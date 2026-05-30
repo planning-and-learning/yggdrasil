@@ -1,0 +1,6 @@
+#ifndef YGG_COMMON_COMPAT_PYTHON_TYPE_CASTERS_UNORDERED_MAP_HPP_
+#define YGG_COMMON_COMPAT_PYTHON_TYPE_CASTERS_UNORDERED_MAP_HPP_
+
+#include "ygg/python/type_casters/unordered_map.hpp"
+
+#endif

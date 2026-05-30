@@ -1,0 +1,6 @@
+#ifndef YGG_COMMON_COMPAT_ASSOCIATIVE_CONTAINER_FORMATTERS_HPP_
+#define YGG_COMMON_COMPAT_ASSOCIATIVE_CONTAINER_FORMATTERS_HPP_
+
+#include "ygg/formatting/associative_container_formatters.hpp"
+
+#endif

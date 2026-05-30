@@ -37,6 +37,7 @@ include = [
     "pyproject.toml",
     "python/**",
     "src/**",
+    "include/**",
 ]
 exclude = [
     "build*/**",

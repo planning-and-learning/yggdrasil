@@ -22,4 +22,9 @@ except PackageNotFoundError:
 
 
 def native_prefix() -> Path:
-    return Path(__file__).resolve().parent
+    package_dir = Path(__file__).resolve().parent
+    for parent in package_dir.parents:
+        if (parent / "pyproject.toml").exists() and (parent / "include").exists():
+            return parent
+
+    return package_dir
