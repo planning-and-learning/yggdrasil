@@ -20,6 +20,23 @@ def test_native_prefix_layout():
     assert (native_prefix / "lib" / "cmake").is_dir()
 
 
+def test_native_prefix_prefers_installed_package_prefix(tmp_path, monkeypatch):
+    repo_root = tmp_path / "repo"
+    repository_include = repo_root / "include" / "ygg"
+    repository_include.mkdir(parents=True)
+
+    package_root = repo_root / "site-packages" / "pyyggdrasil"
+    package_root.mkdir(parents=True, exist_ok=True)
+    (package_root / "include" / "ygg").mkdir(parents=True)
+    (package_root / "__init__.py").write_text("# test shim", encoding="utf-8")
+
+    repository_root = repo_root / "pyproject.toml"
+    repository_root.write_text("[project]\nname = \"repo\"\n", encoding="utf-8")
+    monkeypatch.setattr(pyyggdrasil, "__file__", str(package_root / "__init__.py"))
+
+    assert pyyggdrasil.native_prefix() == package_root
+
+
 def test_downstream_consumer_can_compile_ygg_common(tmp_path):
     compiler = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
     if compiler is None:

@@ -1,6 +1,9 @@
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
 
+def _has_ygg_headers(path: Path) -> bool:
+    return (path / "include" / "ygg").is_dir()
+
 
 def _source_version() -> str:
     for parent in Path(__file__).resolve().parents:
@@ -23,8 +26,10 @@ except PackageNotFoundError:
 
 def native_prefix() -> Path:
     package_dir = Path(__file__).resolve().parent
+    if _has_ygg_headers(package_dir):
+        return package_dir
     for parent in package_dir.parents:
-        if (parent / "pyproject.toml").exists() and (parent / "include").exists():
+        if (parent / "pyproject.toml").exists() and _has_ygg_headers(parent):
             return parent
 
     return package_dir
