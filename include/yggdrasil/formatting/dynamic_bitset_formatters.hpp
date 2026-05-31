@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_FORMATTING_DYNAMIC_BITSET_FORMATTERS_HPP_
+#define YGGDRASIL_COMPAT_FORMATTING_DYNAMIC_BITSET_FORMATTERS_HPP_
+
+#include <ygg/formatting/dynamic_bitset_formatters.hpp>
+
+#endif

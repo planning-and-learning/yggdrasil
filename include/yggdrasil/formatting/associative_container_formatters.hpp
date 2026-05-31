@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_FORMATTING_ASSOCIATIVE_CONTAINER_FORMATTERS_HPP_
+#define YGGDRASIL_COMPAT_FORMATTING_ASSOCIATIVE_CONTAINER_FORMATTERS_HPP_
+
+#include <ygg/formatting/associative_container_formatters.hpp>
+
+#endif

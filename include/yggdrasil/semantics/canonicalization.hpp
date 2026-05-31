@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_SEMANTICS_CANONICALIZATION_HPP_
+#define YGGDRASIL_COMPAT_SEMANTICS_CANONICALIZATION_HPP_
+
+#include <ygg/semantics/canonicalization.hpp>
+
+#endif

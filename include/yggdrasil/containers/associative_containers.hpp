@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_ASSOCIATIVE_CONTAINERS_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_ASSOCIATIVE_CONTAINERS_HPP_
+
+#include <ygg/containers/associative_containers.hpp>
+
+#endif

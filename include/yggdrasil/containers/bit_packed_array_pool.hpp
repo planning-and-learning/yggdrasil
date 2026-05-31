@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_BIT_PACKED_ARRAY_POOL_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_BIT_PACKED_ARRAY_POOL_HPP_
+
+#include <ygg/containers/bit_packed_array_pool.hpp>
+
+#endif

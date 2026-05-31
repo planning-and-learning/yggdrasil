@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_DYNAMIC_BITSET_COMPARATORS_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_DYNAMIC_BITSET_COMPARATORS_HPP_
+
+#include <ygg/containers/dynamic_bitset_comparators.hpp>
+
+#endif

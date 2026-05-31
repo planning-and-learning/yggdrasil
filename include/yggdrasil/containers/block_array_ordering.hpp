@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_BLOCK_ARRAY_ORDERING_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_BLOCK_ARRAY_ORDERING_HPP_
+
+#include <ygg/containers/block_array_ordering.hpp>
+
+#endif

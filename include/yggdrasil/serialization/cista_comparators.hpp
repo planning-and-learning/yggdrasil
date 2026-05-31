@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_SERIALIZATION_CISTA_COMPARATORS_HPP_
+#define YGGDRASIL_COMPAT_SERIALIZATION_CISTA_COMPARATORS_HPP_
+
+#include <ygg/serialization/cista_comparators.hpp>
+
+#endif

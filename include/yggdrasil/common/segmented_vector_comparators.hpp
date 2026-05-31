@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_COMMON_SEGMENTED_VECTOR_COMPARATORS_HPP_
+#define YGGDRASIL_COMPAT_COMMON_SEGMENTED_VECTOR_COMPARATORS_HPP_
+
+#include <ygg/common/segmented_vector_comparators.hpp>
+
+#endif

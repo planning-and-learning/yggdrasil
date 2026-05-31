@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_SERIALIZATION_CISTA_ORDERING_HPP_
+#define YGGDRASIL_COMPAT_SERIALIZATION_CISTA_ORDERING_HPP_
+
+#include <ygg/serialization/cista_ordering.hpp>
+
+#endif

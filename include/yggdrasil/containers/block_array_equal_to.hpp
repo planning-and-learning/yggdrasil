@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_BLOCK_ARRAY_EQUAL_TO_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_BLOCK_ARRAY_EQUAL_TO_HPP_
+
+#include <ygg/containers/block_array_equal_to.hpp>
+
+#endif

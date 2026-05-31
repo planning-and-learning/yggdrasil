@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_COMMON_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+#define YGGDRASIL_COMPAT_COMMON_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+
+#include <ygg/common/segmented_vector_equal_to.hpp>
+
+#endif

@@ -11,23 +11,26 @@ def test_native_prefix_layout():
     native_prefix = pyyggdrasil.native_prefix()
 
     assert pyyggdrasil.__version__ != ""
+    assert pyyggdrasil.ExecutionContext(1).num_threads == 1
     assert (native_prefix / "include").is_dir()
     assert (native_prefix / "lib").is_dir()
     assert (native_prefix / "include" / "boost").is_dir()
     assert (native_prefix / "include" / "ygg" / "common.hpp").is_file()
+    assert (native_prefix / "include" / "yggdrasil" / "common.hpp").is_file()
     assert (native_prefix / "include" / "ygg" / "containers" / "indexed_hash_set.hpp").is_file()
+    assert (native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp").is_file()
     assert (native_prefix / "include" / "ygg" / "common" / "common.hpp").is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
 
 
 def test_native_prefix_prefers_installed_package_prefix(tmp_path, monkeypatch):
     repo_root = tmp_path / "repo"
-    repository_include = repo_root / "include" / "ygg"
+    repository_include = repo_root / "include" / "yggdrasil"
     repository_include.mkdir(parents=True)
 
     package_root = repo_root / "site-packages" / "pyyggdrasil"
     package_root.mkdir(parents=True, exist_ok=True)
-    (package_root / "include" / "ygg").mkdir(parents=True)
+    (package_root / "include" / "yggdrasil").mkdir(parents=True)
     (package_root / "__init__.py").write_text("# test shim", encoding="utf-8")
 
     repository_root = repo_root / "pyproject.toml"
@@ -47,11 +50,11 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path):
     source.write_text(
         textwrap.dedent(
             """\
-            #include <ygg/semantics/hash.hpp>
-            #include <ygg/containers/indexed_hash_set.hpp>
-            #include <ygg/containers/unordered_set.hpp>
-            #include <ygg/core/types.hpp>
-            #include <ygg/ids/index_mixins.hpp>
+            #include <yggdrasil/semantics/hash.hpp>
+            #include <yggdrasil/containers/indexed_hash_set.hpp>
+            #include <yggdrasil/containers/unordered_set.hpp>
+            #include <yggdrasil/core/types.hpp>
+            #include <yggdrasil/ids/index_mixins.hpp>
 
             #include <tuple>
 

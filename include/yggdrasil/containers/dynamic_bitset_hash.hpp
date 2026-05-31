@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_DYNAMIC_BITSET_HASH_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_DYNAMIC_BITSET_HASH_HPP_
+
+#include <ygg/containers/dynamic_bitset_hash.hpp>
+
+#endif

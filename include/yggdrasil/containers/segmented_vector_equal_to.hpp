@@ -1,0 +1,6 @@
+#ifndef YGGDRASIL_COMPAT_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+#define YGGDRASIL_COMPAT_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+
+#include <ygg/containers/segmented_vector_equal_to.hpp>
+
+#endif

@@ -18,4 +18,4 @@ endif()
 
 add_subdirectory(python)
 
-add_custom_target(pyyggdrasil_wheel)
+add_custom_target(pyyggdrasil_wheel DEPENDS pyyggdrasil_python)

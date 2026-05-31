@@ -1,8 +1,10 @@
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
 
-def _has_ygg_headers(path: Path) -> bool:
-    return (path / "include" / "ygg").is_dir()
+from ._pyyggdrasil import ExecutionContext
+
+def _has_yggdrasil_headers(path: Path) -> bool:
+    return (path / "include" / "yggdrasil").is_dir()
 
 
 def _source_version() -> str:
@@ -26,10 +28,13 @@ except PackageNotFoundError:
 
 def native_prefix() -> Path:
     package_dir = Path(__file__).resolve().parent
-    if _has_ygg_headers(package_dir):
+    if _has_yggdrasil_headers(package_dir):
         return package_dir
     for parent in package_dir.parents:
-        if (parent / "pyproject.toml").exists() and _has_ygg_headers(parent):
+        if (parent / "pyproject.toml").exists() and _has_yggdrasil_headers(parent):
             return parent
 
     return package_dir
+
+
+__all__ = ["ExecutionContext", "__version__", "native_prefix"]
