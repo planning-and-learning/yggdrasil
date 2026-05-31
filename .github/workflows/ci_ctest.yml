@@ -1,0 +1,63 @@
+name: CI Ctest
+
+on:
+  push:
+    branches-ignore:
+      - test-pypi
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build_type: Debug
+          - os: macos-latest
+            build_type: Release
+
+    steps:
+      - name: Checkout Yggdrasil
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install CMake on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+
+      - name: Build native dependencies
+        run: |
+          cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_INSTALL_PREFIX="$PWD/dependencies-install" \
+                -DCMAKE_INSTALL_LIBDIR=lib \
+                -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+                -S src -B dependencies-build
+          cmake --build dependencies-build -j2
+          cmake --install dependencies-build
+
+      - name: Configure and Build Yggdrasil
+        run: |
+          cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DYGGDRASIL_BUILD_TESTS=ON \
+                -DYGGDRASIL_NATIVE_PREFIX="$PWD/dependencies-install" \
+                -DCMAKE_INSTALL_LIBDIR=lib \
+                -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+                -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+                -S . -B build_${{ matrix.build_type }}
+          cmake --build build_${{ matrix.build_type }} -j2
+
+      - name: Run Tests
+        run: |
+          export DYLD_LIBRARY_PATH="$PWD/dependencies-install/lib:${DYLD_LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="$PWD/dependencies-install/lib:${LD_LIBRARY_PATH:-}"
+          GTEST_OUTPUT=xml:test-results/ GTEST_COLOR=1 ctest --test-dir build_${{ matrix.build_type }} -V
