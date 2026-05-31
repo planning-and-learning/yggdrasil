@@ -82,7 +82,6 @@ inline bool IndexedHashSetCustomEqualTo::operator()(const ygg::Data<IndexedHashS
 namespace ygg
 {
 
-static_assert(CanonicalDataTag<ygg::tests::IndexedHashSetTestTag>);
 static_assert(ygg::HashFor<ygg::tests::IndexedHashSetCustomHash, ygg::Data<ygg::tests::IndexedHashSetTestTag>>);
 static_assert(ygg::EqualToFor<ygg::tests::IndexedHashSetCustomEqualTo, ygg::Data<ygg::tests::IndexedHashSetTestTag>>);
 

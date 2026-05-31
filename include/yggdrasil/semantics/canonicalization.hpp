@@ -24,8 +24,11 @@
 
 #include <cista/containers/optional.h>
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <concepts>
+#include <string>
 #include <type_traits>
 
 namespace ygg
@@ -33,35 +36,25 @@ namespace ygg
 
 namespace detail
 {
-template<typename List>
-bool is_canonical_list(const List& list)
+template<typename C, typename Element>
+std::string fmt_key(const C& context, const Element& element)
 {
-    using Element = std::remove_cvref_t<decltype(*list.begin())>;
-    return std::is_sorted(list.begin(), list.end(), Less<Element> {});
+    const auto view = make_view(element, context);
+    return fmt::format("{}", make_view(view.get_data(), view.get_context()));
 }
 
-template<typename List>
-void canonicalize_list(List& list)
-{
-    using Element = std::remove_cvref_t<decltype(*list.begin())>;
-
-    if (!is_canonical_list(list))
-        std::sort(list.begin(), list.end(), Less<Element> {});
-
-    list.erase(std::unique(list.begin(), list.end(), EqualTo<Element> {}), list.end());
-}
 }
 
 template<typename T>
 bool is_canonical(const IndexList<T>& list)
 {
-    return detail::is_canonical_list(list);
+    return std::is_sorted(list.begin(), list.end(), Less<Index<T>> {});
 }
 
 template<typename T>
 bool is_canonical(const DataList<T>& list)
 {
-    return detail::is_canonical_list(list);
+    return std::is_sorted(list.begin(), list.end(), Less<Data<T>> {});
 }
 
 template<typename T>
@@ -73,13 +66,19 @@ bool is_canonical(const ::cista::optional<T>& element)
 template<typename T>
 void canonicalize(IndexList<T>& list)
 {
-    detail::canonicalize_list(list);
+    if (!is_canonical(list))
+        std::sort(list.begin(), list.end(), Less<Index<T>> {});
+
+    list.erase(std::unique(list.begin(), list.end(), EqualTo<Index<T>> {}), list.end());
 }
 
 template<typename T>
 void canonicalize(DataList<T>& list)
 {
-    detail::canonicalize_list(list);
+    if (!is_canonical(list))
+        std::sort(list.begin(), list.end(), Less<Data<T>> {});
+
+    list.erase(std::unique(list.begin(), list.end(), EqualTo<Data<T>> {}), list.end());
 }
 
 template<typename T>
@@ -87,14 +86,39 @@ void canonicalize(::cista::optional<T>& element)
 {
 }
 
-template<typename T>
-concept Canonicalizable = requires(T value, const T const_value) {
-    { is_canonical(const_value) } -> std::same_as<bool>;
-    { canonicalize(value) };
-};
+template<typename C, typename T>
+bool is_canonical(const C& context, const IndexList<T>& list)
+{
+    auto less = [&](const auto& lhs, const auto& rhs) { return detail::fmt_key(context, lhs) < detail::fmt_key(context, rhs); };
+    return std::is_sorted(list.begin(), list.end(), less);
+}
 
-template<typename Tag>
-concept CanonicalDataTag = Canonicalizable<Data<Tag>>;
+template<typename C, typename T>
+bool is_canonical(const C& context, const DataList<T>& list)
+{
+    auto less = [&](const auto& lhs, const auto& rhs) { return detail::fmt_key(context, lhs) < detail::fmt_key(context, rhs); };
+    return std::is_sorted(list.begin(), list.end(), less);
+}
+
+template<typename C, typename T>
+void canonicalize(const C& context, IndexList<T>& list)
+{
+    auto less = [&](const auto& lhs, const auto& rhs) { return detail::fmt_key(context, lhs) < detail::fmt_key(context, rhs); };
+    auto equal = [&](const auto& lhs, const auto& rhs) { return detail::fmt_key(context, lhs) == detail::fmt_key(context, rhs); };
+
+    std::sort(list.begin(), list.end(), less);
+    list.erase(std::unique(list.begin(), list.end(), equal), list.end());
+}
+
+template<typename C, typename T>
+void canonicalize(const C& context, DataList<T>& list)
+{
+    auto less = [&](const auto& lhs, const auto& rhs) { return detail::fmt_key(context, lhs) < detail::fmt_key(context, rhs); };
+    auto equal = [&](const auto& lhs, const auto& rhs) { return detail::fmt_key(context, lhs) == detail::fmt_key(context, rhs); };
+
+    std::sort(list.begin(), list.end(), less);
+    list.erase(std::unique(list.begin(), list.end(), equal), list.end());
+}
 
 }
 

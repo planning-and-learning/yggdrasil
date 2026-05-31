@@ -19,7 +19,6 @@
 #define YGG_COMMON_INDEXED_HASH_SET_HPP_
 
 #include "yggdrasil/core/bit.hpp"
-#include "yggdrasil/semantics/canonicalization.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
@@ -39,7 +38,7 @@
 namespace ygg
 {
 
-template<CanonicalDataTag Tag, HashFor<Data<Tag>> H = Hash<Data<Tag>>, EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>, size_t FirstSegmentSize = 32>
+template<typename Tag, HashFor<Data<Tag>> H = Hash<Data<Tag>>, EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>, size_t FirstSegmentSize = 32>
 class IndexedHashSet
 {
     static_assert(bit::is_power_of_two(FirstSegmentSize));
@@ -67,7 +66,6 @@ public:
 
     std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const
     {
-        assert(is_canonical(element) && "The given element is not canonical. Did you forget to call canonicalize?");
         assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
@@ -79,7 +77,6 @@ public:
 
     std::optional<Index<Tag>> find(const Data<Tag>& element) const
     {
-        assert(is_canonical(element));
         assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
         return find_with_hash(element, IndexedHashSet::hash(element));
@@ -91,7 +88,6 @@ public:
 
     std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(is_canonical(element) && "The given element is not canonical. Did you forget to call canonicalize?");
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
@@ -103,7 +99,6 @@ public:
 
     Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(is_canonical(element) && "The given element is not canonical. Did you forget to call canonicalize?");
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
@@ -116,7 +111,6 @@ public:
 
     std::pair<Index<Tag>, bool> insert(const Data<Tag>& element)
     {
-        assert(is_canonical(element));
         assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
         return insert_with_hash(IndexedHashSet::hash(element), element);

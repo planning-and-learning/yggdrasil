@@ -48,6 +48,21 @@ struct View
 };
 
 template<typename T, typename C>
+struct View<Data<T>, C>
+{
+private:
+    const Data<T>* m_handle;
+    const C* m_context;
+
+public:
+    View(const Data<T>& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
+
+    const auto& get_data() const noexcept { return *m_handle; }
+    const auto& get_context() const noexcept { return *m_context; }
+    const auto& get_handle() const noexcept { return *m_handle; }
+};
+
+template<typename T, typename C>
 concept ViewConcept = requires(T type, const C& context) {
     // Constructor
     View<T, C>(type, context);

@@ -21,7 +21,6 @@
 #include "cista/serialization.h"
 #include "yggdrasil/buffer/declarations.hpp"
 #include "yggdrasil/buffer/segmented_buffer.hpp"
-#include <yggdrasil/semantics/canonicalization.hpp>
 #include <yggdrasil/serialization/cista_comparators.hpp>
 #include <yggdrasil/serialization/cista_equal_to.hpp>
 #include <yggdrasil/serialization/cista_hash.hpp>
@@ -42,14 +41,12 @@
 
 namespace ygg::buffer
 {
-using ygg::CanonicalDataTag;
 using ygg::Data;
 using ygg::EqualToFor;
 using ygg::HashFor;
 using ygg::Index;
-using ygg::is_canonical;
 
-template<CanonicalDataTag Tag, HashFor<Data<Tag>> H = ygg::Hash<Data<Tag>>, EqualToFor<Data<Tag>> E = ygg::EqualTo<Data<Tag>>>
+template<typename Tag, HashFor<Data<Tag>> H = ygg::Hash<Data<Tag>>, EqualToFor<Data<Tag>> E = ygg::EqualTo<Data<Tag>>>
 class IndexedHashSet
 {
 private:
@@ -93,7 +90,6 @@ public:
 
     std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const noexcept
     {
-        assert(is_canonical(element) && "The given element is not canonical. Did you forget to call canonicalize?");
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
@@ -106,7 +102,6 @@ public:
 
     std::optional<Index<Tag>> find(const Data<Tag>& element) const noexcept
     {
-        assert(is_canonical(element));
         assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
         return find_with_hash(element, IndexedHashSet::hash(element));
@@ -115,7 +110,6 @@ public:
     template<::cista::mode Mode = ygg::CISTA_MODE>
     std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(is_canonical(element) && "The given element is not canonical. Did you forget to call canonicalize?");
         assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
@@ -131,7 +125,6 @@ public:
     template<::cista::mode Mode = ygg::CISTA_MODE>
     Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(is_canonical(element) && "The given element is not canonical. Did you forget to call canonicalize?");
         assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
@@ -160,7 +153,6 @@ public:
     template<::cista::mode Mode = ygg::CISTA_MODE>
     std::pair<Index<Tag>, bool> insert(const Data<Tag>& element)
     {
-        assert(is_canonical(element));
         assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
         return insert_with_hash<Mode>(IndexedHashSet::hash(element), element);
