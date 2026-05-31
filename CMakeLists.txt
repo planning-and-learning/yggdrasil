@@ -16,6 +16,13 @@ if(NOT EXISTS "${YGGDRASIL_NATIVE_PREFIX}")
     message(FATAL_ERROR "Native prefix does not exist: ${YGGDRASIL_NATIVE_PREFIX}")
 endif()
 
+option(YGGDRASIL_BUILD_TESTS "Build Yggdrasil C++ tests." OFF)
+
 add_subdirectory(python)
+
+if(YGGDRASIL_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 add_custom_target(pyyggdrasil_wheel DEPENDS pyyggdrasil_python)
