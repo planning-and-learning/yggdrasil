@@ -15,23 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_OBSERVER_PTR_ORDERING_HPP_
-#define YGG_COMMON_OBSERVER_PTR_ORDERING_HPP_
+#ifndef YGG_BUFFER_BUFFER_HPP_
+#define YGG_BUFFER_BUFFER_HPP_
 
-#include "yggdrasil/semantics/comparators.hpp"
-#include "yggdrasil/core/observer_ptr.hpp"
-
-#include <type_traits>
-
-namespace ygg
-{
-
-template<typename T>
-struct Less<ObserverPtr<T>>
-{
-    bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept { return Less<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
-};
-
-}
+#include "yggdrasil/buffer/declarations.hpp"
+#include "yggdrasil/buffer/indexed_hash_set.hpp"
+#include "yggdrasil/buffer/segmented_buffer.hpp"
 
 #endif

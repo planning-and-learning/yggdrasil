@@ -1,7 +1,7 @@
 #include "module.hpp"
 
 #include <nanobind/stl/shared_ptr.h>
-#include <ygg/execution/onetbb.hpp>
+#include <yggdrasil/execution/onetbb.hpp>
 
 namespace yggdrasil
 {

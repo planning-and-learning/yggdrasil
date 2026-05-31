@@ -1,6 +1,35 @@
-#ifndef YGGDRASIL_COMPAT_HPP_
-#define YGGDRASIL_COMPAT_HPP_
+/*
+ * Copyright (C) 2025-2026 Dominik Drexler
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
 
-#include <ygg/common.hpp>
+#ifndef YGGDRASIL_HPP_
+#define YGGDRASIL_HPP_
+
+#include "yggdrasil/extensions.hpp"
+#include "yggdrasil/containers/block_array_ordering.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/containers/containers.hpp"
+#include "yggdrasil/core.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+#include "yggdrasil/io/iostream.hpp"
+#include "yggdrasil/core/path.hpp"
+#include "yggdrasil/io/project_adapters.hpp"
+#include "yggdrasil/containers/repository_types.hpp"
+#include "yggdrasil/containers/tuple.hpp"
+#include "yggdrasil/ids/uint_mixins.hpp"
 
 #endif

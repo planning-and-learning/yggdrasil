@@ -15,23 +15,32 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_OBSERVER_PTR_ORDERING_HPP_
-#define YGG_COMMON_OBSERVER_PTR_ORDERING_HPP_
+#ifndef YGG_BUFFER_DECLARATIONS_HPP_
+#define YGG_BUFFER_DECLARATIONS_HPP_
 
-#include "yggdrasil/semantics/comparators.hpp"
-#include "yggdrasil/core/observer_ptr.hpp"
+#include "cista/serialization.h"
+#include <yggdrasil/core/types.hpp>
 
-#include <type_traits>
+#include <cstdint>
+#include <vector>
 
-namespace ygg
+#include <iostream>
+
+namespace cista
 {
+template<typename Buf>
+struct buf;
+}
 
-template<typename T>
-struct Less<ObserverPtr<T>>
+namespace ygg::buffer
 {
-    bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept { return Less<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
-};
+using ygg::Data;
+using ygg::DataList;
+using ygg::Index;
+using ygg::IndexList;
+using ygg::View;
 
+using Buffer = ::cista::buf<std::vector<uint8_t>>;
 }
 
 #endif

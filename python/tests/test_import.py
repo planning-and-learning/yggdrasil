@@ -15,11 +15,9 @@ def test_native_prefix_layout():
     assert (native_prefix / "include").is_dir()
     assert (native_prefix / "lib").is_dir()
     assert (native_prefix / "include" / "boost").is_dir()
-    assert (native_prefix / "include" / "ygg" / "common.hpp").is_file()
-    assert (native_prefix / "include" / "yggdrasil" / "common.hpp").is_file()
-    assert (native_prefix / "include" / "ygg" / "containers" / "indexed_hash_set.hpp").is_file()
+    assert (native_prefix / "include" / "yggdrasil.hpp").is_file()
     assert (native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp").is_file()
-    assert (native_prefix / "include" / "ygg" / "common" / "common.hpp").is_file()
+    assert (native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp").is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
 
 

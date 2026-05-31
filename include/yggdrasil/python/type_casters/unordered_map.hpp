@@ -1,6 +1,29 @@
-#ifndef YGGDRASIL_COMPAT_PYTHON_TYPE_CASTERS_UNORDERED_MAP_HPP_
-#define YGGDRASIL_COMPAT_PYTHON_TYPE_CASTERS_UNORDERED_MAP_HPP_
+/*
+    nanobind/stl/unordered_map.h: type caster for std::unordered_map<...>
 
-#include <ygg/python/type_casters/unordered_map.hpp>
+    Copyright (c) 2022 Matej Ferencevic and Wenzel Jakob
 
-#endif
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE file.
+*/
+
+#pragma once
+
+#include <gtl/phmap.hpp>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/detail/nb_dict.h>
+#include <type_traits>
+#include <yggdrasil/containers/associative_containers.hpp>
+#include <yggdrasil/semantics/equal_to.hpp>
+#include <yggdrasil/semantics/hash.hpp>
+
+NAMESPACE_BEGIN(NB_NAMESPACE)
+NAMESPACE_BEGIN(detail)
+
+template<typename Key, typename T, typename Hash, typename Compare, typename Alloc>
+struct type_caster<gtl::flat_hash_map<Key, T, Hash, Compare, Alloc>> : dict_caster<gtl::flat_hash_map<Key, T, Hash, Compare, Alloc>, Key, T>
+{
+};
+
+NAMESPACE_END(detail)
+NAMESPACE_END(NB_NAMESPACE)

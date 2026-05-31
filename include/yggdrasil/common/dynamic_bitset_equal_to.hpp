@@ -1,6 +1,0 @@
-#ifndef YGGDRASIL_COMPAT_COMMON_DYNAMIC_BITSET_EQUAL_TO_HPP_
-#define YGGDRASIL_COMPAT_COMMON_DYNAMIC_BITSET_EQUAL_TO_HPP_
-
-#include <ygg/common/dynamic_bitset_equal_to.hpp>
-
-#endif

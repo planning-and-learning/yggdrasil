@@ -1,6 +1,50 @@
-#ifndef YGGDRASIL_COMPAT_PYTHON_TYPE_CASTERS_OPTIONAL_HPP_
-#define YGGDRASIL_COMPAT_PYTHON_TYPE_CASTERS_OPTIONAL_HPP_
+/*
+    nanobind/stl/optional.h: type caster for std::optional<...>
 
-#include <ygg/python/type_casters/optional.hpp>
+    Copyright (c) 2022 Yoshiki Matsuda and Wenzel Jakob
 
-#endif
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE file.
+*/
+
+#pragma once
+
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/optional.h>
+#include <type_traits>
+#include <yggdrasil/containers/optional.hpp>
+
+NAMESPACE_BEGIN(NB_NAMESPACE)
+NAMESPACE_BEGIN(detail)
+
+// Adapted from nanobind/stl/detail/nb_optional.h
+template<typename C, typename T>
+struct type_caster<::ygg::View<::cista::optional<T>, C>>
+{
+    using ViewT = ::ygg::View<::cista::optional<T>, C>;
+    using Entry = std::conditional_t<::ygg::ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+    using Caster = make_caster<Entry>;
+
+    NB_TYPE_CASTER(ViewT, optional_name(Caster::Name))
+
+    // Views are not constructible from Python
+    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+
+    template<typename U>
+    static handle from_cpp(U&& value, rv_policy policy, cleanup_list* cleanup) noexcept
+    {
+        if (!value)  // uses View::operator bool()
+            return none().release();
+
+        return Caster::from_cpp(value.value(), policy, cleanup);
+    }
+};
+
+// Taken from nanobind/stl/optional.h
+template<typename T>
+struct type_caster<::cista::optional<T>> : optional_caster<::cista::optional<T>>
+{
+};
+
+NAMESPACE_END(detail)
+NAMESPACE_END(NB_NAMESPACE)
