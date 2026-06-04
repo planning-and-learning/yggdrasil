@@ -57,4 +57,16 @@ elseif(UNIX)
             COMPONENT pyyggdrasil)
 endif()
 
+nanobind_add_stub(
+    pyyggdrasil_stubs
+    MODULE pyyggdrasil._pyyggdrasil
+    RECURSIVE
+    INSTALL_TIME
+    OUTPUT_PATH "pyyggdrasil"
+    PYTHON_PATH "."
+    COMPONENT pyyggdrasil
+)
+
+install(SCRIPT "${PROJECT_SOURCE_DIR}/cmake/patch_python_stubs.cmake" COMPONENT pyyggdrasil)
+
 add_custom_target(pyyggdrasil_python DEPENDS _pyyggdrasil)

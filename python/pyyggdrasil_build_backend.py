@@ -85,6 +85,49 @@ def _strip_args() -> list[str]:
     return ["--strip-unneeded"]
 
 
+def _patch_stub_text(text: str) -> str:
+    text = text.replace("pyyggdrasil._pyyggdrasil.", "pyyggdrasil.")
+    return text.replace("pyyggdrasil._pyyggdrasil", "pyyggdrasil")
+
+
+def _fix_wheel_stubs(wheel_path: Path) -> None:
+    with tempfile.TemporaryDirectory(prefix="pyyggdrasil-wheel-") as tmp:
+        wheel_root = Path(tmp) / "wheel"
+        with zipfile.ZipFile(wheel_path) as wheel:
+            wheel.extractall(wheel_root)
+
+        def install_stub(path: Path, target: Path) -> None:
+            package_dir = target.with_suffix("")
+            if package_dir.is_dir():
+                target = package_dir / "__init__.pyi"
+
+            if target.exists():
+                return
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(_patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
+
+        private_stub_root = wheel_root / "pyyggdrasil" / "_pyyggdrasil"
+        if private_stub_root.is_dir():
+            public_stub_root = wheel_root / "pyyggdrasil"
+            for path in sorted(private_stub_root.rglob("*.pyi")):
+                install_stub(path, public_stub_root / path.relative_to(private_stub_root))
+            shutil.rmtree(private_stub_root)
+
+        for path in sorted(wheel_root.rglob("*.pyi")):
+            path.write_text(_patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
+
+        _rewrite_record(wheel_root)
+
+        replacement_path = wheel_path.with_suffix(".tmp")
+        with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
+            for path in sorted(wheel_root.rglob("*")):
+                if path.is_file():
+                    wheel.write(path, path.relative_to(wheel_root).as_posix())
+
+        replacement_path.replace(wheel_path)
+
+
 def _record_digest(path: Path) -> tuple[str, str]:
     content = path.read_bytes()
     digest = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).rstrip(b"=").decode("ascii")
@@ -161,7 +204,9 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     _prepare_native_build()
     wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
-    _strip_wheel_native_libraries(Path(wheel_directory) / wheel_filename)
+    wheel_path = Path(wheel_directory) / wheel_filename
+    _fix_wheel_stubs(wheel_path)
+    _strip_wheel_native_libraries(wheel_path)
     return wheel_filename
 
 
