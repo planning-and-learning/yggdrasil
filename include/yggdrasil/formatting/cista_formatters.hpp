@@ -42,9 +42,13 @@ struct range_format_kind<
     ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>,
     Char, void> : std::false_type {};
 
+// cista defines this exact specialization itself when CISTA_FMT is set
+// (cista/containers/string.h), e.g. when linking the cista::cista target.
+#if !defined(CISTA_FMT)
 template <typename Ptr, typename Char>
 struct range_format_kind<::cista::basic_string<Ptr>, Char, void>
     : std::false_type {};
+#endif
 
 template <typename C, typename T, template <typename> typename Ptr,
           bool IndexPointers, typename TemplateSizeType, class Allocator,

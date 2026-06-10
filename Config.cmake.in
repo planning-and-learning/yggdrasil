@@ -18,9 +18,12 @@ endif()
 include(CMakeFindDependencyMacro)
 
 # The bundled dependencies are ABI-matched to the bundled shared libraries, so
-# resolve them from this prefix only.
+# resolve them from this prefix only. cista is deliberately consumed through
+# the include directory rather than the cista::cista target: that target
+# exports CISTA_FMT/CISTA_FNV1A compile definitions, which change cista's fmt
+# integration and hash function relative to how the planning projects compile
+# these headers.
 find_dependency(Boost CONFIG COMPONENTS headers json PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
-find_dependency(cista CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(TBB CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
@@ -29,7 +32,7 @@ add_library(yggdrasil::yggdrasil INTERFACE IMPORTED)
 set_target_properties(yggdrasil::yggdrasil PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${_yggdrasil_prefix}/include"
     INTERFACE_COMPILE_FEATURES "cxx_std_20"
-    INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::json;cista::cista;fmt::fmt;gtl::gtl;TBB::tbb")
+    INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
 
 set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")
 
