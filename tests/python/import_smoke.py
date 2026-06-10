@@ -13,7 +13,8 @@ def main() -> None:
     extension = Path(sys.argv[2]).resolve()
 
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-import-") as tmp:
-        package_dir = Path(tmp) / "pyyggdrasil"
+        tmp_dir = Path(tmp).resolve()
+        package_dir = tmp_dir / "pyyggdrasil"
         package_dir.mkdir()
         lib_dir = package_dir / "lib"
         cmake_dir = lib_dir / "cmake"
@@ -21,7 +22,7 @@ def main() -> None:
         shutil.copy2(package_init, package_dir / "__init__.py")
         shutil.copy2(extension, package_dir / extension.name)
 
-        sys.path.insert(0, tmp)
+        sys.path.insert(0, str(tmp_dir))
         try:
             import pyyggdrasil
 
@@ -43,7 +44,7 @@ def main() -> None:
 
             assert execution is pyyggdrasil.execution
 
-            source_root = Path(tmp) / "source-tree"
+            source_root = tmp_dir / "source-tree"
             source_package_dir = source_root / "python" / "src" / "pyyggdrasil"
             source_include_dir = source_root / "include" / "yggdrasil"
             source_cmake_dir = source_root / "lib64" / "cmake"
@@ -97,7 +98,7 @@ def main() -> None:
             else:
                 raise AssertionError("ExecutionContext(max_num_threads + 1) did not fail")
         finally:
-            sys.path.remove(tmp)
+            sys.path.remove(str(tmp_dir))
 
 
 if __name__ == "__main__":
