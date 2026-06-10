@@ -15,6 +15,13 @@ endif()
 
 option(YGGDRASIL_BUILD_TESTS "Build Yggdrasil C++ tests." OFF)
 
+option(YGGDRASIL_ENABLE_FMT_FORMATTERS "Enable Yggdrasil's public fmt::formatter specializations." ON)
+if(YGGDRASIL_ENABLE_FMT_FORMATTERS)
+    add_compile_definitions(YGG_ENABLE_FMT_FORMATTERS=1)
+else()
+    add_compile_definitions(YGG_ENABLE_FMT_FORMATTERS=0)
+endif()
+
 add_subdirectory(python)
 
 if(YGGDRASIL_BUILD_TESTS)

@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/optional.hpp"
 #include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/containers/vector.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
 
 #include <cista/containers/optional.h>

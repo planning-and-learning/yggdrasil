@@ -105,3 +105,14 @@ target_link_libraries(my_target PRIVATE yggdrasil::yggdrasil)
 For compiler invocations launched from Python, use `pyyggdrasil.include_dir()`
 for the C++ headers and `pyyggdrasil.library_dirs()` for installed native
 library directories.
+
+## fmt Formatters
+
+Yggdrasil's public `fmt::formatter` specializations are guarded by the
+`YGG_ENABLE_FMT_FORMATTERS` macro, which defaults to `1`
+(`yggdrasil/core/config.hpp`). Consumers can opt out by defining
+`YGG_ENABLE_FMT_FORMATTERS=0`. For Yggdrasil's own builds, the
+`YGGDRASIL_ENABLE_FMT_FORMATTERS` CMake option (default `ON`) toggles the
+macro. The sibling libraries follow the same convention with
+`LOKI_`/`TYR_`/`RUNIR_ENABLE_FMT_FORMATTERS`, and each library's CMake option
+also toggles the macros of its upstream libraries.
