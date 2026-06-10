@@ -1,0 +1,36 @@
+@PACKAGE_INIT@
+
+# Package configuration for the yggdrasil header-only library bundled in the
+# pyyggdrasil wheel. Installed to <pyyggdrasil>/lib/cmake/yggdrasil/.
+
+if(TARGET yggdrasil::yggdrasil)
+    return()
+endif()
+
+set_and_check(_yggdrasil_prefix "@PACKAGE_YGGDRASIL_PACKAGE_ROOT@")
+
+if(NOT EXISTS "${_yggdrasil_prefix}/include/yggdrasil")
+    set(yggdrasil_FOUND FALSE)
+    set(yggdrasil_NOT_FOUND_MESSAGE "yggdrasil headers not found under ${_yggdrasil_prefix}/include")
+    return()
+endif()
+
+include(CMakeFindDependencyMacro)
+
+# The bundled dependencies are ABI-matched to the bundled shared libraries, so
+# resolve them from this prefix only.
+find_dependency(Boost CONFIG COMPONENTS headers json PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+find_dependency(cista CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+find_dependency(TBB CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+
+add_library(yggdrasil::yggdrasil INTERFACE IMPORTED)
+set_target_properties(yggdrasil::yggdrasil PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_yggdrasil_prefix}/include"
+    INTERFACE_COMPILE_FEATURES "cxx_std_20"
+    INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::json;cista::cista;fmt::fmt;gtl::gtl;TBB::tbb")
+
+set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")
+
+unset(_yggdrasil_prefix)

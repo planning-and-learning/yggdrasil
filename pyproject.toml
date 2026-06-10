@@ -7,7 +7,7 @@ backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.0.12"
+version = "0.0.13"
 description = "Native dependency provider for Dominik Drexler's planning projects"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -33,6 +33,7 @@ wheel.packages = []
 [tool.scikit-build.sdist]
 include = [
     "CMakeLists.txt",
+    "Config.cmake.in",
     "README.md",
     "pyproject.toml",
     "python/**",

@@ -13,6 +13,8 @@ nanobind_add_module(_pyyggdrasil
     src/pyyggdrasil/execution/module.cpp
 )
 
+target_compile_features(_pyyggdrasil PRIVATE cxx_std_20)
+
 target_include_directories(_pyyggdrasil PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${PROJECT_SOURCE_DIR}/include"
@@ -32,6 +34,7 @@ endif()
 
 set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__init__.py
+    pyyggdrasil/__main__.py
     pyyggdrasil/__init__.pyi
     pyyggdrasil/execution/__init__.pyi
 )
@@ -49,6 +52,27 @@ install(TARGETS _pyyggdrasil
 
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
         DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/include"
+        COMPONENT pyyggdrasil)
+
+include(CMakePackageConfigHelpers)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMinorVersion)
+
+set(YGGDRASIL_PACKAGE_ROOT "${YGGDRASIL_INSTALL_PACKAGEDIR}")
+configure_package_config_file(
+    "${PROJECT_SOURCE_DIR}/Config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfig.cmake"
+    INSTALL_DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
+    PATH_VARS YGGDRASIL_PACKAGE_ROOT
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO)
+
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfigVersion.cmake"
+        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
         COMPONENT pyyggdrasil)
 
 foreach(native_dir IN ITEMS include lib lib64 bin nanobind)

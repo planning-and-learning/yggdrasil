@@ -90,9 +90,31 @@ def cmake_dirs() -> Tuple[Path, ...]:
     )
 
 
+def cmake_prefix() -> Path:
+    """Return the prefix to put on CMAKE_PREFIX_PATH to find yggdrasil and its
+    bundled dependencies via find_package."""
+    return native_prefix()
+
+
+def cmake_dir() -> Path:
+    """Return the directory containing yggdrasilConfig.cmake."""
+    for cmake_packages_dir in cmake_dirs():
+        candidate = cmake_packages_dir / "yggdrasil"
+        if (candidate / "yggdrasilConfig.cmake").is_file():
+            return candidate
+
+    raise FileNotFoundError(
+        "yggdrasilConfig.cmake not found under "
+        f"{[str(path) for path in cmake_dirs()] or native_prefix()}; "
+        "the installed pyyggdrasil is too old or incomplete."
+    )
+
+
 __all__ = [
     "__version__",
+    "cmake_dir",
     "cmake_dirs",
+    "cmake_prefix",
     "include_dir",
     "library_dirs",
     "native_prefix",

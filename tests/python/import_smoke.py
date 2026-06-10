@@ -19,6 +19,11 @@ def main() -> None:
         lib_dir = package_dir / "lib"
         cmake_dir = lib_dir / "cmake"
         cmake_dir.mkdir(parents=True)
+        yggdrasil_cmake_dir = cmake_dir / "yggdrasil"
+        yggdrasil_cmake_dir.mkdir()
+        (yggdrasil_cmake_dir / "yggdrasilConfig.cmake").write_text(
+            "# test placeholder\n", encoding="utf-8"
+        )
         shutil.copy2(package_init, package_dir / "__init__.py")
         shutil.copy2(extension, package_dir / extension.name)
 
@@ -28,7 +33,9 @@ def main() -> None:
 
             assert pyyggdrasil.__all__ == [
                 "__version__",
+                "cmake_dir",
                 "cmake_dirs",
+                "cmake_prefix",
                 "include_dir",
                 "library_dirs",
                 "native_prefix",
@@ -36,9 +43,11 @@ def main() -> None:
             ]
             assert pyyggdrasil.__version__ != ""
             assert pyyggdrasil.native_prefix() == package_dir
+            assert pyyggdrasil.cmake_prefix() == package_dir
             assert pyyggdrasil.include_dir() == package_dir / "include"
             assert pyyggdrasil.library_dirs() == (lib_dir,)
             assert pyyggdrasil.cmake_dirs() == (cmake_dir,)
+            assert pyyggdrasil.cmake_dir() == yggdrasil_cmake_dir
 
             import pyyggdrasil.execution as execution
 
@@ -62,6 +71,14 @@ def main() -> None:
                 assert pyyggdrasil.include_dir() == source_root / "include"
                 assert pyyggdrasil.library_dirs() == (source_root / "lib64",)
                 assert pyyggdrasil.cmake_dirs() == (source_cmake_dir,)
+                try:
+                    pyyggdrasil.cmake_dir()
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise AssertionError(
+                        "cmake_dir() should fail without yggdrasilConfig.cmake"
+                    )
             finally:
                 pyyggdrasil.__file__ = original_file
 

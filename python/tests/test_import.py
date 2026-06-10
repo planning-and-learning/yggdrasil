@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import sys
 import textwrap
 
 import pytest
@@ -28,6 +29,10 @@ def test_native_prefix_layout():
         native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp"
     ).is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
+    assert pyyggdrasil.cmake_prefix() == native_prefix
+    assert pyyggdrasil.cmake_dir().name == "yggdrasil"
+    assert (pyyggdrasil.cmake_dir() / "yggdrasilConfig.cmake").is_file()
+    assert (pyyggdrasil.cmake_dir() / "yggdrasilConfigVersion.cmake").is_file()
 
 
 def test_execution_submodule_is_public():
@@ -37,7 +42,9 @@ def test_execution_submodule_is_public():
 def test_public_package_exports_are_explicit():
     assert pyyggdrasil.__all__ == [
         "__version__",
+        "cmake_dir",
         "cmake_dirs",
+        "cmake_prefix",
         "include_dir",
         "library_dirs",
         "native_prefix",
@@ -45,6 +52,22 @@ def test_public_package_exports_are_explicit():
     ]
     for name in pyyggdrasil.__all__:
         assert hasattr(pyyggdrasil, name)
+
+
+def test_module_cli_prints_discovery_paths():
+    for flag, expected in [
+        ("--prefix", str(pyyggdrasil.cmake_prefix())),
+        ("--include-dir", str(pyyggdrasil.include_dir())),
+        ("--cmake-dir", str(pyyggdrasil.cmake_dir())),
+        ("--version", pyyggdrasil.__version__),
+    ]:
+        result = subprocess.run(
+            [sys.executable, "-m", "pyyggdrasil", flag],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert result.stdout.strip() == expected
 
 
 def test_execution_context_exposes_introspection_docs():
