@@ -410,8 +410,9 @@ private:
 
   template <typename... Idx>
   void assert_indices_in_bounds(Idx... idx) const noexcept {
-    size_t d = 0;
-    ((assert(size_t(idx) < m_shapes[d++])), ...);
+    const std::array<size_t, sizeof...(Idx)> indices{size_t(idx)...};
+    for (size_t d = 0; d < indices.size(); ++d)
+      assert(indices[d] < m_shapes[d]);
   }
 
   template <typename... Idx> size_t offset(Idx... idx) const noexcept {
