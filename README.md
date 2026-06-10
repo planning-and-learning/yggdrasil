@@ -15,9 +15,7 @@ import pyyggdrasil
 print(pyyggdrasil.native_prefix())
 print(pyyggdrasil.include_dir())
 print(pyyggdrasil.library_dirs())
-
-with pyyggdrasil.ExecutionContext(1) as context:
-    print(context.num_threads)
+print(pyyggdrasil.cmake_dirs())
 ```
 
 Python packages that consume this native prefix should depend on:
