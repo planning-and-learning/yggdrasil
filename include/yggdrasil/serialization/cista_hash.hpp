@@ -18,10 +18,10 @@
 #ifndef YGG_COMMON_CISTA_HASH_HPP_
 #define YGG_COMMON_CISTA_HASH_HPP_
 
-#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/containers/optional.hpp"
 #include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/containers/vector.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 
 #include <cista/containers/optional.h>
 #include <cista/containers/string.h>
@@ -30,83 +30,81 @@
 
 #include <type_traits>
 
-namespace ygg
-{
+namespace ygg {
 
-template<>
-struct Hash<::cista::offset::string>
-{
-    using Type = ::cista::offset::string;
+template <> struct Hash<::cista::offset::string> {
+  using Type = ::cista::offset::string;
 
-    size_t operator()(const Type& el) const noexcept { return hash_range(el); }
+  size_t operator()(const Type &el) const noexcept { return hash_range(el); }
 };
 
-template<typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
-struct Hash<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>>
-{
-    using Type = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
+template <typename T, template <typename> typename Ptr, bool IndexPointers,
+          typename TemplateSizeType, class Allocator>
+struct Hash<
+    ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>> {
+  using Type =
+      ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
 
-    size_t operator()(const Type& el) const noexcept { return hash_range(el); }
+  size_t operator()(const Type &el) const noexcept { return hash_range(el); }
 };
 
-template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
-struct Hash<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>
-{
-    using Type = View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
+template <typename C, typename T, template <typename> typename Ptr,
+          bool IndexPointers, typename TemplateSizeType, class Allocator>
+struct Hash<View<
+    ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>,
+    C>> {
+  using Type = View<
+      ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>,
+      C>;
 
-    size_t operator()(const Type& el) const noexcept { return hash_range(el); }
+  size_t operator()(const Type &el) const noexcept { return hash_range(el); }
 };
 
-template<typename... Ts>
-struct Hash<::cista::offset::variant<Ts...>>
-{
-    using Type = ::cista::offset::variant<Ts...>;
+template <typename... Ts> struct Hash<::cista::offset::variant<Ts...>> {
+  using Type = ::cista::offset::variant<Ts...>;
 
-    size_t operator()(const Type& el) const noexcept
-    {
-        return el.apply([](auto&& arg) -> size_t { return Hash<std::remove_cvref_t<decltype(arg)>> {}(arg); });
-    }
+  size_t operator()(const Type &el) const noexcept {
+    size_t seed = el.index();
+    if (el.valid())
+      el.apply([&seed](auto &&arg) { hash_combine(seed, arg); });
+    return seed;
+  }
 };
 
-template<typename C, typename... Ts>
-struct Hash<View<::cista::offset::variant<Ts...>, C>>
-{
-    using Type = View<::cista::offset::variant<Ts...>, C>;
+template <typename C, typename... Ts>
+struct Hash<View<::cista::offset::variant<Ts...>, C>> {
+  using Type = View<::cista::offset::variant<Ts...>, C>;
 
-    size_t operator()(const Type& el) const noexcept
-    {
-        return el.apply([](auto&& arg) -> size_t { return Hash<std::remove_cvref_t<decltype(arg)>> {}(arg); });
-    }
+  size_t operator()(const Type &el) const noexcept {
+    size_t seed = el.index_variant().index();
+    if (el.valid())
+      el.apply([&seed](auto &&arg) { hash_combine(seed, arg); });
+    return seed;
+  }
 };
 
-template<typename T>
-struct Hash<::cista::optional<T>>
-{
-    using Type = ::cista::optional<T>;
+template <typename T> struct Hash<::cista::optional<T>> {
+  using Type = ::cista::optional<T>;
 
-    size_t operator()(const Type& el) const noexcept
-    {
-        if (!el.has_value())
-            return 0x9e3779b97f4a7c15ULL;
-
-        return Hash<T> {}(*el);
-    }
+  size_t operator()(const Type &el) const noexcept {
+    size_t seed = el.has_value() ? 1 : 0;
+    if (el.has_value())
+      hash_combine(seed, *el);
+    return seed;
+  }
 };
 
-template<typename C, typename T>
-struct Hash<View<::cista::optional<T>, C>>
-{
-    using Type = View<::cista::optional<T>, C>;
+template <typename C, typename T> struct Hash<View<::cista::optional<T>, C>> {
+  using Type = View<::cista::optional<T>, C>;
 
-    size_t operator()(const Type& el) const noexcept
-    {
-        if (!el.has_value())
-            return 0x9e3779b97f4a7c15ULL;
-
-        return Hash<std::remove_cvref_t<decltype(el.value())>> {}(el.value());
-    }
+  size_t operator()(const Type &el) const noexcept {
+    size_t seed = el.has_value() ? 1 : 0;
+    if (el.has_value())
+      hash_combine(seed, el.value());
+    return seed;
+  }
 };
 
-}
+} // namespace ygg
 
 #endif

@@ -13,13 +13,18 @@ Install the wheel and query the native prefix:
 import pyyggdrasil
 
 print(pyyggdrasil.native_prefix())
+print(pyyggdrasil.include_dir())
+print(pyyggdrasil.library_dirs())
+
+with pyyggdrasil.ExecutionContext(1) as context:
+    print(context.num_threads)
 ```
 
 Python packages that consume this native prefix should depend on:
 
 ```toml
 dependencies = [
-    "pyyggdrasil>=0.0.11",
+    "pyyggdrasil>=0.0.12",
 ]
 ```
 
@@ -39,6 +44,8 @@ YGGDRASIL_BUILD_NATIVE=OFF \
 YGGDRASIL_NATIVE_PREFIX=/path/to/dependencies-install \
 uv build --wheel
 ```
+
+Set `YGGDRASIL_JOBS` to control the native dependency build parallelism.
 
 Runtime libraries are stripped in the wheel by default. Disable that for
 debugging with:
@@ -73,3 +80,7 @@ Downstream CMake projects can use the installed native prefix through
 cmake -S . -B build \
   -DCMAKE_PREFIX_PATH="$(python -c 'import pyyggdrasil; print(pyyggdrasil.native_prefix())')"
 ```
+
+For compiler invocations launched from Python, use `pyyggdrasil.include_dir()`
+for the C++ headers and `pyyggdrasil.library_dirs()` for installed native
+library directories.

@@ -3,18 +3,21 @@ import csv
 import hashlib
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Callable
 
 from scikit_build_core import build as scikit_build
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 YGGDRASIL_BUILD_DIR = ROOT_DIR / "dependencies-build"
+DEFAULT_BUILD_JOBS = 8
 
 
 def _native_prefix() -> Path:
@@ -26,7 +29,19 @@ def _build_type() -> str:
 
 
 def _num_jobs() -> int:
-    return int(os.environ.get("YGGDRASIL_JOBS", "8"))
+    raw_value = os.environ.get("YGGDRASIL_JOBS")
+    if raw_value is None:
+        return DEFAULT_BUILD_JOBS
+
+    try:
+        jobs = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError("YGGDRASIL_JOBS must be a positive integer") from error
+
+    if jobs < 1:
+        raise RuntimeError("YGGDRASIL_JOBS must be a positive integer")
+
+    return jobs
 
 
 def _is_disabled(value: str) -> bool:
@@ -61,8 +76,8 @@ def _configure_and_install_dependencies() -> None:
 
 
 def _prepend_cmake_args(*args: str) -> None:
-    existing = os.environ.get("CMAKE_ARGS", "")
-    os.environ["CMAKE_ARGS"] = " ".join([*args, existing]).strip()
+    existing = shlex.split(os.environ.get("CMAKE_ARGS", ""))
+    os.environ["CMAKE_ARGS"] = shlex.join([*args, *existing])
 
 
 def _prepare_native_build() -> None:
@@ -74,9 +89,24 @@ def _prepare_native_build() -> None:
     )
 
 
+def _is_versioned_shared_object(name: str) -> bool:
+    marker = ".so."
+    if marker not in name:
+        return False
+
+    version = name.rsplit(marker, maxsplit=1)[1]
+    return bool(version) and all(component.isdigit() for component in version.split("."))
+
+
 def _is_native_library(path: Path) -> bool:
     name = path.name
-    return ".so" in name or name.endswith(".dylib") or name.endswith(".pyd")
+    return (
+        name.endswith(".so")
+        or _is_versioned_shared_object(name)
+        or name.endswith(".dylib")
+        or name.endswith(".pyd")
+        or name.endswith(".dll")
+    )
 
 
 def _strip_args() -> list[str]:
@@ -85,38 +115,13 @@ def _strip_args() -> list[str]:
     return ["--strip-unneeded"]
 
 
-def _patch_stub_text(text: str) -> str:
-    text = text.replace("pyyggdrasil._pyyggdrasil.", "pyyggdrasil.")
-    return text.replace("pyyggdrasil._pyyggdrasil", "pyyggdrasil")
-
-
-def _fix_wheel_stubs(wheel_path: Path) -> None:
+def _rewrite_wheel(wheel_path: Path, mutator: Callable[[Path], None]) -> None:
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-wheel-") as tmp:
         wheel_root = Path(tmp) / "wheel"
         with zipfile.ZipFile(wheel_path) as wheel:
             wheel.extractall(wheel_root)
 
-        def install_stub(path: Path, target: Path) -> None:
-            package_dir = target.with_suffix("")
-            if package_dir.is_dir():
-                target = package_dir / "__init__.pyi"
-
-            if target.exists():
-                return
-
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(_patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
-
-        private_stub_root = wheel_root / "pyyggdrasil" / "_pyyggdrasil"
-        if private_stub_root.is_dir():
-            public_stub_root = wheel_root / "pyyggdrasil"
-            for path in sorted(private_stub_root.rglob("*.pyi")):
-                install_stub(path, public_stub_root / path.relative_to(private_stub_root))
-            shutil.rmtree(private_stub_root)
-
-        for path in sorted(wheel_root.rglob("*.pyi")):
-            path.write_text(_patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
-
+        mutator(wheel_root)
         _rewrite_record(wheel_root)
 
         replacement_path = wheel_path.with_suffix(".tmp")
@@ -164,11 +169,7 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
     if strip is None:
         return
 
-    with tempfile.TemporaryDirectory(prefix="pyyggdrasil-wheel-") as tmp:
-        wheel_root = Path(tmp) / "wheel"
-        with zipfile.ZipFile(wheel_path) as wheel:
-            wheel.extractall(wheel_root)
-
+    def strip_native_libraries(wheel_root: Path) -> None:
         for path in wheel_root.rglob("*"):
             if path.is_file() and _is_native_library(path):
                 subprocess.run(
@@ -178,15 +179,7 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
                     stderr=subprocess.DEVNULL,
                 )
 
-        _rewrite_record(wheel_root)
-
-        replacement_path = wheel_path.with_suffix(".tmp")
-        with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
-            for path in sorted(wheel_root.rglob("*")):
-                if path.is_file():
-                    wheel.write(path, path.relative_to(wheel_root).as_posix())
-
-        replacement_path.replace(wheel_path)
+    _rewrite_wheel(wheel_path, strip_native_libraries)
 
 
 def get_requires_for_build_wheel(config_settings=None):
@@ -205,7 +198,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     _prepare_native_build()
     wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
     wheel_path = Path(wheel_directory) / wheel_filename
-    _fix_wheel_stubs(wheel_path)
     _strip_wheel_native_libraries(wheel_path)
     return wheel_filename
 

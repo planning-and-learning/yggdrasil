@@ -20,11 +20,20 @@
 
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/chrono.hpp"
+#include "yggdrasil/core/closed_interval.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/core/dependent_false.hpp"
 #include "yggdrasil/core/itertools.hpp"
 #include "yggdrasil/core/memory.hpp"
 #include "yggdrasil/core/observer_ptr.hpp"
+#include "yggdrasil/core/observer_ptr_comparators.hpp"
+#include "yggdrasil/core/observer_ptr_equal_to.hpp"
+#include "yggdrasil/core/observer_ptr_hash.hpp"
+#include "yggdrasil/core/observer_ptr_ordering.hpp"
+#include "yggdrasil/core/path.hpp"
 #include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/core/types_utils.hpp"
 
 #endif

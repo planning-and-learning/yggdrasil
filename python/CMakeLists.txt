@@ -10,6 +10,7 @@ find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_P
 nanobind_add_module(_pyyggdrasil
     src/module.cpp
     src/pyyggdrasil/module.cpp
+    src/pyyggdrasil/execution/module.cpp
 )
 
 target_include_directories(_pyyggdrasil PRIVATE
@@ -29,9 +30,18 @@ elseif(UNIX)
         INSTALL_RPATH "$ORIGIN/${CMAKE_INSTALL_LIBDIR}")
 endif()
 
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/pyyggdrasil/__init__.py"
-        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-        COMPONENT pyyggdrasil)
+set(PYYGGDRASIL_PYTHON_FILES
+    pyyggdrasil/__init__.py
+    pyyggdrasil/__init__.pyi
+    pyyggdrasil/execution/__init__.pyi
+)
+
+foreach(python_file IN LISTS PYYGGDRASIL_PYTHON_FILES)
+    get_filename_component(python_file_directory "${python_file}" DIRECTORY)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/${python_file}"
+            DESTINATION "${python_file_directory}"
+            COMPONENT pyyggdrasil)
+endforeach()
 
 install(TARGETS _pyyggdrasil
         DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"

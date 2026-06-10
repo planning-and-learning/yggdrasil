@@ -18,19 +18,26 @@
 #ifndef YGG_COMMON_CONTAINERS_HPP_
 #define YGG_COMMON_CONTAINERS_HPP_
 
+#include "yggdrasil/containers/array.hpp"
 #include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
 #include "yggdrasil/containers/bit_packed_array_set.hpp"
 #include "yggdrasil/containers/block_array_pool.hpp"
 #include "yggdrasil/containers/block_array_set.hpp"
+#include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/optional.hpp"
 #include "yggdrasil/containers/raw_array_pool.hpp"
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/containers/raw_vector_pool.hpp"
 #include "yggdrasil/containers/raw_vector_set.hpp"
+#include "yggdrasil/containers/repository_types.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/containers/shared_object_pool.hpp"
+#include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/containers/unique_object_pool.hpp"
 #include "yggdrasil/containers/unordered_set.hpp"
+#include "yggdrasil/containers/variant.hpp"
+#include "yggdrasil/containers/vector.hpp"
 
 #endif

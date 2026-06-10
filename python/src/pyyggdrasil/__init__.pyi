@@ -1,0 +1,13 @@
+from pathlib import Path
+from typing import Tuple
+
+from . import execution as execution
+
+__version__: str
+
+def native_prefix() -> Path: ...
+def include_dir() -> Path: ...
+def library_dirs() -> Tuple[Path, ...]: ...
+def cmake_dirs() -> Tuple[Path, ...]: ...
+
+__all__: list[str]

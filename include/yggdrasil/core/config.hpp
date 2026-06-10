@@ -22,6 +22,8 @@
 #define YGG_ENABLE_FMT_FORMATTERS 1
 #endif
 
+#include "yggdrasil/core/dependent_false.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <cista/mode.h>
@@ -37,49 +39,47 @@
 #include <tuple>
 #include <type_traits>
 
-namespace ygg
-{
+namespace ygg {
 using int_t = std::int32_t;
 using uint_t = std::uint32_t;
 using float_t = double;
 
-inline uint_t to_uint_t(size_t value)
-{
-    if (value > std::numeric_limits<uint_t>::max())
-        throw std::overflow_error("Value does not fit into uint_t.");
+inline uint_t to_uint_t(size_t value) {
+  if (value > std::numeric_limits<uint_t>::max())
+    throw std::overflow_error("Value does not fit into uint_t.");
 
-    return static_cast<uint_t>(value);
+  return static_cast<uint_t>(value);
 }
 
-template<typename T>
-struct FloatTolerance
-{
-    static_assert(!std::is_same_v<T, T>, "FloatTolerance<T> is not defined for this type.");
+template <typename T> struct FloatTolerance {
+  static_assert(dependent_false<T>::value,
+                "FloatTolerance<T> is not defined for this type.");
 };
 
-template<>
-struct FloatTolerance<float_t>
-{
-    static constexpr float_t abs_epsilon = static_cast<float_t>(1e-12);
-    static constexpr float_t rel_epsilon = static_cast<float_t>(1e-12);
+template <> struct FloatTolerance<float_t> {
+  static constexpr float_t abs_epsilon = static_cast<float_t>(1e-12);
+  static constexpr float_t rel_epsilon = static_cast<float_t>(1e-12);
 
-    static_assert(abs_epsilon > std::numeric_limits<float_t>::epsilon(), "Absolute float tolerance is too small.");
-    static_assert(rel_epsilon > std::numeric_limits<float_t>::epsilon(), "Relative float tolerance is too small.");
-    static_assert(abs_epsilon < static_cast<float_t>(1), "Absolute float tolerance is too large.");
-    static_assert(rel_epsilon < static_cast<float_t>(1), "Relative float tolerance is too large.");
+  static_assert(abs_epsilon > std::numeric_limits<float_t>::epsilon(),
+                "Absolute float tolerance is too small.");
+  static_assert(rel_epsilon > std::numeric_limits<float_t>::epsilon(),
+                "Relative float tolerance is too small.");
+  static_assert(abs_epsilon < static_cast<float_t>(1),
+                "Absolute float tolerance is too large.");
+  static_assert(rel_epsilon < static_cast<float_t>(1),
+                "Relative float tolerance is too large.");
 
-    static constexpr float_t tolerance(float_t lhs, float_t rhs) noexcept
-    {
-        return std::max(abs_epsilon, rel_epsilon * std::max(std::abs(lhs), std::abs(rhs)));
-    }
+  static constexpr float_t tolerance(float_t lhs, float_t rhs) noexcept {
+    return std::max(abs_epsilon,
+                    rel_epsilon * std::max(std::abs(lhs), std::abs(rhs)));
+  }
 
-    static constexpr float_t canonicalize(float_t value) noexcept
-    {
-        if (std::isnan(value) || std::isinf(value))
-            return value;
+  static constexpr float_t canonicalize(float_t value) noexcept {
+    if (std::isnan(value) || std::isinf(value))
+      return value;
 
-        return std::round(value / abs_epsilon) * abs_epsilon;
-    }
+    return std::round(value / abs_epsilon) * abs_epsilon;
+  }
 };
 
 #ifdef NDEBUG
@@ -87,6 +87,6 @@ static constexpr ::cista::mode CISTA_MODE = ::cista::mode::UNCHECKED;
 #else
 static constexpr ::cista::mode CISTA_MODE = ::cista::mode::NONE;
 #endif
-}
+} // namespace ygg
 
 #endif

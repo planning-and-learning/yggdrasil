@@ -1,16 +1,15 @@
 #include "module.hpp"
 
-#include <nanobind/stl/shared_ptr.h>
-#include <yggdrasil/execution/onetbb.hpp>
+#include "pyyggdrasil/execution/module.hpp"
 
-namespace yggdrasil
-{
+namespace yggdrasil {
 
-void bind_module_definitions(nb::module_& m)
-{
-    nb::class_<ygg::ExecutionContext>(m, "ExecutionContext")
-        .def(nb::new_([](std::size_t num_threads) { return ygg::ExecutionContext::create(num_threads); }), nb::arg("num_threads"))
-        .def_prop_ro("num_threads", &ygg::ExecutionContext::get_num_threads);
+void bind_module_definitions(nb::module_ &m) {
+  m.doc() = "Python bindings for Yggdrasil native utilities.";
+
+  auto execution = m.def_submodule("execution", "Execution utilities.");
+  bind_execution_module_definitions(execution);
+  m.attr("execution") = execution;
 }
 
-}
+} // namespace yggdrasil

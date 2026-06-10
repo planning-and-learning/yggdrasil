@@ -21,36 +21,57 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 
-namespace ygg::tests
-{
+namespace ygg::tests {
 
-TEST(YggdrasilTests, CommonPathResolvePath)
-{
-    const auto prefix = std::filesystem::path("/tmp/prefix");
+TEST(YggdrasilTests, CommonPathResolvePath) {
+  const auto prefix = std::filesystem::path("/tmp/prefix");
 
-    EXPECT_EQ(common::resolve_path(prefix, "child/file.txt"), prefix / "child/file.txt");
-    EXPECT_EQ(common::resolve_path(prefix, "/absolute/file.txt"), std::filesystem::path("/absolute/file.txt"));
+  EXPECT_EQ(common::resolve_path(prefix, "child/file.txt"),
+            prefix / "child/file.txt");
+  EXPECT_EQ(common::resolve_path(prefix, "/absolute/file.txt"),
+            std::filesystem::path("/absolute/file.txt"));
 }
 
-TEST(YggdrasilTests, CommonPathReadFile)
-{
-    const auto path = std::filesystem::temp_directory_path() / "yggdrasil_path_test.txt";
-    {
-        auto out = std::ofstream(path);
-        out << "contents";
-    }
+TEST(YggdrasilTests, CommonPathReadFile) {
+  const auto path =
+      std::filesystem::temp_directory_path() / "yggdrasil_path_test.txt";
+  {
+    auto out = std::ofstream(path);
+    out << "contents";
+  }
 
-    EXPECT_EQ(common::read_file(path), "contents");
-    std::filesystem::remove(path);
+  EXPECT_EQ(common::read_file(path), "contents");
+  std::filesystem::remove(path);
 }
 
-TEST(YggdrasilTests, CommonPathReadFileReportsMissingFile)
-{
-    const auto path = std::filesystem::temp_directory_path() / "yggdrasil_path_missing.txt";
-    std::filesystem::remove(path);
+TEST(YggdrasilTests, CommonPathReadFilePreservesBinaryContent) {
+  const auto path =
+      std::filesystem::temp_directory_path() / "yggdrasil_path_binary_test.bin";
+  const auto contents = std::string("a\0b\n", 4);
+  {
+    auto out = std::ofstream(path, std::ios::binary);
+    out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+  }
 
-    EXPECT_THROW(common::read_file(path), std::runtime_error);
+  EXPECT_EQ(common::read_file(path), contents);
+  std::filesystem::remove(path);
 }
 
+TEST(YggdrasilTests, CommonPathReadFileReportsMissingFile) {
+  const auto path =
+      std::filesystem::temp_directory_path() / "yggdrasil_path_missing.txt";
+  std::filesystem::remove(path);
+
+  try {
+    (void)common::read_file(path);
+    FAIL() << "Expected read_file to reject missing files";
+  } catch (const std::runtime_error &error) {
+    const auto message = std::string(error.what());
+    EXPECT_NE(message.find("Could not open file:"), std::string::npos);
+    EXPECT_NE(message.find(path.string()), std::string::npos);
+  }
 }
+
+} // namespace ygg::tests

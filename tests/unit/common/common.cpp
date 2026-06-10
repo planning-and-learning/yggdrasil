@@ -18,12 +18,41 @@
 #include <gtest/gtest.h>
 #include <yggdrasil.hpp>
 
-namespace ygg::tests
-{
+#include <sstream>
+#include <type_traits>
 
-TEST(YggdrasilTests, CommonUmbrellaHeaderCompiles)
-{
-    SUCCEED();
+namespace ygg::tests {
+
+TEST(YggdrasilTests, CommonUmbrellaHeaderCompiles) { SUCCEED(); }
+
+TEST(YggdrasilTests, CommonIostreamIndentationTracksPerStreamScope) {
+  static_assert(!std::is_copy_constructible_v<ygg::IndentScope>);
+  static_assert(!std::is_move_constructible_v<ygg::IndentScope>);
+
+  auto out = std::ostringstream();
+  auto other = std::ostringstream();
+
+  ygg::print_indent(out) << "root";
+  {
+    const auto scope = ygg::IndentScope(out);
+    ygg::print_indent(out) << "child";
+    ygg::print_indent(other) << "other";
+  }
+  ygg::print_indent(out) << "root";
+
+  EXPECT_EQ(out.str(), "root    childroot");
+  EXPECT_EQ(other.str(), "other");
 }
 
+TEST(YggdrasilTests, CommonIostreamIndentationClampsNegativeLevels) {
+  auto out = std::ostringstream();
+
+  out << ygg::indent_down;
+  ygg::print_indent(out) << "text";
+  out << ygg::indent_up;
+  ygg::print_indent(out) << "child";
+
+  EXPECT_EQ(out.str(), "text    child");
 }
+
+} // namespace ygg::tests

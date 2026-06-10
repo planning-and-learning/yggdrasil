@@ -20,53 +20,61 @@
 
 #include <chrono>
 
-namespace ygg
-{
+namespace ygg {
 
-template<typename Rep, typename Period>
-[[nodiscard]] inline std::chrono::microseconds::rep to_us(std::chrono::duration<Rep, Period> d) noexcept
-{
-    return std::chrono::duration_cast<std::chrono::microseconds>(d).count();
+template <typename Rep, typename Period>
+[[nodiscard]] inline std::chrono::microseconds::rep
+to_us(std::chrono::duration<Rep, Period> d) noexcept {
+  return std::chrono::duration_cast<std::chrono::microseconds>(d).count();
 }
 
-template<typename Rep, typename Period>
-[[nodiscard]] inline std::chrono::milliseconds::rep to_ms(std::chrono::duration<Rep, Period> d) noexcept
-{
-    return std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
+template <typename Rep, typename Period>
+[[nodiscard]] inline std::chrono::milliseconds::rep
+to_ms(std::chrono::duration<Rep, Period> d) noexcept {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
 }
 
-template<typename Rep, typename Period>
-[[nodiscard]] inline std::chrono::nanoseconds::rep to_ns(std::chrono::duration<Rep, Period> d) noexcept
-{
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(d).count();
+template <typename Rep, typename Period>
+[[nodiscard]] inline std::chrono::nanoseconds::rep
+to_ns(std::chrono::duration<Rep, Period> d) noexcept {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(d).count();
 }
 
-template<typename T>
-struct StopwatchScope
-{
-    StopwatchScope(T& cur_time) : m_cur_time(cur_time), m_start(std::chrono::steady_clock::now()) {}
+template <typename T> struct StopwatchScope {
+  StopwatchScope(T &cur_time)
+      : m_cur_time(cur_time), m_start(std::chrono::steady_clock::now()) {}
 
-    ~StopwatchScope() { m_cur_time += std::chrono::duration_cast<T>(std::chrono::steady_clock::now() - m_start); }
+  StopwatchScope(const StopwatchScope &) = delete;
+  StopwatchScope &operator=(const StopwatchScope &) = delete;
+  StopwatchScope(StopwatchScope &&) = delete;
+  StopwatchScope &operator=(StopwatchScope &&) = delete;
 
-    T& m_cur_time;
-    std::chrono::steady_clock::time_point m_start;
+  ~StopwatchScope() {
+    m_cur_time += std::chrono::duration_cast<T>(
+        std::chrono::steady_clock::now() - m_start);
+  }
+
+  T &m_cur_time;
+  std::chrono::steady_clock::time_point m_start;
 };
 
-class CountdownWatch
-{
+class CountdownWatch {
 private:
-    std::chrono::steady_clock::time_point m_deadline;
+  std::chrono::steady_clock::time_point m_deadline;
 
 public:
-    template<typename Rep, typename Period>
-    explicit CountdownWatch(std::chrono::duration<Rep, Period> timeout) :
-        m_deadline(std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout))
-    {
-    }
+  template <typename Rep, typename Period>
+  explicit CountdownWatch(std::chrono::duration<Rep, Period> timeout)
+      : m_deadline(
+            std::chrono::steady_clock::now() +
+            std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                timeout)) {}
 
-    bool has_finished() const { return std::chrono::steady_clock::now() >= m_deadline; }
+  bool has_finished() const {
+    return std::chrono::steady_clock::now() >= m_deadline;
+  }
 };
 
-}
+} // namespace ygg
 
 #endif

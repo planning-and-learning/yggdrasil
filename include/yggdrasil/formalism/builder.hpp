@@ -15,31 +15,24 @@
 
 #include <tuple>
 
-namespace ygg::formalism
-{
+namespace ygg::formalism {
 
-template<typename T>
-class BasicBuilder
-{
+template <typename T> class BasicBuilder {
 private:
-    ygg::UniqueObjectPool<ygg::Data<T>> m_data;
+  ygg::UniqueObjectPool<ygg::Data<T>> m_data;
 
 public:
-    [[nodiscard]] auto get_builder() { return m_data.get_or_allocate(); }
+  [[nodiscard]] auto get_builder() { return m_data.get_or_allocate(); }
 };
 
-template<typename... Ts>
-class BuilderStorage
-{
+template <typename... Ts> class BuilderStorage {
 private:
-    std::tuple<BasicBuilder<Ts>...> m_builders;
+  std::tuple<BasicBuilder<Ts>...> m_builders;
 
 public:
-    template<typename T>
-    [[nodiscard]] auto get_builder()
-    {
-        return std::get<BasicBuilder<T>>(m_builders).get_builder();
-    }
+  template <typename T> [[nodiscard]] auto get_builder() {
+    return std::get<BasicBuilder<T>>(m_builders).get_builder();
+  }
 };
 
 } // namespace ygg::formalism

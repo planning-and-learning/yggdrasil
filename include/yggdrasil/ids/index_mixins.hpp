@@ -24,55 +24,75 @@
 #include <limits>
 #include <tuple>
 
-namespace ygg
-{
+namespace ygg {
 
-template<typename Derived>
-struct IndexMixin
-{
-    uint_t value {};
+template <typename Derived> struct IndexMixin {
+  using value_type = uint_t;
 
-    static constexpr uint_t MAX = std::numeric_limits<uint_t>::max();
+  value_type value{};
 
-    constexpr IndexMixin() noexcept : value(MAX) {}
-    constexpr explicit IndexMixin(uint_t value) noexcept : value(value) {}
+  static constexpr value_type MAX = std::numeric_limits<value_type>::max();
 
-    static constexpr Derived max() noexcept { return Derived(MAX); }
+  constexpr IndexMixin() noexcept : value(MAX) {}
+  constexpr explicit IndexMixin(value_type value) noexcept : value(value) {}
 
-    // ----------------------------------------------------
-    // Comparisons
-    // ----------------------------------------------------
+  static constexpr Derived max() noexcept { return Derived(MAX); }
 
-    friend constexpr bool operator==(const IndexMixin& lhs, const IndexMixin& rhs) noexcept { return lhs.value == rhs.value; }
-    friend constexpr bool operator!=(const IndexMixin& lhs, const IndexMixin& rhs) noexcept { return !(lhs == rhs); }
-    friend constexpr bool operator<=(const IndexMixin& lhs, const IndexMixin& rhs) noexcept { return lhs.value <= rhs.value; }
-    friend constexpr bool operator<(const IndexMixin& lhs, const IndexMixin& rhs) noexcept { return lhs.value < rhs.value; }
-    friend constexpr bool operator>=(const IndexMixin& lhs, const IndexMixin& rhs) noexcept { return lhs.value >= rhs.value; }
-    friend constexpr bool operator>(const IndexMixin& lhs, const IndexMixin& rhs) noexcept { return lhs.value > rhs.value; }
+  constexpr bool is_max() const noexcept { return value == MAX; }
 
-    explicit constexpr operator uint_t() const noexcept { return value; }
+  // ----------------------------------------------------
+  // Comparisons
+  // ----------------------------------------------------
 
-    constexpr uint_t get_value() const noexcept { return value; }
+  friend constexpr bool operator==(const IndexMixin &lhs,
+                                   const IndexMixin &rhs) noexcept {
+    return lhs.value == rhs.value;
+  }
+  friend constexpr bool operator!=(const IndexMixin &lhs,
+                                   const IndexMixin &rhs) noexcept {
+    return !(lhs == rhs);
+  }
+  friend constexpr bool operator<=(const IndexMixin &lhs,
+                                   const IndexMixin &rhs) noexcept {
+    return lhs.value <= rhs.value;
+  }
+  friend constexpr bool operator<(const IndexMixin &lhs,
+                                  const IndexMixin &rhs) noexcept {
+    return lhs.value < rhs.value;
+  }
+  friend constexpr bool operator>=(const IndexMixin &lhs,
+                                   const IndexMixin &rhs) noexcept {
+    return lhs.value >= rhs.value;
+  }
+  friend constexpr bool operator>(const IndexMixin &lhs,
+                                  const IndexMixin &rhs) noexcept {
+    return lhs.value > rhs.value;
+  }
 
-    auto cista_members() const noexcept { return std::tie(value); }
-    auto identifying_members() const noexcept { return std::tie(value); }
+  explicit constexpr operator value_type() const noexcept { return value; }
+
+  constexpr value_type get_value() const noexcept { return value; }
+
+  auto cista_members() const noexcept { return std::tie(value); }
+  auto identifying_members() const noexcept { return std::tie(value); }
 };
 
-template<typename T>
-concept IndexConcept = requires(const T& i, const T& j, uint_t v) {
-    { T() };
-    { T(v) };
-    { i.get_value() } -> std::same_as<uint_t>;
-    { uint_t(i) } -> std::same_as<uint_t>;
-    { T::max() } -> std::same_as<T>;
-    { i == j } -> std::same_as<bool>;
-    { i != j } -> std::same_as<bool>;
-    { i <= j } -> std::same_as<bool>;
-    { i < j } -> std::same_as<bool>;
-    { i >= j } -> std::same_as<bool>;
-    { i > j } -> std::same_as<bool>;
+template <typename T>
+concept IndexConcept = requires(const T &i, const T &j, uint_t v) {
+  { T() };
+  { T(v) };
+  { i.get_value() } -> std::same_as<uint_t>;
+  { uint_t(i) } -> std::same_as<uint_t>;
+  { T::max() } -> std::same_as<T>;
+  { i.is_max() } -> std::same_as<bool>;
+  { i == j } -> std::same_as<bool>;
+  { i != j } -> std::same_as<bool>;
+  { i <= j } -> std::same_as<bool>;
+  { i < j } -> std::same_as<bool>;
+  { i >= j } -> std::same_as<bool>;
+  { i > j } -> std::same_as<bool>;
 };
 
-}
+} // namespace ygg
 
 #endif

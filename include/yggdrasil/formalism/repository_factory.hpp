@@ -20,35 +20,29 @@
 
 #include <yggdrasil/formalism/repository.hpp>
 
-#include <cassert>
-#include <optional>
-#include <tuple>
-#include <type_traits>
-#include <utility>
+#include <memory>
 
-namespace ygg::formalism
-{
+namespace ygg::formalism {
 
-template<typename SymbolRepo, typename RelationRepo>
-class RepositoryFactory
-{
+template <typename SymbolRepo, typename RelationRepo> class RepositoryFactory {
 public:
-    RepositoryFactory() : m_next_index(0) {}
+  RepositoryFactory() : m_next_index(0) {}
 
-    Repository<SymbolRepo, RelationRepo> create(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    {
-        return Repository<SymbolRepo, RelationRepo>(m_next_index++, parent);
-    }
+  Repository<SymbolRepo, RelationRepo>
+  create(const Repository<SymbolRepo, RelationRepo> *parent = nullptr) {
+    return Repository<SymbolRepo, RelationRepo>(m_next_index++, parent);
+  }
 
-    std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    {
-        return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_next_index++, parent);
-    }
+  std::shared_ptr<Repository<SymbolRepo, RelationRepo>>
+  create_shared(const Repository<SymbolRepo, RelationRepo> *parent = nullptr) {
+    return std::make_shared<Repository<SymbolRepo, RelationRepo>>(
+        m_next_index++, parent);
+  }
 
 private:
-    ygg::uint_t m_next_index;
+  ygg::uint_t m_next_index;
 };
 
-}
+} // namespace ygg::formalism
 
 #endif

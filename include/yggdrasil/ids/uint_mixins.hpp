@@ -22,77 +22,94 @@
 
 #include <concepts>
 #include <limits>
+#include <tuple>
 
-namespace ygg
-{
+namespace ygg {
 
-template<typename Derived>
-struct FixedUintMixin
-{
-    using value_type = uint_t;
+template <typename Derived> struct FixedUintMixin {
+  using value_type = uint_t;
 
-    value_type m_value;
+  value_type m_value;
 
-    static constexpr value_type MAX = std::numeric_limits<value_type>::max();
+  static constexpr value_type MAX = std::numeric_limits<value_type>::max();
 
-    constexpr FixedUintMixin() noexcept : m_value(MAX) {}
-    explicit constexpr FixedUintMixin(value_type v) noexcept : m_value(v) {}
+  constexpr FixedUintMixin() noexcept : m_value(MAX) {}
+  explicit constexpr FixedUintMixin(value_type v) noexcept : m_value(v) {}
 
-    static constexpr Derived max() noexcept { return Derived(MAX); }
+  static constexpr Derived max() noexcept { return Derived(MAX); }
 
-    // ----------------------------------------------------
-    // Comparisons
-    // ----------------------------------------------------
+  constexpr bool is_max() const noexcept { return m_value == MAX; }
 
-    friend constexpr bool operator==(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value == rhs.m_value; }
-    friend constexpr bool operator!=(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return !(lhs == rhs); }
-    friend constexpr bool operator<=(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value <= rhs.m_value; }
-    friend constexpr bool operator<(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value < rhs.m_value; }
-    friend constexpr bool operator>=(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value >= rhs.m_value; }
-    friend constexpr bool operator>(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value > rhs.m_value; }
+  // ----------------------------------------------------
+  // Comparisons
+  // ----------------------------------------------------
 
-    // ----------------------------------------------------
-    // Arithmetic with integral types
-    // ----------------------------------------------------
+  friend constexpr bool operator==(const FixedUintMixin &lhs,
+                                   const FixedUintMixin &rhs) noexcept {
+    return lhs.m_value == rhs.m_value;
+  }
+  friend constexpr bool operator!=(const FixedUintMixin &lhs,
+                                   const FixedUintMixin &rhs) noexcept {
+    return !(lhs == rhs);
+  }
+  friend constexpr bool operator<=(const FixedUintMixin &lhs,
+                                   const FixedUintMixin &rhs) noexcept {
+    return lhs.m_value <= rhs.m_value;
+  }
+  friend constexpr bool operator<(const FixedUintMixin &lhs,
+                                  const FixedUintMixin &rhs) noexcept {
+    return lhs.m_value < rhs.m_value;
+  }
+  friend constexpr bool operator>=(const FixedUintMixin &lhs,
+                                   const FixedUintMixin &rhs) noexcept {
+    return lhs.m_value >= rhs.m_value;
+  }
+  friend constexpr bool operator>(const FixedUintMixin &lhs,
+                                  const FixedUintMixin &rhs) noexcept {
+    return lhs.m_value > rhs.m_value;
+  }
 
-    template<std::integral T>
-    friend constexpr Derived operator+(const FixedUintMixin& lhs, T rhs) noexcept
-    {
-        return Derived(lhs.m_value + rhs);
-    }
-    template<std::integral T>
-    friend constexpr Derived operator-(const FixedUintMixin& lhs, T rhs) noexcept
-    {
-        return Derived(lhs.m_value - rhs);  // wraps if rhs > lhs
-    }
+  // ----------------------------------------------------
+  // Arithmetic with integral types
+  // ----------------------------------------------------
 
-    // ----------------------------------------------------
-    // Pre-increment (++x)
-    // ----------------------------------------------------
-    constexpr Derived& operator++() noexcept
-    {
-        ++m_value;
-        return static_cast<Derived&>(*this);
-    }
+  template <std::integral T>
+  friend constexpr Derived operator+(const FixedUintMixin &lhs,
+                                     T rhs) noexcept {
+    return Derived(lhs.m_value + rhs);
+  }
+  template <std::integral T>
+  friend constexpr Derived operator-(const FixedUintMixin &lhs,
+                                     T rhs) noexcept {
+    return Derived(lhs.m_value - rhs); // wraps if rhs > lhs
+  }
 
-    // ----------------------------------------------------
-    // Post-increment (x++)
-    // ----------------------------------------------------
-    constexpr Derived operator++(int) noexcept
-    {
-        Derived tmp = static_cast<const Derived&>(*this);
-        ++(*this);
-        return tmp;
-    }
+  // ----------------------------------------------------
+  // Pre-increment (++x)
+  // ----------------------------------------------------
+  constexpr Derived &operator++() noexcept {
+    ++m_value;
+    return static_cast<Derived &>(*this);
+  }
 
-    constexpr value_type value() const noexcept { return m_value; }
+  // ----------------------------------------------------
+  // Post-increment (x++)
+  // ----------------------------------------------------
+  constexpr Derived operator++(int) noexcept {
+    Derived tmp = static_cast<const Derived &>(*this);
+    ++(*this);
+    return tmp;
+  }
 
-    explicit constexpr operator value_type() const noexcept { return m_value; }
+  constexpr value_type value() const noexcept { return m_value; }
+  constexpr value_type get_value() const noexcept { return m_value; }
 
-    auto cista_members() const noexcept { return std::tie(m_value); }
-    auto identifying_members() const noexcept { return std::tie(m_value); }
+  explicit constexpr operator value_type() const noexcept { return m_value; }
+
+  auto cista_members() const noexcept { return std::tie(m_value); }
+  auto identifying_members() const noexcept { return std::tie(m_value); }
 };
 
-}
+} // namespace ygg
 
 #endif

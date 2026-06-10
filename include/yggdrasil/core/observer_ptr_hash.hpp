@@ -18,20 +18,19 @@
 #ifndef YGG_COMMON_OBSERVER_PTR_HASH_HPP_
 #define YGG_COMMON_OBSERVER_PTR_HASH_HPP_
 
-#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/core/observer_ptr.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 
 #include <type_traits>
 
-namespace ygg
-{
+namespace ygg {
 
-template<typename T>
-struct Hash<ObserverPtr<T>>
-{
-    size_t operator()(ObserverPtr<T> ptr) const noexcept { return Hash<std::remove_cvref_t<T>> {}(*ptr); }
+template <typename T> struct Hash<ObserverPtr<T>> {
+  size_t operator()(ObserverPtr<T> ptr) const noexcept {
+    return Hash<std::remove_cvref_t<T>>{}(*ptr);
+  }
 };
 
-}
+} // namespace ygg
 
 #endif

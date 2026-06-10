@@ -18,18 +18,17 @@
 #ifndef YGGDRASIL_HPP_
 #define YGGDRASIL_HPP_
 
-#include "yggdrasil/extensions.hpp"
+#include "yggdrasil/buffer.hpp"
 #include "yggdrasil/containers/block_array_ordering.hpp"
-#include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/containers/containers.hpp"
 #include "yggdrasil/core.hpp"
+#include "yggdrasil/extensions.hpp"
+#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/ids/uint_mixins.hpp"
+#include "yggdrasil/io/iostream.hpp"
+#include "yggdrasil/io/project_adapters.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
-#include "yggdrasil/io/iostream.hpp"
-#include "yggdrasil/core/path.hpp"
-#include "yggdrasil/io/project_adapters.hpp"
-#include "yggdrasil/containers/repository_types.hpp"
-#include "yggdrasil/containers/tuple.hpp"
-#include "yggdrasil/ids/uint_mixins.hpp"
 
 #endif

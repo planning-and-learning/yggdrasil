@@ -18,21 +18,28 @@
 #ifndef YGG_COMMON_PROJECT_PATH_HPP_
 #define YGG_COMMON_PROJECT_PATH_HPP_
 
+#include "yggdrasil/core/path.hpp"
+
 #include <filesystem>
 #include <string>
 #include <string_view>
 
-namespace ygg::common
-{
+namespace ygg::common {
 
 #ifdef ROOT_DIR
-inline std::filesystem::path root_path() { return std::filesystem::path(std::string(ROOT_DIR)); }
+inline std::filesystem::path root_path() {
+  return std::filesystem::path(std::string(ROOT_DIR));
+}
 
-inline std::filesystem::path data_path(std::string_view relative_path) { return root_path() / "data" / relative_path; }
+inline std::filesystem::path data_path(std::string_view path) {
+  return resolve_path(root_path() / "data", path);
+}
 
-inline std::filesystem::path profiling_path(std::string_view relative_path) { return root_path() / "profiling" / relative_path; }
+inline std::filesystem::path profiling_path(std::string_view path) {
+  return resolve_path(root_path() / "profiling", path);
+}
 #endif
 
-}
+} // namespace ygg::common
 
 #endif

@@ -22,49 +22,45 @@
 
 #include <cista/containers/optional.h>
 
-namespace ygg
-{
+namespace ygg {
 
-template<typename C, typename T>
-class View<::cista::optional<T>, C>
-{
+template <typename C, typename T> class View<::cista::optional<T>, C> {
 public:
-    using Optional = ::cista::optional<T>;
+  using Optional = ::cista::optional<T>;
 
-    View(const Optional& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
+  View(const Optional &handle, const C &context) noexcept
+      : m_context(&context), m_handle(&handle) {}
 
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
+  const auto &get_data() const noexcept { return *m_handle; }
+  const auto &get_context() const noexcept { return *m_context; }
+  const auto &get_handle() const noexcept { return *m_handle; }
 
-    bool has_value() const noexcept { return m_handle->has_value(); }
+  bool has_value() const noexcept { return m_handle->has_value(); }
 
-    explicit operator bool() const noexcept { return m_handle->has_value(); }
+  explicit operator bool() const noexcept { return m_handle->has_value(); }
 
-    decltype(auto) value() const
-    {
-        if constexpr (ViewConcept<T, C>)
-            return make_view(**m_handle, *m_context);
-        else
-            return m_handle->value();
-    }
+  decltype(auto) value() const {
+    if constexpr (ViewConcept<T, C>)
+      return make_view(**m_handle, *m_context);
+    else
+      return m_handle->value();
+  }
 
-    decltype(auto) operator*() const noexcept { return value(); }
+  decltype(auto) operator*() const { return value(); }
 
-    auto operator->() const
-    {
-        if constexpr (ViewConcept<T, C>)
-            static_assert(!ViewConcept<T, C>,
-                          "operator-> is not supported when T is viewable; "
-                          "call .value() first to get a make_view.");
-        else
-            return &m_handle->value();
-    }
+  auto operator->() const {
+    if constexpr (ViewConcept<T, C>)
+      static_assert(!ViewConcept<T, C>,
+                    "operator-> is not supported when T is viewable; "
+                    "call .value() first to get a make_view.");
+    else
+      return &m_handle->value();
+  }
 
 private:
-    const C* m_context;
-    const Optional* m_handle;
+  const C *m_context;
+  const Optional *m_handle;
 };
 
-}
+} // namespace ygg
 #endif

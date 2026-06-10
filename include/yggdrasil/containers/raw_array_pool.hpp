@@ -16,123 +16,158 @@
 #include <bit>
 #include <cassert>
 #include <cstddef>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
-namespace ygg
-{
+namespace ygg {
 
-template<TriviallyCopyable T, size_t ArraysPerSegment = 1024>
-class RawArrayPool
-{
-    static_assert(bit::is_power_of_two(ArraysPerSegment));
+template <TriviallyCopyable T, size_t ArraysPerSegment = 1024>
+class RawArrayPool {
+  static_assert(bit::is_power_of_two(ArraysPerSegment));
 
-    static constexpr size_t seg_shift = std::countr_zero(ArraysPerSegment);
-    static constexpr size_t seg_mask = ArraysPerSegment - 1;
+  static constexpr size_t seg_shift = std::countr_zero(ArraysPerSegment);
+  static constexpr size_t seg_mask = ArraysPerSegment - 1;
 
 private:
-    void increase_capacity()
-    {
-        if (m_cur_seg < m_segments.size() && m_cur_pos + m_array_size <= m_segment_size)
-            return;
+  static constexpr size_t max_array_size() noexcept {
+    return std::numeric_limits<size_t>::max() / ArraysPerSegment;
+  }
 
-        if (m_cur_seg + 1 < m_segments.size())
-        {
-            m_cur_seg = m_cur_seg + 1;
-            m_cur_pos = 0;
-            return;
-        }
+  static size_t segment_size_for(size_t array_size) {
+    if (array_size > max_array_size())
+      throw std::length_error(
+          "RawArrayPool: array segment size exceeds addressable memory.");
+    return ArraysPerSegment * array_size;
+  }
 
-        m_segments.emplace_back(m_segment_size);
+  void increase_capacity() {
+    if (m_cur_seg < m_segments.size() &&
+        m_cur_pos + m_array_size <= m_segment_size)
+      return;
 
-        m_cur_seg = m_segments.size() - 1;
-        m_cur_pos = 0;
+    if (m_cur_seg + 1 < m_segments.size()) {
+      m_cur_seg = m_cur_seg + 1;
+      m_cur_pos = 0;
+      return;
     }
+
+    m_segments.emplace_back(m_segment_size);
+
+    m_cur_seg = m_segments.size() - 1;
+    m_cur_pos = 0;
+  }
+
+private:
+  void ensure_index(size_t array_index) const {
+    if (array_index >= m_size)
+      throw std::out_of_range("RawArrayPool: index out of range.");
+  }
+
+  void ensure_not_empty() const {
+    if (empty())
+      throw std::out_of_range("RawArrayPool: container is empty.");
+  }
 
 public:
-    explicit RawArrayPool(size_t array_size) : m_array_size(array_size), m_segment_size(ArraysPerSegment * array_size), m_cur_seg(0), m_cur_pos(0), m_size(0) {}
+  explicit RawArrayPool(size_t array_size)
+      : m_array_size(array_size), m_segment_size(segment_size_for(array_size)),
+        m_cur_seg(0), m_cur_pos(0), m_size(0) {}
 
-    T* allocate()
-    {
-        increase_capacity();
-
-        T* result = &m_segments[m_cur_seg][m_cur_pos];
-
-        m_cur_pos += m_array_size;
-        ++m_size;
-
-        return result;
+  T *allocate() {
+    if (m_array_size == 0) {
+      ++m_size;
+      return nullptr;
     }
 
-    const T* operator[](size_t array_index) const noexcept
-    {
-        assert(array_index < m_size);
-        const size_t seg = array_index >> seg_shift;
-        const size_t idx = array_index & seg_mask;
-        return &m_segments[seg][idx * m_array_size];
-    }
+    increase_capacity();
 
-    T* operator[](size_t array_index) noexcept
-    {
-        assert(array_index < m_size);
-        const size_t seg = array_index >> seg_shift;
-        const size_t idx = array_index & seg_mask;
-        return &m_segments[seg][idx * m_array_size];
-    }
+    T *result = &m_segments[m_cur_seg][m_cur_pos];
 
-    const T* front() const noexcept
-    {
-        assert(!empty());
-        return (*this)[0];
-    }
+    m_cur_pos += m_array_size;
+    ++m_size;
 
-    T* front() noexcept
-    {
-        assert(!empty());
-        return (*this)[0];
-    }
+    return result;
+  }
 
-    const T* back() const noexcept
-    {
-        assert(!empty());
-        return (*this)[m_size - 1];
-    }
+  const T *operator[](size_t array_index) const noexcept {
+    assert(array_index < m_size);
+    if (m_array_size == 0)
+      return nullptr;
 
-    T* back() noexcept
-    {
-        assert(!empty());
-        return (*this)[m_size - 1];
-    }
+    const size_t seg = array_index >> seg_shift;
+    const size_t idx = array_index & seg_mask;
+    return &m_segments[seg][idx * m_array_size];
+  }
 
-    void clear() noexcept
-    {
-        m_cur_seg = 0;
-        m_cur_pos = 0;
-        m_size = 0;
-    }
+  T *operator[](size_t array_index) noexcept {
+    assert(array_index < m_size);
+    if (m_array_size == 0)
+      return nullptr;
 
-    size_t memory_usage() const noexcept
-    {
-        size_t bytes = 0;
-        for (const auto& seg : m_segments)
-            bytes += seg.capacity() * sizeof(T);
-        return bytes;
-    }
+    const size_t seg = array_index >> seg_shift;
+    const size_t idx = array_index & seg_mask;
+    return &m_segments[seg][idx * m_array_size];
+  }
 
-    size_t size() const noexcept { return m_size; }
-    bool empty() const noexcept { return m_size == 0; }
-    size_t array_size() const noexcept { return m_array_size; }
+  const T *at(size_t array_index) const {
+    ensure_index(array_index);
+    return (*this)[array_index];
+  }
+
+  T *at(size_t array_index) {
+    ensure_index(array_index);
+    return (*this)[array_index];
+  }
+
+  const T *front() const {
+    ensure_not_empty();
+    return (*this)[0];
+  }
+
+  T *front() {
+    ensure_not_empty();
+    return (*this)[0];
+  }
+
+  const T *back() const {
+    ensure_not_empty();
+    return (*this)[m_size - 1];
+  }
+
+  T *back() {
+    ensure_not_empty();
+    return (*this)[m_size - 1];
+  }
+
+  void clear() noexcept {
+    m_cur_seg = 0;
+    m_cur_pos = 0;
+    m_size = 0;
+  }
+
+  size_t memory_usage() const noexcept {
+    size_t bytes = 0;
+    for (const auto &seg : m_segments)
+      bytes += seg.capacity() * sizeof(T);
+    return bytes;
+  }
+
+  size_t size() const noexcept { return m_size; }
+  bool empty() const noexcept { return m_size == 0; }
+  size_t array_size() const noexcept { return m_array_size; }
 
 private:
-    std::vector<std::vector<T>> m_segments;
+  std::vector<std::vector<T>> m_segments;
 
-    size_t m_array_size;
-    size_t m_segment_size;
+  size_t m_array_size;
+  size_t m_segment_size;
 
-    size_t m_cur_seg;
-    size_t m_cur_pos;
-    size_t m_size;
+  size_t m_cur_seg;
+  size_t m_cur_pos;
+  size_t m_size;
 };
 
-}  // namespace ygg
+} // namespace ygg
 
 #endif

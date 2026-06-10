@@ -7,7 +7,7 @@ backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.0.11"
+version = "0.0.12"
 description = "Native dependency provider for Dominik Drexler's planning projects"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -38,6 +38,7 @@ include = [
     "python/**",
     "src/**",
     "include/**",
+    "cmake/**",
 ]
 exclude = [
     "build*/**",
@@ -52,6 +53,7 @@ CMAKE_INSTALL_LIBDIR = "lib"
 
 [tool.cibuildwheel]
 container-engine = "docker"
+test-command = "python -c \"import pyyggdrasil; assert pyyggdrasil.include_dir().is_dir(); assert pyyggdrasil.library_dirs(); assert pyyggdrasil.cmake_dirs(); assert pyyggdrasil.ExecutionContext.max_num_threads() >= 1\""
 
 [tool.cibuildwheel.linux]
 repair-wheel-command = "LD_LIBRARY_PATH=$(python -c 'import os, pathlib; prefix = pathlib.Path(\"dependencies-install\"); print(os.pathsep.join(str(path) for path in sorted(prefix.glob(\"lib*\")) if path.is_dir()))') auditwheel repair -w {dest_dir} {wheel}"

@@ -21,47 +21,49 @@
 #include <iosfwd>
 #include <iostream>
 
-namespace ygg
-{
+namespace ygg {
 
-inline int indent_index()
-{
-    static int idx = std::ios_base::xalloc();
-    return idx;
+inline int indent_index() {
+  static int idx = std::ios_base::xalloc();
+  return idx;
 }
 
 constexpr int INDENT_WIDTH = 4;
 
-inline std::ostream& print_indent(std::ostream& os)
-{
-    auto level = os.iword(indent_index());
-    if (level < 0)
-        level = 0;
-    for (long i = 0; i < level * INDENT_WIDTH; ++i)
-        os.put(' ');
-    return os;
+inline std::ostream &print_indent(std::ostream &os) {
+  auto level = os.iword(indent_index());
+  if (level < 0)
+    level = 0;
+  for (long i = 0; i < level * INDENT_WIDTH; ++i)
+    os.put(' ');
+  return os;
 }
 
 // manipulators to change indentation
-inline std::ostream& indent_up(std::ostream& os)
-{
-    ++os.iword(indent_index());
-    return os;
+inline std::ostream &indent_up(std::ostream &os) {
+  ++os.iword(indent_index());
+  return os;
 }
 
-inline std::ostream& indent_down(std::ostream& os)
-{
-    --os.iword(indent_index());
-    return os;
+inline std::ostream &indent_down(std::ostream &os) {
+  auto &level = os.iword(indent_index());
+  if (level > 0)
+    --level;
+  return os;
 }
 
 // RAII scope for indentation (recommended)
-struct IndentScope
-{
-    std::ostream& os;
-    explicit IndentScope(std::ostream& os) : os(os) { indent_up(os); }
-    ~IndentScope() { indent_down(os); }
+struct IndentScope {
+  std::ostream &os;
+  explicit IndentScope(std::ostream &os) : os(os) { indent_up(os); }
+
+  IndentScope(const IndentScope &) = delete;
+  IndentScope &operator=(const IndentScope &) = delete;
+  IndentScope(IndentScope &&) = delete;
+  IndentScope &operator=(IndentScope &&) = delete;
+
+  ~IndentScope() { indent_down(os); }
 };
-}
+} // namespace ygg
 
 #endif

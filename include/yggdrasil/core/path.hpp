@@ -25,24 +25,23 @@
 #include <string>
 #include <string_view>
 
-namespace ygg::common
-{
+namespace ygg::common {
 
-inline std::filesystem::path resolve_path(const std::filesystem::path& prefix, std::string_view path)
-{
-    const auto result = std::filesystem::path(std::string(path));
-    return result.is_absolute() ? result : prefix / result;
+inline std::filesystem::path resolve_path(const std::filesystem::path &prefix,
+                                          std::string_view path) {
+  const auto result = std::filesystem::path(std::string(path));
+  return result.is_absolute() ? result : prefix / result;
 }
 
-inline std::string read_file(const std::filesystem::path& path)
-{
-    auto stream = std::ifstream(path);
-    if (!stream)
-        throw std::runtime_error("Could not open file: " + path.string());
+inline std::string read_file(const std::filesystem::path &path) {
+  auto stream = std::ifstream(path, std::ios::binary);
+  if (!stream)
+    throw std::runtime_error("Could not open file: " + path.string());
 
-    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+  return std::string(std::istreambuf_iterator<char>(stream),
+                     std::istreambuf_iterator<char>());
 }
 
-}
+} // namespace ygg::common
 
 #endif

@@ -26,158 +26,185 @@
 
 #include <cassert>
 #include <optional>
+#include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
-namespace ygg::formalism
-{
-template<typename ObjectTag, typename... Ts>
-class RelationRepository
-{
+namespace ygg::formalism {
+template <typename ObjectTag, typename... Ts> class RelationRepository {
 private:
-    const RelationRepository* m_parent;
-    const RelationRepository* m_root;
-    std::tuple<BasicRelationRepository<ObjectTag, Ts>...> m_repositories;
+  const RelationRepository *m_parent;
+  const RelationRepository *m_root;
+  std::tuple<BasicRelationRepository<ObjectTag, Ts>...> m_repositories;
 
 public:
-    using object_tag = ObjectTag;
-    using container_type = typename BasicRelationRepository<ObjectTag, std::tuple_element_t<0, std::tuple<Ts...>>>::container_type;
-    using ConstViewType = typename container_type::ConstArrayView;
+  using object_tag = ObjectTag;
+  using container_type = typename BasicRelationRepository<
+      ObjectTag, std::tuple_element_t<0, std::tuple<Ts...>>>::container_type;
+  using ConstViewType = typename container_type::ConstArrayView;
 
-    RelationRepository(const RelationRepository* parent = nullptr) :
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this),
-        m_repositories(BasicRelationRepository<ObjectTag, Ts>(parent ? &std::get<BasicRelationRepository<ObjectTag, Ts>>(parent->m_repositories) : nullptr)...)
-    {
+  RelationRepository(const RelationRepository *parent = nullptr)
+      : m_parent(parent), m_root(m_parent ? m_parent->m_root : this),
+        m_repositories(BasicRelationRepository<ObjectTag, Ts>(
+            parent ? &std::get<BasicRelationRepository<ObjectTag, Ts>>(
+                         parent->m_repositories)
+                   : nullptr)...) {}
+
+  RelationRepository(const RelationRepository &) = delete;
+  RelationRepository &operator=(const RelationRepository &) = delete;
+  RelationRepository(RelationRepository &&) = delete;
+  RelationRepository &operator=(RelationRepository &&) = delete;
+
+  const auto &get_root() const noexcept { return *m_root; }
+
+  template <typename T> BasicRelationRepository<ObjectTag, T> &get() noexcept {
+    return std::get<BasicRelationRepository<ObjectTag, T>>(m_repositories);
+  }
+
+  template <typename T>
+  const BasicRelationRepository<ObjectTag, T> &get() const noexcept {
+    return std::get<BasicRelationRepository<ObjectTag, T>>(m_repositories);
+  }
+
+  void clear() noexcept {
+    std::apply([](auto &...repos) { (repos.clear(), ...); }, m_repositories);
+  }
+
+  template <typename T>
+  static size_t
+  hash(const Data<RelationBinding<T, ObjectTag>> &builder) noexcept {
+    return BasicRelationRepository<ObjectTag, T>::hash(builder);
+  }
+
+  template <typename T>
+  std::optional<Index<RelationBinding<T, ObjectTag>>>
+  find_with_hash(const Data<RelationBinding<T, ObjectTag>> &builder,
+                 size_t h) const noexcept {
+    const auto relation = builder.relation;
+
+    const auto *current = this;
+    while (current != nullptr) {
+      if (auto row_or_nullopt =
+              current->template get<T>().find_local_with_hash(builder, h))
+        return Index<RelationBinding<T, ObjectTag>>{relation, *row_or_nullopt};
+
+      current = current->m_parent;
     }
 
-    RelationRepository(const RelationRepository&) = delete;
-    RelationRepository& operator=(const RelationRepository&) = delete;
-    RelationRepository(RelationRepository&&) = delete;
-    RelationRepository& operator=(RelationRepository&&) = delete;
+    return std::nullopt;
+  }
 
-    const auto& get_root() const noexcept { return *m_root; }
+  template <typename T>
+  std::optional<Index<RelationBinding<T, ObjectTag>>>
+  find(const Data<RelationBinding<T, ObjectTag>> &builder) const noexcept {
+    return find_with_hash(builder, RelationRepository::hash(builder));
+  }
 
-    template<typename T>
-    BasicRelationRepository<ObjectTag, T>& get() noexcept
-    {
-        return std::get<BasicRelationRepository<ObjectTag, T>>(m_repositories);
+  template <typename T>
+  std::pair<Index<RelationBinding<T, ObjectTag>>, bool>
+  get_or_create(const Data<RelationBinding<T, ObjectTag>> &builder) {
+    const auto relation = builder.relation;
+
+    const auto *current = this;
+    while (current != nullptr) {
+      if (auto row_or_nullopt = current->template get<T>().find_local(builder))
+        return {Index<RelationBinding<T, ObjectTag>>{relation, *row_or_nullopt},
+                false};
+
+      current = current->m_parent;
     }
 
-    template<typename T>
-    const BasicRelationRepository<ObjectTag, T>& get() const noexcept
-    {
-        return std::get<BasicRelationRepository<ObjectTag, T>>(m_repositories);
+    assert(!get<T>().exists_parent_mutation(relation) &&
+           "Integrity error: Parent RelationRepository modified after child "
+           "branching!");
+
+    const auto [row, success] = get<T>().get_or_create_local(builder);
+    return {Index<RelationBinding<T, ObjectTag>>{relation, row}, success};
+  }
+
+  template <typename T>
+  auto operator[](Index<RelationBinding<T, ObjectTag>> index) const {
+    const auto *current = this;
+    while (current != nullptr) {
+      if (current->template get<T>().is_local(index))
+        return current->template get<T>().at_local(index);
+
+      current = current->m_parent;
     }
 
-    void clear() noexcept
-    {
-        std::apply([](auto&... repos) { (repos.clear(), ...); }, m_repositories);
+    throw std::out_of_range(
+        "Relation binding index not found in any repository layer.");
+  }
+
+  template <typename T> size_t size(Index<T> g) const noexcept {
+    return get<T>().size(g);
+  }
+
+  template <typename T>
+  const BasicRelationRepository<ObjectTag, T> &
+  get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const {
+    const auto *current = this;
+    while (current != nullptr) {
+      if (current->template get<T>().is_local(index))
+        return current->template get<T>();
+
+      current = current->m_parent;
     }
 
-    template<typename T>
-    static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
-    {
-        return BasicRelationRepository<ObjectTag, T>::hash(builder);
-    }
+    throw std::out_of_range(
+        "Relation binding index not found in any repository layer.");
+  }
 
-    template<typename T>
-    auto find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const noexcept
-    {
-        return get<T>().find_with_hash(builder, h);
-    }
+  template <typename T>
+  auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>> &builder,
+                            size_t h) const noexcept {
+    return get<T>().find_local_with_hash(builder, h);
+  }
 
-    template<typename T>
-    auto find(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
-    {
-        return get<T>().find(builder);
-    }
+  template <typename T>
+  auto find_local(
+      const Data<RelationBinding<T, ObjectTag>> &builder) const noexcept {
+    return get<T>().find_local(builder);
+  }
 
-    template<typename T>
-    auto get_or_create(const Data<RelationBinding<T, ObjectTag>>& builder)
-    {
-        return get<T>().get_or_create(builder);
-    }
+  template <typename T>
+  auto get_or_create_local_with_hash(
+      const Data<RelationBinding<T, ObjectTag>> &builder, size_t h) {
+    return get<T>().get_or_create_local_with_hash(builder, h);
+  }
 
-    template<typename T>
-    auto operator[](Index<RelationBinding<T, ObjectTag>> index) const noexcept
-    {
-        return get<T>()[index];
-    }
+  template <typename T>
+  auto get_or_create_local(const Data<RelationBinding<T, ObjectTag>> &builder) {
+    return get<T>().get_or_create_local(builder);
+  }
 
-    template<typename T>
-    size_t size(Index<T> g) const noexcept
-    {
-        return get<T>().size(g);
-    }
+  template <typename T>
+  auto at_local(Index<RelationBinding<T, ObjectTag>> index) const {
+    return get<T>().at_local(index);
+  }
 
-    template<typename T>
-    const BasicRelationRepository<ObjectTag, T>& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const noexcept
-    {
-        return get<T>().get_canonical_context(index);
-    }
+  template <typename T> auto front_local(Index<T> g) const {
+    return get<T>().front_local(g);
+  }
 
-    template<typename T>
-    auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const noexcept
-    {
-        return get<T>().find_local_with_hash(builder, h);
-    }
+  template <typename T> size_t local_size(Index<T> g) const noexcept {
+    return get<T>().local_size(g);
+  }
 
-    template<typename T>
-    auto find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
-    {
-        return get<T>().find_local(builder);
-    }
+  template <typename T> size_t parent_size(Index<T> g) const noexcept {
+    return get<T>().parent_size(g);
+  }
 
-    template<typename T>
-    auto get_or_create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
-    {
-        return get<T>().get_or_create_local_with_hash(builder, h);
-    }
+  template <typename T>
+  bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept {
+    return get<T>().is_local(index);
+  }
 
-    template<typename T>
-    auto get_or_create_local(const Data<RelationBinding<T, ObjectTag>>& builder)
-    {
-        return get<T>().get_or_create_local(builder);
-    }
-
-    template<typename T>
-    auto at_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
-    {
-        return get<T>().at_local(index);
-    }
-
-    template<typename T>
-    auto front_local(Index<T> g) const noexcept
-    {
-        return get<T>().front_local(g);
-    }
-
-    template<typename T>
-    size_t local_size(Index<T> g) const noexcept
-    {
-        return get<T>().local_size(g);
-    }
-
-    template<typename T>
-    size_t parent_size(Index<T> g) const noexcept
-    {
-        return get<T>().parent_size(g);
-    }
-
-    template<typename T>
-    bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
-    {
-        return get<T>().is_local(index);
-    }
-
-    template<typename T>
-    bool exists_parent_mutation(Index<T> g) const noexcept
-    {
-        return get<T>().exists_parent_mutation(g);
-    }
+  template <typename T> bool exists_parent_mutation(Index<T> g) const noexcept {
+    return get<T>().exists_parent_mutation(g);
+  }
 };
-}
+} // namespace ygg::formalism
 
 #endif

@@ -4,7 +4,4 @@
 
 namespace nb = nanobind;
 
-NB_MODULE(_pyyggdrasil, m)
-{
-    yggdrasil::bind_module_definitions(m);
-}
+NB_MODULE(_pyyggdrasil, m) { yggdrasil::bind_module_definitions(m); }

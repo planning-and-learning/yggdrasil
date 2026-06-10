@@ -5,20 +5,127 @@ import textwrap
 import pytest
 
 import pyyggdrasil
+import pyyggdrasil.execution as execution
 
 
 def test_native_prefix_layout():
     native_prefix = pyyggdrasil.native_prefix()
 
     assert pyyggdrasil.__version__ != ""
-    assert pyyggdrasil.ExecutionContext(1).num_threads == 1
-    assert (native_prefix / "include").is_dir()
+    assert pyyggdrasil.execution.ExecutionContext(1).num_threads == 1
+    assert pyyggdrasil.execution.ExecutionContext.max_num_threads() >= 1
+    assert pyyggdrasil.include_dir() == native_prefix / "include"
+    assert pyyggdrasil.include_dir().is_dir()
+    assert native_prefix / "lib" in pyyggdrasil.library_dirs()
+    assert native_prefix / "lib" / "cmake" in pyyggdrasil.cmake_dirs()
     assert (native_prefix / "lib").is_dir()
     assert (native_prefix / "include" / "boost").is_dir()
     assert (native_prefix / "include" / "yggdrasil.hpp").is_file()
-    assert (native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp").is_file()
-    assert (native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp").is_file()
+    assert (
+        native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp"
+    ).is_file()
+    assert (
+        native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp"
+    ).is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
+
+
+def test_execution_submodule_is_public():
+    assert execution is pyyggdrasil.execution
+
+
+def test_public_package_exports_are_explicit():
+    assert pyyggdrasil.__all__ == [
+        "__version__",
+        "cmake_dirs",
+        "include_dir",
+        "library_dirs",
+        "native_prefix",
+        "execution",
+    ]
+    for name in pyyggdrasil.__all__:
+        assert hasattr(pyyggdrasil, name)
+
+
+def test_execution_context_exposes_introspection_docs():
+    assert "worker threads" in pyyggdrasil.execution.ExecutionContext.__doc__
+    assert (
+        "maximum thread count"
+        in pyyggdrasil.execution.ExecutionContext.max_num_threads.__doc__
+    )
+    assert (
+        "Configured worker thread count"
+        in pyyggdrasil.execution.ExecutionContext.num_threads.__doc__
+    )
+
+
+def test_execution_context_rejects_invalid_thread_counts():
+    max_num_threads = pyyggdrasil.execution.ExecutionContext.max_num_threads()
+
+    with pytest.raises(ValueError, match="num_threads must be at least 1"):
+        pyyggdrasil.execution.ExecutionContext(0)
+
+    with pytest.raises(ValueError, match="threads"):
+        pyyggdrasil.execution.ExecutionContext(max_num_threads + 1)
+
+
+def test_execution_context_repr():
+    assert repr(pyyggdrasil.execution.ExecutionContext(1)) == "ExecutionContext(num_threads=1)"
+
+
+def test_execution_context_supports_context_manager():
+    with pyyggdrasil.execution.ExecutionContext(1) as context:
+        assert isinstance(context, pyyggdrasil.execution.ExecutionContext)
+        assert context.num_threads == 1
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with pyyggdrasil.execution.ExecutionContext(1):
+            raise RuntimeError("boom")
+
+
+def test_source_version_reads_project_table(tmp_path, monkeypatch):
+    package_dir = tmp_path / "src" / "pyyggdrasil"
+    package_dir.mkdir(parents=True)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        textwrap.dedent(
+            """\
+            [tool.example]
+            version = "999.0.0"
+
+            [project]
+            name = "pyyggdrasil"
+            version = "1.2.3"
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pyyggdrasil, "__file__", str(package_dir / "__init__.py"))
+
+    assert pyyggdrasil._source_version() == "1.2.3"
+
+
+def test_source_version_fallback_parses_toml_string_literals(tmp_path, monkeypatch):
+    package_dir = tmp_path / "src" / "pyyggdrasil"
+    package_dir.mkdir(parents=True)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        textwrap.dedent(
+            """\
+            [tool.example]
+            version = "999.0.0"
+
+            [project]
+            name = "pyyggdrasil"
+            version = '2.3.4'
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pyyggdrasil, "__file__", str(package_dir / "__init__.py"))
+    monkeypatch.setattr(pyyggdrasil, "tomllib", None)
+
+    assert pyyggdrasil._source_version() == "2.3.4"
 
 
 def test_native_prefix_prefers_installed_package_prefix(tmp_path, monkeypatch):
@@ -95,7 +202,7 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path):
         [
             compiler,
             "-std=c++20",
-            f"-I{native_prefix / 'include'}",
+            f"-I{pyyggdrasil.include_dir()}",
             f"-I{native_prefix / 'nanobind' / 'include'}",
             "-fsyntax-only",
             str(source),

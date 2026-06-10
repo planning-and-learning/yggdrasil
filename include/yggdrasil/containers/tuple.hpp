@@ -19,55 +19,46 @@
 #define YGG_COMMON_TUPLE_HPP_
 
 #include <cstddef>
+#include <functional>
 #include <tuple>
-#include <type_traits>
+#include <utility>
 
-namespace ygg
-{
+namespace ygg {
 
 /**
  * std::get<I> with runtime I.
  */
 
-template<size_t I>
-struct visit_impl
-{
-    template<typename T, typename F>
-    static void visit(T& tup, size_t idx, F function)
-    {
-        if (idx == I - 1)
-        {
-            function(std::get<I - 1>(tup));
-        }
-        else
-            visit_impl<I - 1>::visit(tup, idx, function);
+template <size_t I> struct visit_impl {
+  template <typename T, typename F>
+  static bool visit(T &&tup, size_t idx, F &&function) {
+    if (idx == I - 1) {
+      std::invoke(std::forward<F>(function),
+                  std::get<I - 1>(std::forward<T>(tup)));
+      return true;
     }
+    return visit_impl<I - 1>::visit(std::forward<T>(tup), idx,
+                                    std::forward<F>(function));
+  }
 };
 
-template<>
-struct visit_impl<0>
-{
-    template<typename T, typename F>
-    static void visit(T& tup, size_t idx, F function)
-    {
-        if (idx == 0)
-        {
-            function(std::get<0>(tup));
-        }
-    }
+template <> struct visit_impl<0> {
+  template <typename T, typename F>
+  static bool visit(T &&, size_t, F &&) noexcept {
+    return false;
+  }
 };
 
-template<typename F, typename... Ts>
-void visit_at(std::tuple<Ts...> const& tup, size_t idx, F function)
-{
-    return visit_impl<sizeof...(Ts)>::visit(tup, idx, function);
+template <typename F, typename... Ts>
+bool visit_at(std::tuple<Ts...> const &tup, size_t idx, F &&function) {
+  return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
 }
 
-template<typename F, typename... Ts>
-void visit_at(std::tuple<Ts...>& tup, size_t idx, F function)
-{
-    return visit_impl<sizeof...(Ts)>::visit(tup, idx, function);
+template <typename F, typename... Ts>
+bool visit_at(std::tuple<Ts...> &tup, size_t idx, F &&function) {
+  return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
 }
-}
+
+} // namespace ygg
 
 #endif

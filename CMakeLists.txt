@@ -1,10 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" YGGDRASIL_PROJECT_VERSION_LINE REGEX "^version[ \t]*=" LIMIT_COUNT 1)
-if(NOT YGGDRASIL_PROJECT_VERSION_LINE)
-    message(FATAL_ERROR "Could not read project version from pyproject.toml")
-endif()
-string(REGEX REPLACE "^version[ \t]*=[ \t]*\"([^\"]+)\".*$" "\\1" YGGDRASIL_PROJECT_VERSION "${YGGDRASIL_PROJECT_VERSION_LINE}")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/read_project_version.cmake")
+yggdrasil_read_project_version(YGGDRASIL_PROJECT_VERSION "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml")
 
 project(yggdrasil VERSION "${YGGDRASIL_PROJECT_VERSION}")
 

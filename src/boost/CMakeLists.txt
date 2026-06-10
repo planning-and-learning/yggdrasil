@@ -16,6 +16,7 @@ set(BOOST_DLL_PATH_ARGS hardcode-dll-paths=true dll-path=${YGGDRASIL_DEPENDENCY_
 ExternalProject_Add(
     boost
     URL https://archives.boost.io/release/${YGGDRASIL_BOOST_VERSION}/source/boost_${YGGDRASIL_BOOST_ARCHIVE_VERSION}.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     PREFIX ${CMAKE_BINARY_DIR}/boost
     STAMP_DIR ${CMAKE_BINARY_DIR}/boost/stamp/${YGGDRASIL_BOOST_VERSION}
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR> ./bootstrap.sh --prefix=<INSTALL_DIR>

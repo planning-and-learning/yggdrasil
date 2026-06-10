@@ -20,20 +20,24 @@
 
 #include <filesystem>
 
-namespace ygg::tests
-{
+namespace ygg::tests {
 
-TEST(YggdrasilTests, CommonProjectPathRootDerivedPaths)
-{
+TEST(YggdrasilTests, CommonProjectPathRootDerivedPaths) {
 #ifdef ROOT_DIR
-    const auto root = std::filesystem::path(std::string(ROOT_DIR));
+  const auto root = std::filesystem::path(std::string(ROOT_DIR));
 
-    EXPECT_EQ(common::root_path(), root);
-    EXPECT_EQ(common::data_path("domain/file.pddl"), root / "data" / "domain/file.pddl");
-    EXPECT_EQ(common::profiling_path("case.json"), root / "profiling" / "case.json");
+  EXPECT_EQ(common::root_path(), root);
+  EXPECT_EQ(common::data_path("domain/file.pddl"),
+            root / "data" / "domain/file.pddl");
+  EXPECT_EQ(common::profiling_path("case.json"),
+            root / "profiling" / "case.json");
+  EXPECT_EQ(common::data_path("/absolute/file.pddl"),
+            std::filesystem::path("/absolute/file.pddl"));
+  EXPECT_EQ(common::profiling_path("/absolute/case.json"),
+            std::filesystem::path("/absolute/case.json"));
 #else
-    GTEST_SKIP() << "ROOT_DIR is not configured.";
+  GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif
 }
 
-}
+} // namespace ygg::tests

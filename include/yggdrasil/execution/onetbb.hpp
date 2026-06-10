@@ -27,47 +27,50 @@
 #include <stdexcept>
 #include <string>
 
-namespace ygg
-{
+namespace ygg {
 
-struct ExecutionContext
-{
-    using size_type = std::size_t;
-    using uint_t = size_type;
+struct ExecutionContext {
+  using size_type = std::size_t;
+  using uint_t = size_type;
 
-    explicit ExecutionContext(uint_t num_threads) : m_num_threads(num_threads), m_arena()
-    {
-        if (num_threads == 0)
-        {
-            throw std::invalid_argument("num_threads must be at least 1.");
-        }
-
-        const auto available_threads = static_cast<size_type>(oneapi::tbb::info::default_concurrency());
-
-        if (num_threads > available_threads)
-        {
-            throw std::invalid_argument("Requested " + std::to_string(num_threads) + " threads, but only " + std::to_string(available_threads)
-                                        + " are available by default.");
-        }
-
-        m_arena.initialize(static_cast<int>(num_threads));
+  explicit ExecutionContext(uint_t num_threads)
+      : m_num_threads(num_threads), m_arena() {
+    if (num_threads == 0) {
+      throw std::invalid_argument("num_threads must be at least 1.");
     }
 
-    static std::shared_ptr<ExecutionContext> create(uint_t num_threads) { return std::make_shared<ExecutionContext>(num_threads); }
+    const auto available_threads = get_max_num_threads();
 
-    uint_t get_num_threads() const noexcept { return m_num_threads; }
+    if (num_threads > available_threads) {
+      throw std::invalid_argument(
+          "Requested " + std::to_string(num_threads) + " threads, but only " +
+          std::to_string(available_threads) + " are available by default.");
+    }
 
-    oneapi::tbb::task_arena& arena() noexcept { return m_arena; }
+    m_arena.initialize(static_cast<int>(num_threads));
+  }
 
-    const oneapi::tbb::task_arena& arena() const noexcept { return m_arena; }
+  static std::shared_ptr<ExecutionContext> create(uint_t num_threads) {
+    return std::make_shared<ExecutionContext>(num_threads);
+  }
+
+  static uint_t get_max_num_threads() noexcept {
+    return static_cast<uint_t>(oneapi::tbb::info::default_concurrency());
+  }
+
+  uint_t get_num_threads() const noexcept { return m_num_threads; }
+
+  oneapi::tbb::task_arena &arena() noexcept { return m_arena; }
+
+  const oneapi::tbb::task_arena &arena() const noexcept { return m_arena; }
 
 private:
-    uint_t m_num_threads;
-    oneapi::tbb::task_arena m_arena;
+  uint_t m_num_threads;
+  oneapi::tbb::task_arena m_arena;
 };
 
 using ExecutionContextPtr = std::shared_ptr<ExecutionContext>;
 
-}
+} // namespace ygg
 
 #endif

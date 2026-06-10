@@ -18,20 +18,19 @@
 #ifndef YGG_COMMON_OBSERVER_PTR_ORDERING_HPP_
 #define YGG_COMMON_OBSERVER_PTR_ORDERING_HPP_
 
-#include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/core/observer_ptr.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
 
 #include <type_traits>
 
-namespace ygg
-{
+namespace ygg {
 
-template<typename T>
-struct Less<ObserverPtr<T>>
-{
-    bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept { return Less<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
+template <typename T> struct Less<ObserverPtr<T>> {
+  bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept {
+    return Less<std::remove_cvref_t<T>>{}(*lhs, *rhs);
+  }
 };
 
-}
+} // namespace ygg
 
 #endif

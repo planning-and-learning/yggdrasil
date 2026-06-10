@@ -1,21 +1,53 @@
-from pathlib import Path
+import ast
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from typing import Optional, Tuple
 
-from ._pyyggdrasil import ExecutionContext
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+    tomllib = None
+
+import sys
+
+from ._pyyggdrasil import execution as execution
+
+sys.modules[__name__ + ".execution"] = execution
+
 
 def _has_yggdrasil_headers(path: Path) -> bool:
     return (path / "include" / "yggdrasil").is_dir()
 
 
+def _read_pyproject_version(pyproject: Path) -> Optional[str]:
+    if tomllib is not None:
+        with pyproject.open("rb") as f:
+            return tomllib.load(f).get("project", {}).get("version")
+
+    in_project_table = False
+    for line in pyproject.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_project_table = stripped == "[project]"
+            continue
+        if in_project_table and stripped.startswith("version"):
+            raw_value = stripped.split("=", maxsplit=1)[1].strip()
+            try:
+                value = ast.literal_eval(raw_value)
+            except (SyntaxError, ValueError):
+                return raw_value.strip("\"").strip("'")
+            return value if isinstance(value, str) else None
+
+    return None
+
+
 def _source_version() -> str:
     for parent in Path(__file__).resolve().parents:
         pyproject = parent / "pyproject.toml"
-        if not pyproject.exists():
-            continue
-
-        for line in pyproject.read_text(encoding="utf-8").splitlines():
-            if line.startswith("version"):
-                return line.split("=", maxsplit=1)[1].strip().strip("\"")
+        if pyproject.exists():
+            source_version = _read_pyproject_version(pyproject)
+            if source_version:
+                return source_version
 
     return "0.0.0"
 
@@ -27,6 +59,7 @@ except PackageNotFoundError:
 
 
 def native_prefix() -> Path:
+    """Return the directory containing bundled native headers and libraries."""
     package_dir = Path(__file__).resolve().parent
     if _has_yggdrasil_headers(package_dir):
         return package_dir
@@ -37,4 +70,31 @@ def native_prefix() -> Path:
     return package_dir
 
 
-__all__ = ["ExecutionContext", "__version__", "native_prefix"]
+def include_dir() -> Path:
+    """Return the bundled C++ header include directory."""
+    return native_prefix() / "include"
+
+
+def library_dirs() -> Tuple[Path, ...]:
+    """Return existing bundled native library directories."""
+    prefix = native_prefix()
+    return tuple(
+        path for path in (prefix / "lib", prefix / "lib64") if path.is_dir()
+    )
+
+
+def cmake_dirs() -> Tuple[Path, ...]:
+    """Return existing bundled CMake package directories."""
+    return tuple(
+        path / "cmake" for path in library_dirs() if (path / "cmake").is_dir()
+    )
+
+
+__all__ = [
+    "__version__",
+    "cmake_dirs",
+    "include_dir",
+    "library_dirs",
+    "native_prefix",
+    "execution",
+]

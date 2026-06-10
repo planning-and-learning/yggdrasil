@@ -10,7 +10,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- *<
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
@@ -19,72 +19,65 @@
 #define YGG_COMMON_ITERTOOLS_HPP_
 
 #include <algorithm>
-#include <concepts>
 #include <cstddef>
 #include <iterator>
-#include <ranges>
-#include <utility>
 #include <vector>
 
-namespace ygg::itertools
-{
+namespace ygg::itertools {
 
-namespace cartesian_set
-{
+namespace cartesian_set {
 
-template<typename T>
-struct Workspace
-{
-    std::vector<T> element;
-    std::vector<std::size_t> indices;
+template <typename T> struct Workspace {
+  std::vector<T> element;
+  std::vector<std::size_t> indices;
 };
 
-template<class OuterRandomIt, class InnerRange = typename std::iterator_traits<OuterRandomIt>::value_type, class T = typename InnerRange::value_type, class F>
-void for_each_element(OuterRandomIt first, OuterRandomIt last, Workspace<T>& workspace, F&& callback)
-{
-    const std::size_t n = last - first;
+template <
+    class OuterRandomIt,
+    class InnerRange = typename std::iterator_traits<OuterRandomIt>::value_type,
+    class T = typename InnerRange::value_type, class F>
+void for_each_element(OuterRandomIt first, OuterRandomIt last,
+                      Workspace<T> &workspace, F &&callback) {
+  const std::size_t n = last - first;
 
-    workspace.element.resize(n);
+  workspace.element.resize(n);
+  workspace.indices.assign(n, 0);
 
-    if (n == 0)
-    {
-        callback(workspace.element);  // empty element for empty range
-        return;
+  if (n == 0) {
+    callback(workspace.element); // empty element for empty range
+    return;
+  }
+
+  if (std::any_of(first, last, [](auto &&inner) {
+        return std::distance(inner.begin(), inner.end()) == 0;
+      }))
+    return;
+
+  while (true) {
+    // Emit current tuple
+    for (std::size_t i = 0; i < n; ++i)
+      workspace.element[i] = first[i][workspace.indices[i]];
+
+    callback(workspace.element);
+
+    // Mixed-radix increment (odometer)
+    std::size_t pos = n - 1;
+    while (true) {
+      ++workspace.indices[pos];
+      if (workspace.indices[pos] < first[pos].size())
+        break;
+
+      workspace.indices[pos] = 0;
+      if (pos == 0)
+        return; // fully done
+
+      --pos;
     }
-
-    if (std::any_of(first, last, [](auto&& inner) { return std::distance(inner.begin(), inner.end()) == 0; }))
-        return;
-
-    workspace.indices.resize(n);
-    workspace.indices.assign(n, 0);
-
-    while (true)
-    {
-        // Emit current tuple
-        for (std::size_t i = 0; i < n; ++i)
-            workspace.element[i] = first[i][workspace.indices[i]];
-
-        callback(workspace.element);
-
-        // Mixed-radix increment (odometer)
-        std::size_t pos = n - 1;
-        while (true)
-        {
-            ++workspace.indices[pos];
-            if (workspace.indices[pos] < first[pos].size())
-                break;
-
-            workspace.indices[pos] = 0;
-            if (pos == 0)
-                return;  // fully done
-
-            --pos;
-        }
-    }
+  }
 }
 
-}
+} // namespace cartesian_set
 
-}
+} // namespace ygg::itertools
 
 #endif
