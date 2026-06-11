@@ -82,7 +82,7 @@ template <std::floating_point T> struct Hash<T> {
 
 template <typename T, size_t N> struct Hash<std::array<T, N>> {
   size_t operator()(const std::array<T, N> &arr) const noexcept {
-    return hash_range(arr);
+    return ygg::hash_range(arr);
   }
 };
 
@@ -96,7 +96,7 @@ template <typename Key, typename Compare, typename Allocator>
 struct Hash<std::set<Key, Compare, Allocator>> {
   size_t
   operator()(const std::set<Key, Compare, Allocator> &set) const noexcept {
-    return hash_range(set);
+    return ygg::hash_range(set);
   }
 };
 
@@ -104,7 +104,7 @@ template <typename Key, typename T, typename Compare, typename Allocator>
 struct Hash<std::map<Key, T, Compare, Allocator>> {
   size_t
   operator()(const std::map<Key, T, Compare, Allocator> &map) const noexcept {
-    return hash_range(map);
+    return ygg::hash_range(map);
   }
 };
 
@@ -112,7 +112,7 @@ template <typename Key, typename Compare, typename Allocator>
 struct Hash<gtl::btree_set<Key, Compare, Allocator>> {
   size_t operator()(
       const gtl::btree_set<Key, Compare, Allocator> &set) const noexcept {
-    return hash_range(set);
+    return ygg::hash_range(set);
   }
 };
 
@@ -120,20 +120,20 @@ template <typename Key, typename T, typename Compare, typename Allocator>
 struct Hash<gtl::btree_map<Key, T, Compare, Allocator>> {
   size_t operator()(
       const gtl::btree_map<Key, T, Compare, Allocator> &map) const noexcept {
-    return hash_range(map);
+    return ygg::hash_range(map);
   }
 };
 
 template <typename T, typename Allocator>
 struct Hash<std::vector<T, Allocator>> {
   size_t operator()(const std::vector<T, Allocator> &vec) const noexcept {
-    return hash_range(vec);
+    return ygg::hash_range(vec);
   }
 };
 
 template <typename T1, typename T2> struct Hash<std::pair<T1, T2>> {
   size_t operator()(const std::pair<T1, T2> &pair) const noexcept {
-    return hash_combine(pair.first, pair.second);
+    return ygg::hash_combine(pair.first, pair.second);
   }
 };
 
@@ -142,7 +142,7 @@ template <typename... Ts> struct Hash<std::tuple<Ts...>> {
     size_t aggregated_hash = sizeof...(Ts);
     std::apply(
         [&aggregated_hash](const Ts &...args) {
-          (hash_combine(aggregated_hash, args), ...);
+          (ygg::hash_combine(aggregated_hash, args), ...);
         },
         tuple);
     return aggregated_hash;
@@ -152,7 +152,7 @@ template <typename... Ts> struct Hash<std::tuple<Ts...>> {
 template <typename... Ts> struct Hash<std::variant<Ts...>> {
   size_t operator()(const std::variant<Ts...> &variant) const noexcept {
     size_t seed = variant.index();
-    std::visit([&seed](const auto &arg) { hash_combine(seed, arg); }, variant);
+    std::visit([&seed](const auto &arg) { ygg::hash_combine(seed, arg); }, variant);
     return seed;
   }
 };
@@ -161,14 +161,14 @@ template <typename T> struct Hash<std::optional<T>> {
   size_t operator()(const std::optional<T> &optional) const noexcept {
     size_t seed = optional.has_value() ? 1 : 0;
     if (optional.has_value())
-      hash_combine(seed, optional.value());
+      ygg::hash_combine(seed, optional.value());
     return seed;
   }
 };
 
 template <typename T, std::size_t Extent> struct Hash<std::span<T, Extent>> {
   size_t operator()(const std::span<T, Extent> &span) const noexcept {
-    return hash_range(span);
+    return ygg::hash_range(span);
   }
 };
 
@@ -176,12 +176,12 @@ template <Identifiable T> struct Hash<T> {
   using is_transparent = void;
 
   size_t operator()(const T &element) const noexcept {
-    return hash_combine(element.identifying_members());
+    return ygg::hash_combine(element.identifying_members());
   }
 
   template <typename... Args>
   size_t operator()(const std::tuple<Args...> &view) const noexcept {
-    return hash_combine(view);
+    return ygg::hash_combine(view);
   }
 };
 
@@ -196,7 +196,7 @@ inline size_t hash_range(Range &&range) noexcept {
     seed = std::ranges::size(range);
 
   for (const auto &value : range)
-    hash_combine(seed, value);
+    ygg::hash_combine(seed, value);
 
   return seed;
 }
@@ -209,13 +209,13 @@ inline void hash_combine(size_t &seed, const T &value) noexcept {
 
 template <typename T, typename... Rest>
 inline void hash_combine(size_t &seed, const Rest &...rest) noexcept {
-  (hash_combine(seed, rest), ...);
+  (ygg::hash_combine(seed, rest), ...);
 }
 
 template <typename... Ts>
 inline size_t hash_combine(const Ts &...rest) noexcept {
   size_t seed = 0;
-  (hash_combine(seed, rest), ...);
+  (ygg::hash_combine(seed, rest), ...);
   return seed;
 }
 
