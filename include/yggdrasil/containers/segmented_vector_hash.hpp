@@ -33,7 +33,7 @@ struct Hash<SegmentedVector<T, FirstSegmentSize>>
     {
         size_t seed = value.size();
         for (std::size_t i = 0; i < value.size(); ++i)
-            hash_combine(seed, value[i]);
+            ygg::hash_combine(seed, value[i]);
         return seed;
     }
 };

@@ -124,7 +124,7 @@ private:
         : pool(std::move(pool)), array_size(array_size) {}
 
     static size_t hash(const T *arr, size_t len) noexcept {
-      return hash_range(std::span<const T>(arr, len));
+      return ygg::hash_range(std::span<const T>(arr, len));
     }
 
     size_t operator()(uint_t el) const noexcept {

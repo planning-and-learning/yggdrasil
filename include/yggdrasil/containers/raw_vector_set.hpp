@@ -103,11 +103,11 @@ private:
         : pool(std::move(pool)) {}
 
     size_t operator()(uint_t idx) const noexcept {
-      return hash_range((*pool)[idx]);
+      return ygg::hash_range((*pool)[idx]);
     }
 
     size_t operator()(std::span<const T> value) const noexcept {
-      return hash_range(value);
+      return ygg::hash_range(value);
     }
   };
 

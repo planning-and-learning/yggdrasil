@@ -39,7 +39,7 @@ struct Hash<boost::dynamic_bitset<Block, Allocator>> {
 
     size_t seed = bitset.size();
     for (const auto &block : blocks)
-      hash_combine(seed, block);
+      ygg::hash_combine(seed, block);
     return seed;
   }
 };
@@ -48,7 +48,7 @@ template <std::unsigned_integral Block> struct Hash<BitsetSpan<Block>> {
   size_t operator()(const BitsetSpan<Block> &bitset_span) const noexcept {
     size_t aggregated_hash = bitset_span.num_bits();
     for (const auto &block : bitset_span.blocks())
-      hash_combine(aggregated_hash, block);
+      ygg::hash_combine(aggregated_hash, block);
     return aggregated_hash;
   }
 };
