@@ -35,6 +35,7 @@ endif()
 set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__init__.py
     pyyggdrasil/__main__.py
+    pyyggdrasil/repair.py
     pyyggdrasil/__init__.pyi
     pyyggdrasil/execution/__init__.pyi
 )
@@ -72,6 +73,7 @@ configure_package_config_file(
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfigVersion.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPythonHelpers.cmake"
         DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
         COMPONENT pyyggdrasil)
 
