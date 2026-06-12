@@ -18,8 +18,8 @@
 #ifndef YGG_COMMON_RAW_VECTOR_ORDERING_HPP_
 #define YGG_COMMON_RAW_VECTOR_ORDERING_HPP_
 
-#include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/containers/raw_vector_pool.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
 
 namespace ygg
 {
@@ -33,7 +33,10 @@ struct Less<RawVectorView<Size, T>>
 template<std::unsigned_integral Size, TriviallyCopyable T>
 struct Less<RawVectorView<const Size, const T>>
 {
-    bool operator()(const RawVectorView<const Size, const T>& lhs, const RawVectorView<const Size, const T>& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const RawVectorView<const Size, const T>& lhs, const RawVectorView<const Size, const T>& rhs) const noexcept
+    {
+        return less_range(lhs, rhs);
+    }
 };
 
 }

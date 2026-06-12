@@ -23,14 +23,15 @@
 
 #include <type_traits>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename T> struct Hash<ObserverPtr<T>> {
-  size_t operator()(ObserverPtr<T> ptr) const noexcept {
-    return Hash<std::remove_cvref_t<T>>{}(*ptr);
-  }
+template<typename T>
+struct Hash<ObserverPtr<T>>
+{
+    size_t operator()(ObserverPtr<T> ptr) const noexcept { return Hash<std::remove_cvref_t<T>> {}(*ptr); }
 };
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

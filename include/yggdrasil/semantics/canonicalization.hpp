@@ -18,16 +18,14 @@
 #ifndef YGG_COMMON_CANONICALIZATION_HPP_
 #define YGG_COMMON_CANONICALIZATION_HPP_
 
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/core/types.hpp"
-
-#include <cista/containers/optional.h>
-
-#include <fmt/format.h>
 
 #include <algorithm>
+#include <cista/containers/optional.h>
 #include <concepts>
+#include <fmt/format.h>
 #include <string>
 #include <type_traits>
 

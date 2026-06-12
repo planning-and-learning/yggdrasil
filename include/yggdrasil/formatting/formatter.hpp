@@ -28,89 +28,110 @@
 #include <variant>
 #include <vector>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename T> struct Index;
+template<typename T>
+struct Index;
 
-template <typename T, typename C> struct View;
+template<typename T, typename C>
+struct View;
 
-template <typename T> std::string to_string(const T &element) {
-  return fmt::format("{}", element);
+template<typename T>
+std::string to_string(const T& element)
+{
+    return fmt::format("{}", element);
 }
 
-} // namespace ygg
+}  // namespace ygg
 
 #if YGG_ENABLE_FMT_FORMATTERS
-namespace fmt {
+namespace fmt
+{
 
-template <typename T> struct formatter<ygg::Index<T>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
+template<typename T>
+struct formatter<ygg::Index<T>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
-  template <typename FormatContext>
-  auto format(const ygg::Index<T> &value, FormatContext &ctx) const {
-    return fmt::format_to(ctx.out(), "{}", ygg::uint_t(value));
-  }
+    template<typename FormatContext>
+    auto format(const ygg::Index<T>& value, FormatContext& ctx) const
+    {
+        return fmt::format_to(ctx.out(), "{}", ygg::uint_t(value));
+    }
 };
 
-template <typename T> struct formatter<std::optional<T>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
+template<typename T>
+struct formatter<std::optional<T>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
-  template <typename FormatContext>
-  auto format(const std::optional<T> &value, FormatContext &ctx) const {
-    if (value.has_value())
-      return fmt::format_to(ctx.out(), "{}", value.value());
-    return fmt::format_to(ctx.out(), "<nullopt>");
-  }
+    template<typename FormatContext>
+    auto format(const std::optional<T>& value, FormatContext& ctx) const
+    {
+        if (value.has_value())
+            return fmt::format_to(ctx.out(), "{}", value.value());
+        return fmt::format_to(ctx.out(), "<nullopt>");
+    }
 };
 
-template <typename T> struct formatter<std::shared_ptr<T>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
+template<typename T>
+struct formatter<std::shared_ptr<T>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
-  template <typename FormatContext>
-  auto format(const std::shared_ptr<T> &value, FormatContext &ctx) const {
-    if (value)
-      return fmt::format_to(ctx.out(), "{}", *value);
-    return fmt::format_to(ctx.out(), "<nullptr>");
-  }
+    template<typename FormatContext>
+    auto format(const std::shared_ptr<T>& value, FormatContext& ctx) const
+    {
+        if (value)
+            return fmt::format_to(ctx.out(), "{}", *value);
+        return fmt::format_to(ctx.out(), "<nullptr>");
+    }
 };
 
-template <typename T, typename Deleter>
-struct formatter<std::unique_ptr<T, Deleter>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
+template<typename T, typename Deleter>
+struct formatter<std::unique_ptr<T, Deleter>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
-  template <typename FormatContext>
-  auto format(const std::unique_ptr<T, Deleter> &value,
-              FormatContext &ctx) const {
-    if (value)
-      return fmt::format_to(ctx.out(), "{}", *value);
-    return fmt::format_to(ctx.out(), "<nullptr>");
-  }
+    template<typename FormatContext>
+    auto format(const std::unique_ptr<T, Deleter>& value, FormatContext& ctx) const
+    {
+        if (value)
+            return fmt::format_to(ctx.out(), "{}", *value);
+        return fmt::format_to(ctx.out(), "<nullptr>");
+    }
 };
 
-template <> struct formatter<std::monostate, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
+template<>
+struct formatter<std::monostate, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
-  template <typename FormatContext>
-  auto format(const std::monostate &, FormatContext &ctx) const {
-    return fmt::format_to(ctx.out(), "monostate");
-  }
+    template<typename FormatContext>
+    auto format(const std::monostate&, FormatContext& ctx) const
+    {
+        return fmt::format_to(ctx.out(), "monostate");
+    }
 };
 
-} // namespace fmt
+}  // namespace fmt
 #endif
 
-namespace ygg {
+namespace ygg
+{
 
-template <std::ranges::input_range Range>
-std::vector<std::string> to_strings(Range &&range) {
-  auto result = std::vector<std::string>{};
-  if constexpr (std::ranges::sized_range<Range>)
-    result.reserve(std::ranges::size(range));
-  for (const auto &element : range)
-    result.push_back(to_string(element));
-  return result;
+template<std::ranges::input_range Range>
+std::vector<std::string> to_strings(Range&& range)
+{
+    auto result = std::vector<std::string> {};
+    if constexpr (std::ranges::sized_range<Range>)
+        result.reserve(std::ranges::size(range));
+    for (const auto& element : range)
+        result.push_back(to_string(element));
+    return result;
 }
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

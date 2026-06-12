@@ -173,7 +173,6 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path):
     if compiler is None:
         pytest.skip("No C++ compiler available")
 
-    native_prefix = pyyggdrasil.native_prefix()
     source = tmp_path / "consumer.cpp"
     source.write_text(
         textwrap.dedent(
@@ -226,7 +225,6 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path):
             compiler,
             "-std=c++20",
             f"-I{pyyggdrasil.include_dir()}",
-            f"-I{native_prefix / 'nanobind' / 'include'}",
             "-fsyntax-only",
             str(source),
         ],

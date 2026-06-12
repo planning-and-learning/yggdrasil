@@ -15,15 +15,14 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <cstddef>
 #include <gtest/gtest.h>
+#include <span>
+#include <vector>
 #include <yggdrasil/core/concepts.hpp>
 #include <yggdrasil/semantics/comparators.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/semantics/hash.hpp>
-
-#include <cstddef>
-#include <span>
-#include <vector>
 
 namespace ygg::tests
 {

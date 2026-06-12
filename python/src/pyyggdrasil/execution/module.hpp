@@ -3,11 +3,12 @@
 
 #include <nanobind/nanobind.h>
 
-namespace yggdrasil {
+namespace yggdrasil
+{
 namespace nb = nanobind;
 
-void bind_execution_module_definitions(nb::module_ &m);
+void bind_execution_module_definitions(nb::module_& m);
 
-} // namespace yggdrasil
+}  // namespace yggdrasil
 
 #endif

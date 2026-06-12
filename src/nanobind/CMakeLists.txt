@@ -7,14 +7,33 @@ set(YGGDRASIL_NANOBIND_GIT_TAG v2.12.0 CACHE STRING "Git tag used to build nanob
 
 message(STATUS "Dependency \"nanobind\"...")
 
-# Attempt to find the installed library
 find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 
-find_package(nanobind QUIET PATHS ${CMAKE_INSTALL_PREFIX} NO_DEFAULT_PATH)
+# The nanobind external project installs the upstream datadir layout
+# (<prefix>/nanobind/{include,src,ext,cmake}), which contains the runtime
+# sources. The shared runtime project builds libnanobind from it, installs the
+# flattened layout used by all other bundled dependencies
+# (<prefix>/{include,lib,lib/cmake/nanobind,bin/stubgen.py}), and removes the
+# datadir afterwards: with a prebuilt shared runtime, consumers never compile
+# nanobind from source.
+set(YGGDRASIL_NANOBIND_DATADIR_CONFIG
+    "${CMAKE_INSTALL_PREFIX}/nanobind/cmake/nanobind-config.cmake")
+set(YGGDRASIL_NANOBIND_FLATTENED_CONFIG
+    "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/nanobind/nanobind-config.cmake")
+set(YGGDRASIL_NANOBIND_SHARED_RUNTIME_LIBRARY
+    "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${CMAKE_SHARED_LIBRARY_PREFIX}nanobind${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
-if (NOT nanobind_FOUND)
+if(EXISTS "${YGGDRASIL_NANOBIND_FLATTENED_CONFIG}" AND EXISTS "${YGGDRASIL_NANOBIND_SHARED_RUNTIME_LIBRARY}")
+    set(YGGDRASIL_NANOBIND_SHARED_RUNTIME_INSTALLED TRUE)
+else()
+    set(YGGDRASIL_NANOBIND_SHARED_RUNTIME_INSTALLED FALSE)
+endif()
+
+set(YGGDRASIL_NANOBIND_SHARED_RUNTIME_DEPENDS)
+
+if(NOT YGGDRASIL_NANOBIND_SHARED_RUNTIME_INSTALLED AND NOT EXISTS "${YGGDRASIL_NANOBIND_DATADIR_CONFIG}")
     list(APPEND CMAKE_ARGS
             -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
             -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_INSTALL_PREFIX}
@@ -27,8 +46,6 @@ if (NOT nanobind_FOUND)
         message(STATUS "-- ${CMAKE_ARG}")
     endforeach()
 
-
-    # If the library is not found, use ExternalProject_Add to download and build it
     ExternalProject_Add(
             nanobind
             GIT_REPOSITORY https://github.com/wjakob/nanobind.git
@@ -38,6 +55,23 @@ if (NOT nanobind_FOUND)
             UPDATE_COMMAND ""
             CMAKE_ARGS ${CMAKE_ARGS}
     )
+    list(APPEND YGGDRASIL_NANOBIND_SHARED_RUNTIME_DEPENDS nanobind)
+endif()
+
+if(NOT YGGDRASIL_NANOBIND_SHARED_RUNTIME_INSTALLED)
+    ExternalProject_Add(
+            nanobind_shared_runtime
+            SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shared_runtime"
+            PREFIX ${CMAKE_BINARY_DIR}/nanobind-shared-runtime
+            STAMP_DIR ${CMAKE_BINARY_DIR}/nanobind/stamp/${YGGDRASIL_NANOBIND_GIT_TAG}-shared-runtime
+            UPDATE_COMMAND ""
+            CMAKE_ARGS
+                -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+                -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_INSTALL_PREFIX}
+                -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+                -DPython_EXECUTABLE=${Python_EXECUTABLE}
+            DEPENDS ${YGGDRASIL_NANOBIND_SHARED_RUNTIME_DEPENDS}
+    )
 else()
-    message(STATUS "nanobind is already installed.")
+    message(STATUS "nanobind shared runtime is already installed.")
 endif()

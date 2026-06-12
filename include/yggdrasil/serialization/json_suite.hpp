@@ -24,26 +24,24 @@
 #include <filesystem>
 #include <string_view>
 
-namespace ygg::common {
+namespace ygg::common
+{
 
 #ifdef ROOT_DIR
-inline std::filesystem::path
-suite_prefix_path(const boost::json::object &suite) {
-  const auto prefix = find_string(suite, "prefix", "suite");
-  return prefix ? resolve_path(root_path(), *prefix) : root_path();
+inline std::filesystem::path suite_prefix_path(const boost::json::object& suite)
+{
+    const auto prefix = find_string(suite, "prefix", "suite");
+    return prefix ? resolve_path(root_path(), *prefix) : root_path();
 }
 
-inline std::filesystem::path suite_path(const boost::json::object &suite,
-                                        std::string_view path) {
-  return resolve_path(suite_prefix_path(suite), path);
-}
+inline std::filesystem::path suite_path(const boost::json::object& suite, std::string_view path) { return resolve_path(suite_prefix_path(suite), path); }
 
-inline std::filesystem::path suite_member_path(const boost::json::object &suite,
-                                               std::string_view key) {
-  return suite_path(suite, as_string(suite, key, "suite"));
+inline std::filesystem::path suite_member_path(const boost::json::object& suite, std::string_view key)
+{
+    return suite_path(suite, as_string(suite, key, "suite"));
 }
 #endif
 
-} // namespace ygg::common
+}  // namespace ygg::common
 
 #endif

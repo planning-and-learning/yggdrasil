@@ -16,10 +16,10 @@
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)
 
-template <typename Key, typename T, typename Hash, typename Compare,
-          typename Alloc>
-struct type_caster<gtl::flat_hash_map<Key, T, Hash, Compare, Alloc>>
-    : dict_caster<gtl::flat_hash_map<Key, T, Hash, Compare, Alloc>, Key, T> {};
+template<typename Key, typename T, typename Hash, typename Compare, typename Alloc>
+struct type_caster<gtl::flat_hash_map<Key, T, Hash, Compare, Alloc>> : dict_caster<gtl::flat_hash_map<Key, T, Hash, Compare, Alloc>, Key, T>
+{
+};
 
 NAMESPACE_END(detail)
 NAMESPACE_END(NB_NAMESPACE)

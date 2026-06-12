@@ -18,8 +18,8 @@
 #ifndef YGG_COMMON_RAW_VECTOR_HASH_HPP_
 #define YGG_COMMON_RAW_VECTOR_HASH_HPP_
 
-#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/containers/raw_vector_pool.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 
 namespace ygg
 {

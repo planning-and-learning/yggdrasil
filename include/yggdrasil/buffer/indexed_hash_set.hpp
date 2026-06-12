@@ -29,231 +29,214 @@
 #include "yggdrasil/serialization/cista_equal_to.hpp"
 #include "yggdrasil/serialization/cista_hash.hpp"
 
-#include <cista/serialization.h>
-#include <gtl/phmap.hpp>
-
 #include <cassert>
+#include <cista/serialization.h>
 #include <cstddef>
 #include <functional>
+#include <gtl/phmap.hpp>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
-namespace ygg::buffer {
-template <typename Tag,
-          ygg::HashFor<ygg::Data<Tag>> H = ygg::Hash<ygg::Data<Tag>>,
-          ygg::EqualToFor<ygg::Data<Tag>> E = ygg::EqualTo<ygg::Data<Tag>>>
-class IndexedHashSet {
+namespace ygg::buffer
+{
+template<typename Tag, ygg::HashFor<ygg::Data<Tag>> H = ygg::Hash<ygg::Data<Tag>>, ygg::EqualToFor<ygg::Data<Tag>> E = ygg::EqualTo<ygg::Data<Tag>>>
+class IndexedHashSet
+{
 private:
-  class IndexableHash;
-  class IndexableEqualTo;
+    class IndexableHash;
+    class IndexableEqualTo;
 
-  using VectorType = std::vector<const ygg::Data<Tag> *>;
+    using VectorType = std::vector<const ygg::Data<Tag>*>;
 
 public:
-  IndexedHashSet()
-      : m_storage(std::make_unique<VectorType>()),
+    IndexedHashSet() :
+        m_storage(std::make_unique<VectorType>()),
         m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)),
-        m_buf(nullptr), m_arena(nullptr) {}
-  IndexedHashSet(::cista::buf<std::vector<uint8_t>> &buf,
-                 SegmentedBuffer &arena)
-      : m_storage(std::make_unique<VectorType>()),
+        m_buf(nullptr),
+        m_arena(nullptr)
+    {
+    }
+    IndexedHashSet(::cista::buf<std::vector<uint8_t>>& buf, SegmentedBuffer& arena) :
+        m_storage(std::make_unique<VectorType>()),
         m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)),
-        m_buf(&buf), m_arena(&arena) {}
-  IndexedHashSet(const IndexedHashSet &other) = delete;
-  IndexedHashSet &operator=(const IndexedHashSet &other) = delete;
-  IndexedHashSet(IndexedHashSet &&other) = default;
-  IndexedHashSet &operator=(IndexedHashSet &&other) = default;
+        m_buf(&buf),
+        m_arena(&arena)
+    {
+    }
+    IndexedHashSet(const IndexedHashSet& other) = delete;
+    IndexedHashSet& operator=(const IndexedHashSet& other) = delete;
+    IndexedHashSet(IndexedHashSet&& other) = default;
+    IndexedHashSet& operator=(IndexedHashSet&& other) = default;
 
-  /**
-   * Capacity
-   */
+    /**
+     * Capacity
+     */
 
-  bool empty() const noexcept { return m_storage->empty(); }
-  size_t size() const noexcept { return m_storage->size(); }
+    bool empty() const noexcept { return m_storage->empty(); }
+    size_t size() const noexcept { return m_storage->size(); }
 
-  /**
-   * Modifiers
-   */
+    /**
+     * Modifiers
+     */
 
-  void clear() {
-    m_set.clear();
-    m_storage->clear();
-  }
+    void clear()
+    {
+        m_set.clear();
+        m_storage->clear();
+    }
 
-  static size_t hash(const ygg::Data<Tag> &element) noexcept {
-    return gtl::phmap_mix<sizeof(size_t)>()(H{}(element));
-  }
+    static size_t hash(const ygg::Data<Tag>& element) noexcept { return gtl::phmap_mix<sizeof(size_t)>()(H {}(element)); }
 
-  std::optional<ygg::Index<Tag>> find_with_hash(const ygg::Data<Tag> &element,
-                                                size_t h) const noexcept {
-    assert(h == hash(element) &&
-           "The given hash does not match container internal's hash.");
-    assert(h == m_set.hash(element));
+    std::optional<ygg::Index<Tag>> find_with_hash(const ygg::Data<Tag>& element, size_t h) const noexcept
+    {
+        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
 
-    const auto it = m_set.find(element, h);
-    if (it != m_set.end())
-      return *it;
+        const auto it = m_set.find(element, h);
+        if (it != m_set.end())
+            return *it;
 
-    return std::nullopt;
-  }
+        return std::nullopt;
+    }
 
-  std::optional<ygg::Index<Tag>>
-  find(const ygg::Data<Tag> &element) const noexcept {
-    assert(IndexedHashSet::hash(element) == m_set.hash(element));
+    std::optional<ygg::Index<Tag>> find(const ygg::Data<Tag>& element) const noexcept
+    {
+        assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
-    return find_with_hash(element, IndexedHashSet::hash(element));
-  }
+        return find_with_hash(element, IndexedHashSet::hash(element));
+    }
 
-  bool contains_with_hash(const ygg::Data<Tag> &element,
-                          size_t h) const noexcept {
-    return find_with_hash(element, h).has_value();
-  }
+    bool contains_with_hash(const ygg::Data<Tag>& element, size_t h) const noexcept { return find_with_hash(element, h).has_value(); }
 
-  bool contains(const ygg::Data<Tag> &element) const noexcept {
-    return find(element).has_value();
-  }
+    bool contains(const ygg::Data<Tag>& element) const noexcept { return find(element).has_value(); }
 
-  template <::cista::mode Mode = ygg::CISTA_MODE>
-  std::pair<ygg::Index<Tag>, bool>
-  insert_with_hash(size_t h, const ygg::Data<Tag> &element) {
-    assert(h == IndexedHashSet::hash(element) &&
-           "The given hash does not match container internal's hash.");
-    assert(h == m_set.hash(element));
+    template<::cista::mode Mode = ygg::CISTA_MODE>
+    std::pair<ygg::Index<Tag>, bool> insert_with_hash(size_t h, const ygg::Data<Tag>& element)
+    {
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
 
-    // 1. Check if element already exists
+        // 1. Check if element already exists
 
-    auto it = m_set.find(element, h);
-    if (it != m_set.end())
-      return std::make_pair(*it, false);
+        auto it = m_set.find(element, h);
+        if (it != m_set.end())
+            return std::make_pair(*it, false);
 
-    return std::make_pair(insert_new_with_hash<Mode>(h, element), true);
-  }
+        return std::make_pair(insert_new_with_hash<Mode>(h, element), true);
+    }
 
-  template <::cista::mode Mode = ygg::CISTA_MODE>
-  ygg::Index<Tag> insert_new_with_hash(size_t h,
-                                       const ygg::Data<Tag> &element) {
-    assert(h == IndexedHashSet::hash(element) &&
-           "The given hash does not match container internal's hash.");
-    assert(h == m_set.hash(element));
+    template<::cista::mode Mode = ygg::CISTA_MODE>
+    ygg::Index<Tag> insert_new_with_hash(size_t h, const ygg::Data<Tag>& element)
+    {
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
 
-    if (!m_buf || !m_arena)
-      throw std::logic_error("Buffer IndexedHashSet requires a buffer and "
-                             "arena before insertion.");
+        if (!m_buf || !m_arena)
+            throw std::logic_error("Buffer IndexedHashSet requires a buffer and "
+                                   "arena before insertion.");
 
-    // 2. Serialize
-    m_buf->reset();
-    ::cista::serialize<Mode>(*m_buf, element);
+        // 2. Serialize
+        m_buf->reset();
+        ::cista::serialize<Mode>(*m_buf, element);
 
-    // 3. Write to storage
-    auto begin =
-        m_arena->write(m_buf->base(), m_buf->size(), alignof(ygg::Data<Tag>));
+        // 3. Write to storage
+        auto begin = m_arena->write(m_buf->base(), m_buf->size(), alignof(ygg::Data<Tag>));
 
-    const auto index = ygg::Index<Tag>(ygg::to_uint_t(m_storage->size()));
+        const auto index = ygg::Index<Tag>(ygg::to_uint_t(m_storage->size()));
 
-    // 4. Insert into vec
-    const auto serialized_element =
-        ::cista::deserialize<const ygg::Data<Tag>, Mode>(begin,
-                                                         begin + m_buf->size());
-    m_storage->push_back(serialized_element);
+        // 4. Insert into vec
+        const auto serialized_element = ::cista::deserialize<const ygg::Data<Tag>, Mode>(begin, begin + m_buf->size());
+        m_storage->push_back(serialized_element);
 
-    // 5. Insert into set
-    [[maybe_unused]] auto [it2, inserted] = m_set.emplace_with_hash(h, index);
-    assert(inserted);
+        // 5. Insert into set
+        [[maybe_unused]] auto [it2, inserted] = m_set.emplace_with_hash(h, index);
+        assert(inserted);
 
-    return index;
-  }
+        return index;
+    }
 
-  // const T* always points to a valid instantiation of the class.
-  // We return const T* here to avoid bugs when using structured bindings.
-  template <::cista::mode Mode = ygg::CISTA_MODE>
-  std::pair<ygg::Index<Tag>, bool> insert(const ygg::Data<Tag> &element) {
-    assert(IndexedHashSet::hash(element) == m_set.hash(element));
+    // const T* always points to a valid instantiation of the class.
+    // We return const T* here to avoid bugs when using structured bindings.
+    template<::cista::mode Mode = ygg::CISTA_MODE>
+    std::pair<ygg::Index<Tag>, bool> insert(const ygg::Data<Tag>& element)
+    {
+        assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
-    return insert_with_hash<Mode>(IndexedHashSet::hash(element), element);
-  }
+        return insert_with_hash<Mode>(IndexedHashSet::hash(element), element);
+    }
 
-  /**
-   * Lookup
-   */
+    /**
+     * Lookup
+     */
 
-  const ygg::Data<Tag> &operator[](ygg::Index<Tag> index) const noexcept {
-    assert(index.get_value() < m_storage->size());
-    return *(*m_storage)[index.get_value()];
-  }
+    const ygg::Data<Tag>& operator[](ygg::Index<Tag> index) const noexcept
+    {
+        assert(index.get_value() < m_storage->size());
+        return *(*m_storage)[index.get_value()];
+    }
 
-  const ygg::Data<Tag> &at(ygg::Index<Tag> index) const {
-    if (index.get_value() >= m_storage->size())
-      throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
-    return (*this)[index];
-  }
+    const ygg::Data<Tag>& at(ygg::Index<Tag> index) const
+    {
+        if (index.get_value() >= m_storage->size())
+            throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
+        return (*this)[index];
+    }
 
-  const ygg::Data<Tag> &front() const {
-    if (m_storage->empty())
-      throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
-    return *m_storage->front();
-  }
+    const ygg::Data<Tag>& front() const
+    {
+        if (m_storage->empty())
+            throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
+        return *m_storage->front();
+    }
 
 private:
-  class IndexableHash {
-  private:
-    const VectorType *m_storage;
-    H m_hash;
+    class IndexableHash
+    {
+    private:
+        const VectorType* m_storage;
+        H m_hash;
 
-  public:
-    using is_transparent = void;
+    public:
+        using is_transparent = void;
 
-    IndexableHash() noexcept : m_storage(nullptr) {}
-    explicit IndexableHash(const VectorType &storage) noexcept
-        : m_storage(&storage) {}
+        IndexableHash() noexcept : m_storage(nullptr) {}
+        explicit IndexableHash(const VectorType& storage) noexcept : m_storage(&storage) {}
 
-    size_t operator()(ygg::Index<Tag> el) const noexcept {
-      return m_hash(*(*m_storage)[ygg::uint_t(el)]);
-    }
-    size_t operator()(const ygg::Data<Tag> &el) const noexcept {
-      return m_hash(el);
-    }
-  };
+        size_t operator()(ygg::Index<Tag> el) const noexcept { return m_hash(*(*m_storage)[ygg::uint_t(el)]); }
+        size_t operator()(const ygg::Data<Tag>& el) const noexcept { return m_hash(el); }
+    };
 
-  class IndexableEqualTo {
-  private:
-    const VectorType *m_storage;
-    E m_equal_to;
+    class IndexableEqualTo
+    {
+    private:
+        const VectorType* m_storage;
+        E m_equal_to;
 
-  public:
-    using is_transparent = void;
+    public:
+        using is_transparent = void;
 
-    IndexableEqualTo() noexcept : m_storage(nullptr), m_equal_to() {}
-    explicit IndexableEqualTo(const VectorType &storage) noexcept
-        : m_storage(&storage), m_equal_to() {}
+        IndexableEqualTo() noexcept : m_storage(nullptr), m_equal_to() {}
+        explicit IndexableEqualTo(const VectorType& storage) noexcept : m_storage(&storage), m_equal_to() {}
 
-    bool operator()(ygg::Index<Tag> lhs, ygg::Index<Tag> rhs) const noexcept {
-      return m_equal_to(*(*m_storage)[ygg::uint_t(lhs)],
-                        *(*m_storage)[ygg::uint_t(rhs)]);
-    }
-    bool operator()(const ygg::Data<Tag> &lhs,
-                    ygg::Index<Tag> rhs) const noexcept {
-      return m_equal_to(lhs, *(*m_storage)[ygg::uint_t(rhs)]);
-    }
-    bool operator()(ygg::Index<Tag> lhs,
-                    const ygg::Data<Tag> &rhs) const noexcept {
-      return m_equal_to(*(*m_storage)[ygg::uint_t(lhs)], rhs);
-    }
-    bool operator()(const ygg::Data<Tag> &lhs,
-                    const ygg::Data<Tag> &rhs) const noexcept {
-      return m_equal_to(lhs, rhs);
-    }
-  };
+        bool operator()(ygg::Index<Tag> lhs, ygg::Index<Tag> rhs) const noexcept
+        {
+            return m_equal_to(*(*m_storage)[ygg::uint_t(lhs)], *(*m_storage)[ygg::uint_t(rhs)]);
+        }
+        bool operator()(const ygg::Data<Tag>& lhs, ygg::Index<Tag> rhs) const noexcept { return m_equal_to(lhs, *(*m_storage)[ygg::uint_t(rhs)]); }
+        bool operator()(ygg::Index<Tag> lhs, const ygg::Data<Tag>& rhs) const noexcept { return m_equal_to(*(*m_storage)[ygg::uint_t(lhs)], rhs); }
+        bool operator()(const ygg::Data<Tag>& lhs, const ygg::Data<Tag>& rhs) const noexcept { return m_equal_to(lhs, rhs); }
+    };
 
-  std::unique_ptr<VectorType> m_storage;
-  gtl::flat_hash_set<ygg::Index<Tag>, IndexableHash, IndexableEqualTo> m_set;
+    std::unique_ptr<VectorType> m_storage;
+    gtl::flat_hash_set<ygg::Index<Tag>, IndexableHash, IndexableEqualTo> m_set;
 
-  ::cista::buf<std::vector<uint8_t>> *m_buf;
-  SegmentedBuffer *m_arena;
+    ::cista::buf<std::vector<uint8_t>>* m_buf;
+    SegmentedBuffer* m_arena;
 };
 
-} // namespace ygg::buffer
+}  // namespace ygg::buffer
 
 #endif

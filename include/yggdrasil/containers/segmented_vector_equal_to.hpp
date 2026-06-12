@@ -18,8 +18,8 @@
 #ifndef YGG_COMMON_SEGMENTED_VECTOR_EQUAL_TO_HPP_
 #define YGG_COMMON_SEGMENTED_VECTOR_EQUAL_TO_HPP_
 
-#include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
 
 #include <cstddef>
 

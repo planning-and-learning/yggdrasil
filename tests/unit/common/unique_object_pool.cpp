@@ -16,150 +16,153 @@
  */
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <yggdrasil/containers/unique_object_pool.hpp>
 
-#include <stdexcept>
+namespace ygg::tests
+{
 
-namespace ygg::tests {
+struct UniquePoolValue
+{
+    int value = 0;
 
-struct UniquePoolValue {
-  int value = 0;
-
-  void initialize(int next_value) { value = next_value; }
+    void initialize(int next_value) { value = next_value; }
 };
 
-struct ThrowingUniquePoolValue {
-  int value = 0;
+struct ThrowingUniquePoolValue
+{
+    int value = 0;
 
-  void initialize(int next_value) {
-    if (next_value < 0)
-      throw std::runtime_error("negative value");
-    value = next_value;
-  }
+    void initialize(int next_value)
+    {
+        if (next_value < 0)
+            throw std::runtime_error("negative value");
+        value = next_value;
+    }
 };
 
-template <bool ThreadSafe>
-void expect_unique_pool_recovers_from_failed_initialization() {
-  auto pool = ygg::UniqueObjectPool<ThrowingUniquePoolValue, ThreadSafe>();
+template<bool ThreadSafe>
+void expect_unique_pool_recovers_from_failed_initialization()
+{
+    auto pool = ygg::UniqueObjectPool<ThrowingUniquePoolValue, ThreadSafe>();
 
-  EXPECT_THROW((void)pool.get_or_allocate(-1), std::runtime_error);
-  EXPECT_EQ(pool.size(), 1);
-  EXPECT_EQ(pool.free_size(), 1);
+    EXPECT_THROW((void) pool.get_or_allocate(-1), std::runtime_error);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool.free_size(), 1);
 
-  auto value = pool.get_or_allocate(3);
-  EXPECT_EQ(value->value, 3);
-  EXPECT_EQ(pool.size(), 1);
-  EXPECT_EQ(pool.free_size(), 0);
+    auto value = pool.get_or_allocate(3);
+    EXPECT_EQ(value->value, 3);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool.free_size(), 0);
 }
 
-TEST(YggdrasilTests, CommonUniqueObjectPoolReportsStorageSize) {
-  auto pool = ygg::UniqueObjectPool<UniquePoolValue>();
+TEST(YggdrasilTests, CommonUniqueObjectPoolReportsStorageSize)
+{
+    auto pool = ygg::UniqueObjectPool<UniquePoolValue>();
 
-  EXPECT_EQ(pool.size(), 0);
-  EXPECT_TRUE(pool.empty());
-  EXPECT_EQ(pool.get_size(), pool.size());
-  EXPECT_EQ(pool.free_size(), 0);
-  EXPECT_EQ(pool.get_num_free(), pool.free_size());
+    EXPECT_EQ(pool.size(), 0);
+    EXPECT_TRUE(pool.empty());
+    EXPECT_EQ(pool.get_size(), pool.size());
+    EXPECT_EQ(pool.free_size(), 0);
+    EXPECT_EQ(pool.get_num_free(), pool.free_size());
 
-  {
-    auto first = pool.get_or_allocate(1);
-    EXPECT_EQ(first->value, 1);
+    {
+        auto first = pool.get_or_allocate(1);
+        EXPECT_EQ(first->value, 1);
+        EXPECT_EQ(pool.size(), 1);
+        EXPECT_FALSE(pool.empty());
+        EXPECT_EQ(pool.get_size(), pool.size());
+        EXPECT_EQ(pool.free_size(), 0);
+        EXPECT_EQ(pool.get_num_free(), pool.free_size());
+
+        auto second = pool.get_or_allocate(2);
+        EXPECT_EQ(second->value, 2);
+        EXPECT_EQ(pool.size(), 2);
+        EXPECT_FALSE(pool.empty());
+        EXPECT_EQ(pool.get_size(), pool.size());
+        EXPECT_EQ(pool.free_size(), 0);
+        EXPECT_EQ(pool.get_num_free(), pool.free_size());
+    }
+
+    EXPECT_EQ(pool.size(), 2);
+    EXPECT_FALSE(pool.empty());
+    EXPECT_EQ(pool.get_size(), pool.size());
+    EXPECT_EQ(pool.free_size(), 2);
+    EXPECT_EQ(pool.get_num_free(), pool.free_size());
+
+    auto reused = pool.get_or_allocate(3);
+    EXPECT_EQ(reused->value, 3);
+    EXPECT_EQ(pool.size(), 2);
+    EXPECT_FALSE(pool.empty());
+    EXPECT_EQ(pool.get_size(), pool.size());
+    EXPECT_EQ(pool.free_size(), 1);
+    EXPECT_EQ(pool.get_num_free(), pool.free_size());
+}
+
+TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolReportsStorageSize)
+{
+    auto pool = ygg::UniqueObjectPool<UniquePoolValue, true>();
+
+    auto value = pool.get_or_allocate(4);
+
+    EXPECT_EQ(value->value, 4);
     EXPECT_EQ(pool.size(), 1);
     EXPECT_FALSE(pool.empty());
     EXPECT_EQ(pool.get_size(), pool.size());
     EXPECT_EQ(pool.free_size(), 0);
     EXPECT_EQ(pool.get_num_free(), pool.free_size());
+}
 
-    auto second = pool.get_or_allocate(2);
-    EXPECT_EQ(second->value, 2);
+TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolReusesReleasedObjects)
+{
+    auto pool = ygg::UniqueObjectPool<UniquePoolValue, true>();
+    UniquePoolValue* first_address = nullptr;
+
+    {
+        auto first = pool.get_or_allocate(7);
+        first_address = first.get();
+        EXPECT_EQ(first->value, 7);
+        EXPECT_EQ(pool.free_size(), 0);
+    }
+
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool.free_size(), 1);
+
+    auto reused = pool.get_or_allocate(8);
+    EXPECT_EQ(reused.get(), first_address);
+    EXPECT_EQ(reused->value, 8);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool.free_size(), 0);
+}
+
+TEST(YggdrasilTests, CommonUniqueObjectPoolPtrMoveAndClonePreserveOwnership)
+{
+    auto pool = ygg::UniqueObjectPool<UniquePoolValue>();
+
+    auto original = pool.get_or_allocate(5);
+    auto* original_address = original.get();
+
+    auto moved = std::move(original);
+    EXPECT_FALSE(original);
+    ASSERT_TRUE(moved);
+    EXPECT_EQ(moved.get(), original_address);
+    EXPECT_EQ(moved->value, 5);
+
+    auto cloned = moved.clone();
+    ASSERT_TRUE(cloned);
+    EXPECT_NE(cloned.get(), moved.get());
+    EXPECT_EQ(cloned->value, moved->value);
     EXPECT_EQ(pool.size(), 2);
-    EXPECT_FALSE(pool.empty());
-    EXPECT_EQ(pool.get_size(), pool.size());
     EXPECT_EQ(pool.free_size(), 0);
-    EXPECT_EQ(pool.get_num_free(), pool.free_size());
-  }
 
-  EXPECT_EQ(pool.size(), 2);
-  EXPECT_FALSE(pool.empty());
-  EXPECT_EQ(pool.get_size(), pool.size());
-  EXPECT_EQ(pool.free_size(), 2);
-  EXPECT_EQ(pool.get_num_free(), pool.free_size());
-
-  auto reused = pool.get_or_allocate(3);
-  EXPECT_EQ(reused->value, 3);
-  EXPECT_EQ(pool.size(), 2);
-  EXPECT_FALSE(pool.empty());
-  EXPECT_EQ(pool.get_size(), pool.size());
-  EXPECT_EQ(pool.free_size(), 1);
-  EXPECT_EQ(pool.get_num_free(), pool.free_size());
+    moved = {};
+    EXPECT_EQ(pool.free_size(), 1);
+    cloned = {};
+    EXPECT_EQ(pool.free_size(), 2);
 }
 
-TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolReportsStorageSize) {
-  auto pool = ygg::UniqueObjectPool<UniquePoolValue, true>();
+TEST(YggdrasilTests, CommonUniqueObjectPoolRecoversFromFailedInitialization) { expect_unique_pool_recovers_from_failed_initialization<false>(); }
 
-  auto value = pool.get_or_allocate(4);
+TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolRecoversFromFailedInitialization) { expect_unique_pool_recovers_from_failed_initialization<true>(); }
 
-  EXPECT_EQ(value->value, 4);
-  EXPECT_EQ(pool.size(), 1);
-  EXPECT_FALSE(pool.empty());
-  EXPECT_EQ(pool.get_size(), pool.size());
-  EXPECT_EQ(pool.free_size(), 0);
-  EXPECT_EQ(pool.get_num_free(), pool.free_size());
-}
-
-TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolReusesReleasedObjects) {
-  auto pool = ygg::UniqueObjectPool<UniquePoolValue, true>();
-  UniquePoolValue *first_address = nullptr;
-
-  {
-    auto first = pool.get_or_allocate(7);
-    first_address = first.get();
-    EXPECT_EQ(first->value, 7);
-    EXPECT_EQ(pool.free_size(), 0);
-  }
-
-  EXPECT_EQ(pool.size(), 1);
-  EXPECT_EQ(pool.free_size(), 1);
-
-  auto reused = pool.get_or_allocate(8);
-  EXPECT_EQ(reused.get(), first_address);
-  EXPECT_EQ(reused->value, 8);
-  EXPECT_EQ(pool.size(), 1);
-  EXPECT_EQ(pool.free_size(), 0);
-}
-
-TEST(YggdrasilTests, CommonUniqueObjectPoolPtrMoveAndClonePreserveOwnership) {
-  auto pool = ygg::UniqueObjectPool<UniquePoolValue>();
-
-  auto original = pool.get_or_allocate(5);
-  auto *original_address = original.get();
-
-  auto moved = std::move(original);
-  EXPECT_FALSE(original);
-  ASSERT_TRUE(moved);
-  EXPECT_EQ(moved.get(), original_address);
-  EXPECT_EQ(moved->value, 5);
-
-  auto cloned = moved.clone();
-  ASSERT_TRUE(cloned);
-  EXPECT_NE(cloned.get(), moved.get());
-  EXPECT_EQ(cloned->value, moved->value);
-  EXPECT_EQ(pool.size(), 2);
-  EXPECT_EQ(pool.free_size(), 0);
-
-  moved = {};
-  EXPECT_EQ(pool.free_size(), 1);
-  cloned = {};
-  EXPECT_EQ(pool.free_size(), 2);
-}
-
-TEST(YggdrasilTests, CommonUniqueObjectPoolRecoversFromFailedInitialization) {
-  expect_unique_pool_recovers_from_failed_initialization<false>();
-}
-
-TEST(YggdrasilTests,
-     CommonThreadSafeUniqueObjectPoolRecoversFromFailedInitialization) {
-  expect_unique_pool_recovers_from_failed_initialization<true>();
-}
-
-} // namespace ygg::tests
+}  // namespace ygg::tests

@@ -36,165 +36,143 @@
 #include <utility>
 #include <vector>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename Tag, HashFor<Data<Tag>> H = Hash<Data<Tag>>,
-          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
-          size_t FirstSegmentSize = 32>
-class IndexedHashSet {
-  static_assert(bit::is_power_of_two(FirstSegmentSize));
+template<typename Tag, HashFor<Data<Tag>> H = Hash<Data<Tag>>, EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>, size_t FirstSegmentSize = 32>
+class IndexedHashSet
+{
+    static_assert(bit::is_power_of_two(FirstSegmentSize));
 
 private:
-  class IndexableHash;
-  class IndexableEqualTo;
+    class IndexableHash;
+    class IndexableEqualTo;
 
-  using VectorType = SegmentedVector<Data<Tag>, FirstSegmentSize>;
+    using VectorType = SegmentedVector<Data<Tag>, FirstSegmentSize>;
 
 public:
-  IndexedHashSet()
-      : m_storage(std::make_unique<VectorType>()),
-        m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)) {}
-  IndexedHashSet(const IndexedHashSet &other) = delete;
-  IndexedHashSet &operator=(const IndexedHashSet &other) = delete;
-  IndexedHashSet(IndexedHashSet &&other) = default;
-  IndexedHashSet &operator=(IndexedHashSet &&other) = default;
+    IndexedHashSet() : m_storage(std::make_unique<VectorType>()), m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)) {}
+    IndexedHashSet(const IndexedHashSet& other) = delete;
+    IndexedHashSet& operator=(const IndexedHashSet& other) = delete;
+    IndexedHashSet(IndexedHashSet&& other) = default;
+    IndexedHashSet& operator=(IndexedHashSet&& other) = default;
 
-  void clear() noexcept {
-    m_set.clear();
-    m_storage->clear();
-  }
+    void clear() noexcept
+    {
+        m_set.clear();
+        m_storage->clear();
+    }
 
-  static size_t hash(const Data<Tag> &element) noexcept {
-    return gtl::phmap_mix<sizeof(size_t)>()(H{}(element));
-  }
+    static size_t hash(const Data<Tag>& element) noexcept { return gtl::phmap_mix<sizeof(size_t)>()(H {}(element)); }
 
-  std::optional<Index<Tag>> find_with_hash(const Data<Tag> &element,
-                                           size_t h) const {
-    assert(h == IndexedHashSet::hash(element) &&
-           "The given hash does not match container internal's hash.");
-    assert(h == m_set.hash(element));
+    std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const
+    {
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
 
-    if (auto it = m_set.find(element, h); it != m_set.end())
-      return *it;
+        if (auto it = m_set.find(element, h); it != m_set.end())
+            return *it;
 
-    return std::nullopt;
-  }
+        return std::nullopt;
+    }
 
-  std::optional<Index<Tag>> find(const Data<Tag> &element) const {
-    assert(IndexedHashSet::hash(element) == m_set.hash(element));
+    std::optional<Index<Tag>> find(const Data<Tag>& element) const
+    {
+        assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
-    return find_with_hash(element, IndexedHashSet::hash(element));
-  }
+        return find_with_hash(element, IndexedHashSet::hash(element));
+    }
 
-  bool contains_with_hash(const Data<Tag> &element, size_t h) const {
-    return find_with_hash(element, h).has_value();
-  }
+    bool contains_with_hash(const Data<Tag>& element, size_t h) const { return find_with_hash(element, h).has_value(); }
 
-  bool contains(const Data<Tag> &element) const {
-    return find(element).has_value();
-  }
+    bool contains(const Data<Tag>& element) const { return find(element).has_value(); }
 
-  std::pair<Index<Tag>, bool> insert_with_hash(size_t h,
-                                               const Data<Tag> &element) {
-    assert(h == hash(element) &&
-           "The given hash does not match container internal's hash.");
-    assert(h == m_set.hash(element));
+    std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element)
+    {
+        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
 
-    if (auto it = m_set.find(element, h); it != m_set.end())
-      return {*it, false};
+        if (auto it = m_set.find(element, h); it != m_set.end())
+            return { *it, false };
 
-    return {insert_new_with_hash(h, element), true};
-  }
+        return { insert_new_with_hash(h, element), true };
+    }
 
-  Index<Tag> insert_new_with_hash(size_t h, const Data<Tag> &element) {
-    assert(h == hash(element) &&
-           "The given hash does not match container internal's hash.");
-    assert(h == m_set.hash(element));
+    Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
+    {
+        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
 
-    Index<Tag> idx(to_uint_t(m_storage->size()));
-    m_storage->push_back(element);
-    [[maybe_unused]] const auto [it, inserted] =
-        m_set.emplace_with_hash(h, idx);
-    assert(inserted);
-    return idx;
-  }
+        Index<Tag> idx(to_uint_t(m_storage->size()));
+        m_storage->push_back(element);
+        [[maybe_unused]] const auto [it, inserted] = m_set.emplace_with_hash(h, idx);
+        assert(inserted);
+        return idx;
+    }
 
-  std::pair<Index<Tag>, bool> insert(const Data<Tag> &element) {
-    assert(IndexedHashSet::hash(element) == m_set.hash(element));
+    std::pair<Index<Tag>, bool> insert(const Data<Tag>& element)
+    {
+        assert(IndexedHashSet::hash(element) == m_set.hash(element));
 
-    return insert_with_hash(IndexedHashSet::hash(element), element);
-  }
+        return insert_with_hash(IndexedHashSet::hash(element), element);
+    }
 
-  const Data<Tag> &operator[](Index<Tag> idx) const noexcept {
-    return (*m_storage)[uint_t(idx)];
-  }
+    const Data<Tag>& operator[](Index<Tag> idx) const noexcept { return (*m_storage)[uint_t(idx)]; }
 
-  const Data<Tag> &at(Index<Tag> idx) const {
-    return m_storage->at(uint_t(idx));
-  }
+    const Data<Tag>& at(Index<Tag> idx) const { return m_storage->at(uint_t(idx)); }
 
-  const Data<Tag> &front() const noexcept { return m_storage->front(); }
+    const Data<Tag>& front() const noexcept { return m_storage->front(); }
 
-  size_t memory_usage() const noexcept {
-    size_t bytes = 0;
-    bytes += m_storage ? m_storage->memory_usage() : 0;
-    bytes +=
-        m_set.capacity() * (sizeof(Index<Tag>) + sizeof(gtl::priv::ctrl_t));
-    return bytes;
-  }
+    size_t memory_usage() const noexcept
+    {
+        size_t bytes = 0;
+        bytes += m_storage ? m_storage->memory_usage() : 0;
+        bytes += m_set.capacity() * (sizeof(Index<Tag>) + sizeof(gtl::priv::ctrl_t));
+        return bytes;
+    }
 
-  std::size_t size() const noexcept { return m_storage->size(); }
+    std::size_t size() const noexcept { return m_storage->size(); }
 
-  bool empty() const noexcept { return m_storage->empty(); }
+    bool empty() const noexcept { return m_storage->empty(); }
 
 private:
-  class IndexableHash {
-  private:
-    const VectorType *m_storage;
-    H m_hash;
+    class IndexableHash
+    {
+    private:
+        const VectorType* m_storage;
+        H m_hash;
 
-  public:
-    using is_transparent = void;
+    public:
+        using is_transparent = void;
 
-    IndexableHash() noexcept : m_storage(nullptr) {}
-    explicit IndexableHash(const VectorType &storage) noexcept
-        : m_storage(&storage) {}
+        IndexableHash() noexcept : m_storage(nullptr) {}
+        explicit IndexableHash(const VectorType& storage) noexcept : m_storage(&storage) {}
 
-    size_t operator()(Index<Tag> el) const noexcept {
-      return m_hash((*m_storage)[uint_t(el)]);
-    }
-    size_t operator()(const Data<Tag> &el) const noexcept { return m_hash(el); }
-  };
+        size_t operator()(Index<Tag> el) const noexcept { return m_hash((*m_storage)[uint_t(el)]); }
+        size_t operator()(const Data<Tag>& el) const noexcept { return m_hash(el); }
+    };
 
-  class IndexableEqualTo {
-  private:
-    const VectorType *m_storage;
-    E m_equal_to;
+    class IndexableEqualTo
+    {
+    private:
+        const VectorType* m_storage;
+        E m_equal_to;
 
-  public:
-    using is_transparent = void;
+    public:
+        using is_transparent = void;
 
-    IndexableEqualTo() noexcept : m_storage(nullptr), m_equal_to() {}
-    explicit IndexableEqualTo(const VectorType &storage) noexcept
-        : m_storage(&storage), m_equal_to() {}
+        IndexableEqualTo() noexcept : m_storage(nullptr), m_equal_to() {}
+        explicit IndexableEqualTo(const VectorType& storage) noexcept : m_storage(&storage), m_equal_to() {}
 
-    bool operator()(Index<Tag> lhs, Index<Tag> rhs) const noexcept {
-      return m_equal_to((*m_storage)[uint_t(lhs)], (*m_storage)[uint_t(rhs)]);
-    }
-    bool operator()(const Data<Tag> &lhs, Index<Tag> rhs) const noexcept {
-      return m_equal_to(lhs, (*m_storage)[uint_t(rhs)]);
-    }
-    bool operator()(Index<Tag> lhs, const Data<Tag> &rhs) const noexcept {
-      return m_equal_to((*m_storage)[uint_t(lhs)], rhs);
-    }
-    bool operator()(const Data<Tag> &lhs, const Data<Tag> &rhs) const noexcept {
-      return m_equal_to(lhs, rhs);
-    }
-  };
+        bool operator()(Index<Tag> lhs, Index<Tag> rhs) const noexcept { return m_equal_to((*m_storage)[uint_t(lhs)], (*m_storage)[uint_t(rhs)]); }
+        bool operator()(const Data<Tag>& lhs, Index<Tag> rhs) const noexcept { return m_equal_to(lhs, (*m_storage)[uint_t(rhs)]); }
+        bool operator()(Index<Tag> lhs, const Data<Tag>& rhs) const noexcept { return m_equal_to((*m_storage)[uint_t(lhs)], rhs); }
+        bool operator()(const Data<Tag>& lhs, const Data<Tag>& rhs) const noexcept { return m_equal_to(lhs, rhs); }
+    };
 
-  std::unique_ptr<VectorType> m_storage;
-  gtl::flat_hash_set<Index<Tag>, IndexableHash, IndexableEqualTo> m_set;
+    std::unique_ptr<VectorType> m_storage;
+    gtl::flat_hash_set<Index<Tag>, IndexableHash, IndexableEqualTo> m_set;
 };
-} // namespace ygg
+}  // namespace ygg
 
 #endif

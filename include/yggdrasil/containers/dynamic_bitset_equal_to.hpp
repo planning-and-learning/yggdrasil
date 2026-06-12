@@ -23,22 +23,23 @@
 
 #include <concepts>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename Block, typename Allocator>
-struct EqualTo<boost::dynamic_bitset<Block, Allocator>> {
-  using Type = boost::dynamic_bitset<Block, Allocator>;
+template<typename Block, typename Allocator>
+struct EqualTo<boost::dynamic_bitset<Block, Allocator>>
+{
+    using Type = boost::dynamic_bitset<Block, Allocator>;
 
-  bool operator()(const Type &lhs, const Type &rhs) const { return lhs == rhs; }
+    bool operator()(const Type& lhs, const Type& rhs) const { return lhs == rhs; }
 };
 
-template <std::unsigned_integral Block> struct EqualTo<BitsetSpan<Block>> {
-  bool operator()(const BitsetSpan<Block> &lhs,
-                  const BitsetSpan<Block> &rhs) const noexcept {
-    return lhs == rhs;
-  }
+template<std::unsigned_integral Block>
+struct EqualTo<BitsetSpan<Block>>
+{
+    bool operator()(const BitsetSpan<Block>& lhs, const BitsetSpan<Block>& rhs) const noexcept { return lhs == rhs; }
 };
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

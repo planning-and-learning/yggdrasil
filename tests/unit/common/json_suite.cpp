@@ -15,80 +15,80 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <gtest/gtest.h>
-#include <yggdrasil/serialization/json_suite.hpp>
-
 #include <boost/json.hpp>
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <stdexcept>
+#include <yggdrasil/serialization/json_suite.hpp>
 
-namespace ygg::tests {
+namespace ygg::tests
+{
 
-TEST(YggdrasilTests, CommonJsonSuitePrefixDefaultsToRoot) {
+TEST(YggdrasilTests, CommonJsonSuitePrefixDefaultsToRoot)
+{
 #ifdef ROOT_DIR
-  const auto suite = boost::json::object();
+    const auto suite = boost::json::object();
 
-  EXPECT_EQ(common::suite_prefix_path(suite), common::root_path());
-  EXPECT_EQ(common::suite_path(suite, "tests/file.json"),
-            common::root_path() / "tests/file.json");
+    EXPECT_EQ(common::suite_prefix_path(suite), common::root_path());
+    EXPECT_EQ(common::suite_path(suite, "tests/file.json"), common::root_path() / "tests/file.json");
 #else
-  GTEST_SKIP() << "ROOT_DIR is not configured.";
+    GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif
 }
 
-TEST(YggdrasilTests, CommonJsonSuitePrefixResolvesRelativePaths) {
+TEST(YggdrasilTests, CommonJsonSuitePrefixResolvesRelativePaths)
+{
 #ifdef ROOT_DIR
-  auto suite = boost::json::object();
-  suite["prefix"] = "data";
+    auto suite = boost::json::object();
+    suite["prefix"] = "data";
 
-  EXPECT_EQ(common::suite_prefix_path(suite), common::root_path() / "data");
-  EXPECT_EQ(common::suite_path(suite, "task.pddl"),
-            common::root_path() / "data" / "task.pddl");
+    EXPECT_EQ(common::suite_prefix_path(suite), common::root_path() / "data");
+    EXPECT_EQ(common::suite_path(suite, "task.pddl"), common::root_path() / "data" / "task.pddl");
 #else
-  GTEST_SKIP() << "ROOT_DIR is not configured.";
+    GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif
 }
 
-TEST(YggdrasilTests, CommonJsonSuiteMemberPathReadsRequiredStringMembers) {
+TEST(YggdrasilTests, CommonJsonSuiteMemberPathReadsRequiredStringMembers)
+{
 #ifdef ROOT_DIR
-  auto suite = boost::json::object();
-  suite["prefix"] = "data";
-  suite["domain"] = "domain.pddl";
+    auto suite = boost::json::object();
+    suite["prefix"] = "data";
+    suite["domain"] = "domain.pddl";
 
-  EXPECT_EQ(common::suite_member_path(suite, "domain"),
-            common::root_path() / "data" / "domain.pddl");
+    EXPECT_EQ(common::suite_member_path(suite, "domain"), common::root_path() / "data" / "domain.pddl");
 
-  EXPECT_THROW(common::suite_member_path(suite, "problem"), std::runtime_error);
-  suite["problem"] = 42;
-  EXPECT_THROW(common::suite_member_path(suite, "problem"), std::runtime_error);
+    EXPECT_THROW(common::suite_member_path(suite, "problem"), std::runtime_error);
+    suite["problem"] = 42;
+    EXPECT_THROW(common::suite_member_path(suite, "problem"), std::runtime_error);
 #else
-  GTEST_SKIP() << "ROOT_DIR is not configured.";
+    GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif
 }
 
-TEST(YggdrasilTests, CommonJsonSuitePrefixKeepsAbsolutePaths) {
+TEST(YggdrasilTests, CommonJsonSuitePrefixKeepsAbsolutePaths)
+{
 #ifdef ROOT_DIR
-  auto suite = boost::json::object();
-  suite["prefix"] = "/absolute/prefix";
+    auto suite = boost::json::object();
+    suite["prefix"] = "/absolute/prefix";
 
-  EXPECT_EQ(common::suite_prefix_path(suite),
-            std::filesystem::path("/absolute/prefix"));
-  EXPECT_EQ(common::suite_path(suite, "/absolute/task.pddl"),
-            std::filesystem::path("/absolute/task.pddl"));
+    EXPECT_EQ(common::suite_prefix_path(suite), std::filesystem::path("/absolute/prefix"));
+    EXPECT_EQ(common::suite_path(suite, "/absolute/task.pddl"), std::filesystem::path("/absolute/task.pddl"));
 #else
-  GTEST_SKIP() << "ROOT_DIR is not configured.";
+    GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif
 }
 
-TEST(YggdrasilTests, CommonJsonSuitePrefixReportsTypeErrors) {
+TEST(YggdrasilTests, CommonJsonSuitePrefixReportsTypeErrors)
+{
 #ifdef ROOT_DIR
-  auto suite = boost::json::object();
-  suite["prefix"] = 42;
+    auto suite = boost::json::object();
+    suite["prefix"] = 42;
 
-  EXPECT_THROW(common::suite_prefix_path(suite), std::runtime_error);
+    EXPECT_THROW(common::suite_prefix_path(suite), std::runtime_error);
 #else
-  GTEST_SKIP() << "ROOT_DIR is not configured.";
+    GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif
 }
 
-} // namespace ygg::tests
+}  // namespace ygg::tests

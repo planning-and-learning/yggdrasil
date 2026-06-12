@@ -16,54 +16,56 @@
  */
 
 #include <gtest/gtest.h>
-#include <yggdrasil/core/closed_interval.hpp>
-
 #include <sstream>
 #include <tuple>
+#include <yggdrasil/core/closed_interval.hpp>
 
-namespace ygg::tests {
+namespace ygg::tests
+{
 
-TEST(YggdrasilTests, CommonClosedIntervalProvidesBasicIntervalOperations) {
-  const auto first = ygg::ClosedInterval<double>(1.0, 3.0);
-  const auto second = ygg::ClosedInterval<double>(2.0, 4.0);
+TEST(YggdrasilTests, CommonClosedIntervalProvidesBasicIntervalOperations)
+{
+    const auto first = ygg::ClosedInterval<double>(1.0, 3.0);
+    const auto second = ygg::ClosedInterval<double>(2.0, 4.0);
 
-  EXPECT_FALSE(empty(first));
-  EXPECT_EQ(lower(first), 1.0);
-  EXPECT_EQ(upper(first), 3.0);
+    EXPECT_FALSE(empty(first));
+    EXPECT_EQ(lower(first), 1.0);
+    EXPECT_EQ(upper(first), 3.0);
 
-  const auto intersection = intersect(first, second);
-  EXPECT_EQ(lower(intersection), 2.0);
-  EXPECT_EQ(upper(intersection), 3.0);
+    const auto intersection = intersect(first, second);
+    EXPECT_EQ(lower(intersection), 2.0);
+    EXPECT_EQ(upper(intersection), 3.0);
 
-  const auto envelope = hull(first, second);
-  EXPECT_EQ(lower(envelope), 1.0);
-  EXPECT_EQ(upper(envelope), 4.0);
-  EXPECT_TRUE(subset(intersection, envelope));
-  EXPECT_TRUE(contains(first, 1.0));
-  EXPECT_TRUE(contains(first, 2.0));
-  EXPECT_TRUE(contains(first, 3.0));
-  EXPECT_FALSE(contains(first, 0.0));
-  EXPECT_FALSE(contains(first, 4.0));
+    const auto envelope = hull(first, second);
+    EXPECT_EQ(lower(envelope), 1.0);
+    EXPECT_EQ(upper(envelope), 4.0);
+    EXPECT_TRUE(subset(intersection, envelope));
+    EXPECT_TRUE(contains(first, 1.0));
+    EXPECT_TRUE(contains(first, 2.0));
+    EXPECT_TRUE(contains(first, 3.0));
+    EXPECT_FALSE(contains(first, 0.0));
+    EXPECT_FALSE(contains(first, 4.0));
 
-  EXPECT_EQ(first.identifying_members(), std::make_tuple(false, 1.0, 3.0));
+    EXPECT_EQ(first.identifying_members(), std::make_tuple(false, 1.0, 3.0));
 
-  auto out = std::ostringstream();
-  out << first;
-  EXPECT_EQ(out.str(), "[1,3]");
+    auto out = std::ostringstream();
+    out << first;
+    EXPECT_EQ(out.str(), "[1,3]");
 }
 
-TEST(YggdrasilTests, CommonClosedIntervalCanonicalizesEmptyIdentityMembers) {
-  const auto first = ygg::ClosedInterval<double>();
-  const auto second = ygg::ClosedInterval<double>();
+TEST(YggdrasilTests, CommonClosedIntervalCanonicalizesEmptyIdentityMembers)
+{
+    const auto first = ygg::ClosedInterval<double>();
+    const auto second = ygg::ClosedInterval<double>();
 
-  EXPECT_TRUE(empty(first));
-  EXPECT_EQ(first, second);
-  EXPECT_FALSE(contains(first, 0.0));
-  EXPECT_EQ(first.identifying_members(), std::make_tuple(true, 0.0, 0.0));
+    EXPECT_TRUE(empty(first));
+    EXPECT_EQ(first, second);
+    EXPECT_FALSE(contains(first, 0.0));
+    EXPECT_EQ(first.identifying_members(), std::make_tuple(true, 0.0, 0.0));
 
-  auto out = std::ostringstream();
-  out << first;
-  EXPECT_EQ(out.str(), "[]");
+    auto out = std::ostringstream();
+    out << first;
+    EXPECT_EQ(out.str(), "[]");
 }
 
-} // namespace ygg::tests
+}  // namespace ygg::tests

@@ -21,24 +21,30 @@
 #include <gtl/btree.hpp>
 #include <gtl/phmap.hpp>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename T> struct Hash;
+template<typename T>
+struct Hash;
 
-template <typename T> struct EqualTo;
+template<typename T>
+struct EqualTo;
 
-template <typename T> struct Less;
+template<typename T>
+struct Less;
 
-template <typename T>
+template<typename T>
 using UnorderedSet = gtl::flat_hash_set<T, Hash<T>, EqualTo<T>>;
 
-template <typename T, typename V>
+template<typename T, typename V>
 using UnorderedMap = gtl::flat_hash_map<T, V, Hash<T>, EqualTo<T>>;
 
-template <typename T> using Set = gtl::btree_set<T, Less<T>>;
+template<typename T>
+using Set = gtl::btree_set<T, Less<T>>;
 
-template <typename T, typename V> using Map = gtl::btree_map<T, V, Less<T>>;
+template<typename T, typename V>
+using Map = gtl::btree_map<T, V, Less<T>>;
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

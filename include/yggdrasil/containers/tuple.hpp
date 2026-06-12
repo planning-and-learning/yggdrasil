@@ -23,42 +23,50 @@
 #include <tuple>
 #include <utility>
 
-namespace ygg {
+namespace ygg
+{
 
 /**
  * std::get<I> with runtime I.
  */
 
-template <size_t I> struct visit_impl {
-  template <typename T, typename F>
-  static bool visit(T &&tup, size_t idx, F &&function) {
-    if (idx == I - 1) {
-      std::invoke(std::forward<F>(function),
-                  std::get<I - 1>(std::forward<T>(tup)));
-      return true;
+template<size_t I>
+struct visit_impl
+{
+    template<typename T, typename F>
+    static bool visit(T&& tup, size_t idx, F&& function)
+    {
+        if (idx == I - 1)
+        {
+            std::invoke(std::forward<F>(function), std::get<I - 1>(std::forward<T>(tup)));
+            return true;
+        }
+        return visit_impl<I - 1>::visit(std::forward<T>(tup), idx, std::forward<F>(function));
     }
-    return visit_impl<I - 1>::visit(std::forward<T>(tup), idx,
-                                    std::forward<F>(function));
-  }
 };
 
-template <> struct visit_impl<0> {
-  template <typename T, typename F>
-  static bool visit(T &&, size_t, F &&) noexcept {
-    return false;
-  }
+template<>
+struct visit_impl<0>
+{
+    template<typename T, typename F>
+    static bool visit(T&&, size_t, F&&) noexcept
+    {
+        return false;
+    }
 };
 
-template <typename F, typename... Ts>
-bool visit_at(std::tuple<Ts...> const &tup, size_t idx, F &&function) {
-  return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
+template<typename F, typename... Ts>
+bool visit_at(std::tuple<Ts...> const& tup, size_t idx, F&& function)
+{
+    return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
 }
 
-template <typename F, typename... Ts>
-bool visit_at(std::tuple<Ts...> &tup, size_t idx, F &&function) {
-  return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
+template<typename F, typename... Ts>
+bool visit_at(std::tuple<Ts...>& tup, size_t idx, F&& function)
+{
+    return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
 }
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

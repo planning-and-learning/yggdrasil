@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <gtl/btree.hpp>
 #include <map>
 #include <optional>
 #include <ranges>
@@ -35,190 +36,198 @@
 #include <variant>
 #include <vector>
 
-#include <gtl/btree.hpp>
-
-namespace ygg {
+namespace ygg
+{
 
 /**
  * Forward declarations
  */
 
-template <typename T>
-inline void hash_combine(size_t &seed, const T &value) noexcept;
+template<typename T>
+inline void hash_combine(size_t& seed, const T& value) noexcept;
 
-template <typename T, typename... Rest>
-inline void hash_combine(size_t &seed, const Rest &...rest) noexcept;
+template<typename T, typename... Rest>
+inline void hash_combine(size_t& seed, const Rest&... rest) noexcept;
 
-template <typename... Ts>
-inline size_t hash_combine(const Ts &...rest) noexcept;
+template<typename... Ts>
+inline size_t hash_combine(const Ts&... rest) noexcept;
 
-template <std::ranges::input_range Range>
-inline size_t hash_range(Range &&range) noexcept;
+template<std::ranges::input_range Range>
+inline size_t hash_range(Range&& range) noexcept;
 
 /// @brief `Hash` is our custom hasher, like std::hash.
 ///
 /// Forwards to std::hash by default.
 /// Specializations can be injected into the namespace.
-template <typename T = void> struct Hash {
-  size_t operator()(const T &el) const noexcept { return std::hash<T>{}(el); }
+template<typename T = void>
+struct Hash
+{
+    size_t operator()(const T& el) const noexcept { return std::hash<T> {}(el); }
 };
 
-template <> struct Hash<void> {
-  using is_transparent = void;
+template<>
+struct Hash<void>
+{
+    using is_transparent = void;
 
-  template <typename T> size_t operator()(const T &el) const noexcept {
-    return Hash<std::remove_cvref_t<T>>{}(el);
-  }
+    template<typename T>
+    size_t operator()(const T& el) const noexcept
+    {
+        return Hash<std::remove_cvref_t<T>> {}(el);
+    }
 };
 
-template <std::floating_point T> struct Hash<T> {
-  size_t operator()(const T &el) const noexcept {
-    if (std::isnan(el))
-      return 0x9e3779b97f4a7c15ULL; // any fixed salt
+template<std::floating_point T>
+struct Hash<T>
+{
+    size_t operator()(const T& el) const noexcept
+    {
+        if (std::isnan(el))
+            return 0x9e3779b97f4a7c15ULL;  // any fixed salt
 
-    return std::hash<T>{}(el);
-  }
+        return std::hash<T> {}(el);
+    }
 };
 
-template <typename T, size_t N> struct Hash<std::array<T, N>> {
-  size_t operator()(const std::array<T, N> &arr) const noexcept {
-    return ygg::hash_range(arr);
-  }
+template<typename T, size_t N>
+struct Hash<std::array<T, N>>
+{
+    size_t operator()(const std::array<T, N>& arr) const noexcept { return ygg::hash_range(arr); }
 };
 
-template <typename T> struct Hash<std::reference_wrapper<T>> {
-  size_t operator()(const std::reference_wrapper<T> &ref) const noexcept {
-    return Hash<std::remove_cvref_t<T>>{}(ref.get());
-  }
+template<typename T>
+struct Hash<std::reference_wrapper<T>>
+{
+    size_t operator()(const std::reference_wrapper<T>& ref) const noexcept { return Hash<std::remove_cvref_t<T>> {}(ref.get()); }
 };
 
-template <typename Key, typename Compare, typename Allocator>
-struct Hash<std::set<Key, Compare, Allocator>> {
-  size_t
-  operator()(const std::set<Key, Compare, Allocator> &set) const noexcept {
-    return ygg::hash_range(set);
-  }
+template<typename Key, typename Compare, typename Allocator>
+struct Hash<std::set<Key, Compare, Allocator>>
+{
+    size_t operator()(const std::set<Key, Compare, Allocator>& set) const noexcept { return ygg::hash_range(set); }
 };
 
-template <typename Key, typename T, typename Compare, typename Allocator>
-struct Hash<std::map<Key, T, Compare, Allocator>> {
-  size_t
-  operator()(const std::map<Key, T, Compare, Allocator> &map) const noexcept {
-    return ygg::hash_range(map);
-  }
+template<typename Key, typename T, typename Compare, typename Allocator>
+struct Hash<std::map<Key, T, Compare, Allocator>>
+{
+    size_t operator()(const std::map<Key, T, Compare, Allocator>& map) const noexcept { return ygg::hash_range(map); }
 };
 
-template <typename Key, typename Compare, typename Allocator>
-struct Hash<gtl::btree_set<Key, Compare, Allocator>> {
-  size_t operator()(
-      const gtl::btree_set<Key, Compare, Allocator> &set) const noexcept {
-    return ygg::hash_range(set);
-  }
+template<typename Key, typename Compare, typename Allocator>
+struct Hash<gtl::btree_set<Key, Compare, Allocator>>
+{
+    size_t operator()(const gtl::btree_set<Key, Compare, Allocator>& set) const noexcept { return ygg::hash_range(set); }
 };
 
-template <typename Key, typename T, typename Compare, typename Allocator>
-struct Hash<gtl::btree_map<Key, T, Compare, Allocator>> {
-  size_t operator()(
-      const gtl::btree_map<Key, T, Compare, Allocator> &map) const noexcept {
-    return ygg::hash_range(map);
-  }
+template<typename Key, typename T, typename Compare, typename Allocator>
+struct Hash<gtl::btree_map<Key, T, Compare, Allocator>>
+{
+    size_t operator()(const gtl::btree_map<Key, T, Compare, Allocator>& map) const noexcept { return ygg::hash_range(map); }
 };
 
-template <typename T, typename Allocator>
-struct Hash<std::vector<T, Allocator>> {
-  size_t operator()(const std::vector<T, Allocator> &vec) const noexcept {
-    return ygg::hash_range(vec);
-  }
+template<typename T, typename Allocator>
+struct Hash<std::vector<T, Allocator>>
+{
+    size_t operator()(const std::vector<T, Allocator>& vec) const noexcept { return ygg::hash_range(vec); }
 };
 
-template <typename T1, typename T2> struct Hash<std::pair<T1, T2>> {
-  size_t operator()(const std::pair<T1, T2> &pair) const noexcept {
-    return ygg::hash_combine(pair.first, pair.second);
-  }
+template<typename T1, typename T2>
+struct Hash<std::pair<T1, T2>>
+{
+    size_t operator()(const std::pair<T1, T2>& pair) const noexcept { return ygg::hash_combine(pair.first, pair.second); }
 };
 
-template <typename... Ts> struct Hash<std::tuple<Ts...>> {
-  size_t operator()(const std::tuple<Ts...> &tuple) const noexcept {
-    size_t aggregated_hash = sizeof...(Ts);
-    std::apply(
-        [&aggregated_hash](const Ts &...args) {
-          (ygg::hash_combine(aggregated_hash, args), ...);
-        },
-        tuple);
-    return aggregated_hash;
-  }
+template<typename... Ts>
+struct Hash<std::tuple<Ts...>>
+{
+    size_t operator()(const std::tuple<Ts...>& tuple) const noexcept
+    {
+        size_t aggregated_hash = sizeof...(Ts);
+        std::apply([&aggregated_hash](const Ts&... args) { (ygg::hash_combine(aggregated_hash, args), ...); }, tuple);
+        return aggregated_hash;
+    }
 };
 
-template <typename... Ts> struct Hash<std::variant<Ts...>> {
-  size_t operator()(const std::variant<Ts...> &variant) const noexcept {
-    size_t seed = variant.index();
-    std::visit([&seed](const auto &arg) { ygg::hash_combine(seed, arg); }, variant);
-    return seed;
-  }
+template<typename... Ts>
+struct Hash<std::variant<Ts...>>
+{
+    size_t operator()(const std::variant<Ts...>& variant) const noexcept
+    {
+        size_t seed = variant.index();
+        std::visit([&seed](const auto& arg) { ygg::hash_combine(seed, arg); }, variant);
+        return seed;
+    }
 };
 
-template <typename T> struct Hash<std::optional<T>> {
-  size_t operator()(const std::optional<T> &optional) const noexcept {
-    size_t seed = optional.has_value() ? 1 : 0;
-    if (optional.has_value())
-      ygg::hash_combine(seed, optional.value());
-    return seed;
-  }
+template<typename T>
+struct Hash<std::optional<T>>
+{
+    size_t operator()(const std::optional<T>& optional) const noexcept
+    {
+        size_t seed = optional.has_value() ? 1 : 0;
+        if (optional.has_value())
+            ygg::hash_combine(seed, optional.value());
+        return seed;
+    }
 };
 
-template <typename T, std::size_t Extent> struct Hash<std::span<T, Extent>> {
-  size_t operator()(const std::span<T, Extent> &span) const noexcept {
-    return ygg::hash_range(span);
-  }
+template<typename T, std::size_t Extent>
+struct Hash<std::span<T, Extent>>
+{
+    size_t operator()(const std::span<T, Extent>& span) const noexcept { return ygg::hash_range(span); }
 };
 
-template <Identifiable T> struct Hash<T> {
-  using is_transparent = void;
+template<Identifiable T>
+struct Hash<T>
+{
+    using is_transparent = void;
 
-  size_t operator()(const T &element) const noexcept {
-    return ygg::hash_combine(element.identifying_members());
-  }
+    size_t operator()(const T& element) const noexcept { return ygg::hash_combine(element.identifying_members()); }
 
-  template <typename... Args>
-  size_t operator()(const std::tuple<Args...> &view) const noexcept {
-    return ygg::hash_combine(view);
-  }
+    template<typename... Args>
+    size_t operator()(const std::tuple<Args...>& view) const noexcept
+    {
+        return ygg::hash_combine(view);
+    }
 };
 
 /**
  * Definitions
  */
 
-template <std::ranges::input_range Range>
-inline size_t hash_range(Range &&range) noexcept {
-  size_t seed = 0;
-  if constexpr (std::ranges::sized_range<Range>)
-    seed = std::ranges::size(range);
+template<std::ranges::input_range Range>
+inline size_t hash_range(Range&& range) noexcept
+{
+    size_t seed = 0;
+    if constexpr (std::ranges::sized_range<Range>)
+        seed = std::ranges::size(range);
 
-  for (const auto &value : range)
-    ygg::hash_combine(seed, value);
+    for (const auto& value : range)
+        ygg::hash_combine(seed, value);
 
-  return seed;
+    return seed;
 }
 
-template <typename T>
-inline void hash_combine(size_t &seed, const T &value) noexcept {
-  seed ^= Hash<std::remove_cvref_t<T>>{}(value) + 0x9e3779b9 + (seed << 6) +
-          (seed >> 2);
+template<typename T>
+inline void hash_combine(size_t& seed, const T& value) noexcept
+{
+    seed ^= Hash<std::remove_cvref_t<T>> {}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-template <typename T, typename... Rest>
-inline void hash_combine(size_t &seed, const Rest &...rest) noexcept {
-  (ygg::hash_combine(seed, rest), ...);
+template<typename T, typename... Rest>
+inline void hash_combine(size_t& seed, const Rest&... rest) noexcept
+{
+    (ygg::hash_combine(seed, rest), ...);
 }
 
-template <typename... Ts>
-inline size_t hash_combine(const Ts &...rest) noexcept {
-  size_t seed = 0;
-  (ygg::hash_combine(seed, rest), ...);
-  return seed;
+template<typename... Ts>
+inline size_t hash_combine(const Ts&... rest) noexcept
+{
+    size_t seed = 0;
+    (ygg::hash_combine(seed, rest), ...);
+    return seed;
 }
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

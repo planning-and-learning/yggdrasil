@@ -7,7 +7,7 @@ find_package(Python 3.8 REQUIRED
 find_package(nanobind CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
-nanobind_add_module(_pyyggdrasil
+nanobind_add_module(_pyyggdrasil NB_SHARED
     src/module.cpp
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/execution/module.cpp
@@ -75,13 +75,42 @@ install(FILES
         DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
         COMPONENT pyyggdrasil)
 
-foreach(native_dir IN ITEMS include lib lib64 bin nanobind)
+# Ship the native dependency prefix inside the package, pruned to what
+# downstream consumers need at build and run time: no test-only dependencies
+# (googletest, benchmark), no static archives or libtool files, no nauty
+# command line tools, and only the Boost runtime libraries that are actually
+# linked downstream: json, iostreams, and container (a CMake-level dependency
+# of Boost::json).
+foreach(native_dir IN ITEMS include lib lib64)
     if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}")
         install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
                 DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-                COMPONENT pyyggdrasil)
+                COMPONENT pyyggdrasil
+                REGEX "/include/(gtest|gmock|benchmark)$" EXCLUDE
+                REGEX "/lib(gtest|gmock|benchmark)[^/]*$" EXCLUDE
+                REGEX "/cmake/(GTest|benchmark)$" EXCLUDE
+                REGEX "/pkgconfig$" EXCLUDE
+                REGEX "\\.(a|la)$" EXCLUDE
+                REGEX "/libboost_[^/]*\\.(so|dylib)[^/]*$" EXCLUDE)
+        # Re-add the linked Boost runtime libraries; install(DIRECTORY)
+        # preserves the symlink chains.
+        install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
+                DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
+                COMPONENT pyyggdrasil
+                FILES_MATCHING
+                REGEX "/libboost_(json|iostreams|container)[^/]*\\.(so|dylib)[^/]*$"
+                REGEX "/cmake$" EXCLUDE
+                REGEX "/pkgconfig$" EXCLUDE)
     endif()
 endforeach()
+
+if(WIN32 AND EXISTS "${YGGDRASIL_NATIVE_PREFIX}/bin")
+    # Runtime DLLs live in bin/ on Windows.
+    install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/bin"
+            DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
+            COMPONENT pyyggdrasil
+            FILES_MATCHING PATTERN "*.dll")
+endif()
 
 if(APPLE)
     install(SCRIPT "${PROJECT_SOURCE_DIR}/cmake/install/fix_macos_runtime_paths.cmake"

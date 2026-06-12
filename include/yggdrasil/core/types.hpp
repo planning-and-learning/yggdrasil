@@ -24,89 +24,106 @@
 #include <concepts>
 #include <type_traits>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename T> struct Data;
+template<typename T>
+struct Data;
 
-template <typename T> using DataList = ::cista::offset::vector<Data<T>>;
+template<typename T>
+using DataList = ::cista::offset::vector<Data<T>>;
 
-template <typename T> struct Builder;
+template<typename T>
+using DataMatrix = ::cista::offset::vector<DataList<T>>;
 
-template <typename T> struct Index;
+template<typename T>
+struct Builder;
 
-template <typename T> using IndexList = ::cista::offset::vector<Index<T>>;
+template<typename T>
+struct Index;
 
-template <typename T, typename C> struct View {};
+template<typename T>
+using IndexList = ::cista::offset::vector<Index<T>>;
 
-template <typename T, typename C> struct View<Data<T>, C> {
-private:
-  const Data<T> *m_handle;
-  const C *m_context;
+template<typename T>
+using IndexMatrix = ::cista::offset::vector<IndexList<T>>;
 
-public:
-  View(const Data<T> &handle, const C &context) noexcept
-      : m_handle(&handle), m_context(&context) {}
-
-  const auto &get_data() const noexcept { return *m_handle; }
-  const auto &get_context() const noexcept { return *m_context; }
-  const auto &get_handle() const noexcept { return *m_handle; }
+template<typename T, typename C>
+struct View
+{
 };
 
-template <typename T, typename C> struct View<Index<T>, C> {
+template<typename T, typename C>
+struct View<Data<T>, C>
+{
 private:
-  Index<T> m_handle;
-  const C *m_context;
+    const Data<T>* m_handle;
+    const C* m_context;
 
 public:
-  View(Index<T> handle, const C &context) noexcept
-      : m_handle(handle), m_context(&context) {}
+    View(const Data<T>& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
 
-  decltype(auto) get_data() const { return (*m_context)[m_handle]; }
-  const auto &get_context() const noexcept { return *m_context; }
-  const auto &get_handle() const noexcept { return m_handle; }
-  auto get_index() const noexcept { return m_handle; }
+    const auto& get_data() const noexcept { return *m_handle; }
+    const auto& get_context() const noexcept { return *m_context; }
+    const auto& get_handle() const noexcept { return *m_handle; }
 };
 
-template <typename T, typename C>
-concept ViewConcept = requires(T type, const C &context) {
-  // Constructor
-  View<T, C>(type, context);
-  // Method to retrieve the underlying Data.
-  { View<T, C>(type, context).get_data() };
-  // Method to retrieve the underlying context.
-  { View<T, C>(type, context).get_context() };
-  // Method to retrieve the underlying lightweight handle or data.
-  { View<T, C>(type, context).get_handle() } -> std::same_as<const T &>;
+template<typename T, typename C>
+struct View<Index<T>, C>
+{
+private:
+    Index<T> m_handle;
+    const C* m_context;
+
+public:
+    View(Index<T> handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
+
+    decltype(auto) get_data() const { return (*m_context)[m_handle]; }
+    const auto& get_context() const noexcept { return *m_context; }
+    const auto& get_handle() const noexcept { return m_handle; }
+    auto get_index() const noexcept { return m_handle; }
+};
+
+template<typename T, typename C>
+concept ViewConcept = requires(T type, const C& context) {
+    // Constructor
+    View<T, C>(type, context);
+    // Method to retrieve the underlying Data.
+    { View<T, C>(type, context).get_data() };
+    // Method to retrieve the underlying context.
+    { View<T, C>(type, context).get_context() };
+    // Method to retrieve the underlying lightweight handle or data.
+    { View<T, C>(type, context).get_handle() } -> std::same_as<const T&>;
 };
 
 /// @brief Helper to create a view
-template <typename T, typename C>
-auto make_view(const T &element, const C &context) noexcept {
-  return View<T, C>(element, context);
+template<typename T, typename C>
+auto make_view(const T& element, const C& context) noexcept
+{
+    return View<T, C>(element, context);
 }
 
 /// @brief A context that can map an element to the canonical context in which
 /// it is stored.
-template <typename T, typename C>
-concept CanonicalizableContext = requires(const C &a, const T &e) {
-  { a.get_canonical_context(e) } -> std::same_as<const C &>;
+template<typename T, typename C>
+concept CanonicalizableContext = requires(const C& a, const T& e) {
+    { a.get_canonical_context(e) } -> std::same_as<const C&>;
 };
 
-template <typename C, typename T>
+template<typename C, typename T>
 concept CanonicalizableContextFor = CanonicalizableContext<T, C>;
 
 /// @brief Helper to create a view
-template <typename T, CanonicalizableContextFor<T> C>
-auto make_view(const T &element, const C &context) {
-  return View<T, C>(element, context.get_canonical_context(element));
+template<typename T, CanonicalizableContextFor<T> C>
+auto make_view(const T& element, const C& context)
+{
+    return View<T, C>(element, context.get_canonical_context(element));
 }
 
 // Storage decision: trivially copyable data types are treated as flat in-memory
 // values.
-template <typename T>
-inline constexpr bool uses_trivial_storage_v =
-    std::is_trivially_copyable_v<Data<T>> &&
-    std::is_default_constructible_v<Data<T>>;
-} // namespace ygg
+template<typename T>
+inline constexpr bool uses_trivial_storage_v = std::is_trivially_copyable_v<Data<T>> && std::is_default_constructible_v<Data<T>>;
+}  // namespace ygg
 
 #endif

@@ -24,118 +24,129 @@
 #include <fmt/ranges.h>
 #include <gtl/btree.hpp>
 #include <gtl/phmap.hpp>
-
 #include <type_traits>
 
-namespace ygg {
-template <typename T> struct EqualTo;
+namespace ygg
+{
+template<typename T>
+struct EqualTo;
 
-template <typename T> struct Hash;
-} // namespace ygg
+template<typename T>
+struct Hash;
+}  // namespace ygg
 
 #if YGG_ENABLE_FMT_FORMATTERS
-namespace ygg::detail {
+namespace ygg::detail
+{
 
-template <typename OutputIt, typename Range>
-OutputIt format_elements(OutputIt out, const Range &value) {
-  auto first = true;
-  for (const auto &element : value) {
-    if (!first)
-      out = fmt::format_to(out, ", ");
-    first = false;
-    out = fmt::format_to(out, "{}", element);
-  }
-  return out;
+template<typename OutputIt, typename Range>
+OutputIt format_elements(OutputIt out, const Range& value)
+{
+    auto first = true;
+    for (const auto& element : value)
+    {
+        if (!first)
+            out = fmt::format_to(out, ", ");
+        first = false;
+        out = fmt::format_to(out, "{}", element);
+    }
+    return out;
 }
 
-template <typename OutputIt, typename Range>
-OutputIt format_key_value_elements(OutputIt out, const Range &value) {
-  auto first = true;
-  for (const auto &[key, mapped] : value) {
-    if (!first)
-      out = fmt::format_to(out, ", ");
-    first = false;
-    out = fmt::format_to(out, "{}: {}", key, mapped);
-  }
-  return out;
+template<typename OutputIt, typename Range>
+OutputIt format_key_value_elements(OutputIt out, const Range& value)
+{
+    auto first = true;
+    for (const auto& [key, mapped] : value)
+    {
+        if (!first)
+            out = fmt::format_to(out, ", ");
+        first = false;
+        out = fmt::format_to(out, "{}: {}", key, mapped);
+    }
+    return out;
 }
 
-} // namespace ygg::detail
+}  // namespace ygg::detail
 
-namespace fmt {
-template <typename K, typename Allocator, typename Char>
-struct range_format_kind<
-    gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, Char, void>
-    : std::false_type {};
-
-template <typename K, typename V, typename Allocator, typename Char>
-struct range_format_kind<
-    gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, Char,
-    void> : std::false_type {};
-
-template <typename K, typename C, typename A, typename Char>
-struct range_format_kind<gtl::btree_set<K, C, A>, Char, void>
-    : std::false_type {};
-
-template <typename K, typename V, typename C, typename A, typename Char>
-struct range_format_kind<gtl::btree_map<K, V, C, A>, Char, void>
-    : std::false_type {};
-
-template <typename K, typename Allocator>
-struct formatter<
-    gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>,
-                                       Allocator> &value,
-              FormatContext &ctx) const {
-    auto out = fmt::format_to(ctx.out(), "{{");
-    out = ygg::detail::format_elements(out, value);
-    return fmt::format_to(out, "}}");
-  }
+namespace fmt
+{
+template<typename K, typename Allocator, typename Char>
+struct range_format_kind<gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, Char, void> : std::false_type
+{
 };
 
-template <typename K, typename V, typename Allocator>
-struct formatter<
-    gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>,
-                                       Allocator> &value,
-              FormatContext &ctx) const {
-    auto out = fmt::format_to(ctx.out(), "{{");
-    out = ygg::detail::format_key_value_elements(out, value);
-    return fmt::format_to(out, "}}");
-  }
+template<typename K, typename V, typename Allocator, typename Char>
+struct range_format_kind<gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, Char, void> : std::false_type
+{
 };
 
-template <typename K, typename C, typename A>
-struct formatter<gtl::btree_set<K, C, A>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const gtl::btree_set<K, C, A> &value, FormatContext &ctx) const {
-    auto out = fmt::format_to(ctx.out(), "{{");
-    out = ygg::detail::format_elements(out, value);
-    return fmt::format_to(out, "}}");
-  }
+template<typename K, typename C, typename A, typename Char>
+struct range_format_kind<gtl::btree_set<K, C, A>, Char, void> : std::false_type
+{
 };
 
-template <typename K, typename V, typename C, typename A>
-struct formatter<gtl::btree_map<K, V, C, A>, char> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const gtl::btree_map<K, V, C, A> &value,
-              FormatContext &ctx) const {
-    auto out = fmt::format_to(ctx.out(), "{{");
-    out = ygg::detail::format_key_value_elements(out, value);
-    return fmt::format_to(out, "}}");
-  }
+template<typename K, typename V, typename C, typename A, typename Char>
+struct range_format_kind<gtl::btree_map<K, V, C, A>, Char, void> : std::false_type
+{
 };
-} // namespace fmt
+
+template<typename K, typename Allocator>
+struct formatter<gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>& value, FormatContext& ctx) const
+    {
+        auto out = fmt::format_to(ctx.out(), "{{");
+        out = ygg::detail::format_elements(out, value);
+        return fmt::format_to(out, "}}");
+    }
+};
+
+template<typename K, typename V, typename Allocator>
+struct formatter<gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>& value, FormatContext& ctx) const
+    {
+        auto out = fmt::format_to(ctx.out(), "{{");
+        out = ygg::detail::format_key_value_elements(out, value);
+        return fmt::format_to(out, "}}");
+    }
+};
+
+template<typename K, typename C, typename A>
+struct formatter<gtl::btree_set<K, C, A>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const gtl::btree_set<K, C, A>& value, FormatContext& ctx) const
+    {
+        auto out = fmt::format_to(ctx.out(), "{{");
+        out = ygg::detail::format_elements(out, value);
+        return fmt::format_to(out, "}}");
+    }
+};
+
+template<typename K, typename V, typename C, typename A>
+struct formatter<gtl::btree_map<K, V, C, A>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const gtl::btree_map<K, V, C, A>& value, FormatContext& ctx) const
+    {
+        auto out = fmt::format_to(ctx.out(), "{{");
+        out = ygg::detail::format_key_value_elements(out, value);
+        return fmt::format_to(out, "}}");
+    }
+};
+}  // namespace fmt
 #endif
 
 #endif

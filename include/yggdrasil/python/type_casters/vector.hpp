@@ -19,112 +19,103 @@
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)
 
-template <typename Caster, typename T>
-handle sequence_view_from_cpp(T &&src, rv_policy policy,
-                              cleanup_list *cleanup) {
-  object ret = steal(PyList_New(src.size()));
+template<typename Caster, typename T>
+handle sequence_view_from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
+{
+    object ret = steal(PyList_New(src.size()));
 
-  if (ret.is_valid()) {
-    Py_ssize_t index = 0;
+    if (ret.is_valid())
+    {
+        Py_ssize_t index = 0;
 
-    for (auto &&value : src) {
-      handle h = Caster::from_cpp(forward_like_<T>(value), policy, cleanup);
+        for (auto&& value : src)
+        {
+            handle h = Caster::from_cpp(forward_like_<T>(value), policy, cleanup);
 
-      if (!h.is_valid()) {
-        ret.reset();
-        break;
-      }
+            if (!h.is_valid())
+            {
+                ret.reset();
+                break;
+            }
 
-      NB_LIST_SET_ITEM(ret.ptr(), index++, h.ptr());
+            NB_LIST_SET_ITEM(ret.ptr(), index++, h.ptr());
+        }
     }
-  }
 
-  return ret.release();
+    return ret.release();
 }
 
 // Adapted from nanobind/stl/detail/nb_list.h
-template <typename Type, template <typename> typename Ptr, bool IndexPointers,
-          typename TemplateSizeType, class Allocator, typename C>
-struct type_caster<
-    ::ygg::View<::cista::basic_vector<Type, Ptr, IndexPointers,
-                                      TemplateSizeType, Allocator>,
-                C>> {
-  using ViewT = ::ygg::View<::cista::basic_vector<Type, Ptr, IndexPointers,
-                                                  TemplateSizeType, Allocator>,
-                            C>;
+template<typename Type, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator, typename C>
+struct type_caster<::ygg::View<::cista::basic_vector<Type, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>
+{
+    using ViewT = ::ygg::View<::cista::basic_vector<Type, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
 
-  using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>,
-                                   ::ygg::View<Type, C>, Type>;
-  using Caster = make_caster<Entry>;
+    using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>, ::ygg::View<Type, C>, Type>;
+    using Caster = make_caster<Entry>;
 
-  NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") +
-                            const_name("[") + Caster::Name + const_name("]"))
+    NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") + const_name("[") + Caster::Name + const_name("]"))
 
-  // No Python -> C++ conversion (cannot build a View without backing storage +
-  // context)
-  bool from_python(handle, uint8_t, cleanup_list *) noexcept { return false; }
+    // No Python -> C++ conversion (cannot build a View without backing storage +
+    // context)
+    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
 
-  template <typename T>
-  static handle from_cpp(T &&src, rv_policy policy, cleanup_list *cleanup) {
-    return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy,
-                                          cleanup);
-  }
+    template<typename T>
+    static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
+    {
+        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
+    }
 };
 
-template <std::unsigned_integral Block, typename Coder, typename C>
-struct type_caster<::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>> {
-  using ViewT = ::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>;
-  using Type = typename Coder::value_type;
+template<std::unsigned_integral Block, typename Coder, typename C>
+struct type_caster<::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>>
+{
+    using ViewT = ::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>;
+    using Type = typename Coder::value_type;
 
-  using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>,
-                                   ::ygg::View<Type, C>, Type>;
-  using Caster = make_caster<Entry>;
+    using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>, ::ygg::View<Type, C>, Type>;
+    using Caster = make_caster<Entry>;
 
-  NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") +
-                            const_name("[") + Caster::Name + const_name("]"))
+    NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") + const_name("[") + Caster::Name + const_name("]"))
 
-  // No Python -> C++ conversion (cannot build a View without backing storage +
-  // context)
-  bool from_python(handle, uint8_t, cleanup_list *) noexcept { return false; }
+    // No Python -> C++ conversion (cannot build a View without backing storage +
+    // context)
+    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
 
-  template <typename T>
-  static handle from_cpp(T &&src, rv_policy policy, cleanup_list *cleanup) {
-    return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy,
-                                          cleanup);
-  }
+    template<typename T>
+    static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
+    {
+        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
+    }
 };
 
-template <std::unsigned_integral Block, typename Coder, typename C>
-struct type_caster<
-    ::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder>, C>> {
-  using ViewT = ::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder>, C>;
-  using Type = typename Coder::value_type;
+template<std::unsigned_integral Block, typename Coder, typename C>
+struct type_caster<::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder>, C>>
+{
+    using ViewT = ::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder>, C>;
+    using Type = typename Coder::value_type;
 
-  using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>,
-                                   ::ygg::View<Type, C>, Type>;
-  using Caster = make_caster<Entry>;
+    using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>, ::ygg::View<Type, C>, Type>;
+    using Caster = make_caster<Entry>;
 
-  NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") +
-                            const_name("[") + Caster::Name + const_name("]"))
+    NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") + const_name("[") + Caster::Name + const_name("]"))
 
-  // No Python -> C++ conversion (cannot build a View without backing storage +
-  // context)
-  bool from_python(handle, uint8_t, cleanup_list *) noexcept { return false; }
+    // No Python -> C++ conversion (cannot build a View without backing storage +
+    // context)
+    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
 
-  template <typename T>
-  static handle from_cpp(T &&src, rv_policy policy, cleanup_list *cleanup) {
-    return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy,
-                                          cleanup);
-  }
+    template<typename T>
+    static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
+    {
+        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
+    }
 };
 
-template <typename Type, template <typename> typename Ptr, bool IndexPointers,
-          typename TemplateSizeType, class Allocator>
-struct type_caster<::cista::basic_vector<Type, Ptr, IndexPointers,
-                                         TemplateSizeType, Allocator>>
-    : list_caster<::cista::basic_vector<Type, Ptr, IndexPointers,
-                                        TemplateSizeType, Allocator>,
-                  Type> {};
+template<typename Type, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
+struct type_caster<::cista::basic_vector<Type, Ptr, IndexPointers, TemplateSizeType, Allocator>> :
+    list_caster<::cista::basic_vector<Type, Ptr, IndexPointers, TemplateSizeType, Allocator>, Type>
+{
+};
 
 NAMESPACE_END(detail)
 NAMESPACE_END(NB_NAMESPACE)

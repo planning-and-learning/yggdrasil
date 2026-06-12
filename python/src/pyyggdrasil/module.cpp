@@ -2,14 +2,16 @@
 
 #include "pyyggdrasil/execution/module.hpp"
 
-namespace yggdrasil {
+namespace yggdrasil
+{
 
-void bind_module_definitions(nb::module_ &m) {
-  m.doc() = "Python bindings for Yggdrasil native utilities.";
+void bind_module_definitions(nb::module_& m)
+{
+    m.doc() = "Python bindings for Yggdrasil native utilities.";
 
-  auto execution = m.def_submodule("execution", "Execution utilities.");
-  bind_execution_module_definitions(execution);
-  m.attr("execution") = execution;
+    auto execution = m.def_submodule("execution", "Execution utilities.");
+    bind_execution_module_definitions(execution);
+    m.attr("execution") = execution;
 }
 
-} // namespace yggdrasil
+}  // namespace yggdrasil

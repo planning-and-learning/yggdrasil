@@ -23,14 +23,15 @@
 
 #include <type_traits>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename T> struct EqualTo<ObserverPtr<T>> {
-  bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept {
-    return EqualTo<std::remove_cvref_t<T>>{}(*lhs, *rhs);
-  }
+template<typename T>
+struct EqualTo<ObserverPtr<T>>
+{
+    bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept { return EqualTo<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
 };
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

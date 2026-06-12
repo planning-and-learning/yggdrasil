@@ -19,17 +19,19 @@
 #define YGG_BUFFER_DECLARATIONS_HPP_
 
 #include <cista/serialization.h>
-#include <yggdrasil/core/types.hpp>
-
 #include <cstdint>
 #include <vector>
+#include <yggdrasil/core/types.hpp>
 
-namespace cista {
-template <typename Buf> struct buf;
+namespace cista
+{
+template<typename Buf>
+struct buf;
 }
 
-namespace ygg::buffer {
+namespace ygg::buffer
+{
 using Buffer = ::cista::buf<std::vector<uint8_t>>;
-} // namespace ygg::buffer
+}  // namespace ygg::buffer
 
 #endif

@@ -18,6 +18,12 @@
 #ifndef YGGDRASIL_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 #define YGGDRASIL_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 
+#include <cassert>
+#include <optional>
+#include <stdexcept>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <yggdrasil/buffer/declarations.hpp>
 #include <yggdrasil/buffer/indexed_hash_set.hpp>
 #include <yggdrasil/buffer/segmented_buffer.hpp>
@@ -28,149 +34,136 @@
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/semantics/hash.hpp>
 
-#include <cassert>
-#include <optional>
-#include <stdexcept>
-#include <tuple>
-#include <type_traits>
-#include <utility>
+namespace ygg::formalism
+{
 
-namespace ygg::formalism {
-
-template <typename T> class BasicSymbolRepository {
+template<typename T>
+class BasicSymbolRepository
+{
 private:
-  template <typename U, bool Trivial = uses_trivial_storage_v<U>> struct Slot;
+    template<typename U, bool Trivial = uses_trivial_storage_v<U>>
+    struct Slot;
 
-  template <typename U> struct Slot<U, true> {
-    ::ygg::IndexedHashSet<U> container;
-    size_t parent_size = 0;
+    template<typename U>
+    struct Slot<U, true>
+    {
+        ::ygg::IndexedHashSet<U> container;
+        size_t parent_size = 0;
 
-    static size_t hash(const Data<U> &builder) noexcept {
-      return ::ygg::IndexedHashSet<U>::hash(builder);
+        static size_t hash(const Data<U>& builder) noexcept { return ::ygg::IndexedHashSet<U>::hash(builder); }
+
+        Slot(ygg::buffer::Buffer&, ygg::buffer::SegmentedBuffer&) : container(), parent_size(0) {}
+    };
+
+    template<typename U>
+    struct Slot<U, false>
+    {
+        ygg::buffer::IndexedHashSet<U> container;
+        size_t parent_size = 0;
+
+        static size_t hash(const Data<U>& builder) noexcept { return ygg::buffer::IndexedHashSet<U>::hash(builder); }
+
+        Slot(ygg::buffer::Buffer& buffer, ygg::buffer::SegmentedBuffer& arena) : container(buffer, arena), parent_size(0) {}
+    };
+
+    const BasicSymbolRepository* m_parent;
+    std::unique_ptr<ygg::buffer::SegmentedBuffer> m_arena;
+    std::unique_ptr<ygg::buffer::Buffer> m_buffer;
+    Slot<T> m_slot;
+
+    void clear_slot() noexcept
+    {
+        m_slot.container.clear();
+        m_slot.parent_size = m_parent ? m_parent->size() : size_t { 0 };
     }
-
-    Slot(ygg::buffer::Buffer &, ygg::buffer::SegmentedBuffer &)
-        : container(), parent_size(0) {}
-  };
-
-  template <typename U> struct Slot<U, false> {
-    ygg::buffer::IndexedHashSet<U> container;
-    size_t parent_size = 0;
-
-    static size_t hash(const Data<U> &builder) noexcept {
-      return ygg::buffer::IndexedHashSet<U>::hash(builder);
-    }
-
-    Slot(ygg::buffer::Buffer &buffer, ygg::buffer::SegmentedBuffer &arena)
-        : container(buffer, arena), parent_size(0) {}
-  };
-
-  const BasicSymbolRepository *m_parent;
-  std::unique_ptr<ygg::buffer::SegmentedBuffer> m_arena;
-  std::unique_ptr<ygg::buffer::Buffer> m_buffer;
-  Slot<T> m_slot;
-
-  void clear_slot() noexcept {
-    m_slot.container.clear();
-    m_slot.parent_size = m_parent ? m_parent->size() : size_t{0};
-  }
 
 public:
-  BasicSymbolRepository(const BasicSymbolRepository *parent = nullptr)
-      : m_parent(parent),
+    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr) :
+        m_parent(parent),
         m_arena(std::make_unique<ygg::buffer::SegmentedBuffer>()),
         m_buffer(std::make_unique<ygg::buffer::Buffer>()),
-        m_slot(*m_buffer, *m_arena) {
-    clear_slot();
-  }
+        m_slot(*m_buffer, *m_arena)
+    {
+        clear_slot();
+    }
 
-  BasicSymbolRepository(const BasicSymbolRepository &) = delete;
-  BasicSymbolRepository &operator=(const BasicSymbolRepository &) = delete;
-  BasicSymbolRepository(BasicSymbolRepository &&) noexcept = default;
-  BasicSymbolRepository &operator=(BasicSymbolRepository &&) noexcept = default;
+    BasicSymbolRepository(const BasicSymbolRepository&) = delete;
+    BasicSymbolRepository& operator=(const BasicSymbolRepository&) = delete;
+    BasicSymbolRepository(BasicSymbolRepository&&) noexcept = default;
+    BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept = default;
 
-  void clear() noexcept {
-    m_arena->clear();
-    clear_slot();
-  }
+    void clear() noexcept
+    {
+        m_arena->clear();
+        clear_slot();
+    }
 
-  static size_t hash(const Data<T> &builder) noexcept {
-    return Slot<T>::hash(builder);
-  }
+    static size_t hash(const Data<T>& builder) noexcept { return Slot<T>::hash(builder); }
 
-  /**
-   * Local methods
-   */
+    /**
+     * Local methods
+     */
 
-  std::optional<Index<T>> find_local_with_hash(const Data<T> &builder,
-                                               size_t h) const noexcept {
-    const auto &container = m_slot.container;
-    assert(h == container.hash(builder));
+    std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
+    {
+        const auto& container = m_slot.container;
+        assert(h == container.hash(builder));
 
-    if (auto index_or_nullopt = container.find_with_hash(builder, h))
-      return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
+        if (auto index_or_nullopt = container.find_with_hash(builder, h))
+            return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
 
-    return std::nullopt;
-  }
+        return std::nullopt;
+    }
 
-  std::optional<Index<T>> find_local(const Data<T> &builder) const noexcept {
-    return find_local_with_hash(builder, BasicSymbolRepository::hash(builder));
-  }
+    std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-  std::pair<Index<T>, bool> get_or_create_local_with_hash(Data<T> &builder,
-                                                          size_t h) {
-    auto &container = m_slot.container;
+    std::pair<Index<T>, bool> get_or_create_local_with_hash(Data<T>& builder, size_t h)
+    {
+        auto& container = m_slot.container;
 
-    if (auto index_or_nullopt = container.find_with_hash(builder, h))
-      return {Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt)),
-              false};
+        if (auto index_or_nullopt = container.find_with_hash(builder, h))
+            return { Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt)), false };
 
-    builder.index.value = m_slot.parent_size + container.size();
+        builder.index.value = m_slot.parent_size + container.size();
 
-    const auto index = container.insert_new_with_hash(h, builder);
-    return {Index<T>(m_slot.parent_size + ygg::uint_t(index)), true};
-  }
+        const auto index = container.insert_new_with_hash(h, builder);
+        return { Index<T>(m_slot.parent_size + ygg::uint_t(index)), true };
+    }
 
-  std::pair<Index<T>, bool> get_or_create_local(Data<T> &builder) {
-    return get_or_create_local_with_hash(builder,
-                                         BasicSymbolRepository::hash(builder));
-  }
+    std::pair<Index<T>, bool> get_or_create_local(Data<T>& builder) { return get_or_create_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-  const Data<T> &at_local(Index<T> index) const {
-    const auto parent_size = m_slot.parent_size;
-    if (index.value < parent_size || index.value >= size())
-      throw std::out_of_range("Symbol index not found in local repository.");
+    const Data<T>& at_local(Index<T> index) const
+    {
+        const auto parent_size = m_slot.parent_size;
+        if (index.value < parent_size || index.value >= size())
+            throw std::out_of_range("Symbol index not found in local repository.");
 
-    return m_slot.container[Index<T>(index.value - parent_size)];
-  }
+        return m_slot.container[Index<T>(index.value - parent_size)];
+    }
 
-  const Data<T> &front_local() const {
-    if (m_slot.container.empty())
-      throw std::out_of_range("Symbol index not found in local repository.");
-    return m_slot.container.front();
-  }
+    const Data<T>& front_local() const
+    {
+        if (m_slot.container.empty())
+            throw std::out_of_range("Symbol index not found in local repository.");
+        return m_slot.container.front();
+    }
 
-  size_t local_size() const noexcept { return m_slot.container.size(); }
+    size_t local_size() const noexcept { return m_slot.container.size(); }
 
-  size_t size() const noexcept {
-    return m_slot.parent_size + m_slot.container.size();
-  }
+    size_t size() const noexcept { return m_slot.parent_size + m_slot.container.size(); }
 
-  size_t parent_size() const noexcept { return m_slot.parent_size; }
+    size_t parent_size() const noexcept { return m_slot.parent_size; }
 
-  bool is_local(Index<T> index) const noexcept {
-    return index != Index<T>::max() &&
-           ygg::uint_t(index) >= m_slot.parent_size &&
-           ygg::uint_t(index) < size();
-  }
+    bool is_local(Index<T> index) const noexcept { return index != Index<T>::max() && ygg::uint_t(index) >= m_slot.parent_size && ygg::uint_t(index) < size(); }
 
-  bool exists_parent_mutation() const noexcept {
-    if (!m_parent)
-      return false;
+    bool exists_parent_mutation() const noexcept
+    {
+        if (!m_parent)
+            return false;
 
-    return m_parent->size() > m_slot.parent_size;
-  }
+        return m_parent->size() > m_slot.parent_size;
+    }
 };
-} // namespace ygg::formalism
+}  // namespace ygg::formalism
 
 #endif

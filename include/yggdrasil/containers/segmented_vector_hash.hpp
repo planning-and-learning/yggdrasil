@@ -18,8 +18,8 @@
 #ifndef YGG_COMMON_SEGMENTED_VECTOR_HASH_HPP_
 #define YGG_COMMON_SEGMENTED_VECTOR_HASH_HPP_
 
-#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 
 #include <cstddef>
 

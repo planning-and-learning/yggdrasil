@@ -21,9 +21,6 @@
 namespace ygg::tests
 {
 
-TEST(YggdrasilTests, CommonProjectAdaptersUmbrellaHeaderCompiles)
-{
-    SUCCEED();
-}
+TEST(YggdrasilTests, CommonProjectAdaptersUmbrellaHeaderCompiles) { SUCCEED(); }
 
 }

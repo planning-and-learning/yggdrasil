@@ -26,33 +26,39 @@
 #include <iterator>
 #include <vector>
 
-namespace ygg {
+namespace ygg
+{
 
-template <typename Block, typename Allocator>
-struct Hash<boost::dynamic_bitset<Block, Allocator>> {
-  using Type = boost::dynamic_bitset<Block, Allocator>;
+template<typename Block, typename Allocator>
+struct Hash<boost::dynamic_bitset<Block, Allocator>>
+{
+    using Type = boost::dynamic_bitset<Block, Allocator>;
 
-  size_t operator()(const Type &bitset) const {
-    auto blocks = std::vector<Block>();
-    blocks.reserve(bitset.num_blocks());
-    boost::to_block_range(bitset, std::back_inserter(blocks));
+    size_t operator()(const Type& bitset) const
+    {
+        auto blocks = std::vector<Block>();
+        blocks.reserve(bitset.num_blocks());
+        boost::to_block_range(bitset, std::back_inserter(blocks));
 
-    size_t seed = bitset.size();
-    for (const auto &block : blocks)
-      ygg::hash_combine(seed, block);
-    return seed;
-  }
+        size_t seed = bitset.size();
+        for (const auto& block : blocks)
+            ygg::hash_combine(seed, block);
+        return seed;
+    }
 };
 
-template <std::unsigned_integral Block> struct Hash<BitsetSpan<Block>> {
-  size_t operator()(const BitsetSpan<Block> &bitset_span) const noexcept {
-    size_t aggregated_hash = bitset_span.num_bits();
-    for (const auto &block : bitset_span.blocks())
-      ygg::hash_combine(aggregated_hash, block);
-    return aggregated_hash;
-  }
+template<std::unsigned_integral Block>
+struct Hash<BitsetSpan<Block>>
+{
+    size_t operator()(const BitsetSpan<Block>& bitset_span) const noexcept
+    {
+        size_t aggregated_hash = bitset_span.num_bits();
+        for (const auto& block : bitset_span.blocks())
+            ygg::hash_combine(aggregated_hash, block);
+        return aggregated_hash;
+    }
 };
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

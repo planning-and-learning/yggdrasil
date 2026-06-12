@@ -18,12 +18,11 @@
 #ifndef YGG_COMMON_DYNAMIC_BITSET_FORMATTERS_HPP_
 #define YGG_COMMON_DYNAMIC_BITSET_FORMATTERS_HPP_
 
-#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/containers/dynamic_bitset.hpp"
+#include "yggdrasil/core/config.hpp"
 
 #include <concepts>
 #include <cstddef>
-
 #include <fmt/format.h>
 
 #if YGG_ENABLE_FMT_FORMATTERS

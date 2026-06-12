@@ -18,8 +18,8 @@
 #ifndef YGG_COMMON_SEGMENTED_VECTOR_ORDERING_HPP_
 #define YGG_COMMON_SEGMENTED_VECTOR_ORDERING_HPP_
 
-#include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
 
 #include <algorithm>
 #include <cstddef>

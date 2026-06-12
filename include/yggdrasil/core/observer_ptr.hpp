@@ -20,7 +20,8 @@
 
 #include <type_traits>
 
-namespace ygg {
+namespace ygg
+{
 
 /// @brief `ObserverPtr` wraps T* a non-owning raw pointer.
 ///
@@ -28,65 +29,68 @@ namespace ygg {
 /// overloads, e.g., std::hash<T*>. Comparison operators are deleted to avoid
 /// accidental pointer comparisons.
 /// @tparam T is the underlying type.
-template <typename T> class ObserverPtr {
+template<typename T>
+class ObserverPtr
+{
 public:
-  ObserverPtr() noexcept : ptr(nullptr) {}
-  ObserverPtr(T *ptr) noexcept
-      : ptr(ptr) {} ///< allow implicit conversion from raw pointer
-  ObserverPtr(const ObserverPtr &other) = default;
-  ObserverPtr &operator=(const ObserverPtr &other) = default;
-  ObserverPtr(ObserverPtr &&other) noexcept = default;
-  ObserverPtr &operator=(ObserverPtr &&other) noexcept = default;
+    ObserverPtr() noexcept : ptr(nullptr) {}
+    ObserverPtr(T* ptr) noexcept : ptr(ptr) {}  ///< allow implicit conversion from raw pointer
+    ObserverPtr(const ObserverPtr& other) = default;
+    ObserverPtr& operator=(const ObserverPtr& other) = default;
+    ObserverPtr(ObserverPtr&& other) noexcept = default;
+    ObserverPtr& operator=(ObserverPtr&& other) noexcept = default;
 
-  /**
-   * Accessors
-   */
+    /**
+     * Accessors
+     */
 
-  T *get() noexcept { return ptr; }
-  const T *get() const noexcept { return ptr; }
+    T* get() noexcept { return ptr; }
+    const T* get() const noexcept { return ptr; }
 
-  T &operator*() { return *ptr; }
-  T *operator->() { return ptr; }
-  const T &operator*() const { return *ptr; }
-  const T *operator->() const { return ptr; }
+    T& operator*() { return *ptr; }
+    T* operator->() { return ptr; }
+    const T& operator*() const { return *ptr; }
+    const T* operator->() const { return ptr; }
 
-  /**
-   * Comparisons
-   */
+    /**
+     * Comparisons
+     */
 
-  // Explicitly delete comparison to require user defined comparisons.
-  bool operator==(const ObserverPtr &other) const noexcept = delete;
-  bool operator!=(const ObserverPtr &other) const noexcept = delete;
-  bool operator<(const ObserverPtr &other) const noexcept = delete;
-  bool operator<=(const ObserverPtr &other) const noexcept = delete;
-  bool operator>(const ObserverPtr &other) const noexcept = delete;
-  bool operator>=(const ObserverPtr &other) const noexcept = delete;
+    // Explicitly delete comparison to require user defined comparisons.
+    bool operator==(const ObserverPtr& other) const noexcept = delete;
+    bool operator!=(const ObserverPtr& other) const noexcept = delete;
+    bool operator<(const ObserverPtr& other) const noexcept = delete;
+    bool operator<=(const ObserverPtr& other) const noexcept = delete;
+    bool operator>(const ObserverPtr& other) const noexcept = delete;
+    bool operator>=(const ObserverPtr& other) const noexcept = delete;
 
-  /**
-   * Conversions
-   */
+    /**
+     * Conversions
+     */
 
-  // Explicitly delete raw pointer conversions.
-  operator T *() const = delete;
+    // Explicitly delete raw pointer conversions.
+    operator T*() const = delete;
 
-  // Conversion to boolean
-  explicit operator bool() const noexcept { return ptr != nullptr; }
+    // Conversion to boolean
+    explicit operator bool() const noexcept { return ptr != nullptr; }
 
 private:
-  T *ptr;
+    T* ptr;
 };
 
-template <typename T>
-auto make_observer(T &element) noexcept
-  requires(!std::is_const_v<T>)
+template<typename T>
+auto make_observer(T& element) noexcept
+    requires(!std::is_const_v<T>)
 {
-  return ObserverPtr<T>(&element);
+    return ObserverPtr<T>(&element);
 }
 
-template <typename T> auto make_observer(const T &element) noexcept {
-  return ObserverPtr<const T>(&element);
+template<typename T>
+auto make_observer(const T& element) noexcept
+{
+    return ObserverPtr<const T>(&element);
 }
 
-} // namespace ygg
+}  // namespace ygg
 
 #endif

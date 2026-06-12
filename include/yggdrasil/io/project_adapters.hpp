@@ -18,7 +18,7 @@
 #ifndef YGG_COMMON_PROJECT_ADAPTERS_HPP_
 #define YGG_COMMON_PROJECT_ADAPTERS_HPP_
 
-#include "yggdrasil/serialization/json_suite.hpp"
 #include "yggdrasil/io/project_path.hpp"
+#include "yggdrasil/serialization/json_suite.hpp"
 
 #endif

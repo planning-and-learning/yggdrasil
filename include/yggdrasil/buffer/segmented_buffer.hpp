@@ -18,8 +18,6 @@
 #ifndef YGG_BUFFER_SEGMENTED_BUFFER_HPP_
 #define YGG_BUFFER_SEGMENTED_BUFFER_HPP_
 
-#include <yggdrasil/core/bit.hpp>
-
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -28,128 +26,137 @@
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include <yggdrasil/core/bit.hpp>
 
-namespace ygg::buffer {
+namespace ygg::buffer
+{
 
-class SegmentedBuffer {
+class SegmentedBuffer
+{
 private:
-  size_t m_seg_size;
+    size_t m_seg_size;
 
-  std::vector<std::vector<uint8_t>> m_segments;
+    std::vector<std::vector<uint8_t>> m_segments;
 
-  size_t m_cur_seg;
-  size_t m_cur_pos;
+    size_t m_cur_seg;
+    size_t m_cur_pos;
 
-  size_t m_size;
-  size_t m_capacity;
+    size_t m_size;
+    size_t m_capacity;
 
-  void increase_capacity(size_t amount) {
-    constexpr auto max_grown_segment_size =
-        std::bit_floor(std::numeric_limits<size_t>::max() / 2);
-    if (amount > max_grown_segment_size ||
-        m_seg_size > max_grown_segment_size) {
-      throw std::length_error(
-          "SegmentedBuffer::write size exceeds addressable memory.");
-    }
+    void increase_capacity(size_t amount)
+    {
+        constexpr auto max_grown_segment_size = std::bit_floor(std::numeric_limits<size_t>::max() / 2);
+        if (amount > max_grown_segment_size || m_seg_size > max_grown_segment_size)
+        {
+            throw std::length_error("SegmentedBuffer::write size exceeds addressable memory.");
+        }
 
-    // 1) If current segment has space, we’re done.
-    if (m_cur_seg < m_segments.size()) {
-      if (amount <= (m_segments[m_cur_seg].size() - m_cur_pos)) {
-        return;
-      }
-    }
+        // 1) If current segment has space, we’re done.
+        if (m_cur_seg < m_segments.size())
+        {
+            if (amount <= (m_segments[m_cur_seg].size() - m_cur_pos))
+            {
+                return;
+            }
+        }
 
-    // 2) Try later segments, always starting at position 0 in them.
-    for (size_t i = m_cur_seg + 1; i < m_segments.size(); ++i) {
-      if (amount <= m_segments[i].size()) {
-        m_cur_seg = i;
+        // 2) Try later segments, always starting at position 0 in them.
+        for (size_t i = m_cur_seg + 1; i < m_segments.size(); ++i)
+        {
+            if (amount <= m_segments[i].size())
+            {
+                m_cur_seg = i;
+                m_cur_pos = 0;
+                return;
+            }
+        }
+
+        // 3) No existing segment fits → allocate a new one.
+
+        // Ensure that required bytes fit into a buffer.
+        // Use doubling strategy to make future insertions cheaper.
+        const auto need = std::bit_ceil(amount);
+        m_seg_size = 2 * std::max(need, m_seg_size);
+
+        m_segments.emplace_back(m_seg_size);
+
+        m_capacity += m_seg_size;
+        m_cur_seg = m_segments.size() - 1;
         m_cur_pos = 0;
-        return;
-      }
     }
-
-    // 3) No existing segment fits → allocate a new one.
-
-    // Ensure that required bytes fit into a buffer.
-    // Use doubling strategy to make future insertions cheaper.
-    const auto need = std::bit_ceil(amount);
-    m_seg_size = 2 * std::max(need, m_seg_size);
-
-    m_segments.emplace_back(m_seg_size);
-
-    m_capacity += m_seg_size;
-    m_cur_seg = m_segments.size() - 1;
-    m_cur_pos = 0;
-  }
 
 public:
-  explicit SegmentedBuffer(size_t seg_size = 1024)
-      : m_seg_size(seg_size), m_segments(), m_cur_seg(0), m_cur_pos(0),
-        m_size(0), m_capacity(0) {
-    if (!ygg::bit::is_power_of_two(seg_size)) {
-      throw std::invalid_argument(
-          "SegmentedBuffer segment size must be a power of two.");
-    }
-  }
-
-  /// @brief Write the data with alignment requirement.
-  const uint8_t *write(const uint8_t *data, size_t amount, size_t align = 1) {
-    if (data == nullptr) {
-      throw std::invalid_argument(
-          "SegmentedBuffer::write requires non-null data.");
-    }
-    if (!ygg::bit::is_power_of_two(align)) {
-      throw std::invalid_argument(
-          "SegmentedBuffer::write alignment must be a power of two.");
+    explicit SegmentedBuffer(size_t seg_size = 1024) : m_seg_size(seg_size), m_segments(), m_cur_seg(0), m_cur_pos(0), m_size(0), m_capacity(0)
+    {
+        if (!ygg::bit::is_power_of_two(seg_size))
+        {
+            throw std::invalid_argument("SegmentedBuffer segment size must be a power of two.");
+        }
     }
 
-    // Ensure that there is enough capacity for data written with correct
-    // alignment.
-    const auto worst_padding = (align > 1) ? (align - 1) : 0;
-    if (amount > std::numeric_limits<size_t>::max() - worst_padding) {
-      throw std::length_error(
-          "SegmentedBuffer::write size exceeds addressable memory.");
+    /// @brief Write the data with alignment requirement.
+    const uint8_t* write(const uint8_t* data, size_t amount, size_t align = 1)
+    {
+        if (data == nullptr)
+        {
+            throw std::invalid_argument("SegmentedBuffer::write requires non-null data.");
+        }
+        if (!ygg::bit::is_power_of_two(align))
+        {
+            throw std::invalid_argument("SegmentedBuffer::write alignment must be a power of two.");
+        }
+
+        // Ensure that there is enough capacity for data written with correct
+        // alignment.
+        const auto worst_padding = (align > 1) ? (align - 1) : 0;
+        if (amount > std::numeric_limits<size_t>::max() - worst_padding)
+        {
+            throw std::length_error("SegmentedBuffer::write size exceeds addressable memory.");
+        }
+        auto required = amount + worst_padding;
+
+        increase_capacity(required);
+
+        // Ensure pos satisfies alignment.
+        const auto old_pos = m_cur_pos;
+        if (align > 1)
+            m_cur_pos = (m_cur_pos + align - 1) & ~(align - 1);
+        const auto padding = m_cur_pos - old_pos;
+
+        assert(m_cur_pos % align == 0);
+
+        const auto pos = &m_segments[m_cur_seg][m_cur_pos];
+
+        memcpy(pos, data, amount);
+
+        m_cur_pos += amount;
+        m_size += amount + padding;
+
+        return pos;
     }
-    auto required = amount + worst_padding;
 
-    increase_capacity(required);
-
-    // Ensure pos satisfies alignment.
-    const auto old_pos = m_cur_pos;
-    if (align > 1)
-      m_cur_pos = (m_cur_pos + align - 1) & ~(align - 1);
-    const auto padding = m_cur_pos - old_pos;
-
-    assert(m_cur_pos % align == 0);
-
-    const auto pos = &m_segments[m_cur_seg][m_cur_pos];
-
-    memcpy(pos, data, amount);
-
-    m_cur_pos += amount;
-    m_size += amount + padding;
-
-    return pos;
-  }
-
-  /// @brief Set the write head to the beginning.
-  void clear() {
-    m_cur_seg = 0;
-    m_cur_pos = 0;
-    m_size = 0;
-  }
-
-  size_t num_segments() const { return m_segments.size(); }
-  size_t size() const { return m_size; }
-  size_t capacity() const { return m_capacity; }
-
-  size_t remaining_in_current_segment() const {
-    if (m_cur_seg >= m_segments.size()) {
-      return 0;
+    /// @brief Set the write head to the beginning.
+    void clear()
+    {
+        m_cur_seg = 0;
+        m_cur_pos = 0;
+        m_size = 0;
     }
-    return m_segments[m_cur_seg].size() - m_cur_pos;
-  }
+
+    size_t num_segments() const { return m_segments.size(); }
+    size_t size() const { return m_size; }
+    size_t capacity() const { return m_capacity; }
+
+    size_t remaining_in_current_segment() const
+    {
+        if (m_cur_seg >= m_segments.size())
+        {
+            return 0;
+        }
+        return m_segments[m_cur_seg].size() - m_cur_pos;
+    }
 };
-} // namespace ygg::buffer
+}  // namespace ygg::buffer
 
 #endif

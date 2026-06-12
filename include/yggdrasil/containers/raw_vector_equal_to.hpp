@@ -18,8 +18,8 @@
 #ifndef YGG_COMMON_RAW_VECTOR_EQUAL_TO_HPP_
 #define YGG_COMMON_RAW_VECTOR_EQUAL_TO_HPP_
 
-#include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/containers/raw_vector_pool.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
 
 namespace ygg
 {
@@ -33,7 +33,10 @@ struct EqualTo<RawVectorView<Size, T>>
 template<std::unsigned_integral Size, TriviallyCopyable T>
 struct EqualTo<RawVectorView<const Size, const T>>
 {
-    bool operator()(const RawVectorView<const Size, const T>& lhs, const RawVectorView<const Size, const T>& rhs) const noexcept { return equal_range(lhs, rhs); }
+    bool operator()(const RawVectorView<const Size, const T>& lhs, const RawVectorView<const Size, const T>& rhs) const noexcept
+    {
+        return equal_range(lhs, rhs);
+    }
 };
 
 }

@@ -21,7 +21,6 @@
 namespace ygg
 {
 
-
 /**
  * Forward declarations and type defs
  */
