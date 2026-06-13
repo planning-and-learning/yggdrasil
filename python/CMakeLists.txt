@@ -82,19 +82,18 @@ install(FILES
         COMPONENT pyyggdrasil)
 
 # Ship the native dependency prefix inside the package, pruned to what
-# downstream consumers need at build and run time: no test-only dependencies
-# (googletest, benchmark), no static archives or libtool files, no nauty
-# command line tools, and only the Boost runtime libraries that are actually
-# linked downstream: json, iostreams, and container (a CMake-level dependency
-# of Boost::json).
+# downstream consumers need at build and run time. googletest and benchmark
+# ARE bundled: downstream test/benchmark suites discover them from this prefix
+# via find_package(GTest)/find_package(benchmark) with NO_DEFAULT_PATH, so they
+# are pinned to the same versions as the rest of the toolchain. Still pruned:
+# no static archives or libtool files, no nauty command line tools, and only the
+# Boost runtime libraries that are actually linked downstream: json, iostreams,
+# and container (a CMake-level dependency of Boost::json).
 foreach(native_dir IN ITEMS include lib lib64)
     if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}")
         install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
                 DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
                 COMPONENT pyyggdrasil
-                REGEX "/include/(gtest|gmock|benchmark)$" EXCLUDE
-                REGEX "/lib(gtest|gmock|benchmark)[^/]*$" EXCLUDE
-                REGEX "/cmake/(GTest|benchmark)$" EXCLUDE
                 REGEX "/pkgconfig$" EXCLUDE
                 REGEX "\\.(a|la)$" EXCLUDE
                 REGEX "/libboost_[^/]*\\.(so|dylib)[^/]*$" EXCLUDE)
