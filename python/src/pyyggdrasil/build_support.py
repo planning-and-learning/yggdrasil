@@ -192,14 +192,15 @@ class ProviderBackend:
                 wheel.extractall(wheel_root)
 
             package_root = wheel_root / self.package
-            top_level_stub = package_root / "__init__.pyi"
 
             def install_stub(path, target):
                 package_dir = target.with_suffix("")
                 if package_dir.is_dir():
                     target = package_dir / "__init__.pyi"
 
-                if target == top_level_stub and target.exists():
+                # Handwritten (or otherwise pre-existing) public stubs win over
+                # generated ones, matching yggdrasil_patch_python_stubs.
+                if target.exists():
                     return
 
                 target.parent.mkdir(parents=True, exist_ok=True)

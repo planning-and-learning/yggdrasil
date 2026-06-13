@@ -5,6 +5,12 @@ in this repository family.
 
 The Python distribution name and import package are both `pyyggdrasil`.
 
+`pyyggdrasil` is the base of the planning-and-learning package chain. The shared
+workspace layout, the layered install order, and the common
+build-from-source and CMake-integration patterns are documented in the
+[Planning and Learning build instructions](https://github.com/planning-and-learning/.github/blob/main/profile/README.md#building-from-source);
+the sections below cover `pyyggdrasil`-specific details.
+
 ## Python Integration
 
 Install the wheel and query the native prefix:
@@ -88,8 +94,10 @@ configuration files consumed by the other projects.
 
 The wheel ships a CMake package config (`yggdrasilConfig.cmake`) defining the
 `yggdrasil::yggdrasil` interface target. It carries the include directory,
-C++20 as a compile feature, and the bundled dependencies (Boost, cista, fmt,
-gtl, TBB) via `find_dependency`. Downstream CMake projects consume it through
+C++20 as a compile feature, and the bundled dependencies (Boost, fmt, gtl, TBB)
+via `find_dependency`. (cista is consumed through the include directory only —
+its target exports compile definitions that would otherwise change cista's
+hashing and fmt integration.) Downstream CMake projects consume it through
 `CMAKE_PREFIX_PATH`:
 
 ```bash

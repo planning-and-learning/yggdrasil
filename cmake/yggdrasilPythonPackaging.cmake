@@ -114,10 +114,22 @@ function(yggdrasil_install_native_export)
     endif()
 endfunction()
 
+# Stages a shipped yggdrasil cmake helper module into the consumer build tree
+# and returns the copy's path in <out_var>. install(CODE) must include() these
+# modules at install time, but ${yggdrasil_DIR} points into the (possibly
+# transient) build venv's site-packages; the build tree is guaranteed to exist
+# through the install step, so copying decouples install from that prefix.
+function(_yggdrasil_stage_install_helper module_name out_var)
+    set(staged_dir "${CMAKE_CURRENT_BINARY_DIR}/yggdrasil_install_helpers")
+    configure_file("${yggdrasil_DIR}/${module_name}" "${staged_dir}/${module_name}" COPYONLY)
+    set(${out_var} "${staged_dir}/${module_name}" PARENT_SCOPE)
+endfunction()
+
 # Wraps the shared runtime-path fixup for the wheel's native library dir.
 function(yggdrasil_install_runtime_path_fixup PKG_UPPER package)
+    _yggdrasil_stage_install_helper(yggdrasilFixRuntimePaths.cmake staged_module)
     install(CODE
-            "include(\"${yggdrasil_DIR}/yggdrasilFixRuntimePaths.cmake\")
+            "include(\"${staged_module}\")
              yggdrasil_fix_runtime_paths(LIB_DIR_GLOB \"${${PKG_UPPER}_NATIVE_LIBDIR}\"
                                          RPATH \"${${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATH}\"
                                          RPATHS \"${${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATHS}\")"
@@ -174,8 +186,9 @@ function(yggdrasil_install_python_stubs PKG_UPPER package)
         set(private_module_argument "PRIVATE_MODULE ${ARG_PRIVATE_MODULE}")
     endif()
     string(REPLACE ";" " " rename_packages "${ARG_RENAME_PACKAGES}")
+    _yggdrasil_stage_install_helper(yggdrasilPatchPythonStubs.cmake staged_module)
     install(CODE
-            "include(\"${yggdrasil_DIR}/yggdrasilPatchPythonStubs.cmake\")
+            "include(\"${staged_module}\")
              yggdrasil_patch_python_stubs(PACKAGE ${package} ${private_module_argument} RENAME_PACKAGES ${rename_packages})"
             COMPONENT ${package})
 endfunction()

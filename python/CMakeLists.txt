@@ -1,6 +1,6 @@
 set(YGGDRASIL_INSTALL_PACKAGEDIR "pyyggdrasil")
 
-find_package(Python 3.8 REQUIRED
+find_package(Python 3.9 REQUIRED
   COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 
