@@ -37,7 +37,8 @@ file(WRITE "${public_execution_init_stub}" [=[public execution: pyyggdrasil._pyy
 
 set(CMAKE_INSTALL_PREFIX "${test_prefix}")
 set(ENV{DESTDIR} "${test_destdir}")
-include("${YGGDRASIL_PROJECT_ROOT}/cmake/patch_python_stubs.cmake")
+include("${YGGDRASIL_PROJECT_ROOT}/cmake/yggdrasilPatchPythonStubs.cmake")
+yggdrasil_patch_python_stubs(PACKAGE pyyggdrasil PRIVATE_MODULE _pyyggdrasil RENAME_PACKAGES pyyggdrasil)
 
 file(READ "${stub_file}" patched_stub)
 if(NOT patched_stub STREQUAL [=[value: pyyggdrasil.execution.ExecutionContext

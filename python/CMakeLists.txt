@@ -35,6 +35,7 @@ endif()
 set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__init__.py
     pyyggdrasil/__main__.py
+    pyyggdrasil/build_support.py
     pyyggdrasil/repair.py
     pyyggdrasil/__init__.pyi
     pyyggdrasil/execution/__init__.pyi
@@ -74,6 +75,9 @@ install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfigVersion.cmake"
         "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPythonHelpers.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPatchPythonStubs.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/yggdrasilFixRuntimePaths.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPythonPackaging.cmake"
         DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
         COMPONENT pyyggdrasil)
 
@@ -114,13 +118,10 @@ if(WIN32 AND EXISTS "${YGGDRASIL_NATIVE_PREFIX}/bin")
             FILES_MATCHING PATTERN "*.dll")
 endif()
 
-if(APPLE)
-    install(SCRIPT "${PROJECT_SOURCE_DIR}/cmake/install/fix_macos_runtime_paths.cmake"
-            COMPONENT pyyggdrasil)
-elseif(UNIX)
-    install(SCRIPT "${PROJECT_SOURCE_DIR}/cmake/install/fix_unix_runtime_paths.cmake"
-            COMPONENT pyyggdrasil)
-endif()
+install(CODE
+        "include(\"${PROJECT_SOURCE_DIR}/cmake/yggdrasilFixRuntimePaths.cmake\")
+         yggdrasil_fix_runtime_paths(LIB_DIR_GLOB \"pyyggdrasil/lib*\")"
+        COMPONENT pyyggdrasil)
 
 nanobind_add_stub(
     pyyggdrasil_stubs
@@ -132,6 +133,9 @@ nanobind_add_stub(
     COMPONENT pyyggdrasil
 )
 
-install(SCRIPT "${PROJECT_SOURCE_DIR}/cmake/patch_python_stubs.cmake" COMPONENT pyyggdrasil)
+install(CODE
+        "include(\"${PROJECT_SOURCE_DIR}/cmake/yggdrasilPatchPythonStubs.cmake\")
+         yggdrasil_patch_python_stubs(PACKAGE pyyggdrasil PRIVATE_MODULE _pyyggdrasil RENAME_PACKAGES pyyggdrasil)"
+        COMPONENT pyyggdrasil)
 
 add_custom_target(pyyggdrasil_python DEPENDS _pyyggdrasil)

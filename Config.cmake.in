@@ -6,10 +6,7 @@
 # Generic helpers for consuming pip-installed provider packages; functions are
 # global, so defining them on the first find_package call is sufficient.
 include("${CMAKE_CURRENT_LIST_DIR}/yggdrasilPythonHelpers.cmake")
-
-if(TARGET yggdrasil::yggdrasil)
-    return()
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/yggdrasilPythonPackaging.cmake")
 
 set_and_check(_yggdrasil_prefix "@PACKAGE_YGGDRASIL_PACKAGE_ROOT@")
 
@@ -32,11 +29,16 @@ find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(TBB CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 
-add_library(yggdrasil::yggdrasil INTERFACE IMPORTED)
-set_target_properties(yggdrasil::yggdrasil PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${_yggdrasil_prefix}/include"
-    INTERFACE_COMPILE_FEATURES "cxx_std_20"
-    INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
+# The dependency lookups above always run (consumers rely on this config to
+# provide Boost/fmt/gtl/TBB for their exported targets); only the target
+# definition is guarded against repeated find_package calls.
+if(NOT TARGET yggdrasil::yggdrasil)
+    add_library(yggdrasil::yggdrasil INTERFACE IMPORTED)
+    set_target_properties(yggdrasil::yggdrasil PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${_yggdrasil_prefix}/include"
+        INTERFACE_COMPILE_FEATURES "cxx_std_20"
+        INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
+endif()
 
 set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")
 

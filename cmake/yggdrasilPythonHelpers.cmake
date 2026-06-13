@@ -8,6 +8,11 @@
 #   YGGDRASIL_PYTHON_NATIVE_RUNTIME_PREFIXES
 #   YGGDRASIL_PYTHON_NATIVE_RUNTIME_LIBDIRS
 
+# Functions capture the policy state of their defining scope; set what they
+# rely on explicitly so the helpers also work from cmake -P script mode.
+cmake_policy(PUSH)
+cmake_policy(SET CMP0057 NEW) # IN_LIST operator
+
 # yggdrasil_find_python_native_prefix(<python_package> <out_prefix_var>)
 #   - If <out_prefix_var> is already set (manual override), only ensures it is
 #     on CMAKE_PREFIX_PATH.
@@ -108,3 +113,5 @@ function(yggdrasil_make_python_native_runtime_rpath_string output_variable origi
     list(JOIN runtime_rpaths ":" runtime_rpath)
     set("${output_variable}" "${runtime_rpath}" PARENT_SCOPE)
 endfunction()
+
+cmake_policy(POP)
