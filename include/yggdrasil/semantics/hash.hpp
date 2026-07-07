@@ -26,7 +26,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <gtl/btree.hpp>
 #include <map>
 #include <optional>

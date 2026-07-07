@@ -22,6 +22,8 @@
 #include <limits>
 #include <ranges>
 #include <span>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
@@ -40,6 +42,22 @@ namespace ygg::tests
 struct HashContext
 {
 };
+
+// Golden values: ygg::Hash fixes its algorithms (MurmurHash3) precisely so that hash values are
+// identical across standard libraries, compilers, and platforms. These constants pin that contract;
+// if this test fails, hash-order-dependent results (e.g., downstream test fixtures) change with it.
+TEST(YggdrasilTests, CommonHashValuesArePlatformIndependent)
+{
+    EXPECT_EQ(ygg::Hash<int> {}(42), 0x810879608e4259ccULL);
+    EXPECT_EQ(ygg::Hash<int> {}(0), 0x0000000000000000ULL);  // fmix64 fixed point
+    EXPECT_EQ(ygg::Hash<int> {}(-1), 0x64b5720b4b825f21ULL);
+    EXPECT_EQ(ygg::Hash<double> {}(1.5), 0x885dcc874e75b6f0ULL);
+    EXPECT_EQ(ygg::Hash<float> {}(1.5F), 0x58575b497a14b09cULL);
+    EXPECT_EQ(ygg::Hash<double> {}(-0.0), ygg::Hash<double> {}(0.0));
+    EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), 0x7728ac0c932a3086ULL);
+    EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), ygg::Hash<std::string_view> {}(std::string_view("yggdrasil")));
+    EXPECT_EQ(ygg::Hash<std::string> {}(std::string()), 0x0000000000000000ULL);
+}
 
 TEST(YggdrasilTests, CommonHashAdaptersNormalizeFloatingPointNaN)
 {
