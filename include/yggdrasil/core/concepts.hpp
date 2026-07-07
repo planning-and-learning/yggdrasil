@@ -49,6 +49,9 @@ concept InputRangeOf = std::ranges::input_range<Range> && std::same_as<std::rang
 template<typename T>
 concept TriviallyCopyable = std::is_trivially_copyable_v<T>;
 
+template<typename T>
+concept Enumeration = std::is_enum_v<T>;
+
 template<typename T, typename U>
 concept SameAsIgnoringCvref = std::same_as<std::remove_cvref_t<T>, U>;
 

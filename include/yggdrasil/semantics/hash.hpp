@@ -95,8 +95,7 @@ struct Hash<T>
     size_t operator()(const T& el) const noexcept { return fmix64(static_cast<uint64_t>(el)); }
 };
 
-template<typename T>
-    requires std::is_enum_v<T>
+template<Enumeration T>
 struct Hash<T>
 {
     size_t operator()(const T& el) const noexcept { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
