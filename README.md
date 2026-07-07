@@ -121,6 +121,4 @@ Yggdrasil's public `fmt::formatter` specializations are guarded by the
 (`yggdrasil/core/config.hpp`). Consumers can opt out by defining
 `YGG_ENABLE_FMT_FORMATTERS=0`. For Yggdrasil's own builds, the
 `YGGDRASIL_ENABLE_FMT_FORMATTERS` CMake option (default `ON`) toggles the
-macro. The sibling libraries follow the same convention with
-`LOKI_`/`TYR_`/`RUNIR_ENABLE_FMT_FORMATTERS`, and each library's CMake option
-also toggles the macros of its upstream libraries.
+macro.
