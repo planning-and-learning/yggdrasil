@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_ADAPTERS_HPP_
-#define YGG_COMMON_ADAPTERS_HPP_
+#ifndef YGG_EXTENSIONS_HPP_
+#define YGG_EXTENSIONS_HPP_
 
 #include "yggdrasil/containers/block_array_equal_to.hpp"
 #include "yggdrasil/containers/block_array_hash.hpp"

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_FORMATTER_HPP_
-#define YGG_COMMON_FORMATTER_HPP_
+#ifndef YGG_FORMATTING_FORMATTER_HPP_
+#define YGG_FORMATTING_FORMATTER_HPP_
 
 #include "yggdrasil/core/config.hpp"
 

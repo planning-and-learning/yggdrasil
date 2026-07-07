@@ -1,5 +1,5 @@
-#ifndef YGG_COMMON_RAW_VECTOR_SET_HPP_
-#define YGG_COMMON_RAW_VECTOR_SET_HPP_
+#ifndef YGG_CONTAINERS_RAW_VECTOR_SET_HPP_
+#define YGG_CONTAINERS_RAW_VECTOR_SET_HPP_
 
 #include "yggdrasil/containers/raw_vector_pool.hpp"
 #include "yggdrasil/core/concepts.hpp"

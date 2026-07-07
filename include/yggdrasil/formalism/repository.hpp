@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGGDRASIL_FORMALISM_REPOSITORY_HPP_
-#define YGGDRASIL_FORMALISM_REPOSITORY_HPP_
+#ifndef YGG_FORMALISM_REPOSITORY_HPP_
+#define YGG_FORMALISM_REPOSITORY_HPP_
 
 #include <cassert>
 #include <optional>

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_INDEX_MIXIN_HPP_
-#define YGG_COMMON_INDEX_MIXIN_HPP_
+#ifndef YGG_IDS_INDEX_MIXINS_HPP_
+#define YGG_IDS_INDEX_MIXINS_HPP_
 
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_CISTA_EQUAL_TO_HPP_
-#define YGG_COMMON_CISTA_EQUAL_TO_HPP_
+#ifndef YGG_SERIALIZATION_CISTA_EQUAL_TO_HPP_
+#define YGG_SERIALIZATION_CISTA_EQUAL_TO_HPP_
 
 #include "yggdrasil/containers/optional.hpp"
 #include "yggdrasil/containers/variant.hpp"

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_OBSERVER_PTR_EQUAL_TO_HPP_
-#define YGG_COMMON_OBSERVER_PTR_EQUAL_TO_HPP_
+#ifndef YGG_CORE_OBSERVER_PTR_EQUAL_TO_HPP_
+#define YGG_CORE_OBSERVER_PTR_EQUAL_TO_HPP_
 
 #include "yggdrasil/core/observer_ptr.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"

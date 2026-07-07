@@ -17,8 +17,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_ONETBB_HPP_
-#define YGG_COMMON_ONETBB_HPP_
+#ifndef YGG_EXECUTION_ONETBB_HPP_
+#define YGG_EXECUTION_ONETBB_HPP_
 
 #include <cstddef>
 #include <memory>

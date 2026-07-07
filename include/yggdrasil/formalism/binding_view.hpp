@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGGDRASIL_FORMALISM_BINDING_VIEW_HPP_
-#define YGGDRASIL_FORMALISM_BINDING_VIEW_HPP_
+#ifndef YGG_FORMALISM_BINDING_VIEW_HPP_
+#define YGG_FORMALISM_BINDING_VIEW_HPP_
 
 #include <iterator>
 #include <ranges>

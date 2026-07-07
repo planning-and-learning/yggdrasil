@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_JSON_SUITE_HPP_
-#define YGG_COMMON_JSON_SUITE_HPP_
+#ifndef YGG_SERIALIZATION_JSON_SUITE_HPP_
+#define YGG_SERIALIZATION_JSON_SUITE_HPP_
 
 #include "yggdrasil/io/project_path.hpp"
 #include "yggdrasil/serialization/json.hpp"

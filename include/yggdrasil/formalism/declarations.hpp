@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef YGGDRASIL_FORMALISM_DECLARATIONS_HPP_
-#define YGGDRASIL_FORMALISM_DECLARATIONS_HPP_
+#ifndef YGG_FORMALISM_DECLARATIONS_HPP_
+#define YGG_FORMALISM_DECLARATIONS_HPP_
 
 #include <type_traits>
 

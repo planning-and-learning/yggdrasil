@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_PROJECT_PATH_HPP_
-#define YGG_COMMON_PROJECT_PATH_HPP_
+#ifndef YGG_IO_PROJECT_PATH_HPP_
+#define YGG_IO_PROJECT_PATH_HPP_
 
 #include "yggdrasil/core/path.hpp"
 

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_TYPES_UTILS_HPP_
-#define YGG_COMMON_TYPES_UTILS_HPP_
+#ifndef YGG_CORE_TYPES_UTILS_HPP_
+#define YGG_CORE_TYPES_UTILS_HPP_
 
 #include "yggdrasil/core/dependent_false.hpp"
 #include "yggdrasil/core/types.hpp"

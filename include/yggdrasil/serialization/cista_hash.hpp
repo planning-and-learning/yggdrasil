@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_CISTA_HASH_HPP_
-#define YGG_COMMON_CISTA_HASH_HPP_
+#ifndef YGG_SERIALIZATION_CISTA_HASH_HPP_
+#define YGG_SERIALIZATION_CISTA_HASH_HPP_
 
 #include "yggdrasil/containers/optional.hpp"
 #include "yggdrasil/containers/variant.hpp"
@@ -37,7 +37,8 @@ struct Hash<::cista::offset::string>
 {
     using Type = ::cista::offset::string;
 
-    size_t operator()(const Type& el) const noexcept { return ygg::hash_range(el); }
+    /// Same byte hash as Hash<std::string>, so equal text hashes alike across string representations.
+    size_t operator()(const Type& el) const noexcept { return hashing::bytes(el.data(), el.size()); }
 };
 
 template<typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>

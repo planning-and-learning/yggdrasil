@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_PYTHON_TYPE_CASTERS_HPP_
-#define YGG_COMMON_PYTHON_TYPE_CASTERS_HPP_
+#ifndef YGG_PYTHON_TYPE_CASTERS_HPP_
+#define YGG_PYTHON_TYPE_CASTERS_HPP_
 
 #include "yggdrasil/python/type_casters/optional.hpp"
 #include "yggdrasil/python/type_casters/string.hpp"

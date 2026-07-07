@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef YGGDRASIL_FORMALISM_OBJECT_INDEX_HPP_
-#define YGGDRASIL_FORMALISM_OBJECT_INDEX_HPP_
+#ifndef YGG_FORMALISM_OBJECT_INDEX_HPP_
+#define YGG_FORMALISM_OBJECT_INDEX_HPP_
 
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formalism/declarations.hpp>

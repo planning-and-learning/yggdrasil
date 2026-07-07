@@ -15,14 +15,17 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_HASH_HPP_
-#define YGG_COMMON_HASH_HPP_
+#ifndef YGG_SEMANTICS_HASH_HPP_
+#define YGG_SEMANTICS_HASH_HPP_
 
 #include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/semantics/murmurhash3.hpp"
 
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <gtl/btree.hpp>
 #include <map>
@@ -30,6 +33,8 @@
 #include <ranges>
 #include <set>
 #include <span>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -38,6 +43,25 @@
 
 namespace ygg
 {
+
+// The deterministic hashing below fixes all algorithms and constants for 64-bit hash values, so that
+// hash values (and hence hash container iteration orders) are identical across standard libraries,
+// compilers, and platforms.
+static_assert(sizeof(size_t) == 8, "ygg::Hash requires a 64-bit size_t for platform-independent hash values.");
+
+/// Deterministic hashing primitives with fixed algorithms and constants.
+namespace hashing
+{
+
+/// MurmurHash3 (x64_128, fixed zero seed) over a byte range, truncated to 64 bits.
+inline size_t bytes(const char* data, size_t size) noexcept
+{
+    uint64_t out[2];  ///< MurmurHash3_x64_128 writes two 64-bit words.
+    MurmurHash3_x64_128(data, static_cast<int>(size), 0U, out);
+    return out[0];
+}
+
+}
 
 /**
  * Forward declarations
@@ -55,14 +79,28 @@ inline size_t hash_combine(const Ts&... rest) noexcept;
 template<std::ranges::input_range Range>
 inline size_t hash_range(Range&& range) noexcept;
 
-/// @brief `Hash` is our custom hasher, like std::hash.
+/// @brief `Hash` is our custom hasher, like std::hash, but with fixed, platform-independent algorithms.
 ///
-/// Forwards to std::hash by default.
-/// Specializations can be injected into the namespace.
+/// There is deliberately no fallback to std::hash: its algorithms for floating-point and string types
+/// differ between standard library implementations, which makes hash container iteration orders (and
+/// everything order-sensitive built on top) platform-dependent. Unknown key types must either provide
+/// identifying_members() or a ygg::Hash specialization.
+/// The primary template is deliberately left undefined: a type without a deterministic hash fails to
+/// compile as an incomplete type. Provide identifying_members() or specialize ygg::Hash for new types.
 template<typename T = void>
-struct Hash
+struct Hash;
+
+template<std::integral T>
+struct Hash<T>
 {
-    size_t operator()(const T& el) const noexcept { return std::hash<T> {}(el); }
+    size_t operator()(const T& el) const noexcept { return fmix64(static_cast<uint64_t>(el)); }
+};
+
+template<typename T>
+    requires std::is_enum_v<T>
+struct Hash<T>
+{
+    size_t operator()(const T& el) const noexcept { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
 };
 
 template<>
@@ -77,16 +115,47 @@ struct Hash<void>
     }
 };
 
+/// Pointers appear in identity tuples (e.g., a view's repository) to discriminate owners. Their
+/// address differs across runs (ASLR) and platforms, so hashing it would make hash values (and hash
+/// container iteration orders) irreproducible. All pointers therefore hash to a fixed salt: distinct
+/// owners still compare unequal via EqualTo, they merely share a hash bucket, which only costs
+/// performance in the rare case of mixing elements of many owners in one container.
+template<typename T>
+struct Hash<T*>
+{
+    size_t operator()(T* const&) const noexcept { return 0x2545f4914f6cdd1dULL; }  // any fixed salt
+};
+
 template<std::floating_point T>
 struct Hash<T>
 {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "ygg::Hash: long double has no portable bit representation.");
+
     size_t operator()(const T& el) const noexcept
     {
         if (std::isnan(el))
             return 0x9e3779b97f4a7c15ULL;  // any fixed salt
 
-        return std::hash<T> {}(el);
+        if (el == T(0))
+            return fmix64(0);  // +0.0 and -0.0 compare equal, so they must hash alike
+
+        if constexpr (std::is_same_v<T, float>)
+            return fmix64(std::bit_cast<uint32_t>(el));
+        else
+            return fmix64(std::bit_cast<uint64_t>(el));
     }
+};
+
+template<>
+struct Hash<std::string_view>
+{
+    size_t operator()(std::string_view el) const noexcept { return hashing::bytes(el.data(), el.size()); }
+};
+
+template<>
+struct Hash<std::string>
+{
+    size_t operator()(const std::string& el) const noexcept { return hashing::bytes(el.data(), el.size()); }
 };
 
 template<typename T, size_t N>

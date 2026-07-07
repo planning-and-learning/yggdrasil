@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_IOSTREAM_HPP_
-#define YGG_COMMON_IOSTREAM_HPP_
+#ifndef YGG_IO_IOSTREAM_HPP_
+#define YGG_IO_IOSTREAM_HPP_
 
 #include <iosfwd>
 #include <iostream>

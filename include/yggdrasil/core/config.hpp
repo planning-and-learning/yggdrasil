@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_CONFIG_HPP_
-#define YGG_COMMON_CONFIG_HPP_
+#ifndef YGG_CORE_CONFIG_HPP_
+#define YGG_CORE_CONFIG_HPP_
 
 #ifndef YGG_ENABLE_FMT_FORMATTERS
 #define YGG_ENABLE_FMT_FORMATTERS 1

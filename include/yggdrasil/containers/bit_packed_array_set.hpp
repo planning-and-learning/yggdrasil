@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_BIT_PACKED_ARRAY_SET_HPP_
-#define YGG_COMMON_BIT_PACKED_ARRAY_SET_HPP_
+#ifndef YGG_CONTAINERS_BIT_PACKED_ARRAY_SET_HPP_
+#define YGG_CONTAINERS_BIT_PACKED_ARRAY_SET_HPP_
 
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
 #include "yggdrasil/core/concepts.hpp"

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_DYNAMIC_BITSET_FORMATTERS_HPP_
-#define YGG_COMMON_DYNAMIC_BITSET_FORMATTERS_HPP_
+#ifndef YGG_FORMATTING_DYNAMIC_BITSET_FORMATTERS_HPP_
+#define YGG_FORMATTING_DYNAMIC_BITSET_FORMATTERS_HPP_
 
 #include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/core/config.hpp"

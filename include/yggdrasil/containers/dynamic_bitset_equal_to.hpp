@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_DYNAMIC_BITSET_EQUAL_TO_HPP_
-#define YGG_COMMON_DYNAMIC_BITSET_EQUAL_TO_HPP_
+#ifndef YGG_CONTAINERS_DYNAMIC_BITSET_EQUAL_TO_HPP_
+#define YGG_CONTAINERS_DYNAMIC_BITSET_EQUAL_TO_HPP_
 
 #include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"

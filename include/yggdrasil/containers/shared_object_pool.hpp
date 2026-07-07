@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_SHARED_OBJECT_POOL_HPP_
-#define YGG_COMMON_SHARED_OBJECT_POOL_HPP_
+#ifndef YGG_CONTAINERS_SHARED_OBJECT_POOL_HPP_
+#define YGG_CONTAINERS_SHARED_OBJECT_POOL_HPP_
 
 #include <atomic>
 #include <cassert>

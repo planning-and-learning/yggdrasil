@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_TUPLE_HPP_
-#define YGG_COMMON_TUPLE_HPP_
+#ifndef YGG_CONTAINERS_TUPLE_HPP_
+#define YGG_CONTAINERS_TUPLE_HPP_
 
 #include <cstddef>
 #include <functional>

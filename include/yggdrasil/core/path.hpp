@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_PATH_HPP_
-#define YGG_COMMON_PATH_HPP_
+#ifndef YGG_CORE_PATH_HPP_
+#define YGG_CORE_PATH_HPP_
 
 #include <filesystem>
 #include <fstream>

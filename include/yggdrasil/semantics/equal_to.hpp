@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_EQUAL_TO_HPP_
-#define YGG_COMMON_EQUAL_TO_HPP_
+#ifndef YGG_SEMANTICS_EQUAL_TO_HPP_
+#define YGG_SEMANTICS_EQUAL_TO_HPP_
 
 #include "yggdrasil/core/concepts.hpp"
 

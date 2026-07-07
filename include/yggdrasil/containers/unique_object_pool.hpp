@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_UNIQUE_OBJECT_POOL_HPP
-#define YGG_COMMON_UNIQUE_OBJECT_POOL_HPP
+#ifndef YGG_CONTAINERS_UNIQUE_OBJECT_POOL_HPP_
+#define YGG_CONTAINERS_UNIQUE_OBJECT_POOL_HPP_
 
 #include <cassert>
 #include <concepts>

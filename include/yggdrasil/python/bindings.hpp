@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_PYTHON_BINDINGS_HPP_
-#define YGG_COMMON_PYTHON_BINDINGS_HPP_
+#ifndef YGG_PYTHON_BINDINGS_HPP_
+#define YGG_PYTHON_BINDINGS_HPP_
 
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formatting/formatter.hpp"

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_SEGMENTED_VECTOR_EQUAL_TO_HPP_
-#define YGG_COMMON_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+#ifndef YGG_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+#define YGG_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
 
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"

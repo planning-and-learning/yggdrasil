@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef YGG_COMMON_RAW_ARRAY_POOL_HPP_
-#define YGG_COMMON_RAW_ARRAY_POOL_HPP_
+#ifndef YGG_CONTAINERS_RAW_ARRAY_POOL_HPP_
+#define YGG_CONTAINERS_RAW_ARRAY_POOL_HPP_
 
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/concepts.hpp"

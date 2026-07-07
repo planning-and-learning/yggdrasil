@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_DECLARATIONS_HPP_
-#define YGG_COMMON_DECLARATIONS_HPP_
+#ifndef YGG_IDS_DECLARATIONS_HPP_
+#define YGG_IDS_DECLARATIONS_HPP_
 
 namespace ygg
 {

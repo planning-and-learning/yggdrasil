@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_ASSOCIATIVE_CONTAINERS_HPP_
-#define YGG_COMMON_ASSOCIATIVE_CONTAINERS_HPP_
+#ifndef YGG_CONTAINERS_ASSOCIATIVE_CONTAINERS_HPP_
+#define YGG_CONTAINERS_ASSOCIATIVE_CONTAINERS_HPP_
 
 #include <gtl/btree.hpp>
 #include <gtl/phmap.hpp>

@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_UNORDERED_SET_HPP_
-#define YGG_COMMON_UNORDERED_SET_HPP_
+#ifndef YGG_CONTAINERS_UNORDERED_SET_HPP_
+#define YGG_CONTAINERS_UNORDERED_SET_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
 

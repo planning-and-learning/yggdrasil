@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_COMMON_OPTIONAL_HPP_
-#define YGG_COMMON_OPTIONAL_HPP_
+#ifndef YGG_CONTAINERS_OPTIONAL_HPP_
+#define YGG_CONTAINERS_OPTIONAL_HPP_
 
 #include "yggdrasil/core/types_utils.hpp"
 
