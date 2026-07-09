@@ -115,6 +115,21 @@ TEST(YggdrasilTests, CommonLessRangeMatchesContainerLess)
               ygg::Less<std::span<const int>> {}(std::span<const int>(lhs), std::span<const int>(rhs)));
 }
 
+TEST(YggdrasilTests, CommonLessOrdersNaNAfterNumbers)
+{
+    const auto nan = std::numeric_limits<double>::quiet_NaN();
+    const auto less = ygg::Less<double> {};
+
+    EXPECT_TRUE(less(1.0, nan));
+    EXPECT_FALSE(less(nan, 1.0));
+    EXPECT_FALSE(less(nan, nan));
+    EXPECT_TRUE(less(1.0, 2.0));
+
+    const auto equivalent = [&](double lhs, double rhs) { return !less(lhs, rhs) && !less(rhs, lhs); };
+    EXPECT_TRUE(equivalent(nan, nan));
+    EXPECT_FALSE(equivalent(nan, 1.0));
+}
+
 TEST(YggdrasilTests, CommonLessRangeUsesElementLess)
 {
     const auto nan = std::numeric_limits<double>::quiet_NaN();

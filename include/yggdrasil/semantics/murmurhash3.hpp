@@ -15,10 +15,11 @@
 #define YGG_SEMANTICS_MURMURHASH3_HPP_
 
 #include <bit>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 
-static_assert(std::endian::native == std::endian::little,
-              "MurmurHash3 block reads assume little-endian; hash values would differ on big-endian platforms.");
+static_assert(std::endian::native == std::endian::little, "MurmurHash3 block reads assume little-endian; hash values would differ on big-endian platforms.");
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
@@ -36,9 +37,19 @@ inline uint64_t rotl64(uint64_t x, int8_t r) { return (x << r) | (x >> (64 - r))
 // Block read - if your platform needs to do endian-swapping or can only
 // handle aligned reads, do the conversion here
 
-inline uint32_t getblock32(const uint32_t* p, int i) { return p[i]; }
+inline uint32_t getblock32(const uint8_t* p, int i)
+{
+    auto value = uint32_t {};
+    std::memcpy(&value, p + i * static_cast<std::ptrdiff_t>(sizeof(value)), sizeof(value));
+    return value;
+}
 
-inline uint64_t getblock64(const uint64_t* p, int i) { return p[i]; }
+inline uint64_t getblock64(const uint8_t* p, int i)
+{
+    auto value = uint64_t {};
+    std::memcpy(&value, p + i * static_cast<std::ptrdiff_t>(sizeof(value)), sizeof(value));
+    return value;
+}
 
 //-----------------------------------------------------------------------------
 // Finalization mix - force all bits of a hash block to avalanche
@@ -82,7 +93,7 @@ inline void MurmurHash3_x86_32(const void* key, int len, uint32_t seed, void* ou
     //----------
     // body
 
-    const uint32_t* blocks = (const uint32_t*) (data + nblocks * 4);
+    const uint8_t* blocks = data + nblocks * 4;
 
     for (int i = -nblocks; i; i++)
     {
@@ -148,7 +159,7 @@ inline void MurmurHash3_x86_128(const void* key, const int len, uint32_t seed, v
     //----------
     // body
 
-    const uint32_t* blocks = (const uint32_t*) (data + nblocks * 16);
+    const uint8_t* blocks = data + nblocks * 16;
 
     for (int i = -nblocks; i; i++)
     {
@@ -306,7 +317,7 @@ inline void MurmurHash3_x64_128(const void* key, const int len, const uint32_t s
     //----------
     // body
 
-    const uint64_t* blocks = (const uint64_t*) (data);
+    const uint8_t* blocks = data;
 
     for (int i = 0; i < nblocks; i++)
     {

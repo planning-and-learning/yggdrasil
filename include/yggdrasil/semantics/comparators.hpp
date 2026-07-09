@@ -21,6 +21,7 @@
 #include "yggdrasil/core/concepts.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <gtl/btree.hpp>
@@ -60,6 +61,21 @@ struct Less<void>
     bool operator()(const T& lhs, const U& rhs) const noexcept
     {
         return Less<std::remove_cvref_t<T>> {}(lhs, rhs);
+    }
+};
+
+template<std::floating_point T>
+struct Less<T>
+{
+    bool operator()(T lhs, T rhs) const noexcept
+    {
+        const auto lhs_nan = std::isnan(lhs);
+        const auto rhs_nan = std::isnan(rhs);
+
+        if (lhs_nan || rhs_nan)
+            return !lhs_nan && rhs_nan;
+
+        return std::less<T> {}(lhs, rhs);
     }
 };
 
