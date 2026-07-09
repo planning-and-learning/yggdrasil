@@ -45,7 +45,15 @@ struct Less<boost::dynamic_bitset<Block, Allocator>>
         boost::to_block_range(lhs, std::back_inserter(lhs_blocks));
         boost::to_block_range(rhs, std::back_inserter(rhs_blocks));
 
-        return less_range(lhs_blocks, rhs_blocks);
+        const auto count = detail::num_canonical_bit_blocks(lhs.size());
+        for (size_t i = 0; i < count; ++i)
+        {
+            const auto lhs_block = detail::canonical_bit_block(std::span<const Block>(lhs_blocks), lhs.size(), i);
+            const auto rhs_block = detail::canonical_bit_block(std::span<const Block>(rhs_blocks), rhs.size(), i);
+            if (lhs_block != rhs_block)
+                return lhs_block < rhs_block;
+        }
+        return false;
     }
 };
 
@@ -60,7 +68,17 @@ struct Less<BitsetSpan<Block>>
         if (lhs.num_bits() != rhs.num_bits())
             return lhs.num_bits() < rhs.num_bits();
 
-        return less_range(lhs.blocks(), rhs.blocks());
+        const auto lhs_blocks = lhs.blocks();
+        const auto rhs_blocks = rhs.blocks();
+        const auto count = detail::num_canonical_bit_blocks(lhs.num_bits());
+        for (size_t i = 0; i < count; ++i)
+        {
+            const auto lhs_block = detail::canonical_bit_block(lhs_blocks, lhs.num_bits(), i);
+            const auto rhs_block = detail::canonical_bit_block(rhs_blocks, rhs.num_bits(), i);
+            if (lhs_block != rhs_block)
+                return lhs_block < rhs_block;
+        }
+        return false;
     }
 };
 

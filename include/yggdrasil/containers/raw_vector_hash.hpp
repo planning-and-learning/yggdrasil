@@ -27,13 +27,13 @@ namespace ygg
 template<std::unsigned_integral Size, TriviallyCopyable T>
 struct Hash<RawVectorView<Size, T>>
 {
-    size_t operator()(const RawVectorView<Size, T>& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const RawVectorView<Size, T>& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<std::unsigned_integral Size, TriviallyCopyable T>
 struct Hash<RawVectorView<const Size, const T>>
 {
-    size_t operator()(const RawVectorView<const Size, const T>& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const RawVectorView<const Size, const T>& value) const noexcept { return ygg::hash_range(value); }
 };
 
 }

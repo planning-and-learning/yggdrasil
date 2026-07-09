@@ -166,7 +166,7 @@ private:
     struct Hash
     {
         template<InputRangeOf<value_type> Range>
-        size_t operator()(const Range& el) const noexcept
+        hash_t operator()(const Range& el) const noexcept
         {
             return ygg::hash_range(el);
         }

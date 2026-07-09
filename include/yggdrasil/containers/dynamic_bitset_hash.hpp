@@ -34,15 +34,16 @@ struct Hash<boost::dynamic_bitset<Block, Allocator>>
 {
     using Type = boost::dynamic_bitset<Block, Allocator>;
 
-    size_t operator()(const Type& bitset) const
+    hash_t operator()(const Type& bitset) const
     {
         auto blocks = std::vector<Block>();
         blocks.reserve(bitset.num_blocks());
         boost::to_block_range(bitset, std::back_inserter(blocks));
 
-        size_t seed = bitset.size();
-        for (const auto& block : blocks)
-            ygg::hash_combine(seed, block);
+        const auto block_span = std::span<const Block>(blocks);
+        hash_t seed = bitset.size();
+        for (size_t i = 0; i < detail::num_canonical_bit_blocks(bitset.size()); ++i)
+            ygg::hash_combine(seed, detail::canonical_bit_block(block_span, bitset.size(), i));
         return seed;
     }
 };
@@ -50,11 +51,12 @@ struct Hash<boost::dynamic_bitset<Block, Allocator>>
 template<std::unsigned_integral Block>
 struct Hash<BitsetSpan<Block>>
 {
-    size_t operator()(const BitsetSpan<Block>& bitset_span) const noexcept
+    hash_t operator()(const BitsetSpan<Block>& bitset_span) const noexcept
     {
-        size_t aggregated_hash = bitset_span.num_bits();
-        for (const auto& block : bitset_span.blocks())
-            ygg::hash_combine(aggregated_hash, block);
+        const auto blocks = bitset_span.blocks();
+        hash_t aggregated_hash = bitset_span.num_bits();
+        for (size_t i = 0; i < detail::num_canonical_bit_blocks(bitset_span.num_bits()); ++i)
+            ygg::hash_combine(aggregated_hash, detail::canonical_bit_block(blocks, bitset_span.num_bits(), i));
         return aggregated_hash;
     }
 };

@@ -48,6 +48,8 @@ struct HashContext
 // if this test fails, hash-order-dependent results (e.g., downstream test fixtures) change with it.
 TEST(YggdrasilTests, CommonHashValuesArePlatformIndependent)
 {
+    static_assert(std::same_as<decltype(ygg::Hash<int> {}(42)), ygg::hash_t>);
+    static_assert(sizeof(ygg::hash_t) == 8);
     EXPECT_EQ(ygg::Hash<int> {}(42), 0x810879608e4259ccULL);
     EXPECT_EQ(ygg::Hash<int> {}(0), 0x0000000000000000ULL);  // fmix64 fixed point
     EXPECT_EQ(ygg::Hash<int> {}(-1), 0x64b5720b4b825f21ULL);
@@ -98,7 +100,7 @@ TEST(YggdrasilTests, CommonHashRangeAcceptsRangeAdaptors)
     const auto values = std::vector<int> { 1, 2, 3, 4 };
     auto even_squares = values | std::views::filter([](int value) { return value % 2 == 0; }) | std::views::transform([](int value) { return value * value; });
 
-    auto expected = size_t { 0 };
+    auto expected = ygg::hash_t { 0 };
     ygg::hash_combine(expected, 4);
     ygg::hash_combine(expected, 16);
     EXPECT_EQ(ygg::hash_range(even_squares), expected);
@@ -219,6 +221,20 @@ TEST(YggdrasilTests, CommonDynamicBitsetHashAdaptersHashBoostDynamicBitsets)
     rhs.set(2);
 
     EXPECT_NE(ygg::Hash<boost::dynamic_bitset<>> {}(lhs), ygg::Hash<boost::dynamic_bitset<>> {}(rhs));
+}
+
+TEST(YggdrasilTests, CommonDynamicBitsetHashIsIndependentOfBlockWidth)
+{
+    auto bits32 = boost::dynamic_bitset<std::uint32_t>(130);
+    auto bits64 = boost::dynamic_bitset<std::uint64_t>(130);
+
+    for (const auto bit : std::array<size_t, 6> { 0, 31, 32, 63, 64, 129 })
+    {
+        bits32.set(bit);
+        bits64.set(bit);
+    }
+
+    EXPECT_EQ(ygg::Hash<decltype(bits32)> {}(bits32), ygg::Hash<decltype(bits64)> {}(bits64));
 }
 
 TEST(YggdrasilTests, CommonDynamicBitsetHashAdaptersHashBitsetSpans)

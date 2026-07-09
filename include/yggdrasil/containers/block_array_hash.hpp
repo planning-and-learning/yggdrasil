@@ -29,7 +29,7 @@ struct Hash<BasicBitPackedArrayView<Block, Coder>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder>;
 
-    size_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<typename Block, typename Coder, typename C>
@@ -37,7 +37,7 @@ struct Hash<View<BasicBitPackedArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder>, C>;
 
-    size_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<typename Block, typename Coder>
@@ -45,7 +45,7 @@ struct Hash<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
 
-    size_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<typename Block, typename Coder, typename C>
@@ -53,7 +53,7 @@ struct Hash<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;
 
-    size_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 }

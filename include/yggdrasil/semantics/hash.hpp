@@ -44,16 +44,15 @@ namespace ygg
 {
 
 // The deterministic hashing below fixes all algorithms and constants for 64-bit hash values, so that
-// hash values (and hence hash container iteration orders) are identical across standard libraries,
-// compilers, and platforms.
-static_assert(sizeof(size_t) == 8, "ygg::Hash requires a 64-bit size_t for platform-independent hash values.");
+// hash values are identical across standard libraries, compilers, and platform word sizes. Native
+// hash-table APIs may narrow these values to size_t internally.
 
 /// Deterministic hashing primitives with fixed algorithms and constants.
 namespace hashing
 {
 
 /// MurmurHash3 (x64_128, fixed zero seed) over a byte range, truncated to 64 bits.
-inline size_t bytes(const char* data, size_t size) noexcept
+inline hash_t bytes(const char* data, size_t size) noexcept
 {
     uint64_t out[2];  ///< MurmurHash3_x64_128 writes two 64-bit words.
     MurmurHash3_x64_128(data, static_cast<int>(size), 0U, out);
@@ -67,16 +66,16 @@ inline size_t bytes(const char* data, size_t size) noexcept
  */
 
 template<typename T>
-inline void hash_combine(size_t& seed, const T& value) noexcept;
+inline void hash_combine(hash_t& seed, const T& value) noexcept;
 
 template<typename T, typename... Rest>
-inline void hash_combine(size_t& seed, const Rest&... rest) noexcept;
+inline void hash_combine(hash_t& seed, const Rest&... rest) noexcept;
 
 template<typename... Ts>
-inline size_t hash_combine(const Ts&... rest) noexcept;
+inline hash_t hash_combine(const Ts&... rest) noexcept;
 
 template<std::ranges::input_range Range>
-inline size_t hash_range(Range&& range) noexcept;
+inline hash_t hash_range(Range&& range) noexcept;
 
 /// @brief `Hash` is our custom hasher, like std::hash, but with fixed, platform-independent algorithms.
 ///
@@ -92,13 +91,13 @@ struct Hash;
 template<std::integral T>
 struct Hash<T>
 {
-    size_t operator()(const T& el) const noexcept { return fmix64(static_cast<uint64_t>(el)); }
+    hash_t operator()(const T& el) const noexcept { return fmix64(static_cast<uint64_t>(el)); }
 };
 
 template<Enumeration T>
 struct Hash<T>
 {
-    size_t operator()(const T& el) const noexcept { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
+    hash_t operator()(const T& el) const noexcept { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
 };
 
 template<>
@@ -107,7 +106,7 @@ struct Hash<void>
     using is_transparent = void;
 
     template<typename T>
-    size_t operator()(const T& el) const noexcept
+    hash_t operator()(const T& el) const noexcept
     {
         return Hash<std::remove_cvref_t<T>> {}(el);
     }
@@ -121,7 +120,7 @@ struct Hash<void>
 template<typename T>
 struct Hash<T*>
 {
-    size_t operator()(T* const&) const noexcept { return 0x2545f4914f6cdd1dULL; }  // any fixed salt
+    hash_t operator()(T* const&) const noexcept { return 0x2545f4914f6cdd1dULL; }  // any fixed salt
 };
 
 template<std::floating_point T>
@@ -129,7 +128,7 @@ struct Hash<T>
 {
     static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "ygg::Hash: long double has no portable bit representation.");
 
-    size_t operator()(const T& el) const noexcept
+    hash_t operator()(const T& el) const noexcept
     {
         if (std::isnan(el))
             return 0x9e3779b97f4a7c15ULL;  // any fixed salt
@@ -147,69 +146,69 @@ struct Hash<T>
 template<>
 struct Hash<std::string_view>
 {
-    size_t operator()(std::string_view el) const noexcept { return hashing::bytes(el.data(), el.size()); }
+    hash_t operator()(std::string_view el) const noexcept { return hashing::bytes(el.data(), el.size()); }
 };
 
 template<>
 struct Hash<std::string>
 {
-    size_t operator()(const std::string& el) const noexcept { return hashing::bytes(el.data(), el.size()); }
+    hash_t operator()(const std::string& el) const noexcept { return hashing::bytes(el.data(), el.size()); }
 };
 
 template<typename T, size_t N>
 struct Hash<std::array<T, N>>
 {
-    size_t operator()(const std::array<T, N>& arr) const noexcept { return ygg::hash_range(arr); }
+    hash_t operator()(const std::array<T, N>& arr) const noexcept { return ygg::hash_range(arr); }
 };
 
 template<typename T>
 struct Hash<std::reference_wrapper<T>>
 {
-    size_t operator()(const std::reference_wrapper<T>& ref) const noexcept { return Hash<std::remove_cvref_t<T>> {}(ref.get()); }
+    hash_t operator()(const std::reference_wrapper<T>& ref) const noexcept { return Hash<std::remove_cvref_t<T>> {}(ref.get()); }
 };
 
 template<typename Key, typename Compare, typename Allocator>
 struct Hash<std::set<Key, Compare, Allocator>>
 {
-    size_t operator()(const std::set<Key, Compare, Allocator>& set) const noexcept { return ygg::hash_range(set); }
+    hash_t operator()(const std::set<Key, Compare, Allocator>& set) const noexcept { return ygg::hash_range(set); }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
 struct Hash<std::map<Key, T, Compare, Allocator>>
 {
-    size_t operator()(const std::map<Key, T, Compare, Allocator>& map) const noexcept { return ygg::hash_range(map); }
+    hash_t operator()(const std::map<Key, T, Compare, Allocator>& map) const noexcept { return ygg::hash_range(map); }
 };
 
 template<typename Key, typename Compare, typename Allocator>
 struct Hash<gtl::btree_set<Key, Compare, Allocator>>
 {
-    size_t operator()(const gtl::btree_set<Key, Compare, Allocator>& set) const noexcept { return ygg::hash_range(set); }
+    hash_t operator()(const gtl::btree_set<Key, Compare, Allocator>& set) const noexcept { return ygg::hash_range(set); }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
 struct Hash<gtl::btree_map<Key, T, Compare, Allocator>>
 {
-    size_t operator()(const gtl::btree_map<Key, T, Compare, Allocator>& map) const noexcept { return ygg::hash_range(map); }
+    hash_t operator()(const gtl::btree_map<Key, T, Compare, Allocator>& map) const noexcept { return ygg::hash_range(map); }
 };
 
 template<typename T, typename Allocator>
 struct Hash<std::vector<T, Allocator>>
 {
-    size_t operator()(const std::vector<T, Allocator>& vec) const noexcept { return ygg::hash_range(vec); }
+    hash_t operator()(const std::vector<T, Allocator>& vec) const noexcept { return ygg::hash_range(vec); }
 };
 
 template<typename T1, typename T2>
 struct Hash<std::pair<T1, T2>>
 {
-    size_t operator()(const std::pair<T1, T2>& pair) const noexcept { return ygg::hash_combine(pair.first, pair.second); }
+    hash_t operator()(const std::pair<T1, T2>& pair) const noexcept { return ygg::hash_combine(pair.first, pair.second); }
 };
 
 template<typename... Ts>
 struct Hash<std::tuple<Ts...>>
 {
-    size_t operator()(const std::tuple<Ts...>& tuple) const noexcept
+    hash_t operator()(const std::tuple<Ts...>& tuple) const noexcept
     {
-        size_t aggregated_hash = sizeof...(Ts);
+        hash_t aggregated_hash = sizeof...(Ts);
         std::apply([&aggregated_hash](const Ts&... args) { (ygg::hash_combine(aggregated_hash, args), ...); }, tuple);
         return aggregated_hash;
     }
@@ -218,9 +217,9 @@ struct Hash<std::tuple<Ts...>>
 template<typename... Ts>
 struct Hash<std::variant<Ts...>>
 {
-    size_t operator()(const std::variant<Ts...>& variant) const noexcept
+    hash_t operator()(const std::variant<Ts...>& variant) const noexcept
     {
-        size_t seed = variant.index();
+        hash_t seed = variant.index();
         std::visit([&seed](const auto& arg) { ygg::hash_combine(seed, arg); }, variant);
         return seed;
     }
@@ -229,9 +228,9 @@ struct Hash<std::variant<Ts...>>
 template<typename T>
 struct Hash<std::optional<T>>
 {
-    size_t operator()(const std::optional<T>& optional) const noexcept
+    hash_t operator()(const std::optional<T>& optional) const noexcept
     {
-        size_t seed = optional.has_value() ? 1 : 0;
+        hash_t seed = optional.has_value() ? 1 : 0;
         if (optional.has_value())
             ygg::hash_combine(seed, optional.value());
         return seed;
@@ -241,7 +240,7 @@ struct Hash<std::optional<T>>
 template<typename T, std::size_t Extent>
 struct Hash<std::span<T, Extent>>
 {
-    size_t operator()(const std::span<T, Extent>& span) const noexcept { return ygg::hash_range(span); }
+    hash_t operator()(const std::span<T, Extent>& span) const noexcept { return ygg::hash_range(span); }
 };
 
 template<Identifiable T>
@@ -249,10 +248,10 @@ struct Hash<T>
 {
     using is_transparent = void;
 
-    size_t operator()(const T& element) const noexcept { return ygg::hash_combine(element.identifying_members()); }
+    hash_t operator()(const T& element) const noexcept { return ygg::hash_combine(element.identifying_members()); }
 
     template<typename... Args>
-    size_t operator()(const std::tuple<Args...>& view) const noexcept
+    hash_t operator()(const std::tuple<Args...>& view) const noexcept
     {
         return ygg::hash_combine(view);
     }
@@ -263,9 +262,9 @@ struct Hash<T>
  */
 
 template<std::ranges::input_range Range>
-inline size_t hash_range(Range&& range) noexcept
+inline hash_t hash_range(Range&& range) noexcept
 {
-    size_t seed = 0;
+    hash_t seed = 0;
     if constexpr (std::ranges::sized_range<Range>)
         seed = std::ranges::size(range);
 
@@ -276,21 +275,21 @@ inline size_t hash_range(Range&& range) noexcept
 }
 
 template<typename T>
-inline void hash_combine(size_t& seed, const T& value) noexcept
+inline void hash_combine(hash_t& seed, const T& value) noexcept
 {
     seed ^= Hash<std::remove_cvref_t<T>> {}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
 template<typename T, typename... Rest>
-inline void hash_combine(size_t& seed, const Rest&... rest) noexcept
+inline void hash_combine(hash_t& seed, const Rest&... rest) noexcept
 {
     (ygg::hash_combine(seed, rest), ...);
 }
 
 template<typename... Ts>
-inline size_t hash_combine(const Ts&... rest) noexcept
+inline hash_t hash_combine(const Ts&... rest) noexcept
 {
-    size_t seed = 0;
+    hash_t seed = 0;
     (ygg::hash_combine(seed, rest), ...);
     return seed;
 }

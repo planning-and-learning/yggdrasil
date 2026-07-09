@@ -29,7 +29,7 @@ struct IndexedHashSetTestTag
 
 struct IndexedHashSetCustomHash
 {
-    std::size_t operator()(const ygg::Data<IndexedHashSetTestTag>& value) const noexcept;
+    ygg::hash_t operator()(const ygg::Data<IndexedHashSetTestTag>& value) const noexcept;
 };
 
 struct IndexedHashSetCustomEqualTo
@@ -66,9 +66,9 @@ struct Index<ygg::tests::IndexedHashSetTestTag> : IndexMixin<Index<ygg::tests::I
 namespace ygg::tests
 {
 
-inline std::size_t IndexedHashSetCustomHash::operator()(const ygg::Data<IndexedHashSetTestTag>& value) const noexcept
+inline ygg::hash_t IndexedHashSetCustomHash::operator()(const ygg::Data<IndexedHashSetTestTag>& value) const noexcept
 {
-    return static_cast<std::size_t>(value.value);
+    return static_cast<ygg::hash_t>(value.value);
 }
 
 inline bool IndexedHashSetCustomEqualTo::operator()(const ygg::Data<IndexedHashSetTestTag>& lhs, const ygg::Data<IndexedHashSetTestTag>& rhs) const noexcept

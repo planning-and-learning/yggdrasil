@@ -29,9 +29,9 @@ namespace ygg
 template<typename T, std::size_t FirstSegmentSize>
 struct Hash<SegmentedVector<T, FirstSegmentSize>>
 {
-    size_t operator()(const SegmentedVector<T, FirstSegmentSize>& value) const noexcept
+    hash_t operator()(const SegmentedVector<T, FirstSegmentSize>& value) const noexcept
     {
-        size_t seed = value.size();
+        hash_t seed = value.size();
         for (std::size_t i = 0; i < value.size(); ++i)
             ygg::hash_combine(seed, value[i]);
         return seed;

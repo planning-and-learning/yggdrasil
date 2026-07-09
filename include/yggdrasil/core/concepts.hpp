@@ -18,7 +18,7 @@
 #ifndef YGG_CORE_CONCEPTS_HPP_
 #define YGG_CORE_CONCEPTS_HPP_
 
-#include "yggdrasil/core/dependent_false.hpp"
+#include "yggdrasil/core/config.hpp"
 
 #include <concepts>
 #include <cstddef>
@@ -60,7 +60,7 @@ concept UnsignedIntegralSameAsIgnoringConst = std::unsigned_integral<std::remove
 
 template<typename H, typename T>
 concept HashFor = requires(const H& hash, const T& value) {
-    { hash(value) } -> std::same_as<std::size_t>;
+    { hash(value) } -> std::same_as<hash_t>;
 };
 
 template<typename E, typename Lhs, typename Rhs = Lhs>

@@ -43,6 +43,7 @@ namespace ygg
 {
 using int_t = std::int32_t;
 using uint_t = std::uint32_t;
+using hash_t = std::uint64_t;
 using float_t = double;
 
 inline uint_t to_uint_t(size_t value)

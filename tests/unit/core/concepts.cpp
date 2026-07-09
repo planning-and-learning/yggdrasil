@@ -43,7 +43,7 @@ struct InvalidHashFixture
 
 struct ValidHashFixture
 {
-    std::size_t operator()(int) const { return 0; }
+    ygg::hash_t operator()(int) const { return 0; }
 };
 
 struct InvalidEqualToFixture
