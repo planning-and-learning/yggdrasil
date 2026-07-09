@@ -20,11 +20,15 @@
 
 #include "yggdrasil/core/config.hpp"
 
+#include <algorithm>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <gtl/btree.hpp>
 #include <gtl/phmap.hpp>
+#include <string>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace ygg
 {
@@ -53,6 +57,17 @@ OutputIt format_elements(OutputIt out, const Range& value)
     return out;
 }
 
+template<typename OutputIt, typename Range, typename Render>
+OutputIt format_sorted_elements(OutputIt out, const Range& value, Render&& render)
+{
+    auto elements = std::vector<std::string>();
+    elements.reserve(value.size());
+    for (const auto& element : value)
+        elements.push_back(render(element));
+    std::sort(elements.begin(), elements.end());
+    return format_elements(out, elements);
+}
+
 template<typename OutputIt, typename Range>
 OutputIt format_key_value_elements(OutputIt out, const Range& value)
 {
@@ -65,6 +80,17 @@ OutputIt format_key_value_elements(OutputIt out, const Range& value)
         out = fmt::format_to(out, "{}: {}", key, mapped);
     }
     return out;
+}
+
+template<typename OutputIt, typename Range>
+OutputIt format_sorted_key_value_elements(OutputIt out, const Range& value)
+{
+    auto elements = std::vector<std::pair<std::string, std::string>>();
+    elements.reserve(value.size());
+    for (const auto& [key, mapped] : value)
+        elements.emplace_back(fmt::format("{}", key), fmt::format("{}", mapped));
+    std::sort(elements.begin(), elements.end());
+    return format_key_value_elements(out, elements);
 }
 
 }  // namespace ygg::detail
@@ -100,7 +126,7 @@ struct formatter<gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>
     auto format(const gtl::flat_hash_set<K, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>& value, FormatContext& ctx) const
     {
         auto out = fmt::format_to(ctx.out(), "{{");
-        out = ygg::detail::format_elements(out, value);
+        out = ygg::detail::format_sorted_elements(out, value, [](const auto& element) { return fmt::format("{}", element); });
         return fmt::format_to(out, "}}");
     }
 };
@@ -114,7 +140,7 @@ struct formatter<gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocat
     auto format(const gtl::flat_hash_map<K, V, ygg::Hash<K>, ygg::EqualTo<K>, Allocator>& value, FormatContext& ctx) const
     {
         auto out = fmt::format_to(ctx.out(), "{{");
-        out = ygg::detail::format_key_value_elements(out, value);
+        out = ygg::detail::format_sorted_key_value_elements(out, value);
         return fmt::format_to(out, "}}");
     }
 };

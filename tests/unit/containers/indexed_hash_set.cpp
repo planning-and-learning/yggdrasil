@@ -124,6 +124,8 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_TRUE(set.empty());
     EXPECT_EQ(set.size(), 0);
     EXPECT_FALSE(set.contains(first));
+    EXPECT_THROW(set.front(), std::out_of_range);
+    EXPECT_THROW(set.back(), std::out_of_range);
 
     auto [first_index, inserted_first] = set.insert(first);
     EXPECT_TRUE(inserted_first);
@@ -132,6 +134,8 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_EQ(set.find(first), first_index);
     EXPECT_EQ(set[first_index].value, 1);
     EXPECT_EQ(set.at(first_index).value, 1);
+    EXPECT_EQ(set.front().value, 1);
+    EXPECT_EQ(set.back().value, 1);
     EXPECT_THROW(set.at(ygg::Index<IndexedHashSetTestTag>(1)), std::out_of_range);
 
     auto [second_index, inserted_second] = set.insert(second);
@@ -139,6 +143,8 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_EQ(second_index.get_value(), ygg::uint_t { 1 });
     EXPECT_TRUE(set.contains(second));
     EXPECT_EQ(set.at(second_index).value, 2);
+    EXPECT_EQ(set.front().value, 1);
+    EXPECT_EQ(set.back().value, 2);
     EXPECT_THROW(set.at(ygg::Index<IndexedHashSetTestTag>(2)), std::out_of_range);
 
     auto [duplicate_index, inserted_duplicate] = set.insert(first);

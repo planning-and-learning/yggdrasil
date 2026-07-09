@@ -53,6 +53,9 @@ TEST(YggdrasilTests, CommonVector)
     auto vec = std::vector<uint64_t>(2 * 3 * 4, uint64_t(0));
 
     auto mdspan = ygg::MDSpan<uint64_t, 3>(vec.data(), std::array<size_t, 3> { dim0, dim1, dim2 });
+    auto empty_mdspan = ygg::MDSpan<uint64_t, 3>();
+    EXPECT_TRUE(empty_mdspan.empty());
+    EXPECT_FALSE(mdspan.empty());
 
     EXPECT_EQ(mdspan.size(), 24);
     EXPECT_EQ(mdspan.shapes(), (std::array<size_t, 3> { dim0, dim1, dim2 }));

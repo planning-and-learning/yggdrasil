@@ -387,6 +387,8 @@ public:
         return n;
     }
 
+    bool empty() const noexcept { return size() == 0; }
+
 private:
     void ensure_index_in_bounds(size_t dimension, size_t idx) const
     {

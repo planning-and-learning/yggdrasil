@@ -121,7 +121,9 @@ public:
 
     const Data<Tag>& at(Index<Tag> idx) const { return m_storage->at(uint_t(idx)); }
 
-    const Data<Tag>& front() const noexcept { return m_storage->front(); }
+    const Data<Tag>& front() const { return m_storage->front(); }
+
+    const Data<Tag>& back() const { return m_storage->back(); }
 
     size_t memory_usage() const noexcept
     {

@@ -31,6 +31,7 @@ TEST(YggdrasilTests, BufferSegmentedBufferRejectsInvalidConstructionAndWriteArgu
     EXPECT_THROW(buffer::SegmentedBuffer(3), std::invalid_argument);
 
     auto arena = buffer::SegmentedBuffer();
+    EXPECT_TRUE(arena.empty());
     const auto value = std::array<uint8_t, 1> { 1 };
 
     EXPECT_THROW(arena.write(nullptr, 1), std::invalid_argument);
@@ -51,6 +52,7 @@ TEST(YggdrasilTests, BufferSegmentedBufferTracksSizeCapacityAndRemainingSpace)
     EXPECT_EQ(first_position[1], 2);
     EXPECT_EQ(first_position[2], 3);
     EXPECT_EQ(arena.size(), first.size());
+    EXPECT_FALSE(arena.empty());
     EXPECT_EQ(arena.num_segments(), 1);
     EXPECT_GE(arena.capacity(), arena.size());
     EXPECT_EQ(arena.remaining_in_current_segment(), arena.capacity() - arena.size());
@@ -59,6 +61,7 @@ TEST(YggdrasilTests, BufferSegmentedBufferTracksSizeCapacityAndRemainingSpace)
     arena.clear();
 
     EXPECT_EQ(arena.size(), 0);
+    EXPECT_TRUE(arena.empty());
     EXPECT_EQ(arena.capacity(), capacity);
     EXPECT_EQ(arena.num_segments(), 1);
     EXPECT_EQ(arena.remaining_in_current_segment(), capacity);

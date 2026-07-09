@@ -65,6 +65,7 @@ TEST(YggdrasilTests, BufferIndexedHashSetDefaultConstructionSupportsReadOnlyQuer
     EXPECT_FALSE(repository.contains(element));
     EXPECT_EQ(repository.find(element), std::nullopt);
     EXPECT_THROW(repository.front(), std::out_of_range);
+    EXPECT_THROW(repository.back(), std::out_of_range);
     EXPECT_THROW(repository.insert(element), std::logic_error);
 }
 
@@ -120,6 +121,8 @@ TEST(YggdrasilTests, BufferIndexedHashSetStoresSerializedCanonicalData)
     EXPECT_EQ(first.symbol, builder.symbol);
     EXPECT_EQ(first.arity, builder.arity);
     EXPECT_EQ(repository.at(first_index).symbol, builder.symbol);
+    EXPECT_EQ(repository.front().symbol, builder.symbol);
+    EXPECT_EQ(repository.back().symbol, builder.symbol);
     EXPECT_THROW(repository.at(Index<BufferIndexedHashSetTag>(1)), std::out_of_range);
     EXPECT_TRUE(repository.contains(builder));
     EXPECT_EQ(repository.find(builder), first_index);
@@ -138,6 +141,8 @@ TEST(YggdrasilTests, BufferIndexedHashSetStoresSerializedCanonicalData)
     EXPECT_EQ(second.symbol, builder.symbol);
     EXPECT_EQ(second.arity, builder.arity);
     EXPECT_EQ(repository.at(second_index).symbol, builder.symbol);
+    EXPECT_EQ(repository.front().symbol, 10);
+    EXPECT_EQ(repository.back().symbol, builder.symbol);
     EXPECT_THROW(repository.at(Index<BufferIndexedHashSetTag>(2)), std::out_of_range);
 
     builder.index.value = 1;

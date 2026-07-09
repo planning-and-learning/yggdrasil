@@ -67,13 +67,11 @@ TEST(YggdrasilTests, CommonFormatterHandlesNullableWrappers)
 
 TEST(YggdrasilTests, CommonAssociativeContainerFormatterFormatsFlatHashAliases)
 {
-    auto set = ygg::UnorderedSet<int> {};
-    set.emplace(1);
-    EXPECT_EQ(fmt::format("{}", set), "{1}");
+    auto set = ygg::UnorderedSet<int> { 3, 1, 2, 10, 20 };
+    EXPECT_EQ(fmt::format("{}", set), "{1, 10, 2, 20, 3}");
 
-    auto map = ygg::UnorderedMap<int, std::string_view> {};
-    map.emplace(1, "one");
-    EXPECT_EQ(fmt::format("{}", map), "{1: one}");
+    auto map = ygg::UnorderedMap<int, std::string_view> { { 3, "three" }, { 1, "one" }, { 2, "two" }, { 10, "ten" }, { 20, "twenty" } };
+    EXPECT_EQ(fmt::format("{}", map), "{1: one, 10: ten, 2: two, 20: twenty, 3: three}");
 }
 
 TEST(YggdrasilTests, CommonFormatterFormatsOrderedAssociativeAliases)
