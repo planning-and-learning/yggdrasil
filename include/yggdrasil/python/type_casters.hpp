@@ -18,7 +18,9 @@
 #ifndef YGG_PYTHON_TYPE_CASTERS_HPP_
 #define YGG_PYTHON_TYPE_CASTERS_HPP_
 
+#include "yggdrasil/python/type_casters/array.hpp"
 #include "yggdrasil/python/type_casters/optional.hpp"
+#include "yggdrasil/python/type_casters/pair.hpp"
 #include "yggdrasil/python/type_casters/string.hpp"
 #include "yggdrasil/python/type_casters/unordered_map.hpp"
 #include "yggdrasil/python/type_casters/unordered_set.hpp"

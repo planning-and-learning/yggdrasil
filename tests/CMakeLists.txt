@@ -1,7 +1,18 @@
 enable_testing()
 
-find_package(Python 3.9 REQUIRED COMPONENTS Interpreter)
+find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(nanobind CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 add_subdirectory(unit)
+
+nanobind_add_module(yggdrasil_type_casters_test NB_SHARED python/type_casters.cpp)
+target_compile_features(yggdrasil_type_casters_test PRIVATE cxx_std_20)
+target_include_directories(yggdrasil_type_casters_test PRIVATE "${PROJECT_SOURCE_DIR}/include")
+
+add_test(
+    NAME python_type_casters
+    COMMAND ${Python_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/python/type_casters.py
+            $<TARGET_FILE:yggdrasil_type_casters_test>)
 
 add_test(
     NAME cmake_read_project_version
