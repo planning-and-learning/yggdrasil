@@ -113,6 +113,12 @@ TEST(YggdrasilTests, CommonCistaFormatterFormatsViews)
 {
     const auto context = 0;
 
+    using Pair = ::cista::pair<int, ::cista::array<int, 2>>;
+    using Array = ::cista::array<Pair, 2>;
+    auto array = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 6 } } };
+    using ArrayView = ygg::View<Array, int>;
+    EXPECT_EQ(fmt::format("{}", ArrayView(array, context)), "[(1, [2, 3]), (4, [5, 6])]");
+
     auto vector = ::cista::offset::vector<int> {};
     vector.emplace_back(1);
     vector.emplace_back(2);

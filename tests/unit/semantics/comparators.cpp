@@ -444,4 +444,27 @@ TEST(YggdrasilTests, CommonCistaLessAdaptersOrderVariantViews)
     EXPECT_FALSE(ygg::Less<VariantView> {}(VariantView(invalid, context), VariantView(Variant {}, context)));
 }
 
+TEST(YggdrasilTests, CommonCistaLessAdaptersOrderPairAndNestedArrayViews)
+{
+    using Pair = ::cista::pair<int, ::cista::array<int, 2>>;
+    using Array = ::cista::array<Pair, 2>;
+    using PairView = ygg::View<Pair, ComparatorContext>;
+    using ArrayView = ygg::View<Array, ComparatorContext>;
+
+    static_assert(OrderedByAllCommonPredicates<Pair>);
+    static_assert(OrderedByAllCommonPredicates<PairView>);
+    static_assert(OrderedByAllCommonPredicates<ArrayView>);
+
+    const auto context = ComparatorContext {};
+    const auto lhs = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 6 } } };
+    const auto rhs = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 7 } } };
+    const auto lower_first = Pair { 3, { 9, 9 } };
+
+    EXPECT_TRUE(ygg::Less<Pair> {}(lower_first, lhs[1]));
+    EXPECT_TRUE(ygg::Less<Pair> {}(lhs[1], rhs[1]));
+    EXPECT_FALSE(ygg::Less<Pair> {}(rhs[1], lhs[1]));
+    EXPECT_TRUE(ygg::Less<PairView> {}(PairView(lhs[1], context), PairView(rhs[1], context)));
+    EXPECT_TRUE(ygg::Less<ArrayView> {}(ArrayView(lhs, context), ArrayView(rhs, context)));
+}
+
 }  // namespace ygg::tests

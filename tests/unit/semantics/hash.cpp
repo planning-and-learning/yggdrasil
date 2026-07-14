@@ -324,4 +324,24 @@ TEST(YggdrasilTests, CommonRawAndSegmentedVectorHashAdaptersHashValues)
     EXPECT_NE((ygg::Hash<ygg::SegmentedVector<int, 2>> {}(lhs)), (ygg::Hash<ygg::SegmentedVector<int, 2>> {}(different)));
 }
 
+TEST(YggdrasilTests, CommonCistaHashAdaptersHashPairAndNestedArrayViews)
+{
+    using Pair = ::cista::pair<int, ::cista::array<int, 2>>;
+    using Array = ::cista::array<Pair, 2>;
+    using PairView = ygg::View<Pair, HashContext>;
+    using ArrayView = ygg::View<Array, HashContext>;
+
+    const auto context = HashContext {};
+    const auto lhs = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 6 } } };
+    const auto rhs = lhs;
+    const auto different = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 7 } } };
+
+    EXPECT_EQ(ygg::Hash<Pair> {}(lhs[1]), ygg::Hash<Pair> {}(rhs[1]));
+    EXPECT_NE(ygg::Hash<Pair> {}(lhs[1]), ygg::Hash<Pair> {}(different[1]));
+    EXPECT_EQ(ygg::Hash<PairView> {}(PairView(lhs[1], context)), ygg::Hash<PairView> {}(PairView(rhs[1], context)));
+    EXPECT_NE(ygg::Hash<PairView> {}(PairView(lhs[1], context)), ygg::Hash<PairView> {}(PairView(different[1], context)));
+    EXPECT_EQ(ygg::Hash<ArrayView> {}(ArrayView(lhs, context)), ygg::Hash<ArrayView> {}(ArrayView(rhs, context)));
+    EXPECT_NE(ygg::Hash<ArrayView> {}(ArrayView(lhs, context)), ygg::Hash<ArrayView> {}(ArrayView(different, context)));
+}
+
 }  // namespace ygg::tests

@@ -18,12 +18,16 @@
 #ifndef YGG_SERIALIZATION_CISTA_HASH_HPP_
 #define YGG_SERIALIZATION_CISTA_HASH_HPP_
 
+#include "yggdrasil/containers/array.hpp"
 #include "yggdrasil/containers/optional.hpp"
+#include "yggdrasil/containers/pair.hpp"
 #include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
+#include <cista/containers/array.h>
 #include <cista/containers/optional.h>
+#include <cista/containers/pair.h>
 #include <cista/containers/string.h>
 #include <cista/containers/variant.h>
 #include <cista/containers/vector.h>
@@ -31,6 +35,30 @@
 
 namespace ygg
 {
+
+template<typename C, typename T, size_t N>
+struct Hash<View<::cista::array<T, N>, C>>
+{
+    using Type = View<::cista::array<T, N>, C>;
+
+    hash_t operator()(const Type& el) const noexcept { return ygg::hash_range(el); }
+};
+
+template<typename T1, typename T2>
+struct Hash<::cista::pair<T1, T2>>
+{
+    using Type = ::cista::pair<T1, T2>;
+
+    hash_t operator()(const Type& el) const noexcept { return ygg::hash_combine(el.first, el.second); }
+};
+
+template<typename C, typename T1, typename T2>
+struct Hash<View<::cista::pair<T1, T2>, C>>
+{
+    using Type = View<::cista::pair<T1, T2>, C>;
+
+    hash_t operator()(const Type& el) const noexcept { return ygg::hash_combine(el.get_first(), el.get_second()); }
+};
 
 template<>
 struct Hash<::cista::offset::string>

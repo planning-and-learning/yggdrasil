@@ -89,6 +89,42 @@ TEST(YggdrasilTests, CommonArrayViewFrontBackPropagateEmptyViewErrors)
     EXPECT_THROW(empty_bit_view.back(), std::out_of_range);
 }
 
+TEST(YggdrasilTests, CistaArrayAndPairViewsCompose)
+{
+    using InnerArray = ::cista::array<int, 2>;
+    using Pair = ::cista::pair<int, InnerArray>;
+    using Array = ::cista::array<Pair, 2>;
+
+    static_assert(ygg::ViewConcept<InnerArray, int>);
+    static_assert(ygg::ViewConcept<Pair, int>);
+    static_assert(ygg::ViewConcept<Array, int>);
+
+    const auto context = 0;
+    const auto data = Array { Pair { 1, InnerArray { 2, 3 } }, Pair { 4, InnerArray { 5, 6 } } };
+    const auto view = ygg::View<Array, int>(data, context);
+
+    static_assert(std::same_as<decltype(view.get_handle()), const Array&>);
+    static_assert(std::same_as<decltype(view[0].get_first()), const int&>);
+    static_assert(std::same_as<decltype(view[0].get_second()[0]), const int&>);
+    static_assert(std::random_access_iterator<typename decltype(view)::const_iterator>);
+    EXPECT_EQ(view.size(), 2);
+    EXPECT_FALSE(view.empty());
+    EXPECT_EQ(&view.get_context(), &context);
+    EXPECT_EQ(&view[0].get_context(), &context);
+    EXPECT_EQ(&view[0].get_second().get_context(), &context);
+    EXPECT_EQ(view.front().get_first(), 1);
+    EXPECT_EQ(view.back().get_second().back(), 6);
+    EXPECT_EQ(view[1].get_second()[0], 5);
+    EXPECT_EQ((*view.begin()).get_first(), 1);
+    EXPECT_EQ(view.begin()[1].get_second().front(), 5);
+    EXPECT_EQ(view.end() - view.begin(), 2);
+
+    const auto empty_data = ::cista::array<Pair, 0> {};
+    const auto empty_view = ygg::View<::cista::array<Pair, 0>, int>(empty_data, context);
+    EXPECT_TRUE(empty_view.empty());
+    EXPECT_EQ(empty_view.begin(), empty_view.end());
+}
+
 TEST(YggdrasilTests, CommonContainersUmbrellaHeaderCompiles)
 {
     std::array<unsigned, 1> blocks { 0 };

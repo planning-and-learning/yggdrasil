@@ -18,12 +18,16 @@
 #ifndef YGG_SERIALIZATION_CISTA_EQUAL_TO_HPP_
 #define YGG_SERIALIZATION_CISTA_EQUAL_TO_HPP_
 
+#include "yggdrasil/containers/array.hpp"
 #include "yggdrasil/containers/optional.hpp"
+#include "yggdrasil/containers/pair.hpp"
 #include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 
+#include <cista/containers/array.h>
 #include <cista/containers/optional.h>
+#include <cista/containers/pair.h>
 #include <cista/containers/string.h>
 #include <cista/containers/variant.h>
 #include <cista/containers/vector.h>
@@ -31,6 +35,37 @@
 
 namespace ygg
 {
+
+template<typename C, typename T, size_t N>
+struct EqualTo<View<::cista::array<T, N>, C>>
+{
+    using Type = View<::cista::array<T, N>, C>;
+
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+};
+
+template<typename T1, typename T2>
+struct EqualTo<::cista::pair<T1, T2>>
+{
+    using Type = ::cista::pair<T1, T2>;
+
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    {
+        return EqualTo<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second);
+    }
+};
+
+template<typename C, typename T1, typename T2>
+struct EqualTo<View<::cista::pair<T1, T2>, C>>
+{
+    using Type = View<::cista::pair<T1, T2>, C>;
+
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    {
+        return EqualTo<std::remove_cvref_t<decltype(lhs.get_first())>> {}(lhs.get_first(), rhs.get_first())
+               && EqualTo<std::remove_cvref_t<decltype(lhs.get_second())>> {}(lhs.get_second(), rhs.get_second());
+    }
+};
 
 template<>
 struct EqualTo<::cista::offset::string>

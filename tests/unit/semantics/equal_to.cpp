@@ -303,4 +303,24 @@ TEST(YggdrasilTests, CommonRawAndSegmentedVectorEqualToAdaptersCompareValues)
     EXPECT_FALSE((ygg::EqualTo<ygg::SegmentedVector<int, 2>> {}(lhs, different)));
 }
 
+TEST(YggdrasilTests, CommonCistaEqualToAdaptersComparePairAndNestedArrayViews)
+{
+    using Pair = ::cista::pair<int, ::cista::array<int, 2>>;
+    using Array = ::cista::array<Pair, 2>;
+    using PairView = ygg::View<Pair, EqualToContext>;
+    using ArrayView = ygg::View<Array, EqualToContext>;
+
+    const auto context = EqualToContext {};
+    const auto lhs = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 6 } } };
+    const auto rhs = lhs;
+    const auto different = Array { Pair { 1, { 2, 3 } }, Pair { 4, { 5, 7 } } };
+
+    EXPECT_TRUE(ygg::EqualTo<Pair> {}(lhs[1], rhs[1]));
+    EXPECT_FALSE(ygg::EqualTo<Pair> {}(lhs[1], different[1]));
+    EXPECT_TRUE(ygg::EqualTo<PairView> {}(PairView(lhs[1], context), PairView(rhs[1], context)));
+    EXPECT_FALSE(ygg::EqualTo<PairView> {}(PairView(lhs[1], context), PairView(different[1], context)));
+    EXPECT_TRUE(ygg::EqualTo<ArrayView> {}(ArrayView(lhs, context), ArrayView(rhs, context)));
+    EXPECT_FALSE(ygg::EqualTo<ArrayView> {}(ArrayView(lhs, context), ArrayView(different, context)));
+}
+
 }  // namespace ygg::tests

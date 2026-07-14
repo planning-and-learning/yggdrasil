@@ -18,13 +18,16 @@
 #ifndef YGG_FORMATTING_CISTA_FORMATTERS_HPP_
 #define YGG_FORMATTING_CISTA_FORMATTERS_HPP_
 
+#include "yggdrasil/containers/array.hpp"
 #include "yggdrasil/containers/optional.hpp"
+#include "yggdrasil/containers/pair.hpp"
 #include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
 
 #include <cista/containers/optional.h>
+#include <cista/containers/pair.h>
 #include <cista/containers/string.h>
 #include <cista/containers/variant.h>
 #include <cista/containers/vector.h>
@@ -148,6 +151,18 @@ struct formatter<ygg::View<::cista::optional<T>, C>, char>
         if (value.has_value())
             return fmt::format_to(ctx.out(), "{}", value.value());
         return fmt::format_to(ctx.out(), "<nullopt>");
+    }
+};
+
+template<typename C, typename T1, typename T2>
+struct formatter<ygg::View<::cista::pair<T1, T2>, C>, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const ygg::View<::cista::pair<T1, T2>, C>& value, FormatContext& ctx) const
+    {
+        return fmt::format_to(ctx.out(), "({}, {})", value.get_first(), value.get_second());
     }
 };
 

@@ -27,6 +27,7 @@
 #include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/containers/indexed_hash_set.hpp"
 #include "yggdrasil/containers/optional.hpp"
+#include "yggdrasil/containers/pair.hpp"
 #include "yggdrasil/containers/raw_array_pool.hpp"
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/containers/raw_vector_pool.hpp"

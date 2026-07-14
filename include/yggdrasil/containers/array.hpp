@@ -22,6 +22,8 @@
 #include "yggdrasil/containers/block_array_pool.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 
+#include <array>
+#include <cista/containers/array.h>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -29,6 +31,153 @@
 
 namespace ygg
 {
+
+template<typename T, size_t N, typename C>
+class View<std::array<T, N>, C>
+{
+public:
+    using Container = std::array<T, N>;
+
+    View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
+
+    size_t size() const noexcept { return get_data().size(); }
+    bool empty() const noexcept { return get_data().empty(); }
+
+    decltype(auto) operator[](size_t i) const noexcept
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data()[i], get_context());
+        else
+            return get_data()[i];
+    }
+
+    decltype(auto) front() const noexcept
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data().front(), get_context());
+        else
+            return get_data().front();
+    }
+
+    decltype(auto) back() const noexcept
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data().back(), get_context());
+        else
+            return get_data().back();
+    }
+
+    struct const_iterator
+    {
+        using It = typename Container::const_iterator;
+
+        const C* ctx;
+        It it;
+
+        using difference_type = std::ptrdiff_t;
+        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using iterator_category = std::random_access_iterator_tag;
+        using iterator_concept = std::random_access_iterator_tag;
+
+        const_iterator() noexcept : ctx(nullptr), it() {}
+        const_iterator(It it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+
+        decltype(auto) operator*() const noexcept
+        {
+            if constexpr (ViewConcept<T, C>)
+                return make_view(*it, *ctx);
+            else
+                return *it;
+        }
+
+        const_iterator& operator++() noexcept
+        {
+            ++it;
+            return *this;
+        }
+        const_iterator operator++(int) noexcept
+        {
+            auto tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        const_iterator& operator--() noexcept
+        {
+            --it;
+            return *this;
+        }
+        const_iterator operator--(int) noexcept
+        {
+            auto tmp = *this;
+            --(*this);
+            return tmp;
+        }
+
+        const_iterator& operator+=(difference_type n) noexcept
+        {
+            it += n;
+            return *this;
+        }
+        const_iterator& operator-=(difference_type n) noexcept
+        {
+            it -= n;
+            return *this;
+        }
+
+        friend const_iterator operator+(const_iterator it, difference_type n) noexcept
+        {
+            it += n;
+            return it;
+        }
+
+        friend const_iterator operator+(difference_type n, const_iterator it) noexcept
+        {
+            it += n;
+            return it;
+        }
+
+        friend const_iterator operator-(const_iterator it, difference_type n) noexcept
+        {
+            it -= n;
+            return it;
+        }
+
+        friend difference_type operator-(const_iterator lhs, const_iterator rhs) noexcept { return lhs.it - rhs.it; }
+
+        decltype(auto) operator[](difference_type n) const noexcept
+        {
+            if constexpr (ViewConcept<T, C>)
+                return make_view(it[n], *ctx);
+            else
+                return it[n];
+        }
+
+        friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
+
+        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
+
+        friend bool operator<(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it < rhs.it; }
+
+        friend bool operator>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return rhs < lhs; }
+
+        friend bool operator<=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(rhs < lhs); }
+
+        friend bool operator>=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs < rhs); }
+    };
+
+    const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
+
+    const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+
+    const auto& get_data() const noexcept { return *m_handle; }
+    const auto& get_context() const noexcept { return *m_context; }
+    const auto& get_handle() const noexcept { return *m_handle; }
+
+private:
+    const C* m_context;
+    const Container* m_handle;
+};
 
 template<std::unsigned_integral Block, typename Coder, typename C>
 class View<BasicBitPackedArrayView<Block, Coder>, C>
