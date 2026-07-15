@@ -12,7 +12,7 @@ find_package(Nauty QUIET PATHS ${CMAKE_INSTALL_PREFIX} NO_DEFAULT_PATH)
 if(NOT Nauty_FOUND)
     # Nauty's makefile still expects the static archive to exist while building shared libraries.
     # We build both artifacts here, but the installed CMake package exposes Nauty::Nauty as shared.
-    set(NAUTY_SHARED_ARGS --enable-shared --enable-static)
+    set(NAUTY_SHARED_ARGS --enable-shared --enable-static --enable-generic --disable-popcnt)
     set(NAUTY_LIBRARY_TYPE SHARED)
     set(NAUTY_LIBRARY_FILENAME "${CMAKE_SHARED_LIBRARY_PREFIX}nauty${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
