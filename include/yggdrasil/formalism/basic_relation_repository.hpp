@@ -125,27 +125,10 @@ public:
     using container_type = ygg::BlockArraySet<ygg::uint_t, Coder<ygg::uint_t>>;
     using ConstViewType = typename container_type::ConstArrayView;
 
-    BasicRelationRepository(const BasicRelationRepository* parent = nullptr) : m_parent(parent), m_forward(), m_slots() { clear_slots(); }
-    BasicRelationRepository(const BasicRelationRepository& other) = delete;
-    BasicRelationRepository& operator=(const BasicRelationRepository& other) = delete;
-    BasicRelationRepository(BasicRelationRepository&& other) = default;
-    BasicRelationRepository& operator=(BasicRelationRepository&& other) = default;
-
     /**
-     * Common methods.
+     * Local methods access only the current repository layer.
+     * Handle-producing methods return raw handles because the caller already knows the context.
      */
-
-    /// @brief Clear the repository but keep memory allocated.
-    void clear() noexcept { clear_slots(); }
-
-    /**
-     * Local methods
-     */
-
-    static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
-    {
-        return ygg::BlockArraySet<ygg::uint_t, Coder<ygg::uint_t>>::hash(builder.objects);
-    }
 
     std::optional<Index<Row>> find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const noexcept
     {
@@ -248,6 +231,24 @@ public:
             return false;
 
         return m_parent->size(g) > slot->parent_size;
+    }
+
+    /**
+     * Common methods do not depend on lookup scope.
+     */
+
+    BasicRelationRepository(const BasicRelationRepository* parent = nullptr) : m_parent(parent), m_forward(), m_slots() { clear_slots(); }
+    BasicRelationRepository(const BasicRelationRepository& other) = delete;
+    BasicRelationRepository& operator=(const BasicRelationRepository& other) = delete;
+    BasicRelationRepository(BasicRelationRepository&& other) = default;
+    BasicRelationRepository& operator=(BasicRelationRepository&& other) = default;
+
+    /// @brief Clear the repository but keep memory allocated.
+    void clear() noexcept { clear_slots(); }
+
+    static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
+    {
+        return ygg::BlockArraySet<ygg::uint_t, Coder<ygg::uint_t>>::hash(builder.objects);
     }
 };
 }  // namespace ygg::formalism

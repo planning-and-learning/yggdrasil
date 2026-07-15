@@ -20,6 +20,7 @@
 
 #include <cassert>
 #include <optional>
+#include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -40,19 +41,93 @@ private:
     std::tuple<BasicSymbolRepository<Ts>...> m_repositories;
 
 public:
-    SymbolRepository(const SymbolRepository* parent = nullptr) :
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this),
-        m_repositories(BasicSymbolRepository<Ts>(parent ? &std::get<BasicSymbolRepository<Ts>>(parent->m_repositories) : nullptr)...)
+    /**
+     * Global methods traverse the current repository layer and its parent hierarchy.
+     * Handle-producing methods return views that retain the discovered canonical context.
+     */
+
+    template<typename T>
+    std::optional<View<Index<T>, SymbolRepository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (auto index_or_nullopt = current->template get<T>().find_local_with_hash(builder, h))
+                return View<Index<T>, SymbolRepository>(*index_or_nullopt, *current);
+
+            current = current->m_parent;
+        }
+
+        return std::nullopt;
     }
 
-    SymbolRepository(const SymbolRepository&) = delete;
-    SymbolRepository& operator=(const SymbolRepository&) = delete;
-    SymbolRepository(SymbolRepository&&) = delete;
-    SymbolRepository& operator=(SymbolRepository&&) = delete;
+    template<typename T>
+    std::optional<View<Index<T>, SymbolRepository>> find(const Data<T>& builder) const noexcept
+    {
+        return find_with_hash(builder, SymbolRepository::hash(builder));
+    }
 
-    const auto& get_root() const noexcept { return *m_root; }
+    template<typename T>
+    std::pair<View<Index<T>, SymbolRepository>, bool> get_or_create(Data<T>& builder)
+    {
+        const auto h = SymbolRepository::hash(builder);
+        if (auto view_or_nullopt = find_with_hash(builder, h))
+            return { *view_or_nullopt, false };
+
+        assert(!get<T>().exists_parent_mutation()
+               && "Integrity error: Parent SymbolRepository modified after child "
+                  "branching!");
+
+        const auto [index, success] = get<T>().get_or_create_local_with_hash(builder, h);
+        return { View<Index<T>, SymbolRepository>(index, *this), success };
+    }
+
+    template<typename T>
+    const Data<T>& operator[](Index<T> index) const
+    {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (current->template get<T>().is_local(index))
+                return current->template get<T>().at_local(index);
+
+            current = current->m_parent;
+        }
+
+        throw std::out_of_range("Symbol index not found in any repository layer.");
+    }
+
+    template<typename T>
+    const Data<T>& front() const
+    {
+        return (*this)[Index<T>(0)];
+    }
+
+    template<typename T>
+    size_t size() const noexcept
+    {
+        return get<T>().size();
+    }
+
+    template<typename T>
+    const SymbolRepository& get_canonical_context(Index<T> index) const
+    {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (current->template get<T>().is_local(index))
+                return *current;
+
+            current = current->m_parent;
+        }
+
+        throw std::out_of_range("Symbol index not found in any repository layer.");
+    }
+
+    /**
+     * Local methods access only the current repository layer.
+     * Handle-producing methods return raw handles because the caller already knows the context.
+     */
 
     template<typename T>
     BasicSymbolRepository<T>& get() noexcept
@@ -65,21 +140,6 @@ public:
     {
         return std::get<BasicSymbolRepository<T>>(m_repositories);
     }
-
-    void clear() noexcept
-    {
-        std::apply([](auto&... repos) { (repos.clear(), ...); }, m_repositories);
-    }
-
-    template<typename T>
-    static size_t hash(const Data<T>& builder) noexcept
-    {
-        return BasicSymbolRepository<T>::hash(builder);
-    }
-
-    /**
-     * Local
-     */
 
     template<typename T>
     auto find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
@@ -124,12 +184,6 @@ public:
     }
 
     template<typename T>
-    size_t size() const noexcept
-    {
-        return get<T>().size();
-    }
-
-    template<typename T>
     size_t parent_size() const noexcept
     {
         return get<T>().parent_size();
@@ -145,6 +199,35 @@ public:
     bool exists_parent_mutation() const noexcept
     {
         return get<T>().exists_parent_mutation();
+    }
+
+    /**
+     * Common methods do not depend on lookup scope.
+     */
+
+    SymbolRepository(const SymbolRepository* parent = nullptr) :
+        m_parent(parent),
+        m_root(m_parent ? m_parent->m_root : this),
+        m_repositories(BasicSymbolRepository<Ts>(parent ? &std::get<BasicSymbolRepository<Ts>>(parent->m_repositories) : nullptr)...)
+    {
+    }
+
+    SymbolRepository(const SymbolRepository&) = delete;
+    SymbolRepository& operator=(const SymbolRepository&) = delete;
+    SymbolRepository(SymbolRepository&&) = delete;
+    SymbolRepository& operator=(SymbolRepository&&) = delete;
+
+    const auto& get_root() const noexcept { return *m_root; }
+
+    void clear() noexcept
+    {
+        std::apply([](auto&... repos) { (repos.clear(), ...); }, m_repositories);
+    }
+
+    template<typename T>
+    static size_t hash(const Data<T>& builder) noexcept
+    {
+        return BasicSymbolRepository<T>::hash(builder);
     }
 };
 

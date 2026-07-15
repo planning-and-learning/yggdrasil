@@ -217,6 +217,69 @@ TEST(YggdrasilTests, CommonSymbolRepositoryTracksParentAndLocalSize)
     EXPECT_EQ(child.size<RepositoryTypesElement>(), 2);
 }
 
+TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
+{
+    using Repository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
+    static_assert(ygg::CanonicalizableContext<ygg::Index<RepositoryTypesElement>, Repository>);
+    static_assert(ygg::ViewConcept<ygg::Index<RepositoryTypesElement>, Repository>);
+
+    auto root = Repository();
+    const auto missing = ygg::Index<RepositoryTypesElement>(0);
+    auto data = ygg::Data<RepositoryTypesElement> {};
+    data.value = 7;
+    const auto hash = Repository::hash(data);
+
+    EXPECT_EQ(root.find_with_hash(data, hash), std::nullopt);
+    EXPECT_EQ(root.find(data), std::nullopt);
+    EXPECT_THROW(root[missing], std::out_of_range);
+    EXPECT_THROW(root.front<RepositoryTypesElement>(), std::out_of_range);
+    EXPECT_THROW(root.get_canonical_context(missing), std::out_of_range);
+
+    const auto [view, created] = root.get_or_create(data);
+
+    EXPECT_TRUE(created);
+    EXPECT_EQ(view.get_index(), ygg::Index<RepositoryTypesElement>(0));
+    EXPECT_EQ(view.get_data().value, 7);
+    EXPECT_EQ(&view.get_context(), &root);
+    const auto root_found = root.find_with_hash(data, hash);
+    ASSERT_TRUE(root_found.has_value());
+    EXPECT_EQ(root_found->get_index(), view.get_index());
+    EXPECT_EQ(&root_found->get_context(), &root);
+    EXPECT_EQ(root[view.get_index()].value, 7);
+    EXPECT_EQ(root.front<RepositoryTypesElement>().value, 7);
+    EXPECT_EQ(&root.get_canonical_context(view.get_index()), &root);
+
+    auto child = Repository(&root);
+    const auto [child_view, child_created] = child.get_or_create(data);
+
+    EXPECT_FALSE(child_created);
+    EXPECT_EQ(child_view.get_index(), view.get_index());
+    EXPECT_EQ(&child_view.get_context(), &root);
+    const auto child_found = child.find(data);
+    ASSERT_TRUE(child_found.has_value());
+    EXPECT_EQ(child_found->get_index(), view.get_index());
+    EXPECT_EQ(&child_found->get_context(), &root);
+    EXPECT_EQ(child[view.get_index()].value, 7);
+    EXPECT_EQ(child.front<RepositoryTypesElement>().value, 7);
+    EXPECT_EQ(&child.get_canonical_context(view.get_index()), &root);
+    EXPECT_EQ(&ygg::make_view(view.get_index(), child).get_context(), &root);
+
+    auto child_data = ygg::Data<RepositoryTypesElement> {};
+    child_data.value = 11;
+    const auto [local_view, local_created] = child.get_or_create(child_data);
+
+    EXPECT_TRUE(local_created);
+    EXPECT_EQ(local_view.get_index(), ygg::Index<RepositoryTypesElement>(1));
+    EXPECT_EQ(&local_view.get_context(), &child);
+    EXPECT_EQ(root.find(child_data), std::nullopt);
+    const auto local_found = child.find(child_data);
+    ASSERT_TRUE(local_found.has_value());
+    EXPECT_EQ(local_found->get_index(), local_view.get_index());
+    EXPECT_EQ(&local_found->get_context(), &child);
+    EXPECT_EQ(child[local_view.get_index()].value, 11);
+    EXPECT_EQ(&child.get_canonical_context(local_view.get_index()), &child);
+}
+
 TEST(YggdrasilTests, CommonBasicRelationRepositoryFrontLocalIsChecked)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
@@ -247,9 +310,10 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
     using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
     using Repository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
+    static_assert(ygg::CanonicalizableContext<ygg::Index<Binding>, Repository>);
+    static_assert(ygg::ViewConcept<ygg::Index<Binding>, Repository>);
 
     auto root = Repository();
-    auto child = Repository(&root);
     const auto relation = ygg::Index<RepositoryTypesRelation>(0);
     const auto missing = ygg::Index<Binding> { relation, ygg::Index<ygg::formalism::Row>(0) };
 
@@ -260,29 +324,58 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
 
     EXPECT_EQ(root.find(data), std::nullopt);
     EXPECT_THROW(root[missing], std::out_of_range);
+    EXPECT_THROW(root.front(relation), std::out_of_range);
     EXPECT_THROW(root.get_canonical_context(missing), std::out_of_range);
 
-    const auto [index, created] = root.get_or_create(data);
+    const auto [view, created] = root.get_or_create(data);
 
     EXPECT_TRUE(created);
     const auto root_found = root.find(data);
     ASSERT_TRUE(root_found.has_value());
-    EXPECT_EQ(root_found->relation, index.relation);
-    EXPECT_EQ(root_found->row, index.row);
-    EXPECT_EQ(root[index].size(), 2);
-    EXPECT_EQ(&root.get_canonical_context(index), &root.get<RepositoryTypesRelation>());
+    EXPECT_EQ(root_found->get_index().relation, view.get_index().relation);
+    EXPECT_EQ(root_found->get_index().row, view.get_index().row);
+    EXPECT_EQ(&root_found->get_context(), &root);
+    EXPECT_EQ(view.get_data().size(), 2);
+    EXPECT_EQ(view.get_relation(), relation);
+    EXPECT_EQ(view.get_objects().size(), 2);
+    EXPECT_EQ(std::get<1>(view.identifying_members()), &root);
+    EXPECT_EQ(&view.get_context(), &root);
+    EXPECT_EQ(root[view.get_index()].size(), 2);
+    EXPECT_EQ(root.front(relation).size(), 2);
+    EXPECT_EQ(&root.get_canonical_context(view.get_index()), &root);
 
-    const auto [child_index, child_created] = child.get_or_create(data);
+    auto child = Repository(&root);
+    const auto [child_view, child_created] = child.get_or_create(data);
 
     EXPECT_FALSE(child_created);
-    EXPECT_EQ(child_index.relation, index.relation);
-    EXPECT_EQ(child_index.row, index.row);
+    EXPECT_EQ(child_view.get_index().relation, view.get_index().relation);
+    EXPECT_EQ(child_view.get_index().row, view.get_index().row);
+    EXPECT_EQ(&child_view.get_context(), &root);
     const auto child_found = child.find(data);
     ASSERT_TRUE(child_found.has_value());
-    EXPECT_EQ(child_found->relation, index.relation);
-    EXPECT_EQ(child_found->row, index.row);
-    EXPECT_EQ(child[index].size(), 2);
-    EXPECT_EQ(&child.get_canonical_context(index), &root.get<RepositoryTypesRelation>());
+    EXPECT_EQ(child_found->get_index().relation, view.get_index().relation);
+    EXPECT_EQ(child_found->get_index().row, view.get_index().row);
+    EXPECT_EQ(&child_found->get_context(), &root);
+    EXPECT_EQ(child[view.get_index()].size(), 2);
+    EXPECT_EQ(child.front(relation).size(), 2);
+    EXPECT_EQ(&child.get_canonical_context(view.get_index()), &root);
+    EXPECT_EQ(&ygg::make_view(view.get_index(), child).get_context(), &root);
+
+    auto child_objects = ygg::IndexList<Object> {};
+    child_objects.push_back(ygg::Index<Object>(1));
+    child_objects.push_back(ygg::Index<Object>(0));
+    const auto child_data = ygg::Data<Binding>(relation, 2, child_objects);
+    const auto [local_view, local_created] = child.get_or_create(child_data);
+
+    EXPECT_TRUE(local_created);
+    EXPECT_EQ(local_view.get_index().row, ygg::Index<ygg::formalism::Row>(1));
+    EXPECT_EQ(&local_view.get_context(), &child);
+    EXPECT_EQ(local_view.get_data().size(), 2);
+    EXPECT_EQ(root.find(child_data), std::nullopt);
+    const auto local_found = child.find(child_data);
+    ASSERT_TRUE(local_found.has_value());
+    EXPECT_EQ(local_found->get_index().row, local_view.get_index().row);
+    EXPECT_EQ(&local_found->get_context(), &child);
 }
 
 TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
@@ -294,6 +387,11 @@ TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
 
     const auto rows = Rows { ygg::Index<ygg::formalism::Row>(2), ygg::Index<ygg::formalism::Row>(3) };
     const auto context = RepositoryTypesContext();
+    const auto binding_index = ygg::Index<Binding> { relation, rows.front() };
+    const auto binding_view = ygg::View<ygg::Index<Binding>, RepositoryTypesContext>(binding_index, context);
+    EXPECT_TRUE(binding_view.get_data().empty());
+    EXPECT_EQ(binding_view.get_relation(), relation);
+    EXPECT_EQ(std::get<1>(binding_view.identifying_members()), 0);
 
     using ForwardRange = ygg::formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, Rows>;
     const auto forward_range = ForwardRange { relation, rows };
@@ -343,6 +441,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
     auto repository = Repository(0);
 
     EXPECT_THROW(repository[ygg::Index<RepositoryTypesElement>(0)], std::out_of_range);
+    EXPECT_THROW(repository.front<RepositoryTypesElement>(), std::out_of_range);
     EXPECT_THROW(repository.get_canonical_context(ygg::Index<RepositoryTypesElement>(0)), std::out_of_range);
     EXPECT_THROW(ygg::make_view(ygg::Index<RepositoryTypesElement>(0), repository), std::out_of_range);
 
@@ -352,6 +451,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
 
     EXPECT_TRUE(created);
     EXPECT_EQ(repository[view.get_index()].value, 7);
+    EXPECT_EQ(repository.front<RepositoryTypesElement>().value, 7);
     EXPECT_EQ(&repository.get_canonical_context(view.get_index()), &repository);
     EXPECT_THROW(repository[ygg::Index<RepositoryTypesElement>(1)], std::out_of_range);
     EXPECT_THROW(ygg::make_view(ygg::Index<RepositoryTypesElement>(1), repository), std::out_of_range);

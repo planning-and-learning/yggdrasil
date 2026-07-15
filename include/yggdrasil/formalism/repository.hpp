@@ -47,7 +47,10 @@ private:
     size_t m_index;
 
     /**
-     * SymbolRepository forwarding.
+     * Global methods traverse the current repository layer and its parent hierarchy.
+     * Handle-producing methods return views that retain the discovered canonical context.
+     *
+     * Symbol operations.
      */
 
     template<typename T>
@@ -87,7 +90,10 @@ private:
     }
 
     /**
-     * RelationRepository forwarding
+     * Global methods traverse the current repository layer and its parent hierarchy.
+     * Handle-producing methods return views that retain the discovered canonical context.
+     *
+     * Relation operations.
      */
 
     template<typename T>
@@ -139,31 +145,11 @@ private:
     }
 
 public:
-    Repository(size_t index, const Repository* parent = nullptr) :
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this),
-        m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
-        m_relation_repository(m_parent ? &m_parent->m_relation_repository : nullptr),
-        m_index(index)
-    {
-        clear();
-    }
-    Repository(const Repository& other) = delete;
-    Repository& operator=(const Repository& other) = delete;
-    Repository(Repository&& other) = delete;
-    Repository& operator=(Repository&& other) = delete;
-
-    const auto& get_index() const noexcept { return m_index; }
-    const auto& get_root() const noexcept { return *m_root; }
-
-    void clear() noexcept
-    {
-        m_symbol_repository.clear();
-        m_relation_repository.clear();
-    }
-
     /**
-     * SymbolRepository forwarding.
+     * Global methods traverse the current repository layer and its parent hierarchy.
+     * Handle-producing methods return views that retain the discovered canonical context.
+     *
+     * Symbol operations.
      */
 
     template<typename T>
@@ -234,7 +220,10 @@ public:
     }
 
     /**
-     * RelationRepository forwarding
+     * Global methods traverse the current repository layer and its parent hierarchy.
+     * Handle-producing methods return views that retain the discovered canonical context.
+     *
+     * Relation operations.
      */
 
     template<typename T>
@@ -298,6 +287,33 @@ public:
         }
 
         throw std::out_of_range("Relation binding index not found in any repository layer.");
+    }
+
+    /**
+     * Common methods do not depend on lookup scope.
+     */
+
+    Repository(size_t index, const Repository* parent = nullptr) :
+        m_parent(parent),
+        m_root(m_parent ? m_parent->m_root : this),
+        m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
+        m_relation_repository(m_parent ? &m_parent->m_relation_repository : nullptr),
+        m_index(index)
+    {
+        clear();
+    }
+    Repository(const Repository& other) = delete;
+    Repository& operator=(const Repository& other) = delete;
+    Repository(Repository&& other) = delete;
+    Repository& operator=(Repository&& other) = delete;
+
+    const auto& get_index() const noexcept { return m_index; }
+    const auto& get_root() const noexcept { return *m_root; }
+
+    void clear() noexcept
+    {
+        m_symbol_repository.clear();
+        m_relation_repository.clear();
     }
 };
 

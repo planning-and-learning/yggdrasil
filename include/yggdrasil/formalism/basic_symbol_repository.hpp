@@ -78,30 +78,9 @@ private:
     }
 
 public:
-    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr) :
-        m_parent(parent),
-        m_arena(std::make_unique<ygg::buffer::SegmentedBuffer>()),
-        m_buffer(std::make_unique<ygg::buffer::Buffer>()),
-        m_slot(*m_buffer, *m_arena)
-    {
-        clear_slot();
-    }
-
-    BasicSymbolRepository(const BasicSymbolRepository&) = delete;
-    BasicSymbolRepository& operator=(const BasicSymbolRepository&) = delete;
-    BasicSymbolRepository(BasicSymbolRepository&&) noexcept = default;
-    BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept = default;
-
-    void clear() noexcept
-    {
-        m_arena->clear();
-        clear_slot();
-    }
-
-    static size_t hash(const Data<T>& builder) noexcept { return Slot<T>::hash(builder); }
-
     /**
-     * Local methods
+     * Local methods access only the current repository layer.
+     * Handle-producing methods return raw handles because the caller already knows the context.
      */
 
     std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
@@ -163,6 +142,32 @@ public:
 
         return m_parent->size() > m_slot.parent_size;
     }
+
+    /**
+     * Common methods do not depend on lookup scope.
+     */
+
+    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr) :
+        m_parent(parent),
+        m_arena(std::make_unique<ygg::buffer::SegmentedBuffer>()),
+        m_buffer(std::make_unique<ygg::buffer::Buffer>()),
+        m_slot(*m_buffer, *m_arena)
+    {
+        clear_slot();
+    }
+
+    BasicSymbolRepository(const BasicSymbolRepository&) = delete;
+    BasicSymbolRepository& operator=(const BasicSymbolRepository&) = delete;
+    BasicSymbolRepository(BasicSymbolRepository&&) noexcept = default;
+    BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept = default;
+
+    void clear() noexcept
+    {
+        m_arena->clear();
+        clear_slot();
+    }
+
+    static size_t hash(const Data<T>& builder) noexcept { return Slot<T>::hash(builder); }
 };
 }  // namespace ygg::formalism
 
