@@ -13,6 +13,8 @@ Usage (cibuildwheel repair-wheel-command):
         [--require-archs {delocate_archs}] --dest-dir {dest_dir} {wheel}
 """
 
+from __future__ import annotations
+
 import argparse
 import importlib
 import os

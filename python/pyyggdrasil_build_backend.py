@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import csv
 import hashlib
@@ -11,11 +13,12 @@ import tempfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Union
 
 from scikit_build_core import build as scikit_build
 
 # PEP 517 config_settings: keys map to a string or a list of strings.
-ConfigSettings = dict[str, str | list[str]]
+ConfigSettings = dict[str, Union[str, list[str]]]
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent

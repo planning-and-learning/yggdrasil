@@ -9,6 +9,8 @@ pyyggdrasil's own backend stays standalone: it cannot import pyyggdrasil while
 building it.
 """
 
+from __future__ import annotations
+
 import base64
 import csv
 import hashlib
@@ -23,11 +25,12 @@ import zipfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Union
 
 from scikit_build_core import build as scikit_build
 
 # PEP 517 config_settings: keys map to a string or a list of strings.
-ConfigSettings = dict[str, str | list[str]]
+ConfigSettings = dict[str, Union[str, list[str]]]
 
 
 def _is_disabled(value: str) -> bool:
