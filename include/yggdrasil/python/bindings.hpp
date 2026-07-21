@@ -20,10 +20,11 @@
 
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <nanobind/nanobind.h>
+#include <nanobind/operators.h>
 #include <nanobind/stl/string.h>
 #include <string>
 
@@ -40,34 +41,42 @@ nb::class_<V>& add_print(nb::class_<V>& cls)
 }
 
 template<typename V>
+    requires Identifiable<V>
+nb::class_<V>& add_comparison(nb::class_<V>& cls)
+{
+    // Nanobind adds __eq__ after type creation, so mirror Python's default: unhashable unless add_hash() opts back in.
+    cls.attr("__hash__") = nb::none();
+
+    return cls  //
+        .def(nb::self == nb::self)
+        .def(nb::self < nb::self)
+        .def(nb::self <= nb::self)
+        .def(nb::self > nb::self)
+        .def(nb::self >= nb::self);
+}
+
+template<typename V>
 nb::class_<V>& add_hash(nb::class_<V>& cls)
 {
-    return cls  //
-        .def("__eq__", [](const V& self, const V& other) { return EqualTo<V> {}(self, other); })
-        .def("__hash__", [](const V& self) { return Hash<V> {}(self); });
+    return cls.def("__hash__", [](const V& self) { return Hash<V> {}(self); });
 }
 
 template<typename T>
 void bind_index(nb::module_& m, const std::string& name)
 {
-    nb::class_<T>(m, name.c_str())  //
-        .def(nb::init<>())          // default -> MAX sentinel
+    auto cls = nb::class_<T>(m, name.c_str());
+    cls.def(nb::init<>())  // default -> MAX sentinel
         .def(nb::init<uint_t>(), nb::arg("index"))
         .def("__int__", [](const T& i) { return static_cast<uint_t>(i); })
         .def("__index__", [](const T& i) { return static_cast<uint_t>(i); })
-        .def("__hash__", [](const T& i) { return static_cast<uint_t>(i); })
 
         .def("value", &T::get_value)
         .def("is_max", &T::is_max)
         .def_static("max", &T::max)
-        .def_static("MAX", []() { return T::MAX; })
+        .def_static("MAX", []() { return T::MAX; });
 
-        .def("__eq__", [](const T& a, const T& b) { return a == b; })
-        .def("__lt__", [](const T& a, const T& b) { return a < b; })
-        .def("__le__", [](const T& a, const T& b) { return a <= b; })
-        .def("__gt__", [](const T& a, const T& b) { return a > b; })
-        .def("__ge__", [](const T& a, const T& b) { return a >= b; })
-
+    add_comparison(cls);
+    cls.def("__hash__", [](const T& i) { return static_cast<uint_t>(i); })
         .def("__repr__", [name](const T& i) { return name + "(" + std::to_string(static_cast<uint_t>(i)) + ")"; });
 }
 
@@ -76,25 +85,20 @@ void bind_fixed_uint(nb::module_& m, const std::string& name)
 {
     using value_type = typename T::value_type;
 
-    nb::class_<T>(m, name.c_str())
-        .def(nb::init<>())  // default -> MAX sentinel
+    auto cls = nb::class_<T>(m, name.c_str());
+    cls.def(nb::init<>())  // default -> MAX sentinel
         .def(nb::init<value_type>(), nb::arg("value"))
 
         .def("__int__", [](const T& x) { return static_cast<value_type>(x); })
         .def("__index__", [](const T& x) { return static_cast<value_type>(x); })
-        .def("__hash__", [](const T& x) { return static_cast<value_type>(x); })
 
         .def("value", &T::value)
         .def("is_max", &T::is_max)
         .def_static("max", &T::max)
-        .def_static("MAX", []() { return T::MAX; })
+        .def_static("MAX", []() { return T::MAX; });
 
-        .def("__eq__", [](const T& a, const T& b) { return a == b; })
-        .def("__lt__", [](const T& a, const T& b) { return a < b; })
-        .def("__le__", [](const T& a, const T& b) { return a <= b; })
-        .def("__gt__", [](const T& a, const T& b) { return a > b; })
-        .def("__ge__", [](const T& a, const T& b) { return a >= b; })
-
+    add_comparison(cls);
+    cls.def("__hash__", [](const T& x) { return static_cast<value_type>(x); })
         .def(
             "__add__",
             [](const T& a, value_type b) { return a + b; },

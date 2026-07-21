@@ -16,20 +16,20 @@ import pytest
 import pyyggdrasil
 
 
-def _require_cmake():
+def _require_cmake() -> str:
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("cmake is required for the fix-runtime-paths contract test")
     return cmake
 
 
-def _module():
+def _module() -> Path:
     module = Path(pyyggdrasil.cmake_dir()) / "yggdrasilFixRuntimePaths.cmake"
     assert module.is_file(), f"module missing from wheel: {module}"
     return module
 
 
-def test_fix_runtime_paths_noop_without_libraries(tmp_path):
+def test_fix_runtime_paths_noop_without_libraries(tmp_path: Path) -> None:
     cmake = _require_cmake()
     module = _module()
     (tmp_path / "prefix" / "pkg" / "lib").mkdir(parents=True)  # exists but empty
@@ -51,7 +51,7 @@ def test_fix_runtime_paths_noop_without_libraries(tmp_path):
     assert "fix-runtime-paths noop OK" in (result.stdout + result.stderr)
 
 
-def test_fix_runtime_paths_sets_origin_rpath(tmp_path):
+def test_fix_runtime_paths_sets_origin_rpath(tmp_path: Path) -> None:
     cmake = _require_cmake()
     module = _module()
     patchelf = shutil.which("patchelf")

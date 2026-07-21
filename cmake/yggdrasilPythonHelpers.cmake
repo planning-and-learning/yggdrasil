@@ -27,17 +27,17 @@ function(yggdrasil_find_python_native_prefix python_package out_prefix_var)
     return()
   endif()
 
-  if(NOT Python3_EXECUTABLE AND Python_EXECUTABLE)
-    set(Python3_EXECUTABLE "${Python_EXECUTABLE}")
+  if(NOT Python_EXECUTABLE AND Python3_EXECUTABLE)
+    set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
   endif()
 
-  find_package(Python3 QUIET COMPONENTS Interpreter)
-  if(NOT Python3_Interpreter_FOUND)
+  find_package(Python 3.9 QUIET COMPONENTS Interpreter)
+  if(NOT Python_Interpreter_FOUND)
     return()
   endif()
 
   execute_process(
-    COMMAND "${Python3_EXECUTABLE}" -c
+    COMMAND "${Python_EXECUTABLE}" -c
             "import ${python_package} as m; print(getattr(m, 'cmake_prefix', m.native_prefix)())"
     RESULT_VARIABLE native_result
     OUTPUT_VARIABLE native_prefix

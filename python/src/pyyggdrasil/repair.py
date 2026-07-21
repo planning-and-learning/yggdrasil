@@ -19,20 +19,22 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 
-def provider_library_dirs(provider_names):
+def provider_library_dirs(provider_names: Sequence[str]) -> list[Path]:
     """Return the native library directories of the given provider packages."""
-    library_dirs = []
+    library_dirs: list[Path] = []
     for name in provider_names:
         module = importlib.import_module(name)
-        prefix = Path(module.native_prefix())
+        native_prefix: Callable[[], str] = module.native_prefix
+        prefix = Path(native_prefix())
         library_dirs.extend(path for path in sorted(prefix.glob("lib*")) if path.is_dir())
     return library_dirs
 
 
-def main(argv=None):
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--providers",
@@ -69,7 +71,8 @@ def main(argv=None):
     else:
         # Prefer the console script (always on PATH in manylinux images); fall
         # back to the module when auditwheel is installed in this interpreter.
-        auditwheel = [shutil.which("auditwheel")] if shutil.which("auditwheel") else [sys.executable, "-m", "auditwheel"]
+        auditwheel_script = shutil.which("auditwheel")
+        auditwheel = [auditwheel_script] if auditwheel_script else [sys.executable, "-m", "auditwheel"]
         command = [*auditwheel, "repair", "-w", args.dest_dir, args.wheel]
         # Pass every filename in the provider lib dirs (including the SONAME
         # symlinks such as libtbb.so.12), so NEEDED entries stay unmangled.

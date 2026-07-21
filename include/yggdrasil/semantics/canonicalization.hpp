@@ -19,8 +19,7 @@
 #define YGG_SEMANTICS_CANONICALIZATION_HPP_
 
 #include "yggdrasil/core/types.hpp"
-#include "yggdrasil/semantics/comparators.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
 
 #include <algorithm>
 #include <cista/containers/optional.h>
@@ -46,13 +45,13 @@ std::string fmt_key(const C& context, const Element& element)
 template<typename T>
 bool is_canonical(const IndexList<T>& list)
 {
-    return std::is_sorted(list.begin(), list.end(), Less<Index<T>> {});
+    return std::is_sorted(list.begin(), list.end());
 }
 
 template<typename T>
 bool is_canonical(const DataList<T>& list)
 {
-    return std::is_sorted(list.begin(), list.end(), Less<Data<T>> {});
+    return std::is_sorted(list.begin(), list.end());
 }
 
 template<typename T>
@@ -65,18 +64,18 @@ template<typename T>
 void canonicalize(IndexList<T>& list)
 {
     if (!is_canonical(list))
-        std::sort(list.begin(), list.end(), Less<Index<T>> {});
+        std::sort(list.begin(), list.end());
 
-    list.erase(std::unique(list.begin(), list.end(), EqualTo<Index<T>> {}), list.end());
+    list.erase(std::unique(list.begin(), list.end()), list.end());
 }
 
 template<typename T>
 void canonicalize(DataList<T>& list)
 {
     if (!is_canonical(list))
-        std::sort(list.begin(), list.end(), Less<Data<T>> {});
+        std::sort(list.begin(), list.end());
 
-    list.erase(std::unique(list.begin(), list.end(), EqualTo<Data<T>> {}), list.end());
+    list.erase(std::unique(list.begin(), list.end()), list.end());
 }
 
 template<typename T>

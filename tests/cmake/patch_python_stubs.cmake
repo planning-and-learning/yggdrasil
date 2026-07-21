@@ -5,19 +5,22 @@ set(test_destdir "${YGGDRASIL_TEST_BINARY_DIR}/patch_python_stubs/destdir")
 set(stub_root "${test_destdir}${test_prefix}/pyyggdrasil")
 set(stub_file "${stub_root}/api.pyi")
 set(private_stub_root "${stub_root}/_pyyggdrasil")
+set(abi_private_stub_root "${stub_root}/_pyyggdrasil.cpython-313-x86_64-linux-gnu")
 set(private_init_stub "${private_stub_root}/__init__.pyi")
 set(private_core_stub "${private_stub_root}/core.pyi")
 set(private_flat_stub "${private_stub_root}/flat.pyi")
 set(private_execution_stub "${private_stub_root}/execution.pyi")
+set(abi_private_formalism_stub "${abi_private_stub_root}/formalism.pyi")
 set(public_init_stub "${stub_root}/__init__.pyi")
 set(public_core_stub "${stub_root}/core.pyi")
 set(public_core_init_stub "${stub_root}/core/__init__.pyi")
 set(public_flat_stub "${stub_root}/flat.pyi")
 set(public_execution_init_stub "${stub_root}/execution/__init__.pyi")
+set(public_formalism_init_stub "${stub_root}/formalism/__init__.pyi")
 
 file(REMOVE_RECURSE "${test_destdir}${test_prefix}")
 
-file(MAKE_DIRECTORY "${stub_root}" "${private_stub_root}" "${stub_root}/core" "${stub_root}/execution")
+file(MAKE_DIRECTORY "${stub_root}" "${private_stub_root}" "${abi_private_stub_root}" "${stub_root}/core" "${stub_root}/execution" "${stub_root}/formalism")
 file(WRITE "${stub_file}" [=[value: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
 ]=])
 file(WRITE "${private_init_stub}" [=[private root: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
@@ -29,6 +32,8 @@ file(WRITE "${private_core_stub}" [=[value: pyyggdrasil._pyyggdrasil.execution.E
 file(WRITE "${private_flat_stub}" [=[private flat: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
 ]=])
 file(WRITE "${private_execution_stub}" [=[private execution: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
+]=])
+file(WRITE "${abi_private_formalism_stub}" [=[private formalism: pyyggdrasil._pyyggdrasil.formalism.Object
 ]=])
 file(WRITE "${public_flat_stub}" [=[public flat: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
 ]=])
@@ -49,6 +54,9 @@ endif()
 if(EXISTS "${private_stub_root}")
     message(FATAL_ERROR "Private stub package was not removed: ${private_stub_root}")
 endif()
+if(EXISTS "${abi_private_stub_root}")
+    message(FATAL_ERROR "ABI-suffixed private stub package was not removed: ${abi_private_stub_root}")
+endif()
 
 file(READ "${public_init_stub}" patched_init_stub)
 if(NOT patched_init_stub STREQUAL [=[public root: pyyggdrasil.execution.ExecutionContext
@@ -66,6 +74,9 @@ endif()
 
 if(NOT EXISTS "${public_flat_stub}")
     message(FATAL_ERROR "Private flat.pyi was not moved to the public package.")
+endif()
+if(NOT EXISTS "${public_formalism_init_stub}")
+    message(FATAL_ERROR "ABI-suffixed private formalism.pyi was not moved to the public package __init__.pyi.")
 endif()
 
 if(EXISTS "${stub_root}/execution.pyi")
@@ -88,4 +99,10 @@ file(READ "${public_execution_init_stub}" patched_execution_stub)
 if(NOT patched_execution_stub STREQUAL [=[public execution: pyyggdrasil.execution.ExecutionContext
 ]=])
     message(FATAL_ERROR "Existing public execution stub should be patched but not overwritten. Got: ${patched_execution_stub}")
+endif()
+
+file(READ "${public_formalism_init_stub}" patched_formalism_stub)
+if(NOT patched_formalism_stub STREQUAL [=[private formalism: pyyggdrasil.formalism.Object
+]=])
+    message(FATAL_ERROR "Moved ABI-suffixed private package stub was not patched. Got: ${patched_formalism_stub}")
 endif()

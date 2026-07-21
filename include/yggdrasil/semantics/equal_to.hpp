@@ -39,7 +39,7 @@ namespace ygg
 {
 
 template<std::ranges::input_range LhsRange, std::ranges::input_range RhsRange>
-inline bool equal_range(LhsRange&& lhs, RhsRange&& rhs) noexcept;
+constexpr bool equal_range(LhsRange&& lhs, RhsRange&& rhs) noexcept;
 
 /// @brief `EqualTo` is our custom equality comparator, like std::equal_to.
 ///
@@ -48,7 +48,7 @@ inline bool equal_range(LhsRange&& lhs, RhsRange&& rhs) noexcept;
 template<typename T = void>
 struct EqualTo
 {
-    bool operator()(const T& lhs, const T& rhs) const noexcept { return std::equal_to<T> {}(lhs, rhs); }
+    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept { return std::equal_to<T> {}(lhs, rhs); }
 };
 
 template<>
@@ -57,7 +57,7 @@ struct EqualTo<void>
     using is_transparent = void;
 
     template<typename T, typename U>
-    bool operator()(const T& lhs, const U& rhs) const noexcept
+    constexpr bool operator()(const T& lhs, const U& rhs) const noexcept
     {
         return EqualTo<std::remove_cvref_t<T>> {}(lhs, rhs);
     }
@@ -66,10 +66,13 @@ struct EqualTo<void>
 template<std::floating_point T>
 struct EqualTo<T>
 {
-    bool operator()(const T& lhs, const T& rhs) const noexcept
+    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
     {
-        if (std::isnan(lhs) || std::isnan(rhs))
-            return std::isnan(lhs) && std::isnan(rhs);
+        const auto lhs_nan = std::is_constant_evaluated() ? lhs != lhs : std::isnan(lhs);
+        const auto rhs_nan = std::is_constant_evaluated() ? rhs != rhs : std::isnan(rhs);
+
+        if (lhs_nan || rhs_nan)
+            return lhs_nan && rhs_nan;
 
         return std::equal_to<T> {}(lhs, rhs);
     }
@@ -78,13 +81,13 @@ struct EqualTo<T>
 template<typename T, size_t N>
 struct EqualTo<std::array<T, N>>
 {
-    bool operator()(const std::array<T, N>& lhs, const std::array<T, N>& rhs) const noexcept { return equal_range(lhs, rhs); }
+    constexpr bool operator()(const std::array<T, N>& lhs, const std::array<T, N>& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
 template<typename T>
 struct EqualTo<std::reference_wrapper<T>>
 {
-    bool operator()(const std::reference_wrapper<T>& lhs, const std::reference_wrapper<T>& rhs) const noexcept
+    constexpr bool operator()(const std::reference_wrapper<T>& lhs, const std::reference_wrapper<T>& rhs) const noexcept
     {
         return EqualTo<std::remove_cvref_t<T>> {}(lhs.get(), rhs.get());
     }
@@ -126,13 +129,13 @@ struct EqualTo<gtl::btree_map<Key, T, Compare, Allocator>>
 template<typename T, typename Allocator>
 struct EqualTo<std::vector<T, Allocator>>
 {
-    bool operator()(const std::vector<T, Allocator>& lhs, const std::vector<T, Allocator>& rhs) const noexcept { return equal_range(lhs, rhs); }
+    constexpr bool operator()(const std::vector<T, Allocator>& lhs, const std::vector<T, Allocator>& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
 template<typename T1, typename T2>
 struct EqualTo<std::pair<T1, T2>>
 {
-    bool operator()(const std::pair<T1, T2>& lhs, const std::pair<T1, T2>& rhs) const noexcept
+    constexpr bool operator()(const std::pair<T1, T2>& lhs, const std::pair<T1, T2>& rhs) const noexcept
     {
         return EqualTo<std::remove_cvref_t<T1>>()(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second);
     }
@@ -141,7 +144,7 @@ struct EqualTo<std::pair<T1, T2>>
 template<typename... Ts>
 struct EqualTo<std::tuple<Ts...>>
 {
-    bool operator()(const std::tuple<Ts...>& lhs, const std::tuple<Ts...>& rhs) const noexcept
+    constexpr bool operator()(const std::tuple<Ts...>& lhs, const std::tuple<Ts...>& rhs) const noexcept
     {
         return std::apply(
             [&rhs](const Ts&... lhs_args)
@@ -153,7 +156,7 @@ struct EqualTo<std::tuple<Ts...>>
 template<typename... Ts>
 struct EqualTo<std::variant<Ts...>>
 {
-    bool operator()(const std::variant<Ts...>& lhs, const std::variant<Ts...>& rhs) const noexcept
+    constexpr bool operator()(const std::variant<Ts...>& lhs, const std::variant<Ts...>& rhs) const noexcept
     {
         if (lhs.index() != rhs.index())
             return false;
@@ -173,7 +176,7 @@ struct EqualTo<std::variant<Ts...>>
 template<typename T>
 struct EqualTo<std::optional<T>>
 {
-    bool operator()(const std::optional<T>& lhs, const std::optional<T>& rhs) const noexcept
+    constexpr bool operator()(const std::optional<T>& lhs, const std::optional<T>& rhs) const noexcept
     {
         // Check for presence of values
         if (lhs.has_value() != rhs.has_value())
@@ -191,7 +194,7 @@ struct EqualTo<std::optional<T>>
 template<typename T, std::size_t Extent>
 struct EqualTo<std::span<T, Extent>>
 {
-    bool operator()(const std::span<T, Extent>& lhs, const std::span<T, Extent>& rhs) const noexcept { return equal_range(lhs, rhs); }
+    constexpr bool operator()(const std::span<T, Extent>& lhs, const std::span<T, Extent>& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
 template<Identifiable T>
@@ -201,32 +204,32 @@ struct EqualTo<T>
 
     using MembersTupleType = decltype(std::declval<T>().identifying_members());
 
-    bool operator()(const T& lhs, const T& rhs) const noexcept
+    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
     {
         return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(lhs.identifying_members(), rhs.identifying_members());
     }
 
     template<SameAsIgnoringCvref<MembersTupleType> U>
-    bool operator()(const T& a, const U& v) const noexcept
+    constexpr bool operator()(const T& a, const U& v) const noexcept
     {
         return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(a.identifying_members(), v);
     }
 
     template<SameAsIgnoringCvref<MembersTupleType> U>
-    bool operator()(const U& v, const T& b) const noexcept
+    constexpr bool operator()(const U& v, const T& b) const noexcept
     {
         return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(v, b.identifying_members());
     }
 
     template<SameAsIgnoringCvref<MembersTupleType> U, SameAsIgnoringCvref<MembersTupleType> V>
-    bool operator()(const U& u, const V& v) const noexcept
+    constexpr bool operator()(const U& u, const V& v) const noexcept
     {
         return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(u, v);
     }
 };
 
 template<std::ranges::input_range LhsRange, std::ranges::input_range RhsRange>
-inline bool equal_range(LhsRange&& lhs, RhsRange&& rhs) noexcept
+constexpr bool equal_range(LhsRange&& lhs, RhsRange&& rhs) noexcept
 {
     if constexpr (std::ranges::sized_range<LhsRange> && std::ranges::sized_range<RhsRange>)
     {

@@ -27,8 +27,7 @@
 #include "yggdrasil/ids/uint_mixins.hpp"
 #include "yggdrasil/io/iostream.hpp"
 #include "yggdrasil/io/project_adapters.hpp"
-#include "yggdrasil/semantics/comparators.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
 #endif

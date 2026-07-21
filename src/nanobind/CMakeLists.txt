@@ -7,7 +7,7 @@ set(YGGDRASIL_NANOBIND_GIT_TAG v2.12.0 CACHE STRING "Git tag used to build nanob
 
 message(STATUS "Dependency \"nanobind\"...")
 
-find_package(Python 3.8
+find_package(Python 3.9
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 

@@ -28,6 +28,8 @@
 #include <yggdrasil/formalism/repository_factory.hpp>
 #include <yggdrasil/formalism/symbol_repository.hpp>
 #include <yggdrasil/ids/index_mixins.hpp>
+#include <yggdrasil/semantics/equal_to.hpp>
+#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::tests
 {
@@ -148,6 +150,44 @@ TEST(YggdrasilTests, CommonRepositoryFactoryAssignsIncreasingIndicesAndParents)
     EXPECT_EQ(&root.get_root(), &root);
     EXPECT_EQ(&child.get_root(), &root);
     EXPECT_EQ(&shared->get_root(), &root);
+}
+
+TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesFactoryLocalRepositoryIndices)
+{
+    using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
+    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using SymbolRepo = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
+    using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
+    using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
+    using Factory = ygg::formalism::RepositoryFactory<SymbolRepo, RelationRepo>;
+    using BindingView = ygg::View<ygg::Index<Binding>, Repository>;
+
+    auto first_factory = Factory();
+    auto first_repository = first_factory.create();
+    auto second_repository = first_factory.create();
+    auto independent_factory = Factory();
+    auto independent_repository = independent_factory.create();
+
+    auto objects = ygg::IndexList<Object> {};
+    objects.push_back(ygg::Index<Object>(0));
+    const auto data = ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects);
+
+    const auto [first, first_created] = first_repository.get_or_create(data);
+    const auto [second, second_created] = second_repository.get_or_create(data);
+    const auto [independent, independent_created] = independent_repository.get_or_create(data);
+
+    ASSERT_TRUE(first_created);
+    ASSERT_TRUE(second_created);
+    ASSERT_TRUE(independent_created);
+    EXPECT_EQ(first.get_index().relation, second.get_index().relation);
+    EXPECT_EQ(first.get_index().row, second.get_index().row);
+    EXPECT_EQ(first.get_index().relation, independent.get_index().relation);
+    EXPECT_EQ(first.get_index().row, independent.get_index().row);
+
+    EXPECT_FALSE(ygg::EqualTo<BindingView> {}(first, second));
+    EXPECT_NE(ygg::Hash<BindingView> {}(first), ygg::Hash<BindingView> {}(second));
+    EXPECT_TRUE(ygg::EqualTo<BindingView> {}(first, independent));
+    EXPECT_EQ(ygg::Hash<BindingView> {}(first), ygg::Hash<BindingView> {}(independent));
 }
 
 TEST(YggdrasilTests, CommonRelationBindingDataValidatesArity)

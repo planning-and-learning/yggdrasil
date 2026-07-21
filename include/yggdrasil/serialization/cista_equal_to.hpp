@@ -49,7 +49,7 @@ struct EqualTo<::cista::pair<T1, T2>>
 {
     using Type = ::cista::pair<T1, T2>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
     {
         return EqualTo<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second);
     }
@@ -96,7 +96,7 @@ struct EqualTo<::cista::offset::variant<Ts...>>
 {
     using Type = ::cista::offset::variant<Ts...>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
     {
         if (lhs.valid() != rhs.valid())
             return false;

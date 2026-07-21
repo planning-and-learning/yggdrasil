@@ -49,7 +49,6 @@ struct AdaptersUint : ygg::FixedUintMixin<AdaptersUint>
 
 TEST(YggdrasilTests, CommonAdaptersUmbrellaHeaderExposesPublicSurfaces)
 {
-    static_assert(ygg::IndexConcept<ygg::Index<AdaptersIndexTag>>);
     static_assert(std::is_same_v<ygg::Index<AdaptersIndexTag>::value_type, ygg::uint_t>);
     static_assert(std::is_same_v<AdaptersUint::value_type, ygg::uint_t>);
 

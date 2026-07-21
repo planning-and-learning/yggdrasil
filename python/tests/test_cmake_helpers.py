@@ -8,7 +8,6 @@ behavioral contract against the installed wheel.
 
 import shutil
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
@@ -17,20 +16,20 @@ import pytest
 import pyyggdrasil
 
 
-def _require_cmake():
+def _require_cmake() -> str:
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("cmake is required for the cmake helper contract tests")
     return cmake
 
 
-def _helpers_path():
+def _helpers_path() -> Path:
     helpers = Path(pyyggdrasil.cmake_dir()) / "yggdrasilPythonHelpers.cmake"
     assert helpers.is_file(), f"helpers module missing from wheel: {helpers}"
     return helpers
 
 
-def test_helper_functions_contract(tmp_path):
+def test_helper_functions_contract(tmp_path: Path) -> None:
     cmake = _require_cmake()
     helpers = _helpers_path()
 
@@ -83,7 +82,7 @@ def test_helper_functions_contract(tmp_path):
     subprocess.run([cmake, "-P", str(script)], check=True)
 
 
-def test_find_package_provides_helpers_and_target(tmp_path):
+def test_find_package_provides_helpers_and_target(tmp_path: Path) -> None:
     cmake = _require_cmake()
     prefix = pyyggdrasil.native_prefix()
 

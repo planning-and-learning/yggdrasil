@@ -37,6 +37,7 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__main__.py
     pyyggdrasil/build_support.py
     pyyggdrasil/repair.py
+    pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
     pyyggdrasil/execution/__init__.pyi
 )

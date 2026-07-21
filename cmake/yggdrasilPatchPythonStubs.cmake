@@ -4,9 +4,10 @@
 #
 #   yggdrasil_patch_python_stubs(
 #       PACKAGE <pkg>                 # e.g. pypddl; operates on <prefix>/<pkg>
-#       [PRIVATE_MODULE <_pkg>]       # migrate <pkg>/<_pkg>/*.pyi to public
-#                                     # locations first (existing/handwritten
-#                                     # public stubs win), then remove <_pkg>/
+#       [PRIVATE_MODULE <_pkg>]       # migrate <pkg>/<_pkg>[.<ABI>]/*.pyi to
+#                                     # public locations first (existing/
+#                                     # handwritten public stubs win), then
+#                                     # remove the private stub directories
 #       RENAME_PACKAGES <p1> <p2> ... # rewrite <p>._<p>. -> <p>. and
 #                                     # <p>._<p> -> <p> in all *.pyi files
 #   )
@@ -26,8 +27,16 @@ function(yggdrasil_patch_python_stubs)
     endif()
 
     if(ARG_PRIVATE_MODULE)
-        set(private_stub_root "${stub_root}/${ARG_PRIVATE_MODULE}")
-        if(IS_DIRECTORY "${private_stub_root}")
+        file(GLOB private_stub_roots LIST_DIRECTORIES true
+             "${stub_root}/${ARG_PRIVATE_MODULE}"
+             "${stub_root}/${ARG_PRIVATE_MODULE}.*")
+        list(SORT private_stub_roots)
+
+        foreach(private_stub_root IN LISTS private_stub_roots)
+            if(NOT IS_DIRECTORY "${private_stub_root}")
+                continue()
+            endif()
+
             file(GLOB_RECURSE private_stub_files "${private_stub_root}/*.pyi")
             list(SORT private_stub_files)
 
@@ -54,7 +63,7 @@ function(yggdrasil_patch_python_stubs)
             endforeach()
 
             file(REMOVE_RECURSE "${private_stub_root}")
-        endif()
+        endforeach()
     endif()
 
     file(GLOB_RECURSE stub_files "${stub_root}/*.pyi")
@@ -70,6 +79,12 @@ function(yggdrasil_patch_python_stubs)
             string(REPLACE "${rename_package}._${rename_package}" "${rename_package}"
                    patched_stub_content "${patched_stub_content}")
         endforeach()
+
+        # nanobind stubgen emits bare `os.PathLike` for filesystem::path params; subscript it
+        # so strict type checkers do not see PathLike[Unknown]. Generated stubs never contain
+        # the subscripted form, so a plain replace is idempotent per install.
+        string(REGEX REPLACE "os\\.PathLike([^[])" "os.PathLike[str]\\1"
+               patched_stub_content "${patched_stub_content}")
 
         if(NOT stub_content STREQUAL patched_stub_content)
             file(WRITE "${stub_file}" "${patched_stub_content}")

@@ -48,6 +48,7 @@ add_yggdrasil_gtest(io_project_adapters "io/project_adapters.cpp")
 add_yggdrasil_gtest(io_project_path "io/project_path.cpp")
 
 add_yggdrasil_gtest(semantics_canonicalization "semantics/canonicalization.cpp")
+add_yggdrasil_gtest(semantics_comparison "semantics/comparison.cpp")
 add_yggdrasil_gtest(semantics_comparators "semantics/comparators.cpp")
 add_yggdrasil_gtest(semantics_equal_to "semantics/equal_to.cpp")
 add_yggdrasil_gtest(semantics_hash "semantics/hash.cpp")

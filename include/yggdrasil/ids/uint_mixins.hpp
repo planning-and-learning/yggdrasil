@@ -19,6 +19,7 @@
 #define YGG_IDS_UINT_MIXINS_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
 
 #include <concepts>
 #include <limits>
@@ -42,17 +43,6 @@ struct FixedUintMixin
     static constexpr Derived max() noexcept { return Derived(MAX); }
 
     constexpr bool is_max() const noexcept { return m_value == MAX; }
-
-    // ----------------------------------------------------
-    // Comparisons
-    // ----------------------------------------------------
-
-    friend constexpr bool operator==(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value == rhs.m_value; }
-    friend constexpr bool operator!=(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return !(lhs == rhs); }
-    friend constexpr bool operator<=(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value <= rhs.m_value; }
-    friend constexpr bool operator<(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value < rhs.m_value; }
-    friend constexpr bool operator>=(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value >= rhs.m_value; }
-    friend constexpr bool operator>(const FixedUintMixin& lhs, const FixedUintMixin& rhs) noexcept { return lhs.m_value > rhs.m_value; }
 
     // ----------------------------------------------------
     // Arithmetic with integral types
@@ -94,7 +84,7 @@ struct FixedUintMixin
     explicit constexpr operator value_type() const noexcept { return m_value; }
 
     auto cista_members() const noexcept { return std::tie(m_value); }
-    auto identifying_members() const noexcept { return std::tie(m_value); }
+    constexpr auto identifying_members() const noexcept { return std::tie(m_value); }
 };
 
 }  // namespace ygg

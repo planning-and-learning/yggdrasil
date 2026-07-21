@@ -2,17 +2,21 @@
 
 import sys
 import types
+from pathlib import Path
+
+import pytest
 
 import pyyggdrasil.repair as repair
 
 
-def _fake_provider(name, prefix, monkeypatch):
-    monkeypatch.setitem(
-        sys.modules, name, types.SimpleNamespace(native_prefix=lambda prefix=prefix: prefix)
-    )
+def _fake_provider(name: str, prefix: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def native_prefix() -> Path:
+        return prefix
+
+    monkeypatch.setitem(sys.modules, name, types.SimpleNamespace(native_prefix=native_prefix))
 
 
-def test_provider_library_dirs_collects_lib_and_lib64(tmp_path, monkeypatch):
+def test_provider_library_dirs_collects_lib_and_lib64(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     prefix_a = tmp_path / "a"
     (prefix_a / "lib").mkdir(parents=True)
     (prefix_a / "lib64").mkdir()
@@ -30,7 +34,7 @@ def test_provider_library_dirs_collects_lib_and_lib64(tmp_path, monkeypatch):
     assert all(d.name.startswith("lib") and d.is_dir() for d in dirs)
 
 
-def test_provider_library_dirs_empty_when_no_lib_dirs(tmp_path, monkeypatch):
+def test_provider_library_dirs_empty_when_no_lib_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     prefix = tmp_path / "p"
     (prefix / "include").mkdir(parents=True)
     _fake_provider("fake_empty", prefix, monkeypatch)

@@ -49,7 +49,7 @@ struct Less<::cista::pair<T1, T2>>
 {
     using Type = ::cista::pair<T1, T2>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
     {
         if (Less<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first))
             return true;
@@ -132,7 +132,7 @@ struct Less<::cista::offset::variant<Ts...>>
 {
     using Type = ::cista::offset::variant<Ts...>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
     {
         if (lhs.valid() != rhs.valid())
             return !lhs.valid();

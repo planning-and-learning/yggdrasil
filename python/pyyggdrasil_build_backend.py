@@ -9,10 +9,13 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from scikit_build_core import build as scikit_build
+
+# PEP 517 config_settings: keys map to a string or a list of strings.
+ConfigSettings = dict[str, str | list[str]]
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -145,7 +148,7 @@ def _rewrite_record(wheel_root: Path) -> None:
         raise RuntimeError(f"expected exactly one RECORD file, found {len(record_files)}")
 
     record_file = record_files[0]
-    rows = []
+    rows: list[tuple[str, str, str]] = []
     for path in sorted(wheel_root.rglob("*")):
         if not path.is_file():
             continue
@@ -182,19 +185,23 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
     _rewrite_wheel(wheel_path, strip_native_libraries)
 
 
-def get_requires_for_build_wheel(config_settings=None):
+def get_requires_for_build_wheel(config_settings: ConfigSettings | None = None) -> list[str]:
     return scikit_build.get_requires_for_build_wheel(config_settings)
 
 
-def get_requires_for_build_editable(config_settings=None):
+def get_requires_for_build_editable(config_settings: ConfigSettings | None = None) -> list[str]:
     return scikit_build.get_requires_for_build_editable(config_settings)
 
 
-def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+def prepare_metadata_for_build_wheel(metadata_directory: str, config_settings: ConfigSettings | None = None) -> str:
     return scikit_build.prepare_metadata_for_build_wheel(metadata_directory, config_settings)
 
 
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+def build_wheel(
+    wheel_directory: str,
+    config_settings: ConfigSettings | None = None,
+    metadata_directory: str | None = None,
+) -> str:
     _prepare_native_build()
     wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
     wheel_path = Path(wheel_directory) / wheel_filename
@@ -202,10 +209,14 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     return wheel_filename
 
 
-def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+def build_editable(
+    wheel_directory: str,
+    config_settings: ConfigSettings | None = None,
+    metadata_directory: str | None = None,
+) -> str:
     _prepare_native_build()
     return scikit_build.build_editable(wheel_directory, config_settings, metadata_directory)
 
 
-def build_sdist(sdist_directory, config_settings=None):
+def build_sdist(sdist_directory: str, config_settings: ConfigSettings | None = None) -> str:
     return scikit_build.build_sdist(sdist_directory)
