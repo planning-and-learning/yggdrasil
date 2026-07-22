@@ -10,12 +10,15 @@ def main() -> None:
         raise SystemExit("usage: import_smoke.py <package-init> <extension>")
 
     package_init = Path(sys.argv[1]).resolve()
+    execution_init = package_init.parent / "execution" / "__init__.py"
     extension = Path(sys.argv[2]).resolve()
 
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-import-") as tmp:
         tmp_dir = Path(tmp).resolve()
         package_dir = tmp_dir / "pyyggdrasil"
         package_dir.mkdir()
+        execution_dir = package_dir / "execution"
+        execution_dir.mkdir()
         lib_dir = package_dir / "lib"
         cmake_dir = lib_dir / "cmake"
         cmake_dir.mkdir(parents=True)
@@ -25,6 +28,7 @@ def main() -> None:
             "# test placeholder\n", encoding="utf-8"
         )
         shutil.copy2(package_init, package_dir / "__init__.py")
+        shutil.copy2(execution_init, execution_dir / "__init__.py")
         shutil.copy2(extension, package_dir / extension.name)
 
         sys.path.insert(0, str(tmp_dir))
@@ -85,12 +89,15 @@ def main() -> None:
             for name in pyyggdrasil.__all__:
                 assert hasattr(pyyggdrasil, name)
 
-            assert "worker threads" in pyyggdrasil.execution.ExecutionContext.__doc__
-            assert (
-                "maximum thread count"
-                in pyyggdrasil.execution.ExecutionContext.max_num_threads.__doc__
+            assert "worker threads" in (
+                pyyggdrasil.execution.ExecutionContext.__doc__ or ""
             )
-            assert "worker thread count" in pyyggdrasil.execution.ExecutionContext.num_threads.__doc__
+            assert "maximum thread count" in (
+                pyyggdrasil.execution.ExecutionContext.max_num_threads.__doc__ or ""
+            )
+            assert "worker thread count" in (
+                pyyggdrasil.execution.ExecutionContext.num_threads.__doc__ or ""
+            )
 
             max_num_threads = pyyggdrasil.execution.ExecutionContext.max_num_threads()
             assert max_num_threads >= 1
@@ -113,7 +120,9 @@ def main() -> None:
                 assert "Requested " in str(error)
                 assert " are available by default." in str(error)
             else:
-                raise AssertionError("ExecutionContext(max_num_threads + 1) did not fail")
+                raise AssertionError(
+                    "ExecutionContext(max_num_threads + 1) did not fail"
+                )
         finally:
             sys.path.remove(str(tmp_dir))
 
