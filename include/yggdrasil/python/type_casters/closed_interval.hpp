@@ -42,7 +42,7 @@ struct type_caster<::ygg::ClosedInterval<T>>
     using ScalarCaster = make_caster<T>;
     using BoundsCaster = make_caster<Bounds>;
 
-    NB_TYPE_CASTER(Interval, PythonCaster::Name)
+    NB_TYPE_CASTER(Interval, io_name("float | tuple[float, float]", "float | tuple[float, float] | None"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list* cleanup) noexcept
     {

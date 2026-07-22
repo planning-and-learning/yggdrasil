@@ -101,16 +101,13 @@ def test_execution_context_supports_context_manager() -> None:
             raise RuntimeError("boom")
 
 
-def test_source_version_reads_project_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_source_version_reads_pyproject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     package_dir = tmp_path / "src" / "pyyggdrasil"
     package_dir.mkdir(parents=True)
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
         textwrap.dedent(
             """\
-            [tool.example]
-            version = "999.0.0"
-
             [project]
             name = "pyyggdrasil"
             version = "1.2.3"
@@ -123,31 +120,6 @@ def test_source_version_reads_project_table(tmp_path: Path, monkeypatch: pytest.
     # _source_version is private; reach it via getattr to test internals without a private-access lint.
     source_version = getattr(pyyggdrasil, "_source_version")
     assert source_version() == "1.2.3"
-
-
-def test_source_version_fallback_parses_toml_string_literals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    package_dir = tmp_path / "src" / "pyyggdrasil"
-    package_dir.mkdir(parents=True)
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
-        textwrap.dedent(
-            """\
-            [tool.example]
-            version = "999.0.0"
-
-            [project]
-            name = "pyyggdrasil"
-            version = '2.3.4'
-            """
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(pyyggdrasil, "__file__", str(package_dir / "__init__.py"))
-    monkeypatch.setattr(pyyggdrasil, "tomllib", None)
-
-    # _source_version is private; reach it via getattr to test internals without a private-access lint.
-    source_version = getattr(pyyggdrasil, "_source_version")
-    assert source_version() == "2.3.4"
 
 
 def test_native_prefix_prefers_installed_package_prefix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

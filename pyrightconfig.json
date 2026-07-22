@@ -9,14 +9,15 @@
   "venv": ".venv",
   "stubPath": "typings",
   "include": [
-    "python"
+    "tests",
+    "python",
   ],
   "exclude": [
     ".venv",
     "build",
     "dist",
     "**/__pycache__",
-    "python/src/pyyggdrasil/__init__.py"
+    "python/src/**/__init__.py",
   ],
   "reportMissingImports": "error",
   "reportMissingModuleSource": "error",

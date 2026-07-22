@@ -48,7 +48,7 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/repair.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
-    pyyggdrasil/execution/__init__.pyi
+    pyyggdrasil/execution/__init__.py
 )
 
 foreach(python_file IN LISTS PYYGGDRASIL_PYTHON_FILES)

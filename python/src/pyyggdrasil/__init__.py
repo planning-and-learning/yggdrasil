@@ -1,53 +1,23 @@
-import ast
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
-    tomllib = None
-
-import sys
-
-from ._pyyggdrasil import execution as execution
-
-sys.modules[__name__ + ".execution"] = execution
+from . import execution as execution
 
 
 def _has_yggdrasil_headers(path: Path) -> bool:
     return (path / "include" / "yggdrasil").is_dir()
 
 
-def _read_pyproject_version(pyproject: Path) -> Optional[str]:
-    if tomllib is not None:
-        with pyproject.open("rb") as f:
-            return tomllib.load(f).get("project", {}).get("version")
-
-    in_project_table = False
-    for line in pyproject.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            in_project_table = stripped == "[project]"
-            continue
-        if in_project_table and stripped.startswith("version"):
-            raw_value = stripped.split("=", maxsplit=1)[1].strip()
-            try:
-                value = ast.literal_eval(raw_value)
-            except (SyntaxError, ValueError):
-                return raw_value.strip("\"").strip("'")
-            return value if isinstance(value, str) else None
-
-    return None
-
-
 def _source_version() -> str:
     for parent in Path(__file__).resolve().parents:
         pyproject = parent / "pyproject.toml"
-        if pyproject.exists():
-            source_version = _read_pyproject_version(pyproject)
-            if source_version:
-                return source_version
+        if not pyproject.exists():
+            continue
+
+        for line in pyproject.read_text(encoding="utf-8").splitlines():
+            if line.startswith("version"):
+                return line.split("=", maxsplit=1)[1].strip().strip("\"")
 
     return "0.0.0"
 
