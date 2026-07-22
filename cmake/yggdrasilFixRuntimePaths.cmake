@@ -26,8 +26,10 @@ function(yggdrasil_fix_runtime_paths)
         set(ARG_RPATHS "@loader_path")
     endif()
 
-    file(GLOB native_lib_dirs LIST_DIRECTORIES true
-        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${ARG_LIB_DIR_GLOB}")
+    file(GLOB native_lib_dirs
+        LIST_DIRECTORIES true
+        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${ARG_LIB_DIR_GLOB}"
+    )
     set(existing_lib_dirs)
     foreach(native_lib_dir IN LISTS native_lib_dirs)
         if(IS_DIRECTORY "${native_lib_dir}")
@@ -47,9 +49,11 @@ function(yggdrasil_fix_runtime_paths)
 
         set(native_libraries)
         foreach(native_lib_dir IN LISTS existing_lib_dirs)
-            file(GLOB_RECURSE native_dir_libraries LIST_DIRECTORIES false
+            file(GLOB_RECURSE native_dir_libraries
+                LIST_DIRECTORIES false
                 "${native_lib_dir}/*.dylib"
-                "${native_lib_dir}/*.dylib.*")
+                "${native_lib_dir}/*.dylib.*"
+            )
             list(APPEND native_libraries ${native_dir_libraries})
         endforeach()
 
@@ -59,20 +63,27 @@ function(yggdrasil_fix_runtime_paths)
             execute_process(
                 COMMAND "${INSTALL_NAME_TOOL_EXECUTABLE}" -id "@rpath/${native_library_name}" "${native_library}"
                 RESULT_VARIABLE install_name_result
-                ERROR_VARIABLE install_name_error)
+                ERROR_VARIABLE install_name_error
+            )
             if(NOT install_name_result EQUAL 0)
                 message(WARNING "Could not update install name of ${native_library}: ${install_name_error}")
             endif()
 
             foreach(native_library_rpath IN LISTS ARG_RPATHS)
                 execute_process(
-                    COMMAND "${INSTALL_NAME_TOOL_EXECUTABLE}" -delete_rpath "${native_library_rpath}" "${native_library}"
+                    COMMAND
+                        "${INSTALL_NAME_TOOL_EXECUTABLE}"
+                        -delete_rpath
+                        "${native_library_rpath}"
+                        "${native_library}"
                     OUTPUT_QUIET
-                    ERROR_QUIET)
+                    ERROR_QUIET
+                )
                 execute_process(
                     COMMAND "${INSTALL_NAME_TOOL_EXECUTABLE}" -add_rpath "${native_library_rpath}" "${native_library}"
                     RESULT_VARIABLE rpath_result
-                    ERROR_VARIABLE rpath_error)
+                    ERROR_VARIABLE rpath_error
+                )
                 if(NOT rpath_result EQUAL 0)
                     message(WARNING "Could not add ${native_library_rpath} rpath to ${native_library}: ${rpath_error}")
                 endif()
@@ -87,9 +98,11 @@ function(yggdrasil_fix_runtime_paths)
 
         set(native_libraries)
         foreach(native_lib_dir IN LISTS existing_lib_dirs)
-            file(GLOB_RECURSE native_dir_libraries LIST_DIRECTORIES false
+            file(GLOB_RECURSE native_dir_libraries
+                LIST_DIRECTORIES false
                 "${native_lib_dir}/*.so"
-                "${native_lib_dir}/*.so.*")
+                "${native_lib_dir}/*.so.*"
+            )
             list(APPEND native_libraries ${native_dir_libraries})
         endforeach()
 
@@ -97,7 +110,8 @@ function(yggdrasil_fix_runtime_paths)
             execute_process(
                 COMMAND "${PATCHELF_EXECUTABLE}" --set-rpath "${ARG_RPATH}" "${native_library}"
                 RESULT_VARIABLE rpath_result
-                ERROR_VARIABLE rpath_error)
+                ERROR_VARIABLE rpath_error
+            )
             if(NOT rpath_result EQUAL 0)
                 message(WARNING "Could not set rpath on ${native_library}: ${rpath_error}")
             endif()

@@ -11,7 +11,7 @@
 # Functions capture the policy state of their defining scope; set what they
 # rely on explicitly so the helpers also work from cmake -P script mode.
 cmake_policy(PUSH)
-cmake_policy(SET CMP0057 NEW) # IN_LIST operator
+cmake_policy(SET CMP0057 NEW)  # IN_LIST operator
 
 # yggdrasil_find_python_native_prefix(<python_package> <out_prefix_var>)
 #   - If <out_prefix_var> is already set (manual override), only ensures it is
@@ -19,38 +19,38 @@ cmake_policy(SET CMP0057 NEW) # IN_LIST operator
 #   - Otherwise queries the package for its cmake_prefix() (native_prefix() on
 #     older releases) and prepends it to CMAKE_PREFIX_PATH.
 function(yggdrasil_find_python_native_prefix python_package out_prefix_var)
-  if(${out_prefix_var})
-    if(NOT "${${out_prefix_var}}" IN_LIST CMAKE_PREFIX_PATH)
-      list(PREPEND CMAKE_PREFIX_PATH "${${out_prefix_var}}")
-      set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
+    if(${out_prefix_var})
+        if(NOT "${${out_prefix_var}}" IN_LIST CMAKE_PREFIX_PATH)
+            list(PREPEND CMAKE_PREFIX_PATH "${${out_prefix_var}}")
+            set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
+        endif()
+        return()
     endif()
-    return()
-  endif()
 
-  if(NOT Python_EXECUTABLE AND Python3_EXECUTABLE)
-    set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
-  endif()
+    if(NOT Python_EXECUTABLE AND Python3_EXECUTABLE)
+        set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
+    endif()
 
-  find_package(Python 3.9 QUIET COMPONENTS Interpreter)
-  if(NOT Python_Interpreter_FOUND)
-    return()
-  endif()
+    find_package(Python 3.9 QUIET COMPONENTS Interpreter)
+    if(NOT Python_Interpreter_FOUND)
+        return()
+    endif()
 
-  execute_process(
-    COMMAND "${Python_EXECUTABLE}" -c
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -c
             "import ${python_package} as m; print(getattr(m, 'cmake_prefix', m.native_prefix)())"
-    RESULT_VARIABLE native_result
-    OUTPUT_VARIABLE native_prefix
-    ERROR_QUIET
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
+        RESULT_VARIABLE native_result
+        OUTPUT_VARIABLE native_prefix
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
 
-  if(native_result EQUAL 0 AND EXISTS "${native_prefix}")
-    list(PREPEND CMAKE_PREFIX_PATH "${native_prefix}")
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
-    set(${out_prefix_var} "${native_prefix}" PARENT_SCOPE)
-    message(STATUS "Found ${python_package} native prefix: ${native_prefix}")
-  endif()
+    if(native_result EQUAL 0 AND EXISTS "${native_prefix}")
+        list(PREPEND CMAKE_PREFIX_PATH "${native_prefix}")
+        set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
+        set(${out_prefix_var} "${native_prefix}" PARENT_SCOPE)
+        message(STATUS "Found ${python_package} native prefix: ${native_prefix}")
+    endif()
 endfunction()
 
 function(yggdrasil_register_native_dependency_prefix native_prefix)
@@ -65,7 +65,11 @@ function(yggdrasil_register_native_dependency_prefix native_prefix)
 
     if(EXISTS "${native_prefix}/${native_include_dir_name}")
         list(APPEND YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES "${native_prefix}/${native_include_dir_name}")
-        set(YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES "${YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}" PARENT_SCOPE)
+        set(
+            YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES
+            "${YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}"
+            PARENT_SCOPE
+        )
     endif()
 endfunction()
 
@@ -79,7 +83,10 @@ function(yggdrasil_register_python_native_runtime_prefix package_relative_prefix
 
     set(native_lib_dir_name "${CMAKE_INSTALL_LIBDIR}")
     if(ARGC GREATER 1 AND ARGV1)
-        foreach(candidate_lib_dir IN ITEMS "${ARGV1}/${CMAKE_INSTALL_LIBDIR}" "${ARGV1}/lib" "${ARGV1}/lib64")
+        foreach(
+            candidate_lib_dir
+            IN ITEMS "${ARGV1}/${CMAKE_INSTALL_LIBDIR}" "${ARGV1}/lib" "${ARGV1}/lib64"
+        )
             if(IS_DIRECTORY "${candidate_lib_dir}")
                 get_filename_component(native_lib_dir_name "${candidate_lib_dir}" NAME)
                 break()
@@ -101,7 +108,10 @@ function(yggdrasil_make_python_native_runtime_rpaths output_variable origin pack
         foreach(runtime_prefix_index RANGE ${runtime_prefix_last})
             list(GET YGGDRASIL_PYTHON_NATIVE_RUNTIME_PREFIXES ${runtime_prefix_index} package_relative_prefix)
             list(GET YGGDRASIL_PYTHON_NATIVE_RUNTIME_LIBDIRS ${runtime_prefix_index} native_lib_dir_name)
-            list(APPEND runtime_rpaths "${origin}/${package_relative_base}${package_relative_prefix}/${native_lib_dir_name}")
+            list(
+                APPEND runtime_rpaths
+                "${origin}/${package_relative_base}${package_relative_prefix}/${native_lib_dir_name}"
+            )
         endforeach()
     endif()
 

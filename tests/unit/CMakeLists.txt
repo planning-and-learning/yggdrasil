@@ -1,18 +1,25 @@
+# Dependencies
+
 find_package(GTest "1.11.0" REQUIRED COMPONENTS GTest PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(Boost REQUIRED COMPONENTS json PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(fmt CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
+# Test helper
+
 function(add_yggdrasil_gtest test_name source_file)
     add_executable(${test_name} ${source_file} main.cpp)
     target_compile_features(${test_name} PRIVATE cxx_std_20)
-    target_include_directories(${test_name} PRIVATE "${PROJECT_SOURCE_DIR}/include" "${YGGDRASIL_NATIVE_PREFIX}/include")
+    target_include_directories(${test_name} PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+        "${YGGDRASIL_NATIVE_PREFIX}/include"
+    )
     target_compile_definitions(${test_name} PRIVATE ROOT_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${test_name} PRIVATE GTest::gtest Boost::json fmt::fmt TBB::tbb)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endfunction()
 
-# Test sources mirror the include/yggdrasil directory structure; target names are <dir>_<file>.
+# Test sources mirror include/yggdrasil; target names use <dir>_<file>.
 
 add_yggdrasil_gtest(extensions "extensions.cpp")
 

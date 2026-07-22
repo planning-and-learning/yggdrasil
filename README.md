@@ -65,6 +65,8 @@ uv build --wheel
 ```
 
 Set `YGGDRASIL_JOBS` to control the native dependency build parallelism.
+Set `YGGDRASIL_BUILD_TYPE` to select the dependency build profile; it defaults
+to `Release`.
 
 Runtime libraries are stripped in the wheel by default. Disable that for
 debugging with:
@@ -74,6 +76,8 @@ YGGDRASIL_STRIP_WHEEL=OFF uv build --wheel
 ```
 
 ## Build C++
+
+### Native Dependencies
 
 Build the native dependency prefix directly with CMake:
 
@@ -89,6 +93,37 @@ cmake --install dependencies-build
 Yggdrasil builds its bundled dependencies as shared libraries. The native
 dependency prefix contains C++ headers, shared libraries, and CMake package
 configuration files consumed by the other projects.
+
+### Yggdrasil Targets
+
+Configure Yggdrasil separately against the installed dependency prefix:
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DYGGDRASIL_NATIVE_PREFIX="$PWD/dependencies-install" \
+  -DYGGDRASIL_BUILD_TESTS=ON
+
+cmake --build build -j4
+ctest --test-dir build
+```
+
+CMake options:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `YGGDRASIL_BUILD_TESTS` | `OFF` | Build Yggdrasil C++ tests. |
+| `YGGDRASIL_ENABLE_FMT_FORMATTERS` | `ON` | Enable Yggdrasil's public fmt formatters. |
+| `YGGDRASIL_USE_LLD` | `ON` | Use LLVM `lld` with Clang when available. |
+| `YGGDRASIL_ENABLE_LTO` | `ON` | Enable link-time optimization for Release builds. |
+
+Single-config CMake builds default to Release. On GCC and Clang, Debug builds
+use `-Og` with debug symbols, RelWithDebInfo keeps frame pointers and disables
+LTO, and Release LTO uses GCC LTO or Clang ThinLTO. Editable installs and
+wheels disable `YGGDRASIL_USE_LLD` and `YGGDRASIL_ENABLE_LTO` by default for
+build reliability. This compiler policy applies only to Yggdrasil's
+first-party extension and tests; the `src/` dependency superbuild leaves each
+bundled project in control of its own compiler policy.
 
 ## CMake Integration
 

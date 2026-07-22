@@ -20,7 +20,14 @@ set(public_formalism_init_stub "${stub_root}/formalism/__init__.pyi")
 
 file(REMOVE_RECURSE "${test_destdir}${test_prefix}")
 
-file(MAKE_DIRECTORY "${stub_root}" "${private_stub_root}" "${abi_private_stub_root}" "${stub_root}/core" "${stub_root}/execution" "${stub_root}/formalism")
+file(MAKE_DIRECTORY
+    "${stub_root}"
+    "${private_stub_root}"
+    "${abi_private_stub_root}"
+    "${stub_root}/core"
+    "${stub_root}/execution"
+    "${stub_root}/formalism"
+)
 file(WRITE "${stub_file}" [=[value: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
 ]=])
 file(WRITE "${private_init_stub}" [=[private root: pyyggdrasil._pyyggdrasil.execution.ExecutionContext
@@ -43,7 +50,11 @@ file(WRITE "${public_execution_init_stub}" [=[public execution: pyyggdrasil._pyy
 set(CMAKE_INSTALL_PREFIX "${test_prefix}")
 set(ENV{DESTDIR} "${test_destdir}")
 include("${YGGDRASIL_PROJECT_ROOT}/cmake/yggdrasilPatchPythonStubs.cmake")
-yggdrasil_patch_python_stubs(PACKAGE pyyggdrasil PRIVATE_MODULE _pyyggdrasil RENAME_PACKAGES pyyggdrasil)
+yggdrasil_patch_python_stubs(
+    PACKAGE pyyggdrasil
+    PRIVATE_MODULE _pyyggdrasil
+    RENAME_PACKAGES pyyggdrasil
+)
 
 file(READ "${stub_file}" patched_stub)
 if(NOT patched_stub STREQUAL [=[value: pyyggdrasil.execution.ExecutionContext
@@ -80,7 +91,10 @@ if(NOT EXISTS "${public_formalism_init_stub}")
 endif()
 
 if(EXISTS "${stub_root}/execution.pyi")
-    message(FATAL_ERROR "Private execution.pyi should be installed as execution/__init__.pyi when execution is a package.")
+    message(
+        FATAL_ERROR
+        "Private execution.pyi should be installed as execution/__init__.pyi when execution is a package."
+    )
 endif()
 
 file(READ "${public_core_init_stub}" patched_core_stub)
@@ -98,7 +112,10 @@ endif()
 file(READ "${public_execution_init_stub}" patched_execution_stub)
 if(NOT patched_execution_stub STREQUAL [=[public execution: pyyggdrasil.execution.ExecutionContext
 ]=])
-    message(FATAL_ERROR "Existing public execution stub should be patched but not overwritten. Got: ${patched_execution_stub}")
+    message(
+        FATAL_ERROR
+        "Existing public execution stub should be patched but not overwritten. Got: ${patched_execution_stub}"
+    )
 endif()
 
 file(READ "${public_formalism_init_stub}" patched_formalism_stub)

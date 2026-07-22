@@ -57,6 +57,8 @@ exclude = [
 
 [tool.scikit-build.cmake.define]
 YGGDRASIL_NATIVE_PREFIX = {env = "YGGDRASIL_NATIVE_PREFIX", default = "dependencies-install"}
+YGGDRASIL_USE_LLD = false
+YGGDRASIL_ENABLE_LTO = {env = "YGGDRASIL_ENABLE_LTO", default = false}
 CMAKE_INSTALL_LIBDIR = "lib"
 
 [tool.cibuildwheel]

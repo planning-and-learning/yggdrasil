@@ -38,11 +38,16 @@ macro(yggdrasil_python_module_rpaths PKG_UPPER module_target)
     list(APPEND ${PKG_UPPER}_MODULE_RPATH "${_yggdrasil_rpath_origin}/native/${CMAKE_INSTALL_LIBDIR}")
     yggdrasil_make_python_native_runtime_rpaths(${PKG_UPPER}_CORE_RPATH "${_yggdrasil_rpath_origin}" "../../../")
     set(${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATHS "${${PKG_UPPER}_CORE_RPATH}")
-    yggdrasil_make_python_native_runtime_rpath_string(${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATH "${_yggdrasil_rpath_origin}" "../../../")
+    yggdrasil_make_python_native_runtime_rpath_string(
+        ${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATH
+        "${_yggdrasil_rpath_origin}"
+        "../../../"
+    )
 
     set_target_properties(${module_target} PROPERTIES
         BUILD_RPATH "${${PKG_UPPER}_MODULE_RPATH}"
-        INSTALL_RPATH "${${PKG_UPPER}_MODULE_RPATH}")
+        INSTALL_RPATH "${${PKG_UPPER}_MODULE_RPATH}"
+    )
 endmacro()
 
 # Installs the repo's native library targets with their CMake export package
@@ -56,10 +61,17 @@ endmacro()
 # Each target gets INSTALL_RPATH = <PKG>_CORE_RPATH and the registered
 # dependency include dirs appended to its build interface.
 function(yggdrasil_install_native_export)
-    cmake_parse_arguments(PARSE_ARGV 0 ARG ""
+    cmake_parse_arguments(
+        PARSE_ARGV 0
+        ARG
+        ""
         "PKG_UPPER;PACKAGE;CONFIG_NAME;NAMESPACE;EXPORT_NAME;EXPORT_FILE;CONFIG_TEMPLATE;VERSION_FILE;CMAKE_SOURCE_DIRECTORY"
-        "TARGETS;HEADER_DIRS")
-    foreach(required IN ITEMS PKG_UPPER PACKAGE CONFIG_NAME NAMESPACE EXPORT_NAME EXPORT_FILE CONFIG_TEMPLATE VERSION_FILE)
+        "TARGETS;HEADER_DIRS"
+    )
+    foreach(
+        required
+        IN ITEMS PKG_UPPER PACKAGE CONFIG_NAME NAMESPACE EXPORT_NAME EXPORT_FILE CONFIG_TEMPLATE VERSION_FILE
+    )
         if(NOT ARG_${required})
             message(FATAL_ERROR "yggdrasil_install_native_export: ${required} is required")
         endif()
@@ -77,40 +89,51 @@ function(yggdrasil_install_native_export)
         endif()
         if(YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES)
             set_property(TARGET ${native_target} APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES
-                "$<BUILD_INTERFACE:${YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}>")
+                "$<BUILD_INTERFACE:${YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}>"
+            )
         endif()
-        install(TARGETS ${native_target}
-                EXPORT ${ARG_EXPORT_NAME}
-                LIBRARY DESTINATION "${native_libdir}" COMPONENT ${ARG_PACKAGE}
-                ARCHIVE DESTINATION "${native_libdir}" COMPONENT ${ARG_PACKAGE}
-                RUNTIME DESTINATION "${native_bindir}" COMPONENT ${ARG_PACKAGE}
-                INCLUDES DESTINATION "${native_includedir}")
+        install(
+            TARGETS ${native_target}
+            EXPORT ${ARG_EXPORT_NAME}
+            LIBRARY DESTINATION "${native_libdir}" COMPONENT ${ARG_PACKAGE}
+            ARCHIVE DESTINATION "${native_libdir}" COMPONENT ${ARG_PACKAGE}
+            RUNTIME DESTINATION "${native_bindir}" COMPONENT ${ARG_PACKAGE}
+            INCLUDES DESTINATION "${native_includedir}"
+        )
     endforeach()
 
     foreach(header_dir IN LISTS ARG_HEADER_DIRS)
         install(DIRECTORY "${header_dir}"
-                DESTINATION "${native_includedir}"
-                COMPONENT ${ARG_PACKAGE})
+            DESTINATION "${native_includedir}"
+            COMPONENT ${ARG_PACKAGE}
+        )
     endforeach()
 
-    configure_package_config_file("${ARG_CONFIG_TEMPLATE}"
+    configure_package_config_file(
+        "${ARG_CONFIG_TEMPLATE}"
+        "${CMAKE_CURRENT_BINARY_DIR}/${ARG_CONFIG_NAME}Config.cmake"
+        INSTALL_DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}"
+        NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    )
+    install(
+        FILES
             "${CMAKE_CURRENT_BINARY_DIR}/${ARG_CONFIG_NAME}Config.cmake"
-            INSTALL_DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}"
-            NO_CHECK_REQUIRED_COMPONENTS_MACRO)
-    install(FILES
-                "${CMAKE_CURRENT_BINARY_DIR}/${ARG_CONFIG_NAME}Config.cmake"
-                "${ARG_VERSION_FILE}"
-            DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}"
-            COMPONENT ${ARG_PACKAGE})
-    install(EXPORT ${ARG_EXPORT_NAME}
-            NAMESPACE ${ARG_NAMESPACE}
-            FILE "${ARG_EXPORT_FILE}"
-            DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}"
-            COMPONENT ${ARG_PACKAGE})
+            "${ARG_VERSION_FILE}"
+        DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}"
+        COMPONENT ${ARG_PACKAGE}
+    )
+    install(
+        EXPORT ${ARG_EXPORT_NAME}
+        NAMESPACE ${ARG_NAMESPACE}
+        FILE "${ARG_EXPORT_FILE}"
+        DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}"
+        COMPONENT ${ARG_PACKAGE}
+    )
     if(ARG_CMAKE_SOURCE_DIRECTORY)
         install(DIRECTORY "${ARG_CMAKE_SOURCE_DIRECTORY}/"
-                DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}/cmake"
-                COMPONENT ${ARG_PACKAGE})
+            DESTINATION "${native_cmakedir}/${ARG_CONFIG_NAME}/cmake"
+            COMPONENT ${ARG_PACKAGE}
+        )
     endif()
 endfunction()
 
@@ -129,11 +152,12 @@ endfunction()
 function(yggdrasil_install_runtime_path_fixup PKG_UPPER package)
     _yggdrasil_stage_install_helper(yggdrasilFixRuntimePaths.cmake staged_module)
     install(CODE
-            "include(\"${staged_module}\")
+        "include(\"${staged_module}\")
              yggdrasil_fix_runtime_paths(LIB_DIR_GLOB \"${${PKG_UPPER}_NATIVE_LIBDIR}\"
                                          RPATH \"${${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATH}\"
                                          RPATHS \"${${PKG_UPPER}_INSTALL_NATIVE_LIBRARY_RPATHS}\")"
-            COMPONENT ${package})
+        COMPONENT ${package}
+    )
 endfunction()
 
 # Exports the provider library dirs to the install-time environment so that
@@ -158,7 +182,8 @@ function(yggdrasil_install_provider_env PKG_UPPER package)
         install(CODE
             "set(ENV{LD_LIBRARY_PATH} \"${install_library_path}:\$ENV{LD_LIBRARY_PATH}\")
              set(ENV{DYLD_LIBRARY_PATH} \"${install_library_path}:\$ENV{DYLD_LIBRARY_PATH}\")"
-            COMPONENT ${package})
+            COMPONENT ${package}
+        )
     endif()
 endfunction()
 
@@ -188,9 +213,10 @@ function(yggdrasil_install_python_stubs PKG_UPPER package)
     string(REPLACE ";" " " rename_packages "${ARG_RENAME_PACKAGES}")
     _yggdrasil_stage_install_helper(yggdrasilPatchPythonStubs.cmake staged_module)
     install(CODE
-            "include(\"${staged_module}\")
+        "include(\"${staged_module}\")
              yggdrasil_patch_python_stubs(PACKAGE ${package} ${private_module_argument} RENAME_PACKAGES ${rename_packages})"
-            COMPONENT ${package})
+        COMPONENT ${package}
+    )
 endfunction()
 
 # Installs the listed python source files preserving their relative layout:
@@ -200,7 +226,8 @@ function(yggdrasil_install_python_files package source_dir)
     foreach(python_file IN LISTS ARG_FILES)
         get_filename_component(python_file_directory "${python_file}" DIRECTORY)
         install(FILES "${source_dir}/${python_file}"
-                DESTINATION "${python_file_directory}"
-                COMPONENT ${package})
+            DESTINATION "${python_file_directory}"
+            COMPONENT ${package}
+        )
     endforeach()
 endfunction()

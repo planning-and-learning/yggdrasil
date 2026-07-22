@@ -27,9 +27,11 @@ function(yggdrasil_patch_python_stubs)
     endif()
 
     if(ARG_PRIVATE_MODULE)
-        file(GLOB private_stub_roots LIST_DIRECTORIES true
-             "${stub_root}/${ARG_PRIVATE_MODULE}"
-             "${stub_root}/${ARG_PRIVATE_MODULE}.*")
+        file(GLOB private_stub_roots
+            LIST_DIRECTORIES true
+            "${stub_root}/${ARG_PRIVATE_MODULE}"
+            "${stub_root}/${ARG_PRIVATE_MODULE}.*"
+        )
         list(SORT private_stub_roots)
 
         foreach(private_stub_root IN LISTS private_stub_roots)
@@ -74,17 +76,31 @@ function(yggdrasil_patch_python_stubs)
         set(patched_stub_content "${stub_content}")
 
         foreach(rename_package IN LISTS ARG_RENAME_PACKAGES)
-            string(REPLACE "${rename_package}._${rename_package}." "${rename_package}."
-                   patched_stub_content "${patched_stub_content}")
-            string(REPLACE "${rename_package}._${rename_package}" "${rename_package}"
-                   patched_stub_content "${patched_stub_content}")
+            string(
+                REPLACE
+                "${rename_package}._${rename_package}."
+                "${rename_package}."
+                patched_stub_content
+                "${patched_stub_content}"
+            )
+            string(
+                REPLACE
+                "${rename_package}._${rename_package}"
+                "${rename_package}"
+                patched_stub_content
+                "${patched_stub_content}"
+            )
         endforeach()
 
-        # nanobind stubgen emits bare `os.PathLike` for filesystem::path params; subscript it
-        # so strict type checkers do not see PathLike[Unknown]. Generated stubs never contain
-        # the subscripted form, so a plain replace is idempotent per install.
-        string(REGEX REPLACE "os\\.PathLike([^[])" "os.PathLike[str]\\1"
-               patched_stub_content "${patched_stub_content}")
+        # Subscript nanobind's bare os.PathLike so strict type checkers do not see PathLike[Unknown].
+        # Generated stubs never contain the subscripted form, so this remains idempotent.
+        string(
+            REGEX REPLACE
+            "os\\.PathLike([^[])"
+            "os.PathLike[str]\\1"
+            patched_stub_content
+            "${patched_stub_content}"
+        )
 
         if(NOT stub_content STREQUAL patched_stub_content)
             file(WRITE "${stub_file}" "${patched_stub_content}")
