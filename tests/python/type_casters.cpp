@@ -25,6 +25,8 @@ namespace nb = nanobind;
 
 NB_MODULE(yggdrasil_type_casters_test, m)
 {
+    using Interval = ygg::ClosedInterval<ygg::float_t>;
+
     m.def("array_view",
           []
           {
@@ -52,4 +54,9 @@ NB_MODULE(yggdrasil_type_casters_test, m)
               static constexpr auto context = 0;
               return ygg::View<Array, int>(data, context);
           });
+
+    m.def("empty_interval", [] { return Interval {}; });
+    m.def("singleton_interval", [] { return Interval { 2.5, 2.5 }; });
+    m.def("bounded_interval", [] { return Interval { 1.25, 3.5 }; });
+    m.def("roundtrip_interval", [](Interval interval) { return interval; });
 }
