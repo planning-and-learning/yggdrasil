@@ -19,6 +19,7 @@
 #define YGG_SEMANTICS_HASH_HPP_
 
 #include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/core/dependent_false.hpp"
 #include "yggdrasil/semantics/murmurhash3.hpp"
 
 #include <array>
@@ -28,6 +29,7 @@
 #include <cstdint>
 #include <gtl/btree.hpp>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -91,7 +93,7 @@ struct Hash;
 template<std::integral T>
 struct Hash<T>
 {
-    hash_t operator()(const T& el) const noexcept { return fmix64(static_cast<uint64_t>(el)); }
+    hash_t operator()(const T& el) const noexcept { return static_cast<hash_t>(el); }
 };
 
 template<Enumeration T>
@@ -112,15 +114,28 @@ struct Hash<void>
     }
 };
 
-/// Pointers appear in identity tuples (e.g., a view's repository) to discriminate owners. Their
-/// address differs across runs (ASLR) and platforms, so hashing it would make hash values (and hash
-/// container iteration orders) irreproducible. All pointers therefore hash to a fixed salt: distinct
-/// owners still compare unequal via EqualTo, they merely share a hash bucket, which only costs
-/// performance in the rare case of mixing elements of many owners in one container.
 template<typename T>
 struct Hash<T*>
 {
-    hash_t operator()(T* const&) const noexcept { return 0x2545f4914f6cdd1dULL; }  // any fixed salt
+    static_assert(dependent_false<T>::value, "ygg::Hash does not support raw pointers; hash a stable index instead.");
+};
+
+template<typename T>
+struct Hash<std::shared_ptr<T>>
+{
+    static_assert(dependent_false<T>::value, "ygg::Hash does not support shared_ptr; hash a stable index instead.");
+};
+
+template<typename T, typename Deleter>
+struct Hash<std::unique_ptr<T, Deleter>>
+{
+    static_assert(dependent_false<T>::value, "ygg::Hash does not support unique_ptr; hash a stable index instead.");
+};
+
+template<typename T>
+struct Hash<std::weak_ptr<T>>
+{
+    static_assert(dependent_false<T>::value, "ygg::Hash does not support weak_ptr; hash a stable index instead.");
 };
 
 template<std::floating_point T>
@@ -134,12 +149,12 @@ struct Hash<T>
             return 0x9e3779b97f4a7c15ULL;  // any fixed salt
 
         if (el == T(0))
-            return fmix64(0);  // +0.0 and -0.0 compare equal, so they must hash alike
+            return 0;  // +0.0 and -0.0 compare equal, so they must hash alike
 
         if constexpr (std::is_same_v<T, float>)
-            return fmix64(std::bit_cast<uint32_t>(el));
+            return std::bit_cast<uint32_t>(el);
         else
-            return fmix64(std::bit_cast<uint64_t>(el));
+            return std::bit_cast<uint64_t>(el);
     }
 };
 

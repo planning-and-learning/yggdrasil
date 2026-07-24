@@ -65,13 +65,7 @@ public:
     auto get_objects() const noexcept { return ygg::make_view(get_data(), *m_context); }
     auto get_key() const noexcept { return std::make_pair(get_relation(), get_objects()); }
 
-    auto identifying_members() const noexcept
-    {
-        if constexpr (requires { m_context->get_index(); })
-            return std::make_tuple(m_handle, m_context->get_index());
-        else
-            return std::make_tuple(m_handle, m_context);
-    }
+    auto identifying_members() const noexcept { return std::make_tuple(m_handle, m_context->get_index()); }
 };
 
 template<typename Relation, typename ObjectTag, std::ranges::forward_range BindingRange, typename C>

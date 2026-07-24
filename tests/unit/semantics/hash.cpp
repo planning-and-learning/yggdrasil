@@ -50,11 +50,11 @@ TEST(YggdrasilTests, CommonHashValuesArePlatformIndependent)
 {
     static_assert(std::same_as<decltype(ygg::Hash<int> {}(42)), ygg::hash_t>);
     static_assert(sizeof(ygg::hash_t) == 8);
-    EXPECT_EQ(ygg::Hash<int> {}(42), 0x810879608e4259ccULL);
-    EXPECT_EQ(ygg::Hash<int> {}(0), 0x0000000000000000ULL);  // fmix64 fixed point
-    EXPECT_EQ(ygg::Hash<int> {}(-1), 0x64b5720b4b825f21ULL);
-    EXPECT_EQ(ygg::Hash<double> {}(1.5), 0x885dcc874e75b6f0ULL);
-    EXPECT_EQ(ygg::Hash<float> {}(1.5F), 0x58575b497a14b09cULL);
+    EXPECT_EQ(ygg::Hash<int> {}(42), 0x000000000000002aULL);
+    EXPECT_EQ(ygg::Hash<int> {}(0), 0x0000000000000000ULL);
+    EXPECT_EQ(ygg::Hash<int> {}(-1), 0xffffffffffffffffULL);
+    EXPECT_EQ(ygg::Hash<double> {}(1.5), 0x3ff8000000000000ULL);
+    EXPECT_EQ(ygg::Hash<float> {}(1.5F), 0x000000003fc00000ULL);
     EXPECT_EQ(ygg::Hash<double> {}(-0.0), ygg::Hash<double> {}(0.0));
     EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), 0x7728ac0c932a3086ULL);
     EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), ygg::Hash<std::string_view> {}(std::string_view("yggdrasil")));

@@ -353,7 +353,7 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     static_assert(ygg::CanonicalizableContext<ygg::Index<Binding>, Repository>);
     static_assert(ygg::ViewConcept<ygg::Index<Binding>, Repository>);
 
-    auto root = Repository();
+    auto root = Repository(0);
     const auto relation = ygg::Index<RepositoryTypesRelation>(0);
     const auto missing = ygg::Index<Binding> { relation, ygg::Index<ygg::formalism::Row>(0) };
 
@@ -378,13 +378,13 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_EQ(view.get_data().size(), 2);
     EXPECT_EQ(view.get_relation(), relation);
     EXPECT_EQ(view.get_objects().size(), 2);
-    EXPECT_EQ(std::get<1>(view.identifying_members()), &root);
+    EXPECT_EQ(std::get<1>(view.identifying_members()), root.get_index());
     EXPECT_EQ(&view.get_context(), &root);
     EXPECT_EQ(root[view.get_index()].size(), 2);
     EXPECT_EQ(root.front(relation).size(), 2);
     EXPECT_EQ(&root.get_canonical_context(view.get_index()), &root);
 
-    auto child = Repository(&root);
+    auto child = Repository(1, &root);
     const auto [child_view, child_created] = child.get_or_create(data);
 
     EXPECT_FALSE(child_created);
