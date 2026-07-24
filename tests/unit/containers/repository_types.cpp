@@ -188,6 +188,13 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesFactoryLocalRepository
     EXPECT_NE(ygg::Hash<BindingView> {}(first), ygg::Hash<BindingView> {}(second));
     EXPECT_TRUE(ygg::EqualTo<BindingView> {}(first, independent));
     EXPECT_EQ(ygg::Hash<BindingView> {}(first), ygg::Hash<BindingView> {}(independent));
+    EXPECT_FALSE(ygg::Less<> {}(first.get_key(), second.get_key()));
+    EXPECT_FALSE(ygg::Less<> {}(second.get_key(), first.get_key()));
+
+    objects[0] = ygg::Index<Object>(1);
+    const auto [larger, larger_created] = second_repository.get_or_create(ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects));
+    ASSERT_TRUE(larger_created);
+    EXPECT_TRUE(ygg::Less<> {}(first.get_key(), larger.get_key()));
 }
 
 TEST(YggdrasilTests, CommonRelationBindingDataValidatesArity)

@@ -24,6 +24,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <yggdrasil/containers/block_array_ordering.hpp>
 #include <yggdrasil/containers/vector.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formalism/binding_index.hpp>
@@ -63,7 +64,9 @@ public:
             return m_handle.relation;
     }
     auto get_objects() const noexcept { return ygg::make_view(get_data(), *m_context); }
-    auto get_key() const noexcept { return std::make_pair(get_relation(), get_objects()); }
+    // Use the relation index rather than its view: view identity includes the repository,
+    // while this key represents the logical binding across repositories.
+    auto get_key() const noexcept { return std::make_pair(m_handle.relation, get_data()); }
 
     auto identifying_members() const noexcept { return std::make_tuple(m_handle, m_context->get_index()); }
 };
