@@ -168,6 +168,15 @@ public:
         return get_or_create_local_with_hash(builder, BasicRelationRepository::hash(builder));
     }
 
+    /// Inserts without probing first. The caller must have established that the binding is absent
+    /// from this layer, e.g. by a preceding find_local_with_hash with the same hash.
+    Index<Row> insert_new_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
+    {
+        auto& slot = get_or_create_slot(builder.relation, builder.objects.size());
+
+        return Index<Row>(slot.parent_size + slot.container.insert_new_with_hash(h, builder.objects));
+    }
+
     ConstViewType at_local(Index<RelationBinding<T, ObjectTag>> index) const
     {
         const auto& [g, row] = index;

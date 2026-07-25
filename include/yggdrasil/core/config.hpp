@@ -22,6 +22,15 @@
 #define YGG_ENABLE_FMT_FORMATTERS 1
 #endif
 
+/// Keeps a rarely taken helper out of line, so its size does not count towards the inlined size of
+/// its caller. Without this, a hot caller whose body is small can exceed the inliner's single-call
+/// budget purely because of a cold path spliced into it.
+#if defined(_MSC_VER)
+#define YGG_NOINLINE __declspec(noinline)
+#else
+#define YGG_NOINLINE [[gnu::noinline]]
+#endif
+
 #include "yggdrasil/core/dependent_false.hpp"
 
 #include <algorithm>

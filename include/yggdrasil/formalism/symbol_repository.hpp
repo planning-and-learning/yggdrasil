@@ -160,6 +160,12 @@ public:
     }
 
     template<typename T>
+    auto insert_new_local_with_hash(Data<T>& builder, size_t h)
+    {
+        return get<T>().insert_new_local_with_hash(builder, h);
+    }
+
+    template<typename T>
     auto get_or_create_local(Data<T>& builder)
     {
         return get<T>().get_or_create_local(builder);

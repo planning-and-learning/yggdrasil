@@ -111,6 +111,17 @@ public:
 
     std::pair<Index<T>, bool> get_or_create_local(Data<T>& builder) { return get_or_create_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
+    /// Inserts without probing first. The caller must have established that the symbol is absent from
+    /// this layer, e.g. by a preceding find_local_with_hash with the same hash.
+    Index<T> insert_new_local_with_hash(Data<T>& builder, size_t h)
+    {
+        auto& container = m_slot.container;
+
+        builder.index.value = m_slot.parent_size + container.size();
+
+        return Index<T>(m_slot.parent_size + ygg::uint_t(container.insert_new_with_hash(h, builder)));
+    }
+
     const Data<T>& at_local(Index<T> index) const
     {
         const auto parent_size = m_slot.parent_size;

@@ -69,24 +69,27 @@ private:
         return std::nullopt;
     }
 
+    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Inserts without probing again: the
+    /// caller walked the whole hierarchy starting at this layer, so the symbol is absent here.
     template<typename T>
         requires NonRelationBindingConcept<T>
-    std::pair<View<Index<T>, Repository>, bool> get_or_create_with_hash(Data<T>& builder, size_t h)
+    YGG_NOINLINE std::pair<View<Index<T>, Repository>, bool> create_local_with_hash(Data<T>& builder, size_t h)
     {
-        const Repository* current = this;
-        while (current != nullptr)
-        {
-            if (auto index_or_nullopt = current->m_symbol_repository.find_local_with_hash(builder, h))
-                return { View<Index<T>, Repository>(*index_or_nullopt, *current), false };
-            current = current->m_parent;
-        }
-
         assert(!m_symbol_repository.template exists_parent_mutation<T>()
                && "Integrity error: Parent SymbolRepository modified after child "
                   "branching!");
 
-        const auto [index, success] = m_symbol_repository.get_or_create_local_with_hash(builder, h);
-        return { View<Index<T>, Repository>(index, *this), success };
+        return { View<Index<T>, Repository>(m_symbol_repository.insert_new_local_with_hash(builder, h), *this), true };
+    }
+
+    template<typename T>
+        requires NonRelationBindingConcept<T>
+    std::pair<View<Index<T>, Repository>, bool> get_or_create_with_hash(Data<T>& builder, size_t h)
+    {
+        if (auto found = find_with_hash(builder, h))
+            return { *found, false };
+
+        return create_local_with_hash(builder, h);
     }
 
     /**
@@ -120,28 +123,29 @@ private:
     std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
     get_or_create_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
     {
-        const auto g = builder.relation;
+        if (auto found = find_with_hash(builder, h))
+            return { *found, false };
 
-        const Repository* current = this;
-        while (current != nullptr)
-        {
-            if (auto row_or_nullopt = current->m_relation_repository.find_local_with_hash(builder, h))
-                return { View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
-                             Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, *row_or_nullopt },
-                             *current),
-                         false };
-            current = current->m_parent;
-        }
+        return create_local_with_hash(builder, h);
+    }
+
+    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Inserts without probing again: the
+    /// caller walked the whole hierarchy starting at this layer, so the binding is absent here.
+    template<typename T>
+    YGG_NOINLINE std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
+    create_local_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
+    {
+        const auto g = builder.relation;
 
         assert(!m_relation_repository.exists_parent_mutation(g)
                && "Integrity error: Parent RelationRepository modified after child "
                   "branching!");
 
-        const auto [row, success] = m_relation_repository.get_or_create_local_with_hash(builder, h);
+        const auto row = m_relation_repository.insert_new_local_with_hash(builder, h);
         return { View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
                      Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, row },
                      *this),
-                 success };
+                 true };
     }
 
 public:
