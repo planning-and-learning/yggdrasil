@@ -13,19 +13,19 @@ import types
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class BackendModule(types.ModuleType):
-    DEFAULT_BUILD_JOBS: int
     _num_jobs: Callable[[], int]
     _prepend_cmake_args: Callable[[str, str], None]
     _is_disabled: Callable[[str], bool]
-    _is_native_library: Callable[[Path], bool]
+    _should_strip: Callable[[Path], bool]
     _rewrite_record: Callable[[Path], None]
-    _rewrite_wheel: Callable[[Path, Callable[[Path], None]], None]
+    _strip_wheel_native_libraries: Callable[[Path], None]
 
     def num_jobs(self) -> int:
         return self._num_jobs()
@@ -36,14 +36,14 @@ class BackendModule(types.ModuleType):
     def is_disabled(self, value: str) -> bool:
         return self._is_disabled(value)
 
-    def is_native_library(self, path: Path) -> bool:
-        return self._is_native_library(path)
+    def should_strip(self, path: Path) -> bool:
+        return self._should_strip(path)
 
     def rewrite_record(self, wheel_root: Path) -> None:
         self._rewrite_record(wheel_root)
 
-    def rewrite_wheel(self, wheel_path: Path, mutate: Callable[[Path], None]) -> None:
-        self._rewrite_wheel(wheel_path, mutate)
+    def strip_wheel_native_libraries(self, wheel_path: Path) -> None:
+        self._strip_wheel_native_libraries(wheel_path)
 
 
 def load_backend() -> BackendModule:
@@ -104,7 +104,7 @@ def expect_raises_message(
 def test_job_count(backend: BackendModule) -> None:
     old = with_env("YGGDRASIL_JOBS", None)
     try:
-        assert backend.num_jobs() == backend.DEFAULT_BUILD_JOBS
+        assert backend.num_jobs() == (os.cpu_count() or 1)
         os.environ["YGGDRASIL_JOBS"] = "6"
         assert backend.num_jobs() == 6
         for value in ("0", "-1", "many"):
@@ -136,22 +136,25 @@ def test_disabled_value_parsing(backend: BackendModule) -> None:
         assert not backend.is_disabled(value)
 
 
-def test_native_library_detection(backend: BackendModule) -> None:
+def test_strip_candidate_detection(backend: BackendModule) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        assert backend.is_native_library(root / "module.so")
-        assert backend.is_native_library(
+        assert backend.should_strip(root / "module.so")
+        assert backend.should_strip(
             root / "module.cpython-312-x86_64-linux-gnu.so"
         )
-        assert backend.is_native_library(root / "libtbb.so.12.16")
-        assert backend.is_native_library(root / "module.dylib")
-        assert backend.is_native_library(root / "module.pyd")
-        assert backend.is_native_library(root / "module.dll")
-        assert not backend.is_native_library(root / "module.py")
-        assert not backend.is_native_library(root / "module.so.txt")
-        assert not backend.is_native_library(root / "module.so.")
-        assert not backend.is_native_library(root / "module.so.12a")
-        assert not backend.is_native_library(root / "module.so.12.16a")
+        assert backend.should_strip(root / "libtbb.so.12.16")
+        assert backend.should_strip(root / "module.dylib")
+        assert backend.should_strip(root / "module.pyd")
+        assert backend.should_strip(root / "module.dll")
+        assert backend.should_strip(root / "bin" / "hydra_pmi_proxy")
+        assert backend.should_strip(root / "bin" / "mpiexec")
+        assert not backend.should_strip(root / "module.py")
+        assert not backend.should_strip(root / "module.so.txt")
+        assert not backend.should_strip(root / "module.so.")
+        assert not backend.should_strip(root / "module.so.12a")
+        assert not backend.should_strip(root / "module.so.12.16a")
+        assert not backend.should_strip(root / "libexec" / "mpiexec")
 
 
 def read_record(wheel: zipfile.ZipFile) -> dict[str, list[str]]:
@@ -225,28 +228,26 @@ def test_rewrite_record_requires_exactly_one_record_file(
         )
 
 
-def test_rewrite_wheel(backend: BackendModule) -> None:
+def test_strip_wheel_native_libraries(backend: BackendModule) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wheel_path = Path(tmp) / "pyyggdrasil-0.0.0-py3-none-any.whl"
-        with zipfile.ZipFile(
-            wheel_path, "w", compression=zipfile.ZIP_DEFLATED
-        ) as wheel:
-            wheel.writestr("pyyggdrasil/__init__.py", "value = 1\n")
+        executable = zipfile.ZipInfo("pyyggdrasil/bin/mpiexec")
+        executable.external_attr = 0o755 << 16
+        with zipfile.ZipFile(wheel_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
+            wheel.writestr(executable, b"native executable")
             wheel.writestr("pyyggdrasil-0.0.0.dist-info/RECORD", "")
 
-        def mutate(wheel_root: Path) -> None:
-            (wheel_root / "pyyggdrasil" / "added.py").write_text(
-                "added = True\n", encoding="utf-8"
-            )
+        with (
+            mock.patch.object(backend.shutil, "which", return_value="/usr/bin/strip"),
+            mock.patch.object(backend.subprocess, "run") as strip,
+        ):
+            backend.strip_wheel_native_libraries(wheel_path)
 
-        backend.rewrite_wheel(wheel_path, mutate)
-
+        strip.assert_called_once()
         with zipfile.ZipFile(wheel_path) as wheel:
-            assert (
-                wheel.read("pyyggdrasil/added.py").decode("utf-8") == "added = True\n"
-            )
+            assert (wheel.getinfo(executable.filename).external_attr >> 16) & 0o777 == 0o755
             rows = read_record(wheel)
-            assert rows["pyyggdrasil/added.py"][0].startswith("sha256=")
+            assert rows[executable.filename][0].startswith("sha256=")
             assert rows["pyyggdrasil-0.0.0.dist-info/RECORD"] == ["", ""]
 
 
@@ -255,10 +256,10 @@ def main() -> None:
     test_job_count(backend)
     test_cmake_arg_prepend(backend)
     test_disabled_value_parsing(backend)
-    test_native_library_detection(backend)
+    test_strip_candidate_detection(backend)
     test_rewrite_record(backend)
     test_rewrite_record_requires_exactly_one_record_file(backend)
-    test_rewrite_wheel(backend)
+    test_strip_wheel_native_libraries(backend)
 
 
 if __name__ == "__main__":
