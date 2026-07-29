@@ -21,6 +21,7 @@ if (NOT oneTBB_FOUND)
             -DCMAKE_INSTALL_RPATH=${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}
             -DTBB_STRICT=OFF
             -DTBB_TEST=OFF
+            -DTBB_DISABLE_HWLOC_AUTOMATIC_SEARCH=ON
     )
 
     message(STATUS "Preparing external project \"oneTBB\" with args:")

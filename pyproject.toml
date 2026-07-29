@@ -1,16 +1,18 @@
 [build-system]
 requires = [
     # nanobind 2.12 stubgen requires scikit-build-core's pre-1.0 editable loader.
-    "scikit-build-core>=0.10,<1",
+    "scikit-build-core>=0.11,<1",
 ]
 build-backend = "pyyggdrasil_build_backend"
 backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.0.26"
+version = "0.0.27"
 description = "Native dependency provider for Dominik Drexler's planning projects"
 readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [
     {name = "Dominik Drexler", email = "dominik.drexler@liu.se"},
@@ -22,7 +24,7 @@ test = [
     "pytest",
     # build_support.py wraps scikit-build-core; installed here so type checkers
     # resolve it (it is otherwise only a build-system requirement).
-    "scikit-build-core>=0.10,<1",
+    "scikit-build-core>=0.11,<1",
 ]
 
 [tool.pytest.ini_options]
@@ -41,6 +43,7 @@ wheel.packages = []
 include = [
     "CMakeLists.txt",
     "Config.cmake.in",
+    "LICENSE",
     "README.md",
     "pyproject.toml",
     "python/**",
@@ -63,7 +66,8 @@ CMAKE_INSTALL_LIBDIR = "lib"
 
 [tool.cibuildwheel]
 container-engine = "docker"
-test-command = "python -c \"import pyyggdrasil; assert pyyggdrasil.include_dir().is_dir(); assert pyyggdrasil.library_dirs(); assert pyyggdrasil.cmake_dirs()\""
+test-requires = ["cmake>=3.21"]
+test-command = "python {project}/python/tests/test_mpi.py"
 
 [tool.cibuildwheel.linux]
 repair-wheel-command = "LD_LIBRARY_PATH=$(python -c 'import os, pathlib; prefix = pathlib.Path(\"dependencies-install\"); print(os.pathsep.join(str(path) for path in sorted(prefix.glob(\"lib*\")) if path.is_dir()))') auditwheel repair -w {dest_dir} {wheel}"

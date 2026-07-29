@@ -42,7 +42,6 @@ jobs:
           CIBW_SKIP: "*-musllinux_*"
           CIBW_ARCHS: x86_64
           CIBW_BUILD_VERBOSITY: "1"
-          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2"
 
       - name: Upload Linux wheel artifact
         uses: actions/upload-artifact@v5
@@ -80,7 +79,6 @@ jobs:
           CIBW_BUILD: "cp313-*"
           CIBW_ARCHS: arm64
           CIBW_BUILD_VERBOSITY: "1"
-          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2"
 
       - name: Upload macOS wheel artifact
         uses: actions/upload-artifact@v5

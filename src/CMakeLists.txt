@@ -3,8 +3,16 @@ cmake_minimum_required(VERSION 3.21)
 project(yggdrasil_native_sources)
 
 include(GNUInstallDirs)
+include(ProcessorCount)
 
 # Build configuration
+
+if(NOT DEFINED YGGDRASIL_JOBS)
+    ProcessorCount(YGGDRASIL_JOBS)
+endif()
+if(NOT YGGDRASIL_JOBS)
+    set(YGGDRASIL_JOBS 1)
+endif()
 
 set(DEFAULT_BUILD_TYPE "Release")
 if(NOT CMAKE_BUILD_TYPE)
@@ -46,16 +54,12 @@ set(
 )
 message(STATUS "Dependency install rpath: ${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}")
 
-# Dependencies
-
-add_subdirectory(argparse)
-add_subdirectory(benchmark)
-add_subdirectory(boost)
-add_subdirectory(cista)
-add_subdirectory(fmt)
-add_subdirectory(googletest)
-add_subdirectory(gtl)
-add_subdirectory(nanobind)
-add_subdirectory(nauty)
-add_subdirectory(oneTBB)
-add_subdirectory(valla)
+foreach(dependency IN ITEMS
+    argparse benchmark mpich boost cista fmt
+    googletest gtl nanobind nauty oneTBB valla
+)
+    add_subdirectory("${dependency}")
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${dependency}/licenses/"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${dependency}"
+    )
+endforeach()

@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from collections.abc import Callable
 from pathlib import Path
 from typing import Union
 
@@ -23,7 +22,6 @@ ConfigSettings = dict[str, Union[str, list[str]]]
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 YGGDRASIL_BUILD_DIR = ROOT_DIR / "dependencies-build"
-DEFAULT_BUILD_JOBS = 8
 
 
 def _native_prefix() -> Path:
@@ -35,10 +33,7 @@ def _build_type() -> str:
 
 
 def _num_jobs() -> int:
-    raw_value = os.environ.get("YGGDRASIL_JOBS")
-    if raw_value is None:
-        return DEFAULT_BUILD_JOBS
-
+    raw_value = os.environ.get("YGGDRASIL_JOBS", str(os.cpu_count() or 1))
     try:
         jobs = int(raw_value)
     except ValueError as error:
@@ -73,6 +68,7 @@ def _configure_and_install_dependencies() -> None:
         f"-DCMAKE_BUILD_TYPE={_build_type()}",
         f"-DCMAKE_INSTALL_PREFIX={_native_prefix()}",
         "-DCMAKE_INSTALL_LIBDIR=lib",
+        f"-DYGGDRASIL_JOBS={_num_jobs()}",
         f"-DPython_EXECUTABLE={sys.executable}",
     ]
 
@@ -104,7 +100,7 @@ def _is_versioned_shared_object(name: str) -> bool:
     return bool(version) and all(component.isdigit() for component in version.split("."))
 
 
-def _is_native_library(path: Path) -> bool:
+def _should_strip(path: Path) -> bool:
     name = path.name
     return (
         name.endswith(".so")
@@ -112,6 +108,7 @@ def _is_native_library(path: Path) -> bool:
         or name.endswith(".dylib")
         or name.endswith(".pyd")
         or name.endswith(".dll")
+        or (path.parent.name == "bin" and name in {"hydra_pmi_proxy", "mpiexec"})
     )
 
 
@@ -119,24 +116,6 @@ def _strip_args() -> list[str]:
     if platform.system() == "Darwin":
         return ["-x"]
     return ["--strip-unneeded"]
-
-
-def _rewrite_wheel(wheel_path: Path, mutator: Callable[[Path], None]) -> None:
-    with tempfile.TemporaryDirectory(prefix="pyyggdrasil-wheel-") as tmp:
-        wheel_root = Path(tmp) / "wheel"
-        with zipfile.ZipFile(wheel_path) as wheel:
-            wheel.extractall(wheel_root)
-
-        mutator(wheel_root)
-        _rewrite_record(wheel_root)
-
-        replacement_path = wheel_path.with_suffix(".tmp")
-        with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
-            for path in sorted(wheel_root.rglob("*")):
-                if path.is_file():
-                    wheel.write(path, path.relative_to(wheel_root).as_posix())
-
-        replacement_path.replace(wheel_path)
 
 
 def _record_digest(path: Path) -> tuple[str, str]:
@@ -175,9 +154,16 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
     if strip is None:
         return
 
-    def strip_native_libraries(wheel_root: Path) -> None:
+    with tempfile.TemporaryDirectory(prefix="pyyggdrasil-wheel-") as tmp:
+        wheel_root = Path(tmp) / "wheel"
+        with zipfile.ZipFile(wheel_path) as wheel:
+            for info in wheel.infolist():
+                path = Path(wheel.extract(info, wheel_root))
+                if mode := (info.external_attr >> 16) & 0o777:
+                    path.chmod(mode)
+
         for path in wheel_root.rglob("*"):
-            if path.is_file() and _is_native_library(path):
+            if path.is_file() and _should_strip(path):
                 subprocess.run(
                     [strip, *_strip_args(), str(path)],
                     check=False,
@@ -185,7 +171,13 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
                     stderr=subprocess.DEVNULL,
                 )
 
-    _rewrite_wheel(wheel_path, strip_native_libraries)
+        _rewrite_record(wheel_root)
+        replacement_path = wheel_path.with_suffix(".tmp")
+        with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
+            for path in sorted(wheel_root.rglob("*")):
+                if path.is_file():
+                    wheel.write(path, path.relative_to(wheel_root).as_posix())
+        replacement_path.replace(wheel_path)
 
 
 def get_requires_for_build_wheel(config_settings: ConfigSettings | None = None) -> list[str]:

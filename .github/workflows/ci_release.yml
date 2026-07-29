@@ -59,7 +59,6 @@ jobs:
           CIBW_SKIP: "*-musllinux_*"
           CIBW_ARCHS: "${{ matrix.architecture }}"
           CIBW_BUILD_VERBOSITY: "1"
-          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2"
 
   build_wheels_macos:
     runs-on: macos-latest
@@ -89,4 +88,3 @@ jobs:
           CIBW_BUILD: "${{ matrix.python-version }}-*"
           CIBW_ARCHS: arm64
           CIBW_BUILD_VERBOSITY: "1"
-          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2"

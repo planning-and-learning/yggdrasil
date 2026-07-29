@@ -151,7 +151,7 @@ class ProviderBackend:
     # -- pre-build ---------------------------------------------------------
 
     def _num_jobs(self) -> int:
-        raw_jobs = os.environ.get(self.jobs_env, "8")
+        raw_jobs = os.environ.get(self.jobs_env, str(os.cpu_count() or 1))
         try:
             jobs = int(raw_jobs)
         except ValueError as err:

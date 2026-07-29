@@ -58,7 +58,8 @@ def _read_wheel(path: Path) -> dict[str, str]:
 def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     backend = _backend()
     monkeypatch.delenv("CONSUMER_JOBS", raising=False)
-    assert _num_jobs(backend) == 8
+    monkeypatch.setattr(os, "cpu_count", lambda: 4)
+    assert _num_jobs(backend) == 4
     monkeypatch.setenv("CONSUMER_JOBS", "6")
     assert _num_jobs(backend) == 6
 

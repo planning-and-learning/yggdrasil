@@ -39,7 +39,7 @@ Python packages that consume this native prefix should depend on:
 
 ```toml
 dependencies = [
-    "pyyggdrasil>=0.0.26,<0.1",
+    "pyyggdrasil>=0.0.27,<0.1",
 ]
 ```
 
@@ -64,7 +64,8 @@ YGGDRASIL_NATIVE_PREFIX=/path/to/dependencies-install \
 uv build --wheel
 ```
 
-Set `YGGDRASIL_JOBS` to control the native dependency build parallelism.
+Native builds use all available processors by default. Set `YGGDRASIL_JOBS`
+to override the build parallelism.
 Set `YGGDRASIL_BUILD_TYPE` to select the dependency build profile; it defaults
 to `Release`.
 
@@ -86,7 +87,7 @@ cmake -S src -B dependencies-build \
   -DCMAKE_INSTALL_PREFIX=dependencies-install \
   -DCMAKE_INSTALL_LIBDIR=lib
 
-cmake --build dependencies-build -j4
+cmake --build dependencies-build --parallel
 cmake --install dependencies-build
 ```
 
@@ -104,7 +105,7 @@ cmake -S . -B build \
   -DYGGDRASIL_NATIVE_PREFIX="$PWD/dependencies-install" \
   -DYGGDRASIL_BUILD_TESTS=ON
 
-cmake --build build -j4
+cmake --build build --parallel
 ctest --test-dir build
 ```
 
@@ -141,13 +142,34 @@ cmake -S . -B build \
 ```
 
 ```cmake
-find_package(yggdrasil 0.0.26 CONFIG REQUIRED)
+find_package(yggdrasil 0.0.27 CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE yggdrasil::yggdrasil)
 ```
 
 For compiler invocations launched from Python, use `pyyggdrasil.include_dir()`
 for the C++ headers and `pyyggdrasil.library_dirs()` for installed native
 library directories.
+
+### MPI
+
+The wheel includes a TCP/shared-memory MPICH runtime and Boost.MPI. MPI remains
+opt-in and is not linked by `yggdrasil::yggdrasil`:
+
+```cmake
+find_package(yggdrasil CONFIG REQUIRED)
+set(MPI_HOME "${YGGDRASIL_NATIVE_PREFIX}")
+set(MPI_CXX_SKIP_MPICXX ON)
+find_package(MPI REQUIRED COMPONENTS CXX)
+find_package(Boost CONFIG REQUIRED COMPONENTS mpi serialization
+    PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+target_link_libraries(distributed PRIVATE
+    MPI::MPI_CXX Boost::mpi Boost::serialization)
+```
+
+The launcher is `${YGGDRASIL_NATIVE_PREFIX}/bin/mpiexec`, or from Python,
+`pyyggdrasil.native_prefix() / "bin" / "mpiexec"`. Use the bundled launcher
+and libraries together; vendor interconnects and vendor MPI require a separate
+source build.
 
 ## fmt Formatters
 

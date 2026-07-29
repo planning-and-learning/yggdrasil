@@ -102,9 +102,8 @@ install(FILES
 # ARE bundled: downstream test/benchmark suites discover them from this prefix
 # via find_package(GTest)/find_package(benchmark) with NO_DEFAULT_PATH, so they
 # are pinned to the same versions as the rest of the toolchain. Still pruned:
-# no static archives or libtool files, no nauty command line tools, and only the
-# Boost runtime libraries that are actually linked downstream: json, iostreams,
-# and container (a CMake-level dependency of Boost::json).
+# no static archives or libtool files, no command line tools other than the
+# minimal MPI toolchain, and only Boost runtime libraries linked downstream.
 foreach(native_dir IN ITEMS include lib lib64)
     if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}")
         install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
@@ -113,19 +112,60 @@ foreach(native_dir IN ITEMS include lib lib64)
             REGEX "/pkgconfig$" EXCLUDE
             REGEX "\\.(a|la)$" EXCLUDE
             REGEX "/libboost_[^/]*\\.(so|dylib)[^/]*$" EXCLUDE
+            REGEX "/lib(mpi|mpl|opa)[^/]*\\.(so|dylib)[^/]*$" EXCLUDE
         )
-        # Re-add the linked Boost runtime libraries; install(DIRECTORY)
-        # preserves the symlink chains.
-        install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
-            DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-            COMPONENT pyyggdrasil
-            FILES_MATCHING
-            REGEX "/libboost_(json|iostreams|container)[^/]*\\.(so|dylib)[^/]*$"
-            REGEX "/cmake$" EXCLUDE
-            REGEX "/pkgconfig$" EXCLUDE
-        )
+        foreach(boost_component IN ITEMS container iostreams json mpi serialization)
+            file(GLOB boost_runtime_libraries
+                LIST_DIRECTORIES false
+                "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}/libboost_${boost_component}*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
+            )
+            foreach(boost_runtime_library IN LISTS boost_runtime_libraries)
+                if(NOT IS_SYMLINK "${boost_runtime_library}")
+                    install(FILES "${boost_runtime_library}"
+                        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${native_dir}"
+                        COMPONENT pyyggdrasil
+                    )
+                endif()
+            endforeach()
+        endforeach()
     endif()
 endforeach()
+
+if(UNIX)
+    # MPICH 5.0.1 uses ABI soname 12. Keep only the soname file so wheel
+    # creation cannot expand its symlink chain into duplicate libraries.
+    if(APPLE)
+        set(mpi_runtime_name "libmpi.12.dylib")
+    else()
+        set(mpi_runtime_name "libmpi.so.12")
+    endif()
+    file(REAL_PATH
+        "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${mpi_runtime_name}"
+        mpi_runtime_library
+    )
+    install(FILES "${mpi_runtime_library}"
+        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}"
+        RENAME "${mpi_runtime_name}"
+        COMPONENT pyyggdrasil
+    )
+
+    foreach(mpi_tool IN ITEMS mpicc mpicxx hydra_pmi_proxy)
+        install(PROGRAMS "${YGGDRASIL_NATIVE_PREFIX}/bin/${mpi_tool}"
+            DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/bin"
+            COMPONENT pyyggdrasil
+        )
+    endforeach()
+    install(PROGRAMS "${YGGDRASIL_NATIVE_PREFIX}/bin/mpiexec.hydra"
+        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/bin"
+        RENAME mpiexec
+        COMPONENT pyyggdrasil
+    )
+endif()
+
+install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/share/licenses/"
+    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/share/licenses"
+    COMPONENT pyyggdrasil
+)
 
 if(WIN32 AND EXISTS "${YGGDRASIL_NATIVE_PREFIX}/bin")
     # Runtime DLLs live in bin/ on Windows.
@@ -141,6 +181,15 @@ install(CODE
          yggdrasil_fix_runtime_paths(LIB_DIR_GLOB \"pyyggdrasil/lib*\")"
     COMPONENT pyyggdrasil
 )
+
+if(UNIX AND NOT APPLE)
+    set(mpi_linker_script "${CMAKE_CURRENT_BINARY_DIR}/libmpi.so")
+    file(WRITE "${mpi_linker_script}" "INPUT(libmpi.so.12)\n")
+    install(FILES "${mpi_linker_script}"
+        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}"
+        COMPONENT pyyggdrasil
+    )
+endif()
 
 nanobind_add_stub(
     pyyggdrasil_stubs
