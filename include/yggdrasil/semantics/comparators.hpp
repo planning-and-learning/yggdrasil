@@ -22,6 +22,7 @@
 
 #include <array>
 #include <cmath>
+#include <compare>
 #include <cstddef>
 #include <functional>
 #include <gtl/btree.hpp>
@@ -46,6 +47,8 @@ constexpr bool less_range(LhsRange&& lhs, RhsRange&& rhs) noexcept;
 ///
 /// Forwards to std::less by default.
 /// Specializations can be injected into the namespace.
+/// Every specialization must define a total order whose equivalence agrees
+/// with `EqualTo`.
 template<typename T = void>
 struct Less
 {
@@ -245,137 +248,86 @@ struct Less<T>
     }
 };
 
-/// @brief `LessEqual` is our custom less-equal comparator, like
-/// std::less_equal.
+/// @brief Strong three-way comparison using Yggdrasil's semantic ordering.
 ///
-/// Forwards to std::less_equal by default.
-/// Specializations can be injected into the namespace.
-template<typename T>
-struct LessEqual
+/// `Less<T>` specializations must provide a total order: if neither value is
+/// less than the other, the values are semantically equal.
+template<typename T = void>
+struct ThreeWayCompare
 {
-    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept { return !Less<T> {}(rhs, lhs); }
+    template<typename U = T, typename V = T>
+    constexpr std::strong_ordering operator()(const U& lhs, const V& rhs) const noexcept(noexcept(Less<T> {}(lhs, rhs)) && noexcept(Less<T> {}(rhs, lhs)))
+    {
+        if (Less<T> {}(lhs, rhs))
+            return std::strong_ordering::less;
+        if (Less<T> {}(rhs, lhs))
+            return std::strong_ordering::greater;
+        return std::strong_ordering::equal;
+    }
 };
 
-template<Identifiable T>
-struct LessEqual<T>
+template<>
+struct ThreeWayCompare<void>
 {
     using is_transparent = void;
 
-    using MembersTupleType = decltype(std::declval<T>().identifying_members());
-
-    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
+    template<typename T, typename U>
+    constexpr std::strong_ordering operator()(const T& lhs, const U& rhs) const
+        noexcept(noexcept(Less<std::remove_cvref_t<T>> {}(lhs, rhs)) && noexcept(Less<std::remove_cvref_t<T>> {}(rhs, lhs)))
     {
-        return LessEqual<std::remove_cvref_t<MembersTupleType>> {}(lhs.identifying_members(), rhs.identifying_members());
+        using Compare = Less<std::remove_cvref_t<T>>;
+        if (Compare {}(lhs, rhs))
+            return std::strong_ordering::less;
+        if (Compare {}(rhs, lhs))
+            return std::strong_ordering::greater;
+        return std::strong_ordering::equal;
     }
+};
 
-    // Mixed overloads support heterogeneous lookup against identifying member
-    // tuples.
-    template<SameAsIgnoringCvref<MembersTupleType> U>
-    constexpr bool operator()(const T& a, const U& v) const noexcept
-    {
-        return LessEqual<std::remove_cvref_t<MembersTupleType>> {}(a.identifying_members(), v);
-    }
+/// @brief `LessEqual` is our custom less-equal comparator, like
+/// std::less_equal.
+///
+/// Derived from `Less` so all predicates share the same semantic order.
+template<typename T>
+struct LessEqual
+{
+    using is_transparent = void;
 
-    template<SameAsIgnoringCvref<MembersTupleType> U>
-    constexpr bool operator()(const U& v, const T& b) const noexcept
+    template<typename U = T, typename V = T>
+    constexpr bool operator()(const U& lhs, const V& rhs) const noexcept(noexcept(Less<T> {}(rhs, lhs)))
     {
-        return LessEqual<std::remove_cvref_t<MembersTupleType>> {}(v, b.identifying_members());
-    }
-
-    // Tuple-like overload for direct identifying-member comparisons.
-    template<SameAsIgnoringCvref<MembersTupleType> U, SameAsIgnoringCvref<MembersTupleType> V>
-    constexpr bool operator()(const U& u, const V& v) const noexcept
-    {
-        return LessEqual<std::remove_cvref_t<MembersTupleType>> {}(u, v);
+        return !Less<T> {}(rhs, lhs);
     }
 };
 
 /// @brief `Greater` is our custom greater-than comparator, like std::greater.
 ///
-/// Forwards to std::greater by default.
-/// Specializations can be injected into the namespace.
+/// Derived from `Less` so all predicates share the same semantic order.
 template<typename T>
 struct Greater
 {
-    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept { return Less<T> {}(rhs, lhs); }
-};
-
-template<Identifiable T>
-struct Greater<T>
-{
     using is_transparent = void;
 
-    using MembersTupleType = decltype(std::declval<T>().identifying_members());
-
-    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
+    template<typename U = T, typename V = T>
+    constexpr bool operator()(const U& lhs, const V& rhs) const noexcept(noexcept(Less<T> {}(rhs, lhs)))
     {
-        return Greater<std::remove_cvref_t<MembersTupleType>> {}(lhs.identifying_members(), rhs.identifying_members());
-    }
-
-    // Mixed overloads support heterogeneous lookup against identifying member
-    // tuples.
-    template<SameAsIgnoringCvref<MembersTupleType> U>
-    constexpr bool operator()(const T& a, const U& v) const noexcept
-    {
-        return Greater<std::remove_cvref_t<MembersTupleType>> {}(a.identifying_members(), v);
-    }
-
-    template<SameAsIgnoringCvref<MembersTupleType> U>
-    constexpr bool operator()(const U& v, const T& b) const noexcept
-    {
-        return Greater<std::remove_cvref_t<MembersTupleType>> {}(v, b.identifying_members());
-    }
-
-    // Tuple-like overload for direct identifying-member comparisons.
-    template<SameAsIgnoringCvref<MembersTupleType> U, SameAsIgnoringCvref<MembersTupleType> V>
-    constexpr bool operator()(const U& u, const V& v) const noexcept
-    {
-        return Greater<std::remove_cvref_t<MembersTupleType>> {}(u, v);
+        return Less<T> {}(rhs, lhs);
     }
 };
 
 /// @brief `GreaterEqual` is our custom greater-equal comparator, like
 /// std::greater_equal.
 ///
-/// Forwards to std::greater_equal by default.
-/// Specializations can be injected into the namespace.
+/// Derived from `Less` so all predicates share the same semantic order.
 template<typename T>
 struct GreaterEqual
 {
-    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept { return !Less<T> {}(lhs, rhs); }
-};
-
-template<Identifiable T>
-struct GreaterEqual<T>
-{
     using is_transparent = void;
 
-    using MembersTupleType = decltype(std::declval<T>().identifying_members());
-
-    constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
+    template<typename U = T, typename V = T>
+    constexpr bool operator()(const U& lhs, const V& rhs) const noexcept(noexcept(Less<T> {}(lhs, rhs)))
     {
-        return GreaterEqual<std::remove_cvref_t<MembersTupleType>> {}(lhs.identifying_members(), rhs.identifying_members());
-    }
-
-    // Mixed overloads support heterogeneous lookup against identifying member
-    // tuples.
-    template<SameAsIgnoringCvref<MembersTupleType> U>
-    constexpr bool operator()(const T& a, const U& v) const noexcept
-    {
-        return GreaterEqual<std::remove_cvref_t<MembersTupleType>> {}(a.identifying_members(), v);
-    }
-
-    template<SameAsIgnoringCvref<MembersTupleType> U>
-    constexpr bool operator()(const U& v, const T& b) const noexcept
-    {
-        return GreaterEqual<std::remove_cvref_t<MembersTupleType>> {}(v, b.identifying_members());
-    }
-
-    // Tuple-like overload for direct identifying-member comparisons.
-    template<SameAsIgnoringCvref<MembersTupleType> U, SameAsIgnoringCvref<MembersTupleType> V>
-    constexpr bool operator()(const U& u, const V& v) const noexcept
-    {
-        return GreaterEqual<std::remove_cvref_t<MembersTupleType>> {}(u, v);
+        return !Less<T> {}(lhs, rhs);
     }
 };
 

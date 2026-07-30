@@ -15,6 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <compare>
 #include <concepts>
 #include <gtest/gtest.h>
 #include <yggdrasil/containers/vector.hpp>
@@ -35,11 +36,15 @@ TEST(YggdrasilTests, CommonCistaVectorViewExposesBackAndRandomAccessIterators)
     const auto view = ygg::View<Vector, int>(vector, context);
 
     static_assert(std::same_as<decltype(view.get_handle()), const Vector&>);
+    static_assert(std::same_as<decltype(view.begin() <=> view.end()), std::strong_ordering>);
     EXPECT_EQ(view.get_handle().size(), 3);
     EXPECT_EQ(view.front(), 1);
     EXPECT_EQ(view.back(), 3);
     EXPECT_EQ(view[1], 2);
+    EXPECT_EQ(view.at(1), 2);
     EXPECT_EQ(*view.begin(), 1);
+    EXPECT_EQ(*view.cbegin(), 1);
+    EXPECT_EQ(view.cend(), view.end());
     EXPECT_EQ(view.begin()[2], 3);
     EXPECT_EQ(view.end() - view.begin(), 3);
     EXPECT_LT(view.begin(), view.end());

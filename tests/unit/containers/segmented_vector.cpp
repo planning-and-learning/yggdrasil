@@ -1,7 +1,10 @@
+#include <concepts>
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <ranges>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <yggdrasil/containers/segmented_vector.hpp>
 
 namespace ygg::tests
@@ -18,7 +21,13 @@ TEST(CommonSegmentedVectorTest, EmptySizeCapacityAndMemoryUsage)
 
 TEST(CommonSegmentedVectorTest, SupportsIndexedAccessAcrossSegments)
 {
-    ygg::SegmentedVector<int, 2> vector;
+    using Vector = ygg::SegmentedVector<int, 2>;
+    static_assert(std::random_access_iterator<Vector::iterator>);
+    static_assert(std::random_access_iterator<Vector::const_iterator>);
+    static_assert(std::ranges::random_access_range<Vector>);
+    static_assert(std::ranges::random_access_range<const Vector>);
+
+    Vector vector;
 
     for (int i = 0; i < 7; ++i)
         vector.push_back(i * 10);
@@ -36,6 +45,11 @@ TEST(CommonSegmentedVectorTest, SupportsIndexedAccessAcrossSegments)
 
     EXPECT_EQ(vector.front(), 0);
     EXPECT_EQ(vector.back(), 60);
+    EXPECT_EQ(vector.end() - vector.begin(), 7);
+    EXPECT_EQ(vector.begin()[4], 40);
+    EXPECT_EQ(*(3 + vector.begin()), 30);
+    EXPECT_EQ(*vector.cbegin(), 0);
+    EXPECT_EQ(vector.cend(), std::as_const(vector).end());
 }
 
 TEST(CommonSegmentedVectorTest, MutableAccessUpdatesStoredElements)

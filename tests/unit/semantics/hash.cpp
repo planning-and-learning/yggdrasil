@@ -27,12 +27,12 @@
 #include <variant>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/containers/block_array_hash.hpp>
-#include <yggdrasil/containers/dynamic_bitset_hash.hpp>
-#include <yggdrasil/containers/raw_vector_hash.hpp>
-#include <yggdrasil/containers/segmented_vector_hash.hpp>
 #include <yggdrasil/core/observer_ptr_hash.hpp>
 #include <yggdrasil/semantics/comparators.hpp>
+#include <yggdrasil/semantics/containers/block_array_hash.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_hash.hpp>
+#include <yggdrasil/semantics/containers/raw_vector_hash.hpp>
+#include <yggdrasil/semantics/containers/segmented_vector_hash.hpp>
 #include <yggdrasil/semantics/hash.hpp>
 #include <yggdrasil/serialization/cista_hash.hpp>
 
@@ -281,7 +281,7 @@ TEST(YggdrasilTests, CommonCistaHashAdaptersHashViews)
     EXPECT_NE(ygg::Hash<VariantView> {}(VariantView(Variant {}, context)), ygg::Hash<VariantView> {}(VariantView(lhs_variant, context)));
 }
 
-TEST(YggdrasilTests, CommonBlockArrayHashAdaptersHashViews)
+TEST(YggdrasilTests, CommonArrayHashAdaptersHashViews)
 {
     auto lhs_storage = std::vector<uint8_t> { 1, 2 };
     auto rhs_storage = std::vector<uint8_t> { 1, 2 };
@@ -298,6 +298,24 @@ TEST(YggdrasilTests, CommonBlockArrayHashAdaptersHashViews)
     const auto context = HashContext {};
     using WrappedView = ygg::View<BlockView, HashContext>;
     EXPECT_EQ(ygg::Hash<WrappedView> {}(WrappedView(lhs, context)), ygg::Hash<WrappedView> {}(WrappedView(rhs, context)));
+
+    auto lhs_bits = std::array<uint8_t, 1> {};
+    auto rhs_bits = std::array<uint8_t, 1> {};
+    auto different_bits = std::array<uint8_t, 1> {};
+    using BitPackedView = ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>;
+    auto bit_lhs = BitPackedView(lhs_bits.data(), 2, 2, 0);
+    auto bit_rhs = BitPackedView(rhs_bits.data(), 2, 2, 0);
+    auto bit_different = BitPackedView(different_bits.data(), 2, 2, 0);
+    bit_lhs = std::array<uint8_t, 2> { 1, 2 };
+    bit_rhs = std::array<uint8_t, 2> { 1, 2 };
+    bit_different = std::array<uint8_t, 2> { 1, 3 };
+
+    EXPECT_EQ(ygg::Hash<BitPackedView> {}(bit_lhs), ygg::Hash<BitPackedView> {}(bit_rhs));
+    EXPECT_NE(ygg::Hash<BitPackedView> {}(bit_lhs), ygg::Hash<BitPackedView> {}(bit_different));
+
+    using WrappedBitPackedView = ygg::View<BitPackedView, HashContext>;
+    EXPECT_EQ(ygg::Hash<WrappedBitPackedView> {}(WrappedBitPackedView(bit_lhs, context)),
+              ygg::Hash<WrappedBitPackedView> {}(WrappedBitPackedView(bit_rhs, context)));
 }
 
 TEST(YggdrasilTests, CommonRawAndSegmentedVectorHashAdaptersHashValues)

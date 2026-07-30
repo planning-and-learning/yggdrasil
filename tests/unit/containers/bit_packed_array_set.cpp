@@ -152,6 +152,7 @@ TEST(YggdrasilTests, CommonBitPackedArraySet)
                   12);  /// capacity 16 arrays require 96 bits = 12 uint8_t
         // 2^{5+1} - 1 = 31
         EXPECT_EQ(set.capacity(), 31);
+        EXPECT_GT(set.memory_usage(), 0);
     }
 }
 

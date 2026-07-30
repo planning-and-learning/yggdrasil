@@ -25,12 +25,12 @@
 #include <variant>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/containers/block_array_equal_to.hpp>
-#include <yggdrasil/containers/dynamic_bitset_equal_to.hpp>
-#include <yggdrasil/containers/raw_vector_equal_to.hpp>
-#include <yggdrasil/containers/segmented_vector_equal_to.hpp>
 #include <yggdrasil/core/observer_ptr_equal_to.hpp>
 #include <yggdrasil/semantics/comparators.hpp>
+#include <yggdrasil/semantics/containers/block_array_equal_to.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp>
+#include <yggdrasil/semantics/containers/raw_vector_equal_to.hpp>
+#include <yggdrasil/semantics/containers/segmented_vector_equal_to.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/serialization/cista_equal_to.hpp>
 
@@ -259,7 +259,7 @@ TEST(YggdrasilTests, CommonCistaEqualToAdaptersCompareViews)
     EXPECT_FALSE(ygg::EqualTo<VariantView> {}(VariantView(Variant {}, context), VariantView(lhs_variant, context)));
 }
 
-TEST(YggdrasilTests, CommonBlockArrayEqualToAdaptersCompareViews)
+TEST(YggdrasilTests, CommonArrayEqualToAdaptersCompareViews)
 {
     auto lhs_storage = std::vector<uint8_t> { 1, 2 };
     auto rhs_storage = std::vector<uint8_t> { 1, 2 };
@@ -277,6 +277,24 @@ TEST(YggdrasilTests, CommonBlockArrayEqualToAdaptersCompareViews)
     using WrappedView = ygg::View<BlockView, EqualToContext>;
     EXPECT_TRUE(ygg::EqualTo<WrappedView> {}(WrappedView(lhs, context), WrappedView(rhs, context)));
     EXPECT_FALSE(ygg::EqualTo<WrappedView> {}(WrappedView(lhs, context), WrappedView(different, context)));
+
+    auto lhs_bits = std::array<uint8_t, 1> {};
+    auto rhs_bits = std::array<uint8_t, 1> {};
+    auto different_bits = std::array<uint8_t, 1> {};
+    using BitPackedView = ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>;
+    auto bit_lhs = BitPackedView(lhs_bits.data(), 2, 2, 0);
+    auto bit_rhs = BitPackedView(rhs_bits.data(), 2, 2, 0);
+    auto bit_different = BitPackedView(different_bits.data(), 2, 2, 0);
+    bit_lhs = std::array<uint8_t, 2> { 1, 2 };
+    bit_rhs = std::array<uint8_t, 2> { 1, 2 };
+    bit_different = std::array<uint8_t, 2> { 1, 3 };
+
+    EXPECT_TRUE(ygg::EqualTo<BitPackedView> {}(bit_lhs, bit_rhs));
+    EXPECT_FALSE(ygg::EqualTo<BitPackedView> {}(bit_lhs, bit_different));
+
+    using WrappedBitPackedView = ygg::View<BitPackedView, EqualToContext>;
+    EXPECT_TRUE(ygg::EqualTo<WrappedBitPackedView> {}(WrappedBitPackedView(bit_lhs, context), WrappedBitPackedView(bit_rhs, context)));
+    EXPECT_FALSE(ygg::EqualTo<WrappedBitPackedView> {}(WrappedBitPackedView(bit_lhs, context), WrappedBitPackedView(bit_different, context)));
 }
 
 TEST(YggdrasilTests, CommonRawAndSegmentedVectorEqualToAdaptersCompareValues)

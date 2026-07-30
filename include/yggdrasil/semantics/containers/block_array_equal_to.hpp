@@ -15,49 +15,47 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_BLOCK_ARRAY_ORDERING_HPP_
-#define YGG_CONTAINERS_BLOCK_ARRAY_ORDERING_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_BLOCK_ARRAY_EQUAL_TO_HPP_
+#define YGG_SEMANTICS_CONTAINERS_BLOCK_ARRAY_EQUAL_TO_HPP_
 
 #include "yggdrasil/containers/array.hpp"
-#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
 
 namespace ygg
 {
 
-template<typename T, typename C>
-struct View;
-
 template<typename Block, typename Coder>
-struct Less<BasicBitPackedArrayView<Block, Coder>>
+struct EqualTo<BasicBitPackedArrayView<Block, Coder>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
 template<typename Block, typename Coder, typename C>
-struct Less<View<BasicBitPackedArrayView<Block, Coder>, C>>
+struct EqualTo<View<BasicBitPackedArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
 template<typename Block, typename Coder>
-struct Less<BasicBlockArrayView<Block, Coder>>
+struct EqualTo<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
 template<typename Block, typename Coder, typename C>
-struct Less<View<BasicBlockArrayView<Block, Coder>, C>>
+struct EqualTo<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
+
 }
 
 #endif

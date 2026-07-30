@@ -19,7 +19,6 @@
 #define YGGDRASIL_HPP_
 
 #include "yggdrasil/buffer.hpp"
-#include "yggdrasil/containers/block_array_ordering.hpp"
 #include "yggdrasil/containers/containers.hpp"
 #include "yggdrasil/core.hpp"
 #include "yggdrasil/extensions.hpp"

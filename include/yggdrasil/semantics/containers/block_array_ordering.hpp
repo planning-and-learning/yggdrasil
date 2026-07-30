@@ -15,47 +15,49 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_BLOCK_ARRAY_HASH_HPP_
-#define YGG_CONTAINERS_BLOCK_ARRAY_HASH_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_BLOCK_ARRAY_ORDERING_HPP_
+#define YGG_SEMANTICS_CONTAINERS_BLOCK_ARRAY_ORDERING_HPP_
 
 #include "yggdrasil/containers/array.hpp"
-#include "yggdrasil/semantics/hash.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
 
 namespace ygg
 {
 
+template<typename T, typename C>
+struct View;
+
 template<typename Block, typename Coder>
-struct Hash<BasicBitPackedArrayView<Block, Coder>>
+struct Less<BasicBitPackedArrayView<Block, Coder>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder>;
 
-    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
 template<typename Block, typename Coder, typename C>
-struct Hash<View<BasicBitPackedArrayView<Block, Coder>, C>>
+struct Less<View<BasicBitPackedArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder>, C>;
 
-    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
 template<typename Block, typename Coder>
-struct Hash<BasicBlockArrayView<Block, Coder>>
+struct Less<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
 
-    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
 template<typename Block, typename Coder, typename C>
-struct Hash<View<BasicBlockArrayView<Block, Coder>, C>>
+struct Less<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;
 
-    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
+    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
-
 }
 
 #endif

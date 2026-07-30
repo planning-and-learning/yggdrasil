@@ -24,12 +24,12 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/containers/block_array_ordering.hpp>
 #include <yggdrasil/containers/vector.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formalism/binding_index.hpp>
 #include <yggdrasil/formalism/declarations.hpp>
 #include <yggdrasil/formalism/object_index.hpp>
+#include <yggdrasil/semantics/containers/block_array_ordering.hpp>
 
 namespace ygg
 {

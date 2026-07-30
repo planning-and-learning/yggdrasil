@@ -16,6 +16,7 @@
  */
 
 #include <array>
+#include <compare>
 #include <cstdint>
 #include <functional>
 #include <gtest/gtest.h>
@@ -28,12 +29,13 @@
 #include <variant>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/containers/block_array_ordering.hpp>
-#include <yggdrasil/containers/dynamic_bitset_ordering.hpp>
-#include <yggdrasil/containers/raw_vector_ordering.hpp>
-#include <yggdrasil/containers/segmented_vector_ordering.hpp>
 #include <yggdrasil/core/observer_ptr_ordering.hpp>
 #include <yggdrasil/semantics/comparators.hpp>
+#include <yggdrasil/semantics/comparison.hpp>
+#include <yggdrasil/semantics/containers/block_array_ordering.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp>
+#include <yggdrasil/semantics/containers/raw_vector_ordering.hpp>
+#include <yggdrasil/semantics/containers/segmented_vector_ordering.hpp>
 #include <yggdrasil/serialization/cista_ordering.hpp>
 
 namespace ygg::tests
@@ -52,8 +54,10 @@ struct IdentifiableComparatorValue
 };
 
 template<typename T>
-concept OrderedByAllCommonPredicates =
-    ygg::LessFor<ygg::Less<T>, T> && ygg::LessFor<ygg::LessEqual<T>, T> && ygg::LessFor<ygg::Greater<T>, T> && ygg::LessFor<ygg::GreaterEqual<T>, T>;
+concept OrderedByAllCommonPredicates = ygg::LessFor<ygg::Less<T>, T> && ygg::LessFor<ygg::LessEqual<T>, T> && ygg::LessFor<ygg::Greater<T>, T>
+                                       && ygg::LessFor<ygg::GreaterEqual<T>, T> && requires(const T& lhs, const T& rhs) {
+                                              { ygg::ThreeWayCompare<T> {}(lhs, rhs) } -> std::same_as<std::strong_ordering>;
+                                          };
 
 TEST(YggdrasilTests, CommonOrderingPredicatesCoverHashAndEqualToFamilies)
 {
@@ -63,6 +67,8 @@ TEST(YggdrasilTests, CommonOrderingPredicatesCoverHashAndEqualToFamilies)
     using CistaOptional = ::cista::optional<int>;
     using CistaVariant = ::cista::offset::variant<int, unsigned>;
 
+    static_assert(OrderedByAllCommonPredicates<double>);
+    static_assert(OrderedByAllCommonPredicates<IdentifiableComparatorValue>);
     static_assert(OrderedByAllCommonPredicates<std::array<int, 2>>);
     static_assert(OrderedByAllCommonPredicates<std::vector<int>>);
     static_assert(OrderedByAllCommonPredicates<std::set<int>>);
@@ -399,6 +405,11 @@ TEST(YggdrasilTests, CommonIdentifiableComparatorOrdersMembersAndTuples)
     EXPECT_TRUE(ygg::Less<IdentifiableComparatorValue> {}(lhs, rhs));
     EXPECT_TRUE(ygg::Less<IdentifiableComparatorValue> {}(lhs, rhs_members));
     EXPECT_FALSE(ygg::Less<IdentifiableComparatorValue> {}(rhs_members, lhs));
+    EXPECT_TRUE(ygg::LessEqual<IdentifiableComparatorValue> {}(lhs, rhs_members));
+    EXPECT_TRUE(ygg::Greater<IdentifiableComparatorValue> {}(rhs_members, lhs));
+    EXPECT_TRUE(ygg::GreaterEqual<IdentifiableComparatorValue> {}(rhs_members, lhs));
+    EXPECT_EQ(ygg::ThreeWayCompare<IdentifiableComparatorValue> {}(lhs, rhs_members), std::strong_ordering::less);
+    EXPECT_EQ(ygg::ThreeWayCompare<void> {}(lhs, rhs_members), std::strong_ordering::less);
 }
 
 TEST(YggdrasilTests, CommonCistaLessAdaptersOrderVariantViews)

@@ -15,33 +15,19 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
-#define YGG_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_SEGMENTED_VECTOR_HASH_HPP_
+#define YGG_SEMANTICS_CONTAINERS_SEGMENTED_VECTOR_HASH_HPP_
 
 #include "yggdrasil/containers/segmented_vector.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
-
-#include <cstddef>
+#include "yggdrasil/semantics/hash.hpp"
 
 namespace ygg
 {
 
 template<typename T, std::size_t FirstSegmentSize>
-struct EqualTo<SegmentedVector<T, FirstSegmentSize>>
+struct Hash<SegmentedVector<T, FirstSegmentSize>>
 {
-    bool operator()(const SegmentedVector<T, FirstSegmentSize>& lhs, const SegmentedVector<T, FirstSegmentSize>& rhs) const noexcept
-    {
-        if (lhs.size() != rhs.size())
-            return false;
-
-        for (std::size_t i = 0; i < lhs.size(); ++i)
-        {
-            if (!EqualTo<T> {}(lhs[i], rhs[i]))
-                return false;
-        }
-
-        return true;
-    }
+    hash_t operator()(const SegmentedVector<T, FirstSegmentSize>& value) const noexcept { return ygg::hash_range(value); }
 };
 
 }

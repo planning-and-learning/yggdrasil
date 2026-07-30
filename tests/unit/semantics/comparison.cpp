@@ -17,6 +17,7 @@
 
 #include <array>
 #include <cmath>
+#include <compare>
 #include <gtest/gtest.h>
 #include <limits>
 #include <tuple>
@@ -84,6 +85,7 @@ static_assert(comparison_fixture::Value(1) < comparison_fixture::Value(2));
 static_assert(comparison_fixture::Value(1) <= comparison_fixture::Value(2));
 static_assert(comparison_fixture::Value(2) > comparison_fixture::Value(1));
 static_assert(comparison_fixture::Value(2) >= comparison_fixture::Value(1));
+static_assert((comparison_fixture::Value(1) <=> comparison_fixture::Value(2)) == std::strong_ordering::less);
 static_assert(ygg::Comparable<comparison_fixture::Value>);
 static_assert(!comparison_fixture::FindsParentYggByAdl<comparison_fixture::Value>);
 
@@ -93,6 +95,7 @@ static_assert(ComparisonOwnedValue(1) < ComparisonOwnedValue(2));
 static_assert(ComparisonOwnedValue(1) <= ComparisonOwnedValue(2));
 static_assert(ComparisonOwnedValue(2) > ComparisonOwnedValue(1));
 static_assert(ComparisonOwnedValue(2) >= ComparisonOwnedValue(1));
+static_assert((ComparisonOwnedValue(1) <=> ComparisonOwnedValue(2)) == std::strong_ordering::less);
 
 static_assert(ComparisonIndex(1) == ComparisonIndex(1));
 static_assert(ComparisonIndex(1) != ComparisonIndex(2));
@@ -100,6 +103,7 @@ static_assert(ComparisonIndex(1) < ComparisonIndex(2));
 static_assert(ComparisonIndex(1) <= ComparisonIndex(2));
 static_assert(ComparisonIndex(2) > ComparisonIndex(1));
 static_assert(ComparisonIndex(2) >= ComparisonIndex(1));
+static_assert((ComparisonIndex(1) <=> ComparisonIndex(2)) == std::strong_ordering::less);
 
 static_assert(ComparisonUint(1) == ComparisonUint(1));
 static_assert(ComparisonUint(1) != ComparisonUint(2));
@@ -107,6 +111,7 @@ static_assert(ComparisonUint(1) < ComparisonUint(2));
 static_assert(ComparisonUint(1) <= ComparisonUint(2));
 static_assert(ComparisonUint(2) > ComparisonUint(1));
 static_assert(ComparisonUint(2) >= ComparisonUint(1));
+static_assert((ComparisonUint(1) <=> ComparisonUint(2)) == std::strong_ordering::less);
 
 constexpr auto quiet_nan = std::numeric_limits<double>::quiet_NaN();
 static_assert(ygg::EqualTo<double> {}(quiet_nan, quiet_nan));
@@ -114,6 +119,8 @@ static_assert(!ygg::EqualTo<double> {}(quiet_nan, 0.0));
 static_assert(ygg::Less<double> {}(0.0, quiet_nan));
 static_assert(!ygg::Less<double> {}(quiet_nan, 0.0));
 static_assert(!ygg::Less<double> {}(quiet_nan, quiet_nan));
+static_assert(ygg::ThreeWayCompare<double> {}(0.0, quiet_nan) == std::strong_ordering::less);
+static_assert(ygg::ThreeWayCompare<double> {}(quiet_nan, quiet_nan) == std::strong_ordering::equal);
 
 constexpr auto cista_pair_lhs = ::cista::pair<int, int> { 1, 2 };
 constexpr auto cista_pair_rhs = ::cista::pair<int, int> { 1, 3 };

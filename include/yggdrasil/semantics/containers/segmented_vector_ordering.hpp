@@ -15,9 +15,24 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_RAW_VECTOR_COMPARATORS_HPP_
-#define YGG_CONTAINERS_RAW_VECTOR_COMPARATORS_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_SEGMENTED_VECTOR_ORDERING_HPP_
+#define YGG_SEMANTICS_CONTAINERS_SEGMENTED_VECTOR_ORDERING_HPP_
 
-#include "yggdrasil/containers/raw_vector_ordering.hpp"
+#include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
+
+namespace ygg
+{
+
+template<typename T, std::size_t FirstSegmentSize>
+struct Less<SegmentedVector<T, FirstSegmentSize>>
+{
+    bool operator()(const SegmentedVector<T, FirstSegmentSize>& lhs, const SegmentedVector<T, FirstSegmentSize>& rhs) const noexcept
+    {
+        return less_range(lhs, rhs);
+    }
+};
+
+}
 
 #endif

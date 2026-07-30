@@ -15,45 +15,45 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_BLOCK_ARRAY_EQUAL_TO_HPP_
-#define YGG_CONTAINERS_BLOCK_ARRAY_EQUAL_TO_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_BLOCK_ARRAY_HASH_HPP_
+#define YGG_SEMANTICS_CONTAINERS_BLOCK_ARRAY_HASH_HPP_
 
 #include "yggdrasil/containers/array.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 
 namespace ygg
 {
 
 template<typename Block, typename Coder>
-struct EqualTo<BasicBitPackedArrayView<Block, Coder>>
+struct Hash<BasicBitPackedArrayView<Block, Coder>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<typename Block, typename Coder, typename C>
-struct EqualTo<View<BasicBitPackedArrayView<Block, Coder>, C>>
+struct Hash<View<BasicBitPackedArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<typename Block, typename Coder>
-struct EqualTo<BasicBlockArrayView<Block, Coder>>
+struct Hash<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 template<typename Block, typename Coder, typename C>
-struct EqualTo<View<BasicBlockArrayView<Block, Coder>, C>>
+struct Hash<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
 }

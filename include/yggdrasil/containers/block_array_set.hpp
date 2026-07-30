@@ -150,6 +150,7 @@ public:
     size_t capacity() const noexcept { return m_pool->capacity(); }
     bool empty() const noexcept { return m_pool->empty(); }
     size_t length() const noexcept { return m_pool->length(); }
+    size_t memory_usage() const noexcept { return m_pool->memory_usage() + m_set.capacity() * (sizeof(index_type) + sizeof(gtl::priv::ctrl_t)); }
     const auto& segments() const noexcept { return m_pool->segments(); }
 
 private:

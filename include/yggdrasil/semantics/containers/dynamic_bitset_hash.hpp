@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_DYNAMIC_BITSET_HASH_HPP_
-#define YGG_CONTAINERS_DYNAMIC_BITSET_HASH_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_DYNAMIC_BITSET_HASH_HPP_
+#define YGG_SEMANTICS_CONTAINERS_DYNAMIC_BITSET_HASH_HPP_
 
 #include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/semantics/hash.hpp"

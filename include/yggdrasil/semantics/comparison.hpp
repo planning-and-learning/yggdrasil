@@ -21,6 +21,7 @@
 #include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 
+#include <compare>
 #include <concepts>
 
 namespace ygg
@@ -33,27 +34,9 @@ constexpr bool operator==(const T& lhs, const T& rhs) noexcept
 }
 
 template<Identifiable T>
-constexpr bool operator<(const T& lhs, const T& rhs) noexcept
+constexpr std::strong_ordering operator<=>(const T& lhs, const T& rhs) noexcept
 {
-    return Less<T> {}(lhs, rhs);
-}
-
-template<Identifiable T>
-constexpr bool operator<=(const T& lhs, const T& rhs) noexcept
-{
-    return LessEqual<T> {}(lhs, rhs);
-}
-
-template<Identifiable T>
-constexpr bool operator>(const T& lhs, const T& rhs) noexcept
-{
-    return Greater<T> {}(lhs, rhs);
-}
-
-template<Identifiable T>
-constexpr bool operator>=(const T& lhs, const T& rhs) noexcept
-{
-    return GreaterEqual<T> {}(lhs, rhs);
+    return ThreeWayCompare<T> {}(lhs, rhs);
 }
 
 namespace comparison
@@ -68,42 +51,17 @@ struct Mixin
         return ygg::operator==(lhs, rhs);
     }
 
-    friend constexpr bool operator<(const Derived& lhs, const Derived& rhs) noexcept
+    friend constexpr std::strong_ordering operator<=>(const Derived& lhs, const Derived& rhs) noexcept
         requires Identifiable<Derived>
     {
-        return ygg::operator<(lhs, rhs);
-    }
-
-    friend constexpr bool operator<=(const Derived& lhs, const Derived& rhs) noexcept
-        requires Identifiable<Derived>
-    {
-        return ygg::operator<=(lhs, rhs);
-    }
-
-    friend constexpr bool operator>(const Derived& lhs, const Derived& rhs) noexcept
-        requires Identifiable<Derived>
-    {
-        return ygg::operator>(lhs, rhs);
-    }
-
-    friend constexpr bool operator>=(const Derived& lhs, const Derived& rhs) noexcept
-        requires Identifiable<Derived>
-    {
-        return ygg::operator>=(lhs, rhs);
+        return ygg::operator<=>(lhs, rhs);
     }
 };
 
 }  // namespace comparison
 
 template<typename T>
-concept Comparable = requires(const T& i, const T& j) {
-    { i == j } -> std::same_as<bool>;
-    { i != j } -> std::same_as<bool>;
-    { i <= j } -> std::same_as<bool>;
-    { i < j } -> std::same_as<bool>;
-    { i >= j } -> std::same_as<bool>;
-    { i > j } -> std::same_as<bool>;
-};
+concept Comparable = std::three_way_comparable<T, std::strong_ordering>;
 
 }  // namespace ygg
 

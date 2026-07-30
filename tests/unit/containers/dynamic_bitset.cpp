@@ -16,15 +16,16 @@
  */
 
 #include <boost/dynamic_bitset.hpp>
+#include <concepts>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <vector>
 #include <yggdrasil/containers/dynamic_bitset.hpp>
-#include <yggdrasil/containers/dynamic_bitset_equal_to.hpp>
-#include <yggdrasil/containers/dynamic_bitset_hash.hpp>
-#include <yggdrasil/containers/dynamic_bitset_ordering.hpp>
 #include <yggdrasil/core/config.hpp>
 #include <yggdrasil/formatting/dynamic_bitset_formatters.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_hash.hpp>
+#include <yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp>
 
 namespace ygg::tests
 {
@@ -86,6 +87,9 @@ TEST(YggdrasilTests, CommonDynamicBitsetAtChecksBounds)
 {
     auto blocks = std::vector<uint64_t>(ygg::BitsetSpan<uint64_t>::num_blocks(8), 0);
     auto bitset = ygg::BitsetSpan<uint64_t>(blocks.data(), 8);
+    using Bitset = decltype(bitset);
+    using ConstBitset = ygg::BitsetSpan<const uint64_t>;
+    static_assert(std::convertible_to<Bitset, ConstBitset>);
 
     bitset.at(3) = true;
     EXPECT_TRUE(bitset.at(3));
@@ -93,8 +97,10 @@ TEST(YggdrasilTests, CommonDynamicBitsetAtChecksBounds)
     bitset.at(3).flip();
     EXPECT_FALSE(bitset.at(3));
 
-    const auto const_bitset = ygg::BitsetSpan<const uint64_t>(blocks.data(), bitset.size());
+    const auto const_bitset = ConstBitset(bitset);
     EXPECT_FALSE(const_bitset.at(3));
+    EXPECT_EQ(bitset.data(), blocks.data());
+    EXPECT_EQ(const_bitset.data(), blocks.data());
 
     EXPECT_THROW(bitset.at(8), std::out_of_range);
     EXPECT_THROW(const_bitset.at(8), std::out_of_range);

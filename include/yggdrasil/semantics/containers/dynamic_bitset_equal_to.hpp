@@ -15,30 +15,31 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_RAW_VECTOR_ORDERING_HPP_
-#define YGG_CONTAINERS_RAW_VECTOR_ORDERING_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_DYNAMIC_BITSET_EQUAL_TO_HPP_
+#define YGG_SEMANTICS_CONTAINERS_DYNAMIC_BITSET_EQUAL_TO_HPP_
 
-#include "yggdrasil/containers/raw_vector_pool.hpp"
-#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/containers/dynamic_bitset.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+
+#include <concepts>
 
 namespace ygg
 {
 
-template<std::unsigned_integral Size, TriviallyCopyable T>
-struct Less<RawVectorView<Size, T>>
+template<typename Block, typename Allocator>
+struct EqualTo<boost::dynamic_bitset<Block, Allocator>>
 {
-    bool operator()(const RawVectorView<Size, T>& lhs, const RawVectorView<Size, T>& rhs) const noexcept { return less_range(lhs, rhs); }
+    using Type = boost::dynamic_bitset<Block, Allocator>;
+
+    bool operator()(const Type& lhs, const Type& rhs) const { return lhs == rhs; }
 };
 
-template<std::unsigned_integral Size, TriviallyCopyable T>
-struct Less<RawVectorView<const Size, const T>>
+template<std::unsigned_integral Block>
+struct EqualTo<BitsetSpan<Block>>
 {
-    bool operator()(const RawVectorView<const Size, const T>& lhs, const RawVectorView<const Size, const T>& rhs) const noexcept
-    {
-        return less_range(lhs, rhs);
-    }
+    bool operator()(const BitsetSpan<Block>& lhs, const BitsetSpan<Block>& rhs) const noexcept { return lhs == rhs; }
 };
 
-}
+}  // namespace ygg
 
 #endif

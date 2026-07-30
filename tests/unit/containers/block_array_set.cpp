@@ -51,10 +51,15 @@ TEST(YggdrasilTests, CommonBlockArrayViewHasBorrowedRandomAccessIterators)
     static_assert(std::random_access_iterator<typename View::iterator>);
     static_assert(std::random_access_iterator<typename View::const_iterator>);
     static_assert(std::random_access_iterator<typename ConstView::const_iterator>);
+    static_assert(std::convertible_to<View, ConstView>);
     static_assert(std::ranges::random_access_range<View>);
     static_assert(std::ranges::random_access_range<const View>);
     static_assert(std::ranges::borrowed_range<View>);
     static_assert(std::ranges::borrowed_range<ConstView>);
+    static_assert(std::random_access_iterator<typename Pool::iterator>);
+    static_assert(std::random_access_iterator<typename Pool::const_iterator>);
+    static_assert(std::ranges::random_access_range<Pool>);
+    static_assert(std::ranges::random_access_range<const Pool>);
 
     auto pool = Pool(5);
     pool.push_back(std::array<uint8_t, 5> { 1, 2, 3, 4, 5 });
@@ -79,6 +84,12 @@ TEST(YggdrasilTests, CommonBlockArrayViewHasBorrowedRandomAccessIterators)
     const_begin += 3;
     EXPECT_EQ(*const_begin, 4);
     EXPECT_EQ(*--const_begin, 3);
+
+    const auto converted = ConstView(pool[0]);
+    EXPECT_EQ(converted.back(), 5);
+    EXPECT_EQ(pool.end() - pool.begin(), 1);
+    EXPECT_EQ(pool.begin()[0][2], 3);
+    EXPECT_GT(pool.memory_usage(), 0);
 }
 
 TEST(YggdrasilTests, CommonBlockArrayRejectsUnrepresentableLengths)
@@ -292,6 +303,7 @@ TEST(YggdrasilTests, CommonBlockArraySet)
         EXPECT_EQ(set.segments()[4].size(),
                   32);  /// capacity 16 arrays store 32 uint8_t blocks.
         EXPECT_EQ(set.capacity(), 31);
+        EXPECT_GT(set.memory_usage(), 0);
     }
 }
 

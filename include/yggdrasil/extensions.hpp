@@ -18,18 +18,6 @@
 #ifndef YGG_EXTENSIONS_HPP_
 #define YGG_EXTENSIONS_HPP_
 
-#include "yggdrasil/containers/block_array_equal_to.hpp"
-#include "yggdrasil/containers/block_array_hash.hpp"
-#include "yggdrasil/containers/block_array_ordering.hpp"
-#include "yggdrasil/containers/dynamic_bitset_equal_to.hpp"
-#include "yggdrasil/containers/dynamic_bitset_hash.hpp"
-#include "yggdrasil/containers/dynamic_bitset_ordering.hpp"
-#include "yggdrasil/containers/raw_vector_equal_to.hpp"
-#include "yggdrasil/containers/raw_vector_hash.hpp"
-#include "yggdrasil/containers/raw_vector_ordering.hpp"
-#include "yggdrasil/containers/segmented_vector_equal_to.hpp"
-#include "yggdrasil/containers/segmented_vector_hash.hpp"
-#include "yggdrasil/containers/segmented_vector_ordering.hpp"
 #include "yggdrasil/core/closed_interval.hpp"
 #include "yggdrasil/core/observer_ptr_equal_to.hpp"
 #include "yggdrasil/core/observer_ptr_hash.hpp"
@@ -43,5 +31,17 @@
 #include "yggdrasil/serialization/cista_hash.hpp"
 #include "yggdrasil/serialization/cista_ordering.hpp"
 #include "yggdrasil/serialization/json.hpp"
+#include "yggdrasil/semantics/containers/block_array_equal_to.hpp"
+#include "yggdrasil/semantics/containers/block_array_hash.hpp"
+#include "yggdrasil/semantics/containers/block_array_ordering.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_hash.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp"
+#include "yggdrasil/semantics/containers/raw_vector_equal_to.hpp"
+#include "yggdrasil/semantics/containers/raw_vector_hash.hpp"
+#include "yggdrasil/semantics/containers/raw_vector_ordering.hpp"
+#include "yggdrasil/semantics/containers/segmented_vector_equal_to.hpp"
+#include "yggdrasil/semantics/containers/segmented_vector_hash.hpp"
+#include "yggdrasil/semantics/containers/segmented_vector_ordering.hpp"
 
 #endif

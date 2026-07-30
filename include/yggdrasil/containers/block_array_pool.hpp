@@ -55,6 +55,9 @@ public:
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
 private:
+    template<typename, typename>
+    friend class BasicBlockArrayView;
+
     template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize>
     friend class BlockArrayPool;
 
@@ -106,6 +109,12 @@ public:
     using const_iterator = BasicIterator<const BasicBlockArrayView<Block, Coder>>;
 
     BasicBlockArrayView(Block* data, size_t length) : BasicBlockArrayView(data, checked_length(length), UncheckedTag {}) {}
+
+    template<typename OtherBlock>
+        requires(std::is_const_v<Block> && !std::is_const_v<OtherBlock> && std::same_as<std::remove_const_t<OtherBlock>, block_type>)
+    BasicBlockArrayView(const BasicBlockArrayView<OtherBlock, Coder>& other) noexcept : m_data(other.m_data), m_length(other.m_length)
+    {
+    }
 
     BasicBlockArrayView& operator=(std::span<const value_type> elements)
         requires(!std::is_const_v<Block>)
@@ -407,45 +416,83 @@ public:
         using difference_type = std::ptrdiff_t;
         using value_type = ConstArrayView;
         using reference = std::conditional_t<std::is_const_v<pool_type>, ConstArrayView, ArrayView>;
-        using iterator_category = std::bidirectional_iterator_tag;
-        using iterator_concept = std::bidirectional_iterator_tag;
+        using iterator_category = std::random_access_iterator_tag;
+        using iterator_concept = std::random_access_iterator_tag;
 
-        BasicIterator() : m_pool(nullptr), m_pos(0) {}
-        BasicIterator(pool_type& pool, size_t pos) : m_pool(&pool), m_pos(pos) {}
+        BasicIterator() noexcept : m_pos(0), m_pool(nullptr) {}
+        BasicIterator(pool_type& pool, size_t pos) noexcept : m_pos(pos), m_pool(&pool) {}
 
         reference operator*() const { return (*m_pool)[m_pos]; }
 
-        BasicIterator& operator++()
+        BasicIterator& operator++() noexcept
         {
             ++m_pos;
             return *this;
         }
 
-        BasicIterator operator++(int)
+        BasicIterator operator++(int) noexcept
         {
             auto tmp = *this;
             ++(*this);
             return tmp;
         }
 
-        BasicIterator& operator--()
+        BasicIterator& operator--() noexcept
         {
             --m_pos;
             return *this;
         }
 
-        BasicIterator operator--(int)
+        BasicIterator operator--(int) noexcept
         {
             auto tmp = *this;
             --(*this);
             return tmp;
         }
 
+        BasicIterator& operator+=(difference_type n) noexcept
+        {
+            m_pos += n;
+            return *this;
+        }
+
+        BasicIterator& operator-=(difference_type n) noexcept
+        {
+            m_pos -= n;
+            return *this;
+        }
+
+        friend BasicIterator operator+(BasicIterator it, difference_type n) noexcept
+        {
+            it += n;
+            return it;
+        }
+
+        friend BasicIterator operator+(difference_type n, BasicIterator it) noexcept
+        {
+            it += n;
+            return it;
+        }
+
+        friend BasicIterator operator-(BasicIterator it, difference_type n) noexcept
+        {
+            it -= n;
+            return it;
+        }
+
+        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
+        {
+            return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
+        }
+
+        reference operator[](difference_type n) const { return *(*this + n); }
+
         friend bool operator==(const BasicIterator&, const BasicIterator&) = default;
+        friend auto operator<=>(const BasicIterator&, const BasicIterator&) = default;
 
     private:
-        pool_pointer m_pool;
         size_t m_pos;
+        pool_pointer m_pool;
     };
 
     ArrayView operator[](size_t index) noexcept
@@ -502,6 +549,14 @@ public:
     size_t size() const noexcept { return m_size; }
     bool empty() const noexcept { return m_size == 0; }
     const auto& segments() const noexcept { return m_segments; }
+
+    size_t memory_usage() const noexcept
+    {
+        size_t bytes = 0;
+        for (const auto& segment : m_segments)
+            bytes += segment.capacity() * sizeof(block_type);
+        return bytes;
+    }
 
 private:
     std::vector<std::vector<block_type>> m_segments;

@@ -24,6 +24,7 @@
 
 #include <array>
 #include <cista/containers/array.h>
+#include <compare>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -49,6 +50,14 @@ public:
             return make_view(get_data()[i], get_context());
         else
             return get_data()[i];
+    }
+
+    decltype(auto) at(size_t i) const
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data().at(i), get_context());
+        else
+            return get_data().at(i);
     }
 
     decltype(auto) front() const noexcept
@@ -154,21 +163,16 @@ public:
         }
 
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
-
-        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
-
-        friend bool operator<(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it < rhs.it; }
-
-        friend bool operator>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return rhs < lhs; }
-
-        friend bool operator<=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(rhs < lhs); }
-
-        friend bool operator>=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs < rhs); }
+        friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
     const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
 
     const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+
+    const_iterator cbegin() const noexcept { return begin(); }
+
+    const_iterator cend() const noexcept { return end(); }
 
     const auto& get_data() const noexcept { return *m_handle; }
     const auto& get_context() const noexcept { return *m_context; }
@@ -199,6 +203,14 @@ public:
             return get_data()[i];
     }
 
+    decltype(auto) at(size_t i) const
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data().at(i), get_context());
+        else
+            return get_data().at(i);
+    }
+
     decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
@@ -307,23 +319,17 @@ public:
                 return *(it + n);
         }
 
-        // comparisons
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
-
-        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
-
-        friend bool operator<(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it < rhs.it; }
-
-        friend bool operator>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return rhs < lhs; }
-
-        friend bool operator<=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(rhs < lhs); }
-
-        friend bool operator>=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs < rhs); }
+        friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
     const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
 
     const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+
+    const_iterator cbegin() const noexcept { return begin(); }
+
+    const_iterator cend() const noexcept { return end(); }
 
     const auto& get_data() const noexcept { return m_handle; }
     const auto& get_context() const noexcept { return *m_context; }
@@ -354,6 +360,14 @@ public:
             return get_data()[i];
     }
 
+    decltype(auto) at(size_t i) const
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data().at(i), get_context());
+        else
+            return get_data().at(i);
+    }
+
     decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
@@ -462,23 +476,17 @@ public:
                 return *(it + n);
         }
 
-        // comparisons
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
-
-        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
-
-        friend bool operator<(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it < rhs.it; }
-
-        friend bool operator>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return rhs < lhs; }
-
-        friend bool operator<=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(rhs < lhs); }
-
-        friend bool operator>=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs < rhs); }
+        friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
     const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
 
     const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+
+    const_iterator cbegin() const noexcept { return begin(); }
+
+    const_iterator cend() const noexcept { return end(); }
 
     const auto& get_data() const noexcept { return m_handle; }
     const auto& get_context() const noexcept { return *m_context; }

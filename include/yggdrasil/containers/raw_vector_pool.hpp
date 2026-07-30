@@ -139,6 +139,7 @@ class RawVectorView<const Size, const T>
 public:
     RawVectorView() noexcept : m_ptr(nullptr) {}
     explicit RawVectorView(const std::byte* ptr) noexcept : m_ptr(ptr) {}
+    RawVectorView(const RawVectorView<Size, T>& other) noexcept : m_ptr(other.raw_data()) {}
 
     bool valid() const noexcept { return m_ptr != nullptr; }
     explicit operator bool() const noexcept { return valid(); }

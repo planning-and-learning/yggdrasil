@@ -15,9 +15,24 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_DYNAMIC_BITSET_COMPARATORS_HPP_
-#define YGG_CONTAINERS_DYNAMIC_BITSET_COMPARATORS_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
+#define YGG_SEMANTICS_CONTAINERS_SEGMENTED_VECTOR_EQUAL_TO_HPP_
 
-#include "yggdrasil/containers/dynamic_bitset_ordering.hpp"
+#include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+
+namespace ygg
+{
+
+template<typename T, std::size_t FirstSegmentSize>
+struct EqualTo<SegmentedVector<T, FirstSegmentSize>>
+{
+    bool operator()(const SegmentedVector<T, FirstSegmentSize>& lhs, const SegmentedVector<T, FirstSegmentSize>& rhs) const noexcept
+    {
+        return equal_range(lhs, rhs);
+    }
+};
+
+}
 
 #endif

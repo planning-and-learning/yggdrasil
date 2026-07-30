@@ -53,10 +53,10 @@ template<typename T>
 concept Enumeration = std::is_enum_v<T>;
 
 template<typename T, typename U>
-concept SameAsIgnoringCvref = std::same_as<std::remove_cvref_t<T>, U>;
+concept SameAsIgnoringCvref = std::same_as<std::remove_cvref_t<T>, std::remove_cvref_t<U>>;
 
 template<typename T, typename U>
-concept UnsignedIntegralSameAsIgnoringConst = std::unsigned_integral<std::remove_const_t<T>> && std::same_as<std::remove_const_t<T>, std::remove_const_t<U>>;
+concept SameAsIgnoringConst = std::same_as<std::remove_const_t<T>, std::remove_const_t<U>>;
 
 template<typename H, typename T>
 concept HashFor = requires(const H& hash, const T& value) {

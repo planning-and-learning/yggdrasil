@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <concepts>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
@@ -65,6 +66,10 @@ TEST(YggdrasilTests, CommonRawVectorViewReportsWhetherItReferencesStorage)
     const auto index = pool.insert(std::vector<int> { 1, 2 });
     const auto view = pool[index];
     const auto const_view = std::as_const(pool)[index];
+    using View = decltype(view);
+    using ConstView = decltype(const_view);
+    static_assert(std::convertible_to<View, ConstView>);
+    const auto converted_view = ConstView(view);
 
     EXPECT_TRUE(view.valid());
     EXPECT_TRUE(view);
@@ -72,6 +77,7 @@ TEST(YggdrasilTests, CommonRawVectorViewReportsWhetherItReferencesStorage)
     EXPECT_TRUE(const_view.valid());
     EXPECT_TRUE(const_view);
     EXPECT_NE(const_view.raw_data(), nullptr);
+    EXPECT_EQ(converted_view.raw_data(), view.raw_data());
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolStoresVariableLengthVectors)

@@ -16,6 +16,7 @@
  */
 
 #include <array>
+#include <compare>
 #include <cstddef>
 #include <gtest/gtest.h>
 #include <span>
@@ -38,13 +39,17 @@ TEST(YggdrasilTests, CommonArrayViewsExposeHandlesAndRandomAccessIterators)
 
     static_assert(std::same_as<decltype(block_view.get_handle()), const BlockView&>);
     static_assert(std::random_access_iterator<typename decltype(block_view)::const_iterator>);
+    static_assert(std::same_as<decltype(block_view.begin() <=> block_view.end()), std::strong_ordering>);
     EXPECT_EQ(block_view.get_handle().size(), 2);
     static_assert(!noexcept(block_view.front()));
     static_assert(!noexcept(block_view.back()));
     EXPECT_EQ(block_view.front(), 1U);
     EXPECT_EQ(block_view.back(), 2U);
     EXPECT_EQ(block_view[1], 2U);
+    EXPECT_EQ(block_view.at(1), 2U);
     EXPECT_EQ(*block_view.begin(), 1U);
+    EXPECT_EQ(*block_view.cbegin(), 1U);
+    EXPECT_EQ(block_view.cend(), block_view.end());
     EXPECT_EQ(block_view.begin()[1], 2U);
     EXPECT_EQ(block_view.end() - block_view.begin(), 2);
     EXPECT_LT(block_view.begin(), block_view.end());
@@ -58,13 +63,17 @@ TEST(YggdrasilTests, CommonArrayViewsExposeHandlesAndRandomAccessIterators)
 
     static_assert(std::same_as<decltype(bit_view.get_handle()), const BitPackedView&>);
     static_assert(std::random_access_iterator<typename decltype(bit_view)::const_iterator>);
+    static_assert(std::same_as<decltype(bit_view.begin() <=> bit_view.end()), std::strong_ordering>);
     EXPECT_EQ(bit_view.get_handle().size(), 2);
     static_assert(!noexcept(bit_view.front()));
     static_assert(!noexcept(bit_view.back()));
     EXPECT_EQ(bit_view.front(), 1U);
     EXPECT_EQ(bit_view.back(), 2U);
     EXPECT_EQ(bit_view[1], 2U);
+    EXPECT_EQ(bit_view.at(1), 2U);
     EXPECT_EQ(*bit_view.begin(), 1U);
+    EXPECT_EQ(*bit_view.cbegin(), 1U);
+    EXPECT_EQ(bit_view.cend(), bit_view.end());
     EXPECT_EQ(bit_view.begin()[1], 2U);
     EXPECT_EQ(bit_view.end() - bit_view.begin(), 2);
     EXPECT_LT(bit_view.begin(), bit_view.end());

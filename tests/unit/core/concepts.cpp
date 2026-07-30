@@ -73,8 +73,10 @@ TEST(YggdrasilTests, CommonConceptsHeaderExposesReusableConcepts)
     static_assert(InputRangeOf<std::span<const int>, int>);
     static_assert(TriviallyCopyable<int>);
     static_assert(SameAsIgnoringCvref<const int&, int>);
-    static_assert(UnsignedIntegralSameAsIgnoringConst<const unsigned int, unsigned int>);
-    static_assert(!UnsignedIntegralSameAsIgnoringConst<unsigned int, unsigned long>);
+    static_assert(SameAsIgnoringCvref<int, const int&>);
+    static_assert(SameAsIgnoringConst<const unsigned int, unsigned int>);
+    static_assert(SameAsIgnoringConst<unsigned int, const unsigned int>);
+    static_assert(!SameAsIgnoringConst<unsigned int, unsigned long>);
     static_assert(!SameAsIgnoringCvref<const int&, double>);
     static_assert(!TriviallyCopyable<std::vector<int>>);
     static_assert(HashFor<ygg::Hash<int>, int>);

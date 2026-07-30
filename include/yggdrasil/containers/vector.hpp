@@ -23,6 +23,7 @@
 #include <array>
 #include <cassert>
 #include <cista/containers/vector.h>
+#include <compare>
 #include <cstddef>
 #include <iterator>
 #include <stdexcept>
@@ -49,6 +50,14 @@ public:
             return make_view(get_data()[i], get_context());
         else
             return get_data()[i];
+    }
+
+    decltype(auto) at(size_t i) const
+    {
+        if constexpr (ViewConcept<T, C>)
+            return make_view(get_data().at(i), get_context());
+        else
+            return get_data().at(i);
     }
 
     decltype(auto) front() const noexcept
@@ -157,23 +166,17 @@ public:
                 return *(ptr + n);
         }
 
-        // comparisons
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr == rhs.ptr; }
-
-        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
-
-        friend bool operator<(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr < rhs.ptr; }
-
-        friend bool operator>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return rhs < lhs; }
-
-        friend bool operator<=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(rhs < lhs); }
-
-        friend bool operator>=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs < rhs); }
+        friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr <=> rhs.ptr; }
     };
 
     const_iterator begin() const noexcept { return const_iterator { get_data().data(), get_context() }; }
 
     const_iterator end() const noexcept { return const_iterator { get_data().data() + get_data().size(), get_context() }; }
+
+    const_iterator cbegin() const noexcept { return begin(); }
+
+    const_iterator cend() const noexcept { return end(); }
 
     const auto& get_data() const noexcept { return *m_handle; }
     const auto& get_context() const noexcept { return *m_context; }

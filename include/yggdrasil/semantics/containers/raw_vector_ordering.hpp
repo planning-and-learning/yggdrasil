@@ -15,26 +15,27 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_CONTAINERS_SEGMENTED_VECTOR_HASH_HPP_
-#define YGG_CONTAINERS_SEGMENTED_VECTOR_HASH_HPP_
+#ifndef YGG_SEMANTICS_CONTAINERS_RAW_VECTOR_ORDERING_HPP_
+#define YGG_SEMANTICS_CONTAINERS_RAW_VECTOR_ORDERING_HPP_
 
-#include "yggdrasil/containers/segmented_vector.hpp"
-#include "yggdrasil/semantics/hash.hpp"
-
-#include <cstddef>
+#include "yggdrasil/containers/raw_vector_pool.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
 
 namespace ygg
 {
 
-template<typename T, std::size_t FirstSegmentSize>
-struct Hash<SegmentedVector<T, FirstSegmentSize>>
+template<std::unsigned_integral Size, TriviallyCopyable T>
+struct Less<RawVectorView<Size, T>>
 {
-    hash_t operator()(const SegmentedVector<T, FirstSegmentSize>& value) const noexcept
+    bool operator()(const RawVectorView<Size, T>& lhs, const RawVectorView<Size, T>& rhs) const noexcept { return less_range(lhs, rhs); }
+};
+
+template<std::unsigned_integral Size, TriviallyCopyable T>
+struct Less<RawVectorView<const Size, const T>>
+{
+    bool operator()(const RawVectorView<const Size, const T>& lhs, const RawVectorView<const Size, const T>& rhs) const noexcept
     {
-        hash_t seed = value.size();
-        for (std::size_t i = 0; i < value.size(); ++i)
-            ygg::hash_combine(seed, value[i]);
-        return seed;
+        return less_range(lhs, rhs);
     }
 };
 
