@@ -10,9 +10,9 @@
 #                               # install_name_tool (default @loader_path)
 #   )
 #
-# On macOS the install name of every library is also rewritten to
-# @rpath/<name>. Missing tools degrade to a warning, matching the historical
-# per-repo scripts. Honors $ENV{DESTDIR}.
+# On macOS the install name of every library and absolute references to other
+# bundled libraries are also rewritten to @rpath/<name>. Missing tools degrade
+# to a warning, matching the historical per-repo scripts. Honors $ENV{DESTDIR}.
 
 function(yggdrasil_fix_runtime_paths)
     cmake_parse_arguments(PARSE_ARGV 0 ARG "" "LIB_DIR_GLOB;RPATH" "RPATHS")
@@ -46,6 +46,10 @@ function(yggdrasil_fix_runtime_paths)
             message(WARNING "install_name_tool not found; native libraries keep their original runtime paths")
             return()
         endif()
+        find_program(OTOOL_EXECUTABLE otool)
+        if(NOT OTOOL_EXECUTABLE)
+            message(WARNING "otool not found; bundled library dependencies keep their original paths")
+        endif()
 
         set(native_libraries)
         foreach(native_lib_dir IN LISTS existing_lib_dirs)
@@ -56,6 +60,14 @@ function(yggdrasil_fix_runtime_paths)
             )
             list(APPEND native_libraries ${native_dir_libraries})
         endforeach()
+        list(REMOVE_DUPLICATES native_libraries)
+
+        set(native_library_names)
+        foreach(native_library IN LISTS native_libraries)
+            get_filename_component(native_library_name "${native_library}" NAME)
+            list(APPEND native_library_names "${native_library_name}")
+        endforeach()
+        list(REMOVE_DUPLICATES native_library_names)
 
         foreach(native_library IN LISTS native_libraries)
             get_filename_component(native_library_name "${native_library}" NAME)
@@ -67,6 +79,46 @@ function(yggdrasil_fix_runtime_paths)
             )
             if(NOT install_name_result EQUAL 0)
                 message(WARNING "Could not update install name of ${native_library}: ${install_name_error}")
+            endif()
+
+            if(OTOOL_EXECUTABLE)
+                execute_process(
+                    COMMAND "${OTOOL_EXECUTABLE}" -L "${native_library}"
+                    RESULT_VARIABLE otool_result
+                    OUTPUT_VARIABLE otool_output
+                    ERROR_VARIABLE otool_error
+                )
+                if(otool_result EQUAL 0)
+                    string(REPLACE "\n" ";" otool_lines "${otool_output}")
+                    set(native_dependencies)
+                    foreach(otool_line IN LISTS otool_lines)
+                        if(otool_line MATCHES "^[ \t]*(/.*) \\([^)]*\\)$")
+                            list(APPEND native_dependencies "${CMAKE_MATCH_1}")
+                        endif()
+                    endforeach()
+                    list(REMOVE_DUPLICATES native_dependencies)
+
+                    foreach(native_dependency IN LISTS native_dependencies)
+                        get_filename_component(native_dependency_name "${native_dependency}" NAME)
+                        if(native_dependency_name IN_LIST native_library_names)
+                            execute_process(
+                                COMMAND
+                                    "${INSTALL_NAME_TOOL_EXECUTABLE}"
+                                    -change
+                                    "${native_dependency}"
+                                    "@rpath/${native_dependency_name}"
+                                    "${native_library}"
+                                RESULT_VARIABLE dependency_result
+                                ERROR_VARIABLE dependency_error
+                            )
+                            if(NOT dependency_result EQUAL 0)
+                                message(WARNING "Could not update dependency ${native_dependency} of ${native_library}: ${dependency_error}")
+                            endif()
+                        endif()
+                    endforeach()
+                else()
+                    message(WARNING "Could not inspect dependencies of ${native_library}: ${otool_error}")
+                endif()
             endif()
 
             foreach(native_library_rpath IN LISTS ARG_RPATHS)
