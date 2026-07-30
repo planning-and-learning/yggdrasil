@@ -21,10 +21,8 @@
 #include <cassert>
 #include <optional>
 #include <stdexcept>
-#include <tuple>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/containers/tuple.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formalism/basic_relation_repository.hpp>
 #include <yggdrasil/formalism/declarations.hpp>
@@ -33,17 +31,22 @@
 namespace ygg::formalism
 {
 template<typename ObjectTag, typename... Ts>
-class RelationRepository
+class RelationRepository : private BasicRelationRepository<ObjectTag, Ts>...
 {
 private:
+    template<typename T, typename...>
+    struct FirstType
+    {
+        using type = T;
+    };
+
     const RelationRepository* m_parent;
     const RelationRepository* m_root;
-    std::tuple<BasicRelationRepository<ObjectTag, Ts>...> m_repositories;
     size_t m_index;
 
 public:
     using object_tag = ObjectTag;
-    using container_type = typename BasicRelationRepository<ObjectTag, std::tuple_element_t<0, std::tuple<Ts...>>>::container_type;
+    using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type>::container_type;
     using ConstViewType = typename container_type::ConstArrayView;
 
     /**
@@ -143,13 +146,13 @@ public:
     template<typename T>
     BasicRelationRepository<ObjectTag, T>& get() noexcept
     {
-        return std::get<BasicRelationRepository<ObjectTag, T>>(m_repositories);
+        return static_cast<BasicRelationRepository<ObjectTag, T>&>(*this);
     }
 
     template<typename T>
     const BasicRelationRepository<ObjectTag, T>& get() const noexcept
     {
-        return std::get<BasicRelationRepository<ObjectTag, T>>(m_repositories);
+        return static_cast<const BasicRelationRepository<ObjectTag, T>&>(*this);
     }
 
     template<typename T>
@@ -225,10 +228,9 @@ public:
     RelationRepository(size_t index, const RelationRepository* parent = nullptr) : RelationRepository(index, parent, RelationRepositoryConfig()) {}
 
     RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) :
+        BasicRelationRepository<ObjectTag, Ts>(parent ? &parent->template get<Ts>() : nullptr, config)...,
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),
-        m_repositories(
-            BasicRelationRepository<ObjectTag, Ts>(parent ? &std::get<BasicRelationRepository<ObjectTag, Ts>>(parent->m_repositories) : nullptr, config)...),
         m_index(index)
     {
     }
@@ -241,10 +243,7 @@ public:
     const auto& get_index() const noexcept { return m_index; }
     const auto& get_root() const noexcept { return *m_root; }
 
-    void clear() noexcept
-    {
-        std::apply([](auto&... repos) { (repos.clear(), ...); }, m_repositories);
-    }
+    void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 
     template<typename T>
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept

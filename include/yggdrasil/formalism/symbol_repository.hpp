@@ -21,11 +21,9 @@
 #include <cassert>
 #include <optional>
 #include <stdexcept>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <yggdrasil/buffer/declarations.hpp>
-#include <yggdrasil/containers/tuple.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formalism/basic_symbol_repository.hpp>
 #include <yggdrasil/formalism/declarations.hpp>
@@ -33,12 +31,11 @@
 namespace ygg::formalism
 {
 template<typename... Ts>
-class SymbolRepository
+class SymbolRepository : private BasicSymbolRepository<Ts>...
 {
 private:
     const SymbolRepository* m_parent;
     const SymbolRepository* m_root;
-    std::tuple<BasicSymbolRepository<Ts>...> m_repositories;
 
 public:
     /**
@@ -132,13 +129,13 @@ public:
     template<typename T>
     BasicSymbolRepository<T>& get() noexcept
     {
-        return std::get<BasicSymbolRepository<T>>(m_repositories);
+        return static_cast<BasicSymbolRepository<T>&>(*this);
     }
 
     template<typename T>
     const BasicSymbolRepository<T>& get() const noexcept
     {
-        return std::get<BasicSymbolRepository<T>>(m_repositories);
+        return static_cast<const BasicSymbolRepository<T>&>(*this);
     }
 
     template<typename T>
@@ -212,9 +209,9 @@ public:
      */
 
     SymbolRepository(const SymbolRepository* parent = nullptr) :
+        BasicSymbolRepository<Ts>(parent ? &parent->template get<Ts>() : nullptr)...,
         m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this),
-        m_repositories(BasicSymbolRepository<Ts>(parent ? &std::get<BasicSymbolRepository<Ts>>(parent->m_repositories) : nullptr)...)
+        m_root(m_parent ? m_parent->m_root : this)
     {
     }
 
@@ -225,10 +222,7 @@ public:
 
     const auto& get_root() const noexcept { return *m_root; }
 
-    void clear() noexcept
-    {
-        std::apply([](auto&... repos) { (repos.clear(), ...); }, m_repositories);
-    }
+    void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 
     template<typename T>
     static size_t hash(const Data<T>& builder) noexcept

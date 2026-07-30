@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <compare>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +37,9 @@
 
 namespace ygg
 {
+
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize>
+class BitPackedArrayPool;
 
 /**
  * BasicBitPackedArrayView
@@ -62,6 +66,23 @@ public:
     static constexpr size_t block_shift = std::countr_zero(digits);
 
 private:
+    template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize>
+    friend class BitPackedArrayPool;
+
+    struct UncheckedTag
+    {
+    };
+
+    static size_t checked_length(size_t length, uint8_t width, uint8_t offset)
+    {
+        validate_width(width);
+        if (offset >= digits)
+            throw std::invalid_argument("BasicBitPackedArrayView: offset must be below the block width.");
+        if (length > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) || length > (std::numeric_limits<size_t>::max() - offset) / width)
+            throw std::overflow_error("BasicBitPackedArrayView: length is too large.");
+        return length;
+    }
+
     static void validate_width(uint8_t width)
     {
         if (width == 0 || width > digits)
@@ -96,6 +117,16 @@ private:
             throw std::invalid_argument("BasicBitPackedArrayView: wrong number of elements.");
     }
 
+    BasicBitPackedArrayView(Block* data, size_t length, uint8_t width, uint8_t offset, UncheckedTag) noexcept :
+        m_data(data),
+        m_length(length),
+        m_width(width),
+        m_offset(offset)
+    {
+        assert(width > 0 && width <= digits);
+        assert(offset < digits);
+    }
+
 public:
     /**
      * Iterator declarations
@@ -111,9 +142,9 @@ public:
      * Constructors
      */
 
-    BasicBitPackedArrayView(Block* data, size_t length, uint8_t width, uint8_t offset) : m_data(data), m_length(length), m_width(width), m_offset(offset)
+    BasicBitPackedArrayView(Block* data, size_t length, uint8_t width, uint8_t offset) :
+        BasicBitPackedArrayView(data, checked_length(length, width, offset), width, offset, UncheckedTag {})
     {
-        validate_width(width);
     }
 
     BasicBitPackedArrayView& operator=(std::span<const value_type> elements)
@@ -121,8 +152,9 @@ public:
     {
         ensure_fits(elements);
 
-        for (size_t i = 0; i < m_length; ++i)
-            (*this)[i] = elements[i];
+        auto out = begin();
+        for (const auto& element : elements)
+            *out++ = element;
 
         return *this;
     }
@@ -146,93 +178,141 @@ public:
     {
     private:
         using view_type = View;
-        using view_pointer = View*;
+        static constexpr bool is_const_iterator = std::is_const_v<View> || std::is_const_v<Block>;
+        using block_pointer = std::conditional_t<is_const_iterator, const block_type*, block_type*>;
+
+        void advance(std::ptrdiff_t n) noexcept
+        {
+            if (n == 0)
+                return;
+
+            const auto quotient = n / static_cast<difference_type>(digits);
+            const auto remainder = n % static_cast<difference_type>(digits);
+            auto block_delta = quotient * m_width;
+            auto offset = static_cast<difference_type>(m_offset) + remainder * m_width;
+            block_delta += offset / static_cast<difference_type>(digits);
+            offset %= static_cast<difference_type>(digits);
+            if (offset < 0)
+            {
+                --block_delta;
+                offset += digits;
+            }
+
+            m_word += static_cast<std::ptrdiff_t>(block_delta);
+            m_offset = static_cast<uint8_t>(offset);
+        }
 
     public:
         using difference_type = std::ptrdiff_t;
         using raw_view_type = std::remove_const_t<View>;
         using value_type = typename raw_view_type::value_type;
-        using reference = std::conditional_t<std::is_const_v<View>, value_type, typename raw_view_type::reference_type>;
-        using iterator_category = std::bidirectional_iterator_tag;
-        using iterator_concept = std::bidirectional_iterator_tag;
+        using reference = std::conditional_t<is_const_iterator, value_type, typename raw_view_type::reference_type>;
+        using iterator_category = std::random_access_iterator_tag;
+        using iterator_concept = std::random_access_iterator_tag;
 
-        BasicIterator() : m_view(nullptr), m_pos(0) {}
-        BasicIterator(view_type& view, size_t pos) : m_view(&view), m_pos(pos) {}
-
-        reference operator*() const { return (*m_view)[m_pos]; }
-
-        BasicIterator& operator++()
+        BasicIterator() noexcept : m_pos(0), m_word(nullptr), m_offset(0), m_width(0) {}
+        BasicIterator(view_type& view, size_t pos) noexcept : m_pos(pos), m_word(view.m_data), m_offset(view.m_offset), m_width(view.m_width)
         {
+            if (pos == 0 || m_word == nullptr)
+                return;
+
+            const auto bit_offset = static_cast<size_t>(m_offset) + pos * m_width;
+            m_word += bit_offset >> block_shift;
+            m_offset = static_cast<uint8_t>(bit_offset & (digits - 1));
+        }
+
+        reference operator*() const
+        {
+            if constexpr (is_const_iterator)
+                return Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width));
+            else
+                return reference_type(m_word, m_offset, m_width);
+        }
+
+        BasicIterator& operator++() noexcept
+        {
+            const auto next_offset = static_cast<size_t>(m_offset) + m_width;
+            m_word += next_offset >> block_shift;
+            m_offset = static_cast<uint8_t>(next_offset & (digits - 1));
             ++m_pos;
             return *this;
         }
 
-        BasicIterator operator++(int)
+        BasicIterator operator++(int) noexcept
         {
             auto tmp = *this;
             ++(*this);
             return tmp;
         }
 
-        BasicIterator& operator--()
+        BasicIterator& operator--() noexcept
         {
+            if (m_offset >= m_width)
+                m_offset -= m_width;
+            else
+            {
+                --m_word;
+                m_offset = static_cast<uint8_t>(digits - (m_width - m_offset));
+            }
             --m_pos;
             return *this;
         }
 
-        BasicIterator operator--(int)
+        BasicIterator operator--(int) noexcept
         {
             auto tmp = *this;
             --(*this);
             return tmp;
         }
 
-        BasicIterator& operator+=(difference_type n)
+        BasicIterator& operator+=(difference_type n) noexcept
         {
+            advance(n);
             m_pos += n;
             return *this;
         }
 
-        BasicIterator& operator-=(difference_type n)
+        BasicIterator& operator-=(difference_type n) noexcept
         {
+            advance(-n);
             m_pos -= n;
             return *this;
         }
 
-        friend BasicIterator operator+(BasicIterator it, difference_type n)
+        friend BasicIterator operator+(BasicIterator it, difference_type n) noexcept
         {
             it += n;
             return it;
         }
 
-        friend BasicIterator operator+(difference_type n, BasicIterator it)
+        friend BasicIterator operator+(difference_type n, BasicIterator it) noexcept
         {
             it += n;
             return it;
         }
 
-        friend BasicIterator operator-(BasicIterator it, difference_type n)
+        friend BasicIterator operator-(BasicIterator it, difference_type n) noexcept
         {
             it -= n;
             return it;
         }
 
-        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs)
+        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
         {
             return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
         }
 
-        reference operator[](difference_type n) const { return (*m_view)[m_pos + n]; }
+        reference operator[](difference_type n) const { return *(*this + n); }
 
         friend bool operator==(const BasicIterator&, const BasicIterator&) = default;
-        friend bool operator<(const BasicIterator& lhs, const BasicIterator& rhs) { return lhs.m_pos < rhs.m_pos; }
-        friend bool operator>(const BasicIterator& lhs, const BasicIterator& rhs) { return rhs < lhs; }
-        friend bool operator<=(const BasicIterator& lhs, const BasicIterator& rhs) { return !(rhs < lhs); }
-        friend bool operator>=(const BasicIterator& lhs, const BasicIterator& rhs) { return !(lhs < rhs); }
+        friend auto operator<=>(const BasicIterator&, const BasicIterator&) = default;
 
     private:
-        view_pointer m_view;
+        // Position first makes default comparisons short-circuit efficiently for unequal iterators.
         size_t m_pos;
+        block_pointer m_word;
+        uint8_t m_offset;
+        uint8_t m_width;
     };
 
     /**
@@ -373,21 +453,14 @@ private:
     static constexpr size_t seg_mask = FirstSegmentSize - 1;
 
     static size_t get_segment_index(size_t index) noexcept { return std::bit_width((index >> seg_shift) + 1) - 1; }
-    static size_t get_segment_pos(size_t index) noexcept
+    static size_t get_segment_pos(size_t index, size_t seg_idx) noexcept
     {
         const size_t q = index >> seg_shift;
         const size_t r = index & seg_mask;
-        const size_t seg_idx = get_segment_index(index);
         return ((q - ((size_t { 1 } << seg_idx) - 1)) << seg_shift) + r;
     }
 
-    static constexpr size_t blocks_for_bits(size_t bits) noexcept { return (bits + digits - 1) >> block_shift; }
-
-    static void validate_width(uint8_t width)
-    {
-        if (width == 0 || width > digits)
-            throw std::invalid_argument("BitPackedArrayPool: width must be between 1 and the block width.");
-    }
+    static constexpr size_t blocks_for_bits(size_t bits) noexcept { return bit::ceil_div(bits, digits); }
 
     void reserve(size_t size)
     {
@@ -397,19 +470,22 @@ private:
         const size_t last_segment = get_segment_index(size - 1);
         const size_t first_new_segment = m_segments.size();
 
-        m_segments.resize(last_segment + 1);
-
-        const size_t bits_per_array = m_length * static_cast<size_t>(m_width);
+        m_segments.reserve(last_segment + 1);
 
         for (size_t seg = first_new_segment; seg <= last_segment; ++seg)
         {
+            if (seg >= std::numeric_limits<size_t>::digits - seg_shift)
+                throw std::length_error("BitPackedArrayPool: segment is too large.");
             const size_t arrays_in_segment = FirstSegmentSize << seg;  // geometric growth
             assert(bit::is_power_of_two(arrays_in_segment));
 
-            const size_t bits_in_segment = arrays_in_segment * bits_per_array;
+            if (arrays_in_segment > std::numeric_limits<size_t>::max() - m_capacity
+                || (m_bits_per_array > 0 && arrays_in_segment > std::numeric_limits<size_t>::max() / m_bits_per_array))
+                throw std::length_error("BitPackedArrayPool: segment is too large.");
+            const size_t bits_in_segment = arrays_in_segment * m_bits_per_array;
             const size_t blocks_in_segment = blocks_for_bits(bits_in_segment);
 
-            m_segments[seg].resize(blocks_in_segment, Block { 0 });
+            m_segments.emplace_back(blocks_in_segment, Block { 0 });
             m_capacity += arrays_in_segment;
         }
     }
@@ -424,13 +500,34 @@ private:
     {
         if (elements.size() != m_length)
             throw std::invalid_argument("BitPackedArrayPool: wrong number of elements.");
+    }
 
-        for (const auto& element : elements)
-        {
-            const auto raw = static_cast<block_type>(Coder::encode(element));
-            if (std::bit_width(raw) > m_width)
-                throw std::out_of_range("BitPackedArrayPool: encoded value exceeds bit width.");
-        }
+    ArrayView get_view(size_t index) noexcept
+    {
+        const size_t seg_idx = get_segment_index(index);
+        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const size_t start_bit = seg_pos * m_bits_per_array;
+
+        auto* data = m_segments[seg_idx].data();
+        if (const auto block_offset = start_bit >> block_shift; block_offset > 0)
+            data += block_offset;
+        const uint8_t offset = static_cast<uint8_t>(start_bit & (digits - 1));
+
+        return ArrayView(data, m_length, m_width, offset, typename ArrayView::UncheckedTag {});
+    }
+
+    ConstArrayView get_view(size_t index) const noexcept
+    {
+        const size_t seg_idx = get_segment_index(index);
+        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const size_t start_bit = seg_pos * m_bits_per_array;
+
+        const auto* data = m_segments[seg_idx].data();
+        if (const auto block_offset = start_bit >> block_shift; block_offset > 0)
+            data += block_offset;
+        const uint8_t offset = static_cast<uint8_t>(start_bit & (digits - 1));
+
+        return ConstArrayView(data, m_length, m_width, offset, typename ConstArrayView::UncheckedTag {});
     }
 
 public:
@@ -448,7 +545,14 @@ public:
      * Constructors
      */
 
-    explicit BitPackedArrayPool(size_t length, uint8_t width) : m_length(length), m_width(width), m_capacity(0), m_size(0) { validate_width(width); }
+    explicit BitPackedArrayPool(size_t length, uint8_t width) :
+        m_bits_per_array(ArrayView::checked_length(length, width, 0) * width),
+        m_length(length),
+        m_width(width),
+        m_capacity(0),
+        m_size(0)
+    {
+    }
 
     /**
      * Iterator definitions
@@ -513,29 +617,13 @@ public:
     ArrayView operator[](size_t index) noexcept
     {
         assert(index < m_size);
-
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index);
-        const size_t start_bit = seg_pos * m_width * m_length;
-
-        auto* data = m_segments[seg_idx].data() + (start_bit >> block_shift);
-        const uint8_t offset = static_cast<uint8_t>(start_bit & (digits - 1));
-
-        return ArrayView(data, m_length, m_width, offset);
+        return get_view(index);
     }
 
     ConstArrayView operator[](size_t index) const noexcept
     {
         assert(index < m_size);
-
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index);
-        const size_t start_bit = seg_pos * m_width * m_length;
-
-        const auto* data = m_segments[seg_idx].data() + (start_bit >> block_shift);
-        const uint8_t offset = static_cast<uint8_t>(start_bit & (digits - 1));
-
-        return ConstArrayView(data, m_length, m_width, offset);
+        return get_view(index);
     }
 
     ArrayView at(size_t index)
@@ -573,13 +661,15 @@ public:
     size_t push_back(std::span<const value_type> elements)
     {
         ensure_fits(elements);
+        if (m_size == std::numeric_limits<size_t>::max())
+            throw std::length_error("BitPackedArrayPool: size is too large.");
 
         const size_t index = m_size;
         reserve(m_size + 1);
+        auto out = get_view(index).begin();
+        for (const auto& element : elements)
+            *out++ = element;
         ++m_size;
-        auto view = (*this)[index];
-        for (size_t i = 0; i < m_length; ++i)
-            view[i] = elements[i];
 
         return index;
     }
@@ -602,6 +692,7 @@ private:
     // 4*FirstSegmentSize, ...
     std::vector<std::vector<block_type>> m_segments;
 
+    size_t m_bits_per_array;
     size_t m_length;
     uint8_t m_width;
 
@@ -609,5 +700,11 @@ private:
     size_t m_size;
 };
 }  // namespace ygg
+
+namespace std::ranges
+{
+template<typename Block, typename Coder>
+inline constexpr bool enable_borrowed_range<::ygg::BasicBitPackedArrayView<Block, Coder>> = true;
+}
 
 #endif

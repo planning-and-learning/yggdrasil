@@ -16,9 +16,14 @@
  */
 
 #include <array>
+#include <concepts>
+#include <cstdint>
 #include <gtest/gtest.h>
+#include <limits>
+#include <ranges>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 #include <yggdrasil/containers/bit_packed_array_pool.hpp>
 #include <yggdrasil/core/config.hpp>
@@ -58,6 +63,8 @@ TEST(YggdrasilTests, CommonBitPackedArrayViewAtChecksBounds)
     EXPECT_THROW(invalid_view.at(0), std::logic_error);
     EXPECT_THROW(invalid_const_view.at(0), std::logic_error);
     EXPECT_THROW((invalid_view = std::span<const uint8_t>(storage)), std::logic_error);
+    EXPECT_EQ(invalid_view.end() - invalid_view.begin(), 2);
+    EXPECT_EQ(invalid_const_view.end() - invalid_const_view.begin(), 2);
 }
 
 TEST(YggdrasilTests, CommonBitPackedArrayViewFrontBackCheckEmptyAndInvalidViews)
@@ -96,22 +103,130 @@ TEST(YggdrasilTests, CommonBitPackedArrayRejectsInvalidWidths)
 
     EXPECT_THROW((ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 1, 0, 0)), std::invalid_argument);
     EXPECT_THROW((ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 1, 9, 0)), std::invalid_argument);
+    EXPECT_THROW((ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 1, 1, 8)), std::invalid_argument);
     EXPECT_THROW((ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(1, 0)), std::invalid_argument);
     EXPECT_THROW((ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(1, 9)), std::invalid_argument);
 }
 
+TEST(YggdrasilTests, CommonBitPackedArrayViewHasBorrowedRandomAccessIterators)
+{
+    using Pool = ygg::BitPackedArrayPool<uint32_t, ygg::bit::ForwardingBlockCoder<uint32_t>, 1>;
+    using View = typename Pool::ArrayView;
+    using ConstView = typename Pool::ConstArrayView;
+
+    static_assert(std::random_access_iterator<typename View::iterator>);
+    static_assert(std::random_access_iterator<typename View::const_iterator>);
+    static_assert(std::random_access_iterator<typename ConstView::const_iterator>);
+    static_assert(std::ranges::random_access_range<View>);
+    static_assert(std::ranges::random_access_range<const View>);
+    static_assert(std::ranges::borrowed_range<View>);
+    static_assert(std::ranges::borrowed_range<ConstView>);
+
+    auto pool = Pool(5, 5);
+    pool.push_back(std::array<uint32_t, 5> { 0, 0, 0, 0, 0 });
+    pool.push_back(std::array<uint32_t, 5> { 1, 1, 1, 1, 1 });
+    pool.push_back(std::array<uint32_t, 5> { 2, 3, 5, 7, 11 });
+
+    auto begin = pool[2].begin();
+    const auto end = pool[2].end();
+    EXPECT_EQ(end - begin, 5);
+    EXPECT_EQ(begin[2], 5);
+    EXPECT_EQ(*(begin + 4), 11);
+    EXPECT_EQ(*(3 + begin), 7);
+    EXPECT_LT(begin, end);
+
+    begin += 4;
+    EXPECT_EQ(*begin, 11);
+    begin -= 3;
+    EXPECT_EQ(*begin, 3);
+    EXPECT_EQ(*--begin, 2);
+
+    auto const_begin = std::as_const(pool)[2].begin();
+    const auto const_end = std::as_const(pool)[2].end();
+    EXPECT_EQ(const_end - const_begin, 5);
+    const_begin += 3;
+    EXPECT_EQ(*const_begin, 7);
+    EXPECT_EQ(*--const_begin, 5);
+}
+
+TEST(YggdrasilTests, CommonBitPackedArrayPoolSupportsEveryBlockWidth)
+{
+    const auto check = []<typename Block>()
+    {
+        constexpr size_t length = 11;
+        constexpr size_t num_rows = 8;
+        constexpr auto digits = std::numeric_limits<Block>::digits;
+
+        for (size_t width = 1; width <= digits; ++width)
+        {
+            SCOPED_TRACE(static_cast<int>(digits));
+            SCOPED_TRACE(static_cast<int>(width));
+
+            const auto mask = width == digits ? std::numeric_limits<Block>::max() : static_cast<Block>((Block { 1 } << width) - 1);
+            auto pool = ygg::BitPackedArrayPool<Block, ygg::bit::ForwardingBlockCoder<Block>, 1>(length, static_cast<uint8_t>(width));
+            auto expected = std::vector<std::vector<Block>> {};
+            expected.reserve(num_rows);
+
+            for (size_t row = 0; row < num_rows; ++row)
+            {
+                auto values = std::vector<Block>(length);
+                for (size_t column = 0; column < length; ++column)
+                    values[column] = static_cast<Block>(row * length + column) & mask;
+                values.front() = 0;
+                values.back() = mask;
+
+                EXPECT_EQ(pool.push_back(values), row);
+                expected.push_back(std::move(values));
+            }
+
+            for (size_t row = 0; row < num_rows; ++row)
+                EXPECT_EQ(pool[row], std::span<const Block>(expected[row]));
+
+            expected[3][5] = static_cast<Block>(expected[3][5] + 1) & mask;
+            pool[3] = std::span<const Block>(expected[3]);
+            EXPECT_EQ(pool[2], std::span<const Block>(expected[2]));
+            EXPECT_EQ(pool[3], std::span<const Block>(expected[3]));
+            EXPECT_EQ(pool[4], std::span<const Block>(expected[4]));
+        }
+    };
+
+    check.template operator()<uint8_t>();
+    check.template operator()<uint16_t>();
+    check.template operator()<uint32_t>();
+    check.template operator()<uint64_t>();
+}
+
+TEST(YggdrasilTests, CommonBitPackedArrayRejectsUnrepresentableLengths)
+{
+    if constexpr (std::numeric_limits<size_t>::max() > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+    {
+        using View = ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>;
+        using Pool = ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>;
+        const auto length = static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) + 1;
+
+        EXPECT_THROW((View(nullptr, length, 1, 0)), std::overflow_error);
+        EXPECT_THROW((Pool(length, 1)), std::overflow_error);
+    }
+}
+
 TEST(YggdrasilTests, CommonBitPackedArrayPoolOutOfRange)
 {
-    auto pool = ygg::BitPackedArrayPool<ygg::uint_t, ygg::bit::ForwardingBlockCoder<ygg::uint_t>, 1>(2, 2);
+    auto pool = ygg::BitPackedArrayPool<ygg::uint_t, ygg::bit::ForwardingBlockCoder<ygg::uint_t>, 1>(4, 7);
+    const auto first = std::vector<ygg::uint_t> { 1, 2, 3, 4 };
+    const auto second = std::vector<ygg::uint_t> { 5, 6, 7, 8 };
 
-    // 4 requires width 3, which exceeds the limit of 2.
-    EXPECT_THROW(pool.push_back(std::vector<ygg::uint_t>({ 1, 4 })), std::out_of_range);
-    EXPECT_EQ(pool.size(), 0);
+    EXPECT_EQ(pool.push_back(first), 0);
+    EXPECT_EQ(pool.push_back(second), 1);
 
-    EXPECT_EQ(pool.push_back(std::vector<ygg::uint_t>({ 1, 3 })), 0);
-    EXPECT_EQ(pool[0], (std::vector<ygg::uint_t> { 1, 3 }));
+    EXPECT_THROW(pool.push_back(std::vector<ygg::uint_t>({ 9, 10, 11, 128 })), std::out_of_range);
+    EXPECT_EQ(pool.size(), 2);
+    EXPECT_EQ(pool[0], first);
+    EXPECT_EQ(pool[1], second);
 
-    // 3 elements are too much for a pool that stores arrays of length 2.
+    const auto replacement = std::vector<ygg::uint_t> { 12, 13, 14, 15 };
+    EXPECT_EQ(pool.push_back(replacement), 2);
+    EXPECT_EQ(pool[2], replacement);
+
     EXPECT_THROW(pool.push_back(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
 }
 

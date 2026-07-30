@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <compare>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +37,9 @@
 
 namespace ygg
 {
+
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize>
+class BlockArrayPool;
 
 /**
  * BasicBlockArrayView
@@ -51,6 +55,22 @@ public:
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
 private:
+    template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize>
+    friend class BlockArrayPool;
+
+    struct UncheckedTag
+    {
+    };
+
+    static size_t checked_length(size_t length)
+    {
+        if (length > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+            throw std::overflow_error("BasicBlockArrayView: length is too large.");
+        return length;
+    }
+
+    BasicBlockArrayView(Block* data, size_t length, UncheckedTag) noexcept : m_data(data), m_length(length) {}
+
     void ensure_storage() const
     {
         if (m_data == nullptr && m_length > 0)
@@ -85,15 +105,16 @@ public:
     using iterator = BasicIterator<BasicBlockArrayView<Block, Coder>>;
     using const_iterator = BasicIterator<const BasicBlockArrayView<Block, Coder>>;
 
-    BasicBlockArrayView(Block* data, size_t length) : m_data(data), m_length(length) {}
+    BasicBlockArrayView(Block* data, size_t length) : BasicBlockArrayView(data, checked_length(length), UncheckedTag {}) {}
 
     BasicBlockArrayView& operator=(std::span<const value_type> elements)
         requires(!std::is_const_v<Block>)
     {
         ensure_fits(elements);
 
-        for (size_t i = 0; i < m_length; ++i)
-            (*this)[i] = elements[i];
+        auto out = begin();
+        for (const auto& element : elements)
+            *out++ = element;
 
         return *this;
     }
@@ -109,93 +130,98 @@ public:
     {
     private:
         using view_type = View;
-        using view_pointer = View*;
+        static constexpr bool is_const_iterator = std::is_const_v<View> || std::is_const_v<Block>;
+        using block_pointer = std::conditional_t<is_const_iterator, const block_type*, block_type*>;
 
     public:
         using difference_type = std::ptrdiff_t;
         using raw_view_type = std::remove_const_t<View>;
         using value_type = typename raw_view_type::value_type;
-        using reference = std::conditional_t<std::is_const_v<View>, value_type, typename raw_view_type::reference_type>;
+        using reference = std::conditional_t<is_const_iterator, value_type, typename raw_view_type::reference_type>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
-        BasicIterator() : m_view(nullptr), m_pos(0) {}
-        BasicIterator(view_type& view, size_t pos) : m_view(&view), m_pos(pos) {}
+        BasicIterator() noexcept : m_pos(0), m_data(nullptr) {}
+        BasicIterator(view_type& view, size_t pos) noexcept : m_pos(pos), m_data(view.m_data) {}
 
-        reference operator*() const { return (*m_view)[m_pos]; }
+        reference operator*() const
+        {
+            if constexpr (is_const_iterator)
+                return Coder::decode(m_data[m_pos]);
+            else
+                return reference_type(m_data + m_pos);
+        }
 
-        BasicIterator& operator++()
+        BasicIterator& operator++() noexcept
         {
             ++m_pos;
             return *this;
         }
 
-        BasicIterator operator++(int)
+        BasicIterator operator++(int) noexcept
         {
             auto tmp = *this;
             ++(*this);
             return tmp;
         }
 
-        BasicIterator& operator--()
+        BasicIterator& operator--() noexcept
         {
             --m_pos;
             return *this;
         }
 
-        BasicIterator operator--(int)
+        BasicIterator operator--(int) noexcept
         {
             auto tmp = *this;
             --(*this);
             return tmp;
         }
 
-        BasicIterator& operator+=(difference_type n)
+        BasicIterator& operator+=(difference_type n) noexcept
         {
             m_pos += n;
             return *this;
         }
 
-        BasicIterator& operator-=(difference_type n)
+        BasicIterator& operator-=(difference_type n) noexcept
         {
             m_pos -= n;
             return *this;
         }
 
-        friend BasicIterator operator+(BasicIterator it, difference_type n)
+        friend BasicIterator operator+(BasicIterator it, difference_type n) noexcept
         {
             it += n;
             return it;
         }
 
-        friend BasicIterator operator+(difference_type n, BasicIterator it)
+        friend BasicIterator operator+(difference_type n, BasicIterator it) noexcept
         {
             it += n;
             return it;
         }
 
-        friend BasicIterator operator-(BasicIterator it, difference_type n)
+        friend BasicIterator operator-(BasicIterator it, difference_type n) noexcept
         {
             it -= n;
             return it;
         }
 
-        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs)
+        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
         {
             return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
         }
 
-        reference operator[](difference_type n) const { return (*m_view)[m_pos + n]; }
+        reference operator[](difference_type n) const { return *(*this + n); }
 
         friend bool operator==(const BasicIterator&, const BasicIterator&) = default;
-        friend bool operator<(const BasicIterator& lhs, const BasicIterator& rhs) { return lhs.m_pos < rhs.m_pos; }
-        friend bool operator>(const BasicIterator& lhs, const BasicIterator& rhs) { return rhs < lhs; }
-        friend bool operator<=(const BasicIterator& lhs, const BasicIterator& rhs) { return !(rhs < lhs); }
-        friend bool operator>=(const BasicIterator& lhs, const BasicIterator& rhs) { return !(lhs < rhs); }
+        friend auto operator<=>(const BasicIterator&, const BasicIterator&) = default;
 
     private:
-        view_pointer m_view;
+        // Position first makes default comparisons short-circuit efficiently for unequal iterators.
         size_t m_pos;
+        block_pointer m_data;
     };
 
     reference_type operator[](size_t pos) noexcept
@@ -294,11 +320,10 @@ private:
 
     static size_t get_segment_index(size_t index) noexcept { return std::bit_width((index >> seg_shift) + 1) - 1; }
 
-    static size_t get_segment_pos(size_t index) noexcept
+    static size_t get_segment_pos(size_t index, size_t seg_idx) noexcept
     {
         const size_t q = index >> seg_shift;
         const size_t r = index & seg_mask;
-        const size_t seg_idx = get_segment_index(index);
         return ((q - ((size_t { 1 } << seg_idx) - 1)) << seg_shift) + r;
     }
 
@@ -310,15 +335,20 @@ private:
         const size_t last_segment = get_segment_index(size - 1);
         const size_t first_new_segment = m_segments.size();
 
-        m_segments.resize(last_segment + 1);
+        m_segments.reserve(last_segment + 1);
 
         for (size_t seg = first_new_segment; seg <= last_segment; ++seg)
         {
+            if (seg >= std::numeric_limits<size_t>::digits - seg_shift)
+                throw std::length_error("BlockArrayPool: segment is too large.");
             const size_t arrays_in_segment = FirstSegmentSize << seg;
             assert(bit::is_power_of_two(arrays_in_segment));
 
+            if (arrays_in_segment > std::numeric_limits<size_t>::max() - m_capacity
+                || (m_length > 0 && arrays_in_segment > std::numeric_limits<size_t>::max() / m_length))
+                throw std::length_error("BlockArrayPool: segment is too large.");
             const size_t blocks_in_segment = arrays_in_segment * m_length;
-            m_segments[seg].resize(blocks_in_segment, Block { 0 });
+            m_segments.emplace_back(blocks_in_segment, Block { 0 });
             m_capacity += arrays_in_segment;
         }
     }
@@ -335,6 +365,28 @@ private:
             throw std::invalid_argument("BlockArrayPool: wrong number of elements.");
     }
 
+    ArrayView get_view(size_t index) noexcept
+    {
+        const size_t seg_idx = get_segment_index(index);
+        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        auto* data = m_segments[seg_idx].data();
+        if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
+            data += block_offset;
+
+        return ArrayView(data, m_length, typename ArrayView::UncheckedTag {});
+    }
+
+    ConstArrayView get_view(size_t index) const noexcept
+    {
+        const size_t seg_idx = get_segment_index(index);
+        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const auto* data = m_segments[seg_idx].data();
+        if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
+            data += block_offset;
+
+        return ConstArrayView(data, m_length, typename ConstArrayView::UncheckedTag {});
+    }
+
 public:
     template<typename Pool>
     class BasicIterator;
@@ -342,7 +394,7 @@ public:
     using iterator = BasicIterator<BlockArrayPool>;
     using const_iterator = BasicIterator<const BlockArrayPool>;
 
-    explicit BlockArrayPool(size_t length) : m_length(length), m_capacity(0), m_size(0) {}
+    explicit BlockArrayPool(size_t length) : m_length(ArrayView::checked_length(length)), m_capacity(0), m_size(0) {}
 
     template<typename Pool>
     class BasicIterator
@@ -399,23 +451,13 @@ public:
     ArrayView operator[](size_t index) noexcept
     {
         assert(index < m_size);
-
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index);
-        auto* data = m_segments[seg_idx].data() + seg_pos * m_length;
-
-        return ArrayView(data, m_length);
+        return get_view(index);
     }
 
     ConstArrayView operator[](size_t index) const noexcept
     {
         assert(index < m_size);
-
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index);
-        const auto* data = m_segments[seg_idx].data() + seg_pos * m_length;
-
-        return ConstArrayView(data, m_length);
+        return get_view(index);
     }
 
     ArrayView at(size_t index)
@@ -440,14 +482,15 @@ public:
     size_t push_back(std::span<const value_type> elements)
     {
         ensure_fits(elements);
+        if (m_size == std::numeric_limits<size_t>::max())
+            throw std::length_error("BlockArrayPool: size is too large.");
 
         const size_t index = m_size;
         reserve(m_size + 1);
+        auto out = get_view(index).begin();
+        for (const auto& element : elements)
+            *out++ = element;
         ++m_size;
-
-        auto view = (*this)[index];
-        for (size_t i = 0; i < m_length; ++i)
-            view[i] = elements[i];
 
         return index;
     }
@@ -469,5 +512,11 @@ private:
 };
 
 }  // namespace ygg
+
+namespace std::ranges
+{
+template<typename Block, typename Coder>
+inline constexpr bool enable_borrowed_range<::ygg::BasicBlockArrayView<Block, Coder>> = true;
+}
 
 #endif

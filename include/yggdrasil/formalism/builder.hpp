@@ -13,8 +13,6 @@
 #include "yggdrasil/containers/unique_object_pool.hpp"
 #include "yggdrasil/core/types.hpp"
 
-#include <tuple>
-
 namespace ygg::formalism
 {
 
@@ -29,16 +27,13 @@ public:
 };
 
 template<typename... Ts>
-class BuilderStorage
+class BuilderStorage : private BasicBuilder<Ts>...
 {
-private:
-    std::tuple<BasicBuilder<Ts>...> m_builders;
-
 public:
     template<typename T>
     [[nodiscard]] auto get_builder()
     {
-        return std::get<BasicBuilder<T>>(m_builders).get_builder();
+        return static_cast<BasicBuilder<T>&>(*this).get_builder();
     }
 };
 

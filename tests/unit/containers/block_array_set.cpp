@@ -16,9 +16,13 @@
  */
 
 #include <array>
+#include <concepts>
 #include <gtest/gtest.h>
+#include <limits>
+#include <ranges>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 #include <yggdrasil/containers/block_array_set.hpp>
 #include <yggdrasil/core/config.hpp>
@@ -36,6 +40,58 @@ TEST(YggdrasilTests, CommonBlockArrayViewReportsEmpty)
     EXPECT_FALSE(view.empty());
     EXPECT_EQ(empty_view.size(), 0);
     EXPECT_TRUE(empty_view.empty());
+}
+
+TEST(YggdrasilTests, CommonBlockArrayViewHasBorrowedRandomAccessIterators)
+{
+    using Pool = ygg::BlockArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>;
+    using View = typename Pool::ArrayView;
+    using ConstView = typename Pool::ConstArrayView;
+
+    static_assert(std::random_access_iterator<typename View::iterator>);
+    static_assert(std::random_access_iterator<typename View::const_iterator>);
+    static_assert(std::random_access_iterator<typename ConstView::const_iterator>);
+    static_assert(std::ranges::random_access_range<View>);
+    static_assert(std::ranges::random_access_range<const View>);
+    static_assert(std::ranges::borrowed_range<View>);
+    static_assert(std::ranges::borrowed_range<ConstView>);
+
+    auto pool = Pool(5);
+    pool.push_back(std::array<uint8_t, 5> { 1, 2, 3, 4, 5 });
+
+    auto begin = pool[0].begin();
+    const auto end = pool[0].end();
+    EXPECT_EQ(end - begin, 5);
+    EXPECT_EQ(begin[2], 3);
+    EXPECT_EQ(*(begin + 4), 5);
+    EXPECT_EQ(*(3 + begin), 4);
+    EXPECT_LT(begin, end);
+
+    begin += 4;
+    EXPECT_EQ(*begin, 5);
+    begin -= 3;
+    EXPECT_EQ(*begin, 2);
+    EXPECT_EQ(*--begin, 1);
+
+    auto const_begin = std::as_const(pool)[0].begin();
+    const auto const_end = std::as_const(pool)[0].end();
+    EXPECT_EQ(const_end - const_begin, 5);
+    const_begin += 3;
+    EXPECT_EQ(*const_begin, 4);
+    EXPECT_EQ(*--const_begin, 3);
+}
+
+TEST(YggdrasilTests, CommonBlockArrayRejectsUnrepresentableLengths)
+{
+    if constexpr (std::numeric_limits<size_t>::max() > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+    {
+        using View = ygg::BasicBlockArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>;
+        using Pool = ygg::BlockArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>;
+        const auto length = static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) + 1;
+
+        EXPECT_THROW((View(nullptr, length)), std::overflow_error);
+        EXPECT_THROW((Pool(length)), std::overflow_error);
+    }
 }
 
 TEST(YggdrasilTests, CommonBlockArrayViewAtChecksBounds)
@@ -57,6 +113,8 @@ TEST(YggdrasilTests, CommonBlockArrayViewAtChecksBounds)
     EXPECT_THROW(invalid_view.at(0), std::logic_error);
     EXPECT_THROW(invalid_const_view.at(0), std::logic_error);
     EXPECT_THROW((invalid_view = std::span<const uint8_t>(storage)), std::logic_error);
+    EXPECT_EQ(invalid_view.end() - invalid_view.begin(), 2);
+    EXPECT_EQ(invalid_const_view.end() - invalid_const_view.begin(), 2);
 }
 
 TEST(YggdrasilTests, CommonBlockArrayViewFrontBackCheckEmptyAndInvalidViews)

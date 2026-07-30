@@ -37,6 +37,7 @@ TEST(YggdrasilTests, CommonArrayViewsExposeHandlesAndRandomAccessIterators)
     const auto block_view = ygg::View<BlockView, int>(block_data, context);
 
     static_assert(std::same_as<decltype(block_view.get_handle()), const BlockView&>);
+    static_assert(std::random_access_iterator<typename decltype(block_view)::const_iterator>);
     EXPECT_EQ(block_view.get_handle().size(), 2);
     static_assert(!noexcept(block_view.front()));
     static_assert(!noexcept(block_view.back()));
@@ -56,6 +57,7 @@ TEST(YggdrasilTests, CommonArrayViewsExposeHandlesAndRandomAccessIterators)
     const auto bit_view = ygg::View<BitPackedView, int>(bit_data, context);
 
     static_assert(std::same_as<decltype(bit_view.get_handle()), const BitPackedView&>);
+    static_assert(std::random_access_iterator<typename decltype(bit_view)::const_iterator>);
     EXPECT_EQ(bit_view.get_handle().size(), 2);
     static_assert(!noexcept(bit_view.front()));
     static_assert(!noexcept(bit_view.back()));
