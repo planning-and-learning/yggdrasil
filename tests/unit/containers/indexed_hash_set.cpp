@@ -34,6 +34,8 @@ struct IndexedHashSetCustomHash
 
 struct IndexedHashSetCustomEqualTo
 {
+    static inline size_t calls = 0;
+
     bool operator()(const ygg::Data<IndexedHashSetTestTag>& lhs, const ygg::Data<IndexedHashSetTestTag>& rhs) const noexcept;
 };
 
@@ -68,11 +70,13 @@ namespace ygg::tests
 
 inline ygg::hash_t IndexedHashSetCustomHash::operator()(const ygg::Data<IndexedHashSetTestTag>& value) const noexcept
 {
-    return static_cast<ygg::hash_t>(value.value);
+    static_cast<void>(value);
+    return 0;
 }
 
 inline bool IndexedHashSetCustomEqualTo::operator()(const ygg::Data<IndexedHashSetTestTag>& lhs, const ygg::Data<IndexedHashSetTestTag>& rhs) const noexcept
 {
+    ++calls;
     return lhs.value == rhs.value;
 }
 
@@ -158,6 +162,24 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_TRUE(set.empty());
     EXPECT_EQ(set.size(), 0);
     EXPECT_FALSE(set.contains(first));
+}
+
+TEST(YggdrasilTests, CommonIndexedHashSetUniqueInsertProbesOnce)
+{
+    using Set = ygg::IndexedHashSet<IndexedHashSetTestTag, IndexedHashSetCustomHash, IndexedHashSetCustomEqualTo>;
+    auto set = Set();
+    const auto first = ygg::Data<IndexedHashSetTestTag> { 1 };
+    const auto second = ygg::Data<IndexedHashSetTestTag> { 2 };
+
+    EXPECT_TRUE(set.insert(first).second);
+
+    IndexedHashSetCustomEqualTo::calls = 0;
+    EXPECT_EQ(set.find(second), std::nullopt);
+    const auto single_probe_calls = IndexedHashSetCustomEqualTo::calls;
+
+    IndexedHashSetCustomEqualTo::calls = 0;
+    EXPECT_TRUE(set.insert(second).second);
+    EXPECT_EQ(IndexedHashSetCustomEqualTo::calls, single_probe_calls);
 }
 
 }  // namespace ygg::tests

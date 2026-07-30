@@ -24,6 +24,34 @@
 namespace ygg::tests
 {
 
+struct RawVectorSetCountingElement
+{
+    int value;
+    static inline size_t hash_calls = 0;
+
+    friend bool operator==(const RawVectorSetCountingElement&, const RawVectorSetCountingElement&) = default;
+};
+
+}  // namespace ygg::tests
+
+namespace ygg
+{
+
+template<>
+struct Hash<tests::RawVectorSetCountingElement>
+{
+    hash_t operator()(const tests::RawVectorSetCountingElement& value) const noexcept
+    {
+        ++tests::RawVectorSetCountingElement::hash_calls;
+        return static_cast<hash_t>(value.value);
+    }
+};
+
+}  // namespace ygg
+
+namespace ygg::tests
+{
+
 TEST(YggdrasilTests, CommonRawVectorSetDeduplicatesEmptyVectors)
 {
     auto set = ygg::RawVectorSet<uint8_t, int, 32>();
@@ -115,6 +143,20 @@ TEST(YggdrasilTests, CommonRawVectorSetClearKeepsContainerReusable)
     EXPECT_EQ(set.size(), 1);
     EXPECT_TRUE(set.contains(value));
     EXPECT_EQ(set.find(value), 0);
+}
+
+TEST(YggdrasilTests, CommonRawVectorSetInsertHashesEachElementOnce)
+{
+    auto set = ygg::RawVectorSet<uint8_t, RawVectorSetCountingElement, 32>();
+    const auto value = std::array<RawVectorSetCountingElement, 2> { RawVectorSetCountingElement { 1 }, RawVectorSetCountingElement { 2 } };
+
+    RawVectorSetCountingElement::hash_calls = 0;
+    EXPECT_EQ(set.insert(value), 0);
+    EXPECT_EQ(RawVectorSetCountingElement::hash_calls, value.size());
+
+    RawVectorSetCountingElement::hash_calls = 0;
+    EXPECT_EQ(set.insert(value), 0);
+    EXPECT_EQ(RawVectorSetCountingElement::hash_calls, value.size());
 }
 
 }  // namespace ygg::tests

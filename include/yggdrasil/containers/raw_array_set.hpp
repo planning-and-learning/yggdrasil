@@ -10,6 +10,7 @@
 #ifndef YGG_CONTAINERS_RAW_ARRAY_SET_HPP_
 #define YGG_CONTAINERS_RAW_ARRAY_SET_HPP_
 
+#include "yggdrasil/containers/detail/lazy_insert.hpp"
 #include "yggdrasil/containers/raw_array_pool.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
@@ -71,17 +72,19 @@ public:
     {
         ensure_fits(value);
 
-        if (auto it = m_set.find(value); it != m_set.end())
-            return *it;
-
-        const uint_t idx = to_uint_t(m_pool->size());
-        auto* arr = m_pool->allocate();
-        const auto size = array_size();
-        if (size > 0)
-            std::memcpy(arr, value.data(), size * sizeof(T));
-
-        m_set.emplace(idx);
-        return idx;
+        const auto hash = m_set.hash(value);
+        const auto result = detail::lazy_insert_with_hash(m_set,
+                                                          value,
+                                                          hash,
+                                                          [&]
+                                                          {
+                                                              const auto index = to_uint_t(m_pool->size());
+                                                              auto* array = m_pool->allocate();
+                                                              if (const auto size = array_size(); size > 0)
+                                                                  std::memcpy(array, value.data(), size * sizeof(T));
+                                                              return index;
+                                                          });
+        return *result.first;
     }
 
     T* operator[](uint_t idx) noexcept { return (*m_pool)[idx]; }

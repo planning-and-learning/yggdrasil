@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <new>
 #include <span>
 #include <stdexcept>
@@ -241,20 +242,27 @@ private:
 
     struct Segment
     {
-        std::vector<std::byte> storage;
+        std::unique_ptr<std::byte[]> storage;
+        size_t capacity;
         size_t used_bytes = 0;
 
-        explicit Segment(size_t num_bytes) : storage(num_bytes), used_bytes(0) {}
+        explicit Segment(size_t num_bytes) : storage(std::make_unique_for_overwrite<std::byte[]>(num_bytes)), capacity(num_bytes), used_bytes(0) {}
 
-        size_t capacity_bytes() const noexcept { return storage.size(); }
-        size_t remaining_bytes() const noexcept { return storage.size() - used_bytes; }
+        size_t capacity_bytes() const noexcept { return capacity; }
+        size_t remaining_bytes() const noexcept { return capacity - used_bytes; }
 
         std::byte* allocate(size_t num_bytes) noexcept
         {
-            assert(used_bytes + num_bytes <= storage.size());
-            std::byte* ptr = storage.data() + used_bytes;
+            assert(num_bytes <= remaining_bytes());
+            std::byte* ptr = storage.get() + used_bytes;
             used_bytes += num_bytes;
             return ptr;
+        }
+
+        void deallocate(size_t num_bytes) noexcept
+        {
+            assert(num_bytes <= used_bytes);
+            used_bytes -= num_bytes;
         }
 
         void clear() noexcept { used_bytes = 0; }
@@ -306,6 +314,7 @@ public:
         if (size > std::numeric_limits<Size>::max())
             throw std::out_of_range("RawVectorPool: vector length exceeds size type.");
 
+        const auto index = to_uint_t(m_index.size());
         const size_t needed_bytes = slot_size_bytes(size);
         ensure_current_segment(needed_bytes);
 
@@ -315,8 +324,16 @@ public:
         if (size > 0)
             std::memcpy(payload_ptr(slot), data, size * sizeof(T));
 
-        m_index.push_back(slot);
-        return to_uint_t(m_index.size() - 1);
+        try
+        {
+            m_index.push_back(slot);
+        }
+        catch (...)
+        {
+            m_segments.back().deallocate(needed_bytes);
+            throw;
+        }
+        return index;
     }
 
     RawVectorView<Size, T> operator[](uint_t index) noexcept
@@ -371,7 +388,7 @@ public:
     {
         size_t bytes = 0;
         for (const auto& seg : m_segments)
-            bytes += seg.storage.capacity() * sizeof(std::byte);
+            bytes += seg.capacity_bytes();
         bytes += m_index.capacity() * sizeof(std::byte*);
         return bytes;
     }

@@ -119,4 +119,30 @@ TEST(YggdrasilTests, CommonRawArrayPoolClearKeepsCapacityReusable)
     EXPECT_EQ(std::vector<int>(pool[0], pool[0] + pool.array_size()), (std::vector<int> { 3, 4 }));
 }
 
+TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStableAndCopiesRemainIndependent)
+{
+    auto pool = ygg::RawArrayPool<int, 1>(2);
+    auto* first = pool.allocate();
+    std::ranges::copy(std::array<int, 2> { 1, 2 }, first);
+
+    auto* second = pool.allocate();
+    std::ranges::copy(std::array<int, 2> { 3, 4 }, second);
+
+    EXPECT_EQ(first, pool[0]);
+    EXPECT_EQ(std::vector<int>(first, first + pool.array_size()), (std::vector<int> { 1, 2 }));
+
+    auto copy = pool;
+    copy[0][0] = 9;
+    EXPECT_EQ(pool[0][0], 1);
+    EXPECT_EQ(copy[0][0], 9);
+    EXPECT_EQ(copy.memory_usage(), pool.memory_usage());
+
+    auto assigned = ygg::RawArrayPool<int, 1>(2);
+    assigned = pool;
+    assigned[1][1] = 8;
+    EXPECT_EQ(pool[1][1], 4);
+    EXPECT_EQ(assigned[1][1], 8);
+    EXPECT_EQ(assigned.memory_usage(), pool.memory_usage());
+}
+
 }  // namespace ygg::tests

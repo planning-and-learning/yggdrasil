@@ -73,7 +73,7 @@ TEST(YggdrasilTests, BufferSegmentedBufferHonorsAlignmentAndMovesToNewSegments)
     const auto byte = std::array<uint8_t, 1> { 1 };
     const auto aligned = std::array<uint8_t, 4> { 2, 3, 4, 5 };
 
-    static_cast<void>(arena.write(byte.data(), byte.size()));
+    const auto* first_position = arena.write(byte.data(), byte.size());
     const auto aligned_position = arena.write(aligned.data(), aligned.size(), 4);
 
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(aligned_position) % 4, 0);
@@ -87,6 +87,32 @@ TEST(YggdrasilTests, BufferSegmentedBufferHonorsAlignmentAndMovesToNewSegments)
     EXPECT_NE(second_segment_position, nullptr);
     EXPECT_EQ(arena.num_segments(), 2);
     EXPECT_EQ(arena.size(), 9);
+    EXPECT_EQ(byte[0], first_position[0]);
+}
+
+TEST(YggdrasilTests, BufferSegmentedBufferCopiesRemainIndependent)
+{
+    auto arena = buffer::SegmentedBuffer(4);
+    const auto data = std::array<uint8_t, 4> { 1, 2, 3, 4 };
+    const auto* stored = arena.write(data.data(), data.size());
+
+    auto copy = arena;
+    EXPECT_EQ(copy.size(), arena.size());
+    EXPECT_EQ(copy.capacity(), arena.capacity());
+    EXPECT_EQ(copy.num_segments(), arena.num_segments());
+
+    copy.clear();
+    EXPECT_TRUE(copy.empty());
+    EXPECT_FALSE(arena.empty());
+    EXPECT_EQ(stored[0], 1);
+    EXPECT_EQ(stored[3], 4);
+
+    auto assigned = buffer::SegmentedBuffer(2);
+    assigned = arena;
+    EXPECT_EQ(assigned.size(), arena.size());
+    EXPECT_EQ(assigned.capacity(), arena.capacity());
+    assigned.clear();
+    EXPECT_FALSE(arena.empty());
 }
 
 }  // namespace ygg::tests

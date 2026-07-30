@@ -24,6 +24,34 @@
 namespace ygg::tests
 {
 
+struct RawArraySetCountingElement
+{
+    int value;
+    static inline size_t hash_calls = 0;
+
+    friend bool operator==(const RawArraySetCountingElement&, const RawArraySetCountingElement&) = default;
+};
+
+}  // namespace ygg::tests
+
+namespace ygg
+{
+
+template<>
+struct Hash<tests::RawArraySetCountingElement>
+{
+    hash_t operator()(const tests::RawArraySetCountingElement& value) const noexcept
+    {
+        ++tests::RawArraySetCountingElement::hash_calls;
+        return static_cast<hash_t>(value.value);
+    }
+};
+
+}  // namespace ygg
+
+namespace ygg::tests
+{
+
 TEST(YggdrasilTests, CommonRawArraySetRejectsWrongLengthInputs)
 {
     auto set = ygg::RawArraySet<int, 2>(3);
@@ -114,6 +142,20 @@ TEST(YggdrasilTests, CommonRawArraySetClearKeepsContainerReusable)
     EXPECT_EQ(set.size(), 1);
     EXPECT_TRUE(set.contains(value));
     EXPECT_EQ(set.find(value), 0);
+}
+
+TEST(YggdrasilTests, CommonRawArraySetInsertHashesEachElementOnce)
+{
+    auto set = ygg::RawArraySet<RawArraySetCountingElement, 2>(2);
+    const auto value = std::array<RawArraySetCountingElement, 2> { RawArraySetCountingElement { 1 }, RawArraySetCountingElement { 2 } };
+
+    RawArraySetCountingElement::hash_calls = 0;
+    EXPECT_EQ(set.insert(value), 0);
+    EXPECT_EQ(RawArraySetCountingElement::hash_calls, value.size());
+
+    RawArraySetCountingElement::hash_calls = 0;
+    EXPECT_EQ(set.insert(value), 0);
+    EXPECT_EQ(RawArraySetCountingElement::hash_calls, value.size());
 }
 
 }  // namespace ygg::tests

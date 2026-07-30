@@ -189,4 +189,18 @@ TEST(YggdrasilTests, CommonRawVectorPoolClearKeepsCapacityReusable)
     EXPECT_EQ(std::vector<int>(view.begin(), view.end()), value);
 }
 
+TEST(YggdrasilTests, CommonRawVectorPoolGrowthKeepsViewsStableAndAligned)
+{
+    auto pool = ygg::RawVectorPool<uint8_t, int, 16>();
+    const auto first_index = pool.insert(std::array<int, 1> { 7 });
+    const auto first = pool[first_index];
+    const auto* first_storage = first.raw_data();
+
+    static_cast<void>(pool.insert(std::array<int, 8> { 1, 2, 3, 4, 5, 6, 7, 8 }));
+
+    EXPECT_EQ(pool[first_index].raw_data(), first_storage);
+    EXPECT_EQ(first.front(), 7);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(first.data()) % alignof(int), 0);
+}
+
 }  // namespace ygg::tests

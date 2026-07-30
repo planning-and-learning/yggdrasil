@@ -1,6 +1,7 @@
 #ifndef YGG_CONTAINERS_RAW_VECTOR_SET_HPP_
 #define YGG_CONTAINERS_RAW_VECTOR_SET_HPP_
 
+#include "yggdrasil/containers/detail/lazy_insert.hpp"
 #include "yggdrasil/containers/raw_vector_pool.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
@@ -39,12 +40,9 @@ public:
 
     uint_t insert(std::span<const T> value)
     {
-        if (auto it = m_set.find(value); it != m_set.end())
-            return *it;
-
-        const auto idx = m_pool->insert(value);
-        m_set.emplace(idx);
-        return idx;
+        const auto hash = m_set.hash(value);
+        const auto result = detail::lazy_insert_with_hash(m_set, value, hash, [&] { return m_pool->insert(value); });
+        return *result.first;
     }
 
     RawVectorView<Size, T> operator[](uint_t idx) noexcept { return (*m_pool)[idx]; }

@@ -18,6 +18,7 @@
 #ifndef YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 #define YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 
+#include "yggdrasil/containers/detail/lazy_insert.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/config.hpp"
@@ -92,10 +93,16 @@ public:
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        if (auto it = m_set.find(element, h); it != m_set.end())
-            return { *it, false };
-
-        return { insert_new_with_hash(h, element), true };
+        const auto [it, inserted] = detail::lazy_insert_with_hash(m_set,
+                                                                  element,
+                                                                  h,
+                                                                  [&]
+                                                                  {
+                                                                      const auto index = Index<Tag>(to_uint_t(m_storage->size()));
+                                                                      m_storage->push_back(element);
+                                                                      return index;
+                                                                  });
+        return { *it, inserted };
     }
 
     Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)

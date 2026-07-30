@@ -19,6 +19,7 @@
 #define YGG_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 
 #include <cassert>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <tuple>
@@ -52,28 +53,34 @@ private:
 
         static size_t hash(const Data<U>& builder) noexcept { return ::ygg::IndexedHashSet<U>::hash(builder); }
 
-        Slot(ygg::buffer::Buffer&, ygg::buffer::SegmentedBuffer&) : container(), parent_size(0) {}
+        void clear() noexcept { container.clear(); }
     };
 
     template<typename U>
     struct Slot<U, false>
     {
+        std::unique_ptr<ygg::buffer::SegmentedBuffer> arena;
+        std::unique_ptr<ygg::buffer::Buffer> buffer;
         ygg::buffer::IndexedHashSet<U> container;
         size_t parent_size = 0;
 
         static size_t hash(const Data<U>& builder) noexcept { return ygg::buffer::IndexedHashSet<U>::hash(builder); }
 
-        Slot(ygg::buffer::Buffer& buffer, ygg::buffer::SegmentedBuffer& arena) : container(buffer, arena), parent_size(0) {}
+        Slot() : arena(std::make_unique<ygg::buffer::SegmentedBuffer>()), buffer(std::make_unique<ygg::buffer::Buffer>()), container(*buffer, *arena) {}
+
+        void clear() noexcept
+        {
+            arena->clear();
+            container.clear();
+        }
     };
 
     const BasicSymbolRepository* m_parent;
-    std::unique_ptr<ygg::buffer::SegmentedBuffer> m_arena;
-    std::unique_ptr<ygg::buffer::Buffer> m_buffer;
     Slot<T> m_slot;
 
     void clear_slot() noexcept
     {
-        m_slot.container.clear();
+        m_slot.clear();
         m_slot.parent_size = m_parent ? m_parent->size() : size_t { 0 };
     }
 
@@ -158,25 +165,14 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr) :
-        m_parent(parent),
-        m_arena(std::make_unique<ygg::buffer::SegmentedBuffer>()),
-        m_buffer(std::make_unique<ygg::buffer::Buffer>()),
-        m_slot(*m_buffer, *m_arena)
-    {
-        clear_slot();
-    }
+    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr) : m_parent(parent), m_slot() { clear_slot(); }
 
     BasicSymbolRepository(const BasicSymbolRepository&) = delete;
     BasicSymbolRepository& operator=(const BasicSymbolRepository&) = delete;
     BasicSymbolRepository(BasicSymbolRepository&&) noexcept = default;
     BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept = default;
 
-    void clear() noexcept
-    {
-        m_arena->clear();
-        clear_slot();
-    }
+    void clear() noexcept { clear_slot(); }
 
     static size_t hash(const Data<T>& builder) noexcept { return Slot<T>::hash(builder); }
 };

@@ -31,12 +31,17 @@ TEST(YggdrasilTests, CommonBitPackedArraySetOutOfRange)
     auto set = ygg::BitPackedArraySet<ygg::uint_t, ygg::bit::ForwardingBlockCoder<ygg::uint_t>, 1>(2, 2);
 
     // 4 requires width 3, which exceeds the limit of 2.
-    EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 4 })), std::out_of_range);
+    for (size_t i = 0; i < 3; ++i)
+    {
+        EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 4 })), std::out_of_range);
+        EXPECT_TRUE(set.empty());
+    }
     EXPECT_EQ(set.size(), 0);
 
     const auto [index, inserted] = set.insert(std::vector<ygg::uint_t>({ 1, 3 }));
     EXPECT_TRUE(inserted);
     EXPECT_EQ(index, 0);
+    EXPECT_FALSE(set.insert(std::vector<ygg::uint_t>({ 1, 3 })).second);
 
     // 3 elements are too much for a pool that stores arrays of length 2.
     EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);

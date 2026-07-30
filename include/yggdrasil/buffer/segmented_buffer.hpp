@@ -24,7 +24,9 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 #include <yggdrasil/core/bit.hpp>
 
@@ -34,9 +36,39 @@ namespace ygg::buffer
 class SegmentedBuffer
 {
 private:
+    struct Segment
+    {
+        std::unique_ptr<uint8_t[]> storage;
+        size_t capacity;
+        size_t size;
+
+        explicit Segment(size_t capacity_) : storage(std::make_unique_for_overwrite<uint8_t[]>(capacity_)), capacity(capacity_), size(0) {}
+
+        Segment(const Segment& other) : storage(std::make_unique_for_overwrite<uint8_t[]>(other.capacity)), capacity(other.capacity), size(other.size)
+        {
+            if (size > 0)
+                std::memcpy(storage.get(), other.storage.get(), size);
+        }
+
+        Segment& operator=(const Segment& other)
+        {
+            if (this == &other)
+                return *this;
+
+            auto replacement = Segment(other);
+            *this = std::move(replacement);
+            return *this;
+        }
+
+        Segment(Segment&&) noexcept = default;
+        Segment& operator=(Segment&&) noexcept = default;
+
+        void clear() noexcept { size = 0; }
+    };
+
     size_t m_seg_size;
 
-    std::vector<std::vector<uint8_t>> m_segments;
+    std::vector<Segment> m_segments;
 
     size_t m_cur_seg;
     size_t m_cur_pos;
@@ -55,7 +87,7 @@ private:
         // 1) If current segment has space, we’re done.
         if (m_cur_seg < m_segments.size())
         {
-            if (amount <= (m_segments[m_cur_seg].size() - m_cur_pos))
+            if (amount <= (m_segments[m_cur_seg].capacity - m_cur_pos))
             {
                 return;
             }
@@ -64,7 +96,7 @@ private:
         // 2) Try later segments, always starting at position 0 in them.
         for (size_t i = m_cur_seg + 1; i < m_segments.size(); ++i)
         {
-            if (amount <= m_segments[i].size())
+            if (amount <= m_segments[i].capacity)
             {
                 m_cur_seg = i;
                 m_cur_pos = 0;
@@ -94,6 +126,11 @@ public:
             throw std::invalid_argument("SegmentedBuffer segment size must be a power of two.");
         }
     }
+
+    SegmentedBuffer(const SegmentedBuffer&) = default;
+    SegmentedBuffer& operator=(const SegmentedBuffer&) = default;
+    SegmentedBuffer(SegmentedBuffer&&) noexcept = default;
+    SegmentedBuffer& operator=(SegmentedBuffer&&) noexcept = default;
 
     /// @brief Write the data with alignment requirement.
     const uint8_t* write(const uint8_t* data, size_t amount, size_t align = 1)
@@ -126,11 +163,13 @@ public:
 
         assert(m_cur_pos % align == 0);
 
-        const auto pos = &m_segments[m_cur_seg][m_cur_pos];
+        auto& segment = m_segments[m_cur_seg];
+        const auto pos = segment.storage.get() + m_cur_pos;
 
-        memcpy(pos, data, amount);
+        std::memcpy(pos, data, amount);
 
         m_cur_pos += amount;
+        segment.size = m_cur_pos;
         m_size += amount + padding;
 
         return pos;
@@ -139,6 +178,8 @@ public:
     /// @brief Set the write head to the beginning.
     void clear()
     {
+        for (auto& segment : m_segments)
+            segment.clear();
         m_cur_seg = 0;
         m_cur_pos = 0;
         m_size = 0;
@@ -155,7 +196,7 @@ public:
         {
             return 0;
         }
-        return m_segments[m_cur_seg].size() - m_cur_pos;
+        return m_segments[m_cur_seg].capacity - m_cur_pos;
     }
 };
 }  // namespace ygg::buffer

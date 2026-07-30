@@ -36,6 +36,7 @@ namespace ygg::tests
 {
 
 struct RepositoryTypesElement;
+struct RepositoryTypesSerializedElement;
 struct RepositoryTypesRelation;
 struct RepositoryTypesObjectTag;
 struct RepositoryTypesPackedObjectTag;
@@ -66,6 +67,29 @@ struct Data<tests::RepositoryTypesElement>
     int value = 0;
 
     auto identifying_members() const noexcept { return std::tie(value); }
+};
+
+template<>
+struct Index<tests::RepositoryTypesSerializedElement> : IndexMixin<Index<tests::RepositoryTypesSerializedElement>>
+{
+    using Base = IndexMixin<Index<tests::RepositoryTypesSerializedElement>>;
+    using Base::Base;
+};
+
+template<>
+struct Data<tests::RepositoryTypesSerializedElement>
+{
+    Index<tests::RepositoryTypesSerializedElement> index;
+    IndexList<tests::RepositoryTypesElement> values;
+
+    Data() = default;
+    Data(const Data&) = delete;
+    Data& operator=(const Data&) = delete;
+    Data(Data&&) = default;
+    Data& operator=(Data&&) = default;
+
+    auto cista_members() const noexcept { return std::tie(index, values); }
+    auto identifying_members() const noexcept { return std::tie(values); }
 };
 
 template<>
@@ -242,6 +266,40 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositoryFrontLocalIsChecked)
 
     repository.clear();
     EXPECT_THROW(repository.front_local(), std::out_of_range);
+}
+
+TEST(YggdrasilTests, CommonBasicSymbolRepositorySupportsSerializedStorageAfterMoveAndClear)
+{
+    using Tag = RepositoryTypesSerializedElement;
+    static_assert(!uses_trivial_storage_v<Tag>);
+
+    auto repository = ygg::formalism::BasicSymbolRepository<Tag>();
+    auto data = ygg::Data<Tag> {};
+    data.values.push_back(ygg::Index<RepositoryTypesElement>(7));
+
+    const auto [index, created] = repository.get_or_create_local(data);
+    EXPECT_TRUE(created);
+    EXPECT_EQ(index, ygg::Index<Tag>(0));
+    EXPECT_EQ(repository.front_local().values[0], ygg::Index<RepositoryTypesElement>(7));
+
+    const auto [duplicate_index, duplicate_created] = repository.get_or_create_local(data);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate_index, index);
+
+    auto moved = std::move(repository);
+    EXPECT_EQ(moved.find_local(data), index);
+    EXPECT_EQ(moved.front_local().values[0], ygg::Index<RepositoryTypesElement>(7));
+
+    auto assigned = ygg::formalism::BasicSymbolRepository<Tag>();
+    assigned = std::move(moved);
+    EXPECT_EQ(assigned.find_local(data), index);
+
+    assigned.clear();
+    EXPECT_EQ(assigned.local_size(), 0);
+    const auto [reused_index, reused_created] = assigned.get_or_create_local(data);
+    EXPECT_TRUE(reused_created);
+    EXPECT_EQ(reused_index, ygg::Index<Tag>(0));
+    EXPECT_EQ(assigned.front_local().values[0], ygg::Index<RepositoryTypesElement>(7));
 }
 
 TEST(YggdrasilTests, CommonSymbolRepositoryTracksParentAndLocalSize)

@@ -19,6 +19,7 @@
 #define YGG_CONTAINERS_BLOCK_ARRAY_SET_HPP_
 
 #include "yggdrasil/containers/block_array_pool.hpp"
+#include "yggdrasil/containers/detail/lazy_insert.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -107,10 +108,16 @@ public:
         assert(h == BlockArraySet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        if (const auto it = m_set.find(element, h); it != m_set.end())
-            return { *it, false };
-
-        return { insert_new_with_matching_hash(h, element), true };
+        const auto [it, inserted] = detail::lazy_insert_with_hash(m_set,
+                                                                  element,
+                                                                  h,
+                                                                  [&]
+                                                                  {
+                                                                      const auto index = to_uint_t(m_pool->size());
+                                                                      m_pool->push_back(element);
+                                                                      return index;
+                                                                  });
+        return { *it, inserted };
     }
 
     index_type insert_new_with_hash(size_t h, std::span<const value_type> element)
