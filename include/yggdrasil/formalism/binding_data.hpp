@@ -30,21 +30,21 @@
 namespace ygg
 {
 
-template<typename Relation, typename ObjectTag>
-struct Data<ygg::formalism::RelationBinding<Relation, ObjectTag>>
+template<typename RelationTag, typename ObjectTag>
+struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 {
-    Index<Relation> relation;
+    Index<RelationTag> relation;
     IndexList<ygg::formalism::Object<ObjectTag>> objects;
 
     Data() = default;
-    Data(Index<Relation> relation_, size_t arity, IndexList<ygg::formalism::Object<ObjectTag>> objects_) : relation(relation_), objects(std::move(objects_))
+    Data(Index<RelationTag> relation_, size_t arity, IndexList<ygg::formalism::Object<ObjectTag>> objects_) : relation(relation_), objects(std::move(objects_))
     {
         if (objects.size() != arity)
             throw std::invalid_argument("RelationBinding object count does not match relation arity.");
     }
     // Python constructor
     template<typename C>
-    Data(::ygg::View<Index<Relation>, C> relation_, const std::vector<::ygg::View<Index<ygg::formalism::Object<ObjectTag>>, C>>& objects_) :
+    Data(::ygg::View<Index<RelationTag>, C> relation_, const std::vector<::ygg::View<Index<ygg::formalism::Object<ObjectTag>>, C>>& objects_) :
         relation(),
         objects()
     {

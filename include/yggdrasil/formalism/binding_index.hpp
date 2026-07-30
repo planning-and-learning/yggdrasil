@@ -36,10 +36,10 @@ struct Index<ygg::formalism::Row> : IndexMixin<Index<ygg::formalism::Row>>
     using Base::Base;
 };
 
-template<typename Relation, typename ObjectTag>
-struct Index<ygg::formalism::RelationBinding<Relation, ObjectTag>>
+template<typename RelationTag, typename ObjectTag>
+struct Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 {
-    Index<Relation> relation;
+    Index<RelationTag> relation;
     Index<ygg::formalism::Row> row;
 
     auto identifying_members() const noexcept { return std::tie(relation, row); }
@@ -49,19 +49,19 @@ struct Index<ygg::formalism::RelationBinding<Relation, ObjectTag>>
 namespace ygg::formalism
 {
 
-template<typename Relation, typename ObjectTag, std::ranges::forward_range BindingRange>
+template<typename RelationTag, typename ObjectTag, std::ranges::forward_range BindingRange>
     requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 struct RelationBindingsForwardRange
 {
-    const Index<Relation>& relation;
+    const Index<RelationTag>& relation;
     const BindingRange& rows;
 };
 
-template<typename Relation, typename ObjectTag, std::ranges::random_access_range BindingRange>
+template<typename RelationTag, typename ObjectTag, std::ranges::random_access_range BindingRange>
     requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 struct RelationBindingsRandomAccessRange
 {
-    const Index<Relation>& relation;
+    const Index<RelationTag>& relation;
     const BindingRange& rows;
 };
 }  // namespace ygg::formalism

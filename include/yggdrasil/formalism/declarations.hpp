@@ -24,7 +24,7 @@ struct Row
 {
 };
 
-template<typename Relation, typename ObjectTag>
+template<typename RelationTag, typename ObjectTag>
 struct RelationBinding
 {
 };
@@ -34,8 +34,8 @@ struct is_relation_binding : std::false_type
 {
 };
 
-template<typename Relation, typename ObjectTag>
-struct is_relation_binding<RelationBinding<Relation, ObjectTag>> : std::true_type
+template<typename RelationTag, typename ObjectTag>
+struct is_relation_binding<RelationBinding<RelationTag, ObjectTag>> : std::true_type
 {
 };
 

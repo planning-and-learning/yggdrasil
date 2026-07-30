@@ -34,15 +34,15 @@
 namespace ygg
 {
 
-template<typename Relation, typename ObjectTag, typename C>
-class View<Index<ygg::formalism::RelationBinding<Relation, ObjectTag>>, C>
+template<typename RelationTag, typename ObjectTag, typename C>
+class View<Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>, C>
 {
 private:
     const C* m_context;
-    Index<ygg::formalism::RelationBinding<Relation, ObjectTag>> m_handle;
+    Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>> m_handle;
 
 public:
-    View(Index<ygg::formalism::RelationBinding<Relation, ObjectTag>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     // This will return an ArrayView already
     auto get_data() const noexcept
@@ -71,14 +71,14 @@ public:
     auto identifying_members() const noexcept { return std::make_tuple(m_handle, m_context->get_index()); }
 };
 
-template<typename Relation, typename ObjectTag, std::ranges::forward_range BindingRange, typename C>
+template<typename RelationTag, typename ObjectTag, std::ranges::forward_range BindingRange, typename C>
     requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
-class View<ygg::formalism::RelationBindingsForwardRange<Relation, ObjectTag, BindingRange>, C>
+class View<ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>, C>
 {
 public:
-    using Container = ygg::formalism::RelationBindingsForwardRange<Relation, ObjectTag, BindingRange>;
-    using T = Index<ygg::formalism::RelationBinding<Relation, ObjectTag>>;
-    using I1 = Index<Relation>;
+    using Container = ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>;
+    using T = Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>;
+    using I1 = Index<RelationTag>;
 
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
@@ -161,15 +161,15 @@ private:
     Container m_handle;
 };
 
-template<typename Relation, typename ObjectTag, std::ranges::random_access_range BindingRange, typename C>
+template<typename RelationTag, typename ObjectTag, std::ranges::random_access_range BindingRange, typename C>
     requires std::ranges::sized_range<BindingRange>
              && std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
-class View<ygg::formalism::RelationBindingsRandomAccessRange<Relation, ObjectTag, BindingRange>, C>
+class View<ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>, C>
 {
 public:
-    using Container = ygg::formalism::RelationBindingsRandomAccessRange<Relation, ObjectTag, BindingRange>;
-    using T = Index<ygg::formalism::RelationBinding<Relation, ObjectTag>>;
-    using I1 = Index<Relation>;
+    using Container = ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>;
+    using T = Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>;
+    using I1 = Index<RelationTag>;
 
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
