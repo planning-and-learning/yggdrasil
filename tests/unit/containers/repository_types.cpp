@@ -16,6 +16,7 @@
  */
 
 #include "gtest/gtest.h"
+#include <cstdint>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -37,6 +38,7 @@ namespace ygg::tests
 struct RepositoryTypesElement;
 struct RepositoryTypesRelation;
 struct RepositoryTypesObjectTag;
+struct RepositoryTypesPackedObjectTag;
 struct RepositoryTypesBuilderOther;
 
 struct RepositoryTypesContext
@@ -90,8 +92,22 @@ struct Data<tests::RepositoryTypesBuilderOther>
 
 }  // namespace ygg
 
+namespace ygg::formalism
+{
+
+template<>
+struct RelationRepositoryTraits<tests::RepositoryTypesPackedObjectTag>
+{
+    using storage_type = BitPackedArraySetStorage;
+};
+
+}  // namespace ygg::formalism
+
 namespace ygg::tests
 {
+
+template<typename T>
+concept HasWidth = requires(const T& value) { value.width(); };
 
 struct RepositoryTypesRepository
 {
@@ -423,6 +439,73 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     ASSERT_TRUE(local_found.has_value());
     EXPECT_EQ(local_found->get_index().row, local_view.get_index().row);
     EXPECT_EQ(&local_found->get_context(), &child);
+}
+
+TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
+{
+    using Config = ygg::formalism::RelationRepositoryConfig;
+    using DefaultRelationRepository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
+    using Object = ygg::formalism::Object<RepositoryTypesPackedObjectTag>;
+    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesPackedObjectTag>;
+    using SymbolRepository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
+    using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation>;
+    using Factory = ygg::formalism::RepositoryFactory<SymbolRepository, RelationRepository>;
+
+    static_assert(!HasWidth<typename DefaultRelationRepository::container_type>);
+    static_assert(HasWidth<typename RelationRepository::container_type>);
+
+    auto factory = Factory();
+    auto root = factory.create_shared(Config(2));
+    const auto relation = ygg::Index<RepositoryTypesRelation>(0);
+    auto objects = ygg::IndexList<Object> {};
+    objects.push_back(ygg::Index<Object>(0));
+    objects.push_back(ygg::Index<Object>(3));
+    const auto data = ygg::Data<Binding>(relation, 2, objects);
+
+    const auto [root_view, root_created] = root->get_or_create(data);
+    const auto [duplicate_view, duplicate_created] = root->get_or_create(data);
+
+    EXPECT_TRUE(root_created);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate_view.get_index().row, root_view.get_index().row);
+    EXPECT_EQ((*root)[root_view.get_index()][0], ygg::Index<Object>(0));
+    EXPECT_EQ((*root)[root_view.get_index()][1], ygg::Index<Object>(3));
+
+    objects[0] = ygg::Index<Object>(4);
+    objects[1] = ygg::Index<Object>(0);
+    const auto wider_data = ygg::Data<Binding>(relation, 2, objects);
+
+    EXPECT_THROW(root->get_or_create(wider_data), std::out_of_range);
+    EXPECT_EQ(root->size(relation), 1);
+
+    const auto [root_duplicate_after_failure, created_after_failure] = root->get_or_create(data);
+    EXPECT_FALSE(created_after_failure);
+    EXPECT_EQ(root_duplicate_after_failure.get_index().row, root_view.get_index().row);
+
+    auto child = factory.create_shared(Config(3), root.get());
+    const auto [inherited_view, inherited_created] = child->get_or_create(data);
+    const auto [child_view, child_created] = child->get_or_create(wider_data);
+
+    EXPECT_FALSE(inherited_created);
+    EXPECT_EQ(inherited_view.get_index().row, root_view.get_index().row);
+    EXPECT_EQ(&inherited_view.get_context(), root.get());
+    EXPECT_TRUE(child_created);
+    EXPECT_EQ(child_view.get_index().row, ygg::Index<ygg::formalism::Row>(1));
+    EXPECT_EQ((*child)[child_view.get_index()][0], ygg::Index<Object>(4));
+    EXPECT_EQ((*child)[child_view.get_index()][1], ygg::Index<Object>(0));
+}
+
+TEST(YggdrasilTests, CommonRelationRepositoryValidatesObjectIndexWidth)
+{
+    using Config = ygg::formalism::RelationRepositoryConfig;
+    using Repository = ygg::formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation>;
+
+    EXPECT_EQ(Config().object_index_width, Config::default_object_index_width);
+    EXPECT_THROW((Config(0)), std::invalid_argument);
+    EXPECT_THROW((Config(static_cast<std::uint8_t>(Config::default_object_index_width + 1))), std::invalid_argument);
+
+    auto parent = Repository(0, nullptr, Config(2));
+    EXPECT_THROW((Repository(1, &parent, Config(1))), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)

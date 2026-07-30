@@ -35,9 +35,20 @@ public:
         return Repository<SymbolRepo, RelationRepo>(m_next_index++, parent);
     }
 
+    Repository<SymbolRepo, RelationRepo> create(RelationRepositoryConfig config, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
+    {
+        return Repository<SymbolRepo, RelationRepo>(m_next_index++, parent, config);
+    }
+
     std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
     {
         return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_next_index++, parent);
+    }
+
+    std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(RelationRepositoryConfig config,
+                                                                        const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
+    {
+        return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_next_index++, parent, config);
     }
 
 private:

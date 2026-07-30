@@ -19,12 +19,16 @@
 #define YGG_FORMALISM_BASIC_RELATION_REPOSITORY_HPP_
 
 #include <cassert>
+#include <concepts>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <yggdrasil/containers/bit_packed_array_set.hpp>
 #include <yggdrasil/containers/block_array_set.hpp>
 #include <yggdrasil/containers/tuple.hpp>
 #include <yggdrasil/core/types.hpp>
@@ -37,6 +41,49 @@
 
 namespace ygg::formalism
 {
+
+struct RelationRepositoryConfig
+{
+    static constexpr std::uint8_t default_object_index_width = static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits);
+
+    explicit RelationRepositoryConfig(std::uint8_t object_index_width = default_object_index_width) : object_index_width(object_index_width)
+    {
+        if (object_index_width == 0 || object_index_width > default_object_index_width)
+            throw std::invalid_argument("RelationRepositoryConfig: object index width must be between 1 and the encoded object width.");
+    }
+
+    std::uint8_t object_index_width;
+};
+
+struct BlockArraySetStorage
+{
+    template<std::unsigned_integral Block, typename Coder>
+    using container_type = ygg::BlockArraySet<Block, Coder>;
+
+    template<std::unsigned_integral Block, typename Coder>
+    static container_type<Block, Coder> make(size_t arity, std::uint8_t)
+    {
+        return container_type<Block, Coder>(arity);
+    }
+};
+
+struct BitPackedArraySetStorage
+{
+    template<std::unsigned_integral Block, typename Coder>
+    using container_type = ygg::BitPackedArraySet<Block, Coder>;
+
+    template<std::unsigned_integral Block, typename Coder>
+    static container_type<Block, Coder> make(size_t arity, std::uint8_t object_index_width)
+    {
+        return container_type<Block, Coder>(arity, object_index_width);
+    }
+};
+
+template<typename ObjectTag>
+struct RelationRepositoryTraits
+{
+    using storage_type = BlockArraySetStorage;
+};
 
 template<typename ObjectTag, typename T>
 class BasicRelationRepository
@@ -53,16 +100,25 @@ private:
 
     static constexpr ygg::uint_t kInvalid = std::numeric_limits<ygg::uint_t>::max();
 
+    using storage_type = typename RelationRepositoryTraits<ObjectTag>::storage_type;
+    using internal_container_type = typename storage_type::template container_type<ygg::uint_t, Coder<ygg::uint_t>>;
+
     struct Slot
     {
         Index<T> g;
-        ygg::BlockArraySet<ygg::uint_t, Coder<ygg::uint_t>> container;
+        internal_container_type container;
         size_t parent_size = 0;
 
-        Slot(Index<T> g, size_t arity, size_t parent_size) : g(g), container(arity), parent_size(parent_size) {}
+        Slot(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width) :
+            g(g),
+            container(storage_type::template make<ygg::uint_t, Coder<ygg::uint_t>>(arity, object_index_width)),
+            parent_size(parent_size)
+        {
+        }
     };
 
     const BasicRelationRepository* m_parent;
+    std::uint8_t m_object_index_width;
 
     std::vector<ygg::uint_t> m_forward;
     std::vector<Slot> m_slots;
@@ -78,7 +134,7 @@ private:
         {
             const auto parent_size = m_parent ? m_parent->size(g) : size_t { 0 };
             m_forward[gi] = static_cast<ygg::uint_t>(m_slots.size());
-            m_slots.emplace_back(g, arity, parent_size);
+            m_slots.emplace_back(g, arity, parent_size, m_object_index_width);
         }
 
         return m_slots[m_forward[gi]];
@@ -122,7 +178,7 @@ private:
     }
 
 public:
-    using container_type = ygg::BlockArraySet<ygg::uint_t, Coder<ygg::uint_t>>;
+    using container_type = internal_container_type;
     using ConstViewType = typename container_type::ConstArrayView;
 
     /**
@@ -246,7 +302,18 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    BasicRelationRepository(const BasicRelationRepository* parent = nullptr) : m_parent(parent), m_forward(), m_slots() { clear_slots(); }
+    BasicRelationRepository(const BasicRelationRepository* parent = nullptr) : BasicRelationRepository(parent, RelationRepositoryConfig()) {}
+
+    BasicRelationRepository(const BasicRelationRepository* parent, RelationRepositoryConfig config) :
+        m_parent(parent),
+        m_object_index_width(config.object_index_width),
+        m_forward(),
+        m_slots()
+    {
+        if (m_parent && m_object_index_width < m_parent->m_object_index_width)
+            throw std::invalid_argument("BasicRelationRepository: child object index width must not be smaller than its parent's.");
+        clear_slots();
+    }
     BasicRelationRepository(const BasicRelationRepository& other) = delete;
     BasicRelationRepository& operator=(const BasicRelationRepository& other) = delete;
     BasicRelationRepository(BasicRelationRepository&& other) = default;
@@ -255,10 +322,7 @@ public:
     /// @brief Clear the repository but keep memory allocated.
     void clear() noexcept { clear_slots(); }
 
-    static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
-    {
-        return ygg::BlockArraySet<ygg::uint_t, Coder<ygg::uint_t>>::hash(builder.objects);
-    }
+    static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept { return container_type::hash(builder.objects); }
 };
 }  // namespace ygg::formalism
 

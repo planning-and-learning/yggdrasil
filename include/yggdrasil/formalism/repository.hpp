@@ -306,6 +306,16 @@ public:
     {
         clear();
     }
+
+    Repository(size_t index, const Repository* parent, RelationRepositoryConfig config) :
+        m_parent(parent),
+        m_root(m_parent ? m_parent->m_root : this),
+        m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
+        m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr, config),
+        m_index(index)
+    {
+        clear();
+    }
     Repository(const Repository& other) = delete;
     Repository& operator=(const Repository& other) = delete;
     Repository(Repository&& other) = delete;

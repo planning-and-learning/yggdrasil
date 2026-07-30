@@ -424,6 +424,13 @@ private:
     {
         if (elements.size() != m_length)
             throw std::invalid_argument("BitPackedArrayPool: wrong number of elements.");
+
+        for (const auto& element : elements)
+        {
+            const auto raw = static_cast<block_type>(Coder::encode(element));
+            if (std::bit_width(raw) > m_width)
+                throw std::out_of_range("BitPackedArrayPool: encoded value exceeds bit width.");
+        }
     }
 
 public:

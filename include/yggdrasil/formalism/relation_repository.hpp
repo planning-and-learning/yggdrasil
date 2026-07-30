@@ -222,10 +222,13 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    RelationRepository(size_t index, const RelationRepository* parent = nullptr) :
+    RelationRepository(size_t index, const RelationRepository* parent = nullptr) : RelationRepository(index, parent, RelationRepositoryConfig()) {}
+
+    RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) :
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),
-        m_repositories(BasicRelationRepository<ObjectTag, Ts>(parent ? &std::get<BasicRelationRepository<ObjectTag, Ts>>(parent->m_repositories) : nullptr)...),
+        m_repositories(
+            BasicRelationRepository<ObjectTag, Ts>(parent ? &std::get<BasicRelationRepository<ObjectTag, Ts>>(parent->m_repositories) : nullptr, config)...),
         m_index(index)
     {
     }

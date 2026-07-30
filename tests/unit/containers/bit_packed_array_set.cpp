@@ -32,6 +32,11 @@ TEST(YggdrasilTests, CommonBitPackedArraySetOutOfRange)
 
     // 4 requires width 3, which exceeds the limit of 2.
     EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 4 })), std::out_of_range);
+    EXPECT_EQ(set.size(), 0);
+
+    const auto [index, inserted] = set.insert(std::vector<ygg::uint_t>({ 1, 3 }));
+    EXPECT_TRUE(inserted);
+    EXPECT_EQ(index, 0);
 
     // 3 elements are too much for a pool that stores arrays of length 2.
     EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
