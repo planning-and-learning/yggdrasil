@@ -25,6 +25,8 @@ function(yggdrasil_fix_runtime_paths)
     if(NOT ARG_RPATHS)
         set(ARG_RPATHS "@loader_path")
     endif()
+    # PARSE_ARGV preserves semicolons in quoted list arguments.
+    set(native_library_rpaths ${ARG_RPATHS})
 
     file(GLOB native_lib_dirs
         LIST_DIRECTORIES true
@@ -121,7 +123,7 @@ function(yggdrasil_fix_runtime_paths)
                 endif()
             endif()
 
-            foreach(native_library_rpath IN LISTS ARG_RPATHS)
+            foreach(native_library_rpath IN LISTS native_library_rpaths)
                 execute_process(
                     COMMAND
                         "${INSTALL_NAME_TOOL_EXECUTABLE}"

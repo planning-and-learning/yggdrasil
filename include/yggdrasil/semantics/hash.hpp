@@ -54,7 +54,7 @@ namespace hashing
 {
 
 /// MurmurHash3 (x64_128, fixed zero seed) over a byte range, truncated to 64 bits.
-inline hash_t bytes(const char* data, size_t size) noexcept
+inline hash_t hash_bytes(const char* data, size_t size) noexcept
 {
     uint64_t out[2];  ///< MurmurHash3_x64_128 writes two 64-bit words.
     MurmurHash3_x64_128(data, static_cast<int>(size), 0U, out);
@@ -161,13 +161,13 @@ struct Hash<T>
 template<>
 struct Hash<std::string_view>
 {
-    hash_t operator()(std::string_view el) const noexcept { return hashing::bytes(el.data(), el.size()); }
+    hash_t operator()(std::string_view el) const noexcept { return hashing::hash_bytes(el.data(), el.size()); }
 };
 
 template<>
 struct Hash<std::string>
 {
-    hash_t operator()(const std::string& el) const noexcept { return hashing::bytes(el.data(), el.size()); }
+    hash_t operator()(const std::string& el) const noexcept { return hashing::hash_bytes(el.data(), el.size()); }
 };
 
 template<typename T, size_t N>

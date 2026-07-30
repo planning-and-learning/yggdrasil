@@ -66,7 +66,7 @@ struct Hash<::cista::offset::string>
     using Type = ::cista::offset::string;
 
     /// Same byte hash as Hash<std::string>, so equal text hashes alike across string representations.
-    hash_t operator()(const Type& el) const noexcept { return hashing::bytes(el.data(), el.size()); }
+    hash_t operator()(const Type& el) const noexcept { return hashing::hash_bytes(el.data(), el.size()); }
 };
 
 template<typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
