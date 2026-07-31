@@ -77,6 +77,12 @@ public:
 
     bool empty() const noexcept { return m_storage->empty(); }
     size_t size() const noexcept { return m_storage->size(); }
+    size_t memory_usage() const noexcept
+    {
+        size_t bytes = m_storage ? m_storage->capacity() * sizeof(typename VectorType::value_type) : 0;
+        bytes += m_set.capacity() * (sizeof(Index<Tag>) + sizeof(gtl::priv::ctrl_t));
+        return bytes;
+    }
 
     /**
      * Modifiers

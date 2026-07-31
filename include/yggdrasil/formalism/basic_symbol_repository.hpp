@@ -54,6 +54,7 @@ private:
         static size_t hash(const Data<U>& builder) noexcept { return ::ygg::IndexedHashSet<U>::hash(builder); }
 
         void clear() noexcept { container.clear(); }
+        size_t memory_usage() const noexcept { return container.memory_usage(); }
     };
 
     template<typename U>
@@ -73,6 +74,8 @@ private:
             arena->clear();
             container.clear();
         }
+
+        size_t memory_usage() const noexcept { return (arena ? arena->capacity() : 0) + (buffer ? buffer->buf_.capacity() : 0) + container.memory_usage(); }
     };
 
     const BasicSymbolRepository* m_parent;
@@ -173,6 +176,8 @@ public:
     BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept = default;
 
     void clear() noexcept { clear_slot(); }
+
+    size_t memory_usage() const noexcept { return m_slot.memory_usage(); }
 
     static size_t hash(const Data<T>& builder) noexcept { return Slot<T>::hash(builder); }
 };

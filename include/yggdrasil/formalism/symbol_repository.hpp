@@ -204,6 +204,12 @@ public:
         return get<T>().exists_parent_mutation();
     }
 
+    template<typename T>
+    size_t memory_usage() const noexcept
+    {
+        return get<T>().memory_usage();
+    }
+
     /**
      * Common methods do not depend on lookup scope.
      */

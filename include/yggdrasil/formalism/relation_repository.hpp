@@ -221,6 +221,12 @@ public:
         return get<T>().exists_parent_mutation(g);
     }
 
+    template<typename T>
+    size_t memory_usage() const noexcept
+    {
+        return get<T>().memory_usage();
+    }
+
     /**
      * Common methods do not depend on lookup scope.
      */
@@ -242,10 +248,7 @@ public:
 
     const auto& get_index() const noexcept { return m_index; }
     const auto& get_root() const noexcept { return *m_root; }
-    std::uint8_t get_object_index_width() const noexcept
-    {
-        return this->template get<typename FirstType<Ts...>::type>().get_object_index_width();
-    }
+    std::uint8_t get_object_index_width() const noexcept { return this->template get<typename FirstType<Ts...>::type>().get_object_index_width(); }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 

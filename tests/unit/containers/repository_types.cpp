@@ -256,6 +256,7 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositoryFrontLocalIsChecked)
     auto repository = ygg::formalism::BasicSymbolRepository<RepositoryTypesElement>();
 
     EXPECT_THROW(repository.front_local(), std::out_of_range);
+    EXPECT_EQ(repository.memory_usage(), 0);
 
     auto data = ygg::Data<RepositoryTypesElement> {};
     data.value = 7;
@@ -264,9 +265,12 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositoryFrontLocalIsChecked)
     EXPECT_TRUE(created);
     EXPECT_EQ(index, ygg::Index<RepositoryTypesElement>(0));
     EXPECT_EQ(repository.front_local().value, 7);
+    const auto memory_usage = repository.memory_usage();
+    EXPECT_GT(memory_usage, 0);
 
     repository.clear();
     EXPECT_THROW(repository.front_local(), std::out_of_range);
+    EXPECT_EQ(repository.memory_usage(), memory_usage);
 }
 
 TEST(YggdrasilTests, CommonBasicSymbolRepositorySupportsSerializedStorageAfterMoveAndClear)
@@ -275,6 +279,7 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositorySupportsSerializedStorageAfterMo
     static_assert(!uses_trivial_storage_v<Tag>);
 
     auto repository = ygg::formalism::BasicSymbolRepository<Tag>();
+    EXPECT_EQ(repository.memory_usage(), 0);
     auto data = ygg::Data<Tag> {};
     data.values.push_back(ygg::Index<RepositoryTypesElement>(7));
 
@@ -282,6 +287,7 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositorySupportsSerializedStorageAfterMo
     EXPECT_TRUE(created);
     EXPECT_EQ(index, ygg::Index<Tag>(0));
     EXPECT_EQ(repository.front_local().values[0], ygg::Index<RepositoryTypesElement>(7));
+    EXPECT_GT(repository.memory_usage(), 0);
 
     const auto [duplicate_index, duplicate_created] = repository.get_or_create_local(data);
     EXPECT_FALSE(duplicate_created);
@@ -500,6 +506,42 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_EQ(&local_found->get_context(), &child);
 }
 
+TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
+{
+    using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
+    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using SymbolRepository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
+    using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
+    using Repository = ygg::formalism::Repository<SymbolRepository, RelationRepository>;
+
+    auto repository = Repository(0);
+    EXPECT_EQ(repository.memory_usage<RepositoryTypesElement>(), 0);
+    EXPECT_EQ(repository.memory_usage<Binding>(), 0);
+
+    auto element = ygg::Data<RepositoryTypesElement> {};
+    element.value = 7;
+    repository.get_or_create(element);
+
+    auto objects = ygg::IndexList<Object> {};
+    objects.push_back(ygg::Index<Object>(0));
+    objects.push_back(ygg::Index<Object>(1));
+    const auto data = ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 2, objects);
+    repository.get_or_create(data);
+
+    const auto symbol_memory_usage = repository.memory_usage<RepositoryTypesElement>();
+    const auto relation_memory_usage = repository.memory_usage<Binding>();
+    EXPECT_GT(symbol_memory_usage, 0);
+    EXPECT_GT(relation_memory_usage, 0);
+
+    repository.clear();
+    EXPECT_EQ(repository.memory_usage<RepositoryTypesElement>(), symbol_memory_usage);
+    EXPECT_EQ(repository.memory_usage<Binding>(), relation_memory_usage);
+
+    auto child = Repository(1, &repository);
+    EXPECT_EQ(child.memory_usage<RepositoryTypesElement>(), 0);
+    EXPECT_EQ(child.memory_usage<Binding>(), 0);
+}
+
 TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 {
     using DefaultRelationRepository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
@@ -520,11 +562,14 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     objects.push_back(ygg::Index<Object>(3));
     const auto data = ygg::Data<Binding>(relation, 2, objects);
 
+    EXPECT_EQ(root.memory_usage<Binding>(), 0);
+
     const auto [root_view, root_created] = root.get_or_create(data);
     const auto [duplicate_view, duplicate_created] = root.get_or_create(data);
 
     EXPECT_TRUE(root_created);
     EXPECT_FALSE(duplicate_created);
+    EXPECT_GT(root.memory_usage<Binding>(), 0);
     EXPECT_EQ(duplicate_view.get_index().row, root_view.get_index().row);
     EXPECT_EQ(root[root_view.get_index()][0], ygg::Index<Object>(0));
     EXPECT_EQ(root[root_view.get_index()][1], ygg::Index<Object>(3));

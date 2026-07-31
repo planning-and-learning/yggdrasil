@@ -209,6 +209,13 @@ public:
 
     template<typename T>
         requires NonRelationBindingConcept<T>
+    size_t memory_usage() const noexcept
+    {
+        return m_symbol_repository.template memory_usage<T>();
+    }
+
+    template<typename T>
+        requires NonRelationBindingConcept<T>
     const Repository& get_canonical_context(Index<T> index) const
     {
         const Repository* current = this;
@@ -276,6 +283,14 @@ public:
     size_t size(Index<T> g) const noexcept
     {
         return m_relation_repository.parent_size(g) + m_relation_repository.local_size(g);
+    }
+
+    template<RelationBindingConcept T>
+    size_t memory_usage() const noexcept
+    {
+        using Binding = std::remove_cvref_t<T>;
+        static_assert(std::is_same_v<typename Binding::object_tag, typename RelationRepo::object_tag>);
+        return m_relation_repository.template memory_usage<typename Binding::relation_tag>();
     }
 
     template<typename T>

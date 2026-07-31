@@ -24,9 +24,11 @@ struct Row
 {
 };
 
-template<typename RelationTag, typename ObjectTag>
+template<typename RelationTag_, typename ObjectTag_>
 struct RelationBinding
 {
+    using relation_tag = RelationTag_;
+    using object_tag = ObjectTag_;
 };
 
 template<typename T>

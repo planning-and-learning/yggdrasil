@@ -322,6 +322,15 @@ public:
     /// @brief Clear the repository but keep memory allocated.
     void clear() noexcept { clear_slots(); }
 
+    /// @brief Retained dynamic storage owned by this repository layer.
+    size_t memory_usage() const noexcept
+    {
+        size_t bytes = m_forward.capacity() * sizeof(ygg::uint_t) + m_slots.capacity() * sizeof(Slot);
+        for (const auto& slot : m_slots)
+            bytes += slot.container.memory_usage();
+        return bytes;
+    }
+
     std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
 
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept { return container_type::hash(builder.objects); }
