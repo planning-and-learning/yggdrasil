@@ -323,6 +323,7 @@ public:
 
     const auto& get_index() const noexcept { return m_index; }
     const auto& get_root() const noexcept { return *m_root; }
+    std::uint8_t get_object_index_width() const noexcept { return m_relation_repository.get_object_index_width(); }
 
     void clear() noexcept
     {

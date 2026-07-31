@@ -322,6 +322,8 @@ public:
     /// @brief Clear the repository but keep memory allocated.
     void clear() noexcept { clear_slots(); }
 
+    std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
+
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept { return container_type::hash(builder.objects); }
 };
 }  // namespace ygg::formalism

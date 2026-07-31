@@ -242,6 +242,10 @@ public:
 
     const auto& get_index() const noexcept { return m_index; }
     const auto& get_root() const noexcept { return *m_root; }
+    std::uint8_t get_object_index_width() const noexcept
+    {
+        return this->template get<typename FirstType<Ts...>::type>().get_object_index_width();
+    }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 
