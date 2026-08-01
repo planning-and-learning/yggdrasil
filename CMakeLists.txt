@@ -19,6 +19,7 @@ option(YGGDRASIL_USE_LLD "Use LLVM lld with Clang when available." ON)
 option(YGGDRASIL_ENABLE_LTO "Enable link-time optimization for Release builds." ON)
 option(YGGDRASIL_ENABLE_FMT_FORMATTERS "Enable Yggdrasil's public fmt::formatter specializations." ON)
 option(YGGDRASIL_BUILD_TESTS "Build Yggdrasil C++ tests." OFF)
+option(YGGDRASIL_BUILD_PROFILING "Build Yggdrasil profiling executables." OFF)
 
 # Build configuration
 
@@ -112,6 +113,10 @@ add_subdirectory(python)
 if(YGGDRASIL_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(YGGDRASIL_BUILD_PROFILING)
+    add_subdirectory(profiling)
 endif()
 
 add_custom_target(pyyggdrasil_wheel DEPENDS pyyggdrasil_python)

@@ -31,26 +31,38 @@
 namespace ygg::formalism
 {
 template<typename... Ts>
-class SymbolRepository : private BasicSymbolRepository<Ts>...
+class SymbolRepository;
+
+template<typename... Ts>
+class ConcurrentSymbolRepository;
+
+namespace detail
+{
+template<typename Repository, bool ThreadSafe, typename... Ts>
+class SymbolRepositoryBase : private BasicSymbolRepository<Ts, ThreadSafe>...
 {
 private:
-    const SymbolRepository* m_parent;
-    const SymbolRepository* m_root;
+    const SymbolRepositoryBase* m_parent;
+    const SymbolRepositoryBase* m_root;
+
+    const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 
 public:
+    static constexpr bool thread_safe = ThreadSafe;
+
     /**
      * Global methods traverse the current repository layer and its parent hierarchy.
      * Handle-producing methods return views that retain the discovered canonical context.
      */
 
     template<typename T>
-    std::optional<View<Index<T>, SymbolRepository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
+    std::optional<View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
         const auto* current = this;
         while (current != nullptr)
         {
             if (auto index_or_nullopt = current->template get<T>().find_local_with_hash(builder, h))
-                return View<Index<T>, SymbolRepository>(*index_or_nullopt, *current);
+                return View<Index<T>, Repository>(*index_or_nullopt, current->repository());
 
             current = current->m_parent;
         }
@@ -59,15 +71,15 @@ public:
     }
 
     template<typename T>
-    std::optional<View<Index<T>, SymbolRepository>> find(const Data<T>& builder) const noexcept
+    std::optional<View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
     {
-        return find_with_hash(builder, SymbolRepository::hash(builder));
+        return find_with_hash(builder, SymbolRepositoryBase::hash(builder));
     }
 
     template<typename T>
-    std::pair<View<Index<T>, SymbolRepository>, bool> get_or_create(Data<T>& builder)
+    std::pair<View<Index<T>, Repository>, bool> get_or_create(Data<T>& builder)
     {
-        const auto h = SymbolRepository::hash(builder);
+        const auto h = SymbolRepositoryBase::hash(builder);
         if (auto view_or_nullopt = find_with_hash(builder, h))
             return { *view_or_nullopt, false };
 
@@ -75,8 +87,8 @@ public:
                && "Integrity error: Parent SymbolRepository modified after child "
                   "branching!");
 
-        const auto [index, success] = get<T>().get_or_create_local_with_hash(builder, h);
-        return { View<Index<T>, SymbolRepository>(index, *this), success };
+        const auto [index, success] = create_local_with_hash(builder, h);
+        return { View<Index<T>, Repository>(index, repository()), success };
     }
 
     template<typename T>
@@ -107,13 +119,13 @@ public:
     }
 
     template<typename T>
-    const SymbolRepository& get_canonical_context(Index<T> index) const
+    const Repository& get_canonical_context(Index<T> index) const
     {
         const auto* current = this;
         while (current != nullptr)
         {
             if (current->template get<T>().is_local(index))
-                return *current;
+                return current->repository();
 
             current = current->m_parent;
         }
@@ -127,15 +139,15 @@ public:
      */
 
     template<typename T>
-    BasicSymbolRepository<T>& get() noexcept
+    BasicSymbolRepository<T, ThreadSafe>& get() noexcept
     {
-        return static_cast<BasicSymbolRepository<T>&>(*this);
+        return static_cast<BasicSymbolRepository<T, ThreadSafe>&>(*this);
     }
 
     template<typename T>
-    const BasicSymbolRepository<T>& get() const noexcept
+    const BasicSymbolRepository<T, ThreadSafe>& get() const noexcept
     {
-        return static_cast<const BasicSymbolRepository<T>&>(*this);
+        return static_cast<const BasicSymbolRepository<T, ThreadSafe>&>(*this);
     }
 
     template<typename T>
@@ -157,9 +169,9 @@ public:
     }
 
     template<typename T>
-    auto insert_new_local_with_hash(Data<T>& builder, size_t h)
+    std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
     {
-        return get<T>().insert_new_local_with_hash(builder, h);
+        return get<T>().create_local_with_hash(builder, h);
     }
 
     template<typename T>
@@ -214,27 +226,47 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    SymbolRepository(const SymbolRepository* parent = nullptr) :
-        BasicSymbolRepository<Ts>(parent ? &parent->template get<Ts>() : nullptr)...,
+    /// Parent layers must remain frozen for the lifetime of a child repository.
+    SymbolRepositoryBase(const Repository* parent = nullptr) :
+        BasicSymbolRepository<Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr)...,
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this)
     {
     }
 
-    SymbolRepository(const SymbolRepository&) = delete;
-    SymbolRepository& operator=(const SymbolRepository&) = delete;
-    SymbolRepository(SymbolRepository&&) = delete;
-    SymbolRepository& operator=(SymbolRepository&&) = delete;
+    SymbolRepositoryBase(const SymbolRepositoryBase&) = delete;
+    SymbolRepositoryBase& operator=(const SymbolRepositoryBase&) = delete;
+    SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;
+    SymbolRepositoryBase& operator=(SymbolRepositoryBase&&) = delete;
 
-    const auto& get_root() const noexcept { return *m_root; }
+    const Repository& get_root() const noexcept { return m_root->repository(); }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 
     template<typename T>
     static size_t hash(const Data<T>& builder) noexcept
     {
-        return BasicSymbolRepository<T>::hash(builder);
+        return BasicSymbolRepository<T, ThreadSafe>::hash(builder);
     }
+};
+}  // namespace detail
+
+template<typename... Ts>
+class SymbolRepository : public detail::SymbolRepositoryBase<SymbolRepository<Ts...>, false, Ts...>
+{
+    using Base = detail::SymbolRepositoryBase<SymbolRepository<Ts...>, false, Ts...>;
+
+public:
+    SymbolRepository(const SymbolRepository* parent = nullptr) : Base(parent) {}
+};
+
+template<typename... Ts>
+class ConcurrentSymbolRepository : public detail::SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, true, Ts...>
+{
+    using Base = detail::SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, true, Ts...>;
+
+public:
+    ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent = nullptr) : Base(parent) {}
 };
 
 }  // namespace ygg::formalism

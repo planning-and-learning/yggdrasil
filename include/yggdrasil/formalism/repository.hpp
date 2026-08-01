@@ -36,6 +36,10 @@
 namespace ygg::formalism
 {
 
+/// Concurrent repository aliases support overlapping find, get_or_create,
+/// published-index lookup, and size calls. Builders remain thread-confined;
+/// clear, memory accounting, and destruction require quiescence. Parent layers
+/// must remain frozen while a child exists.
 template<typename SymbolRepo, typename RelationRepo>
 class Repository
 {
@@ -69,8 +73,7 @@ private:
         return std::nullopt;
     }
 
-    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Inserts without probing again: the
-    /// caller walked the whole hierarchy starting at this layer, so the symbol is absent here.
+    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local layer before publishing.
     template<typename T>
         requires NonRelationBindingConcept<T>
     YGG_NOINLINE std::pair<View<Index<T>, Repository>, bool> create_local_with_hash(Data<T>& builder, size_t h)
@@ -79,7 +82,8 @@ private:
                && "Integrity error: Parent SymbolRepository modified after child "
                   "branching!");
 
-        return { View<Index<T>, Repository>(m_symbol_repository.insert_new_local_with_hash(builder, h), *this), true };
+        const auto [index, created] = m_symbol_repository.create_local_with_hash(builder, h);
+        return { View<Index<T>, Repository>(index, *this), created };
     }
 
     template<typename T>
@@ -129,8 +133,7 @@ private:
         return create_local_with_hash(builder, h);
     }
 
-    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Inserts without probing again: the
-    /// caller walked the whole hierarchy starting at this layer, so the binding is absent here.
+    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local lane before publishing.
     template<typename T>
     YGG_NOINLINE std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
     create_local_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
@@ -141,14 +144,16 @@ private:
                && "Integrity error: Parent RelationRepository modified after child "
                   "branching!");
 
-        const auto row = m_relation_repository.insert_new_local_with_hash(builder, h);
+        const auto [row, created] = m_relation_repository.create_local_with_hash(builder, h);
         return { View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
                      Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, row },
                      *this),
-                 true };
+                 created };
     }
 
 public:
+    static constexpr bool thread_safe = SymbolRepo::thread_safe && RelationRepo::thread_safe;
+
     /**
      * Global methods traverse the current repository layer and its parent hierarchy.
      * Handle-producing methods return views that retain the discovered canonical context.
@@ -189,15 +194,7 @@ public:
         requires NonRelationBindingConcept<T>
     const Data<T>& front() const
     {
-        const Repository* current = this;
-        while (current->m_parent != nullptr)
-        {
-            if (current->m_symbol_repository.template parent_size<T>() == 0)
-                break;
-            current = current->m_parent;
-        }
-
-        return current->m_symbol_repository.template front_local<T>();
+        return (*this)[Index<T>(0)];
     }
 
     template<typename T>
@@ -268,21 +265,13 @@ public:
     template<typename T>
     auto front(Index<T> g) const
     {
-        const Repository* current = this;
-        while (current->m_parent != nullptr)
-        {
-            if (current->m_relation_repository.parent_size(g) == 0)
-                break;
-            current = current->m_parent;
-        }
-
-        return current->m_relation_repository.front_local(g);
+        return (*this)[Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, Index<Row>(0) }];
     }
 
     template<typename T>
     size_t size(Index<T> g) const noexcept
     {
-        return m_relation_repository.parent_size(g) + m_relation_repository.local_size(g);
+        return m_relation_repository.size(g);
     }
 
     template<RelationBindingConcept T>
@@ -312,6 +301,7 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
+    /// Parent layers must remain frozen for the lifetime of a child repository.
     Repository(size_t index, const Repository* parent = nullptr) :
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),

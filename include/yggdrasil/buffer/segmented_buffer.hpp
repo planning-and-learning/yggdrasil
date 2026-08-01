@@ -176,7 +176,7 @@ public:
     }
 
     /// @brief Set the write head to the beginning.
-    void clear()
+    void clear() noexcept
     {
         for (auto& segment : m_segments)
             segment.clear();

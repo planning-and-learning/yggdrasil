@@ -18,13 +18,16 @@
 #ifndef YGG_CONTAINERS_SEGMENTED_VECTOR_HPP_
 #define YGG_CONTAINERS_SEGMENTED_VECTOR_HPP_
 
-#include "yggdrasil/core/bit.hpp"
+#include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/detail/threading.hpp"
 
-#include <bit>
+#include <array>
+#include <atomic>
 #include <cassert>
 #include <compare>
 #include <cstddef>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -34,12 +37,15 @@
 
 namespace ygg
 {
-template<typename T, size_t FirstSegmentSize = 32>
+/// ThreadSafe permits concurrent appends, size queries, and reads of published
+/// elements. Clear, pop_back, iteration, memory inspection, move, destruction,
+/// and mutation of published elements require quiescence or external locking.
+template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
 class SegmentedVector
 {
-    static_assert(bit::is_power_of_two(FirstSegmentSize));
-
 private:
+    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize>;
+
     struct Segment
     {
         T* data = nullptr;
@@ -108,33 +114,144 @@ private:
         }
     };
 
-    static constexpr size_t seg_shift = std::countr_zero(FirstSegmentSize);
-    static constexpr size_t seg_mask = FirstSegmentSize - 1;
-
-    static size_t get_segment_index(size_t index) noexcept { return std::bit_width((index >> seg_shift) + size_t { 1 }) - 1; }
-
-    static size_t get_segment_pos(size_t index) noexcept
+    class ConcurrentSegments
     {
-        const size_t q = index >> seg_shift;
-        const size_t r = index & seg_mask;
-        const size_t seg_idx = get_segment_index(index);
-        return ((q - ((size_t { 1 } << seg_idx) - 1)) << seg_shift) + r;
-    }
+    public:
+        ConcurrentSegments()
+        {
+            for (auto& segment : m_published)
+                segment.store(nullptr, std::memory_order_relaxed);
+        }
+
+        ConcurrentSegments(const ConcurrentSegments&) = delete;
+        ConcurrentSegments& operator=(const ConcurrentSegments&) = delete;
+
+        ConcurrentSegments(ConcurrentSegments&& other) noexcept : ConcurrentSegments()
+        {
+            m_owned = std::move(other.m_owned);
+            const auto count = m_owned.size();
+            for (size_t i = 0; i < count; ++i)
+                m_published[i].store(m_owned[i].get(), std::memory_order_relaxed);
+            m_size.store(count, std::memory_order_relaxed);
+            other.m_size.store(0, std::memory_order_relaxed);
+        }
+
+        ConcurrentSegments& operator=(ConcurrentSegments&& other) noexcept
+        {
+            if (this == &other)
+                return *this;
+            this->~ConcurrentSegments();
+            std::construct_at(this, std::move(other));
+            return *this;
+        }
+
+        void emplace_back(size_t capacity)
+        {
+            const auto index = size();
+            assert(index < Layout::max_segments);
+            m_owned.push_back(std::make_unique<Segment>(capacity));
+            m_published[index].store(m_owned.back().get(), std::memory_order_release);
+            m_size.store(index + 1, std::memory_order_release);
+        }
+
+        Segment& operator[](size_t index) noexcept
+        {
+            auto* segment = m_published[index].load(std::memory_order_acquire);
+            assert(segment);
+            return *segment;
+        }
+
+        const Segment& operator[](size_t index) const noexcept
+        {
+            const auto* segment = m_published[index].load(std::memory_order_acquire);
+            assert(segment);
+            return *segment;
+        }
+
+        Segment& at(size_t index)
+        {
+            if (index >= size())
+                throw std::out_of_range("SegmentedVector segment index");
+            return (*this)[index];
+        }
+
+        const Segment& at(size_t index) const
+        {
+            if (index >= size())
+                throw std::out_of_range("SegmentedVector segment index");
+            return (*this)[index];
+        }
+
+        bool empty() const noexcept { return size() == 0; }
+        size_t size() const noexcept { return m_size.load(std::memory_order_acquire); }
+
+    private:
+        std::vector<std::unique_ptr<Segment>> m_owned;
+        std::array<std::atomic<Segment*>, Layout::max_segments> m_published;
+        std::atomic_size_t m_size { 0 };
+    };
+
+    using Segments = std::conditional_t<ThreadSafe, ConcurrentSegments, std::vector<Segment>>;
 
     void resize_to_fit(size_t n)
     {
-        if (m_segments.empty())
+        auto capacity = detail::load_size<ThreadSafe>(m_capacity);
+        while (capacity < n)
         {
-            m_segments.emplace_back(FirstSegmentSize);
-            m_capacity += FirstSegmentSize;
-        }
+            const auto segment = m_segments.size();
+            if (segment >= Layout::max_segments)
+                throw std::length_error("SegmentedVector: segment is too large.");
 
-        while (m_capacity < n)
-        {
-            const size_t new_segment_size = FirstSegmentSize << m_segments.size();
+            const auto new_segment_size = Layout::segment_capacity(segment);
+            if (new_segment_size > std::numeric_limits<size_t>::max() - capacity || new_segment_size > std::numeric_limits<size_t>::max() / sizeof(T))
+                throw std::length_error("SegmentedVector: segment is too large.");
+
             m_segments.emplace_back(new_segment_size);
-            m_capacity += new_segment_size;
+            capacity += new_segment_size;
+            detail::store_size<ThreadSafe>(m_capacity, capacity);
         }
+    }
+
+    template<typename... Args>
+    T& emplace_back_at_unlocked(size_t size, Args&&... args)
+    {
+        if (size == std::numeric_limits<size_t>::max())
+            throw std::length_error("SegmentedVector: size is too large.");
+        resize_to_fit(size + 1);
+
+        const auto index = Layout::segment_index(size);
+        const auto offset = Layout::segment_offset(size, index);
+        auto* element = std::construct_at(m_segments[index].data + offset, std::forward<Args>(args)...);
+
+        ++m_segments[index].size;
+        detail::store_size<ThreadSafe>(m_size, size + 1);
+        return *element;
+    }
+
+    template<typename... Args>
+    T& emplace_back_unlocked(Args&&... args)
+    {
+        return emplace_back_at_unlocked(detail::load_size<ThreadSafe>(m_size), std::forward<Args>(args)...);
+    }
+
+    size_t push_back_bounded_unlocked(const T& element, size_t max_index)
+    {
+        const auto index = detail::load_size<ThreadSafe>(m_size);
+        if (index > max_index)
+            throw std::length_error("SegmentedVector: index is too large.");
+        emplace_back_at_unlocked(index, element);
+        return index;
+    }
+
+    void pop_back_unlocked()
+    {
+        ensure_not_empty();
+        const auto size = detail::load_size<ThreadSafe>(m_size) - 1;
+        detail::store_size<ThreadSafe>(m_size, size);
+
+        const auto index = Layout::segment_index(size);
+        const auto offset = Layout::segment_offset(size, index);
+        m_segments[index].destroy_at(offset);
     }
 
 public:
@@ -144,12 +261,29 @@ public:
     using iterator = BasicIterator<SegmentedVector>;
     using const_iterator = BasicIterator<const SegmentedVector>;
 
+    static constexpr bool thread_safe = ThreadSafe;
+
     SegmentedVector() : m_segments(), m_capacity(0), m_size(0) {}
 
     SegmentedVector(const SegmentedVector&) = delete;
     SegmentedVector& operator=(const SegmentedVector&) = delete;
-    SegmentedVector(SegmentedVector&&) noexcept = default;
-    SegmentedVector& operator=(SegmentedVector&&) noexcept = default;
+    SegmentedVector(SegmentedVector&& other) noexcept : m_segments(std::move(other.m_segments)), m_capacity(other.capacity()), m_size(other.size())
+    {
+        detail::store_size<ThreadSafe>(other.m_capacity, 0);
+        detail::store_size<ThreadSafe>(other.m_size, 0);
+    }
+
+    SegmentedVector& operator=(SegmentedVector&& other) noexcept
+    {
+        if (this == &other)
+            return *this;
+        m_segments = std::move(other.m_segments);
+        detail::store_size<ThreadSafe>(m_capacity, other.capacity());
+        detail::store_size<ThreadSafe>(m_size, other.size());
+        detail::store_size<ThreadSafe>(other.m_capacity, 0);
+        detail::store_size<ThreadSafe>(other.m_size, 0);
+        return *this;
+    }
 
     template<typename Vector>
     class BasicIterator
@@ -245,74 +379,67 @@ public:
 
     void clear() noexcept(std::is_nothrow_destructible_v<T>)
     {
-        for (auto& segment : m_segments)
-            segment.destroy_all();
-        m_size = 0;
+        for (size_t i = 0; i < m_segments.size(); ++i)
+            m_segments[i].destroy_all();
+        detail::store_size<ThreadSafe>(m_size, 0);
     }
 
     template<typename... Args>
     T& emplace_back(Args&&... args)
     {
-        resize_to_fit(m_size + 1);
-
-        const auto index = get_segment_index(m_size);
-        const auto offset = get_segment_pos(m_size);
-        auto* element = std::construct_at(m_segments[index].data + offset, std::forward<Args>(args)...);
-
-        ++m_size;
-        ++m_segments[index].size;
-        return *element;
+        return detail::with_lock<ThreadSafe>(m_writer_mutex, [&]() -> T& { return emplace_back_unlocked(std::forward<Args>(args)...); });
     }
 
     void push_back(const T& element) { emplace_back(element); }
 
     void push_back(T&& element) { emplace_back(std::move(element)); }
 
+    /// Appends only if the returned index is at most max_index.
+    size_t push_back_bounded(const T& element, size_t max_index)
+    {
+        return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_bounded_unlocked(element, max_index); });
+    }
+
     void pop_back()
     {
-        ensure_not_empty();
-        --m_size;
-
-        const auto index = get_segment_index(m_size);
-        const auto offset = get_segment_pos(m_size);
-        m_segments[index].destroy_at(offset);
+        detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { pop_back_unlocked(); });
     }
 
     const T& operator[](size_t pos) const
     {
-        assert(pos < m_size);
+        assert(pos < size());
 
-        const auto index = get_segment_index(pos);
-        const auto offset = get_segment_pos(pos);
+        const auto index = Layout::segment_index(pos);
+        const auto offset = Layout::segment_offset(pos, index);
         return m_segments[index].data[offset];
     }
 
     T& operator[](size_t pos)
     {
-        assert(pos < m_size);
+        assert(pos < size());
 
-        const auto index = get_segment_index(pos);
-        const auto offset = get_segment_pos(pos);
+        const auto index = Layout::segment_index(pos);
+        const auto offset = Layout::segment_offset(pos, index);
         return m_segments[index].data[offset];
     }
 
     const T& at(size_t pos) const
     {
-        if (pos >= m_size)
+        if (pos >= size())
             throw std::out_of_range("SegmentedVector::at");
 
-        const auto index = get_segment_index(pos);
-        const auto offset = get_segment_pos(pos);
+        const auto index = Layout::segment_index(pos);
+        const auto offset = Layout::segment_offset(pos, index);
         return m_segments.at(index).data[offset];
     }
 
     T& at(size_t pos)
     {
-        if (pos >= m_size)
+        if (pos >= size())
             throw std::out_of_range("SegmentedVector::at");
 
-        const auto index = get_segment_index(pos);
-        const auto offset = get_segment_pos(pos);
+        const auto index = Layout::segment_index(pos);
+        const auto offset = Layout::segment_offset(pos, index);
         return m_segments.at(index).data[offset];
     }
 
@@ -331,13 +458,13 @@ public:
     const T& back() const
     {
         ensure_not_empty();
-        return (*this)[m_size - 1];
+        return (*this)[size() - 1];
     }
 
     T& back()
     {
         ensure_not_empty();
-        return (*this)[m_size - 1];
+        return (*this)[size() - 1];
     }
 
     iterator begin() noexcept { return iterator(*this, 0); }
@@ -350,14 +477,14 @@ public:
     size_t memory_usage() const noexcept
     {
         size_t bytes = 0;
-        for (const auto& seg : m_segments)
-            bytes += seg.capacity * sizeof(T);
+        for (size_t i = 0; i < m_segments.size(); ++i)
+            bytes += m_segments[i].capacity * sizeof(T);
         return bytes;
     }
 
-    size_t capacity() const noexcept { return m_capacity; }
-    size_t size() const noexcept { return m_size; }
-    bool empty() const noexcept { return m_size == 0; }
+    size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
+    size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
+    bool empty() const noexcept { return size() == 0; }
 
 private:
     void ensure_not_empty() const
@@ -368,9 +495,10 @@ private:
 
     // Segments grow geometrically, i.e., FirstSegmentSize, 2*FirstSegmentSize,
     // 4*FirstSegmentSize, ...
-    std::vector<Segment> m_segments;
-    size_t m_capacity;
-    size_t m_size;
+    Segments m_segments;
+    detail::Size<ThreadSafe> m_capacity;
+    detail::Size<ThreadSafe> m_size;
+    [[no_unique_address]] detail::Mutex<ThreadSafe> m_writer_mutex;
 };
 
 }  // namespace ygg

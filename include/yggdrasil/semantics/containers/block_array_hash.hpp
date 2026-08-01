@@ -24,18 +24,18 @@
 namespace ygg
 {
 
-template<typename Block, typename Coder>
-struct Hash<BasicBitPackedArrayView<Block, Coder>>
+template<typename Block, typename Coder, bool ThreadSafe>
+struct Hash<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
-    using Type = BasicBitPackedArrayView<Block, Coder>;
+    using Type = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
 
     hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };
 
-template<typename Block, typename Coder, typename C>
-struct Hash<View<BasicBitPackedArrayView<Block, Coder>, C>>
+template<typename Block, typename Coder, bool ThreadSafe, typename C>
+struct Hash<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
-    using Type = View<BasicBitPackedArrayView<Block, Coder>, C>;
+    using Type = View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
 
     hash_t operator()(const Type& value) const noexcept { return ygg::hash_range(value); }
 };

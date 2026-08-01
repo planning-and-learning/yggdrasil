@@ -4,6 +4,7 @@ find_package(GTest "1.11.0" REQUIRED COMPONENTS GTest PATHS "${YGGDRASIL_NATIVE_
 find_package(Boost REQUIRED COMPONENTS json PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(fmt CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(Threads REQUIRED)
 
 # Test helper
 
@@ -42,6 +43,9 @@ add_yggdrasil_gtest(containers_segmented_vector "containers/segmented_vector.cpp
 add_yggdrasil_gtest(containers_shared_object_pool "containers/shared_object_pool.cpp")
 add_yggdrasil_gtest(containers_unique_object_pool "containers/unique_object_pool.cpp")
 add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
+
+add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
+target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
 add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
 add_yggdrasil_gtest(core_concepts "core/concepts.cpp")

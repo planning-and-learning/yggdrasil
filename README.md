@@ -114,6 +114,7 @@ CMake options:
 | Option | Default | Description |
 | --- | --- | --- |
 | `YGGDRASIL_BUILD_TESTS` | `OFF` | Build Yggdrasil C++ tests. |
+| `YGGDRASIL_BUILD_PROFILING` | `OFF` | Build Yggdrasil benchmark executables. |
 | `YGGDRASIL_ENABLE_FMT_FORMATTERS` | `ON` | Enable Yggdrasil's public fmt formatters. |
 | `YGGDRASIL_USE_LLD` | `ON` | Use LLVM `lld` with Clang when available. |
 | `YGGDRASIL_ENABLE_LTO` | `ON` | Enable link-time optimization for Release builds. |

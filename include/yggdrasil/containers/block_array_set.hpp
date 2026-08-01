@@ -19,7 +19,7 @@
 #define YGG_CONTAINERS_BLOCK_ARRAY_SET_HPP_
 
 #include "yggdrasil/containers/block_array_pool.hpp"
-#include "yggdrasil/containers/detail/lazy_insert.hpp"
+#include "yggdrasil/containers/detail/concurrency.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -29,6 +29,7 @@
 #include <cassert>
 #include <concepts>
 #include <gtl/phmap.hpp>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -39,11 +40,15 @@
 namespace ygg
 {
 
-template<std::unsigned_integral Block, typename Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16>
+/// ThreadSafe permits concurrent lookup, insertion, size queries, and reads of
+/// published arrays. Hash-table locking is limited to the target shard and
+/// pool appends use their narrow publication lock. Clear, segment or memory
+/// inspection, move, and destruction require quiescence.
+template<std::unsigned_integral Block, typename Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
 class BlockArraySet
 {
 private:
-    using pool_type = BlockArrayPool<Block, Coder, FirstSegmentSize>;
+    using pool_type = BlockArrayPool<Block, Coder, FirstSegmentSize, ThreadSafe>;
 
 public:
     using value_type = typename pool_type::value_type;
@@ -57,24 +62,32 @@ private:
     class IndexableHash;
     class IndexableEqualTo;
 
+    using SetType = detail::HashSetType<index_type, IndexableHash, IndexableEqualTo, ThreadSafe>;
+
     void ensure_fits(std::span<const value_type> element) const
     {
         if (element.size() != length())
             throw std::invalid_argument("BlockArraySet: wrong number of elements.");
     }
 
-    index_type insert_new_with_matching_hash(size_t h, std::span<const value_type> element)
+    index_type append_new(std::span<const value_type> element)
     {
-        const auto index = to_uint_t(m_pool->size());
-        m_pool->push_back(element);
-
-        [[maybe_unused]] const auto [it, inserted] = m_set.emplace_with_hash(h, index);
-        assert(inserted);
-
-        return index;
+        if constexpr (ThreadSafe)
+        {
+            // Check the bound before publishing so this cast cannot throw.
+            return static_cast<index_type>(m_pool->push_back_bounded(element, std::numeric_limits<index_type>::max()));
+        }
+        else
+        {
+            const auto index = to_uint_t(m_pool->size());
+            m_pool->push_back(element);
+            return index;
+        }
     }
 
 public:
+    static constexpr bool thread_safe = ThreadSafe;
+
     explicit BlockArraySet(size_t length) : m_pool(std::make_unique<pool_type>(length)), m_set(0, IndexableHash(*m_pool), IndexableEqualTo(*m_pool)) {}
 
     void clear() noexcept
@@ -91,11 +104,7 @@ public:
         assert(h == BlockArraySet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        const auto it = m_set.find(element, h);
-        if (it != m_set.end())
-            return *it;
-
-        return std::nullopt;
+        return detail::find_value_with_hash<ThreadSafe>(m_set, element, h);
     }
 
     std::optional<index_type> find(std::span<const value_type> element) const { return find_with_hash(element, BlockArraySet::hash(element)); }
@@ -108,33 +117,38 @@ public:
         assert(h == BlockArraySet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        const auto [it, inserted] = detail::lazy_insert_with_hash(m_set,
-                                                                  element,
-                                                                  h,
-                                                                  [&]
-                                                                  {
-                                                                      const auto index = to_uint_t(m_pool->size());
-                                                                      m_pool->push_back(element);
-                                                                      return index;
-                                                                  });
-        return { *it, inserted };
+        return detail::find_or_lazy_insert_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new(element); });
     }
 
-    index_type insert_new_with_hash(size_t h, std::span<const value_type> element)
+    /// Rechecks a caller-observed miss and returns the canonical stored index.
+    std::pair<index_type, bool> complete_miss_with_hash(size_t h, std::span<const value_type> element)
     {
         ensure_fits(element);
         assert(h == BlockArraySet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        return insert_new_with_matching_hash(h, element);
+        return detail::complete_miss_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new(element); });
+    }
+
+    index_type insert_new_with_hash(size_t h, std::span<const value_type> element)
+    {
+        const auto [index, inserted] = complete_miss_with_hash(h, element);
+        if (!inserted)
+            throw std::logic_error("BlockArraySet::insert_new_with_hash requires an absent key.");
+        return index;
     }
 
     std::pair<index_type, bool> insert(std::span<const value_type> element) { return insert_with_hash(BlockArraySet::hash(element), element); }
 
     bool contains(std::span<const value_type> element) const
     {
-        ensure_fits(element);
-        return m_set.contains(element);
+        if constexpr (ThreadSafe)
+            return find(element).has_value();
+        else
+        {
+            ensure_fits(element);
+            return m_set.contains(element);
+        }
     }
 
     ConstArrayView operator[](index_type index) const { return std::as_const(*m_pool)[index]; }
@@ -157,7 +171,7 @@ public:
     size_t capacity() const noexcept { return m_pool->capacity(); }
     bool empty() const noexcept { return m_pool->empty(); }
     size_t length() const noexcept { return m_pool->length(); }
-    size_t memory_usage() const noexcept { return m_pool->memory_usage() + m_set.capacity() * (sizeof(index_type) + sizeof(gtl::priv::ctrl_t)); }
+    size_t memory_usage() const noexcept { return m_pool->memory_usage() + detail::hash_set_memory_usage(m_set); }
     const auto& segments() const noexcept { return m_pool->segments(); }
 
 private:
@@ -219,7 +233,7 @@ private:
     };
 
     std::unique_ptr<pool_type> m_pool;
-    gtl::flat_hash_set<index_type, IndexableHash, IndexableEqualTo> m_set;
+    SetType m_set;
 };
 
 }  // namespace ygg

@@ -1,6 +1,8 @@
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <gtest/gtest.h>
+#include <limits>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -119,5 +121,24 @@ TEST(CommonSegmentedVectorTest, EmptyAccessThrows)
     EXPECT_THROW(vector.back(), std::out_of_range);
     EXPECT_THROW(const_vector.back(), std::out_of_range);
     EXPECT_THROW(vector.pop_back(), std::out_of_range);
+}
+
+TEST(CommonSegmentedVectorTest, RejectsAnUnrepresentableFirstSegmentWithoutAllocating)
+{
+    constexpr auto huge_segment_size = size_t { 1 } << (std::numeric_limits<size_t>::digits - 1);
+    auto vector = ygg::SegmentedVector<std::uint16_t, huge_segment_size> {};
+
+    EXPECT_THROW(vector.emplace_back(1), std::length_error);
+    EXPECT_TRUE(vector.empty());
+}
+
+TEST(CommonSegmentedVectorTest, BoundedAppendChecksTheIndexBeforePublishing)
+{
+    auto vector = ygg::SegmentedVector<int, 2, true> {};
+
+    EXPECT_EQ(vector.push_back_bounded(1, 0), 0);
+    EXPECT_THROW(vector.push_back_bounded(2, 0), std::length_error);
+    EXPECT_EQ(vector.size(), 1);
+    EXPECT_EQ(vector.front(), 1);
 }
 }  // namespace ygg::tests

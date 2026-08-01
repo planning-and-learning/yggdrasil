@@ -18,10 +18,12 @@
 #ifndef YGG_CONTAINERS_BLOCK_ARRAY_POOL_HPP_
 #define YGG_CONTAINERS_BLOCK_ARRAY_POOL_HPP_
 
+#include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bit.hpp"
 
 #include <algorithm>
-#include <bit>
 #include <cassert>
 #include <compare>
 #include <concepts>
@@ -38,7 +40,7 @@
 namespace ygg
 {
 
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize>
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize, bool ThreadSafe>
 class BlockArrayPool;
 
 /**
@@ -58,7 +60,7 @@ private:
     template<typename, typename>
     friend class BasicBlockArrayView;
 
-    template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize>
+    template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize, bool ThreadSafe>
     friend class BlockArrayPool;
 
     struct UncheckedTag
@@ -311,60 +313,57 @@ private:
 };
 
 /// Stores fixed-length arrays where each element occupies one full Block.
-/// Values are encoded and decoded via Coder.
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16>
+/// Values are encoded and decoded via Coder. ThreadSafe permits concurrent
+/// appends, size queries, and reads of published arrays. Clear, pop_back,
+/// iteration, segment or memory inspection, move, destruction, and mutation of
+/// published arrays require quiescence or external locking.
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
 class BlockArrayPool
 {
-    static_assert(bit::is_power_of_two(FirstSegmentSize));
-
 public:
+    static constexpr bool thread_safe = ThreadSafe;
+
     using block_type = std::remove_const_t<Block>;
     using value_type = typename Coder::value_type;
     using ArrayView = BasicBlockArrayView<Block, Coder>;
     using ConstArrayView = BasicBlockArrayView<const Block, Coder>;
 
 private:
-    static constexpr size_t seg_shift = std::countr_zero(FirstSegmentSize);
-    static constexpr size_t seg_mask = FirstSegmentSize - 1;
-
-    static size_t get_segment_index(size_t index) noexcept { return std::bit_width((index >> seg_shift) + 1) - 1; }
-
-    static size_t get_segment_pos(size_t index, size_t seg_idx) noexcept
-    {
-        const size_t q = index >> seg_shift;
-        const size_t r = index & seg_mask;
-        return ((q - ((size_t { 1 } << seg_idx) - 1)) << seg_shift) + r;
-    }
+    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize>;
+    using Segment = std::vector<block_type>;
+    using Segments = std::conditional_t<ThreadSafe, SegmentedVector<Segment, 1, true>, std::vector<Segment>>;
 
     void reserve(size_t size)
     {
-        if (size == 0 || size <= m_capacity)
+        auto capacity = detail::load_size<ThreadSafe>(m_capacity);
+        if (size == 0 || size <= capacity)
             return;
 
-        const size_t last_segment = get_segment_index(size - 1);
+        const size_t last_segment = Layout::segment_index(size - 1);
         const size_t first_new_segment = m_segments.size();
 
-        m_segments.reserve(last_segment + 1);
+        if constexpr (!ThreadSafe)
+            m_segments.reserve(last_segment + 1);
 
         for (size_t seg = first_new_segment; seg <= last_segment; ++seg)
         {
-            if (seg >= std::numeric_limits<size_t>::digits - seg_shift)
+            if (seg >= Layout::max_segments)
                 throw std::length_error("BlockArrayPool: segment is too large.");
-            const size_t arrays_in_segment = FirstSegmentSize << seg;
-            assert(bit::is_power_of_two(arrays_in_segment));
+            const size_t arrays_in_segment = Layout::segment_capacity(seg);
 
-            if (arrays_in_segment > std::numeric_limits<size_t>::max() - m_capacity
+            if (arrays_in_segment > std::numeric_limits<size_t>::max() - capacity
                 || (m_length > 0 && arrays_in_segment > std::numeric_limits<size_t>::max() / m_length))
                 throw std::length_error("BlockArrayPool: segment is too large.");
             const size_t blocks_in_segment = arrays_in_segment * m_length;
             m_segments.emplace_back(blocks_in_segment, Block { 0 });
-            m_capacity += arrays_in_segment;
+            capacity += arrays_in_segment;
+            detail::store_size<ThreadSafe>(m_capacity, capacity);
         }
     }
 
     void ensure_index(size_t index) const
     {
-        if (index >= m_size)
+        if (index >= size())
             throw std::out_of_range("BlockArrayPool: index out of range.");
     }
 
@@ -376,8 +375,8 @@ private:
 
     ArrayView get_view(size_t index) noexcept
     {
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const size_t seg_idx = Layout::segment_index(index);
+        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
         auto* data = m_segments[seg_idx].data();
         if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
             data += block_offset;
@@ -387,13 +386,42 @@ private:
 
     ConstArrayView get_view(size_t index) const noexcept
     {
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const size_t seg_idx = Layout::segment_index(index);
+        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
         const auto* data = m_segments[seg_idx].data();
         if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
             data += block_offset;
 
         return ConstArrayView(data, m_length, typename ConstArrayView::UncheckedTag {});
+    }
+
+    size_t push_back_unlocked(std::span<const value_type> elements)
+    {
+        const auto size = detail::load_size<ThreadSafe>(m_size);
+        if (size == std::numeric_limits<size_t>::max())
+            throw std::length_error("BlockArrayPool: size is too large.");
+
+        reserve(size + 1);
+        auto out = get_view(size).begin();
+        for (const auto& element : elements)
+            *out++ = element;
+        detail::store_size<ThreadSafe>(m_size, size + 1);
+        return size;
+    }
+
+    size_t push_back_bounded_unlocked(std::span<const value_type> elements, size_t max_index)
+    {
+        if (size() > max_index)
+            throw std::length_error("BlockArrayPool: index is too large.");
+        return push_back_unlocked(elements);
+    }
+
+    void pop_back_unlocked()
+    {
+        const auto current = size();
+        if (current == 0)
+            throw std::out_of_range("BlockArrayPool: container is empty.");
+        detail::store_size<ThreadSafe>(m_size, current - 1);
     }
 
 public:
@@ -497,13 +525,13 @@ public:
 
     ArrayView operator[](size_t index) noexcept
     {
-        assert(index < m_size);
+        assert(index < size());
         return get_view(index);
     }
 
     ConstArrayView operator[](size_t index) const noexcept
     {
-        assert(index < m_size);
+        assert(index < size());
         return get_view(index);
     }
 
@@ -529,41 +557,44 @@ public:
     size_t push_back(std::span<const value_type> elements)
     {
         ensure_fits(elements);
-        if (m_size == std::numeric_limits<size_t>::max())
-            throw std::length_error("BlockArrayPool: size is too large.");
-
-        const size_t index = m_size;
-        reserve(m_size + 1);
-        auto out = get_view(index).begin();
-        for (const auto& element : elements)
-            *out++ = element;
-        ++m_size;
-
-        return index;
+        return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_unlocked(elements); });
     }
 
-    void clear() noexcept { m_size = 0; }
+    /// Appends only if the returned index is at most max_index.
+    size_t push_back_bounded(std::span<const value_type> elements, size_t max_index)
+    {
+        ensure_fits(elements);
+        return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_bounded_unlocked(elements, max_index); });
+    }
+
+    void clear() noexcept { detail::store_size<ThreadSafe>(m_size, 0); }
+
+    void pop_back()
+    {
+        detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { pop_back_unlocked(); });
+    }
 
     size_t length() const noexcept { return m_length; }
-    size_t capacity() const noexcept { return m_capacity; }
-    size_t size() const noexcept { return m_size; }
-    bool empty() const noexcept { return m_size == 0; }
+    size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
+    size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
+    bool empty() const noexcept { return size() == 0; }
     const auto& segments() const noexcept { return m_segments; }
 
     size_t memory_usage() const noexcept
     {
         size_t bytes = 0;
-        for (const auto& segment : m_segments)
-            bytes += segment.capacity() * sizeof(block_type);
+        for (size_t i = 0; i < m_segments.size(); ++i)
+            bytes += m_segments[i].capacity() * sizeof(block_type);
         return bytes;
     }
 
 private:
-    std::vector<std::vector<block_type>> m_segments;
+    Segments m_segments;
 
     size_t m_length;
-    size_t m_capacity;
-    size_t m_size;
+    detail::Size<ThreadSafe> m_capacity;
+    detail::Size<ThreadSafe> m_size;
+    [[no_unique_address]] detail::Mutex<ThreadSafe> m_writer_mutex;
 };
 
 }  // namespace ygg

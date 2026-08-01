@@ -183,11 +183,11 @@ private:
     const Container* m_handle;
 };
 
-template<std::unsigned_integral Block, typename Coder, typename C>
-class View<BasicBitPackedArrayView<Block, Coder>, C>
+template<std::unsigned_integral Block, typename Coder, bool ThreadSafe, typename C>
+class View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>
 {
 public:
-    using Container = BasicBitPackedArrayView<Block, Coder>;
+    using Container = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
     using T = typename Coder::value_type;
 
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}

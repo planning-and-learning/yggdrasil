@@ -20,6 +20,7 @@
 #include <cista/containers/array.h>
 #include <cista/containers/pair.h>
 #include <nanobind/nanobind.h>
+#include <yggdrasil/containers/bit_packed_array_pool.hpp>
 
 namespace nb = nanobind;
 
@@ -53,6 +54,18 @@ NB_MODULE(yggdrasil_type_casters_test, m)
               static constexpr auto data = Array { Pair { 6, 7 }, Pair { 8, 9 } };
               static constexpr auto context = 0;
               return ygg::View<Array, int>(data, context);
+          });
+
+    m.def("concurrent_bit_packed_view",
+          []
+          {
+              using Block = unsigned;
+              using Coder = ygg::bit::ForwardingBlockCoder<Block>;
+              using Array = ygg::BasicBitPackedArrayView<const Block, Coder, true>;
+              static auto data = Block { 0b00111001 };
+              static const auto view = Array(&data, 3, 2, 0);
+              static constexpr auto context = 0;
+              return ygg::View<Array, int>(view, context);
           });
 
     m.def("empty_interval", [] { return Interval {}; });

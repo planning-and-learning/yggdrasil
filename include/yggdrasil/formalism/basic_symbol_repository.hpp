@@ -28,6 +28,7 @@
 #include <yggdrasil/buffer/declarations.hpp>
 #include <yggdrasil/buffer/indexed_hash_set.hpp>
 #include <yggdrasil/buffer/segmented_buffer.hpp>
+#include <yggdrasil/containers/detail/threading.hpp>
 #include <yggdrasil/containers/indexed_hash_set.hpp>
 #include <yggdrasil/containers/tuple.hpp>
 #include <yggdrasil/core/types.hpp>
@@ -38,7 +39,7 @@
 namespace ygg::formalism
 {
 
-template<typename T>
+template<typename T, bool ThreadSafe = false>
 class BasicSymbolRepository
 {
 private:
@@ -48,10 +49,10 @@ private:
     template<typename U>
     struct Slot<U, true>
     {
-        ::ygg::IndexedHashSet<U> container;
+        ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe> container;
         size_t parent_size = 0;
 
-        static size_t hash(const Data<U>& builder) noexcept { return ::ygg::IndexedHashSet<U>::hash(builder); }
+        static size_t hash(const Data<U>& builder) noexcept { return decltype(container)::hash(builder); }
 
         void clear() noexcept { container.clear(); }
         size_t memory_usage() const noexcept { return container.memory_usage(); }
@@ -62,17 +63,17 @@ private:
     {
         std::unique_ptr<ygg::buffer::SegmentedBuffer> arena;
         std::unique_ptr<ygg::buffer::Buffer> buffer;
-        ygg::buffer::IndexedHashSet<U> container;
+        ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe> container;
         size_t parent_size = 0;
 
-        static size_t hash(const Data<U>& builder) noexcept { return ygg::buffer::IndexedHashSet<U>::hash(builder); }
+        static size_t hash(const Data<U>& builder) noexcept { return decltype(container)::hash(builder); }
 
         Slot() : arena(std::make_unique<ygg::buffer::SegmentedBuffer>()), buffer(std::make_unique<ygg::buffer::Buffer>()), container(*buffer, *arena) {}
 
         void clear() noexcept
         {
-            arena->clear();
             container.clear();
+            arena->clear();
         }
 
         size_t memory_usage() const noexcept { return (arena ? arena->capacity() : 0) + (buffer ? buffer->buf_.capacity() : 0) + container.memory_usage(); }
@@ -80,6 +81,7 @@ private:
 
     const BasicSymbolRepository* m_parent;
     Slot<T> m_slot;
+    [[no_unique_address]] ::ygg::detail::Mutex<ThreadSafe> m_write_mutex;
 
     void clear_slot() noexcept
     {
@@ -88,6 +90,8 @@ private:
     }
 
 public:
+    static constexpr bool thread_safe = ThreadSafe;
+
     /**
      * Local methods access only the current repository layer.
      * Handle-producing methods return raw handles because the caller already knows the context.
@@ -108,28 +112,27 @@ public:
 
     std::pair<Index<T>, bool> get_or_create_local_with_hash(Data<T>& builder, size_t h)
     {
-        auto& container = m_slot.container;
+        if (const auto index = find_local_with_hash(builder, h))
+            return { *index, false };
 
-        if (auto index_or_nullopt = container.find_with_hash(builder, h))
-            return { Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt)), false };
-
-        builder.index.value = m_slot.parent_size + container.size();
-
-        const auto index = container.insert_new_with_hash(h, builder);
-        return { Index<T>(m_slot.parent_size + ygg::uint_t(index)), true };
+        return create_local_with_hash(builder, h);
     }
 
     std::pair<Index<T>, bool> get_or_create_local(Data<T>& builder) { return get_or_create_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-    /// Inserts without probing first. The caller must have established that the symbol is absent from
-    /// this layer, e.g. by a preceding find_local_with_hash with the same hash.
-    Index<T> insert_new_local_with_hash(Data<T>& builder, size_t h)
+    /// Completes a hierarchy-wide miss by rechecking this layer before publishing storage.
+    std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
     {
-        auto& container = m_slot.container;
+        return ::ygg::detail::with_lock<ThreadSafe>(m_write_mutex,
+                                                    [&]() -> std::pair<Index<T>, bool>
+                                                    {
+                                                        auto& container = m_slot.container;
+                                                        builder.index.value = m_slot.parent_size + container.size();
 
-        builder.index.value = m_slot.parent_size + container.size();
-
-        return Index<T>(m_slot.parent_size + ygg::uint_t(container.insert_new_with_hash(h, builder)));
+                                                        const auto [index, created] = container.complete_miss_with_hash(h, builder);
+                                                        builder.index.value = m_slot.parent_size + ygg::uint_t(index);
+                                                        return { builder.index, created };
+                                                    });
     }
 
     const Data<T>& at_local(Index<T> index) const
@@ -172,8 +175,18 @@ public:
 
     BasicSymbolRepository(const BasicSymbolRepository&) = delete;
     BasicSymbolRepository& operator=(const BasicSymbolRepository&) = delete;
-    BasicSymbolRepository(BasicSymbolRepository&&) noexcept = default;
-    BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept = default;
+    BasicSymbolRepository(BasicSymbolRepository&&) noexcept
+        requires(!ThreadSafe)
+    = default;
+    BasicSymbolRepository& operator=(BasicSymbolRepository&&) noexcept
+        requires(!ThreadSafe)
+    = default;
+    BasicSymbolRepository(BasicSymbolRepository&&)
+        requires ThreadSafe
+    = delete;
+    BasicSymbolRepository& operator=(BasicSymbolRepository&&)
+        requires ThreadSafe
+    = delete;
 
     void clear() noexcept { clear_slot(); }
 

@@ -31,7 +31,15 @@
 namespace ygg::formalism
 {
 template<typename ObjectTag, typename... Ts>
-class RelationRepository : private BasicRelationRepository<ObjectTag, Ts>...
+class RelationRepository;
+
+template<typename ObjectTag, typename... Ts>
+class ConcurrentRelationRepository;
+
+namespace detail
+{
+template<typename Repository, typename ObjectTag, bool ThreadSafe, typename... Ts>
+class RelationRepositoryBase : private BasicRelationRepository<ObjectTag, Ts, ThreadSafe>...
 {
 private:
     template<typename T, typename...>
@@ -40,14 +48,17 @@ private:
         using type = T;
     };
 
-    const RelationRepository* m_parent;
-    const RelationRepository* m_root;
+    const RelationRepositoryBase* m_parent;
+    const RelationRepositoryBase* m_root;
     size_t m_index;
+
+    const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 
 public:
     using object_tag = ObjectTag;
-    using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type>::container_type;
+    using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type, ThreadSafe>::container_type;
     using ConstViewType = typename container_type::ConstArrayView;
+    static constexpr bool thread_safe = ThreadSafe;
 
     /**
      * Global methods traverse the current repository layer and its parent hierarchy.
@@ -55,8 +66,8 @@ public:
      */
 
     template<typename T>
-    std::optional<View<Index<RelationBinding<T, ObjectTag>>, RelationRepository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder,
-                                                                                                 size_t h) const noexcept
+    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder,
+                                                                                         size_t h) const noexcept
     {
         const auto relation = builder.relation;
 
@@ -64,8 +75,8 @@ public:
         while (current != nullptr)
         {
             if (auto row_or_nullopt = current->template get<T>().find_local_with_hash(builder, h))
-                return View<Index<RelationBinding<T, ObjectTag>>, RelationRepository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt },
-                                                                                      *current);
+                return View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt },
+                                                                              current->repository());
 
             current = current->m_parent;
         }
@@ -74,16 +85,16 @@ public:
     }
 
     template<typename T>
-    std::optional<View<Index<RelationBinding<T, ObjectTag>>, RelationRepository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
+    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
     {
-        return find_with_hash(builder, RelationRepository::hash(builder));
+        return find_with_hash(builder, RelationRepositoryBase::hash(builder));
     }
 
     template<typename T>
-    std::pair<View<Index<RelationBinding<T, ObjectTag>>, RelationRepository>, bool> get_or_create(const Data<RelationBinding<T, ObjectTag>>& builder)
+    std::pair<View<Index<RelationBinding<T, ObjectTag>>, Repository>, bool> get_or_create(const Data<RelationBinding<T, ObjectTag>>& builder)
     {
         const auto relation = builder.relation;
-        const auto h = RelationRepository::hash(builder);
+        const auto h = RelationRepositoryBase::hash(builder);
 
         if (auto view_or_nullopt = find_with_hash(builder, h))
             return { *view_or_nullopt, false };
@@ -92,8 +103,8 @@ public:
                && "Integrity error: Parent RelationRepository modified after child "
                   "branching!");
 
-        const auto [row, success] = get<T>().get_or_create_local_with_hash(builder, h);
-        return { View<Index<RelationBinding<T, ObjectTag>>, RelationRepository>(Index<RelationBinding<T, ObjectTag>> { relation, row }, *this), success };
+        const auto [row, success] = create_local_with_hash(builder, h);
+        return { View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, row }, repository()), success };
     }
 
     template<typename T>
@@ -124,13 +135,13 @@ public:
     }
 
     template<typename T>
-    const RelationRepository& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const
+    const Repository& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const
     {
         const auto* current = this;
         while (current != nullptr)
         {
             if (current->template get<T>().is_local(index))
-                return *current;
+                return current->repository();
 
             current = current->m_parent;
         }
@@ -144,15 +155,15 @@ public:
      */
 
     template<typename T>
-    BasicRelationRepository<ObjectTag, T>& get() noexcept
+    BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() noexcept
     {
-        return static_cast<BasicRelationRepository<ObjectTag, T>&>(*this);
+        return static_cast<BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this);
     }
 
     template<typename T>
-    const BasicRelationRepository<ObjectTag, T>& get() const noexcept
+    const BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() const noexcept
     {
-        return static_cast<const BasicRelationRepository<ObjectTag, T>&>(*this);
+        return static_cast<const BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this);
     }
 
     template<typename T>
@@ -174,9 +185,9 @@ public:
     }
 
     template<typename T>
-    auto insert_new_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
+    std::pair<Index<Row>, bool> create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
     {
-        return get<T>().insert_new_local_with_hash(builder, h);
+        return get<T>().create_local_with_hash(builder, h);
     }
 
     template<typename T>
@@ -231,23 +242,24 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    RelationRepository(size_t index, const RelationRepository* parent = nullptr) : RelationRepository(index, parent, RelationRepositoryConfig()) {}
+    /// Parent layers must remain frozen for the lifetime of a child repository.
+    RelationRepositoryBase(size_t index, const Repository* parent = nullptr) : RelationRepositoryBase(index, parent, RelationRepositoryConfig()) {}
 
-    RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) :
-        BasicRelationRepository<ObjectTag, Ts>(parent ? &parent->template get<Ts>() : nullptr, config)...,
+    RelationRepositoryBase(size_t index, const Repository* parent, RelationRepositoryConfig config) :
+        BasicRelationRepository<ObjectTag, Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr, config)...,
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),
         m_index(index)
     {
     }
 
-    RelationRepository(const RelationRepository&) = delete;
-    RelationRepository& operator=(const RelationRepository&) = delete;
-    RelationRepository(RelationRepository&&) = delete;
-    RelationRepository& operator=(RelationRepository&&) = delete;
+    RelationRepositoryBase(const RelationRepositoryBase&) = delete;
+    RelationRepositoryBase& operator=(const RelationRepositoryBase&) = delete;
+    RelationRepositoryBase(RelationRepositoryBase&&) = delete;
+    RelationRepositoryBase& operator=(RelationRepositoryBase&&) = delete;
 
     const auto& get_index() const noexcept { return m_index; }
-    const auto& get_root() const noexcept { return *m_root; }
+    const Repository& get_root() const noexcept { return m_root->repository(); }
     std::uint8_t get_object_index_width() const noexcept { return this->template get<typename FirstType<Ts...>::type>().get_object_index_width(); }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
@@ -255,8 +267,29 @@ public:
     template<typename T>
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
     {
-        return BasicRelationRepository<ObjectTag, T>::hash(builder);
+        return BasicRelationRepository<ObjectTag, T, ThreadSafe>::hash(builder);
     }
+};
+}  // namespace detail
+
+template<typename ObjectTag, typename... Ts>
+class RelationRepository : public detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>
+{
+    using Base = detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>;
+
+public:
+    RelationRepository(size_t index, const RelationRepository* parent = nullptr) : Base(index, parent) {}
+    RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
+};
+
+template<typename ObjectTag, typename... Ts>
+class ConcurrentRelationRepository : public detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>
+{
+    using Base = detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>;
+
+public:
+    ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent = nullptr) : Base(index, parent) {}
+    ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
 };
 }  // namespace ygg::formalism
 

@@ -24,18 +24,18 @@
 namespace ygg
 {
 
-template<typename Block, typename Coder>
-struct EqualTo<BasicBitPackedArrayView<Block, Coder>>
+template<typename Block, typename Coder, bool ThreadSafe>
+struct EqualTo<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
-    using Type = BasicBitPackedArrayView<Block, Coder>;
+    using Type = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
 
     bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
 };
 
-template<typename Block, typename Coder, typename C>
-struct EqualTo<View<BasicBitPackedArrayView<Block, Coder>, C>>
+template<typename Block, typename Coder, bool ThreadSafe, typename C>
+struct EqualTo<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
-    using Type = View<BasicBitPackedArrayView<Block, Coder>, C>;
+    using Type = View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
 
     bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
 };

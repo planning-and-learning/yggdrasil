@@ -63,6 +63,13 @@ auto lazy_insert_with_hash(Set& set, const Key& key, size_t hash, Factory&& fact
     return std::pair(it, inserted);
 }
 
+template<typename Set, typename Key, typename Factory>
+std::pair<typename Set::value_type, bool> lazy_insert_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
+{
+    const auto [it, inserted] = lazy_insert_with_hash(set, key, hash, std::forward<Factory>(factory));
+    return { *it, inserted };
+}
+
 }  // namespace ygg::detail
 
 #endif

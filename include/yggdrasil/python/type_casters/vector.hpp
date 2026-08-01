@@ -89,10 +89,10 @@ struct type_caster<::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>>
     }
 };
 
-template<std::unsigned_integral Block, typename Coder, typename C>
-struct type_caster<::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder>, C>>
+template<std::unsigned_integral Block, typename Coder, bool ThreadSafe, typename C>
+struct type_caster<::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
-    using ViewT = ::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder>, C>;
+    using ViewT = ::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
     using Type = typename Coder::value_type;
 
     using Entry = std::conditional_t<::ygg::ViewConcept<Type, C>, ::ygg::View<Type, C>, Type>;

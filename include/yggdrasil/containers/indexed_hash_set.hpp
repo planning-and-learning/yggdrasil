@@ -18,7 +18,7 @@
 #ifndef YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 #define YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 
-#include "yggdrasil/containers/detail/lazy_insert.hpp"
+#include "yggdrasil/containers/detail/concurrency.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/config.hpp"
@@ -31,16 +31,26 @@
 #include <concepts>
 #include <cstddef>
 #include <gtl/phmap.hpp>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace ygg
 {
 
-template<typename Tag, HashFor<Data<Tag>> H = Hash<Data<Tag>>, EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>, size_t FirstSegmentSize = 32>
+/// ThreadSafe permits concurrent lookup, insertion, size queries, and reads of
+/// published indices. Hash-table locking is limited to the target shard and
+/// the storage append lock covers only index allocation and publication.
+/// Clear, memory inspection, move, and destruction require quiescence.
+template<typename Tag,
+         HashFor<Data<Tag>> H = Hash<Data<Tag>>,
+         EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
+         size_t FirstSegmentSize = 32,
+         bool ThreadSafe = false>
 class IndexedHashSet
 {
     static_assert(bit::is_power_of_two(FirstSegmentSize));
@@ -49,9 +59,17 @@ private:
     class IndexableHash;
     class IndexableEqualTo;
 
-    using VectorType = SegmentedVector<Data<Tag>, FirstSegmentSize>;
+    using VectorType = SegmentedVector<Data<Tag>, FirstSegmentSize, ThreadSafe>;
+    using SetType = detail::HashSetType<Index<Tag>, IndexableHash, IndexableEqualTo, ThreadSafe>;
+
+    Index<Tag> append_new(const Data<Tag>& element)
+    {
+        return Index<Tag>(static_cast<uint_t>(m_storage->push_back_bounded(element, std::numeric_limits<uint_t>::max())));
+    }
 
 public:
+    static constexpr bool thread_safe = ThreadSafe;
+
     IndexedHashSet() : m_storage(std::make_unique<VectorType>()), m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)) {}
     IndexedHashSet(const IndexedHashSet& other) = delete;
     IndexedHashSet& operator=(const IndexedHashSet& other) = delete;
@@ -64,25 +82,20 @@ public:
         m_storage->clear();
     }
 
-    static size_t hash(const Data<Tag>& element) noexcept { return gtl::phmap_mix<sizeof(size_t)>()(H {}(element)); }
+    static size_t hash(const Data<Tag>& element) noexcept(std::is_nothrow_default_constructible_v<H> && std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
+    {
+        return gtl::phmap_mix<sizeof(size_t)>()(H {}(element));
+    }
 
     std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const
     {
         assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        if (auto it = m_set.find(element, h); it != m_set.end())
-            return *it;
-
-        return std::nullopt;
+        return detail::find_value_with_hash<ThreadSafe>(m_set, element, h);
     }
 
-    std::optional<Index<Tag>> find(const Data<Tag>& element) const
-    {
-        assert(IndexedHashSet::hash(element) == m_set.hash(element));
-
-        return find_with_hash(element, IndexedHashSet::hash(element));
-    }
+    std::optional<Index<Tag>> find(const Data<Tag>& element) const { return find_with_hash(element, IndexedHashSet::hash(element)); }
 
     bool contains_with_hash(const Data<Tag>& element, size_t h) const { return find_with_hash(element, h).has_value(); }
 
@@ -93,36 +106,27 @@ public:
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        const auto [it, inserted] = detail::lazy_insert_with_hash(m_set,
-                                                                  element,
-                                                                  h,
-                                                                  [&]
-                                                                  {
-                                                                      const auto index = Index<Tag>(to_uint_t(m_storage->size()));
-                                                                      m_storage->push_back(element);
-                                                                      return index;
-                                                                  });
-        return { *it, inserted };
+        return detail::find_or_lazy_insert_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new(element); });
     }
 
-    Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
+    /// Rechecks a caller-observed miss and returns the canonical stored index.
+    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element)
     {
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
-        Index<Tag> idx(to_uint_t(m_storage->size()));
-        m_storage->push_back(element);
-        [[maybe_unused]] const auto [it, inserted] = m_set.emplace_with_hash(h, idx);
-        assert(inserted);
-        return idx;
+        return detail::complete_miss_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new(element); });
     }
 
-    std::pair<Index<Tag>, bool> insert(const Data<Tag>& element)
+    Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(IndexedHashSet::hash(element) == m_set.hash(element));
-
-        return insert_with_hash(IndexedHashSet::hash(element), element);
+        const auto [index, inserted] = complete_miss_with_hash(h, element);
+        if (!inserted)
+            throw std::logic_error("IndexedHashSet::insert_new_with_hash requires an absent key.");
+        return index;
     }
+
+    std::pair<Index<Tag>, bool> insert(const Data<Tag>& element) { return insert_with_hash(IndexedHashSet::hash(element), element); }
 
     const Data<Tag>& operator[](Index<Tag> idx) const noexcept { return (*m_storage)[uint_t(idx)]; }
 
@@ -136,7 +140,7 @@ public:
     {
         size_t bytes = 0;
         bytes += m_storage ? m_storage->memory_usage() : 0;
-        bytes += m_set.capacity() * (sizeof(Index<Tag>) + sizeof(gtl::priv::ctrl_t));
+        bytes += detail::hash_set_memory_usage(m_set);
         return bytes;
     }
 
@@ -154,11 +158,11 @@ private:
     public:
         using is_transparent = void;
 
-        IndexableHash() noexcept : m_storage(nullptr) {}
-        explicit IndexableHash(const VectorType& storage) noexcept : m_storage(&storage) {}
+        IndexableHash() noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(nullptr) {}
+        explicit IndexableHash(const VectorType& storage) noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(&storage) {}
 
-        size_t operator()(Index<Tag> el) const noexcept { return m_hash((*m_storage)[uint_t(el)]); }
-        size_t operator()(const Data<Tag>& el) const noexcept { return m_hash(el); }
+        size_t operator()(Index<Tag> el) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash((*m_storage)[uint_t(el)]); }
+        size_t operator()(const Data<Tag>& el) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(el); }
     };
 
     class IndexableEqualTo
@@ -170,17 +174,29 @@ private:
     public:
         using is_transparent = void;
 
-        IndexableEqualTo() noexcept : m_storage(nullptr), m_equal_to() {}
-        explicit IndexableEqualTo(const VectorType& storage) noexcept : m_storage(&storage), m_equal_to() {}
+        IndexableEqualTo() noexcept(std::is_nothrow_default_constructible_v<E>) : m_storage(nullptr), m_equal_to() {}
+        explicit IndexableEqualTo(const VectorType& storage) noexcept(std::is_nothrow_default_constructible_v<E>) : m_storage(&storage), m_equal_to() {}
 
-        bool operator()(Index<Tag> lhs, Index<Tag> rhs) const noexcept { return m_equal_to((*m_storage)[uint_t(lhs)], (*m_storage)[uint_t(rhs)]); }
-        bool operator()(const Data<Tag>& lhs, Index<Tag> rhs) const noexcept { return m_equal_to(lhs, (*m_storage)[uint_t(rhs)]); }
-        bool operator()(Index<Tag> lhs, const Data<Tag>& rhs) const noexcept { return m_equal_to((*m_storage)[uint_t(lhs)], rhs); }
-        bool operator()(const Data<Tag>& lhs, const Data<Tag>& rhs) const noexcept { return m_equal_to(lhs, rhs); }
+        bool operator()(Index<Tag> lhs, Index<Tag> rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
+        {
+            return m_equal_to((*m_storage)[uint_t(lhs)], (*m_storage)[uint_t(rhs)]);
+        }
+        bool operator()(const Data<Tag>& lhs, Index<Tag> rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
+        {
+            return m_equal_to(lhs, (*m_storage)[uint_t(rhs)]);
+        }
+        bool operator()(Index<Tag> lhs, const Data<Tag>& rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
+        {
+            return m_equal_to((*m_storage)[uint_t(lhs)], rhs);
+        }
+        bool operator()(const Data<Tag>& lhs, const Data<Tag>& rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
+        {
+            return m_equal_to(lhs, rhs);
+        }
     };
 
     std::unique_ptr<VectorType> m_storage;
-    gtl::flat_hash_set<Index<Tag>, IndexableHash, IndexableEqualTo> m_set;
+    SetType m_set;
 };
 }  // namespace ygg
 

@@ -165,6 +165,19 @@ TEST(YggdrasilTests, CommonBlockArrayPoolReturnsInsertedIndex)
     EXPECT_EQ(pool.size(), 2);
 }
 
+TEST(YggdrasilTests, CommonConcurrentBlockArrayPoolChecksIndexBoundBeforePublishing)
+{
+    using Pool = ygg::BlockArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1, true>;
+    auto pool = Pool(2);
+    const auto first = std::array<uint8_t, 2> { 1, 2 };
+    const auto second = std::array<uint8_t, 2> { 3, 4 };
+
+    EXPECT_EQ(pool.push_back_bounded(first, 0), 0);
+    EXPECT_THROW(pool.push_back_bounded(second, 0), std::length_error);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool[0], std::span<const uint8_t>(first));
+}
+
 TEST(YggdrasilTests, CommonBlockArrayPoolAtChecksBounds)
 {
     auto pool = ygg::BlockArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(2);
@@ -249,6 +262,10 @@ TEST(YggdrasilTests, CommonBlockArraySetSupportsHashAwareInsertion)
     const auto [duplicate_index, duplicate_inserted] = set.insert_with_hash(first_hash, first);
     EXPECT_FALSE(duplicate_inserted);
     EXPECT_EQ(duplicate_index, first_index);
+
+    EXPECT_THROW(set.insert_new_with_hash(first_hash, first), std::logic_error);
+    EXPECT_EQ(set.size(), 1);
+    EXPECT_EQ(set.find_with_hash(first, first_hash), first_index);
 
     EXPECT_EQ(set.insert_new_with_hash(second_hash, second), 1);
     EXPECT_EQ(set.find_with_hash(second, second_hash), 1);

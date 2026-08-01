@@ -24,10 +24,10 @@
 namespace ygg
 {
 
-template<typename T, std::size_t FirstSegmentSize>
-struct Less<SegmentedVector<T, FirstSegmentSize>>
+template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe>
+struct Less<SegmentedVector<T, FirstSegmentSize, ThreadSafe>>
 {
-    bool operator()(const SegmentedVector<T, FirstSegmentSize>& lhs, const SegmentedVector<T, FirstSegmentSize>& rhs) const noexcept
+    bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& lhs, const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& rhs) const noexcept
     {
         return less_range(lhs, rhs);
     }

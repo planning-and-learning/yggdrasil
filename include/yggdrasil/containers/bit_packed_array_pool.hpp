@@ -18,9 +18,13 @@
 #ifndef YGG_CONTAINERS_BIT_PACKED_ARRAY_POOL_HPP_
 #define YGG_CONTAINERS_BIT_PACKED_ARRAY_POOL_HPP_
 
+#include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bit.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cassert>
 #include <compare>
@@ -38,24 +42,103 @@
 namespace ygg
 {
 
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize>
+namespace detail
+{
+
+template<std::unsigned_integral Block>
+Block atomic_load(const Block* block) noexcept
+{
+    return std::atomic_ref<Block>(*const_cast<Block*>(block)).load(std::memory_order_relaxed);
+}
+
+template<std::unsigned_integral Block>
+void atomic_replace_bits(Block* block, Block mask, Block value) noexcept
+{
+    auto reference = std::atomic_ref<Block>(*block);
+    auto current = reference.load(std::memory_order_relaxed);
+    while (!reference.compare_exchange_weak(current, static_cast<Block>((current & ~mask) | (value & mask)), std::memory_order_relaxed)) {}
+}
+
+template<std::unsigned_integral Block>
+Block atomic_read_int(const Block* word, uint8_t offset, uint8_t len) noexcept
+{
+    constexpr auto digits = std::numeric_limits<Block>::digits;
+    const Block first = atomic_load(word) >> offset;
+    if (offset + len > digits)
+        return first | ((atomic_load(word + 1) & bit::lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
+    return first & bit::lo_set<Block>[len];
+}
+
+template<std::unsigned_integral Block>
+void atomic_write_int(Block* word, Block value, uint8_t offset, uint8_t len) noexcept
+{
+    constexpr auto digits = std::numeric_limits<Block>::digits;
+    value &= bit::lo_set<Block>[len];
+
+    const auto first_len = static_cast<uint8_t>(std::min<size_t>(len, digits - offset));
+    const auto first_mask = static_cast<Block>(bit::lo_set<Block>[first_len] << offset);
+    atomic_replace_bits(word, first_mask, static_cast<Block>(value << offset));
+
+    if (first_len < len)
+    {
+        const auto second_len = static_cast<uint8_t>(len - first_len);
+        atomic_replace_bits(word + 1, bit::lo_set<Block>[second_len], static_cast<Block>(value >> first_len));
+    }
+}
+
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder>
+class AtomicIntReference
+{
+public:
+    using value_type = typename Coder::value_type;
+
+    AtomicIntReference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len) {}
+
+    AtomicIntReference& operator=(const value_type& value)
+    {
+        const auto raw = Coder::encode(value);
+        if ((raw & ~bit::lo_set<Block>[m_len]) != 0)
+            throw std::out_of_range("AtomicIntReference: encoded value exceeds bit width");
+        atomic_write_int(m_word, raw, m_offset, m_len);
+        return *this;
+    }
+
+    AtomicIntReference& operator=(const AtomicIntReference& other) { return *this = static_cast<value_type>(other); }
+
+    operator value_type() const { return Coder::decode(atomic_read_int(m_word, m_offset, m_len)); }
+
+private:
+    Block* m_word;
+    uint8_t m_offset;
+    uint8_t m_len;
+};
+
+}  // namespace detail
+
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize, bool ThreadSafe>
 class BitPackedArrayPool;
 
 /**
  * BasicBitPackedArrayView
  */
 
-template<typename Block, typename Coder>
+template<typename Block, typename Coder, bool ThreadSafe = false>
 class BasicBitPackedArrayView
 {
 public:
+    using block_type = std::remove_const_t<Block>;
+
+    static_assert(std::unsigned_integral<block_type>);
+    static_assert(!ThreadSafe || std::atomic_ref<block_type>::is_always_lock_free, "Concurrent bit-packed access requires lock-free atomic blocks.");
+    static_assert(!ThreadSafe || alignof(block_type) >= std::atomic_ref<block_type>::required_alignment,
+                  "Concurrent bit-packed access requires atomic_ref-compatible block alignment.");
+
     /**
      * Type aliases
      */
 
-    using block_type = std::remove_const_t<Block>;
     using value_type = typename Coder::value_type;
-    using reference_type = typename bit::int_reference<block_type, Coder>;
+    using reference_type = std::conditional_t<ThreadSafe, detail::AtomicIntReference<block_type, Coder>, typename bit::int_reference<block_type, Coder>>;
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
     /**
@@ -66,10 +149,10 @@ public:
     static constexpr size_t block_shift = std::countr_zero(digits);
 
 private:
-    template<typename, typename>
+    template<typename, typename, bool>
     friend class BasicBitPackedArrayView;
 
-    template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize>
+    template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize, bool OtherThreadSafe>
     friend class BitPackedArrayPool;
 
     struct UncheckedTag
@@ -138,8 +221,8 @@ public:
     template<typename View>
     class BasicIterator;
 
-    using iterator = BasicIterator<BasicBitPackedArrayView<Block, Coder>>;
-    using const_iterator = BasicIterator<const BasicBitPackedArrayView<Block, Coder>>;
+    using iterator = BasicIterator<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>;
+    using const_iterator = BasicIterator<const BasicBitPackedArrayView<Block, Coder, ThreadSafe>>;
 
     /**
      * Constructors
@@ -152,7 +235,7 @@ public:
 
     template<typename OtherBlock>
         requires(std::is_const_v<Block> && !std::is_const_v<OtherBlock> && std::same_as<std::remove_const_t<OtherBlock>, block_type>)
-    BasicBitPackedArrayView(const BasicBitPackedArrayView<OtherBlock, Coder>& other) noexcept :
+    BasicBitPackedArrayView(const BasicBitPackedArrayView<OtherBlock, Coder, ThreadSafe>& other) noexcept :
         m_data(other.m_data),
         m_length(other.m_length),
         m_width(other.m_width),
@@ -237,7 +320,12 @@ public:
         reference operator*() const
         {
             if constexpr (is_const_iterator)
-                return Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width));
+            {
+                if constexpr (ThreadSafe)
+                    return Coder::decode(detail::atomic_read_int<block_type>(m_word, m_offset, m_width));
+                else
+                    return Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width));
+            }
             else
                 return reference_type(m_word, m_offset, m_width);
         }
@@ -352,7 +440,10 @@ public:
         const auto* word = m_data + (bit_index >> block_shift);
         const uint8_t offset = static_cast<uint8_t>(bit_index & (digits - 1));
 
-        return Coder::decode(bit::read_int<block_type>(word, offset, m_width));
+        if constexpr (ThreadSafe)
+            return Coder::decode(detail::atomic_read_int<block_type>(word, offset, m_width));
+        else
+            return Coder::decode(bit::read_int<block_type>(word, offset, m_width));
     }
 
     reference_type at(size_t pos)
@@ -429,83 +520,67 @@ private:
 };
 
 /// Stores fixed-length arrays as bit-packed unsigned integer codes with stable
-/// references. Values are encoded and decoded via Coder.
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16>
+/// references. Values are encoded and decoded via Coder. ThreadSafe permits
+/// concurrent appends, size queries, and reads of published arrays. Clear,
+/// pop_back, iteration, segment or memory inspection, move, destruction, and
+/// mutation of published arrays require quiescence or external locking. Atomic
+/// packed access prevents neighboring-array races but does not make a
+/// multi-block logical mutation atomic.
+template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
 class BitPackedArrayPool
 {
-    static_assert(bit::is_power_of_two(FirstSegmentSize));
-
 public:
-    /**
-     * Type aliases
-     */
+    static constexpr bool thread_safe = ThreadSafe;
 
     using block_type = std::remove_const_t<Block>;
     using value_type = typename Coder::value_type;
-    using reference_type = typename bit::int_reference<Block, Coder>;
-    using ArrayView = BasicBitPackedArrayView<Block, Coder>;
-    using ConstArrayView = BasicBitPackedArrayView<const Block, Coder>;
-
-    /**
-     * Compile-time properties
-     */
+    using ArrayView = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
+    using ConstArrayView = BasicBitPackedArrayView<const Block, Coder, ThreadSafe>;
+    using reference_type = typename ArrayView::reference_type;
 
 private:
-    /**
-     * Type aliases
-     */
-
-    /**
-     * Compile-time properties
-     */
+    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize>;
+    using Segment = std::vector<block_type>;
+    using Segments = std::conditional_t<ThreadSafe, SegmentedVector<Segment, 1, true>, std::vector<Segment>>;
 
     static constexpr std::size_t digits = std::numeric_limits<block_type>::digits;
     static constexpr size_t block_shift = std::countr_zero(digits);
-
-    static constexpr size_t seg_shift = std::countr_zero(FirstSegmentSize);
-    static constexpr size_t seg_mask = FirstSegmentSize - 1;
-
-    static size_t get_segment_index(size_t index) noexcept { return std::bit_width((index >> seg_shift) + 1) - 1; }
-    static size_t get_segment_pos(size_t index, size_t seg_idx) noexcept
-    {
-        const size_t q = index >> seg_shift;
-        const size_t r = index & seg_mask;
-        return ((q - ((size_t { 1 } << seg_idx) - 1)) << seg_shift) + r;
-    }
 
     static constexpr size_t blocks_for_bits(size_t bits) noexcept { return bit::ceil_div(bits, digits); }
 
     void reserve(size_t size)
     {
-        if (size == 0 || size <= m_capacity)
+        auto capacity = detail::load_size<ThreadSafe>(m_capacity);
+        if (size == 0 || size <= capacity)
             return;
 
-        const size_t last_segment = get_segment_index(size - 1);
+        const size_t last_segment = Layout::segment_index(size - 1);
         const size_t first_new_segment = m_segments.size();
 
-        m_segments.reserve(last_segment + 1);
+        if constexpr (!ThreadSafe)
+            m_segments.reserve(last_segment + 1);
 
         for (size_t seg = first_new_segment; seg <= last_segment; ++seg)
         {
-            if (seg >= std::numeric_limits<size_t>::digits - seg_shift)
+            if (seg >= Layout::max_segments)
                 throw std::length_error("BitPackedArrayPool: segment is too large.");
-            const size_t arrays_in_segment = FirstSegmentSize << seg;  // geometric growth
-            assert(bit::is_power_of_two(arrays_in_segment));
+            const size_t arrays_in_segment = Layout::segment_capacity(seg);
 
-            if (arrays_in_segment > std::numeric_limits<size_t>::max() - m_capacity
+            if (arrays_in_segment > std::numeric_limits<size_t>::max() - capacity
                 || (m_bits_per_array > 0 && arrays_in_segment > std::numeric_limits<size_t>::max() / m_bits_per_array))
                 throw std::length_error("BitPackedArrayPool: segment is too large.");
             const size_t bits_in_segment = arrays_in_segment * m_bits_per_array;
             const size_t blocks_in_segment = blocks_for_bits(bits_in_segment);
 
             m_segments.emplace_back(blocks_in_segment, Block { 0 });
-            m_capacity += arrays_in_segment;
+            capacity += arrays_in_segment;
+            detail::store_size<ThreadSafe>(m_capacity, capacity);
         }
     }
 
     void ensure_index(size_t index) const
     {
-        if (index >= m_size)
+        if (index >= size())
             throw std::out_of_range("BitPackedArrayPool: index out of range.");
     }
 
@@ -517,8 +592,8 @@ private:
 
     ArrayView get_view(size_t index) noexcept
     {
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const size_t seg_idx = Layout::segment_index(index);
+        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
         const size_t start_bit = seg_pos * m_bits_per_array;
 
         auto* data = m_segments[seg_idx].data();
@@ -531,8 +606,8 @@ private:
 
     ConstArrayView get_view(size_t index) const noexcept
     {
-        const size_t seg_idx = get_segment_index(index);
-        const size_t seg_pos = get_segment_pos(index, seg_idx);
+        const size_t seg_idx = Layout::segment_index(index);
+        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
         const size_t start_bit = seg_pos * m_bits_per_array;
 
         const auto* data = m_segments[seg_idx].data();
@@ -543,20 +618,41 @@ private:
         return ConstArrayView(data, m_length, m_width, offset, typename ConstArrayView::UncheckedTag {});
     }
 
-public:
-    /**
-     * Iterator declarations
-     */
+    size_t push_back_unlocked(std::span<const value_type> elements)
+    {
+        const auto size = detail::load_size<ThreadSafe>(m_size);
+        if (size == std::numeric_limits<size_t>::max())
+            throw std::length_error("BitPackedArrayPool: size is too large.");
 
+        reserve(size + 1);
+        auto out = get_view(size).begin();
+        for (const auto& element : elements)
+            *out++ = element;
+        detail::store_size<ThreadSafe>(m_size, size + 1);
+        return size;
+    }
+
+    size_t push_back_bounded_unlocked(std::span<const value_type> elements, size_t max_index)
+    {
+        if (size() > max_index)
+            throw std::length_error("BitPackedArrayPool: index is too large.");
+        return push_back_unlocked(elements);
+    }
+
+    void pop_back_unlocked()
+    {
+        const auto current = size();
+        if (current == 0)
+            throw std::out_of_range("BitPackedArrayPool: container is empty.");
+        detail::store_size<ThreadSafe>(m_size, current - 1);
+    }
+
+public:
     template<typename Pool>
     class BasicIterator;
 
     using iterator = BasicIterator<BitPackedArrayPool>;
     using const_iterator = BasicIterator<const BitPackedArrayPool>;
-
-    /**
-     * Constructors
-     */
 
     explicit BitPackedArrayPool(size_t length, uint8_t width) :
         m_bits_per_array(ArrayView::checked_length(length, width, 0) * width),
@@ -566,10 +662,6 @@ public:
         m_size(0)
     {
     }
-
-    /**
-     * Iterator definitions
-     */
 
     template<typename Pool>
     class BasicIterator
@@ -661,19 +753,15 @@ public:
         pool_pointer m_pool;
     };
 
-    /**
-     * Accessors
-     */
-
     ArrayView operator[](size_t index) noexcept
     {
-        assert(index < m_size);
+        assert(index < size());
         return get_view(index);
     }
 
     ConstArrayView operator[](size_t index) const noexcept
     {
-        assert(index < m_size);
+        assert(index < size());
         return get_view(index);
     }
 
@@ -689,81 +777,67 @@ public:
         return (*this)[index];
     }
 
-    /**
-     * Iterators
-     */
-
     iterator begin() noexcept { return iterator(*this, 0); }
-
     iterator end() noexcept { return iterator(*this, size()); }
-
     const_iterator begin() const noexcept { return const_iterator(*this, 0); }
-
     const_iterator end() const noexcept { return const_iterator(*this, size()); }
-
     const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
-
     const_iterator cend() const noexcept { return const_iterator(*this, size()); }
-
-    /**
-     * Modifiers
-     */
 
     size_t push_back(std::span<const value_type> elements)
     {
         ensure_fits(elements);
-        if (m_size == std::numeric_limits<size_t>::max())
-            throw std::length_error("BitPackedArrayPool: size is too large.");
-
-        const size_t index = m_size;
-        reserve(m_size + 1);
-        auto out = get_view(index).begin();
-        for (const auto& element : elements)
-            *out++ = element;
-        ++m_size;
-
-        return index;
+        return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_unlocked(elements); });
     }
 
-    void clear() noexcept { m_size = 0; }
+    /// Appends only if the returned index is at most max_index.
+    size_t push_back_bounded(std::span<const value_type> elements, size_t max_index)
+    {
+        ensure_fits(elements);
+        return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_bounded_unlocked(elements, max_index); });
+    }
 
-    /**
-     * Capacity
-     */
+    void clear() noexcept { detail::store_size<ThreadSafe>(m_size, 0); }
+
+    void pop_back()
+    {
+        detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { pop_back_unlocked(); });
+    }
 
     size_t length() const noexcept { return m_length; }
     uint8_t width() const noexcept { return m_width; }
-    size_t capacity() const noexcept { return m_capacity; }
-    size_t size() const noexcept { return m_size; }
-    bool empty() const noexcept { return m_size == 0; }
+    size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
+    size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
+    bool empty() const noexcept { return size() == 0; }
     const auto& segments() const noexcept { return m_segments; }
 
     size_t memory_usage() const noexcept
     {
         size_t bytes = 0;
-        for (const auto& segment : m_segments)
-            bytes += segment.capacity() * sizeof(block_type);
+        for (size_t i = 0; i < m_segments.size(); ++i)
+            bytes += m_segments[i].capacity() * sizeof(block_type);
         return bytes;
     }
 
 private:
     // Segments grow geometrically, i.e., FirstSegmentSize, 2*FirstSegmentSize,
     // 4*FirstSegmentSize, ...
-    std::vector<std::vector<block_type>> m_segments;
+    Segments m_segments;
 
     size_t m_bits_per_array;
     size_t m_length;
     uint8_t m_width;
 
-    size_t m_capacity;
-    size_t m_size;
+    detail::Size<ThreadSafe> m_capacity;
+    detail::Size<ThreadSafe> m_size;
+    [[no_unique_address]] detail::Mutex<ThreadSafe> m_writer_mutex;
 };
 }  // namespace ygg
 
 namespace std::ranges
 {
-template<typename Block, typename Coder>
-inline constexpr bool enable_borrowed_range<::ygg::BasicBitPackedArrayView<Block, Coder>> = true;
+template<typename Block, typename Coder, bool ThreadSafe>
+inline constexpr bool enable_borrowed_range<::ygg::BasicBitPackedArrayView<Block, Coder, ThreadSafe>> = true;
 }
 
 #endif

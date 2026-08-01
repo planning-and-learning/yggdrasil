@@ -241,6 +241,19 @@ TEST(YggdrasilTests, CommonBitPackedArrayPoolOutOfRange)
     EXPECT_THROW(pool.push_back(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
 }
 
+TEST(YggdrasilTests, CommonConcurrentBitPackedArrayPoolChecksIndexBoundBeforePublishing)
+{
+    using Pool = ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1, true>;
+    auto pool = Pool(2, 3);
+    const auto first = std::array<uint8_t, 2> { 1, 2 };
+    const auto second = std::array<uint8_t, 2> { 3, 4 };
+
+    EXPECT_EQ(pool.push_back_bounded(first, 0), 0);
+    EXPECT_THROW(pool.push_back_bounded(second, 0), std::length_error);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool[0], std::span<const uint8_t>(first));
+}
+
 TEST(YggdrasilTests, CommonBitPackedArrayPoolStoresZeroLengthArrays)
 {
     auto pool = ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(0, 1);
