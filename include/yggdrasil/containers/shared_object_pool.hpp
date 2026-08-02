@@ -67,7 +67,7 @@ private:
     Entry* m_entry;
 
 private:
-    void deallocate()
+    void deallocate() noexcept
     {
         assert(m_pool && m_entry);
 
@@ -220,13 +220,26 @@ private:
 
     void allocate_unlocked()
     {
+        if (m_storage.size() == m_storage.capacity())
+        {
+            const auto capacity = m_storage.capacity();
+            const auto next_capacity = capacity == 0 ? size_t { 1 } : capacity > m_storage.max_size() / 2 ? m_storage.max_size() : 2 * capacity;
+            m_storage.reserve(next_capacity);
+            m_stack.reserve(next_capacity);
+        }
+
         m_storage.push_back(std::make_unique<Entry>());
         m_stack.push_back(m_storage.back().get());
     }
 
-    void free(Entry* element)
+    void free(Entry* element) noexcept
     {
-        detail::with_lock<ThreadSafe>(m_mutex, [&] { m_stack.push_back(element); });
+        detail::with_lock<ThreadSafe>(m_mutex,
+                                      [&]
+                                      {
+                                          assert(m_stack.size() < m_stack.capacity());
+                                          m_stack.push_back(element);
+                                      });
     }
 
     friend class SharedObjectPoolPtr<T, ThreadSafe>;
