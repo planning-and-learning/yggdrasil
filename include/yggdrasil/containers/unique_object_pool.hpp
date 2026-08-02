@@ -18,13 +18,11 @@
 #ifndef YGG_CONTAINERS_UNIQUE_OBJECT_POOL_HPP_
 #define YGG_CONTAINERS_UNIQUE_OBJECT_POOL_HPP_
 
-#include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/detail/object_pool_storage.hpp"
 
 #include <cassert>
-#include <memory>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace ygg
 {
@@ -122,67 +120,21 @@ template<typename T, bool ThreadSafe>
 class UniqueObjectPool
 {
 private:
-    std::vector<std::unique_ptr<T>> m_storage;
-    std::vector<T*> m_stack;
-    [[no_unique_address]] mutable detail::Mutex<ThreadSafe> m_mutex;
+    detail::ObjectPoolStorage<T, ThreadSafe> m_storage;
 
-    void allocate_unlocked()
-    {
-        if (m_storage.size() == m_storage.capacity())
-        {
-            const auto capacity = m_storage.capacity();
-            const auto next_capacity = capacity == 0 ? size_t { 1 } : capacity > m_storage.max_size() / 2 ? m_storage.max_size() : 2 * capacity;
-            m_storage.reserve(next_capacity);
-            m_stack.reserve(next_capacity);
-        }
-
-        m_storage.push_back(std::make_unique<T>());
-        m_stack.push_back(m_storage.back().get());
-    }
-
-    void free(T* element) noexcept
-    {
-        detail::with_lock<ThreadSafe>(m_mutex,
-                                      [&]
-                                      {
-                                          assert(m_stack.size() < m_stack.capacity());
-                                          m_stack.push_back(element);
-                                      });
-    }
+    void free(T* element) noexcept { m_storage.release(element); }
 
     friend class UniqueObjectPoolPtr<T, ThreadSafe>;
 
 public:
-    // Non-copyable to prevent dangling memory pool pointers.
+    // Handles retain this address, so the pool must remain stationary.
     UniqueObjectPool() noexcept = default;
     UniqueObjectPool(const UniqueObjectPool& other) = delete;
     UniqueObjectPool& operator=(const UniqueObjectPool& other) = delete;
-    UniqueObjectPool(UniqueObjectPool&& other) noexcept
-        requires(!ThreadSafe)
-    = default;
-    UniqueObjectPool(UniqueObjectPool&& other) noexcept
-        requires ThreadSafe
-    = delete;
-    UniqueObjectPool& operator=(UniqueObjectPool&& other) noexcept
-        requires(!ThreadSafe)
-    = default;
-    UniqueObjectPool& operator=(UniqueObjectPool&& other) noexcept
-        requires ThreadSafe
-    = delete;
+    UniqueObjectPool(UniqueObjectPool&& other) = delete;
+    UniqueObjectPool& operator=(UniqueObjectPool&& other) = delete;
 
-    [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate()
-    {
-        auto* element = detail::with_lock<ThreadSafe>(m_mutex,
-                                                      [&]
-                                                      {
-                                                          if (m_stack.empty())
-                                                              allocate_unlocked();
-                                                          auto* result = m_stack.back();
-                                                          m_stack.pop_back();
-                                                          return result;
-                                                      });
-        return UniqueObjectPoolPtr<T, ThreadSafe>(this, element);
-    }
+    [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate() { return UniqueObjectPoolPtr<T, ThreadSafe>(this, m_storage.acquire()); }
 
     template<typename... Args>
     [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate(Args&&... args)
@@ -194,19 +146,13 @@ public:
         return element;
     }
 
-    [[nodiscard]] size_t size() const noexcept
-    {
-        return detail::with_lock<ThreadSafe>(m_mutex, [&] { return m_storage.size(); });
-    }
+    [[nodiscard]] size_t size() const noexcept { return m_storage.size(); }
 
     [[nodiscard]] size_t get_size() const noexcept { return size(); }
 
     [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
-    [[nodiscard]] size_t free_size() const noexcept
-    {
-        return detail::with_lock<ThreadSafe>(m_mutex, [&] { return m_stack.size(); });
-    }
+    [[nodiscard]] size_t free_size() const noexcept { return m_storage.free_size(); }
 
     [[nodiscard]] size_t get_num_free() const noexcept { return free_size(); }
 };

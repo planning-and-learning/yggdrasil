@@ -47,10 +47,10 @@ static_assert(!std::is_copy_constructible_v<ConcurrentRawArrayPool>);
 
 TEST(YggdrasilTests, CommonRawArrayPoolRejectsImpossibleSegmentSizes)
 {
-    constexpr auto arrays_per_segment = size_t { 2 };
-    constexpr auto too_large = std::numeric_limits<size_t>::max() / arrays_per_segment + 1;
+    constexpr auto first_segment_size = size_t { 2 };
+    constexpr auto too_large = std::numeric_limits<size_t>::max() / first_segment_size + 1;
 
-    EXPECT_THROW((ygg::RawArrayPool<int, arrays_per_segment>(too_large)), std::length_error);
+    EXPECT_THROW((ygg::RawArrayPool<int, first_segment_size>(too_large)), std::length_error);
 }
 
 TEST(YggdrasilTests, CommonRawArrayPoolStoresFixedLengthArrays)
@@ -149,12 +149,16 @@ TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStableAndCopiesRemainI
     auto pool = ygg::RawArrayPool<int, 1>(2);
     const auto first_value = std::array<int, 2> { 1, 2 };
     const auto second_value = std::array<int, 2> { 3, 4 };
+    const auto third_value = std::array<int, 2> { 5, 6 };
     EXPECT_EQ(pool.insert(first_value), 0);
     const auto* first_storage = pool[0].data();
     EXPECT_EQ(pool.insert(second_value), 1);
+    EXPECT_EQ(pool.insert(third_value), 2);
 
     EXPECT_EQ(first_storage, pool[0].data());
     EXPECT_TRUE(std::ranges::equal(pool[0], first_value));
+    EXPECT_TRUE(std::ranges::equal(pool[2], third_value));
+    EXPECT_EQ(pool.memory_usage(), 6 * sizeof(int));
 
     auto copy = pool;
     EXPECT_NE(copy[0].data(), pool[0].data());
@@ -165,6 +169,7 @@ TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStableAndCopiesRemainI
     assigned = pool;
     EXPECT_NE(assigned[1].data(), pool[1].data());
     EXPECT_TRUE(std::ranges::equal(assigned[1], second_value));
+    EXPECT_TRUE(std::ranges::equal(assigned[2], third_value));
     EXPECT_EQ(assigned.memory_usage(), pool.memory_usage());
 }
 

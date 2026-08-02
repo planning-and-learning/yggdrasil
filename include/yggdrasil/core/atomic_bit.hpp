@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -48,7 +49,12 @@ void atomic_replace_bits(Block* block, Block mask, Block value) noexcept
 template<std::unsigned_integral Block>
 Block atomic_read_int(const Block* word, uint8_t offset, uint8_t len) noexcept
 {
-    constexpr auto digits = std::numeric_limits<Block>::digits;
+    constexpr std::size_t digits = std::numeric_limits<Block>::digits;
+
+    static_assert(is_power_of_two(digits), "Block width must be a power of two.");
+    assert(len <= digits && "Width exceeds block width.");
+    assert(offset < digits && "Offset must lie within one block.");
+
     const Block first = atomic_load(word) >> offset;
     if (offset + len > digits)
         return first | ((atomic_load(word + 1) & lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
@@ -58,7 +64,12 @@ Block atomic_read_int(const Block* word, uint8_t offset, uint8_t len) noexcept
 template<std::unsigned_integral Block>
 void atomic_write_int(Block* word, Block value, uint8_t offset, uint8_t len) noexcept
 {
-    constexpr auto digits = std::numeric_limits<Block>::digits;
+    constexpr std::size_t digits = std::numeric_limits<Block>::digits;
+
+    static_assert(is_power_of_two(digits), "Block width must be a power of two.");
+    assert(len <= digits && "Width exceeds block width.");
+    assert(offset < digits && "Offset must lie within one block.");
+
     value &= lo_set<Block>[len];
 
     const auto first_len = static_cast<uint8_t>(std::min<size_t>(len, digits - offset));
@@ -80,7 +91,13 @@ class atomic_int_reference
 public:
     using value_type = typename Coder::value_type;
 
-    atomic_int_reference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len) {}
+    atomic_int_reference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len)
+    {
+        constexpr std::size_t digits = std::numeric_limits<Block>::digits;
+        static_assert(is_power_of_two(digits), "Block width must be a power of two.");
+        assert(len <= digits && "Width exceeds block width.");
+        assert(offset < digits && "Offset must lie within one block.");
+    }
 
     atomic_int_reference& operator=(const value_type& value)
     {

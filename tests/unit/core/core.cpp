@@ -46,6 +46,37 @@ TEST(YggdrasilTests, CommonAtomicIntReferencePreservesAdjacentBits)
     EXPECT_THROW((reference = uint8_t { 0b1000000 }), std::out_of_range);
 }
 
+TEST(YggdrasilTests, CommonAtomicPackedAccessMatchesNonAtomicAccess)
+{
+    for (uint8_t offset = 0; offset < std::numeric_limits<uint8_t>::digits; ++offset)
+    {
+        for (uint8_t len = 0; len <= std::numeric_limits<uint8_t>::digits; ++len)
+        {
+            auto expected = std::array<uint8_t, 2> { 0b10100101, 0b01011010 };
+            auto actual = expected;
+            constexpr auto value = uint8_t { 0b11010011 };
+
+            ygg::bit::write_int(expected.data(), value, offset, len);
+            ygg::bit::atomic_write_int(actual.data(), value, offset, len);
+
+            EXPECT_EQ(actual, expected);
+            EXPECT_EQ(ygg::bit::atomic_read_int(actual.data(), offset, len), ygg::bit::read_int(expected.data(), offset, len));
+        }
+    }
+}
+
+#ifndef NDEBUG
+TEST(YggdrasilTests, CommonAtomicPackedAccessRejectsInvalidRanges)
+{
+    auto blocks = std::array<uint8_t, 2> {};
+    constexpr auto digits = std::numeric_limits<uint8_t>::digits;
+
+    EXPECT_DEATH((void) ygg::bit::atomic_read_int(blocks.data(), digits, 1), "Offset");
+    EXPECT_DEATH(ygg::bit::atomic_write_int(blocks.data(), uint8_t { 0 }, 0, digits + 1), "Width");
+    EXPECT_DEATH((void) ygg::bit::atomic_int_reference<uint8_t>(blocks.data(), digits, 1), "Offset");
+}
+#endif
+
 struct CoreConceptFixture
 {
     auto identifying_members() const noexcept { return 0; }

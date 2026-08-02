@@ -506,6 +506,34 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_EQ(&local_found->get_context(), &child);
 }
 
+TEST(YggdrasilTests, CommonRelationRepositoryRejectsWrongArityWithoutMutation)
+{
+    using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
+    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using Repository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
+
+    auto repository = Repository(0);
+    const auto relation = ygg::Index<RepositoryTypesRelation>(0);
+    auto objects = ygg::IndexList<Object> {};
+    objects.push_back(ygg::Index<Object>(0));
+    objects.push_back(ygg::Index<Object>(1));
+    const auto data = ygg::Data<Binding>(relation, 2, std::move(objects));
+    const auto [view, created] = repository.get_or_create(data);
+    ASSERT_TRUE(created);
+
+    auto wrong_objects = ygg::IndexList<Object> {};
+    wrong_objects.push_back(ygg::Index<Object>(0));
+    const auto wrong = ygg::Data<Binding>(relation, 1, std::move(wrong_objects));
+    static_assert(!noexcept(repository.find_with_hash(wrong, Repository::hash(wrong))));
+    static_assert(!noexcept(repository.find(wrong)));
+
+    EXPECT_THROW(repository.find_with_hash(wrong, Repository::hash(wrong)), std::invalid_argument);
+    EXPECT_THROW(repository.find(wrong), std::invalid_argument);
+    EXPECT_THROW(repository.get_or_create(wrong), std::invalid_argument);
+    EXPECT_EQ(repository.size(relation), 1);
+    EXPECT_EQ(repository[view.get_index()].size(), 2);
+}
+
 TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;

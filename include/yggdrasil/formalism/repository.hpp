@@ -105,7 +105,7 @@ private:
 
     template<typename T>
     std::optional<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>>
-    find_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h) const noexcept
+    find_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h) const
     {
         const auto g = builder.relation;
 
@@ -236,7 +236,7 @@ public:
 
     template<typename T>
     std::optional<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>>
-    find(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder) const noexcept
+    find(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder) const
     {
         return find_with_hash(builder, RelationRepo::hash(builder));
     }

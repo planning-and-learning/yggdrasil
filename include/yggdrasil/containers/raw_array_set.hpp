@@ -23,11 +23,11 @@ namespace ygg
 /// ThreadSafe permits concurrent lookup, insertion, size queries, and reads
 /// after publication was observed through size() or external synchronization.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<TriviallyCopyable T, size_t ArraysPerSegment = 1024, bool ThreadSafe = false>
-class RawArraySet : public detail::BasicRawSet<RawArrayPool<T, ArraysPerSegment, ThreadSafe>>
+template<TriviallyCopyable T, size_t FirstSegmentSize = 1024, bool ThreadSafe = false>
+class RawArraySet : public detail::BasicRawSet<RawArrayPool<T, FirstSegmentSize, ThreadSafe>>
 {
 private:
-    using pool_type = RawArrayPool<T, ArraysPerSegment, ThreadSafe>;
+    using pool_type = RawArrayPool<T, FirstSegmentSize, ThreadSafe>;
     using Base = detail::BasicRawSet<pool_type>;
 
 public:

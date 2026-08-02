@@ -1,8 +1,8 @@
 #ifndef YGG_CONTAINERS_RAW_VECTOR_POOL_HPP_
 #define YGG_CONTAINERS_RAW_VECTOR_POOL_HPP_
 
+#include "yggdrasil/containers/detail/geometric_byte_storage.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
-#include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 
@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <memory>
 #include <new>
 #include <span>
 #include <stdexcept>
@@ -223,14 +222,14 @@ private:
 template<std::unsigned_integral Size, TriviallyCopyable T, size_t FirstSegmentBytes = 1024, bool ThreadSafe = false>
 class RawVectorPool
 {
-    static_assert(bit::is_power_of_two(FirstSegmentBytes));
-
 public:
     using value_type = T;
     using ConstView = RawVectorView<const Size, const T>;
     static constexpr bool thread_safe = ThreadSafe;
 
 private:
+    using Storage = detail::GeometricByteStorage<FirstSegmentBytes, alignof(T), false>;
+
     static constexpr size_t align_up(size_t n, size_t a) noexcept { return (n + a - 1) / a * a; }
 
     static constexpr size_t payload_offset() noexcept { return align_up(sizeof(Size), alignof(T)); }
@@ -248,55 +247,6 @@ private:
     static void write_size(std::byte* ptr, Size size) noexcept { std::memcpy(ptr, &size, sizeof(Size)); }
 
     static T* payload_ptr(std::byte* ptr) noexcept { return std::launder(reinterpret_cast<T*>(ptr + payload_offset())); }
-
-    struct Segment
-    {
-        std::unique_ptr<std::byte[]> storage;
-        size_t capacity;
-        size_t used_bytes = 0;
-
-        explicit Segment(size_t num_bytes) : storage(std::make_unique_for_overwrite<std::byte[]>(num_bytes)), capacity(num_bytes), used_bytes(0) {}
-
-        size_t capacity_bytes() const noexcept { return capacity; }
-        size_t remaining_bytes() const noexcept { return capacity - used_bytes; }
-
-        std::byte* allocate(size_t num_bytes) noexcept
-        {
-            assert(num_bytes <= remaining_bytes());
-            std::byte* ptr = storage.get() + used_bytes;
-            used_bytes += num_bytes;
-            return ptr;
-        }
-
-        void clear() noexcept { used_bytes = 0; }
-    };
-
-    bool current_segment_fits(size_t needed_bytes) const noexcept { return !m_segments.empty() && m_segments.back().remaining_bytes() >= needed_bytes; }
-
-    void ensure_current_segment(size_t needed_bytes)
-    {
-        if (current_segment_fits(needed_bytes))
-            return;
-
-        size_t next_bytes = FirstSegmentBytes;
-        if (!m_segments.empty())
-        {
-            const auto current_bytes = m_segments.back().capacity_bytes();
-            next_bytes = current_bytes > std::numeric_limits<size_t>::max() / 2 ? needed_bytes : current_bytes * 2;
-        }
-
-        while (next_bytes < needed_bytes)
-        {
-            if (next_bytes > std::numeric_limits<size_t>::max() / 2)
-            {
-                next_bytes = needed_bytes;
-                break;
-            }
-            next_bytes *= 2;
-        }
-
-        m_segments.emplace_back(next_bytes);
-    }
 
 private:
     void ensure_index(uint_t index) const
@@ -334,9 +284,7 @@ public:
         return static_cast<uint_t>(m_index.emplace_back_with_index(
             [&](size_t)
             {
-                ensure_current_segment(needed_bytes);
-
-                std::byte* slot = m_segments.back().allocate(needed_bytes);
+                std::byte* slot = m_storage.allocate(needed_bytes);
                 write_size(slot, static_cast<Size>(size));
                 if (size > 0)
                     std::memcpy(payload_ptr(slot), data, size * sizeof(T));
@@ -369,27 +317,19 @@ public:
         return (*this)[to_uint_t(size() - 1)];
     }
 
-    size_t memory_usage() const noexcept
-    {
-        size_t bytes = 0;
-        for (const auto& seg : m_segments)
-            bytes += seg.capacity_bytes();
-        bytes += m_index.memory_usage();
-        return bytes;
-    }
+    size_t memory_usage() const noexcept { return m_storage.memory_usage() + m_index.memory_usage(); }
 
     size_t size() const noexcept { return m_index.size(); }
     bool empty() const noexcept { return m_index.empty(); }
 
     void clear() noexcept
     {
-        for (auto& seg : m_segments)
-            seg.clear();
+        m_storage.clear();
         m_index.clear();
     }
 
 private:
-    std::vector<Segment> m_segments;
+    Storage m_storage;
     SegmentedVector<std::byte*, 32, ThreadSafe> m_index;
 };
 

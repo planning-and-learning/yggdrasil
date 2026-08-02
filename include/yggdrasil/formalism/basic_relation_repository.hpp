@@ -352,7 +352,7 @@ public:
      * Handle-producing methods return raw handles because the caller already knows the context.
      */
 
-    std::optional<Index<Row>> find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const noexcept
+    std::optional<Index<Row>> find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         const auto g = builder.relation;
 
@@ -366,7 +366,7 @@ public:
         return std::nullopt;
     }
 
-    std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
+    std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
         return find_local_with_hash(builder, BasicRelationRepository::hash(builder));
     }

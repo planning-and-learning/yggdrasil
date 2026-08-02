@@ -32,6 +32,11 @@ namespace ygg::tests
 using DefaultRawVectorPool = RawVectorPool<uint8_t, int, 32>;
 using ConcurrentRawVectorPool = RawVectorPool<uint8_t, int, 32, true>;
 
+struct alignas(64) OverAlignedValue
+{
+    int value;
+};
+
 static_assert(!DefaultRawVectorPool::thread_safe);
 static_assert(ConcurrentRawVectorPool::thread_safe);
 static_assert(std::same_as<decltype(std::declval<DefaultRawVectorPool&>()[0]), RawVectorView<const uint8_t, const int>>);
@@ -162,21 +167,25 @@ TEST(YggdrasilTests, CommonRawVectorPoolAtChecksBounds)
 TEST(YggdrasilTests, CommonRawVectorPoolClearKeepsCapacityReusable)
 {
     auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
+    const auto value = std::vector<int> { 1, 2 };
 
-    EXPECT_EQ(pool.insert(std::vector<int> { 1, 2 }), 0);
+    for (size_t i = 0; i < 7; ++i)
+        EXPECT_EQ(pool.insert(value), i);
+    const auto memory_usage = pool.memory_usage();
     pool.clear();
 
     EXPECT_TRUE(pool.empty());
     EXPECT_EQ(pool.size(), 0);
 
-    const auto value = std::vector<int> { 3, 4, 5 };
-    EXPECT_EQ(pool.insert(value), 0);
+    for (size_t i = 0; i < 7; ++i)
+        EXPECT_EQ(pool.insert(value), i);
 
     const auto view = pool[0];
     EXPECT_FALSE(pool.empty());
-    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool.size(), 7);
     EXPECT_FALSE(view.empty());
     EXPECT_EQ(std::vector<int>(view.begin(), view.end()), value);
+    EXPECT_EQ(pool.memory_usage(), memory_usage);
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolGrowthKeepsViewsStableAndAligned)
@@ -185,12 +194,25 @@ TEST(YggdrasilTests, CommonRawVectorPoolGrowthKeepsViewsStableAndAligned)
     const auto first_index = pool.insert(std::array<int, 1> { 7 });
     const auto first = pool[first_index];
     const auto* first_storage = first.raw_data();
+    const auto large = std::array<int, 8> { 1, 2, 3, 4, 5, 6, 7, 8 };
 
-    static_cast<void>(pool.insert(std::array<int, 8> { 1, 2, 3, 4, 5, 6, 7, 8 }));
+    static_cast<void>(pool.insert(large));
+    const auto memory_usage = pool.memory_usage();
+    static_cast<void>(pool.insert(large));
 
     EXPECT_EQ(pool[first_index].raw_data(), first_storage);
     EXPECT_EQ(first.front(), 7);
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(first.data()) % alignof(int), 0);
+    EXPECT_EQ(pool.memory_usage() - memory_usage, 128);
+}
+
+TEST(YggdrasilTests, CommonRawVectorPoolPreservesOverAlignment)
+{
+    auto pool = ygg::RawVectorPool<uint8_t, OverAlignedValue, 64>();
+    const auto index = pool.insert(std::array<OverAlignedValue, 1> { OverAlignedValue { 7 } });
+
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[index].data()) % alignof(OverAlignedValue), 0);
+    EXPECT_EQ(pool[index].front().value, 7);
 }
 
 }  // namespace ygg::tests

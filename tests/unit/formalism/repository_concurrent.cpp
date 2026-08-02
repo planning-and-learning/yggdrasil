@@ -415,6 +415,28 @@ TEST(YggdrasilTests, FormalismRepositoryRejectsReservedRelationIndex)
     EXPECT_THROW(concurrent.get_or_create(make_binding<ObjectTag>(relation, 7)), std::invalid_argument);
 }
 
+TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithoutMutation)
+{
+    using ObjectTag = ConcurrentPackedObjectTag;
+    using Object = formalism::Object<ObjectTag>;
+    auto repository = ConcurrentRepository<ObjectTag>(0, nullptr, formalism::RelationRepositoryConfig(12));
+    const auto relation = Index<ConcurrentRelation>(0);
+    const auto [view, created] = repository.get_or_create(make_binding<ObjectTag>(relation, 7));
+    ASSERT_TRUE(created);
+
+    auto objects = IndexList<Object> {};
+    objects.push_back(Index<Object>(0));
+    objects.push_back(Index<Object>(1));
+    objects.push_back(Index<Object>(2));
+    const auto wrong = Data<Binding<ObjectTag>>(relation, 3, std::move(objects));
+    static_assert(!noexcept(repository.find(wrong)));
+
+    EXPECT_THROW(repository.find(wrong), std::invalid_argument);
+    EXPECT_THROW(repository.get_or_create(wrong), std::invalid_argument);
+    EXPECT_EQ(repository.size(relation), 1);
+    EXPECT_EQ(view.get_data().size(), 4);
+}
+
 TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesRelationBindings)
 {
     expect_duplicate_same_relation_insertions<ConcurrentObjectTag>();

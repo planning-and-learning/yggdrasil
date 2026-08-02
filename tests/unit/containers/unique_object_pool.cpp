@@ -15,11 +15,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <chrono>
 #include <future>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <type_traits>
+#include <vector>
 #include <yggdrasil/containers/unique_object_pool.hpp>
 
 namespace ygg::tests
@@ -53,10 +55,45 @@ struct BlockingUniquePoolValue
     }
 };
 
-static_assert(std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue>>);
-static_assert(std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue>>);
+static_assert(!std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue>>);
+static_assert(!std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue>>);
 static_assert(!std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue, true>>);
 static_assert(!std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue, true>>);
+
+template<bool ThreadSafe>
+void expect_unique_pool_grows_and_reuses_across_capacity_boundaries()
+{
+    constexpr size_t count = 65;
+    auto pool = ygg::UniqueObjectPool<UniquePoolValue, ThreadSafe>();
+    auto handles = std::vector<ygg::UniqueObjectPoolPtr<UniquePoolValue, ThreadSafe>> {};
+    auto available = std::vector<UniquePoolValue*> {};
+    handles.reserve(count);
+    available.reserve(count);
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        handles.push_back(pool.get_or_allocate(static_cast<int>(i)));
+        available.push_back(handles.back().get());
+    }
+
+    EXPECT_EQ(pool.size(), count);
+    EXPECT_EQ(pool.free_size(), 0);
+    for (auto& handle : handles)
+        handle = {};
+    EXPECT_EQ(pool.free_size(), count);
+
+    for (auto& handle : handles)
+    {
+        handle = pool.get_or_allocate();
+        const auto it = std::ranges::find(available, handle.get());
+        ASSERT_NE(it, available.end());
+        available.erase(it);
+    }
+
+    EXPECT_TRUE(available.empty());
+    EXPECT_EQ(pool.size(), count);
+    EXPECT_EQ(pool.free_size(), 0);
+}
 
 template<bool ThreadSafe>
 void expect_unique_pool_recovers_from_failed_initialization()
@@ -150,6 +187,12 @@ TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolReusesReleasedObjects)
     EXPECT_EQ(reused->value, 8);
     EXPECT_EQ(pool.size(), 1);
     EXPECT_EQ(pool.free_size(), 0);
+}
+
+TEST(YggdrasilTests, CommonUniqueObjectPoolGrowsAndReusesAcrossCapacityBoundaries)
+{
+    expect_unique_pool_grows_and_reuses_across_capacity_boundaries<false>();
+    expect_unique_pool_grows_and_reuses_across_capacity_boundaries<true>();
 }
 
 TEST(YggdrasilTests, CommonUniqueObjectPoolPtrMoveAndClonePreserveOwnership)

@@ -66,8 +66,7 @@ public:
      */
 
     template<typename T>
-    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder,
-                                                                                         size_t h) const noexcept
+    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         const auto relation = builder.relation;
 
@@ -85,7 +84,7 @@ public:
     }
 
     template<typename T>
-    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
+    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
         return find_with_hash(builder, RelationRepositoryBase::hash(builder));
     }
@@ -167,13 +166,13 @@ public:
     }
 
     template<typename T>
-    auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const noexcept
+    auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         return get<T>().find_local_with_hash(builder, h);
     }
 
     template<typename T>
-    auto find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const noexcept
+    auto find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
         return get<T>().find_local(builder);
     }
