@@ -1,6 +1,7 @@
 #ifndef YGG_CONTAINERS_RAW_VECTOR_POOL_HPP_
 #define YGG_CONTAINERS_RAW_VECTOR_POOL_HPP_
 
+#include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
@@ -216,10 +217,18 @@ private:
     const std::byte* m_ptr;
 };
 
-template<std::unsigned_integral Size, TriviallyCopyable T, size_t FirstSegmentBytes = 1024>
+/// ThreadSafe permits concurrent insertion, size queries, and reads after
+/// publication was observed through size() or external synchronization.
+/// Clear, memory inspection, move, and destruction require quiescence.
+template<std::unsigned_integral Size, TriviallyCopyable T, size_t FirstSegmentBytes = 1024, bool ThreadSafe = false>
 class RawVectorPool
 {
     static_assert(bit::is_power_of_two(FirstSegmentBytes));
+
+public:
+    using value_type = T;
+    using ConstView = RawVectorView<const Size, const T>;
+    static constexpr bool thread_safe = ThreadSafe;
 
 private:
     static constexpr size_t align_up(size_t n, size_t a) noexcept { return (n + a - 1) / a * a; }
@@ -259,12 +268,6 @@ private:
             return ptr;
         }
 
-        void deallocate(size_t num_bytes) noexcept
-        {
-            assert(num_bytes <= used_bytes);
-            used_bytes -= num_bytes;
-        }
-
         void clear() noexcept { used_bytes = 0; }
     };
 
@@ -275,9 +278,22 @@ private:
         if (current_segment_fits(needed_bytes))
             return;
 
-        size_t next_bytes = m_segments.empty() ? FirstSegmentBytes : m_segments.back().capacity_bytes() * 2;
+        size_t next_bytes = FirstSegmentBytes;
+        if (!m_segments.empty())
+        {
+            const auto current_bytes = m_segments.back().capacity_bytes();
+            next_bytes = current_bytes > std::numeric_limits<size_t>::max() / 2 ? needed_bytes : current_bytes * 2;
+        }
+
         while (next_bytes < needed_bytes)
+        {
+            if (next_bytes > std::numeric_limits<size_t>::max() / 2)
+            {
+                next_bytes = needed_bytes;
+                break;
+            }
             next_bytes *= 2;
+        }
 
         m_segments.emplace_back(next_bytes);
     }
@@ -314,71 +330,40 @@ public:
         if (size > std::numeric_limits<Size>::max())
             throw std::out_of_range("RawVectorPool: vector length exceeds size type.");
 
-        const auto index = to_uint_t(m_index.size());
         const size_t needed_bytes = slot_size_bytes(size);
-        ensure_current_segment(needed_bytes);
+        return static_cast<uint_t>(m_index.emplace_back_with_index(
+            [&](size_t)
+            {
+                ensure_current_segment(needed_bytes);
 
-        std::byte* slot = m_segments.back().allocate(needed_bytes);
-        write_size(slot, static_cast<Size>(size));
-
-        if (size > 0)
-            std::memcpy(payload_ptr(slot), data, size * sizeof(T));
-
-        try
-        {
-            m_index.push_back(slot);
-        }
-        catch (...)
-        {
-            m_segments.back().deallocate(needed_bytes);
-            throw;
-        }
-        return index;
+                std::byte* slot = m_segments.back().allocate(needed_bytes);
+                write_size(slot, static_cast<Size>(size));
+                if (size > 0)
+                    std::memcpy(payload_ptr(slot), data, size * sizeof(T));
+                return slot;
+            },
+            std::numeric_limits<uint_t>::max()));
     }
 
-    RawVectorView<Size, T> operator[](uint_t index) noexcept
+    ConstView operator[](uint_t index) const noexcept
     {
         assert(index < m_index.size());
-        return RawVectorView<Size, T>(m_index[index]);
+        return ConstView(m_index[index]);
     }
 
-    RawVectorView<const Size, const T> operator[](uint_t index) const noexcept
-    {
-        assert(index < m_index.size());
-        return RawVectorView<const Size, const T>(m_index[index]);
-    }
-
-    RawVectorView<Size, T> at(uint_t index)
+    ConstView at(uint_t index) const
     {
         ensure_index(index);
         return (*this)[index];
     }
 
-    RawVectorView<const Size, const T> at(uint_t index) const
-    {
-        ensure_index(index);
-        return (*this)[index];
-    }
-
-    RawVectorView<Size, T> front()
+    ConstView front() const
     {
         ensure_not_empty();
         return (*this)[0];
     }
 
-    RawVectorView<const Size, const T> front() const
-    {
-        ensure_not_empty();
-        return (*this)[0];
-    }
-
-    RawVectorView<Size, T> back()
-    {
-        ensure_not_empty();
-        return (*this)[to_uint_t(size() - 1)];
-    }
-
-    RawVectorView<const Size, const T> back() const
+    ConstView back() const
     {
         ensure_not_empty();
         return (*this)[to_uint_t(size() - 1)];
@@ -389,7 +374,7 @@ public:
         size_t bytes = 0;
         for (const auto& seg : m_segments)
             bytes += seg.capacity_bytes();
-        bytes += m_index.capacity() * sizeof(std::byte*);
+        bytes += m_index.memory_usage();
         return bytes;
     }
 
@@ -405,7 +390,7 @@ public:
 
 private:
     std::vector<Segment> m_segments;
-    std::vector<std::byte*> m_index;
+    SegmentedVector<std::byte*, 32, ThreadSafe> m_index;
 };
 
 }  // namespace ygg

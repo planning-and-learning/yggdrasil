@@ -325,8 +325,10 @@ TEST(YggdrasilTests, CommonRawAndSegmentedVectorHashAdaptersHashValues)
     const auto rhs_index = pool.insert(std::vector<int> { 1, 2 });
     const auto different_index = pool.insert(std::vector<int> { 1, 3 });
 
-    EXPECT_EQ((ygg::Hash<ygg::RawVectorView<uint8_t, int>> {}(pool[lhs_index])), (ygg::Hash<ygg::RawVectorView<uint8_t, int>> {}(pool[rhs_index])));
-    EXPECT_NE((ygg::Hash<ygg::RawVectorView<uint8_t, int>> {}(pool[lhs_index])), (ygg::Hash<ygg::RawVectorView<uint8_t, int>> {}(pool[different_index])));
+    EXPECT_EQ((ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index])),
+              (ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[rhs_index])));
+    EXPECT_NE((ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index])),
+              (ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[different_index])));
 
     auto lhs = ygg::SegmentedVector<int, 2>();
     auto rhs = ygg::SegmentedVector<int, 2>();

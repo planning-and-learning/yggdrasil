@@ -289,8 +289,8 @@ TEST(YggdrasilTests, CommonRawVectorComparatorOrdersViews)
     const auto lhs = pool[lhs_index];
     const auto rhs = pool[rhs_index];
 
-    EXPECT_TRUE((ygg::Less<ygg::RawVectorView<uint8_t, int>> {}(lhs, rhs)));
-    EXPECT_FALSE((ygg::Less<ygg::RawVectorView<uint8_t, int>> {}(rhs, lhs)));
+    EXPECT_TRUE((ygg::Less<ygg::RawVectorView<const uint8_t, const int>> {}(lhs, rhs)));
+    EXPECT_FALSE((ygg::Less<ygg::RawVectorView<const uint8_t, const int>> {}(rhs, lhs)));
 }
 
 TEST(YggdrasilTests, CommonSegmentedVectorComparatorOrdersValues)

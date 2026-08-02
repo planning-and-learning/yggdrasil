@@ -304,8 +304,8 @@ TEST(YggdrasilTests, CommonRawAndSegmentedVectorEqualToAdaptersCompareValues)
     const auto rhs_index = pool.insert(std::vector<int> { 1, 2 });
     const auto different_index = pool.insert(std::vector<int> { 1, 3 });
 
-    EXPECT_TRUE((ygg::EqualTo<ygg::RawVectorView<uint8_t, int>> {}(pool[lhs_index], pool[rhs_index])));
-    EXPECT_FALSE((ygg::EqualTo<ygg::RawVectorView<uint8_t, int>> {}(pool[lhs_index], pool[different_index])));
+    EXPECT_TRUE((ygg::EqualTo<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index], pool[rhs_index])));
+    EXPECT_FALSE((ygg::EqualTo<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index], pool[different_index])));
 
     auto lhs = ygg::SegmentedVector<int, 2>();
     auto rhs = ygg::SegmentedVector<int, 2>();

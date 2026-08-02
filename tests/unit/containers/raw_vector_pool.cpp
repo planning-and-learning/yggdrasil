@@ -29,6 +29,14 @@
 namespace ygg::tests
 {
 
+using DefaultRawVectorPool = RawVectorPool<uint8_t, int, 32>;
+using ConcurrentRawVectorPool = RawVectorPool<uint8_t, int, 32, true>;
+
+static_assert(!DefaultRawVectorPool::thread_safe);
+static_assert(ConcurrentRawVectorPool::thread_safe);
+static_assert(std::same_as<decltype(std::declval<DefaultRawVectorPool&>()[0]), RawVectorView<const uint8_t, const int>>);
+static_assert(std::same_as<decltype(std::declval<ConcurrentRawVectorPool&>()[0]), RawVectorView<const uint8_t, const int>>);
+
 TEST(YggdrasilTests, CommonRawVectorPoolRejectsInvalidInsertArguments)
 {
     auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
@@ -68,8 +76,7 @@ TEST(YggdrasilTests, CommonRawVectorViewReportsWhetherItReferencesStorage)
     const auto const_view = std::as_const(pool)[index];
     using View = decltype(view);
     using ConstView = decltype(const_view);
-    static_assert(std::convertible_to<View, ConstView>);
-    const auto converted_view = ConstView(view);
+    static_assert(std::same_as<View, ConstView>);
 
     EXPECT_TRUE(view.valid());
     EXPECT_TRUE(view);
@@ -77,7 +84,7 @@ TEST(YggdrasilTests, CommonRawVectorViewReportsWhetherItReferencesStorage)
     EXPECT_TRUE(const_view.valid());
     EXPECT_TRUE(const_view);
     EXPECT_NE(const_view.raw_data(), nullptr);
-    EXPECT_EQ(converted_view.raw_data(), view.raw_data());
+    EXPECT_EQ(const_view.raw_data(), view.raw_data());
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolStoresVariableLengthVectors)
@@ -144,29 +151,12 @@ TEST(YggdrasilTests, CommonRawVectorPoolAtChecksBounds)
     const auto index = pool.insert(std::vector<int> { 1, 2 });
     const auto& const_pool = pool;
 
-    pool.at(index).at(1) = 5;
-
-    EXPECT_EQ(pool.at(index).at(1), 5);
-    EXPECT_EQ(const_pool.at(index).at(1), 5);
+    EXPECT_EQ(pool.at(index).at(1), 2);
+    EXPECT_EQ(const_pool.at(index).at(1), 2);
     EXPECT_THROW(pool.at(1), std::out_of_range);
     EXPECT_THROW(const_pool.at(1), std::out_of_range);
     EXPECT_THROW(pool.at(index).at(2), std::out_of_range);
     EXPECT_THROW(const_pool.at(index).at(2), std::out_of_range);
-}
-
-TEST(YggdrasilTests, CommonRawVectorPoolMutableViewsWriteThroughToStoredValues)
-{
-    auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
-    const auto value = std::array<int, 3> { 1, 2, 3 };
-
-    const auto index = pool.insert(value);
-    auto view = pool[index];
-    view.front() = 10;
-    view[1] = 20;
-    view.back() = 30;
-
-    const auto stored = std::as_const(pool)[index];
-    EXPECT_EQ(std::vector<int>(stored.begin(), stored.end()), (std::vector<int> { 10, 20, 30 }));
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolClearKeepsCapacityReusable)

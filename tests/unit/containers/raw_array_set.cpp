@@ -15,14 +15,30 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <array>
+#include <concepts>
 #include <gtest/gtest.h>
+#include <span>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 #include <vector>
 #include <yggdrasil/containers/raw_array_set.hpp>
 
 namespace ygg::tests
 {
+
+using DefaultRawArraySet = RawArraySet<int, 2>;
+using ConcurrentRawArraySet = RawArraySet<int, 2, true>;
+
+static_assert(!DefaultRawArraySet::thread_safe);
+static_assert(ConcurrentRawArraySet::thread_safe);
+static_assert(std::same_as<decltype(std::declval<DefaultRawArraySet&>()[0]), std::span<const int>>);
+static_assert(std::same_as<decltype(std::declval<ConcurrentRawArraySet&>()[0]), std::span<const int>>);
+static_assert(!std::is_copy_constructible_v<DefaultRawArraySet>);
+static_assert(std::is_move_constructible_v<ConcurrentRawArraySet>);
+static_assert(std::is_move_assignable_v<ConcurrentRawArraySet>);
 
 struct RawArraySetCountingElement
 {
@@ -89,12 +105,12 @@ TEST(YggdrasilTests, CommonRawArraySetStoresFixedLengthArrays)
     EXPECT_EQ(set.find(third), 2);
     EXPECT_EQ(set.find(std::array<int, 3> { 9, 9, 9 }), std::nullopt);
 
-    EXPECT_EQ(std::vector<int>(set[0], set[0] + set.array_size()), first);
-    EXPECT_EQ(std::vector<int>(set.front(), set.front() + set.array_size()), first);
-    EXPECT_EQ(std::vector<int>(set.back(), set.back() + set.array_size()), std::vector<int>(third.begin(), third.end()));
-    EXPECT_EQ(std::vector<int>(set[1], set[1] + set.array_size()), second);
-    EXPECT_EQ(std::vector<int>(set.at(1), set.at(1) + set.array_size()), second);
-    EXPECT_EQ(std::vector<int>(set[2], set[2] + set.array_size()), std::vector<int>(third.begin(), third.end()));
+    EXPECT_TRUE(std::ranges::equal(set[0], first));
+    EXPECT_TRUE(std::ranges::equal(set.front(), first));
+    EXPECT_TRUE(std::ranges::equal(set.back(), third));
+    EXPECT_TRUE(std::ranges::equal(set[1], second));
+    EXPECT_TRUE(std::ranges::equal(set.at(1), second));
+    EXPECT_TRUE(std::ranges::equal(set[2], third));
     EXPECT_THROW(set.at(3), std::out_of_range);
 }
 
@@ -124,9 +140,10 @@ TEST(YggdrasilTests, CommonRawArraySetStoresSingleZeroLengthArray)
     EXPECT_FALSE(set.empty());
     EXPECT_TRUE(set.contains(value));
     EXPECT_EQ(set.find(value), 0);
-    EXPECT_EQ(set[0], nullptr);
-    EXPECT_EQ(set.front(), nullptr);
-    EXPECT_EQ(set.back(), nullptr);
+    EXPECT_TRUE(set[0].empty());
+    EXPECT_EQ(set[0].data(), nullptr);
+    EXPECT_TRUE(set.front().empty());
+    EXPECT_TRUE(set.back().empty());
 }
 
 TEST(YggdrasilTests, CommonRawArraySetClearKeepsContainerReusable)
@@ -156,6 +173,21 @@ TEST(YggdrasilTests, CommonRawArraySetInsertHashesEachElementOnce)
     RawArraySetCountingElement::hash_calls = 0;
     EXPECT_EQ(set.insert(value), 0);
     EXPECT_EQ(RawArraySetCountingElement::hash_calls, value.size());
+}
+
+TEST(YggdrasilTests, CommonRawArraySetMoveKeepsHashFunctorsBoundToStorage)
+{
+    const auto value = std::array<int, 2> { 1, 2 };
+    auto source = ygg::RawArraySet<int, 2>(2);
+    EXPECT_EQ(source.insert(value), 0);
+
+    auto moved = std::move(source);
+    EXPECT_TRUE(moved.contains(value));
+
+    auto assigned = ygg::RawArraySet<int, 2>(2);
+    assigned = std::move(moved);
+    EXPECT_EQ(assigned.find(value), 0);
+    EXPECT_TRUE(std::ranges::equal(assigned[0], value));
 }
 
 }  // namespace ygg::tests

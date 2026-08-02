@@ -16,13 +16,27 @@
  */
 
 #include <array>
+#include <concepts>
 #include <gtest/gtest.h>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 #include <vector>
 #include <yggdrasil/containers/raw_vector_set.hpp>
 
 namespace ygg::tests
 {
+
+using DefaultRawVectorSet = RawVectorSet<uint8_t, int, 32>;
+using ConcurrentRawVectorSet = RawVectorSet<uint8_t, int, 32, true>;
+
+static_assert(!DefaultRawVectorSet::thread_safe);
+static_assert(ConcurrentRawVectorSet::thread_safe);
+static_assert(std::same_as<decltype(std::declval<DefaultRawVectorSet&>()[0]), RawVectorView<const uint8_t, const int>>);
+static_assert(std::same_as<decltype(std::declval<ConcurrentRawVectorSet&>()[0]), RawVectorView<const uint8_t, const int>>);
+static_assert(!std::is_copy_constructible_v<DefaultRawVectorSet>);
+static_assert(std::is_move_constructible_v<ConcurrentRawVectorSet>);
+static_assert(std::is_move_assignable_v<ConcurrentRawVectorSet>);
 
 struct RawVectorSetCountingElement
 {
@@ -157,6 +171,21 @@ TEST(YggdrasilTests, CommonRawVectorSetInsertHashesEachElementOnce)
     RawVectorSetCountingElement::hash_calls = 0;
     EXPECT_EQ(set.insert(value), 0);
     EXPECT_EQ(RawVectorSetCountingElement::hash_calls, value.size());
+}
+
+TEST(YggdrasilTests, CommonRawVectorSetMoveKeepsHashFunctorsBoundToStorage)
+{
+    const auto value = std::array<int, 2> { 1, 2 };
+    auto source = ygg::RawVectorSet<uint8_t, int, 32>();
+    EXPECT_EQ(source.insert(value), 0);
+
+    auto moved = std::move(source);
+    EXPECT_TRUE(moved.contains(value));
+
+    auto assigned = ygg::RawVectorSet<uint8_t, int, 32>();
+    assigned = std::move(moved);
+    EXPECT_EQ(assigned.find(value), 0);
+    EXPECT_EQ(std::vector<int>(assigned[0].begin(), assigned[0].end()), std::vector<int>(value.begin(), value.end()));
 }
 
 }  // namespace ygg::tests
