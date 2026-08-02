@@ -49,6 +49,9 @@ namespace ygg::detail
  * to either assumption require rerunning profiling/formalism/repository.cpp.
  * GTL treats unknown mutexes as exclusive-only, hence the reader-lock adapter
  * below. ThreadSafe=false still uses flat_hash_set without synchronization.
+ * Indexed symbol insertion holds one hash shard while the storage append
+ * transaction reserves the index, constructs the indexed value, and publishes
+ * it. This keeps the embedded symbol index correct without a repository lock.
  * ponytail: Relation pool appends remain serialized to publish contiguous
  * stable indices; add range reservation only if profiling makes that lock
  * dominant.

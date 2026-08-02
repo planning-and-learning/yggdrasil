@@ -28,7 +28,6 @@
 #include <yggdrasil/buffer/declarations.hpp>
 #include <yggdrasil/buffer/indexed_hash_set.hpp>
 #include <yggdrasil/buffer/segmented_buffer.hpp>
-#include <yggdrasil/containers/detail/threading.hpp>
 #include <yggdrasil/containers/indexed_hash_set.hpp>
 #include <yggdrasil/containers/tuple.hpp>
 #include <yggdrasil/core/types.hpp>
@@ -81,7 +80,6 @@ private:
 
     const BasicSymbolRepository* m_parent;
     Slot<T> m_slot;
-    [[no_unique_address]] ::ygg::detail::Mutex<ThreadSafe> m_write_mutex;
 
     void clear_slot() noexcept
     {
@@ -123,16 +121,17 @@ public:
     /// Completes a hierarchy-wide miss by rechecking this layer before publishing storage.
     std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
     {
-        return ::ygg::detail::with_lock<ThreadSafe>(m_write_mutex,
-                                                    [&]() -> std::pair<Index<T>, bool>
-                                                    {
-                                                        auto& container = m_slot.container;
-                                                        builder.index.value = m_slot.parent_size + container.size();
-
-                                                        const auto [index, created] = container.complete_miss_with_hash(h, builder);
-                                                        builder.index.value = m_slot.parent_size + ygg::uint_t(index);
-                                                        return { builder.index, created };
-                                                    });
+        auto& container = m_slot.container;
+        const auto [index, created] = container.complete_miss_with_hash(h,
+                                                                        builder,
+                                                                        [&](Index<T> local_index) -> const Data<T>&
+                                                                        {
+                                                                            builder.index.value = m_slot.parent_size + ygg::uint_t(local_index);
+                                                                            assert(h == container.hash(builder) && "Symbol index must not affect identity.");
+                                                                            return builder;
+                                                                        });
+        builder.index.value = m_slot.parent_size + ygg::uint_t(index);
+        return { builder.index, created };
     }
 
     const Data<T>& at_local(Index<T> index) const

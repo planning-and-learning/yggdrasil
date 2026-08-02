@@ -20,7 +20,6 @@
 
 #include "yggdrasil/containers/detail/concurrency.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
-#include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/ids/index_mixins.hpp"
@@ -28,7 +27,6 @@
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <cassert>
-#include <concepts>
 #include <cstddef>
 #include <gtl/phmap.hpp>
 #include <limits>
@@ -37,15 +35,15 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace ygg
 {
 
 /// ThreadSafe permits concurrent lookup, insertion, size queries, and reads of
 /// published indices. Hash-table locking is limited to the target shard and
-/// the storage append lock covers only index allocation and publication.
-/// Clear, memory inspection, move, and destruction require quiescence.
+/// the storage append lock covers index allocation, construction, and
+/// publication. Clear, memory inspection, move, and destruction require
+/// quiescence.
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
@@ -53,8 +51,6 @@ template<typename Tag,
          bool ThreadSafe = false>
 class IndexedHashSet
 {
-    static_assert(bit::is_power_of_two(FirstSegmentSize));
-
 private:
     class IndexableHash;
     class IndexableEqualTo;
@@ -62,9 +58,17 @@ private:
     using VectorType = SegmentedVector<Data<Tag>, FirstSegmentSize, ThreadSafe>;
     using SetType = detail::HashSetType<Index<Tag>, IndexableHash, IndexableEqualTo, ThreadSafe>;
 
+    template<typename Factory>
+    Index<Tag> append_new_with_index(Factory&& factory)
+    {
+        return Index<Tag>(static_cast<uint_t>(m_storage->emplace_back_with_index(
+            [&](size_t index) -> decltype(auto) { return std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index))); },
+            std::numeric_limits<uint_t>::max())));
+    }
+
     Index<Tag> append_new(const Data<Tag>& element)
     {
-        return Index<Tag>(static_cast<uint_t>(m_storage->push_back_bounded(element, std::numeric_limits<uint_t>::max())));
+        return append_new_with_index([&](Index<Tag>) -> const Data<Tag>& { return element; });
     }
 
 public:
@@ -103,7 +107,7 @@ public:
 
     std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
         return detail::find_or_lazy_insert_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new(element); });
@@ -112,10 +116,21 @@ public:
     /// Rechecks a caller-observed miss and returns the canonical stored index.
     std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element)
     {
-        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
         return detail::complete_miss_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new(element); });
+    }
+
+    /// Runs the factory inside the insertion transaction with the reserved local index.
+    /// The result must preserve the key's identity, and the factory must not access this set.
+    template<typename Factory>
+    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element, Factory&& factory)
+    {
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
+
+        return detail::complete_miss_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new_with_index(std::forward<Factory>(factory)); });
     }
 
     Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
@@ -128,9 +143,9 @@ public:
 
     std::pair<Index<Tag>, bool> insert(const Data<Tag>& element) { return insert_with_hash(IndexedHashSet::hash(element), element); }
 
-    const Data<Tag>& operator[](Index<Tag> idx) const noexcept { return (*m_storage)[uint_t(idx)]; }
+    const Data<Tag>& operator[](Index<Tag> index) const noexcept { return (*m_storage)[uint_t(index)]; }
 
-    const Data<Tag>& at(Index<Tag> idx) const { return m_storage->at(uint_t(idx)); }
+    const Data<Tag>& at(Index<Tag> index) const { return m_storage->at(uint_t(index)); }
 
     const Data<Tag>& front() const { return m_storage->front(); }
 
@@ -144,7 +159,7 @@ public:
         return bytes;
     }
 
-    std::size_t size() const noexcept { return m_storage->size(); }
+    size_t size() const noexcept { return m_storage->size(); }
 
     bool empty() const noexcept { return m_storage->empty(); }
 
@@ -161,8 +176,11 @@ private:
         IndexableHash() noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(nullptr) {}
         explicit IndexableHash(const VectorType& storage) noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(&storage) {}
 
-        size_t operator()(Index<Tag> el) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash((*m_storage)[uint_t(el)]); }
-        size_t operator()(const Data<Tag>& el) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(el); }
+        size_t operator()(Index<Tag> index) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
+        {
+            return m_hash((*m_storage)[uint_t(index)]);
+        }
+        size_t operator()(const Data<Tag>& element) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(element); }
     };
 
     class IndexableEqualTo

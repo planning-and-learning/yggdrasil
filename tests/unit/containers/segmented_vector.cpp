@@ -141,4 +141,28 @@ TEST(CommonSegmentedVectorTest, BoundedAppendChecksTheIndexBeforePublishing)
     EXPECT_EQ(vector.size(), 1);
     EXPECT_EQ(vector.front(), 1);
 }
+
+TEST(CommonSegmentedVectorTest, IndexAwareAppendUsesReservedIndexAndPublishesLast)
+{
+    auto vector = ygg::SegmentedVector<int, 2, true> {};
+
+    EXPECT_EQ(vector.emplace_back_with_index([](size_t index) { return static_cast<int>(index + 7); }, 1), 0);
+    EXPECT_EQ(vector.front(), 7);
+    EXPECT_THROW(vector.emplace_back_with_index([](size_t) -> int { throw std::runtime_error("factory failed"); }, 1), std::runtime_error);
+    EXPECT_EQ(vector.size(), 1);
+    EXPECT_EQ(vector.emplace_back_with_index([](size_t index) { return static_cast<int>(index + 7); }, 1), 1);
+    EXPECT_EQ(vector.back(), 8);
+
+    auto factory_called = false;
+    EXPECT_THROW(vector.emplace_back_with_index(
+                     [&](size_t)
+                     {
+                         factory_called = true;
+                         return 9;
+                     },
+                     1),
+                 std::length_error);
+    EXPECT_FALSE(factory_called);
+    EXPECT_EQ(vector.size(), 2);
+}
 }  // namespace ygg::tests

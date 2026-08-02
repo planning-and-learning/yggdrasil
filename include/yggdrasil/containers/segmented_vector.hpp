@@ -400,6 +400,22 @@ public:
         return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_bounded_unlocked(element, max_index); });
     }
 
+    /// Checks the bound, then runs the factory inside the append transaction with the reserved index and publishes.
+    /// ThreadSafe holds the writer lock; the factory must not access this vector.
+    template<typename Factory>
+    size_t emplace_back_with_index(Factory&& factory, size_t max_index)
+    {
+        return detail::with_lock<ThreadSafe>(m_writer_mutex,
+                                             [&]
+                                             {
+                                                 const auto index = detail::load_size<ThreadSafe>(m_size);
+                                                 if (index == std::numeric_limits<size_t>::max() || index > max_index)
+                                                     throw std::length_error("SegmentedVector: index is too large.");
+                                                 emplace_back_at_unlocked(index, std::forward<Factory>(factory)(index));
+                                                 return index;
+                                             });
+    }
+
     void pop_back()
     {
         detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { pop_back_unlocked(); });

@@ -33,8 +33,8 @@
 #include <cassert>
 #include <cista/serialization.h>
 #include <cstddef>
-#include <functional>
 #include <gtl/phmap.hpp>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -46,7 +46,7 @@ namespace ygg::buffer
 {
 /// ThreadSafe permits concurrent lookup, insertion, size queries, and reads of
 /// published indices. Hash-table locking is limited to the target shard and
-/// the append lock covers only index allocation, serialization, and storage
+/// the append lock covers index allocation, serialization, and storage
 /// publication. Clear, memory inspection, move, and destruction require
 /// quiescence. Each ThreadSafe instance requires exclusive use of its supplied
 /// serialization buffer and arena.
@@ -65,25 +65,30 @@ private:
     using SetType = ygg::detail::HashSetType<Index<Tag>, IndexableHash, IndexableEqualTo, ThreadSafe>;
 
     template<::cista::mode Mode>
-    Index<Tag> append_new_unlocked(const Data<Tag>& element)
+    const Data<Tag>* serialize(const Data<Tag>& element)
+    {
+        m_buf->reset();
+        ::cista::serialize<Mode>(*m_buf, element);
+        auto begin = m_arena->write(m_buf->base(), m_buf->size(), alignof(Data<Tag>));
+        return ::cista::deserialize<const Data<Tag>, Mode>(begin, begin + m_buf->size());
+    }
+
+    template<::cista::mode Mode, typename Factory>
+    Index<Tag> append_new_with_index(Factory&& factory)
     {
         if (!m_buf || !m_arena)
             throw std::logic_error("Buffer IndexedHashSet requires a buffer and "
                                    "arena before insertion.");
 
-        const auto index = Index<Tag>(to_uint_t(m_storage->size()));
-        m_buf->reset();
-        ::cista::serialize<Mode>(*m_buf, element);
-        auto begin = m_arena->write(m_buf->base(), m_buf->size(), alignof(Data<Tag>));
-        const auto serialized_element = ::cista::deserialize<const Data<Tag>, Mode>(begin, begin + m_buf->size());
-        m_storage->push_back(serialized_element);
-        return index;
+        return Index<Tag>(static_cast<uint_t>(m_storage->emplace_back_with_index(
+            [&](size_t index) { return serialize<Mode>(std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index)))); },
+            std::numeric_limits<uint_t>::max())));
     }
 
     template<::cista::mode Mode>
     Index<Tag> append_new(const Data<Tag>& element)
     {
-        return ygg::detail::with_lock<ThreadSafe>(m_append_mutex, [&] { return append_new_unlocked<Mode>(element); });
+        return append_new_with_index<Mode>([&](Index<Tag>) -> const Data<Tag>& { return element; });
     }
 
 public:
@@ -121,7 +126,7 @@ public:
 
     std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const
     {
-        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
         assert(h == m_set.hash(element));
 
         return ygg::detail::find_value_with_hash<ThreadSafe>(m_set, element, h);
@@ -152,6 +157,20 @@ public:
         return ygg::detail::complete_miss_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new<Mode>(element); });
     }
 
+    /// Runs the factory inside the insertion transaction with the reserved local index.
+    /// The result must preserve the key's identity, and the factory must not access this set.
+    template<::cista::mode Mode = CISTA_MODE, typename Factory>
+    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element, Factory&& factory)
+    {
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
+
+        return ygg::detail::complete_miss_value_with_hash<ThreadSafe>(m_set,
+                                                                      element,
+                                                                      h,
+                                                                      [&] { return append_new_with_index<Mode>(std::forward<Factory>(factory)); });
+    }
+
     template<::cista::mode Mode = CISTA_MODE>
     Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
     {
@@ -167,32 +186,13 @@ public:
         return insert_with_hash<Mode>(IndexedHashSet::hash(element), element);
     }
 
-    const Data<Tag>& operator[](Index<Tag> index) const noexcept
-    {
-        assert(index.get_value() < m_storage->size());
-        return *(*m_storage)[index.get_value()];
-    }
+    const Data<Tag>& operator[](Index<Tag> index) const noexcept { return *(*m_storage)[uint_t(index)]; }
 
-    const Data<Tag>& at(Index<Tag> index) const
-    {
-        if (index.get_value() >= m_storage->size())
-            throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
-        return (*this)[index];
-    }
+    const Data<Tag>& at(Index<Tag> index) const { return *m_storage->at(uint_t(index)); }
 
-    const Data<Tag>& front() const
-    {
-        if (m_storage->empty())
-            throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
-        return *m_storage->front();
-    }
+    const Data<Tag>& front() const { return *m_storage->front(); }
 
-    const Data<Tag>& back() const
-    {
-        if (m_storage->empty())
-            throw std::out_of_range("buffer::IndexedHashSet: index out of range.");
-        return *m_storage->back();
-    }
+    const Data<Tag>& back() const { return *m_storage->back(); }
 
     size_t memory_usage() const noexcept
     {
@@ -219,8 +219,11 @@ private:
         IndexableHash() noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(nullptr) {}
         explicit IndexableHash(const VectorType& storage) noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(&storage) {}
 
-        size_t operator()(Index<Tag> el) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(*(*m_storage)[uint_t(el)]); }
-        size_t operator()(const Data<Tag>& el) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(el); }
+        size_t operator()(Index<Tag> index) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
+        {
+            return m_hash(*(*m_storage)[uint_t(index)]);
+        }
+        size_t operator()(const Data<Tag>& element) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(element); }
     };
 
     class IndexableEqualTo
@@ -255,7 +258,6 @@ private:
 
     std::unique_ptr<VectorType> m_storage;
     SetType m_set;
-    [[no_unique_address]] ygg::detail::Mutex<ThreadSafe> m_append_mutex;
 
     ::cista::buf<std::vector<uint8_t>>* m_buf;
     SegmentedBuffer* m_arena;

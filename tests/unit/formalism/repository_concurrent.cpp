@@ -329,7 +329,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         data.value = key;
                         const auto [view, created] = repository.get_or_create(data);
                         trivial_created.fetch_add(created, std::memory_order_relaxed);
-                        if (view.get_data().value != key)
+                        if (view.get_data().value != key || view.get_data().index != view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -363,7 +363,8 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         data.values.push_back(Index<ConcurrentElement>(key));
                         const auto [view, created] = repository.get_or_create(data);
                         serialized_created.fetch_add(created, std::memory_order_relaxed);
-                        if (view.get_data().values.size() != 1 || view.get_data().values.front().get_value() != key)
+                        if (view.get_data().values.size() != 1 || view.get_data().values.front().get_value() != key
+                            || view.get_data().index != view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -490,7 +491,8 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                         auto local = Data<ConcurrentElement> {};
                         local.value = 1000 + static_cast<uint_t>(thread) * rows_per_thread + row;
                         const auto [local_view, created] = child.get_or_create(local);
-                        if (!created || &local_view.get_context() != &child || local_view.get_data().value != local.value)
+                        if (!created || &local_view.get_context() != &child || local_view.get_data().value != local.value
+                            || local_view.get_data().index != local_view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
