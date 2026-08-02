@@ -18,13 +18,13 @@
 #ifndef YGG_CONTAINERS_BIT_PACKED_ARRAY_POOL_HPP_
 #define YGG_CONTAINERS_BIT_PACKED_ARRAY_POOL_HPP_
 
+#include "yggdrasil/containers/detail/bit_packed_layout.hpp"
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/atomic_bit.hpp"
 
 #include <atomic>
-#include <bit>
 #include <cassert>
 #include <compare>
 #include <concepts>
@@ -70,10 +70,11 @@ public:
      * Compile-time properties
      */
 
-    static constexpr std::size_t digits = std::numeric_limits<block_type>::digits;
-    static constexpr size_t block_shift = std::countr_zero(digits);
+    static constexpr size_t digits = detail::BitPackedLayout<block_type>::digits;
 
 private:
+    using PackedLayout = detail::BitPackedLayout<block_type>;
+
     template<std::unsigned_integral OtherBlock, bit::BlockCoder<std::remove_const_t<OtherBlock>> OtherCoder, bool OtherThreadSafe>
     friend class BasicBitPackedArrayView;
 
@@ -207,20 +208,9 @@ public:
             if (n == 0)
                 return;
 
-            const auto quotient = n / static_cast<difference_type>(digits);
-            const auto remainder = n % static_cast<difference_type>(digits);
-            auto block_delta = quotient * m_width;
-            auto offset = static_cast<difference_type>(m_offset) + remainder * m_width;
-            block_delta += offset / static_cast<difference_type>(digits);
-            offset %= static_cast<difference_type>(digits);
-            if (offset < 0)
-            {
-                --block_delta;
-                offset += digits;
-            }
-
-            m_word += static_cast<std::ptrdiff_t>(block_delta);
-            m_offset = static_cast<uint8_t>(offset);
+            const auto difference = PackedLayout::advance(m_offset, n, m_width);
+            m_word += difference.block_offset;
+            m_offset = difference.bit_offset;
         }
 
     public:
@@ -237,9 +227,9 @@ public:
             if (pos == 0 || m_word == nullptr)
                 return;
 
-            const auto bit_offset = static_cast<size_t>(m_offset) + pos * m_width;
-            m_word += bit_offset >> block_shift;
-            m_offset = static_cast<uint8_t>(bit_offset & (digits - 1));
+            const auto position = PackedLayout::locate(pos, m_width, m_offset);
+            m_word += position.block_index;
+            m_offset = position.bit_offset;
         }
 
         reference operator*() const
@@ -257,9 +247,7 @@ public:
 
         BasicIterator& operator++() noexcept
         {
-            const auto next_offset = static_cast<size_t>(m_offset) + m_width;
-            m_word += next_offset >> block_shift;
-            m_offset = static_cast<uint8_t>(next_offset & (digits - 1));
+            advance(1);
             ++m_pos;
             return *this;
         }
@@ -273,13 +261,7 @@ public:
 
         BasicIterator& operator--() noexcept
         {
-            if (m_offset >= m_width)
-                m_offset -= m_width;
-            else
-            {
-                --m_word;
-                m_offset = static_cast<uint8_t>(digits - (m_width - m_offset));
-            }
+            advance(-1);
             --m_pos;
             return *this;
         }
@@ -350,25 +332,23 @@ public:
     {
         assert(pos < m_length);
 
-        const size_t bit_index = static_cast<size_t>(m_offset) + pos * m_width;
-        auto* word = m_data + (bit_index >> block_shift);
-        const uint8_t offset = static_cast<uint8_t>(bit_index & (digits - 1));
+        const auto position = PackedLayout::locate(pos, m_width, m_offset);
+        auto* word = m_data + position.block_index;
 
-        return reference_type(word, offset, m_width);
+        return reference_type(word, position.bit_offset, m_width);
     }
 
     value_type operator[](size_t pos) const noexcept
     {
         assert(pos < m_length);
 
-        const size_t bit_index = static_cast<size_t>(m_offset) + pos * m_width;
-        const auto* word = m_data + (bit_index >> block_shift);
-        const uint8_t offset = static_cast<uint8_t>(bit_index & (digits - 1));
+        const auto position = PackedLayout::locate(pos, m_width, m_offset);
+        const auto* word = m_data + position.block_index;
 
         if constexpr (ThreadSafe)
-            return Coder::decode(bit::atomic_read_int<block_type>(word, offset, m_width));
+            return Coder::decode(bit::atomic_read_int<block_type>(word, position.bit_offset, m_width));
         else
-            return Coder::decode(bit::read_int<block_type>(word, offset, m_width));
+            return Coder::decode(bit::read_int<block_type>(word, position.bit_offset, m_width));
     }
 
     reference_type at(size_t pos)
@@ -465,14 +445,10 @@ public:
     using reference_type = typename ArrayView::reference_type;
 
 private:
-    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize>;
+    using PackedLayout = detail::BitPackedLayout<block_type>;
+    using SegmentLayout = detail::GeometricSegmentLayout<FirstSegmentSize>;
     using Segment = std::vector<block_type>;
     using Segments = std::conditional_t<ThreadSafe, SegmentedVector<Segment, 1, true>, std::vector<Segment>>;
-
-    static constexpr std::size_t digits = std::numeric_limits<block_type>::digits;
-    static constexpr size_t block_shift = std::countr_zero(digits);
-
-    static constexpr size_t blocks_for_bits(size_t bits) noexcept { return bit::ceil_div(bits, digits); }
 
     void reserve(size_t size)
     {
@@ -480,7 +456,7 @@ private:
         if (size == 0 || size <= capacity)
             return;
 
-        const size_t last_segment = Layout::segment_index(size - 1);
+        const size_t last_segment = SegmentLayout::segment_index(size - 1);
         const size_t first_new_segment = m_segments.size();
 
         if constexpr (!ThreadSafe)
@@ -488,15 +464,15 @@ private:
 
         for (size_t seg = first_new_segment; seg <= last_segment; ++seg)
         {
-            if (seg >= Layout::max_segments)
+            if (seg >= SegmentLayout::max_segments)
                 throw std::length_error("BitPackedArrayPool: segment is too large.");
-            const size_t arrays_in_segment = Layout::segment_capacity(seg);
+            const size_t arrays_in_segment = SegmentLayout::segment_capacity(seg);
 
             if (arrays_in_segment > std::numeric_limits<size_t>::max() - capacity
                 || (m_bits_per_array > 0 && arrays_in_segment > std::numeric_limits<size_t>::max() / m_bits_per_array))
                 throw std::length_error("BitPackedArrayPool: segment is too large.");
             const size_t bits_in_segment = arrays_in_segment * m_bits_per_array;
-            const size_t blocks_in_segment = blocks_for_bits(bits_in_segment);
+            const size_t blocks_in_segment = PackedLayout::block_count(bits_in_segment);
 
             m_segments.emplace_back(blocks_in_segment, Block { 0 });
             capacity += arrays_in_segment;
@@ -518,30 +494,28 @@ private:
 
     ArrayView get_view(size_t index) noexcept
     {
-        const size_t seg_idx = Layout::segment_index(index);
-        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
-        const size_t start_bit = seg_pos * m_bits_per_array;
+        const size_t seg_idx = SegmentLayout::segment_index(index);
+        const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
+        const auto position = PackedLayout::locate(seg_pos * m_bits_per_array);
 
         auto* data = m_segments[seg_idx].data();
-        if (const auto block_offset = start_bit >> block_shift; block_offset > 0)
-            data += block_offset;
-        const uint8_t offset = static_cast<uint8_t>(start_bit & (digits - 1));
+        if (position.block_index > 0)
+            data += position.block_index;
 
-        return ArrayView(data, m_length, m_width, offset, typename ArrayView::UncheckedTag {});
+        return ArrayView(data, m_length, m_width, position.bit_offset, typename ArrayView::UncheckedTag {});
     }
 
     ConstArrayView get_view(size_t index) const noexcept
     {
-        const size_t seg_idx = Layout::segment_index(index);
-        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
-        const size_t start_bit = seg_pos * m_bits_per_array;
+        const size_t seg_idx = SegmentLayout::segment_index(index);
+        const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
+        const auto position = PackedLayout::locate(seg_pos * m_bits_per_array);
 
         const auto* data = m_segments[seg_idx].data();
-        if (const auto block_offset = start_bit >> block_shift; block_offset > 0)
-            data += block_offset;
-        const uint8_t offset = static_cast<uint8_t>(start_bit & (digits - 1));
+        if (position.block_index > 0)
+            data += position.block_index;
 
-        return ConstArrayView(data, m_length, m_width, offset, typename ConstArrayView::UncheckedTag {});
+        return ConstArrayView(data, m_length, m_width, position.bit_offset, typename ConstArrayView::UncheckedTag {});
     }
 
     size_t push_back_at_unlocked(size_t size, std::span<const value_type> elements)

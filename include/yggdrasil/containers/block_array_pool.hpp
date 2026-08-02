@@ -330,7 +330,7 @@ public:
     using ConstArrayView = BasicBlockArrayView<const Block, Coder>;
 
 private:
-    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize>;
+    using SegmentLayout = detail::GeometricSegmentLayout<FirstSegmentSize>;
     using Segment = std::vector<block_type>;
     using Segments = std::conditional_t<ThreadSafe, SegmentedVector<Segment, 1, true>, std::vector<Segment>>;
 
@@ -340,7 +340,7 @@ private:
         if (size == 0 || size <= capacity)
             return;
 
-        const size_t last_segment = Layout::segment_index(size - 1);
+        const size_t last_segment = SegmentLayout::segment_index(size - 1);
         const size_t first_new_segment = m_segments.size();
 
         if constexpr (!ThreadSafe)
@@ -348,9 +348,9 @@ private:
 
         for (size_t seg = first_new_segment; seg <= last_segment; ++seg)
         {
-            if (seg >= Layout::max_segments)
+            if (seg >= SegmentLayout::max_segments)
                 throw std::length_error("BlockArrayPool: segment is too large.");
-            const size_t arrays_in_segment = Layout::segment_capacity(seg);
+            const size_t arrays_in_segment = SegmentLayout::segment_capacity(seg);
 
             if (arrays_in_segment > std::numeric_limits<size_t>::max() - capacity
                 || (m_length > 0 && arrays_in_segment > std::numeric_limits<size_t>::max() / m_length))
@@ -376,8 +376,8 @@ private:
 
     ArrayView get_view(size_t index) noexcept
     {
-        const size_t seg_idx = Layout::segment_index(index);
-        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
+        const size_t seg_idx = SegmentLayout::segment_index(index);
+        const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
         auto* data = m_segments[seg_idx].data();
         if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
             data += block_offset;
@@ -387,8 +387,8 @@ private:
 
     ConstArrayView get_view(size_t index) const noexcept
     {
-        const size_t seg_idx = Layout::segment_index(index);
-        const size_t seg_pos = Layout::segment_offset(index, seg_idx);
+        const size_t seg_idx = SegmentLayout::segment_index(index);
+        const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
         const auto* data = m_segments[seg_idx].data();
         if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
             data += block_offset;
