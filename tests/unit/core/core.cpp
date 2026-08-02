@@ -28,10 +28,23 @@
 #include <utility>
 #include <vector>
 #include <yggdrasil/core.hpp>
+#include <yggdrasil/core/atomic_bit.hpp>
 #include <yggdrasil/ids/index_mixins.hpp>
 
 namespace ygg::tests
 {
+
+TEST(YggdrasilTests, CommonAtomicIntReferencePreservesAdjacentBits)
+{
+    auto blocks = std::array<uint8_t, 2> { 0b00111111, 0b11110000 };
+    auto reference = ygg::bit::atomic_int_reference<uint8_t>(blocks.data(), 6, 6);
+
+    reference = uint8_t { 0b101011 };
+
+    EXPECT_EQ(static_cast<uint8_t>(reference), uint8_t { 0b101011 });
+    EXPECT_EQ(blocks, (std::array<uint8_t, 2> { 0b11111111, 0b11111010 }));
+    EXPECT_THROW((reference = uint8_t { 0b1000000 }), std::out_of_range);
+}
 
 struct CoreConceptFixture
 {

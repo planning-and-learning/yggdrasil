@@ -37,9 +37,10 @@
 
 namespace ygg
 {
-/// ThreadSafe permits concurrent appends, size queries, and reads of published
-/// elements. Clear, pop_back, iteration, memory inspection, move, destruction,
-/// and mutation of published elements require quiescence or external locking.
+/// ThreadSafe permits concurrent appends, size queries, and reads after
+/// publication was observed through size() or external synchronization. Clear,
+/// pop_back, iteration, memory inspection, move, destruction, and mutation of
+/// published elements require quiescence or external locking.
 template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
 class SegmentedVector
 {

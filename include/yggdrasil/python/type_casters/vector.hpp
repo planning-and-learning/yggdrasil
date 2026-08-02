@@ -67,7 +67,7 @@ struct type_caster<::ygg::View<::cista::basic_vector<Type, Ptr, IndexPointers, T
     }
 };
 
-template<std::unsigned_integral Block, typename Coder, typename C>
+template<std::unsigned_integral Block, ::ygg::bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
 struct type_caster<::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>>
 {
     using ViewT = ::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>;
@@ -89,7 +89,7 @@ struct type_caster<::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>>
     }
 };
 
-template<std::unsigned_integral Block, typename Coder, bool ThreadSafe, typename C>
+template<std::unsigned_integral Block, ::ygg::bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
 struct type_caster<::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
     using ViewT = ::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;

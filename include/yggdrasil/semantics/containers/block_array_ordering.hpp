@@ -27,7 +27,7 @@ namespace ygg
 template<typename T, typename C>
 struct View;
 
-template<typename Block, typename Coder, bool ThreadSafe>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe>
 struct Less<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
@@ -35,7 +35,7 @@ struct Less<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
     bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
-template<typename Block, typename Coder, bool ThreadSafe, typename C>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
 struct Less<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
@@ -43,7 +43,7 @@ struct Less<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
     bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
-template<typename Block, typename Coder>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
 struct Less<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
@@ -51,7 +51,7 @@ struct Less<BasicBlockArrayView<Block, Coder>>
     bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
-template<typename Block, typename Coder, typename C>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
 struct Less<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;

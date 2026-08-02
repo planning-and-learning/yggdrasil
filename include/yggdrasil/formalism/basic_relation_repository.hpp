@@ -61,10 +61,10 @@ struct RelationRepositoryConfig
 
 struct BlockArraySetStorage
 {
-    template<std::unsigned_integral Block, typename Coder, bool ThreadSafe>
+    template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     using container_type = ygg::BlockArraySet<Block, Coder, 16, ThreadSafe>;
 
-    template<std::unsigned_integral Block, typename Coder, bool ThreadSafe>
+    template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t)
     {
         return container_type<Block, Coder, ThreadSafe>(arity);
@@ -73,10 +73,10 @@ struct BlockArraySetStorage
 
 struct BitPackedArraySetStorage
 {
-    template<std::unsigned_integral Block, typename Coder, bool ThreadSafe>
+    template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     using container_type = ygg::BitPackedArraySet<Block, Coder, 16, ThreadSafe>;
 
-    template<std::unsigned_integral Block, typename Coder, bool ThreadSafe>
+    template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t object_index_width)
     {
         return container_type<Block, Coder, ThreadSafe>(arity, object_index_width);

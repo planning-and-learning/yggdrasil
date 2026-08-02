@@ -15,8 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <chrono>
+#include <future>
 #include <gtest/gtest.h>
 #include <stdexcept>
+#include <type_traits>
 #include <yggdrasil/containers/unique_object_pool.hpp>
 
 namespace ygg::tests
@@ -40,6 +43,20 @@ struct ThrowingUniquePoolValue
         value = next_value;
     }
 };
+
+struct BlockingUniquePoolValue
+{
+    void initialize(std::promise<void>& started, const std::shared_future<void>& release)
+    {
+        started.set_value();
+        release.wait();
+    }
+};
+
+static_assert(std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue>>);
+static_assert(std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue>>);
+static_assert(!std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue, true>>);
+static_assert(!std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue, true>>);
 
 template<bool ThreadSafe>
 void expect_unique_pool_recovers_from_failed_initialization()
@@ -164,5 +181,36 @@ TEST(YggdrasilTests, CommonUniqueObjectPoolPtrMoveAndClonePreserveOwnership)
 TEST(YggdrasilTests, CommonUniqueObjectPoolRecoversFromFailedInitialization) { expect_unique_pool_recovers_from_failed_initialization<false>(); }
 
 TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolRecoversFromFailedInitialization) { expect_unique_pool_recovers_from_failed_initialization<true>(); }
+
+TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolInitializesOutsideLock)
+{
+    using namespace std::chrono_literals;
+
+    auto pool = ygg::UniqueObjectPool<BlockingUniquePoolValue, true>();
+    auto started_promise = std::promise<void>();
+    auto started = started_promise.get_future();
+    auto release_promise = std::promise<void>();
+    auto release = release_promise.get_future().share();
+
+    auto initializer = std::async(std::launch::async, [&] { auto value = pool.get_or_allocate(started_promise, release); });
+
+    if (started.wait_for(2s) != std::future_status::ready)
+    {
+        release_promise.set_value();
+        initializer.wait();
+        FAIL() << "initializer did not start";
+    }
+
+    auto checkout = std::async(std::launch::async, [&] { auto value = pool.get_or_allocate(); });
+    const auto checkout_completed = checkout.wait_for(2s) == std::future_status::ready;
+
+    release_promise.set_value();
+    initializer.get();
+    checkout.get();
+
+    EXPECT_TRUE(checkout_completed);
+    EXPECT_EQ(pool.size(), 2);
+    EXPECT_EQ(pool.free_size(), 2);
+}
 
 }  // namespace ygg::tests

@@ -183,7 +183,7 @@ private:
     const Container* m_handle;
 };
 
-template<std::unsigned_integral Block, typename Coder, bool ThreadSafe, typename C>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
 class View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>
 {
 public:
@@ -340,7 +340,7 @@ private:
     Container m_handle;
 };
 
-template<std::unsigned_integral Block, typename Coder, typename C>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
 class View<BasicBlockArrayView<Block, Coder>, C>
 {
 public:

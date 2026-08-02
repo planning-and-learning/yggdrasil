@@ -223,6 +223,23 @@ TEST(YggdrasilTests, CommonBlockArraySetEmptyAccessThrows)
     EXPECT_THROW(set.back(), std::out_of_range);
 }
 
+TEST(YggdrasilTests, CommonBlockArraySetPreservesLookupAcrossMoves)
+{
+    using Set = ygg::BlockArraySet<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>;
+    const auto first = std::array<uint8_t, 2> { 1, 2 };
+    const auto second = std::array<uint8_t, 2> { 3, 4 };
+
+    auto source = Set(2);
+    source.insert(first);
+    auto moved = std::move(source);
+    EXPECT_EQ(moved.find(first), 0);
+
+    auto assigned = Set(2);
+    assigned = std::move(moved);
+    EXPECT_EQ(assigned.find(first), 0);
+    EXPECT_TRUE(assigned.insert(second).second);
+}
+
 TEST(YggdrasilTests, CommonBlockArraySetDeduplicatesZeroLengthArrays)
 {
     auto set = BlockArraySet<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(0);

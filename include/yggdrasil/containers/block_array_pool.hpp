@@ -47,7 +47,7 @@ class BlockArrayPool;
  * BasicBlockArrayView
  */
 
-template<typename Block, typename Coder>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
 class BasicBlockArrayView
 {
 public:
@@ -57,7 +57,7 @@ public:
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
 private:
-    template<typename, typename>
+    template<std::unsigned_integral OtherBlock, bit::BlockCoder<std::remove_const_t<OtherBlock>> OtherCoder>
     friend class BasicBlockArrayView;
 
     template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize, bool ThreadSafe>
@@ -112,7 +112,7 @@ public:
 
     BasicBlockArrayView(Block* data, size_t length) : BasicBlockArrayView(data, checked_length(length), UncheckedTag {}) {}
 
-    template<typename OtherBlock>
+    template<std::unsigned_integral OtherBlock>
         requires(std::is_const_v<Block> && !std::is_const_v<OtherBlock> && std::same_as<std::remove_const_t<OtherBlock>, block_type>)
     BasicBlockArrayView(const BasicBlockArrayView<OtherBlock, Coder>& other) noexcept : m_data(other.m_data), m_length(other.m_length)
     {
@@ -314,9 +314,10 @@ private:
 
 /// Stores fixed-length arrays where each element occupies one full Block.
 /// Values are encoded and decoded via Coder. ThreadSafe permits concurrent
-/// appends, size queries, and reads of published arrays. Clear, pop_back,
-/// iteration, segment or memory inspection, move, destruction, and mutation of
-/// published arrays require quiescence or external locking.
+/// appends, size queries, and reads after publication was observed through
+/// size() or external synchronization. Clear, pop_back, iteration, segment or
+/// memory inspection, move, destruction, and mutation of published arrays
+/// require quiescence or external locking.
 template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
 class BlockArrayPool
 {
@@ -395,9 +396,8 @@ private:
         return ConstArrayView(data, m_length, typename ConstArrayView::UncheckedTag {});
     }
 
-    size_t push_back_unlocked(std::span<const value_type> elements)
+    size_t push_back_at_unlocked(size_t size, std::span<const value_type> elements)
     {
-        const auto size = detail::load_size<ThreadSafe>(m_size);
         if (size == std::numeric_limits<size_t>::max())
             throw std::length_error("BlockArrayPool: size is too large.");
 
@@ -409,11 +409,14 @@ private:
         return size;
     }
 
+    size_t push_back_unlocked(std::span<const value_type> elements) { return push_back_at_unlocked(detail::load_size<ThreadSafe>(m_size), elements); }
+
     size_t push_back_bounded_unlocked(std::span<const value_type> elements, size_t max_index)
     {
-        if (size() > max_index)
+        const auto size = detail::load_size<ThreadSafe>(m_size);
+        if (size > max_index)
             throw std::length_error("BlockArrayPool: index is too large.");
-        return push_back_unlocked(elements);
+        return push_back_at_unlocked(size, elements);
     }
 
     void pop_back_unlocked()
@@ -601,7 +604,7 @@ private:
 
 namespace std::ranges
 {
-template<typename Block, typename Coder>
+template<std::unsigned_integral Block, ::ygg::bit::BlockCoder<std::remove_const_t<Block>> Coder>
 inline constexpr bool enable_borrowed_range<::ygg::BasicBlockArrayView<Block, Coder>> = true;
 }
 

@@ -31,6 +31,9 @@ add_yggdrasil_gtest(containers_associative_containers "containers/associative_co
 add_yggdrasil_gtest(containers_bit_packed_array_pool "containers/bit_packed_array_pool.cpp")
 add_yggdrasil_gtest(containers_bit_packed_array_set "containers/bit_packed_array_set.cpp")
 add_yggdrasil_gtest(containers_block_array_set "containers/block_array_set.cpp")
+add_yggdrasil_gtest(containers_concurrent_publication "containers/concurrent_publication.cpp")
+target_compile_definitions(containers_concurrent_publication PRIVATE NDEBUG)
+target_link_libraries(containers_concurrent_publication PRIVATE Threads::Threads)
 add_yggdrasil_gtest(containers_containers "containers/containers.cpp")
 add_yggdrasil_gtest(containers_dynamic_bitset "containers/dynamic_bitset.cpp")
 add_yggdrasil_gtest(containers_indexed_hash_set "containers/indexed_hash_set.cpp")
@@ -42,6 +45,8 @@ add_yggdrasil_gtest(containers_repository_types "containers/repository_types.cpp
 add_yggdrasil_gtest(containers_segmented_vector "containers/segmented_vector.cpp")
 add_yggdrasil_gtest(containers_shared_object_pool "containers/shared_object_pool.cpp")
 add_yggdrasil_gtest(containers_unique_object_pool "containers/unique_object_pool.cpp")
+target_link_libraries(containers_shared_object_pool PRIVATE Threads::Threads)
+target_link_libraries(containers_unique_object_pool PRIVATE Threads::Threads)
 add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
 
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")

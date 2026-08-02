@@ -21,9 +21,8 @@
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
-#include "yggdrasil/core/bit.hpp"
+#include "yggdrasil/core/atomic_bit.hpp"
 
-#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <cassert>
@@ -42,79 +41,6 @@
 namespace ygg
 {
 
-namespace detail
-{
-
-template<std::unsigned_integral Block>
-Block atomic_load(const Block* block) noexcept
-{
-    return std::atomic_ref<Block>(*const_cast<Block*>(block)).load(std::memory_order_relaxed);
-}
-
-template<std::unsigned_integral Block>
-void atomic_replace_bits(Block* block, Block mask, Block value) noexcept
-{
-    auto reference = std::atomic_ref<Block>(*block);
-    auto current = reference.load(std::memory_order_relaxed);
-    while (!reference.compare_exchange_weak(current, static_cast<Block>((current & ~mask) | (value & mask)), std::memory_order_relaxed)) {}
-}
-
-template<std::unsigned_integral Block>
-Block atomic_read_int(const Block* word, uint8_t offset, uint8_t len) noexcept
-{
-    constexpr auto digits = std::numeric_limits<Block>::digits;
-    const Block first = atomic_load(word) >> offset;
-    if (offset + len > digits)
-        return first | ((atomic_load(word + 1) & bit::lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
-    return first & bit::lo_set<Block>[len];
-}
-
-template<std::unsigned_integral Block>
-void atomic_write_int(Block* word, Block value, uint8_t offset, uint8_t len) noexcept
-{
-    constexpr auto digits = std::numeric_limits<Block>::digits;
-    value &= bit::lo_set<Block>[len];
-
-    const auto first_len = static_cast<uint8_t>(std::min<size_t>(len, digits - offset));
-    const auto first_mask = static_cast<Block>(bit::lo_set<Block>[first_len] << offset);
-    atomic_replace_bits(word, first_mask, static_cast<Block>(value << offset));
-
-    if (first_len < len)
-    {
-        const auto second_len = static_cast<uint8_t>(len - first_len);
-        atomic_replace_bits(word + 1, bit::lo_set<Block>[second_len], static_cast<Block>(value >> first_len));
-    }
-}
-
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder>
-class AtomicIntReference
-{
-public:
-    using value_type = typename Coder::value_type;
-
-    AtomicIntReference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len) {}
-
-    AtomicIntReference& operator=(const value_type& value)
-    {
-        const auto raw = Coder::encode(value);
-        if ((raw & ~bit::lo_set<Block>[m_len]) != 0)
-            throw std::out_of_range("AtomicIntReference: encoded value exceeds bit width");
-        atomic_write_int(m_word, raw, m_offset, m_len);
-        return *this;
-    }
-
-    AtomicIntReference& operator=(const AtomicIntReference& other) { return *this = static_cast<value_type>(other); }
-
-    operator value_type() const { return Coder::decode(atomic_read_int(m_word, m_offset, m_len)); }
-
-private:
-    Block* m_word;
-    uint8_t m_offset;
-    uint8_t m_len;
-};
-
-}  // namespace detail
-
 template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, size_t FirstSegmentSize, bool ThreadSafe>
 class BitPackedArrayPool;
 
@@ -122,13 +48,12 @@ class BitPackedArrayPool;
  * BasicBitPackedArrayView
  */
 
-template<typename Block, typename Coder, bool ThreadSafe = false>
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe = false>
 class BasicBitPackedArrayView
 {
 public:
     using block_type = std::remove_const_t<Block>;
 
-    static_assert(std::unsigned_integral<block_type>);
     static_assert(!ThreadSafe || std::atomic_ref<block_type>::is_always_lock_free, "Concurrent bit-packed access requires lock-free atomic blocks.");
     static_assert(!ThreadSafe || alignof(block_type) >= std::atomic_ref<block_type>::required_alignment,
                   "Concurrent bit-packed access requires atomic_ref-compatible block alignment.");
@@ -138,7 +63,7 @@ public:
      */
 
     using value_type = typename Coder::value_type;
-    using reference_type = std::conditional_t<ThreadSafe, detail::AtomicIntReference<block_type, Coder>, typename bit::int_reference<block_type, Coder>>;
+    using reference_type = std::conditional_t<ThreadSafe, bit::atomic_int_reference<block_type, Coder>, typename bit::int_reference<block_type, Coder>>;
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
     /**
@@ -149,7 +74,7 @@ public:
     static constexpr size_t block_shift = std::countr_zero(digits);
 
 private:
-    template<typename, typename, bool>
+    template<std::unsigned_integral OtherBlock, bit::BlockCoder<std::remove_const_t<OtherBlock>> OtherCoder, bool OtherThreadSafe>
     friend class BasicBitPackedArrayView;
 
     template<std::unsigned_integral OtherBlock, bit::BlockCoder<OtherBlock> OtherCoder, size_t FirstSegmentSize, bool OtherThreadSafe>
@@ -233,7 +158,7 @@ public:
     {
     }
 
-    template<typename OtherBlock>
+    template<std::unsigned_integral OtherBlock>
         requires(std::is_const_v<Block> && !std::is_const_v<OtherBlock> && std::same_as<std::remove_const_t<OtherBlock>, block_type>)
     BasicBitPackedArrayView(const BasicBitPackedArrayView<OtherBlock, Coder, ThreadSafe>& other) noexcept :
         m_data(other.m_data),
@@ -322,7 +247,7 @@ public:
             if constexpr (is_const_iterator)
             {
                 if constexpr (ThreadSafe)
-                    return Coder::decode(detail::atomic_read_int<block_type>(m_word, m_offset, m_width));
+                    return Coder::decode(bit::atomic_read_int<block_type>(m_word, m_offset, m_width));
                 else
                     return Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width));
             }
@@ -441,7 +366,7 @@ public:
         const uint8_t offset = static_cast<uint8_t>(bit_index & (digits - 1));
 
         if constexpr (ThreadSafe)
-            return Coder::decode(detail::atomic_read_int<block_type>(word, offset, m_width));
+            return Coder::decode(bit::atomic_read_int<block_type>(word, offset, m_width));
         else
             return Coder::decode(bit::read_int<block_type>(word, offset, m_width));
     }
@@ -521,11 +446,12 @@ private:
 
 /// Stores fixed-length arrays as bit-packed unsigned integer codes with stable
 /// references. Values are encoded and decoded via Coder. ThreadSafe permits
-/// concurrent appends, size queries, and reads of published arrays. Clear,
-/// pop_back, iteration, segment or memory inspection, move, destruction, and
-/// mutation of published arrays require quiescence or external locking. Atomic
-/// packed access prevents neighboring-array races but does not make a
-/// multi-block logical mutation atomic.
+/// concurrent appends, size queries, and reads after publication was observed
+/// through size() or external synchronization. Clear, pop_back, iteration,
+/// segment or memory inspection, move, destruction, and mutation of published
+/// arrays require quiescence or external locking. Atomic packed access prevents
+/// neighboring-array races but does not make a multi-block logical mutation
+/// atomic.
 template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
 class BitPackedArrayPool
 {
@@ -618,9 +544,8 @@ private:
         return ConstArrayView(data, m_length, m_width, offset, typename ConstArrayView::UncheckedTag {});
     }
 
-    size_t push_back_unlocked(std::span<const value_type> elements)
+    size_t push_back_at_unlocked(size_t size, std::span<const value_type> elements)
     {
-        const auto size = detail::load_size<ThreadSafe>(m_size);
         if (size == std::numeric_limits<size_t>::max())
             throw std::length_error("BitPackedArrayPool: size is too large.");
 
@@ -632,11 +557,14 @@ private:
         return size;
     }
 
+    size_t push_back_unlocked(std::span<const value_type> elements) { return push_back_at_unlocked(detail::load_size<ThreadSafe>(m_size), elements); }
+
     size_t push_back_bounded_unlocked(std::span<const value_type> elements, size_t max_index)
     {
-        if (size() > max_index)
+        const auto size = detail::load_size<ThreadSafe>(m_size);
+        if (size > max_index)
             throw std::length_error("BitPackedArrayPool: index is too large.");
-        return push_back_unlocked(elements);
+        return push_back_at_unlocked(size, elements);
     }
 
     void pop_back_unlocked()
@@ -836,7 +764,7 @@ private:
 
 namespace std::ranges
 {
-template<typename Block, typename Coder, bool ThreadSafe>
+template<std::unsigned_integral Block, ::ygg::bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe>
 inline constexpr bool enable_borrowed_range<::ygg::BasicBitPackedArrayView<Block, Coder, ThreadSafe>> = true;
 }
 

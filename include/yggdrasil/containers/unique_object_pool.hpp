@@ -18,10 +18,12 @@
 #ifndef YGG_CONTAINERS_UNIQUE_OBJECT_POOL_HPP_
 #define YGG_CONTAINERS_UNIQUE_OBJECT_POOL_HPP_
 
+#include "yggdrasil/containers/detail/threading.hpp"
+
 #include <cassert>
-#include <concepts>
 #include <memory>
-#include <mutex>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace ygg
@@ -116,15 +118,15 @@ public:
     explicit operator bool() const noexcept { return m_entry != nullptr; }
 };
 
-template<typename T>
-class UniqueObjectPool<T, true>
+template<typename T, bool ThreadSafe>
+class UniqueObjectPool
 {
 private:
     std::vector<std::unique_ptr<T>> m_storage;
     std::vector<T*> m_stack;
-    mutable std::mutex m_mutex;
+    [[no_unique_address]] mutable detail::Mutex<ThreadSafe> m_mutex;
 
-    void allocate()
+    void allocate_unlocked()
     {
         m_storage.push_back(std::make_unique<T>());
         m_stack.push_back(m_storage.back().get());
@@ -132,58 +134,56 @@ private:
 
     void free(T* element)
     {
-        std::lock_guard<std::mutex> lg(m_mutex);
-
-        m_stack.push_back(element);
+        detail::with_lock<ThreadSafe>(m_mutex, [&] { m_stack.push_back(element); });
     }
 
-    friend class UniqueObjectPoolPtr<T, true>;
+    friend class UniqueObjectPoolPtr<T, ThreadSafe>;
 
 public:
     // Non-copyable to prevent dangling memory pool pointers.
     UniqueObjectPool() noexcept = default;
     UniqueObjectPool(const UniqueObjectPool& other) = delete;
     UniqueObjectPool& operator=(const UniqueObjectPool& other) = delete;
-    UniqueObjectPool(UniqueObjectPool&& other) noexcept = default;
-    UniqueObjectPool& operator=(UniqueObjectPool&& other) noexcept = default;
+    UniqueObjectPool(UniqueObjectPool&& other) noexcept
+        requires(!ThreadSafe)
+    = default;
+    UniqueObjectPool(UniqueObjectPool&& other) noexcept
+        requires ThreadSafe
+    = delete;
+    UniqueObjectPool& operator=(UniqueObjectPool&& other) noexcept
+        requires(!ThreadSafe)
+    = default;
+    UniqueObjectPool& operator=(UniqueObjectPool&& other) noexcept
+        requires ThreadSafe
+    = delete;
 
-    [[nodiscard]] UniqueObjectPoolPtr<T, true> get_or_allocate()
+    [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate()
     {
-        std::lock_guard<std::mutex> lg(m_mutex);
-
-        if (m_stack.empty())
-            allocate();
-        T* element = m_stack.back();
-        m_stack.pop_back();
-        return UniqueObjectPoolPtr<T, true>(this, element);
+        auto* element = detail::with_lock<ThreadSafe>(m_mutex,
+                                                      [&]
+                                                      {
+                                                          if (m_stack.empty())
+                                                              allocate_unlocked();
+                                                          auto* result = m_stack.back();
+                                                          m_stack.pop_back();
+                                                          return result;
+                                                      });
+        return UniqueObjectPoolPtr<T, ThreadSafe>(this, element);
     }
 
     template<typename... Args>
-    [[nodiscard]] UniqueObjectPoolPtr<T, true> get_or_allocate(Args&&... args)
+    [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate(Args&&... args)
     {
-        std::lock_guard<std::mutex> lg(m_mutex);
-
-        if (m_stack.empty())
-            allocate();
-        T* element = m_stack.back();
-        m_stack.pop_back();
-        try
-        {
-            element->initialize(std::forward<Args>(args)...);
-        }
-        catch (...)
-        {
-            m_stack.push_back(element);
-            throw;
-        }
-        return UniqueObjectPoolPtr<T, true>(this, element);
+        // Only pool bookkeeping is serialized; the checked-out object is
+        // exclusively owned while user initialization runs.
+        auto element = get_or_allocate();
+        element->initialize(std::forward<Args>(args)...);
+        return element;
     }
 
     [[nodiscard]] size_t size() const noexcept
     {
-        std::lock_guard<std::mutex> lg(m_mutex);
-
-        return m_storage.size();
+        return detail::with_lock<ThreadSafe>(m_mutex, [&] { return m_storage.size(); });
     }
 
     [[nodiscard]] size_t get_size() const noexcept { return size(); }
@@ -192,74 +192,8 @@ public:
 
     [[nodiscard]] size_t free_size() const noexcept
     {
-        std::lock_guard<std::mutex> lg(m_mutex);
-
-        return m_stack.size();
+        return detail::with_lock<ThreadSafe>(m_mutex, [&] { return m_stack.size(); });
     }
-
-    [[nodiscard]] size_t get_num_free() const noexcept { return free_size(); }
-};
-
-template<typename T>
-class UniqueObjectPool<T, false>
-{
-private:
-    std::vector<std::unique_ptr<T>> m_storage;
-    std::vector<T*> m_stack;
-
-    void allocate()
-    {
-        m_storage.push_back(std::make_unique<T>());
-        m_stack.push_back(m_storage.back().get());
-    }
-
-    void free(T* element) { m_stack.push_back(element); }
-
-    friend class UniqueObjectPoolPtr<T, false>;
-
-public:
-    // Non-copyable to prevent dangling memory pool pointers.
-    UniqueObjectPool() noexcept = default;
-    UniqueObjectPool(const UniqueObjectPool& other) = delete;
-    UniqueObjectPool& operator=(const UniqueObjectPool& other) = delete;
-    UniqueObjectPool(UniqueObjectPool&& other) noexcept = default;
-    UniqueObjectPool& operator=(UniqueObjectPool&& other) noexcept = default;
-
-    [[nodiscard]] UniqueObjectPoolPtr<T, false> get_or_allocate()
-    {
-        if (m_stack.empty())
-            allocate();
-        T* element = m_stack.back();
-        m_stack.pop_back();
-        return UniqueObjectPoolPtr<T, false>(this, element);
-    }
-
-    template<typename... Args>
-    [[nodiscard]] UniqueObjectPoolPtr<T, false> get_or_allocate(Args&&... args)
-    {
-        if (m_stack.empty())
-            allocate();
-        T* element = m_stack.back();
-        m_stack.pop_back();
-        try
-        {
-            element->initialize(std::forward<Args>(args)...);
-        }
-        catch (...)
-        {
-            m_stack.push_back(element);
-            throw;
-        }
-        return UniqueObjectPoolPtr<T, false>(this, element);
-    }
-
-    [[nodiscard]] size_t size() const noexcept { return m_storage.size(); }
-
-    [[nodiscard]] size_t get_size() const noexcept { return size(); }
-
-    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
-
-    [[nodiscard]] size_t free_size() const noexcept { return m_stack.size(); }
 
     [[nodiscard]] size_t get_num_free() const noexcept { return free_size(); }
 };

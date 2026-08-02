@@ -15,8 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <chrono>
+#include <future>
 #include <gtest/gtest.h>
 #include <stdexcept>
+#include <type_traits>
 #include <yggdrasil/containers/shared_object_pool.hpp>
 
 namespace ygg::tests
@@ -40,6 +43,20 @@ struct ThrowingSharedPoolValue
         value = next_value;
     }
 };
+
+struct BlockingSharedPoolValue
+{
+    void initialize(std::promise<void>& started, const std::shared_future<void>& release)
+    {
+        started.set_value();
+        release.wait();
+    }
+};
+
+static_assert(std::is_move_constructible_v<ygg::SharedObjectPool<SharedPoolValue>>);
+static_assert(std::is_move_assignable_v<ygg::SharedObjectPool<SharedPoolValue>>);
+static_assert(!std::is_move_constructible_v<ygg::SharedObjectPool<SharedPoolValue, true>>);
+static_assert(!std::is_move_assignable_v<ygg::SharedObjectPool<SharedPoolValue, true>>);
 
 template<bool ThreadSafe>
 void expect_shared_pool_recovers_from_failed_initialization()
@@ -172,5 +189,36 @@ TEST(YggdrasilTests, CommonSharedObjectPoolPtrMoveCopyAndCloneTrackReferences)
 TEST(YggdrasilTests, CommonSharedObjectPoolRecoversFromFailedInitialization) { expect_shared_pool_recovers_from_failed_initialization<false>(); }
 
 TEST(YggdrasilTests, CommonThreadSafeSharedObjectPoolRecoversFromFailedInitialization) { expect_shared_pool_recovers_from_failed_initialization<true>(); }
+
+TEST(YggdrasilTests, CommonThreadSafeSharedObjectPoolInitializesOutsideLock)
+{
+    using namespace std::chrono_literals;
+
+    auto pool = ygg::SharedObjectPool<BlockingSharedPoolValue, true>();
+    auto started_promise = std::promise<void>();
+    auto started = started_promise.get_future();
+    auto release_promise = std::promise<void>();
+    auto release = release_promise.get_future().share();
+
+    auto initializer = std::async(std::launch::async, [&] { auto value = pool.get_or_allocate(started_promise, release); });
+
+    if (started.wait_for(2s) != std::future_status::ready)
+    {
+        release_promise.set_value();
+        initializer.wait();
+        FAIL() << "initializer did not start";
+    }
+
+    auto checkout = std::async(std::launch::async, [&] { auto value = pool.get_or_allocate(); });
+    const auto checkout_completed = checkout.wait_for(2s) == std::future_status::ready;
+
+    release_promise.set_value();
+    initializer.get();
+    checkout.get();
+
+    EXPECT_TRUE(checkout_completed);
+    EXPECT_EQ(pool.size(), 2);
+    EXPECT_EQ(pool.free_size(), 2);
+}
 
 }  // namespace ygg::tests
