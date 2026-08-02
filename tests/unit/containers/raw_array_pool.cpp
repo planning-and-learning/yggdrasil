@@ -41,9 +41,14 @@ static_assert(ConcurrentRawArrayPool::thread_safe);
 static_assert(!HasAllocate<DefaultRawArrayPool>);
 static_assert(std::same_as<decltype(std::declval<DefaultRawArrayPool&>()[0]), std::span<const int>>);
 static_assert(std::same_as<decltype(std::declval<ConcurrentRawArrayPool&>()[0]), std::span<const int>>);
-static_assert(std::is_copy_constructible_v<DefaultRawArrayPool>);
-static_assert(std::is_copy_assignable_v<DefaultRawArrayPool>);
+static_assert(!std::is_copy_constructible_v<DefaultRawArrayPool>);
+static_assert(!std::is_copy_assignable_v<DefaultRawArrayPool>);
 static_assert(!std::is_copy_constructible_v<ConcurrentRawArrayPool>);
+static_assert(!std::is_copy_assignable_v<ConcurrentRawArrayPool>);
+static_assert(std::is_nothrow_move_constructible_v<DefaultRawArrayPool>);
+static_assert(std::is_nothrow_move_assignable_v<DefaultRawArrayPool>);
+static_assert(std::is_nothrow_move_constructible_v<ConcurrentRawArrayPool>);
+static_assert(std::is_nothrow_move_assignable_v<ConcurrentRawArrayPool>);
 
 TEST(YggdrasilTests, CommonRawArrayPoolRejectsImpossibleSegmentSizes)
 {
@@ -144,7 +149,7 @@ TEST(YggdrasilTests, CommonRawArrayPoolClearKeepsCapacityReusable)
     EXPECT_TRUE(std::ranges::equal(pool[0], second));
 }
 
-TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStableAndCopiesRemainIndependent)
+TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStable)
 {
     auto pool = ygg::RawArrayPool<int, 1>(2);
     const auto first_value = std::array<int, 2> { 1, 2 };
@@ -159,18 +164,44 @@ TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStableAndCopiesRemainI
     EXPECT_TRUE(std::ranges::equal(pool[0], first_value));
     EXPECT_TRUE(std::ranges::equal(pool[2], third_value));
     EXPECT_EQ(pool.memory_usage(), 6 * sizeof(int));
+}
 
-    auto copy = pool;
-    EXPECT_NE(copy[0].data(), pool[0].data());
-    EXPECT_TRUE(std::ranges::equal(copy[0], first_value));
-    EXPECT_EQ(copy.memory_usage(), pool.memory_usage());
+template<bool ThreadSafe>
+void test_raw_array_pool_move()
+{
+    using Pool = ygg::RawArrayPool<int, 1, ThreadSafe>;
+    const auto first = std::array<int, 2> { 1, 2 };
+    const auto second = std::array<int, 2> { 3, 4 };
 
-    auto assigned = ygg::RawArrayPool<int, 1>(2);
-    assigned = pool;
-    EXPECT_NE(assigned[1].data(), pool[1].data());
-    EXPECT_TRUE(std::ranges::equal(assigned[1], second_value));
-    EXPECT_TRUE(std::ranges::equal(assigned[2], third_value));
-    EXPECT_EQ(assigned.memory_usage(), pool.memory_usage());
+    auto source = Pool(2);
+    source.insert(first);
+    source.insert(second);
+    const auto first_view = source[0];
+
+    auto moved = std::move(source);
+    EXPECT_TRUE(source.empty());
+    EXPECT_EQ(source.array_size(), 2);
+    EXPECT_EQ(source.insert(first), 0);
+    EXPECT_EQ(moved.size(), 2);
+    EXPECT_EQ(moved[0].data(), first_view.data());
+    EXPECT_TRUE(std::ranges::equal(first_view, first));
+
+    auto assigned = Pool(1);
+    assigned.insert(std::array<int, 1> { 9 });
+    assigned = std::move(moved);
+    EXPECT_TRUE(moved.empty());
+    EXPECT_EQ(moved.array_size(), 2);
+    EXPECT_EQ(moved.insert(second), 0);
+    EXPECT_EQ(assigned.array_size(), 2);
+    EXPECT_EQ(assigned.size(), 2);
+    EXPECT_EQ(assigned[0].data(), first_view.data());
+    EXPECT_TRUE(std::ranges::equal(assigned[1], second));
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolMovesLeaveSourcesReusable)
+{
+    test_raw_array_pool_move<false>();
+    test_raw_array_pool_move<true>();
 }
 
 }  // namespace ygg::tests

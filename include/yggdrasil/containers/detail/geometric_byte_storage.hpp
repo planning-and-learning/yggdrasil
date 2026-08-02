@@ -16,7 +16,6 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
-#include <cstring>
 #include <limits>
 #include <new>
 #include <stdexcept>
@@ -56,21 +55,8 @@ class GeometricByteStorage
 
         explicit Segment(size_t capacity_) : storage(allocate_storage(capacity_)), capacity(capacity_), used(0) {}
 
-        Segment(const Segment& other) : storage(allocate_storage(other.capacity)), capacity(other.capacity), used(other.used)
-        {
-            if (used > 0)
-                std::memcpy(storage, other.storage, used);
-        }
-
-        Segment& operator=(const Segment& other)
-        {
-            if (this != &other)
-            {
-                auto replacement = Segment(other);
-                *this = std::move(replacement);
-            }
-            return *this;
-        }
+        Segment(const Segment&) = delete;
+        Segment& operator=(const Segment&) = delete;
 
         Segment(Segment&& other) noexcept : storage(std::exchange(other.storage, nullptr)), capacity(other.capacity), used(other.used) {}
 
@@ -161,23 +147,8 @@ public:
             static_cast<void>(nominal_capacity(0));
     }
 
-    GeometricByteStorage(const GeometricByteStorage& other) :
-        m_segments(other.m_segments),
-        m_unit_size(other.m_unit_size),
-        m_current_segment(other.m_current_segment)
-    {
-        rebuild_publication();
-    }
-
-    GeometricByteStorage& operator=(const GeometricByteStorage& other)
-    {
-        if (this != &other)
-        {
-            auto replacement = GeometricByteStorage(other);
-            *this = std::move(replacement);
-        }
-        return *this;
-    }
+    GeometricByteStorage(const GeometricByteStorage&) = delete;
+    GeometricByteStorage& operator=(const GeometricByteStorage&) = delete;
 
     GeometricByteStorage(GeometricByteStorage&& other) noexcept :
         m_segments(std::move(other.m_segments)),

@@ -31,7 +31,6 @@
 #include <yggdrasil/semantics/comparators.hpp>
 #include <yggdrasil/semantics/containers/block_array_hash.hpp>
 #include <yggdrasil/semantics/containers/dynamic_bitset_hash.hpp>
-#include <yggdrasil/semantics/containers/raw_vector_hash.hpp>
 #include <yggdrasil/semantics/containers/segmented_vector_hash.hpp>
 #include <yggdrasil/semantics/hash.hpp>
 #include <yggdrasil/serialization/cista_hash.hpp>
@@ -318,18 +317,8 @@ TEST(YggdrasilTests, CommonArrayHashAdaptersHashViews)
               ygg::Hash<WrappedBitPackedView> {}(WrappedBitPackedView(bit_rhs, context)));
 }
 
-TEST(YggdrasilTests, CommonRawAndSegmentedVectorHashAdaptersHashValues)
+TEST(YggdrasilTests, CommonSegmentedVectorHashAdapterHashesValues)
 {
-    auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
-    const auto lhs_index = pool.insert(std::vector<int> { 1, 2 });
-    const auto rhs_index = pool.insert(std::vector<int> { 1, 2 });
-    const auto different_index = pool.insert(std::vector<int> { 1, 3 });
-
-    EXPECT_EQ((ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index])),
-              (ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[rhs_index])));
-    EXPECT_NE((ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index])),
-              (ygg::Hash<ygg::RawVectorView<const uint8_t, const int>> {}(pool[different_index])));
-
     auto lhs = ygg::SegmentedVector<int, 2>();
     auto rhs = ygg::SegmentedVector<int, 2>();
     auto different = ygg::SegmentedVector<int, 2>();

@@ -22,13 +22,14 @@
 #include <new>
 #include <span>
 #include <stdexcept>
+#include <utility>
 
 namespace ygg
 {
 
 /// ThreadSafe permits concurrent insertion, size queries, and reads after
 /// publication was observed through size() or external synchronization.
-/// Clear, memory inspection, copy, move, and destruction require quiescence.
+/// Clear, memory inspection, move, and destruction require quiescence.
 template<TriviallyCopyable T, size_t FirstSegmentSize = 1024, bool ThreadSafe = false>
 class RawArrayPool
 {
@@ -67,6 +68,32 @@ public:
         m_storage(m_array_size_bytes),
         m_size(0)
     {
+    }
+
+    RawArrayPool(const RawArrayPool&) = delete;
+    RawArrayPool& operator=(const RawArrayPool&) = delete;
+
+    RawArrayPool(RawArrayPool&& other) noexcept :
+        m_array_size(other.m_array_size),
+        m_array_size_bytes(other.m_array_size_bytes),
+        m_storage(std::move(other.m_storage)),
+        m_size(other.size())
+    {
+        detail::store_size<ThreadSafe>(other.m_size, 0);
+    }
+
+    RawArrayPool& operator=(RawArrayPool&& other) noexcept
+    {
+        if (this == &other)
+            return *this;
+
+        const auto other_size = other.size();
+        m_array_size = other.m_array_size;
+        m_array_size_bytes = other.m_array_size_bytes;
+        m_storage = std::move(other.m_storage);
+        detail::store_size<ThreadSafe>(m_size, other_size);
+        detail::store_size<ThreadSafe>(other.m_size, 0);
+        return *this;
     }
 
     uint_t insert(std::span<const T> value)

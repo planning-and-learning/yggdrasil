@@ -29,7 +29,6 @@
 #include <yggdrasil/semantics/comparators.hpp>
 #include <yggdrasil/semantics/containers/block_array_equal_to.hpp>
 #include <yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp>
-#include <yggdrasil/semantics/containers/raw_vector_equal_to.hpp>
 #include <yggdrasil/semantics/containers/segmented_vector_equal_to.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/serialization/cista_equal_to.hpp>
@@ -297,16 +296,8 @@ TEST(YggdrasilTests, CommonArrayEqualToAdaptersCompareViews)
     EXPECT_FALSE(ygg::EqualTo<WrappedBitPackedView> {}(WrappedBitPackedView(bit_lhs, context), WrappedBitPackedView(bit_different, context)));
 }
 
-TEST(YggdrasilTests, CommonRawAndSegmentedVectorEqualToAdaptersCompareValues)
+TEST(YggdrasilTests, CommonSegmentedVectorEqualToAdapterComparesValues)
 {
-    auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
-    const auto lhs_index = pool.insert(std::vector<int> { 1, 2 });
-    const auto rhs_index = pool.insert(std::vector<int> { 1, 2 });
-    const auto different_index = pool.insert(std::vector<int> { 1, 3 });
-
-    EXPECT_TRUE((ygg::EqualTo<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index], pool[rhs_index])));
-    EXPECT_FALSE((ygg::EqualTo<ygg::RawVectorView<const uint8_t, const int>> {}(pool[lhs_index], pool[different_index])));
-
     auto lhs = ygg::SegmentedVector<int, 2>();
     auto rhs = ygg::SegmentedVector<int, 2>();
     auto different = ygg::SegmentedVector<int, 2>();

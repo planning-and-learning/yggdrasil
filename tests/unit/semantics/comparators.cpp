@@ -34,7 +34,6 @@
 #include <yggdrasil/semantics/comparison.hpp>
 #include <yggdrasil/semantics/containers/block_array_ordering.hpp>
 #include <yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp>
-#include <yggdrasil/semantics/containers/raw_vector_ordering.hpp>
 #include <yggdrasil/semantics/containers/segmented_vector_ordering.hpp>
 #include <yggdrasil/serialization/cista_ordering.hpp>
 
@@ -94,7 +93,6 @@ TEST(YggdrasilTests, CommonOrderingPredicatesCoverHashAndEqualToFamilies)
     static_assert(OrderedByAllCommonPredicates<ygg::View<BlockView, ComparatorContext>>);
     static_assert(OrderedByAllCommonPredicates<BitPackedView>);
     static_assert(OrderedByAllCommonPredicates<ygg::View<BitPackedView, ComparatorContext>>);
-    static_assert(OrderedByAllCommonPredicates<ygg::RawVectorView<uint8_t, int>>);
     static_assert(OrderedByAllCommonPredicates<ygg::SegmentedVector<int, 2>>);
     static_assert(OrderedByAllCommonPredicates<ygg::ObserverPtr<const int>>);
 
@@ -278,19 +276,6 @@ TEST(YggdrasilTests, CommonObserverPtrComparatorOrdersPointees)
 
     EXPECT_TRUE(ygg::Less<ygg::ObserverPtr<const int>> {}(lhs, rhs));
     EXPECT_FALSE(ygg::Less<ygg::ObserverPtr<const int>> {}(rhs, lhs));
-}
-
-TEST(YggdrasilTests, CommonRawVectorComparatorOrdersViews)
-{
-    auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
-    const auto lhs_index = pool.insert(std::vector<int> { 1, 2 });
-    const auto rhs_index = pool.insert(std::vector<int> { 1, 3 });
-
-    const auto lhs = pool[lhs_index];
-    const auto rhs = pool[rhs_index];
-
-    EXPECT_TRUE((ygg::Less<ygg::RawVectorView<const uint8_t, const int>> {}(lhs, rhs)));
-    EXPECT_FALSE((ygg::Less<ygg::RawVectorView<const uint8_t, const int>> {}(rhs, lhs)));
 }
 
 TEST(YggdrasilTests, CommonSegmentedVectorComparatorOrdersValues)

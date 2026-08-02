@@ -21,7 +21,9 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
+#include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include <yggdrasil/containers/raw_vector_pool.hpp>
@@ -39,8 +41,16 @@ struct alignas(64) OverAlignedValue
 
 static_assert(!DefaultRawVectorPool::thread_safe);
 static_assert(ConcurrentRawVectorPool::thread_safe);
-static_assert(std::same_as<decltype(std::declval<DefaultRawVectorPool&>()[0]), RawVectorView<const uint8_t, const int>>);
-static_assert(std::same_as<decltype(std::declval<ConcurrentRawVectorPool&>()[0]), RawVectorView<const uint8_t, const int>>);
+static_assert(std::same_as<decltype(std::declval<DefaultRawVectorPool&>()[0]), std::span<const int>>);
+static_assert(std::same_as<decltype(std::declval<ConcurrentRawVectorPool&>()[0]), std::span<const int>>);
+static_assert(!std::is_copy_constructible_v<DefaultRawVectorPool>);
+static_assert(!std::is_copy_assignable_v<DefaultRawVectorPool>);
+static_assert(!std::is_copy_constructible_v<ConcurrentRawVectorPool>);
+static_assert(!std::is_copy_assignable_v<ConcurrentRawVectorPool>);
+static_assert(std::is_nothrow_move_constructible_v<DefaultRawVectorPool>);
+static_assert(std::is_nothrow_move_assignable_v<DefaultRawVectorPool>);
+static_assert(std::is_nothrow_move_constructible_v<ConcurrentRawVectorPool>);
+static_assert(std::is_nothrow_move_assignable_v<ConcurrentRawVectorPool>);
 
 TEST(YggdrasilTests, CommonRawVectorPoolRejectsInvalidInsertArguments)
 {
@@ -55,41 +65,6 @@ TEST(YggdrasilTests, CommonRawVectorPoolRejectsInvalidInsertArguments)
     auto huge_pool = ygg::RawVectorPool<size_t, int, 32>();
     const auto impossible_size = std::numeric_limits<size_t>::max() / sizeof(int) + 1;
     EXPECT_THROW(huge_pool.insert(&value, impossible_size), std::length_error);
-}
-
-TEST(YggdrasilTests, CommonRawVectorViewReportsWhetherItReferencesStorage)
-{
-    auto empty_mutable_view = ygg::RawVectorView<uint8_t, int> {};
-    auto empty_const_view = ygg::RawVectorView<const uint8_t, const int> {};
-
-    EXPECT_FALSE(empty_mutable_view.valid());
-    EXPECT_FALSE(empty_mutable_view);
-    EXPECT_EQ(empty_mutable_view.raw_data(), nullptr);
-    EXPECT_FALSE(empty_const_view.valid());
-    EXPECT_FALSE(empty_const_view);
-    EXPECT_EQ(empty_const_view.raw_data(), nullptr);
-    EXPECT_THROW(empty_mutable_view.at(0), std::logic_error);
-    EXPECT_THROW(empty_const_view.at(0), std::logic_error);
-    EXPECT_THROW(empty_mutable_view.front(), std::logic_error);
-    EXPECT_THROW(empty_const_view.front(), std::logic_error);
-    EXPECT_THROW(empty_mutable_view.back(), std::logic_error);
-    EXPECT_THROW(empty_const_view.back(), std::logic_error);
-
-    auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
-    const auto index = pool.insert(std::vector<int> { 1, 2 });
-    const auto view = pool[index];
-    const auto const_view = std::as_const(pool)[index];
-    using View = decltype(view);
-    using ConstView = decltype(const_view);
-    static_assert(std::same_as<View, ConstView>);
-
-    EXPECT_TRUE(view.valid());
-    EXPECT_TRUE(view);
-    EXPECT_NE(view.raw_data(), nullptr);
-    EXPECT_TRUE(const_view.valid());
-    EXPECT_TRUE(const_view);
-    EXPECT_NE(const_view.raw_data(), nullptr);
-    EXPECT_EQ(const_view.raw_data(), view.raw_data());
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolStoresVariableLengthVectors)
@@ -139,15 +114,6 @@ TEST(YggdrasilTests, CommonRawVectorPoolEmptyAccessThrows)
     EXPECT_THROW(const_pool.front(), std::out_of_range);
     EXPECT_THROW(pool.back(), std::out_of_range);
     EXPECT_THROW(const_pool.back(), std::out_of_range);
-
-    const auto empty_index = pool.insert(std::vector<int> {});
-    const auto empty_view = pool[empty_index];
-    const auto empty_const_view = const_pool[empty_index];
-
-    EXPECT_THROW(empty_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_const_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_view.back(), std::out_of_range);
-    EXPECT_THROW(empty_const_view.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolAtChecksBounds)
@@ -156,12 +122,10 @@ TEST(YggdrasilTests, CommonRawVectorPoolAtChecksBounds)
     const auto index = pool.insert(std::vector<int> { 1, 2 });
     const auto& const_pool = pool;
 
-    EXPECT_EQ(pool.at(index).at(1), 2);
-    EXPECT_EQ(const_pool.at(index).at(1), 2);
+    EXPECT_EQ(pool.at(index)[1], 2);
+    EXPECT_EQ(const_pool.at(index)[1], 2);
     EXPECT_THROW(pool.at(1), std::out_of_range);
     EXPECT_THROW(const_pool.at(1), std::out_of_range);
-    EXPECT_THROW(pool.at(index).at(2), std::out_of_range);
-    EXPECT_THROW(const_pool.at(index).at(2), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolClearKeepsCapacityReusable)
@@ -188,19 +152,19 @@ TEST(YggdrasilTests, CommonRawVectorPoolClearKeepsCapacityReusable)
     EXPECT_EQ(pool.memory_usage(), memory_usage);
 }
 
-TEST(YggdrasilTests, CommonRawVectorPoolGrowthKeepsViewsStableAndAligned)
+TEST(YggdrasilTests, CommonRawVectorPoolGrowthKeepsSpansStableAndAligned)
 {
     auto pool = ygg::RawVectorPool<uint8_t, int, 16>();
     const auto first_index = pool.insert(std::array<int, 1> { 7 });
     const auto first = pool[first_index];
-    const auto* first_storage = first.raw_data();
+    const auto* first_storage = first.data();
     const auto large = std::array<int, 8> { 1, 2, 3, 4, 5, 6, 7, 8 };
 
     static_cast<void>(pool.insert(large));
     const auto memory_usage = pool.memory_usage();
     static_cast<void>(pool.insert(large));
 
-    EXPECT_EQ(pool[first_index].raw_data(), first_storage);
+    EXPECT_EQ(pool[first_index].data(), first_storage);
     EXPECT_EQ(first.front(), 7);
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(first.data()) % alignof(int), 0);
     EXPECT_EQ(pool.memory_usage() - memory_usage, 128);
@@ -210,9 +174,45 @@ TEST(YggdrasilTests, CommonRawVectorPoolPreservesOverAlignment)
 {
     auto pool = ygg::RawVectorPool<uint8_t, OverAlignedValue, 64>();
     const auto index = pool.insert(std::array<OverAlignedValue, 1> { OverAlignedValue { 7 } });
+    const auto const_view = pool[index];
 
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[index].data()) % alignof(OverAlignedValue), 0);
-    EXPECT_EQ(pool[index].front().value, 7);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(const_view.data()) % alignof(OverAlignedValue), 0);
+    EXPECT_EQ(const_view.front().value, 7);
+}
+
+template<bool ThreadSafe>
+void test_raw_vector_pool_move()
+{
+    using Pool = ygg::RawVectorPool<uint8_t, int, 16, ThreadSafe>;
+    const auto first = std::array<int, 2> { 1, 2 };
+    const auto second = std::array<int, 1> { 3 };
+
+    auto source = Pool {};
+    source.insert(first);
+    source.insert(second);
+    const auto first_view = source[0];
+
+    auto moved = std::move(source);
+    EXPECT_TRUE(source.empty());
+    EXPECT_EQ(source.insert(second), 0);
+    EXPECT_EQ(moved.size(), 2);
+    EXPECT_EQ(moved[0].data(), first_view.data());
+    EXPECT_TRUE(std::ranges::equal(first_view, first));
+
+    auto assigned = Pool {};
+    assigned.insert(std::array<int, 1> { 9 });
+    assigned = std::move(moved);
+    EXPECT_TRUE(moved.empty());
+    EXPECT_EQ(moved.insert(first), 0);
+    EXPECT_EQ(assigned.size(), 2);
+    EXPECT_EQ(assigned[0].data(), first_view.data());
+    EXPECT_TRUE(std::ranges::equal(assigned[1], second));
+}
+
+TEST(YggdrasilTests, CommonRawVectorPoolMovesLeaveSourcesReusable)
+{
+    test_raw_vector_pool_move<false>();
+    test_raw_vector_pool_move<true>();
 }
 
 }  // namespace ygg::tests

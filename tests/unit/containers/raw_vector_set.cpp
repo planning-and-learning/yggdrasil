@@ -18,6 +18,7 @@
 #include <array>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -32,8 +33,8 @@ using ConcurrentRawVectorSet = RawVectorSet<uint8_t, int, 32, true>;
 
 static_assert(!DefaultRawVectorSet::thread_safe);
 static_assert(ConcurrentRawVectorSet::thread_safe);
-static_assert(std::same_as<decltype(std::declval<DefaultRawVectorSet&>()[0]), RawVectorView<const uint8_t, const int>>);
-static_assert(std::same_as<decltype(std::declval<ConcurrentRawVectorSet&>()[0]), RawVectorView<const uint8_t, const int>>);
+static_assert(std::same_as<decltype(std::declval<DefaultRawVectorSet&>()[0]), std::span<const int>>);
+static_assert(std::same_as<decltype(std::declval<ConcurrentRawVectorSet&>()[0]), std::span<const int>>);
 static_assert(!std::is_copy_constructible_v<DefaultRawVectorSet>);
 static_assert(std::is_move_constructible_v<ConcurrentRawVectorSet>);
 static_assert(std::is_move_assignable_v<ConcurrentRawVectorSet>);
@@ -119,27 +120,17 @@ TEST(YggdrasilTests, CommonRawVectorSetStoresVariableLengthVectors)
     const auto first_view = set[0];
     const auto second_view = set[1];
     const auto third_view = set[2];
-    EXPECT_TRUE(first_view.valid());
-    EXPECT_TRUE(first_view);
     EXPECT_EQ(std::vector<int>(first_view.begin(), first_view.end()), first);
     EXPECT_EQ(first_view.front(), 1);
-    EXPECT_TRUE(set.front().valid());
     EXPECT_EQ(set.front().front(), 1);
     EXPECT_EQ(first_view.back(), 2);
-    EXPECT_TRUE(set.back().valid());
     EXPECT_EQ(set.back().back(), 4);
     EXPECT_EQ(std::vector<int>(second_view.begin(), second_view.end()), second);
     const auto checked_second_view = set.at(1);
-    EXPECT_TRUE(checked_second_view.valid());
     EXPECT_EQ(std::vector<int>(checked_second_view.begin(), checked_second_view.end()), second);
     EXPECT_EQ(std::vector<int>(third_view.begin(), third_view.end()), std::vector<int>(third.begin(), third.end()));
 
     const auto& const_set = set;
-    EXPECT_TRUE(const_set[0].valid());
-    EXPECT_TRUE(const_set.at(1).valid());
-    EXPECT_TRUE(const_set.front().valid());
-    EXPECT_TRUE(const_set.back().valid());
-
     EXPECT_THROW(set.at(3), std::out_of_range);
     EXPECT_THROW(const_set.at(3), std::out_of_range);
 }
