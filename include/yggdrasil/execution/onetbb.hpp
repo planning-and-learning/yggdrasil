@@ -20,8 +20,9 @@
 #ifndef YGG_EXECUTION_ONETBB_HPP_
 #define YGG_EXECUTION_ONETBB_HPP_
 
+#include "yggdrasil/execution/declarations.hpp"
+
 #include <cstddef>
-#include <memory>
 #include <oneapi/tbb/info.h>
 #include <oneapi/tbb/task_arena.h>
 #include <stdexcept>
@@ -67,8 +68,6 @@ private:
     uint_t m_num_threads;
     oneapi::tbb::task_arena m_arena;
 };
-
-using ExecutionContextPtr = std::shared_ptr<ExecutionContext>;
 
 }  // namespace ygg
 
