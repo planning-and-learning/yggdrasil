@@ -181,6 +181,25 @@ TEST(YggdrasilTests, CommonDynamicBitsetBoostHelpersTreatOutOfRangeTestAsFalseAn
     EXPECT_TRUE(ygg::test(3, bitset));
 }
 
+TEST(YggdrasilTests, CommonDynamicBitsetTrimTrailingZeros)
+{
+    auto bitset = boost::dynamic_bitset<>(10);
+    bitset.set(2);
+    bitset.set(7);
+
+    ygg::trim_trailing_zeros(bitset);
+    EXPECT_EQ(bitset.size(), 8);
+
+    bitset.reset(7);
+    ygg::trim_trailing_zeros(bitset);
+    EXPECT_EQ(bitset.size(), 3);
+    EXPECT_TRUE(bitset.test(2));
+
+    bitset.reset();
+    ygg::trim_trailing_zeros(bitset);
+    EXPECT_TRUE(bitset.empty());
+}
+
 TEST(YggdrasilTests, CommonDynamicBitsetAdaptersHashAndCompareSpans)
 {
     auto lhs_blocks = std::vector<uint64_t>(ygg::BitsetSpan<uint64_t>::num_blocks(8), 0);

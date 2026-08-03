@@ -21,10 +21,8 @@
 #include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
+#include <boost/iterator/function_output_iterator.hpp>
 #include <concepts>
-#include <cstddef>
-#include <iterator>
-#include <vector>
 
 namespace ygg
 {
@@ -36,14 +34,8 @@ struct Hash<boost::dynamic_bitset<Block, Allocator>>
 
     hash_t operator()(const Type& bitset) const
     {
-        auto blocks = std::vector<Block>();
-        blocks.reserve(bitset.num_blocks());
-        boost::to_block_range(bitset, std::back_inserter(blocks));
-
-        const auto block_span = std::span<const Block>(blocks);
         hash_t seed = bitset.size();
-        for (size_t i = 0; i < detail::num_canonical_bit_blocks(bitset.size()); ++i)
-            ygg::hash_combine(seed, detail::canonical_bit_block(block_span, bitset.size(), i));
+        boost::to_block_range(bitset, boost::make_function_output_iterator([&seed](const Block block) noexcept { ygg::hash_combine(seed, block); }));
         return seed;
     }
 };
@@ -53,10 +45,9 @@ struct Hash<BitsetSpan<Block>>
 {
     hash_t operator()(const BitsetSpan<Block>& bitset_span) const noexcept
     {
-        const auto blocks = bitset_span.blocks();
         hash_t aggregated_hash = bitset_span.num_bits();
-        for (size_t i = 0; i < detail::num_canonical_bit_blocks(bitset_span.num_bits()); ++i)
-            ygg::hash_combine(aggregated_hash, detail::canonical_bit_block(blocks, bitset_span.num_bits(), i));
+        for (const auto block : bitset_span.blocks())
+            ygg::hash_combine(aggregated_hash, block);
         return aggregated_hash;
     }
 };

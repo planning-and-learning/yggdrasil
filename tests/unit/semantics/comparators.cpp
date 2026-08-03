@@ -235,22 +235,6 @@ TEST(YggdrasilTests, CommonDynamicBitsetComparatorOrdersBoostDynamicBitsets)
     EXPECT_FALSE(ygg::Less<boost::dynamic_bitset<>> {}(rhs, lhs));
 }
 
-TEST(YggdrasilTests, CommonDynamicBitsetOrderingIsIndependentOfBlockWidth)
-{
-    auto lhs32 = boost::dynamic_bitset<std::uint32_t>(64);
-    auto rhs32 = boost::dynamic_bitset<std::uint32_t>(64);
-    auto lhs64 = boost::dynamic_bitset<std::uint64_t>(64);
-    auto rhs64 = boost::dynamic_bitset<std::uint64_t>(64);
-
-    lhs32.set(0);
-    lhs64.set(0);
-    rhs32.set(32);
-    rhs64.set(32);
-
-    EXPECT_TRUE(ygg::Less<decltype(lhs32)> {}(lhs32, rhs32));
-    EXPECT_EQ(ygg::Less<decltype(lhs32)> {}(lhs32, rhs32), ygg::Less<decltype(lhs64)> {}(lhs64, rhs64));
-}
-
 TEST(YggdrasilTests, CommonDynamicBitsetComparatorOrdersBitsetSpans)
 {
     auto lhs_blocks = std::vector<uint64_t>(ygg::BitsetSpan<uint64_t>::num_blocks(8), 0);

@@ -21,9 +21,8 @@
 #include "yggdrasil/containers/dynamic_bitset.hpp"
 #include "yggdrasil/semantics/comparators.hpp"
 
+#include <algorithm>
 #include <concepts>
-#include <iterator>
-#include <vector>
 
 namespace ygg
 {
@@ -38,22 +37,7 @@ struct Less<boost::dynamic_bitset<Block, Allocator>>
         if (lhs.size() != rhs.size())
             return lhs.size() < rhs.size();
 
-        auto lhs_blocks = std::vector<Block>();
-        auto rhs_blocks = std::vector<Block>();
-        lhs_blocks.reserve(lhs.num_blocks());
-        rhs_blocks.reserve(rhs.num_blocks());
-        boost::to_block_range(lhs, std::back_inserter(lhs_blocks));
-        boost::to_block_range(rhs, std::back_inserter(rhs_blocks));
-
-        const auto count = detail::num_canonical_bit_blocks(lhs.size());
-        for (size_t i = 0; i < count; ++i)
-        {
-            const auto lhs_block = detail::canonical_bit_block(std::span<const Block>(lhs_blocks), lhs.size(), i);
-            const auto rhs_block = detail::canonical_bit_block(std::span<const Block>(rhs_blocks), rhs.size(), i);
-            if (lhs_block != rhs_block)
-                return lhs_block < rhs_block;
-        }
-        return false;
+        return lhs < rhs;
     }
 };
 
@@ -68,17 +52,7 @@ struct Less<BitsetSpan<Block>>
         if (lhs.num_bits() != rhs.num_bits())
             return lhs.num_bits() < rhs.num_bits();
 
-        const auto lhs_blocks = lhs.blocks();
-        const auto rhs_blocks = rhs.blocks();
-        const auto count = detail::num_canonical_bit_blocks(lhs.num_bits());
-        for (size_t i = 0; i < count; ++i)
-        {
-            const auto lhs_block = detail::canonical_bit_block(lhs_blocks, lhs.num_bits(), i);
-            const auto rhs_block = detail::canonical_bit_block(rhs_blocks, rhs.num_bits(), i);
-            if (lhs_block != rhs_block)
-                return lhs_block < rhs_block;
-        }
-        return false;
+        return std::ranges::lexicographical_compare(lhs.blocks(), rhs.blocks());
     }
 };
 

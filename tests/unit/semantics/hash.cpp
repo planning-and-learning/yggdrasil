@@ -222,20 +222,6 @@ TEST(YggdrasilTests, CommonDynamicBitsetHashAdaptersHashBoostDynamicBitsets)
     EXPECT_NE(ygg::Hash<boost::dynamic_bitset<>> {}(lhs), ygg::Hash<boost::dynamic_bitset<>> {}(rhs));
 }
 
-TEST(YggdrasilTests, CommonDynamicBitsetHashIsIndependentOfBlockWidth)
-{
-    auto bits32 = boost::dynamic_bitset<std::uint32_t>(130);
-    auto bits64 = boost::dynamic_bitset<std::uint64_t>(130);
-
-    for (const auto bit : std::array<size_t, 6> { 0, 31, 32, 63, 64, 129 })
-    {
-        bits32.set(bit);
-        bits64.set(bit);
-    }
-
-    EXPECT_EQ(ygg::Hash<decltype(bits32)> {}(bits32), ygg::Hash<decltype(bits64)> {}(bits64));
-}
-
 TEST(YggdrasilTests, CommonDynamicBitsetHashAdaptersHashBitsetSpans)
 {
     const auto lhs_blocks = std::vector<std::uint64_t> { 0b1010 };

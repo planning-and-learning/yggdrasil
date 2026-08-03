@@ -20,13 +20,11 @@
 
 #include "yggdrasil/core/concepts.hpp"
 
-#include <algorithm>
 #include <bit>
 #include <boost/dynamic_bitset.hpp>
 #include <cassert>
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <limits>
 #include <span>
 #include <stdexcept>
@@ -49,42 +47,14 @@ inline void set(size_t pos, bool value, boost::dynamic_bitset<>& bitset)
     bitset[pos] = value;
 }
 
-namespace detail
+template<typename Block, typename Allocator>
+void trim_trailing_zeros(boost::dynamic_bitset<Block, Allocator>& bitset)
 {
-
-constexpr size_t num_canonical_bit_blocks(size_t num_bits) noexcept { return num_bits / 64 + (num_bits % 64 != 0); }
-
-template<std::unsigned_integral Block>
-constexpr std::uint64_t canonical_bit_block(std::span<const Block> blocks, size_t num_bits, size_t index) noexcept
-{
-    constexpr auto digits = std::numeric_limits<Block>::digits;
-    assert(index < num_canonical_bit_blocks(num_bits));
-
-    if constexpr (digits == 64)
-    {
-        return blocks[index];
-    }
-    else if constexpr (digits == 32)
-    {
-        const auto block = index * 2;
-        auto result = static_cast<std::uint64_t>(blocks[block]);
-        if (block + 1 < blocks.size())
-            result |= static_cast<std::uint64_t>(blocks[block + 1]) << 32;
-        return result;
-    }
-    else
-    {
-        auto result = std::uint64_t { 0 };
-        const auto first_bit = index * 64;
-        const auto last_bit = std::min(first_bit + 64, num_bits);
-        for (auto bit = first_bit; bit < last_bit; ++bit)
-            if ((blocks[bit / digits] & (Block { 1 } << (bit % digits))) != Block { 0 })
-                result |= std::uint64_t { 1 } << (bit - first_bit);
-        return result;
-    }
+    auto last = boost::dynamic_bitset<Block, Allocator>::npos;
+    for (auto pos = bitset.find_first(); pos != boost::dynamic_bitset<Block, Allocator>::npos; pos = bitset.find_next(pos))
+        last = pos;
+    bitset.resize(last == boost::dynamic_bitset<Block, Allocator>::npos ? 0 : last + 1);
 }
-
-}  // namespace detail
 
 template<std::unsigned_integral Block>
 class BitsetSpan
