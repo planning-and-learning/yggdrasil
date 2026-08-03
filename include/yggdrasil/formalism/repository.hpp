@@ -39,7 +39,7 @@ namespace ygg::formalism
 /// Concurrent repository aliases support overlapping find, get_or_create,
 /// published-index lookup, and size calls. Builders remain thread-confined;
 /// clear, memory accounting, and destruction require quiescence. Parent layers
-/// must remain frozen while a child exists.
+/// must remain frozen and outlive their descendants.
 template<typename SymbolRepo, typename RelationRepo>
 class Repository
 {
@@ -61,10 +61,13 @@ private:
         requires NonRelationBindingConcept<T>
     std::optional<View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
-        const Repository* current = this;
+        if (auto index_or_nullopt = m_symbol_repository.find_local_with_hash(builder, h))
+            return View<Index<T>, Repository>(*index_or_nullopt, *this);
+
+        const Repository* current = m_parent;
         while (current != nullptr)
         {
-            if (auto index_or_nullopt = current->m_symbol_repository.find_local_with_hash(builder, h))
+            if (auto index_or_nullopt = current->m_symbol_repository.find_local_unsafe_with_hash(builder, h))
                 return View<Index<T>, Repository>(*index_or_nullopt, *current);
 
             current = current->m_parent;
@@ -109,10 +112,15 @@ private:
     {
         const auto g = builder.relation;
 
-        const Repository* current = this;
+        if (auto row_or_nullopt = m_relation_repository.find_local_with_hash(builder, h))
+            return View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
+                Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, *row_or_nullopt },
+                *this);
+
+        const Repository* current = m_parent;
         while (current != nullptr)
         {
-            if (auto row_or_nullopt = current->m_relation_repository.find_local_with_hash(builder, h))
+            if (auto row_or_nullopt = current->m_relation_repository.find_local_unsafe_with_hash(builder, h))
                 return View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
                     Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, *row_or_nullopt },
                     *current);
@@ -301,7 +309,7 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    /// Parent layers must remain frozen for the lifetime of a child repository.
+    /// Parent layers must remain frozen and outlive this repository.
     Repository(size_t index, const Repository* parent = nullptr) :
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),

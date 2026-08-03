@@ -176,6 +176,9 @@ void expect_concurrent_complete_miss_canonicalizes(Set& set, const Element& elem
     const auto found = set.find_with_hash(element, hash);
     ASSERT_TRUE(found.has_value());
     EXPECT_EQ(*found, expected);
+    const auto unsafe_found = set.find_unsafe_with_hash(element, hash);
+    ASSERT_TRUE(unsafe_found.has_value());
+    EXPECT_EQ(*unsafe_found, expected);
     EXPECT_THROW(set.insert_new_with_hash(hash, element), std::logic_error);
     EXPECT_EQ(set.size(), 1);
 }
@@ -495,6 +498,15 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
     const auto [parent_view, parent_created] = parent.get_or_create(parent_data);
     ASSERT_TRUE(parent_created);
 
+    auto parent_serialized_data = Data<ConcurrentSerializedElement> {};
+    parent_serialized_data.values.push_back(parent_view.get_index());
+    const auto [parent_serialized_view, parent_serialized_created] = parent.get_or_create(parent_serialized_data);
+    ASSERT_TRUE(parent_serialized_created);
+
+    const auto relation = Index<ConcurrentRelation>(0);
+    const auto [parent_binding_view, parent_binding_created] = parent.get_or_create(make_binding<ObjectTag>(relation, 7));
+    ASSERT_TRUE(parent_binding_created);
+
     auto child = ConcurrentRepository<ObjectTag>(1, &parent, formalism::RelationRepositoryConfig(12));
     auto errors = std::atomic_size_t { 0 };
     constexpr uint_t rows_per_thread = 256;
@@ -506,6 +518,23 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                     inherited.value = 7;
                     const auto [inherited_view, inherited_created] = child.get_or_create(inherited);
                     if (inherited_created || &inherited_view.get_context() != &parent)
+                        errors.fetch_add(1, std::memory_order_relaxed);
+
+                    auto inherited_serialized = Data<ConcurrentSerializedElement> {};
+                    inherited_serialized.values.push_back(parent_view.get_index());
+                    const auto [inherited_serialized_view, inherited_serialized_created] = child.get_or_create(inherited_serialized);
+                    if (inherited_serialized_created || &inherited_serialized_view.get_context() != &parent
+                        || inherited_serialized_view.get_data().values.front() != parent_view.get_index())
+                        errors.fetch_add(1, std::memory_order_relaxed);
+
+                    const auto [inherited_binding_view, inherited_binding_created] = child.get_or_create(make_binding<ObjectTag>(relation, 7));
+                    if (inherited_binding_created || &inherited_binding_view.get_context() != &parent
+                        || !std::ranges::equal(inherited_binding_view.get_data(), parent_binding_view.get_data()))
+                        errors.fetch_add(1, std::memory_order_relaxed);
+
+                    auto missing = Data<ConcurrentElement> {};
+                    missing.value = std::numeric_limits<uint_t>::max();
+                    if (child.find(missing).has_value())
                         errors.fetch_add(1, std::memory_order_relaxed);
 
                     for (uint_t row = 0; row < rows_per_thread; ++row)
@@ -521,8 +550,12 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
 
     EXPECT_EQ(errors.load(), 0);
     EXPECT_EQ(parent.size<ConcurrentElement>(), 1);
+    EXPECT_EQ(parent.size<ConcurrentSerializedElement>(), 1);
+    EXPECT_EQ(parent.size(relation), 1);
     EXPECT_EQ(child.size<ConcurrentElement>(), 1 + kThreads * rows_per_thread);
     EXPECT_EQ(parent_view.get_data().value, 7);
+    EXPECT_EQ(parent_serialized_view.get_data().values.front(), parent_view.get_index());
+    EXPECT_TRUE(std::ranges::equal(parent_binding_view.get_data(), make_binding<ObjectTag>(relation, 7).objects));
 }
 
 TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndClearReusesStorage)

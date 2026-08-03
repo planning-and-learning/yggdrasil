@@ -366,6 +366,23 @@ public:
         return std::nullopt;
     }
 
+    /// Performs a local lookup without locking the underlying hash shard. The
+    /// underlying collection's unsafe publication, lifetime, and immutability
+    /// preconditions apply.
+    std::optional<Index<Row>> find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+    {
+        const auto g = builder.relation;
+
+        const auto* slot = find_slot(g);
+        if (!slot)
+            return std::nullopt;
+
+        if (auto row_or_nullopt = slot->container.find_unsafe_with_hash(builder.objects, h))
+            return Index<Row>(slot->parent_size + *row_or_nullopt);
+
+        return std::nullopt;
+    }
+
     std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
         return find_local_with_hash(builder, BasicRelationRepository::hash(builder));

@@ -106,6 +106,20 @@ public:
         return std::nullopt;
     }
 
+    /// Performs a local lookup without locking the underlying hash shard. The
+    /// underlying collection's unsafe publication, lifetime, and immutability
+    /// preconditions apply.
+    std::optional<Index<T>> find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
+    {
+        const auto& container = m_slot.container;
+        assert(h == container.hash(builder));
+
+        if (auto index_or_nullopt = container.find_unsafe_with_hash(builder, h))
+            return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
+
+        return std::nullopt;
+    }
+
     std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
     std::pair<Index<T>, bool> get_or_create_local_with_hash(Data<T>& builder, size_t h)

@@ -70,10 +70,13 @@ public:
     {
         const auto relation = builder.relation;
 
-        const auto* current = this;
+        if (auto row_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
+            return View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt }, repository());
+
+        const auto* current = m_parent;
         while (current != nullptr)
         {
-            if (auto row_or_nullopt = current->template get<T>().find_local_with_hash(builder, h))
+            if (auto row_or_nullopt = current->template get<T>().find_local_unsafe_with_hash(builder, h))
                 return View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt },
                                                                               current->repository());
 
@@ -171,6 +174,13 @@ public:
         return get<T>().find_local_with_hash(builder, h);
     }
 
+    /// Forwards the unsafe local-only lookup without traversing ancestors.
+    template<typename T>
+    auto find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+    {
+        return get<T>().find_local_unsafe_with_hash(builder, h);
+    }
+
     template<typename T>
     auto find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
@@ -241,7 +251,7 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    /// Parent layers must remain frozen for the lifetime of a child repository.
+    /// Parent layers must remain frozen and outlive this repository.
     RelationRepositoryBase(size_t index, const Repository* parent = nullptr) : RelationRepositoryBase(index, parent, RelationRepositoryConfig()) {}
 
     RelationRepositoryBase(size_t index, const Repository* parent, RelationRepositoryConfig config) :

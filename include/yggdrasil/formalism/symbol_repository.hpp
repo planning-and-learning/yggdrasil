@@ -58,10 +58,13 @@ public:
     template<typename T>
     std::optional<View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
-        const auto* current = this;
+        if (auto index_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
+            return View<Index<T>, Repository>(*index_or_nullopt, repository());
+
+        const auto* current = m_parent;
         while (current != nullptr)
         {
-            if (auto index_or_nullopt = current->template get<T>().find_local_with_hash(builder, h))
+            if (auto index_or_nullopt = current->template get<T>().find_local_unsafe_with_hash(builder, h))
                 return View<Index<T>, Repository>(*index_or_nullopt, current->repository());
 
             current = current->m_parent;
@@ -156,6 +159,13 @@ public:
         return get<T>().find_local_with_hash(builder, h);
     }
 
+    /// Forwards the unsafe local-only lookup without traversing ancestors.
+    template<typename T>
+    auto find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
+    {
+        return get<T>().find_local_unsafe_with_hash(builder, h);
+    }
+
     template<typename T>
     auto find_local(const Data<T>& builder) const noexcept
     {
@@ -226,7 +236,7 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    /// Parent layers must remain frozen for the lifetime of a child repository.
+    /// Parent layers must remain frozen and outlive this repository.
     SymbolRepositoryBase(const Repository* parent = nullptr) :
         BasicSymbolRepository<Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr)...,
         m_parent(parent),

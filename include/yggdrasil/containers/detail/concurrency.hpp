@@ -125,6 +125,35 @@ std::optional<typename Set::value_type> find_value_with_hash(const Set& set, con
     }
 }
 
+/**
+ * Performs a prehashed lookup without locking a concurrent hash shard.
+ *
+ * All prior publication must happen-before the call. The set must remain alive
+ * and must not be mutated, cleared, rehashed, moved, or destroyed for the
+ * whole call. Concurrent read-only calls are allowed. Violating these
+ * preconditions is a data race and undefined behavior.
+ *
+ * GTL has no prehashed overload of if_contains_unsafe(), so the dependency's
+ * explicitly unsafe submap access is centralized here.
+ */
+template<bool ThreadSafe, typename Set, typename Key>
+std::optional<typename Set::value_type> find_value_unsafe_with_hash(const Set& set, const Key& key, size_t hash)
+{
+    if constexpr (ThreadSafe)
+    {
+        const auto& submap = set.get_inner(set.subidx(hash)).set_;
+        if (const auto it = submap.find(key, hash); it != submap.end())
+            return *it;
+        return std::nullopt;
+    }
+    else
+    {
+        if (const auto it = set.find(key, hash); it != set.end())
+            return *it;
+        return std::nullopt;
+    }
+}
+
 template<typename Set, typename Key, typename Factory>
 std::pair<typename Set::value_type, bool> parallel_lazy_insert_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
 {

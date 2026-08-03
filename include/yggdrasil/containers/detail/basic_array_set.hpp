@@ -154,6 +154,19 @@ public:
         return find_value_with_hash<ThreadSafe>(m_set, element, h);
     }
 
+    /// Performs a prehashed lookup without a shard lock. Prior publication must
+    /// happen-before the call, and the set must remain alive and unmodified for
+    /// the whole call. Concurrent read-only calls are allowed. No runtime check
+    /// enforces these preconditions; violating them is undefined behavior.
+    std::optional<index_type> find_unsafe_with_hash(std::span<const value_type> element, size_t h) const
+    {
+        ensure_fits(element);
+        assert(h == hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
+
+        return find_value_unsafe_with_hash<ThreadSafe>(m_set, element, h);
+    }
+
     std::optional<index_type> find(std::span<const value_type> element) const { return find_with_hash(element, hash(element)); }
 
     bool contains_with_hash(std::span<const value_type> element, size_t h) const { return find_with_hash(element, h).has_value(); }

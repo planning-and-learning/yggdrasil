@@ -44,12 +44,13 @@
 
 namespace ygg::buffer
 {
-/// ThreadSafe permits concurrent lookup, insertion, size queries, and reads of
+/// ThreadSafe permits concurrent normal lookup, insertion, size queries, and reads of
 /// published indices. Hash-table locking is limited to the target shard and
 /// the append lock covers index allocation, serialization, and storage
 /// publication. Clear, memory inspection, move, and destruction require
 /// quiescence. Each ThreadSafe instance requires exclusive use of its supplied
-/// serialization buffer and arena.
+/// serialization buffer and arena. find_unsafe_with_hash additionally requires
+/// the documented caller-enforced quiescence.
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
@@ -130,6 +131,18 @@ public:
         assert(h == m_set.hash(element));
 
         return ygg::detail::find_value_with_hash<ThreadSafe>(m_set, element, h);
+    }
+
+    /// Performs a prehashed lookup without a shard lock. Prior publication must
+    /// happen-before the call, and the set must remain alive and unmodified for
+    /// the whole call. Concurrent read-only calls are allowed. No runtime check
+    /// enforces these preconditions; violating them is undefined behavior.
+    std::optional<Index<Tag>> find_unsafe_with_hash(const Data<Tag>& element, size_t h) const
+    {
+        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
+        assert(h == m_set.hash(element));
+
+        return ygg::detail::find_value_unsafe_with_hash<ThreadSafe>(m_set, element, h);
     }
 
     std::optional<Index<Tag>> find(const Data<Tag>& element) const { return find_with_hash(element, IndexedHashSet::hash(element)); }
