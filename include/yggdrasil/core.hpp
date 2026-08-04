@@ -32,6 +32,7 @@
 #include "yggdrasil/core/observer_ptr_hash.hpp"
 #include "yggdrasil/core/observer_ptr_ordering.hpp"
 #include "yggdrasil/core/path.hpp"
+#include "yggdrasil/core/portable_shuffle.hpp"
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/core/types_utils.hpp"

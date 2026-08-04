@@ -56,6 +56,7 @@ add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
 add_yggdrasil_gtest(core_concepts "core/concepts.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
 add_yggdrasil_gtest(core_path "core/path.cpp")
+add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
 add_yggdrasil_gtest(formatting_formatter "formatting/formatter.cpp")
 
