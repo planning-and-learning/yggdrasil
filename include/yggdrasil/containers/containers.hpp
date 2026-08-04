@@ -33,6 +33,7 @@
 #include "yggdrasil/containers/raw_vector_pool.hpp"
 #include "yggdrasil/containers/raw_vector_set.hpp"
 #include "yggdrasil/containers/repository_types.hpp"
+#include "yggdrasil/containers/segmented_bit_vector.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/containers/shared_object_pool.hpp"
 #include "yggdrasil/containers/tuple.hpp"

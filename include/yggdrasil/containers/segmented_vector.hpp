@@ -37,10 +37,11 @@
 
 namespace ygg
 {
-/// ThreadSafe permits concurrent appends, size queries, and reads after
-/// publication was observed through size() or external synchronization. Clear,
-/// pop_back, iteration, memory inspection, move, destruction, and mutation of
-/// published elements require quiescence or external locking.
+/// ThreadSafe permits concurrent appends, resize growth, size queries, and reads
+/// after publication was observed through size() or external synchronization.
+/// Clear, resize shrink, pop_back, iteration, memory inspection, move,
+/// destruction, and mutation of published elements require quiescence or
+/// external locking.
 template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
 class SegmentedVector
 {
@@ -249,10 +250,55 @@ private:
         ensure_not_empty();
         const auto size = detail::load_size<ThreadSafe>(m_size) - 1;
         detail::store_size<ThreadSafe>(m_size, size);
+        destroy_at_unlocked(size);
+    }
 
-        const auto index = Layout::segment_index(size);
-        const auto offset = Layout::segment_offset(size, index);
-        m_segments[index].destroy_at(offset);
+    void destroy_at_unlocked(size_t pos)
+    {
+        const auto index = Layout::segment_index(pos);
+        m_segments[index].destroy_at(Layout::segment_offset(pos, index));
+    }
+
+    template<typename Construct>
+    void resize_unlocked(size_t new_size, Construct&& construct)
+    {
+        const auto old_size = detail::load_size<ThreadSafe>(m_size);
+        if (new_size == old_size)
+            return;
+
+        if (new_size < old_size)
+        {
+            detail::store_size<ThreadSafe>(m_size, new_size);
+            for (auto size = old_size; size > new_size;)
+            {
+                --size;
+                destroy_at_unlocked(size);
+            }
+            return;
+        }
+
+        resize_to_fit(new_size);
+        auto size = old_size;
+        try
+        {
+            for (; size < new_size; ++size)
+            {
+                const auto index = Layout::segment_index(size);
+                const auto offset = Layout::segment_offset(size, index);
+                construct(m_segments[index].data + offset);
+                ++m_segments[index].size;
+            }
+        }
+        catch (...)
+        {
+            while (size > old_size)
+            {
+                --size;
+                destroy_at_unlocked(size);
+            }
+            throw;
+        }
+        detail::store_size<ThreadSafe>(m_size, new_size);
     }
 
 public:
@@ -394,6 +440,16 @@ public:
     void push_back(const T& element) { emplace_back(element); }
 
     void push_back(T&& element) { emplace_back(std::move(element)); }
+
+    void resize(size_t size)
+    {
+        detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { resize_unlocked(size, [](T* element) { std::construct_at(element); }); });
+    }
+
+    void resize(size_t size, const T& value)
+    {
+        detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { resize_unlocked(size, [&](T* element) { std::construct_at(element, value); }); });
+    }
 
     /// Appends only if the returned index is at most max_index.
     size_t push_back_bounded(const T& element, size_t max_index)

@@ -426,12 +426,12 @@ private:
 
 /// Stores fixed-length arrays as bit-packed unsigned integer codes with stable
 /// references. Values are encoded and decoded via Coder. ThreadSafe permits
-/// concurrent appends, size queries, and reads after publication was observed
-/// through size() or external synchronization. Clear, pop_back, iteration,
-/// segment or memory inspection, move, destruction, and mutation of published
-/// arrays require quiescence or external locking. Atomic packed access prevents
-/// neighboring-array races but does not make a multi-block logical mutation
-/// atomic.
+/// concurrent appends, resize growth, size queries, and reads after publication
+/// was observed through size() or external synchronization. Clear, resize
+/// shrink, pop_back, iteration, segment or memory inspection, move,
+/// destruction, and mutation of published arrays require quiescence or external
+/// locking. Atomic packed access prevents neighboring-array races but does not
+/// make a multi-block logical mutation atomic.
 template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
 class BitPackedArrayPool
 {
@@ -539,6 +539,21 @@ private:
         if (size > max_index)
             throw std::length_error("BitPackedArrayPool: index is too large.");
         return push_back_at_unlocked(size, elements);
+    }
+
+    void resize_unlocked(size_t new_size, std::span<const value_type> elements)
+    {
+        const auto current = detail::load_size<ThreadSafe>(m_size);
+        if (new_size <= current)
+        {
+            detail::store_size<ThreadSafe>(m_size, new_size);
+            return;
+        }
+
+        reserve(new_size);
+        for (size_t index = current; index < new_size; ++index)
+            get_view(index) = elements;
+        detail::store_size<ThreadSafe>(m_size, new_size);
     }
 
     void pop_back_unlocked()
@@ -697,6 +712,12 @@ public:
     {
         ensure_fits(elements);
         return detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { return push_back_bounded_unlocked(elements, max_index); });
+    }
+
+    void resize(size_t new_size, std::span<const value_type> elements)
+    {
+        ensure_fits(elements);
+        detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { resize_unlocked(new_size, elements); });
     }
 
     void clear() noexcept { detail::store_size<ThreadSafe>(m_size, 0); }

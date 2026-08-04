@@ -241,6 +241,58 @@ TEST(YggdrasilTests, CommonBitPackedArrayPoolOutOfRange)
     EXPECT_THROW(pool.push_back(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
 }
 
+TEST(YggdrasilTests, CommonBitPackedArrayPoolResizeGrowsShrinksAndOverwritesRetainedStorage)
+{
+    auto pool = ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(2, 3);
+    const auto first = std::array<uint8_t, 2> { 1, 2 };
+    const auto fill = std::array<uint8_t, 2> { 3, 4 };
+    const auto replacement = std::array<uint8_t, 2> { 5, 6 };
+
+    pool.push_back(first);
+    pool.resize(6, fill);
+
+    EXPECT_EQ(pool.size(), 6);
+    EXPECT_EQ(pool[0], std::span<const uint8_t>(first));
+    for (size_t i = 1; i < pool.size(); ++i)
+        EXPECT_EQ(pool[i], std::span<const uint8_t>(fill));
+
+    const auto capacity = pool.capacity();
+    pool.resize(2, replacement);
+    EXPECT_EQ(pool.size(), 2);
+    EXPECT_EQ(pool.capacity(), capacity);
+    EXPECT_EQ(pool[1], std::span<const uint8_t>(fill));
+
+    pool.resize(5, replacement);
+    EXPECT_EQ(pool.size(), 5);
+    EXPECT_EQ(pool.capacity(), capacity);
+    EXPECT_EQ(pool[1], std::span<const uint8_t>(fill));
+    for (size_t i = 2; i < pool.size(); ++i)
+        EXPECT_EQ(pool[i], std::span<const uint8_t>(replacement));
+}
+
+TEST(YggdrasilTests, CommonBitPackedArrayPoolResizePublishesOnlyAfterSuccessfulFill)
+{
+    auto pool = ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(2, 3);
+    const auto first = std::array<uint8_t, 2> { 1, 2 };
+    const auto wrong_length = std::array<uint8_t, 1> { 3 };
+    const auto unrepresentable = std::array<uint8_t, 2> { 4, 8 };
+    const auto fill = std::array<uint8_t, 2> { 6, 7 };
+    pool.push_back(first);
+
+    EXPECT_THROW(pool.resize(4, wrong_length), std::invalid_argument);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool[0], std::span<const uint8_t>(first));
+
+    EXPECT_THROW(pool.resize(4, unrepresentable), std::out_of_range);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool[0], std::span<const uint8_t>(first));
+
+    pool.resize(4, fill);
+    EXPECT_EQ(pool.size(), 4);
+    for (size_t i = 1; i < pool.size(); ++i)
+        EXPECT_EQ(pool[i], std::span<const uint8_t>(fill));
+}
+
 TEST(YggdrasilTests, CommonConcurrentBitPackedArrayPoolChecksIndexBoundBeforePublishing)
 {
     using Pool = ygg::BitPackedArrayPool<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1, true>;

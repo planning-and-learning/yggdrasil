@@ -30,6 +30,7 @@
 #include <yggdrasil/containers/raw_array_set.hpp>
 #include <yggdrasil/containers/raw_vector_pool.hpp>
 #include <yggdrasil/containers/raw_vector_set.hpp>
+#include <yggdrasil/containers/segmented_bit_vector.hpp>
 #include <yggdrasil/containers/segmented_vector.hpp>
 
 #ifndef NDEBUG
@@ -131,6 +132,53 @@ void expect_concurrent_set_inserts(Set& set)
         EXPECT_TRUE(std::ranges::equal(set[indices[0][value]], expected));
     }
 }
+
+struct BlockingValue
+{
+    int value;
+    std::atomic_size_t* copies;
+    std::atomic_bool* started;
+    std::atomic_bool* release;
+
+    BlockingValue(int value_, std::atomic_size_t* copies_ = nullptr, std::atomic_bool* started_ = nullptr, std::atomic_bool* release_ = nullptr) noexcept :
+        value(value_),
+        copies(copies_),
+        started(started_),
+        release(release_)
+    {
+    }
+
+    BlockingValue(const BlockingValue& other) : value(other.value), copies(other.copies), started(other.started), release(other.release)
+    {
+        if (!copies || copies->fetch_add(1, std::memory_order_relaxed) != 1)
+            return;
+        started->store(true, std::memory_order_release);
+        while (!release->load(std::memory_order_acquire))
+            std::this_thread::yield();
+    }
+};
+
+struct BlockingCoder
+{
+    using value_type = uint32_t;
+
+    static inline std::atomic_size_t* encodes = nullptr;
+    static inline std::atomic_bool* started = nullptr;
+    static inline std::atomic_bool* release = nullptr;
+
+    static value_type decode(uint32_t value) noexcept { return value; }
+
+    static uint32_t encode(value_type value) noexcept
+    {
+        if (encodes && encodes->fetch_add(1, std::memory_order_relaxed) == 1)
+        {
+            started->store(true, std::memory_order_release);
+            while (!release->load(std::memory_order_acquire))
+                std::this_thread::yield();
+        }
+        return value;
+    }
+};
 }  // namespace
 
 TEST(CommonConcurrentPublicationTest, SegmentedVectorPublishesForMutableAndConstAccess)
@@ -170,6 +218,54 @@ TEST(CommonConcurrentPublicationTest, BitPackedArrayPoolPublishesForMutableAndCo
 
     auto const_pool = Pool(2, 5);
     EXPECT_EQ(publish_and_read([&] { const_pool.push_back(values); }, [&] { return const_pool.size(); }, [&] { return std::as_const(const_pool)[0][1]; }), 23);
+}
+
+TEST(CommonConcurrentPublicationTest, ResizeGrowthPublishesOnlyTheFinalSize)
+{
+    auto started = std::atomic_bool { false };
+    auto release = std::atomic_bool { false };
+    auto calls = std::atomic_size_t { 0 };
+
+    auto vector = SegmentedVector<BlockingValue, 1, true> {};
+    vector.emplace_back(1);
+    const auto fill = BlockingValue(7, &calls, &started, &release);
+    auto vector_writer = std::jthread([&] { vector.resize(4, fill); });
+
+    while (!started.load(std::memory_order_acquire))
+        std::this_thread::yield();
+    EXPECT_EQ(vector.size(), 1);
+    release.store(true, std::memory_order_release);
+    while (vector.size() != 4)
+        std::this_thread::yield();
+    EXPECT_EQ(vector.back().value, 7);
+    vector_writer.join();
+
+    calls.store(0, std::memory_order_relaxed);
+    started.store(false, std::memory_order_relaxed);
+    release.store(false, std::memory_order_relaxed);
+    BlockingCoder::encodes = &calls;
+    BlockingCoder::started = &started;
+    BlockingCoder::release = &release;
+    auto pool = BitPackedArrayPool<uint32_t, BlockingCoder, 1, true>(1, 1);
+    constexpr auto bit = std::array<uint32_t, 1> { 1 };
+    auto pool_writer = std::jthread([&] { pool.resize(4, bit); });
+
+    while (!started.load(std::memory_order_acquire))
+        std::this_thread::yield();
+    EXPECT_EQ(pool.size(), 0);
+    release.store(true, std::memory_order_release);
+    while (pool.size() != 4)
+        std::this_thread::yield();
+    EXPECT_EQ(pool[3][0], 1);
+    pool_writer.join();
+    BlockingCoder::encodes = nullptr;
+    BlockingCoder::started = nullptr;
+    BlockingCoder::release = nullptr;
+
+    auto bits = SegmentedBitVector<uint32_t, 1, true> {};
+    bits.resize(4, true);
+    EXPECT_EQ(bits.size(), 4);
+    EXPECT_TRUE(bits.back());
 }
 
 TEST(CommonConcurrentPublicationTest, RawVectorPoolPublishesCompleteValues)

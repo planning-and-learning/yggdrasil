@@ -11,6 +11,33 @@
 
 namespace ygg::tests
 {
+namespace
+{
+struct ResizeValue
+{
+    static inline int alive = 0;
+    static inline int constructions_before_throw = -1;
+
+    int value = 0;
+
+    ResizeValue() { initialize(0); }
+    explicit ResizeValue(int value_) { initialize(value_); }
+    ResizeValue(const ResizeValue& other) { initialize(other.value); }
+    ~ResizeValue() { --alive; }
+
+private:
+    void initialize(int value_)
+    {
+        if (constructions_before_throw == 0)
+            throw std::runtime_error("construction failed");
+        if (constructions_before_throw > 0)
+            --constructions_before_throw;
+        value = value_;
+        ++alive;
+    }
+};
+}
+
 TEST(CommonSegmentedVectorTest, EmptySizeCapacityAndMemoryUsage)
 {
     ygg::SegmentedVector<int, 4> vector;
@@ -101,6 +128,62 @@ TEST(CommonSegmentedVectorTest, PopBackAndClearUpdateSize)
     EXPECT_TRUE(vector.empty());
     EXPECT_EQ(vector.size(), 0);
     EXPECT_EQ(vector.capacity(), 6);
+}
+
+TEST(CommonSegmentedVectorTest, ResizeGrowsAndShrinksAcrossSegments)
+{
+    ygg::SegmentedVector<int, 2> vector;
+    vector.push_back(7);
+
+    vector.resize(7);
+
+    EXPECT_EQ(vector.size(), 7);
+    EXPECT_EQ(vector.capacity(), 14);
+    EXPECT_EQ(vector.front(), 7);
+    for (size_t i = 1; i < vector.size(); ++i)
+        EXPECT_EQ(vector[i], 0);
+
+    vector.resize(3);
+    vector.resize(6, 9);
+
+    EXPECT_EQ(vector.size(), 6);
+    EXPECT_EQ(vector.capacity(), 14);
+    EXPECT_EQ(vector[0], 7);
+    EXPECT_EQ(vector[1], 0);
+    EXPECT_EQ(vector[2], 0);
+    for (size_t i = 3; i < vector.size(); ++i)
+        EXPECT_EQ(vector[i], 9);
+}
+
+TEST(CommonSegmentedVectorTest, ResizeRollsBackFailedConstruction)
+{
+    ResizeValue::alive = 0;
+    ResizeValue::constructions_before_throw = -1;
+    {
+        ygg::SegmentedVector<ResizeValue, 2> vector;
+        vector.emplace_back(7);
+
+        ResizeValue::constructions_before_throw = 1;
+        EXPECT_THROW(vector.resize(4), std::runtime_error);
+        EXPECT_EQ(vector.size(), 1);
+        EXPECT_EQ(vector.front().value, 7);
+        EXPECT_EQ(ResizeValue::alive, 1);
+
+        ResizeValue::constructions_before_throw = -1;
+        const ResizeValue fill(9);
+        ResizeValue::constructions_before_throw = 1;
+        EXPECT_THROW(vector.resize(4, fill), std::runtime_error);
+        EXPECT_EQ(vector.size(), 1);
+        EXPECT_EQ(vector.front().value, 7);
+        EXPECT_EQ(ResizeValue::alive, 2);
+
+        ResizeValue::constructions_before_throw = -1;
+        vector.resize(4, fill);
+        EXPECT_EQ(ResizeValue::alive, 5);
+        vector.resize(1);
+        EXPECT_EQ(ResizeValue::alive, 2);
+    }
+    EXPECT_EQ(ResizeValue::alive, 0);
 }
 
 TEST(CommonSegmentedVectorTest, AtThrowsForOutOfRangeAccess)
