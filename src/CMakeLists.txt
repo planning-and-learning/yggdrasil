@@ -56,7 +56,7 @@ message(STATUS "Dependency install rpath: ${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}"
 
 foreach(dependency IN ITEMS
     argparse benchmark mpich boost cista fmt
-    googletest gtl nanobind nauty oneTBB valla
+    googletest gtl nanobind nauty oneTBB
 )
     add_subdirectory("${dependency}")
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${dependency}/licenses/"

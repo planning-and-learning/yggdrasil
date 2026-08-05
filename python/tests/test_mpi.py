@@ -43,7 +43,6 @@ def _run_smoke_test(root: Path) -> None:
         "nauty/LICENSE-2.0.txt",
         "oneTBB/LICENSE.txt",
         "oneTBB/third-party-programs.txt",
-        "valla/LICENSE",
     ):
         assert (license_dir / license_file).is_file()
 

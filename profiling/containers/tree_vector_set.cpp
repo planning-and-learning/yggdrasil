@@ -17,13 +17,10 @@
 
 #include <array>
 #include <benchmark/benchmark.h>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <span>
 #include <string>
-#include <valla/valla.hpp>
 #include <vector>
 #include <yggdrasil/containers/tree_vector_set.hpp>
 
@@ -41,42 +38,10 @@ constexpr auto kMixedPrefill = size_t { 1U << 14 };
 constexpr auto kMixedInsertPeriod = size_t { 20 };
 constexpr auto kMixedInsertsPerThread = (static_cast<size_t>(kMixedIterations) + kMixedInsertPeriod - 1) / kMixedInsertPeriod;
 
-// Valla's heterogeneous overloads are ambiguous when its leaf and index types
-// are identical, so use a different integral width for the scalar-leaf baseline.
 using Value = uint64_t;
 using Vector = std::array<Value, kVectorSize>;
 using SequentialSet = TreeVectorSet<Value>;
 using ConcurrentSet = TreeVectorSet<Value, 32, true>;
-
-class VallaSet
-{
-public:
-    using index_type = valla::Slot<uint_t>;
-    static constexpr bool thread_safe = false;
-
-    index_type insert(std::span<const Value> values)
-    {
-        assert(values.size() == kVectorSize);
-        valla::encode_as_unsigned_integrals(values, m_leaves, m_scratch.begin());
-        return valla::insert_sequence(m_scratch, m_nodes);
-    }
-
-    void read(index_type index, std::span<Value> values)
-    {
-        assert(values.size() == kVectorSize);
-        valla::read_sequence(index, m_nodes, m_scratch.begin());
-        valla::decode_from_unsigned_integrals(m_scratch, m_leaves, values.begin());
-    }
-
-    size_t memory_usage() const noexcept { return m_leaves.memory_usage() + m_nodes.memory_usage(); }
-    size_t num_leaves() const noexcept { return m_leaves.size(); }
-    size_t num_nodes() const noexcept { return m_nodes.size(); }
-
-private:
-    valla::IndexedHashSet<Value, uint_t> m_leaves;
-    valla::IndexedHashSet<valla::Slot<uint_t>, uint_t> m_nodes;
-    std::array<uint_t, kVectorSize> m_scratch {};
-};
 
 std::vector<Vector> corpus;
 
@@ -237,7 +202,6 @@ void register_benchmarks(const char* prefix, bool concurrent)
 {
     register_benchmarks<SequentialSet>("tree_vector_set/uint64/sequential", false);
     register_benchmarks<ConcurrentSet>("tree_vector_set/uint64/concurrent", true);
-    register_benchmarks<VallaSet>("valla/uint64/sequential", false);
     return true;
 }();
 
