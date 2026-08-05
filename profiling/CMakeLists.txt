@@ -2,6 +2,16 @@ find_package(benchmark 1.8.3 REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFA
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(Threads REQUIRED)
 
+add_executable(tree_vector_set "containers/tree_vector_set.cpp")
+target_compile_features(tree_vector_set PRIVATE cxx_std_20)
+target_include_directories(
+    tree_vector_set
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+        "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
+target_link_libraries(tree_vector_set PRIVATE benchmark::benchmark_main Threads::Threads)
+
 add_executable(formalism_repository "formalism/repository.cpp")
 target_compile_features(formalism_repository PRIVATE cxx_std_20)
 target_include_directories(

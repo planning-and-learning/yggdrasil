@@ -45,8 +45,10 @@ add_yggdrasil_gtest(containers_repository_types "containers/repository_types.cpp
 add_yggdrasil_gtest(containers_segmented_bit_vector "containers/segmented_bit_vector.cpp")
 add_yggdrasil_gtest(containers_segmented_vector "containers/segmented_vector.cpp")
 add_yggdrasil_gtest(containers_shared_object_pool "containers/shared_object_pool.cpp")
+add_yggdrasil_gtest(containers_tree_vector_set "containers/tree_vector_set.cpp")
 add_yggdrasil_gtest(containers_unique_object_pool "containers/unique_object_pool.cpp")
 target_link_libraries(containers_shared_object_pool PRIVATE Threads::Threads)
+target_link_libraries(containers_tree_vector_set PRIVATE Threads::Threads)
 target_link_libraries(containers_unique_object_pool PRIVATE Threads::Threads)
 add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
 

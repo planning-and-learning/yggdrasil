@@ -36,6 +36,7 @@
 #include "yggdrasil/containers/segmented_bit_vector.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/containers/shared_object_pool.hpp"
+#include "yggdrasil/containers/tree_vector_set.hpp"
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/containers/unique_object_pool.hpp"
 #include "yggdrasil/containers/unordered_set.hpp"
