@@ -1,0 +1,13 @@
+diff --git a/include/gtl/btree.hpp b/include/gtl/btree.hpp
+index f01ac2b..189e4c4 100644
+--- a/include/gtl/btree.hpp
++++ b/include/gtl/btree.hpp
+@@ -2701,7 +2701,7 @@ auto btree<P>::erase_multi(const K& key) -> size_type {
+ 
+ template<typename P>
+ void btree<P>::clear() {
+-    if (!empty()) {
++    if (root() != EmptyNode()) {
+         internal_clear(root());
+     }
+     mutable_root() = EmptyNode();

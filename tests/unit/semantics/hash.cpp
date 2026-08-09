@@ -62,11 +62,11 @@ TEST(YggdrasilTests, CommonHashValuesArePlatformIndependent)
 
 TEST(YggdrasilTests, CommonHashSupportsUnalignedByteRanges)
 {
-    alignas(uint64_t) const char storage[] = "_yggdrasil";
+    alignas(uint64_t) const char storage[] = "_0123456789abcdef";
     const auto text = std::string_view(storage + 1, sizeof(storage) - 2);
 
     ASSERT_NE(reinterpret_cast<uintptr_t>(text.data()) % alignof(uint64_t), 0);
-    EXPECT_EQ(ygg::Hash<std::string_view> {}(text), ygg::Hash<std::string> {}("yggdrasil"));
+    EXPECT_EQ(ygg::Hash<std::string_view> {}(text), 0x4be06d94cf4ad1a7ULL);
 }
 
 TEST(YggdrasilTests, CommonHashAdaptersNormalizeFloatingPointNaN)

@@ -69,7 +69,7 @@ TEST(YggdrasilTests, CommonBitPackedArrayViewAtChecksBounds)
 
 TEST(YggdrasilTests, CommonBitPackedArrayViewFrontBackCheckEmptyAndInvalidViews)
 {
-    auto storage = std::array<uint8_t, 1> {};
+    auto storage = std::array<uint8_t, 2> {};
     auto view = ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 2, 3, 0);
     const auto const_view = ygg::BasicBitPackedArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 2, 3, 0);
 

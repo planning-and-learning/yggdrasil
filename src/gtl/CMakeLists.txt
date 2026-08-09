@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 project(InstallGTL)
 
 include(ExternalProject)
+find_package(Git REQUIRED)
 
 set(YGGDRASIL_GTL_GIT_TAG a1381e70058257c0f639d90136fa9939703fab3b CACHE STRING "Git tag used to build gtl.")
 
@@ -33,6 +34,9 @@ ExternalProject_Add(
     PREFIX ${CMAKE_BINARY_DIR}/gtl
     STAMP_DIR ${CMAKE_BINARY_DIR}/gtl/stamp/${YGGDRASIL_GTL_GIT_TAG}
     UPDATE_COMMAND ""
+    PATCH_COMMAND
+        ${GIT_EXECUTABLE} -C <SOURCE_DIR> apply
+        ${CMAKE_CURRENT_LIST_DIR}/clear-empty-node.patch
     CMAKE_ARGS ${CMAKE_ARGS}
 )
 ExternalProject_Add_Step(

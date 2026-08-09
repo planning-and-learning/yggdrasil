@@ -55,7 +55,7 @@ bool is_canonical(const DataList<T>& list)
 }
 
 template<typename T>
-bool is_canonical(const ::cista::optional<T>& element)
+bool is_canonical(const ::cista::optional<T>&)
 {
     return true;
 }
@@ -79,7 +79,7 @@ void canonicalize(DataList<T>& list)
 }
 
 template<typename T>
-void canonicalize(::cista::optional<T>& element)
+void canonicalize(::cista::optional<T>&)
 {
 }
 

@@ -51,7 +51,11 @@ inline std::string json_member_context(std::string_view context, std::string_vie
 {
     if (context.empty())
         return std::string(key);
-    return std::string(context) + "." + std::string(key);
+
+    std::string result;
+    result.reserve(context.size() + 1 + key.size());
+    result.append(context).append(".").append(key);
+    return result;
 }
 
 inline const boost::json::value* find_member(const boost::json::object& object, std::string_view key) { return object.if_contains(key); }

@@ -306,8 +306,6 @@ inline void MurmurHash3_x86_128(const void* key, const int len, uint32_t seed, v
 inline void MurmurHash3_x64_128(const void* key, const int len, const uint32_t seed, void* out)
 {
     const uint8_t* data = (const uint8_t*) key;
-    const int nblocks = len / 16;
-
     uint64_t h1 = seed;
     uint64_t h2 = seed;
 
@@ -318,11 +316,12 @@ inline void MurmurHash3_x64_128(const void* key, const int len, const uint32_t s
     // body
 
     const uint8_t* blocks = data;
+    auto remaining = len;
 
-    for (int i = 0; i < nblocks; i++)
+    for (; remaining >= 16; remaining -= 16, blocks += 16)
     {
-        uint64_t k1 = getblock64(blocks, i * 2 + 0);
-        uint64_t k2 = getblock64(blocks, i * 2 + 1);
+        uint64_t k1 = getblock64(blocks, 0);
+        uint64_t k2 = getblock64(blocks, 1);
 
         k1 *= c1;
         k1 = rotl64(k1, 31);
@@ -346,12 +345,12 @@ inline void MurmurHash3_x64_128(const void* key, const int len, const uint32_t s
     //----------
     // tail
 
-    const uint8_t* tail = (const uint8_t*) (data + nblocks * 16);
+    const uint8_t* tail = blocks;
 
     uint64_t k1 = 0;
     uint64_t k2 = 0;
 
-    switch (len & 15)
+    switch (remaining)
     {
         case 15:
             k2 ^= ((uint64_t) tail[14]) << 48;
