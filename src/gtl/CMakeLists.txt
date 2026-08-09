@@ -3,7 +3,7 @@ project(InstallGTL)
 
 include(ExternalProject)
 
-set(YGGDRASIL_GTL_GIT_TAG dc7a24fe4b7f2f94480d954da6562c7381ace41f CACHE STRING "Git tag used to build gtl.")
+set(YGGDRASIL_GTL_GIT_TAG a1381e70058257c0f639d90136fa9939703fab3b CACHE STRING "Git tag used to build gtl.")
 
 message(STATUS "Dependency \"gtl\"...")
 

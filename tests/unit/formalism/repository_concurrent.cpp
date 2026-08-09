@@ -150,6 +150,7 @@ using MixedRepository = formalism::Repository<formalism::ConcurrentSymbolReposit
 static_assert(ConcurrentRepository<ConcurrentObjectTag>::thread_safe);
 static_assert(!SequentialRepository::thread_safe);
 static_assert(!MixedRepository::thread_safe);
+static_assert(alignof(ConcurrentRepository<ConcurrentObjectTag>) < 256);
 
 template<typename Set, typename Element, typename IndexType>
 void expect_concurrent_complete_miss_canonicalizes(Set& set, const Element& element, IndexType expected)
