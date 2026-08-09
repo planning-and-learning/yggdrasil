@@ -43,7 +43,11 @@ void atomic_replace_bits(Block* block, Block mask, Block value) noexcept
 {
     auto reference = std::atomic_ref<Block>(*block);
     auto current = reference.load(std::memory_order_relaxed);
-    while (!reference.compare_exchange_weak(current, static_cast<Block>((current & ~mask) | (value & mask)), std::memory_order_relaxed)) {}
+    const auto masked_value = static_cast<Block>(value & mask);
+    while ((current & mask) != masked_value
+           && !reference.compare_exchange_weak(current, static_cast<Block>((current & ~mask) | masked_value), std::memory_order_relaxed))
+    {
+    }
 }
 
 template<std::unsigned_integral Block>
