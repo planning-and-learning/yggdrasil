@@ -464,7 +464,7 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_EQ(root_found->get_index().row, view.get_index().row);
     EXPECT_EQ(&root_found->get_context(), &root);
     EXPECT_EQ(view.get_data().size(), 2);
-    EXPECT_EQ(view.get_relation(), relation);
+    EXPECT_EQ(view.get_relation().get_index(), relation);
     EXPECT_EQ(view.get_objects().size(), 2);
     EXPECT_EQ(std::get<1>(view.identifying_members()), root.get_index());
     EXPECT_EQ(&view.get_context(), &root);
@@ -671,7 +671,7 @@ TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
     const auto binding_index = ygg::Index<Binding> { relation, rows.front() };
     const auto binding_view = ygg::View<ygg::Index<Binding>, RepositoryTypesContext>(binding_index, context);
     EXPECT_TRUE(binding_view.get_data().empty());
-    EXPECT_EQ(binding_view.get_relation(), relation);
+    EXPECT_EQ(binding_view.get_relation().get_index(), relation);
     EXPECT_EQ(std::get<1>(binding_view.identifying_members()), 0);
 
     using ForwardRange = ygg::formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, Rows>;

@@ -60,6 +60,8 @@ public:
     using ConstViewType = typename container_type::ConstArrayView;
     static constexpr bool thread_safe = ThreadSafe;
 
+    friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
+
     /**
      * Global methods traverse the current repository layer and its parent hierarchy.
      * Handle-producing methods return views that retain the discovered canonical context.

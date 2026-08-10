@@ -45,24 +45,12 @@ public:
     View(Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     // This will return an ArrayView already
-    auto get_data() const noexcept
-    {
-        if constexpr (requires { get_repository(*m_context)[m_handle]; })
-            return get_repository(*m_context)[m_handle];
-        else
-            return (*m_context)[m_handle];
-    }
+    auto get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
     const auto& get_context() const noexcept { return *m_context; }
     const auto& get_handle() const noexcept { return m_handle; }
 
     auto get_index() const noexcept { return m_handle; }
-    decltype(auto) get_relation() const noexcept
-    {
-        if constexpr (requires { (*m_context)[m_handle.relation]; })
-            return ygg::make_view(m_handle.relation, *m_context);
-        else
-            return m_handle.relation;
-    }
+    auto get_relation() const noexcept { return ygg::make_view(m_handle.relation, *m_context); }
     auto get_objects() const noexcept { return ygg::make_view(get_data(), *m_context); }
     // Use the relation index rather than its view: view identity includes the repository,
     // while this key represents the logical binding across repositories.
@@ -94,10 +82,7 @@ public:
     {
         ensure_not_empty();
         auto it = std::ranges::begin(get_data().rows);
-        if constexpr (ViewConcept<T, C>)
-            return ygg::make_view(T { get_data().relation, *it }, get_context());
-        else
-            return T { get_data().relation, *it };
+        return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
     struct const_iterator
@@ -109,20 +94,14 @@ public:
         I1 relation;
 
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using value_type = ::ygg::View<T, C>;
         using iterator_category = std::forward_iterator_tag;
         using iterator_concept = std::forward_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
         const_iterator(I1 relation, BaseIt it, const C& ctx) noexcept : ctx(&ctx), it(it), relation(relation) {}
 
-        decltype(auto) operator*() const noexcept
-        {
-            if constexpr (ViewConcept<T, C>)
-                return ygg::make_view(T { relation, *it }, *ctx);
-            else
-                return T { relation, *it };
-        }
+        auto operator*() const noexcept { return ygg::make_view(T { relation, *it }, *ctx); }
 
         const_iterator& operator++() noexcept
         {
@@ -181,29 +160,20 @@ public:
     {
         ensure_not_empty();
         auto it = std::ranges::begin(get_data().rows);
-        if constexpr (ViewConcept<T, C>)
-            return ygg::make_view(T { get_data().relation, *it }, get_context());
-        else
-            return T { get_data().relation, *it };
+        return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
     decltype(auto) back() const
     {
         ensure_not_empty();
         auto it = std::ranges::begin(get_data().rows) + (std::ranges::ssize(get_data().rows) - 1);
-        if constexpr (ViewConcept<T, C>)
-            return ygg::make_view(T { get_data().relation, *it }, get_context());
-        else
-            return T { get_data().relation, *it };
+        return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
     decltype(auto) operator[](size_t i) const noexcept
     {
         auto it = std::ranges::begin(get_data().rows) + static_cast<std::ptrdiff_t>(i);
-        if constexpr (ViewConcept<T, C>)
-            return ygg::make_view(T { get_data().relation, *it }, get_context());
-        else
-            return T { get_data().relation, *it };
+        return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
     struct const_iterator
@@ -215,20 +185,14 @@ public:
         I1 relation;
 
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using value_type = ::ygg::View<T, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
         const_iterator(I1 relation, BaseIt it, const C& ctx) noexcept : ctx(&ctx), it(it), relation(relation) {}
 
-        decltype(auto) operator*() const noexcept
-        {
-            if constexpr (ViewConcept<T, C>)
-                return ygg::make_view(T { relation, *it }, *ctx);
-            else
-                return T { relation, *it };
-        }
+        auto operator*() const noexcept { return ygg::make_view(T { relation, *it }, *ctx); }
 
         const_iterator& operator++() noexcept
         {
@@ -291,13 +255,7 @@ public:
 
         friend difference_type operator-(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it - rhs.it; }
 
-        decltype(auto) operator[](difference_type n) const noexcept
-        {
-            if constexpr (ViewConcept<T, C>)
-                return ygg::make_view(T { relation, it[n] }, *ctx);
-            else
-                return T { relation, it[n] };
-        }
+        auto operator[](difference_type n) const noexcept { return ygg::make_view(T { relation, it[n] }, *ctx); }
 
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
         friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }

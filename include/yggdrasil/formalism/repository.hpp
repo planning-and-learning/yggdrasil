@@ -162,6 +162,8 @@ private:
 public:
     static constexpr bool thread_safe = SymbolRepo::thread_safe && RelationRepo::thread_safe;
 
+    friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
+
     /**
      * Global methods traverse the current repository layer and its parent hierarchy.
      * Handle-producing methods return views that retain the discovered canonical context.
