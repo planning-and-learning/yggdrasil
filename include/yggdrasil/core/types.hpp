@@ -84,18 +84,6 @@ public:
     auto get_index() const noexcept { return m_handle; }
 };
 
-template<typename T, typename C>
-concept ViewConcept = requires(T type, const C& context) {
-    // Constructor
-    View<T, C>(type, context);
-    // Method to retrieve the underlying Data.
-    { View<T, C>(type, context).get_data() };
-    // Method to retrieve the underlying context.
-    { View<T, C>(type, context).get_context() };
-    // Method to retrieve the underlying lightweight handle or data.
-    { View<T, C>(type, context).get_handle() } -> std::same_as<const T&>;
-};
-
 /// @brief Helper to create a view
 template<typename T, typename C>
 auto make_view(const T& element, const C& context) noexcept
@@ -119,6 +107,20 @@ auto make_view(const T& element, const C& context)
 {
     return View<T, C>(element, context.get_canonical_context(element));
 }
+
+template<typename T, typename C>
+concept ViewConcept = requires(T type, const C& context) {
+    // Constructor
+    View<T, C>(type, context);
+    // Helper
+    { make_view(type, context) } -> std::same_as<View<T, C>>;
+    // Method to retrieve the underlying Data.
+    { View<T, C>(type, context).get_data() };
+    // Method to retrieve the underlying context.
+    { View<T, C>(type, context).get_context() };
+    // Method to retrieve the underlying lightweight handle or data.
+    { View<T, C>(type, context).get_handle() } -> std::same_as<const T&>;
+};
 
 // Storage decision: trivially copyable data types are treated as flat in-memory
 // values.
