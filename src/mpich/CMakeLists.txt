@@ -54,7 +54,8 @@ endif()
 
 ExternalProject_Add(
     mpich
-    URL https://github.com/pmodels/mpich/releases/download/v${YGGDRASIL_MPICH_VERSION}/mpich-${YGGDRASIL_MPICH_VERSION}.tar.gz
+    URL https://www.mpich.org/static/downloads/${YGGDRASIL_MPICH_VERSION}/mpich-${YGGDRASIL_MPICH_VERSION}.tar.gz
+        https://github.com/pmodels/mpich/releases/download/v${YGGDRASIL_MPICH_VERSION}/mpich-${YGGDRASIL_MPICH_VERSION}.tar.gz
     URL_HASH SHA256=8c1832a13ddacf071685069f5fadfd1f2877a29e1a628652892c65211b1f3327
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     PREFIX ${CMAKE_BINARY_DIR}/mpich
