@@ -10,7 +10,9 @@ yggdrasil_source(YGGDRASIL_BOOST_SHA256 boost sha256)
 message(STATUS "Preparing external project \"boost\":")
 
 set(BOOST_USER_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/user-config.jam")
-file(WRITE "${BOOST_USER_CONFIG}" "using mpi : \"${CMAKE_INSTALL_PREFIX}/bin/mpicxx\" ;\n")
+file(WRITE "${BOOST_USER_CONFIG}"
+    "using mpi : : <include>${CMAKE_INSTALL_PREFIX}/include <library-path>${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR} <find-shared-library>mpi ;\n"
+)
 
 # We need to build boost for cmake support
 ExternalProject_Add(
