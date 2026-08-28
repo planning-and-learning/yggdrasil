@@ -144,12 +144,10 @@ if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/libfmt-c.a")
 endif()
 
 if(UNIX)
-    # Bundled MPICH uses ABI soname 12. Keep only the soname file so wheel
-    # creation cannot expand its symlink chain into duplicate libraries.
     if(APPLE)
-        set(mpi_runtime_name "libmpi.12.dylib")
+        set(mpi_runtime_name "libmpi.dylib")
     else()
-        set(mpi_runtime_name "libmpi.so.12")
+        set(mpi_runtime_name "libmpi.so")
     endif()
     file(REAL_PATH
         "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${mpi_runtime_name}"
@@ -200,15 +198,6 @@ install(CODE
          yggdrasil_fix_runtime_paths(LIB_DIR_GLOB \"pyyggdrasil/lib*\")"
     COMPONENT pyyggdrasil
 )
-
-if(UNIX AND NOT APPLE)
-    set(mpi_linker_script "${CMAKE_CURRENT_BINARY_DIR}/libmpi.so")
-    file(WRITE "${mpi_linker_script}" "INPUT(libmpi.so.12)\n")
-    install(FILES "${mpi_linker_script}"
-        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}"
-        COMPONENT pyyggdrasil
-    )
-endif()
 
 nanobind_add_stub(
     pyyggdrasil_stubs

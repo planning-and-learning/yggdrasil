@@ -31,12 +31,5 @@ foreach(wrapper IN ITEMS mpicc.sh.in mpicc.bash.in mpicxx.sh.in mpicxx.bash.in)
     else()
         string(REPLACE "CXX=\"@CXX@\"" "CXX=\"c++\"" contents "${contents}")
     endif()
-    if(MPICH_MPI_LIBRARY)
-        string(REPLACE
-            [=[mpi_libs_shared="-l@MPILIBNAME@ @LPMPILIBNAME@"]=]
-            "mpi_libs_shared=\"\${libdir}/${MPICH_MPI_LIBRARY}\""
-            contents "${contents}"
-        )
-    endif()
     file(WRITE "${path}" "${contents}")
 endforeach()

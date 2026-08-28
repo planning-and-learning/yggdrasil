@@ -190,9 +190,6 @@ def _run_smoke_test(root: Path) -> None:
         *prefix.glob("lib*/libboost_serialization*"),
     ]
     for library in native_libraries:
-        if library.name == "libmpi.so":
-            assert library.read_text(encoding="utf-8") == "INPUT(libmpi.so.12)\n"
-            continue
         if platform.system() == "Darwin":
             metadata = subprocess.run(
                 ["otool", "-L", library],

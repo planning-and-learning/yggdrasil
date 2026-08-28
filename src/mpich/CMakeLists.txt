@@ -13,7 +13,7 @@ set(MPICH_CONFIGURE_ARGS
     --disable-option-checking
     --enable-shared
     --disable-static
-    --enable-versioning
+    --disable-versioning
     --disable-fortran
     --disable-cxx
     --disable-romio
@@ -49,11 +49,6 @@ foreach (MPICH_CONFIGURE_ARG IN LISTS MPICH_CONFIGURE_ARGS)
     message(STATUS "-- ${MPICH_CONFIGURE_ARG}")
 endforeach ()
 
-if(APPLE)
-    # Keep the versioned install name while omitting a duplicate linker alias.
-    set(MPICH_MPI_LIBRARY libmpi.12.dylib)
-endif()
-
 ExternalProject_Add(
     mpich
     URL ${YGGDRASIL_MPICH_URLS}
@@ -66,7 +61,6 @@ ExternalProject_Add(
         ${CMAKE_COMMAND}
         -DMPICH_SOURCE_DIR=<SOURCE_DIR>
         -DMPICH_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
-        -DMPICH_MPI_LIBRARY=${MPICH_MPI_LIBRARY}
         -P ${CMAKE_CURRENT_LIST_DIR}/patch_wrappers.cmake
     CONFIGURE_COMMAND
         ${CMAKE_COMMAND} -E env
