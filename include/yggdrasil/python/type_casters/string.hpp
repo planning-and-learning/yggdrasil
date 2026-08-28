@@ -30,7 +30,7 @@ struct type_caster<cista::basic_string<Ptr>>
 
     NB_TYPE_CASTER(String, const_name("str"))
 
-    bool from_python(handle src, uint8_t, cleanup_list*) noexcept
+    bool from_python(handle src, uint32_t, cleanup_list*) noexcept
     {
         Py_ssize_t size = 0;
         const char* str = PyUnicode_AsUTF8AndSize(src.ptr(), &size);

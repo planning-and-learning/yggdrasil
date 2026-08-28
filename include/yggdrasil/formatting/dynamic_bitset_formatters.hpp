@@ -24,10 +24,17 @@
 #include <concepts>
 #include <cstddef>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
+#include <type_traits>
 
 #if YGG_ENABLE_FMT_FORMATTERS
 namespace fmt
 {
+template<typename Block, typename Allocator, typename Char>
+struct range_format_kind<boost::dynamic_bitset<Block, Allocator>, Char, void> : std::integral_constant<range_format, range_format::disabled>
+{
+};
+
 template<typename Block, typename Allocator>
 struct formatter<boost::dynamic_bitset<Block, Allocator>, char>
 {

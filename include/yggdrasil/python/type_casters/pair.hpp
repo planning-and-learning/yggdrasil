@@ -30,7 +30,7 @@ struct type_caster<::ygg::View<::cista::pair<T1, T2>, C>>
     NB_TYPE_CASTER(ViewT, const_name("tuple[") + concat(Caster1::Name, Caster2::Name) + const_name("]"))
 
     // Views are not constructible from Python.
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename T>
     static handle from_cpp(T&& value, rv_policy policy, cleanup_list* cleanup) noexcept

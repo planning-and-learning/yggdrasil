@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "argparse": {
+      "kind": "git",
+      "version": "3.2",
+      "repository": "https://github.com/p-ranav/argparse.git",
+      "revision": "3eda91b2e1ce7d569f84ba295507c4cd8fd96910"
+    },
+    "benchmark": {
+      "kind": "git",
+      "version": "1.9.5",
+      "repository": "https://github.com/google/benchmark.git",
+      "revision": "192ef10025eb2c4cdd392bc502f0c852196baa48"
+    },
+    "boost": {
+      "kind": "archive",
+      "version": "1.92.0",
+      "urls": [
+        "https://archives.boost.io/release/1.92.0/source/boost_1_92_0.tar.gz"
+      ],
+      "sha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce"
+    },
+    "cista": {
+      "kind": "git",
+      "repository": "https://github.com/drexlerd/cista.git",
+      "revision": "7547d5b40212a8561e83a596bdfb70db9d4161c1"
+    },
+    "fmt": {
+      "kind": "git",
+      "version": "12.2.0",
+      "repository": "https://github.com/fmtlib/fmt",
+      "revision": "1be298e1bd68957e4cd352e1f676f00e07dcfb57"
+    },
+    "googletest": {
+      "kind": "git",
+      "version": "1.18.0",
+      "repository": "https://github.com/google/googletest.git",
+      "revision": "063de7e9578f82b369302001269680b4b1553359"
+    },
+    "gtl": {
+      "kind": "git",
+      "repository": "https://github.com/greg7mdp/gtl.git",
+      "revision": "f35ce6ff8050e95b837caedb24cd07018f6a3fed"
+    },
+    "mpich": {
+      "kind": "archive",
+      "version": "5.0.1",
+      "urls": [
+        "https://www.mpich.org/static/downloads/5.0.1/mpich-5.0.1.tar.gz",
+        "https://github.com/pmodels/mpich/releases/download/v5.0.1/mpich-5.0.1.tar.gz"
+      ],
+      "sha256": "8c1832a13ddacf071685069f5fadfd1f2877a29e1a628652892c65211b1f3327"
+    },
+    "nanobind": {
+      "kind": "git",
+      "version": "3.0.1",
+      "repository": "https://github.com/wjakob/nanobind.git",
+      "revision": "db4827f06f6f1680e5d4004c95fc8d69299dba8b",
+      "submodules": true
+    },
+    "nauty": {
+      "kind": "archive",
+      "version": "2.9.3",
+      "urls": [
+        "https://users.cecs.anu.edu.au/~bdm/nauty/nauty2_9_3.tar.gz"
+      ],
+      "sha256": "9fc4edae04f88a0f5883985be3b39cf7f898fd6cc96e96b9ee25452743cc1b5b"
+    },
+    "oneTBB": {
+      "kind": "git",
+      "version": "2023.1.0",
+      "repository": "https://github.com/uxlfoundation/oneTBB.git",
+      "revision": "3046c8b0c29df995980003ea24f4d78c80ec0c8"
+    }
+  }
+}

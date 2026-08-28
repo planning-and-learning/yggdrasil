@@ -11,6 +11,10 @@ build-from-source and CMake-integration patterns are documented in the
 [Planning and Learning build instructions](https://github.com/planning-and-learning/.github/blob/main/profile/README.md#building-from-source);
 the sections below cover `pyyggdrasil`-specific details.
 
+Each binary release has a matching complete corresponding-source archive on the
+[GitHub releases page](https://github.com/planning-and-learning/yggdrasil/releases),
+containing Yggdrasil and its exact native dependency sources.
+
 ## Python Integration
 
 Install the wheel and query the native prefix:
@@ -39,7 +43,7 @@ Python packages that consume this native prefix should depend on:
 
 ```toml
 dependencies = [
-    "pyyggdrasil>=0.0.27,<0.1",
+    "pyyggdrasil>=0.1,<0.2",
 ]
 ```
 
@@ -55,14 +59,17 @@ Build a wheel from source:
 uv build --wheel
 ```
 
-The build creates `dependencies-build/` and `dependencies-install/`. To package
-an existing native prefix without rebuilding dependencies:
+The build recreates `dependencies-build/` and `dependencies-install/` from
+scratch. To package an existing native prefix without rebuilding dependencies:
 
 ```bash
 YGGDRASIL_BUILD_NATIVE=OFF \
 YGGDRASIL_NATIVE_PREFIX=/path/to/dependencies-install \
 uv build --wheel
 ```
+
+This bypass trusts the prefix as-is; use only one built from the dependency
+revisions in `docs/SOURCES.json`.
 
 Native builds use all available processors by default. Set `YGGDRASIL_JOBS`
 to override the build parallelism.
@@ -143,7 +150,7 @@ cmake -S . -B build \
 ```
 
 ```cmake
-find_package(yggdrasil 0.0.27 CONFIG REQUIRED)
+find_package(yggdrasil 0.1 CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE yggdrasil::yggdrasil)
 ```
 

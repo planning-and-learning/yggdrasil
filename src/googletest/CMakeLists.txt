@@ -3,7 +3,8 @@ project(InstallGoogletest)
 
 include(ExternalProject)
 
-set(YGGDRASIL_GOOGLETEST_GIT_TAG release-1.12.1 CACHE STRING "Git tag used to build googletest.")
+yggdrasil_source(YGGDRASIL_GOOGLETEST_GIT_REPOSITORY googletest repository)
+yggdrasil_source(YGGDRASIL_GOOGLETEST_GIT_TAG googletest revision)
 
 message(STATUS "Dependency \"GTest\"...")
 
@@ -27,10 +28,11 @@ if (NOT GTest_FOUND)
 
     ExternalProject_Add(
             googletest
-            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_REPOSITORY ${YGGDRASIL_GOOGLETEST_GIT_REPOSITORY}
             GIT_TAG ${YGGDRASIL_GOOGLETEST_GIT_TAG}
             PREFIX ${CMAKE_BINARY_DIR}/googletest
             STAMP_DIR ${CMAKE_BINARY_DIR}/googletest/stamp/${YGGDRASIL_GOOGLETEST_GIT_TAG}
+            STEP_TARGETS download
             UPDATE_COMMAND ""
             CMAKE_ARGS ${CMAKE_ARGS}
     )

@@ -3,8 +3,9 @@ project(InstallBoost)
 
 include(ExternalProject)
 
-set(YGGDRASIL_BOOST_VERSION 1.84.0 CACHE STRING "Boost version used to build boost.")
-string(REPLACE "." "_" YGGDRASIL_BOOST_ARCHIVE_VERSION ${YGGDRASIL_BOOST_VERSION})
+yggdrasil_source(YGGDRASIL_BOOST_VERSION boost version)
+yggdrasil_source(YGGDRASIL_BOOST_URLS boost urls)
+yggdrasil_source(YGGDRASIL_BOOST_SHA256 boost sha256)
 
 message(STATUS "Preparing external project \"boost\":")
 
@@ -15,11 +16,12 @@ file(WRITE "${BOOST_USER_CONFIG}" "using mpi : \"${CMAKE_INSTALL_PREFIX}/bin/mpi
 ExternalProject_Add(
     boost
     DEPENDS mpich
-    URL https://archives.boost.io/release/${YGGDRASIL_BOOST_VERSION}/source/boost_${YGGDRASIL_BOOST_ARCHIVE_VERSION}.tar.gz
-    URL_HASH SHA256=a5800f405508f5df8114558ca9855d2640a2de8f0445f051fa1c7c3383045724
+    URL ${YGGDRASIL_BOOST_URLS}
+    URL_HASH SHA256=${YGGDRASIL_BOOST_SHA256}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     PREFIX ${CMAKE_BINARY_DIR}/boost
     STAMP_DIR ${CMAKE_BINARY_DIR}/boost/stamp/${YGGDRASIL_BOOST_VERSION}
+    STEP_TARGETS download
     CONFIGURE_COMMAND
         ${CMAKE_COMMAND} -E chdir <SOURCE_DIR>
         ./bootstrap.sh

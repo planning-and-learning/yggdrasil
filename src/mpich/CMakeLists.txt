@@ -3,7 +3,9 @@ project(InstallMPICH)
 
 include(ExternalProject)
 
-set(YGGDRASIL_MPICH_VERSION 5.0.1 CACHE STRING "MPICH version used to build MPI.")
+yggdrasil_source(YGGDRASIL_MPICH_VERSION mpich version)
+yggdrasil_source(YGGDRASIL_MPICH_URLS mpich urls)
+yggdrasil_source(YGGDRASIL_MPICH_SHA256 mpich sha256)
 
 message(STATUS "Dependency \"mpich\"...")
 
@@ -54,12 +56,12 @@ endif()
 
 ExternalProject_Add(
     mpich
-    URL https://www.mpich.org/static/downloads/${YGGDRASIL_MPICH_VERSION}/mpich-${YGGDRASIL_MPICH_VERSION}.tar.gz
-        https://github.com/pmodels/mpich/releases/download/v${YGGDRASIL_MPICH_VERSION}/mpich-${YGGDRASIL_MPICH_VERSION}.tar.gz
-    URL_HASH SHA256=8c1832a13ddacf071685069f5fadfd1f2877a29e1a628652892c65211b1f3327
+    URL ${YGGDRASIL_MPICH_URLS}
+    URL_HASH SHA256=${YGGDRASIL_MPICH_SHA256}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     PREFIX ${CMAKE_BINARY_DIR}/mpich
     STAMP_DIR ${CMAKE_BINARY_DIR}/mpich/stamp/${YGGDRASIL_MPICH_VERSION}
+    STEP_TARGETS download
     PATCH_COMMAND
         ${CMAKE_COMMAND}
         -DMPICH_SOURCE_DIR=<SOURCE_DIR>

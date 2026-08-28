@@ -3,7 +3,9 @@ project(InstallNauty)
 
 include(ExternalProject)
 
-set(YGGDRASIL_NAUTY_GIT_TAG cb44c50bd4fa543b977df6a4b70ec88e67020646 CACHE STRING "Git tag used to build nauty.")
+yggdrasil_source(YGGDRASIL_NAUTY_VERSION nauty version)
+yggdrasil_source(YGGDRASIL_NAUTY_URLS nauty urls)
+yggdrasil_source(YGGDRASIL_NAUTY_SHA256 nauty sha256)
 
 message(STATUS "Dependency \"nauty\"...")
 
@@ -22,14 +24,15 @@ if(NOT Nauty_FOUND)
     # We need to build nauty for cmake support
     ExternalProject_Add(
         nauty
-        GIT_REPOSITORY https://github.com/drexlerd/nauty.git
-        GIT_TAG ${YGGDRASIL_NAUTY_GIT_TAG}
+        URL ${YGGDRASIL_NAUTY_URLS}
+        URL_HASH SHA256=${YGGDRASIL_NAUTY_SHA256}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         PREFIX ${CMAKE_BINARY_DIR}/nauty
-        STAMP_DIR ${CMAKE_BINARY_DIR}/nauty/stamp/${YGGDRASIL_NAUTY_GIT_TAG}
-        UPDATE_COMMAND ""
+        STAMP_DIR ${CMAKE_BINARY_DIR}/nauty/stamp/${YGGDRASIL_NAUTY_VERSION}
+        STEP_TARGETS download
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR> ./configure --prefix=<INSTALL_DIR> CFLAGS=-fPIC --enable-tls ${NAUTY_SHARED_ARGS}
-        BUILD_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR> make
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR> make install
+        BUILD_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR> make -j${YGGDRASIL_JOBS}
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR> make -j${YGGDRASIL_JOBS} install
         INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
     )
 

@@ -31,7 +31,7 @@ function(yggdrasil_find_python_native_prefix python_package out_prefix_var)
         set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
     endif()
 
-    find_package(Python 3.9 QUIET COMPONENTS Interpreter)
+    find_package(Python 3.10 QUIET COMPONENTS Interpreter)
     if(NOT Python_Interpreter_FOUND)
         return()
     endif()

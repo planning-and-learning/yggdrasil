@@ -29,7 +29,7 @@ struct type_caster<::ygg::View<::cista::array<Type, Size>, C>>
     NB_TYPE_CASTER(ViewT, io_name("collections.abc.Sequence", "list") + const_name("[") + Caster::Name + const_name("]"))
 
     // Views are not constructible from Python.
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(NautyPackage VERSION 2.8.9 LANGUAGES C)
+include("${CMAKE_CURRENT_LIST_DIR}/../../source_manifest.cmake")
+yggdrasil_source(YGGDRASIL_NAUTY_VERSION nauty version)
+project(NautyPackage VERSION ${YGGDRASIL_NAUTY_VERSION} LANGUAGES C)
 
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)

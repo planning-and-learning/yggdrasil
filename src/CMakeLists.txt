@@ -4,6 +4,7 @@ project(yggdrasil_native_sources)
 
 include(GNUInstallDirs)
 include(ProcessorCount)
+include("${CMAKE_CURRENT_LIST_DIR}/source_manifest.cmake")
 
 # Build configuration
 
@@ -54,12 +55,16 @@ set(
 )
 message(STATUS "Dependency install rpath: ${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}")
 
-foreach(dependency IN ITEMS
-    argparse benchmark mpich boost cista fmt
-    googletest gtl nanobind nauty oneTBB
-)
+yggdrasil_sources(YGGDRASIL_DEPENDENCIES)
+# Boost's MPI component requires the MPICH target to exist first.
+list(REMOVE_ITEM YGGDRASIL_DEPENDENCIES boost)
+list(APPEND YGGDRASIL_DEPENDENCIES boost)
+foreach(dependency IN LISTS YGGDRASIL_DEPENDENCIES)
     add_subdirectory("${dependency}")
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${dependency}/licenses/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${dependency}"
     )
 endforeach()
+
+list(TRANSFORM YGGDRASIL_DEPENDENCIES APPEND "-download" OUTPUT_VARIABLE YGGDRASIL_DOWNLOAD_TARGETS)
+add_custom_target(corresponding-source-downloads DEPENDS ${YGGDRASIL_DOWNLOAD_TARGETS})

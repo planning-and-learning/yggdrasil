@@ -57,6 +57,25 @@ def _configure_and_install_dependencies() -> None:
     if cmake is None:
         raise RuntimeError("cmake is required to build pyyggdrasil")
 
+    native_prefix = _native_prefix()
+    if "YGGDRASIL_NATIVE_PREFIX" in os.environ and native_prefix.exists() and (
+        not native_prefix.is_dir() or any(native_prefix.iterdir())
+    ):
+        raise RuntimeError(
+            "YGGDRASIL_NATIVE_PREFIX must be empty when YGGDRASIL_BUILD_NATIVE is enabled; "
+            "set YGGDRASIL_BUILD_NATIVE=OFF to package an existing prefix"
+        )
+
+    default_native_prefix = ROOT_DIR / "dependencies-install"
+    generated_dirs = [YGGDRASIL_BUILD_DIR]
+    if "YGGDRASIL_NATIVE_PREFIX" not in os.environ:
+        generated_dirs.append(default_native_prefix)
+    for generated_dir in generated_dirs:
+        if generated_dir.is_symlink():
+            raise RuntimeError(f"refusing to clean symlinked build directory: {generated_dir}")
+        if generated_dir.exists():
+            shutil.rmtree(generated_dir)
+
     YGGDRASIL_BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
     cmake_args = [
@@ -66,7 +85,7 @@ def _configure_and_install_dependencies() -> None:
         "-B",
         str(YGGDRASIL_BUILD_DIR),
         f"-DCMAKE_BUILD_TYPE={_build_type()}",
-        f"-DCMAKE_INSTALL_PREFIX={_native_prefix()}",
+        f"-DCMAKE_INSTALL_PREFIX={native_prefix}",
         "-DCMAKE_INSTALL_LIBDIR=lib",
         f"-DYGGDRASIL_JOBS={_num_jobs()}",
         f"-DPython_EXECUTABLE={sys.executable}",

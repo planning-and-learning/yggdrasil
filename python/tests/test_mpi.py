@@ -9,21 +9,10 @@ from pathlib import Path
 import pyyggdrasil
 
 
-def _run_smoke_test(root: Path) -> None:
+def _check_distribution_compliance() -> None:
     prefix = pyyggdrasil.native_prefix()
-    mpicxx = prefix / "bin" / "mpicxx"
-    mpiexec = prefix / "bin" / "mpiexec"
-    for tool in (
-        prefix / "bin" / "mpicc",
-        mpicxx,
-        mpiexec,
-        prefix / "bin" / "hydra_pmi_proxy",
-    ):
-        assert tool.is_file()
-        assert os.access(tool, os.X_OK)
-
     license_dir = prefix / "share" / "licenses"
-    for license_file in (
+    expected_license_files = {
         "argparse/LICENSE",
         "benchmark/LICENSE",
         "boost/LICENSE_1_0.txt",
@@ -43,8 +32,18 @@ def _run_smoke_test(root: Path) -> None:
         "nauty/LICENSE-2.0.txt",
         "oneTBB/LICENSE.txt",
         "oneTBB/third-party-programs.txt",
-    ):
-        assert (license_dir / license_file).is_file()
+    }
+    actual_license_files = {
+        path.relative_to(license_dir).as_posix()
+        for path in license_dir.rglob("*")
+        if path.is_file()
+    }
+    assert actual_license_files == expected_license_files
+    assert (prefix / "share" / "CORRESPONDING_SOURCE.md").is_file()
+    assert (prefix / "share" / "SOURCES.json").is_file()
+    assert "Modified by the Yggdrasil project on 2026-08-13" in (
+        prefix / "include" / "gtl" / "btree.hpp"
+    ).read_text(encoding="utf-8")
 
     distribution = importlib_metadata.distribution("pyyggdrasil")
     assert distribution.metadata["License-Expression"] == "GPL-3.0-or-later"
@@ -53,6 +52,21 @@ def _run_smoke_test(root: Path) -> None:
         str(path).endswith(".dist-info/licenses/LICENSE")
         for path in distribution.files or ()
     )
+
+
+def _run_smoke_test(root: Path) -> None:
+    _check_distribution_compliance()
+    prefix = pyyggdrasil.native_prefix()
+    mpicxx = prefix / "bin" / "mpicxx"
+    mpiexec = prefix / "bin" / "mpiexec"
+    for tool in (
+        prefix / "bin" / "mpicc",
+        mpicxx,
+        mpiexec,
+        prefix / "bin" / "hydra_pmi_proxy",
+    ):
+        assert tool.is_file()
+        assert os.access(tool, os.X_OK)
 
     assert not list(prefix.glob("lib*/libtbbbind*"))
     if platform.system() == "Linux":
@@ -75,7 +89,7 @@ def _run_smoke_test(root: Path) -> None:
             set(CMAKE_CXX_STANDARD_REQUIRED ON)
             set(MPI_CXX_SKIP_MPICXX ON)
             find_package(MPI REQUIRED COMPONENTS CXX)
-            find_package(Boost 1.84 CONFIG REQUIRED COMPONENTS mpi serialization
+            find_package(Boost CONFIG REQUIRED COMPONENTS mpi serialization
                 PATHS "${MPI_HOME}" NO_DEFAULT_PATH)
             find_package(TBB CONFIG REQUIRED)
 
@@ -199,6 +213,10 @@ def _run_smoke_test(root: Path) -> None:
 
 def test_bundled_mpi(tmp_path: Path) -> None:
     _run_smoke_test(tmp_path)
+
+
+def test_distribution_compliance() -> None:
+    _check_distribution_compliance()
 
 
 if __name__ == "__main__":

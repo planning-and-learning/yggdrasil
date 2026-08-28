@@ -30,6 +30,8 @@ def test_native_prefix_layout() -> None:
         native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp"
     ).is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
+    assert (native_prefix / "nanobind" / "cmake" / "nanobind-config.cmake").is_file()
+    assert not list(native_prefix.glob("lib*/libnanobind*"))
     assert pyyggdrasil.cmake_prefix() == native_prefix
     assert pyyggdrasil.cmake_dir().name == "yggdrasil"
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfig.cmake").is_file()
@@ -198,6 +200,43 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
             f"-I{pyyggdrasil.include_dir()}",
             "-fsyntax-only",
             str(source),
+        ],
+        check=True,
+    )
+
+
+def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is not available")
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "CMakeLists.txt").write_text(
+        textwrap.dedent(
+            """\
+            cmake_minimum_required(VERSION 3.21)
+            project(pyyggdrasil_provider_probe LANGUAGES CXX)
+
+            find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+            find_package(yggdrasil 0.1 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
+            find_package(nanobind CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
+
+            add_library(provider_probe INTERFACE)
+            target_link_libraries(provider_probe INTERFACE yggdrasil::yggdrasil)
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(source_dir),
+            "-B",
+            str(tmp_path / "build"),
+            f"-DCMAKE_PREFIX_PATH={pyyggdrasil.cmake_prefix()}",
         ],
         check=True,
     )

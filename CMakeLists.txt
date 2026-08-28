@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(GNUInstallDirs)
+include("${CMAKE_CURRENT_SOURCE_DIR}/src/source_manifest.cmake")
 
 # Options
 

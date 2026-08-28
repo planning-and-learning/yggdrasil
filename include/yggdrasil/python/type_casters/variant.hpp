@@ -29,7 +29,7 @@ struct type_caster<::ygg::View<::cista::offset::variant<Ts...>, C>>
     static constexpr auto Name = union_name(make_caster<std::conditional_t<::ygg::ViewConcept<Ts, C>, ::ygg::View<Ts, C>, Ts>>::Name...);
 
     // No Python -> C++ conversion
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename U>
     static handle from_cpp(U&& v, rv_policy policy, cleanup_list* cleanup) noexcept
@@ -69,7 +69,7 @@ struct type_caster<::cista::offset::variant<Ts...>> : private variant_caster_sto
     explicit operator Value&&() { return (Value&&) this->get(); }
 
     template<typename T>
-    bool try_variant(const handle& src, uint8_t flags, cleanup_list* cleanup)
+    bool try_variant(const handle& src, uint32_t flags, cleanup_list* cleanup)
     {
         using CasterT = make_caster<T>;
 
@@ -83,11 +83,11 @@ struct type_caster<::cista::offset::variant<Ts...>> : private variant_caster_sto
         return true;
     }
 
-    bool from_python(handle src, uint8_t flags, cleanup_list* cleanup) noexcept
+    bool from_python(handle src, uint32_t flags, cleanup_list* cleanup) noexcept
     {
-        if (flags & (uint8_t) cast_flags::convert)
+        if (flags & (uint32_t) cast_flags::convert)
         {
-            if ((try_variant<Ts>(src, flags & ~(uint8_t) cast_flags::convert, cleanup) || ...))
+            if ((try_variant<Ts>(src, flags & ~(uint32_t) cast_flags::convert, cleanup) || ...))
             {
                 return true;
             }

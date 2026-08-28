@@ -4,7 +4,8 @@ project(InstallGTL)
 include(ExternalProject)
 find_package(Git REQUIRED)
 
-set(YGGDRASIL_GTL_GIT_TAG a1381e70058257c0f639d90136fa9939703fab3b CACHE STRING "Git tag used to build gtl.")
+yggdrasil_source(YGGDRASIL_GTL_GIT_REPOSITORY gtl repository)
+yggdrasil_source(YGGDRASIL_GTL_GIT_TAG gtl revision)
 
 message(STATUS "Dependency \"gtl\"...")
 
@@ -29,10 +30,11 @@ foreach(CMAKE_ARG ${CMAKE_ARGS})
 endforeach()
 ExternalProject_Add(
     gtl
-    GIT_REPOSITORY https://github.com/greg7mdp/gtl.git
+    GIT_REPOSITORY ${YGGDRASIL_GTL_GIT_REPOSITORY}
     GIT_TAG ${YGGDRASIL_GTL_GIT_TAG}
     PREFIX ${CMAKE_BINARY_DIR}/gtl
     STAMP_DIR ${CMAKE_BINARY_DIR}/gtl/stamp/${YGGDRASIL_GTL_GIT_TAG}
+    STEP_TARGETS download
     UPDATE_COMMAND ""
     PATCH_COMMAND
         ${GIT_EXECUTABLE} -C <SOURCE_DIR> apply

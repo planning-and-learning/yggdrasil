@@ -2,13 +2,17 @@ enable_testing()
 
 # Dependencies and targets
 
-find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
-find_package(nanobind CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
+find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 add_subdirectory(unit)
 
-nanobind_add_module(yggdrasil_type_casters_test NB_SHARED python/type_casters.cpp)
+nanobind_add_module(yggdrasil_type_casters_test BACKEND_MODULE nanobind_backend python/type_casters.cpp)
 target_compile_features(yggdrasil_type_casters_test PRIVATE cxx_std_20)
-target_include_directories(yggdrasil_type_casters_test PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_include_directories(yggdrasil_type_casters_test PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
 
 # Test registration
 

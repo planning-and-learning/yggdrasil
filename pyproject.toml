@@ -1,30 +1,32 @@
 [build-system]
 requires = [
-    # nanobind 2.12 stubgen requires scikit-build-core's pre-1.0 editable loader.
-    "scikit-build-core>=0.11,<1",
+    "scikit-build-core>=1.0.3,<2",
+    "nanobind-backend>=1.0",
 ]
 build-backend = "pyyggdrasil_build_backend"
 backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.0.27"
+version = "0.1.0"
 description = "Native dependency provider for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Dominik Drexler", email = "dominik.drexler@liu.se"},
 ]
-dependencies = []
+dependencies = [
+    "nanobind-backend>=1.0",
+]
 
 [project.optional-dependencies]
 test = [
     "pytest",
     # build_support.py wraps scikit-build-core; installed here so type checkers
     # resolve it (it is otherwise only a build-system requirement).
-    "scikit-build-core>=0.11,<1",
+    "scikit-build-core>=1.0.3,<2",
 ]
 
 [tool.pytest.ini_options]
@@ -38,11 +40,13 @@ build.targets = ["pyyggdrasil_wheel"]
 cmake.build-type = "Release"
 install.components = ["pyyggdrasil"]
 wheel.packages = []
+wheel.py-api = "cp310"
 
 [tool.scikit-build.sdist]
 include = [
     "CMakeLists.txt",
     "Config.cmake.in",
+    "docs/**",
     "LICENSE",
     "README.md",
     "pyproject.toml",
@@ -65,6 +69,7 @@ YGGDRASIL_ENABLE_LTO = {env = "YGGDRASIL_ENABLE_LTO", default = false}
 CMAKE_INSTALL_LIBDIR = "lib"
 
 [tool.cibuildwheel]
+build = "cp310-*"
 container-engine = "docker"
 test-requires = ["cmake>=3.21"]
 test-command = "python {project}/python/tests/test_mpi.py"

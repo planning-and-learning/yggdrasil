@@ -4,9 +4,7 @@ Wraps auditwheel (Linux) / delocate (macOS) and excludes every shared library
 that a provider wheel already ships: those libraries must be resolved at
 runtime via the consumer's rpaths into the provider package, not vendored into
 each consumer wheel. Vendoring would store per-wheel copies under mangled
-SONAMEs, so the dynamic loader would load one runtime per wheel (for nanobind
-this reintroduces the reference-leak problem that the shared runtime exists to
-solve).
+SONAMEs, so the dynamic loader would load duplicate native runtimes.
 
 Usage (cibuildwheel repair-wheel-command):
     python -m pyyggdrasil.repair --providers pypddl,pyyggdrasil \

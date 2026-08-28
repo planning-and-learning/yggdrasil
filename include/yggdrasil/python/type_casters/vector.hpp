@@ -58,7 +58,7 @@ struct type_caster<::ygg::View<::cista::basic_vector<Type, Ptr, IndexPointers, T
 
     // No Python -> C++ conversion (cannot build a View without backing storage +
     // context)
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
@@ -80,7 +80,7 @@ struct type_caster<::ygg::View<::ygg::BasicBlockArrayView<Block, Coder>, C>>
 
     // No Python -> C++ conversion (cannot build a View without backing storage +
     // context)
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
@@ -102,7 +102,7 @@ struct type_caster<::ygg::View<::ygg::BasicBitPackedArrayView<Block, Coder, Thre
 
     // No Python -> C++ conversion (cannot build a View without backing storage +
     // context)
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)

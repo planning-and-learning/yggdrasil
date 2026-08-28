@@ -3,7 +3,8 @@ project(InstallCista)
 
 include(ExternalProject)
 
-set(YGGDRASIL_CISTA_GIT_TAG 7547d5b40212a8561e83a596bdfb70db9d4161c1 CACHE STRING "Git tag used to build cista.")
+yggdrasil_source(YGGDRASIL_CISTA_GIT_REPOSITORY cista repository)
+yggdrasil_source(YGGDRASIL_CISTA_GIT_TAG cista revision)
 
 message(STATUS "Dependency \"cista\"...")
 
@@ -30,10 +31,11 @@ if (NOT cista_FOUND)
     endforeach()
     ExternalProject_Add(
         cista
-        GIT_REPOSITORY https://github.com/drexlerd/cista.git
+        GIT_REPOSITORY ${YGGDRASIL_CISTA_GIT_REPOSITORY}
         GIT_TAG ${YGGDRASIL_CISTA_GIT_TAG}
         PREFIX ${CMAKE_BINARY_DIR}/cista
         STAMP_DIR ${CMAKE_BINARY_DIR}/cista/stamp/${YGGDRASIL_CISTA_GIT_TAG}
+        STEP_TARGETS download
         UPDATE_COMMAND ""
         CMAKE_ARGS ${CMAKE_ARGS}
     )

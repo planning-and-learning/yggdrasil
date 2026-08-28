@@ -44,7 +44,7 @@ struct type_caster<::ygg::ClosedInterval<T>>
 
     NB_TYPE_CASTER(Interval, io_name("float | tuple[float, float]", "float | tuple[float, float] | None"))
 
-    bool from_python(handle src, uint8_t flags, cleanup_list* cleanup) noexcept
+    bool from_python(handle src, uint32_t flags, cleanup_list* cleanup) noexcept
     {
         auto caster = PythonCaster {};
         if (!caster.from_python(src, flags_for_local_caster<PythonValue>(flags), cleanup) || !caster.template can_cast<PythonValue>())

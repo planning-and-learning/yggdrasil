@@ -3,7 +3,8 @@ project(InstallFMT)
 
 include(ExternalProject)
 
-set(YGGDRASIL_FMT_GIT_TAG 11.2.0 CACHE STRING "Git tag used to build fmt.")
+yggdrasil_source(YGGDRASIL_FMT_GIT_REPOSITORY fmt repository)
+yggdrasil_source(YGGDRASIL_FMT_GIT_TAG fmt revision)
 
 message(STATUS "Dependency \"fmt\"...")
 
@@ -23,10 +24,11 @@ endforeach ()
 
 ExternalProject_Add(
         fmt
-        GIT_REPOSITORY https://github.com/fmtlib/fmt
+        GIT_REPOSITORY ${YGGDRASIL_FMT_GIT_REPOSITORY}
         GIT_TAG ${YGGDRASIL_FMT_GIT_TAG}
         PREFIX ${CMAKE_BINARY_DIR}/fmt
         STAMP_DIR ${CMAKE_BINARY_DIR}/fmt/stamp/${YGGDRASIL_FMT_GIT_TAG}
+        STEP_TARGETS download
         UPDATE_COMMAND ""
         CMAKE_ARGS ${CMAKE_ARGS}
 )

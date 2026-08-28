@@ -3,7 +3,8 @@ project(InstallBenchmark)
 
 include(ExternalProject)
 
-set(YGGDRASIL_BENCHMARK_GIT_TAG v1.8.3 CACHE STRING "Git tag used to build benchmark.")
+yggdrasil_source(YGGDRASIL_BENCHMARK_GIT_REPOSITORY benchmark repository)
+yggdrasil_source(YGGDRASIL_BENCHMARK_GIT_TAG benchmark revision)
 
 message(STATUS "Dependency \"benchmark\"...")
 
@@ -17,6 +18,7 @@ if (NOT benchmark_FOUND)
             -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
             -DBUILD_SHARED_LIBS:BOOL=ON
             -DCMAKE_INSTALL_RPATH=${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}
+            -DBENCHMARK_ENABLE_TESTING=OFF
             -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
     )
 
@@ -27,10 +29,11 @@ if (NOT benchmark_FOUND)
 
     ExternalProject_Add(
             benchmark
-            GIT_REPOSITORY https://github.com/google/benchmark.git
+            GIT_REPOSITORY ${YGGDRASIL_BENCHMARK_GIT_REPOSITORY}
             GIT_TAG ${YGGDRASIL_BENCHMARK_GIT_TAG}
             PREFIX ${CMAKE_BINARY_DIR}/benchmark
             STAMP_DIR ${CMAKE_BINARY_DIR}/benchmark/stamp/${YGGDRASIL_BENCHMARK_GIT_TAG}
+            STEP_TARGETS download
             UPDATE_COMMAND ""
             CMAKE_ARGS ${CMAKE_ARGS}
     )

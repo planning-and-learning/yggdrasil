@@ -28,7 +28,7 @@ struct type_caster<::ygg::View<::cista::optional<T>, C>>
     NB_TYPE_CASTER(ViewT, optional_name(Caster::Name))
 
     // Views are not constructible from Python
-    bool from_python(handle, uint8_t, cleanup_list*) noexcept { return false; }
+    bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename U>
     static handle from_cpp(U&& value, rv_policy policy, cleanup_list* cleanup) noexcept

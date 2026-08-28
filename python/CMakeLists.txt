@@ -2,17 +2,18 @@ set(YGGDRASIL_INSTALL_PACKAGEDIR "pyyggdrasil")
 
 # Dependencies
 
-find_package(Python 3.9 REQUIRED
+find_package(Python 3.10 REQUIRED
     COMPONENTS Interpreter Development.Module
     OPTIONAL_COMPONENTS Development.SABIModule
 )
 
-find_package(nanobind CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
+find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
 # Targets
 
-nanobind_add_module(_pyyggdrasil NB_SHARED
+nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/execution/module.cpp
@@ -59,6 +60,11 @@ foreach(python_file IN LISTS PYYGGDRASIL_PYTHON_FILES)
     )
 endforeach()
 
+install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/nanobind"
+    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
+    COMPONENT pyyggdrasil
+)
+
 install(TARGETS _pyyggdrasil
     DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
     COMPONENT pyyggdrasil
@@ -102,8 +108,9 @@ install(FILES
 # ARE bundled: downstream test/benchmark suites discover them from this prefix
 # via find_package(GTest)/find_package(benchmark) with NO_DEFAULT_PATH, so they
 # are pinned to the same versions as the rest of the toolchain. Still pruned:
-# no static archives or libtool files, no command line tools other than the
-# minimal MPI toolchain, and only Boost runtime libraries linked downstream.
+# no static archives other than fmt's installed C target, no libtool files,
+# no command line tools other than the minimal MPI toolchain, and one copy of
+# each built Boost shared library.
 foreach(native_dir IN ITEMS include lib lib64)
     if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}")
         install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
@@ -114,25 +121,30 @@ foreach(native_dir IN ITEMS include lib lib64)
             REGEX "/libboost_[^/]*\\.(so|dylib)[^/]*$" EXCLUDE
             REGEX "/lib(mpi|mpl|opa)[^/]*\\.(so|dylib)[^/]*$" EXCLUDE
         )
-        foreach(boost_component IN ITEMS container iostreams json mpi serialization)
-            file(GLOB boost_runtime_libraries
-                LIST_DIRECTORIES false
-                "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}/libboost_${boost_component}*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
-            )
-            foreach(boost_runtime_library IN LISTS boost_runtime_libraries)
-                if(NOT IS_SYMLINK "${boost_runtime_library}")
-                    install(FILES "${boost_runtime_library}"
-                        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${native_dir}"
-                        COMPONENT pyyggdrasil
-                    )
-                endif()
-            endforeach()
+        file(GLOB boost_runtime_libraries
+            LIST_DIRECTORIES false
+            "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}/libboost_*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
+        )
+        foreach(boost_runtime_library IN LISTS boost_runtime_libraries)
+            if(NOT IS_SYMLINK "${boost_runtime_library}")
+                install(FILES "${boost_runtime_library}"
+                    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${native_dir}"
+                    COMPONENT pyyggdrasil
+                )
+            endif()
         endforeach()
     endif()
 endforeach()
 
+if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/libfmt-c.a")
+    install(FILES "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/libfmt-c.a"
+        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}"
+        COMPONENT pyyggdrasil
+    )
+endif()
+
 if(UNIX)
-    # MPICH 5.0.1 uses ABI soname 12. Keep only the soname file so wheel
+    # Bundled MPICH uses ABI soname 12. Keep only the soname file so wheel
     # creation cannot expand its symlink chain into duplicate libraries.
     if(APPLE)
         set(mpi_runtime_name "libmpi.12.dylib")
@@ -164,6 +176,13 @@ endif()
 
 install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/share/licenses/"
     DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/share/licenses"
+    COMPONENT pyyggdrasil
+)
+
+install(FILES
+    "${PROJECT_SOURCE_DIR}/docs/CORRESPONDING_SOURCE.md"
+    "${PROJECT_SOURCE_DIR}/docs/SOURCES.json"
+    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/share"
     COMPONENT pyyggdrasil
 )
 

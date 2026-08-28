@@ -3,7 +3,8 @@ project(InstallOneTBB)
 
 include(ExternalProject)
 
-set(YGGDRASIL_ONETBB_GIT_TAG v2022.2.0 CACHE STRING "Git tag used to build oneTBB.")
+yggdrasil_source(YGGDRASIL_ONETBB_GIT_REPOSITORY oneTBB repository)
+yggdrasil_source(YGGDRASIL_ONETBB_GIT_TAG oneTBB revision)
 
 message(STATUS "Dependency \"oneTBB\"...")
 
@@ -30,10 +31,11 @@ if (NOT oneTBB_FOUND)
     endforeach()
     ExternalProject_Add(
         oneTBB
-        GIT_REPOSITORY https://github.com/uxlfoundation/oneTBB.git
+        GIT_REPOSITORY ${YGGDRASIL_ONETBB_GIT_REPOSITORY}
         GIT_TAG ${YGGDRASIL_ONETBB_GIT_TAG}
         PREFIX ${CMAKE_BINARY_DIR}/oneTBB
         STAMP_DIR ${CMAKE_BINARY_DIR}/oneTBB/stamp/${YGGDRASIL_ONETBB_GIT_TAG}
+        STEP_TARGETS download
         UPDATE_COMMAND ""
         CMAKE_ARGS ${CMAKE_ARGS}
     )
