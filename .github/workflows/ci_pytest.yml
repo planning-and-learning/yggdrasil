@@ -45,4 +45,4 @@ jobs:
           PIP_NO_CACHE_DIR: 1
 
       - name: Test
-        run: pytest python/tests
+        run: python -m pytest python/tests
