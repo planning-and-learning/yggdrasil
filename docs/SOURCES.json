@@ -17,9 +17,9 @@
       "kind": "archive",
       "version": "1.92.0",
       "urls": [
-        "https://archives.boost.io/release/1.92.0/source/boost_1_92_0.tar.gz"
+        "https://github.com/boostorg/boost/releases/download/boost-1.92.0/boost-1.92.0-cmake.tar.xz"
       ],
-      "sha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce"
+      "sha256": "9bed76128d4e46755dbe818487788c6fceb6f72b378f4daa49b7e1e600d9088d"
     },
     "cista": {
       "kind": "git",

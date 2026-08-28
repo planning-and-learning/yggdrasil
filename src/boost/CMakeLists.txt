@@ -9,12 +9,6 @@ yggdrasil_source(YGGDRASIL_BOOST_SHA256 boost sha256)
 
 message(STATUS "Preparing external project \"boost\":")
 
-set(BOOST_USER_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/user-config.jam")
-file(WRITE "${BOOST_USER_CONFIG}"
-    "using mpi : : <include>${CMAKE_INSTALL_PREFIX}/include <library-path>${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR} <find-shared-library>mpi ;\n"
-)
-
-# We need to build boost for cmake support
 ExternalProject_Add(
     boost
     DEPENDS mpich
@@ -24,24 +18,19 @@ ExternalProject_Add(
     PREFIX ${CMAKE_BINARY_DIR}/boost
     STAMP_DIR ${CMAKE_BINARY_DIR}/boost/stamp/${YGGDRASIL_BOOST_VERSION}
     STEP_TARGETS download
-    CONFIGURE_COMMAND
-        ${CMAKE_COMMAND} -E chdir <SOURCE_DIR>
-        ./bootstrap.sh
-        --prefix=<INSTALL_DIR>
-        --with-libraries=container,iostreams,json,mpi,serialization
-    BUILD_COMMAND ""
-    INSTALL_COMMAND
-        ${CMAKE_COMMAND} -E chdir <SOURCE_DIR>
-        ./b2
-        -j${YGGDRASIL_JOBS}
-        --ignore-site-config
-        --user-config=${BOOST_USER_CONFIG}
-        install
-        variant=release
-        threading=multi
-        link=shared
-        runtime-link=shared
-        hardcode-dll-paths=true
-        dll-path=${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}
+    LIST_SEPARATOR |
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+        -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+        -DCMAKE_PREFIX_PATH=${CMAKE_INSTALL_PREFIX}
+        -DMPI_HOME=${CMAKE_INSTALL_PREFIX}
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DBUILD_SHARED_LIBS=ON
+        -DBUILD_TESTING=OFF
+        -DBOOST_INCLUDE_LIBRARIES=container|iostreams|json|mpi|serialization
+        -DBOOST_ENABLE_MPI=ON
+        -DBOOST_ENABLE_PYTHON=OFF
+        -DCMAKE_INSTALL_RPATH=${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}
     INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
 )
