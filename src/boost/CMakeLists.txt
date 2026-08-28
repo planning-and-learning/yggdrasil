@@ -28,9 +28,10 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DBUILD_SHARED_LIBS=ON
         -DBUILD_TESTING=OFF
-        -DBOOST_INCLUDE_LIBRARIES=container|iostreams|json|mpi|serialization
+        -DBOOST_INCLUDE_LIBRARIES=container|iostreams|json|mpi|numeric/interval|serialization
         -DBOOST_ENABLE_MPI=ON
         -DBOOST_ENABLE_PYTHON=OFF
+        -DBOOST_IOSTREAMS_ENABLE_ZSTD=OFF
         -DCMAKE_INSTALL_RPATH=${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}
     INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
 )
