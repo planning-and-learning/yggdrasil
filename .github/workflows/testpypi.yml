@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13"
 
       - name: Stage TestPyPI version
         if: github.event_name == 'workflow_dispatch'
@@ -59,7 +59,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13"
 
       - name: Stage TestPyPI version
         if: github.event_name == 'workflow_dispatch'
