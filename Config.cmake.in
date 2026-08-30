@@ -24,7 +24,7 @@ include(CMakeFindDependencyMacro)
 # exports CISTA_FMT/CISTA_FNV1A compile definitions, which change cista's fmt
 # integration and hash function relative to how the planning projects compile
 # these headers.
-find_dependency(Boost CONFIG COMPONENTS headers json PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+find_dependency(Boost CONFIG COMPONENTS headers json locale PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(TBB CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)

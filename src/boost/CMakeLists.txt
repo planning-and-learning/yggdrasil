@@ -11,7 +11,7 @@ message(STATUS "Preparing external project \"boost\":")
 
 ExternalProject_Add(
     boost
-    DEPENDS mpich
+    DEPENDS icu mpich
     URL ${YGGDRASIL_BOOST_URLS}
     URL_HASH SHA256=${YGGDRASIL_BOOST_SHA256}
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -28,10 +28,16 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DBUILD_SHARED_LIBS=ON
         -DBUILD_TESTING=OFF
-        -DBOOST_INCLUDE_LIBRARIES=container|iostreams|json|mpi|numeric/interval|serialization
+        -DBOOST_INCLUDE_LIBRARIES=container|hash2|iostreams|json|locale|mpi|numeric/interval|serialization
         -DBOOST_ENABLE_MPI=ON
         -DBOOST_ENABLE_PYTHON=OFF
         -DBOOST_IOSTREAMS_ENABLE_ZSTD=OFF
+        -DBOOST_LOCALE_ENABLE_ICU=ON
+        -DBOOST_LOCALE_ENABLE_ICONV=OFF
+        -DBOOST_LOCALE_ENABLE_POSIX=OFF
+        -DBOOST_LOCALE_ENABLE_STD=OFF
+        -DBOOST_LOCALE_ENABLE_WINAPI=OFF
+        -DICU_ROOT=${CMAKE_INSTALL_PREFIX}
         -DCMAKE_INSTALL_RPATH=${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}
     INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
 )

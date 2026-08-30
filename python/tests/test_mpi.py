@@ -22,6 +22,7 @@ def _check_distribution_compliance() -> None:
         "gtl/LICENSE",
         "gtl/license_folly",
         "gtl/license_lamerman",
+        "icu/LICENSE",
         "mpich/COPYRIGHT",
         "mpich/LICENSE.json-c",
         "mpich/LICENSE.libfabric",
@@ -89,13 +90,13 @@ def _run_smoke_test(root: Path) -> None:
             set(CMAKE_CXX_STANDARD_REQUIRED ON)
             set(MPI_CXX_SKIP_MPICXX ON)
             find_package(MPI REQUIRED COMPONENTS CXX)
-            find_package(Boost CONFIG REQUIRED COMPONENTS mpi serialization
+            find_package(Boost CONFIG REQUIRED COMPONENTS locale mpi serialization
                 PATHS "${MPI_HOME}" NO_DEFAULT_PATH)
             find_package(TBB CONFIG REQUIRED)
 
             add_executable(mpi_smoke main.cpp)
             target_link_libraries(mpi_smoke PRIVATE
-                MPI::MPI_CXX Boost::mpi Boost::serialization TBB::tbb)
+                MPI::MPI_CXX Boost::locale Boost::mpi Boost::serialization TBB::tbb)
             """
         ),
         encoding="utf-8",
@@ -104,6 +105,7 @@ def _run_smoke_test(root: Path) -> None:
         textwrap.dedent(
             """\
             #include <boost/mpi.hpp>
+            #include <boost/locale.hpp>
             #include <boost/serialization/vector.hpp>
             #include <oneapi/tbb/task_arena.h>
 
@@ -127,6 +129,14 @@ def _run_smoke_test(root: Path) -> None:
                 boost::mpi::communicator world;
                 oneapi::tbb::task_arena arena(1);
                 arena.execute([] {});
+                boost::locale::generator generator;
+                const auto locale = generator("en_US.UTF-8");
+                if (boost::locale::normalize("e\\xcc\\x81", boost::locale::norm_nfc, locale) != "\\xc3\\xa9") {
+                    return 4;
+                }
+                if (boost::locale::fold_case("Stra\\xc3\\x9f" "e", locale) != "strasse") {
+                    return 5;
+                }
                 if (
                     boost::mpi::environment::thread_level()
                         != boost::mpi::threading::multiple
@@ -187,7 +197,9 @@ def _run_smoke_test(root: Path) -> None:
     native_libraries = [
         *prefix.glob("lib*/libmpi*"),
         *prefix.glob("lib*/libboost_mpi*"),
+        *prefix.glob("lib*/libboost_locale*"),
         *prefix.glob("lib*/libboost_serialization*"),
+        *prefix.glob("lib*/libicu*"),
     ]
     for library in native_libraries:
         if platform.system() == "Darwin":

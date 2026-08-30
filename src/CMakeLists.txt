@@ -56,13 +56,14 @@ set(
 message(STATUS "Dependency install rpath: ${YGGDRASIL_DEPENDENCY_INSTALL_RPATH}")
 
 yggdrasil_sources(YGGDRASIL_DEPENDENCIES)
-# Boost's MPI component requires the MPICH target to exist first.
+# Boost's MPI and Locale components require MPICH and ICU to exist first.
 list(REMOVE_ITEM YGGDRASIL_DEPENDENCIES boost)
 list(APPEND YGGDRASIL_DEPENDENCIES boost)
 foreach(dependency IN LISTS YGGDRASIL_DEPENDENCIES)
     add_subdirectory("${dependency}")
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${dependency}/licenses/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${dependency}"
+        OPTIONAL
     )
 endforeach()
 

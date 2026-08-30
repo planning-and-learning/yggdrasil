@@ -22,6 +22,7 @@ def test_native_prefix_layout() -> None:
     assert native_prefix / "lib" / "cmake" in pyyggdrasil.cmake_dirs()
     assert (native_prefix / "lib").is_dir()
     assert (native_prefix / "include" / "boost").is_dir()
+    assert (native_prefix / "include" / "boost" / "hash2" / "sha2.hpp").is_file()
     assert (native_prefix / "include" / "yggdrasil.hpp").is_file()
     assert (
         native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp"
