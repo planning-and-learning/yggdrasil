@@ -106,8 +106,8 @@ def test_find_package_provides_helpers_and_target(tmp_path: Path) -> None:
 
     result = subprocess.run(
         [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")],
-        check=True,
         capture_output=True,
         text=True,
     )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     assert "helpers contract OK" in result.stdout

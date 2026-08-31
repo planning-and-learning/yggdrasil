@@ -24,6 +24,16 @@ include(CMakeFindDependencyMacro)
 # exports CISTA_FMT/CISTA_FNV1A compile definitions, which change cista's fmt
 # integration and hash function relative to how the planning projects compile
 # these headers.
+
+# boost_locale-config.cmake resolves ICU through FindICU, a find-module: it never
+# sees the PATHS/NO_DEFAULT_PATH below and would search default paths, silently
+# picking a system ICU on Linux and finding none at all on macOS. These are the
+# cache entries it looks for, so filling them in leaves it nothing to search.
+find_path(ICU_INCLUDE_DIR NAMES unicode/utypes.h PATHS "${_yggdrasil_prefix}/include" NO_DEFAULT_PATH REQUIRED)
+find_library(ICU_UC_LIBRARY_RELEASE NAMES icuuc PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
+find_library(ICU_I18N_LIBRARY_RELEASE NAMES icui18n PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
+find_library(ICU_DATA_LIBRARY_RELEASE NAMES icudata PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
+
 find_dependency(Boost CONFIG COMPONENTS headers json locale PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)

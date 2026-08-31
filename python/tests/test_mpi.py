@@ -92,7 +92,7 @@ def _run_smoke_test(root: Path) -> None:
             find_package(MPI REQUIRED COMPONENTS CXX)
             find_package(Boost CONFIG REQUIRED COMPONENTS locale mpi serialization
                 PATHS "${MPI_HOME}" NO_DEFAULT_PATH)
-            find_package(TBB CONFIG REQUIRED)
+            find_package(TBB CONFIG REQUIRED PATHS "${MPI_HOME}" NO_DEFAULT_PATH)
 
             add_executable(mpi_smoke main.cpp)
             target_link_libraries(mpi_smoke PRIVATE
