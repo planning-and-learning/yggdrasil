@@ -8,7 +8,7 @@ backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.1.2"
+version = "0.1.1"
 description = "Native dependency provider for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
