@@ -33,6 +33,7 @@ def _check_distribution_compliance() -> None:
         "nauty/LICENSE-2.0.txt",
         "oneTBB/LICENSE.txt",
         "oneTBB/third-party-programs.txt",
+        "tomlplusplus/LICENSE",
     }
     actual_license_files = {
         path.relative_to(license_dir).as_posix()

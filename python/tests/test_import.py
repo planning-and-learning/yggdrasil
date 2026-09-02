@@ -13,7 +13,7 @@ import pyyggdrasil.execution as execution
 def test_native_prefix_layout() -> None:
     native_prefix = pyyggdrasil.native_prefix()
 
-    assert pyyggdrasil.__version__ != ""
+    assert pyyggdrasil.__version__ == "0.1.2"
     assert pyyggdrasil.execution.ExecutionContext(1).num_threads == 1
     assert pyyggdrasil.execution.ExecutionContext.max_num_threads() >= 1
     assert pyyggdrasil.include_dir() == native_prefix / "include"
@@ -23,6 +23,7 @@ def test_native_prefix_layout() -> None:
     assert (native_prefix / "lib").is_dir()
     assert (native_prefix / "include" / "boost").is_dir()
     assert (native_prefix / "include" / "boost" / "hash2" / "sha2.hpp").is_file()
+    assert (native_prefix / "include" / "toml++" / "toml.hpp").is_file()
     assert (native_prefix / "include" / "yggdrasil.hpp").is_file()
     assert (
         native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp"
@@ -37,6 +38,9 @@ def test_native_prefix_layout() -> None:
     assert pyyggdrasil.cmake_dir().name == "yggdrasil"
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfig.cmake").is_file()
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfigVersion.cmake").is_file()
+    assert (
+        native_prefix / "lib" / "cmake" / "tomlplusplus" / "tomlplusplusConfig.cmake"
+    ).is_file()
 
 
 def test_execution_submodule_is_public() -> None:
@@ -220,11 +224,12 @@ def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
             project(pyyggdrasil_provider_probe LANGUAGES CXX)
 
             find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
-            find_package(yggdrasil 0.1 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
+            find_package(yggdrasil 0.1.2 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(nanobind CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
+            find_package(tomlplusplus 3.4 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
 
             add_library(provider_probe INTERFACE)
-            target_link_libraries(provider_probe INTERFACE yggdrasil::yggdrasil)
+            target_link_libraries(provider_probe INTERFACE yggdrasil::yggdrasil tomlplusplus::tomlplusplus)
             """
         ),
         encoding="utf-8",
