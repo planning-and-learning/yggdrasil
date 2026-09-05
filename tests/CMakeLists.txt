@@ -14,6 +14,13 @@ target_include_directories(yggdrasil_type_casters_test PRIVATE
     "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 
+nanobind_add_module(yggdrasil_diagnostics_test BACKEND_MODULE nanobind_backend python/diagnostics.cpp)
+target_compile_features(yggdrasil_diagnostics_test PRIVATE cxx_std_20)
+target_include_directories(yggdrasil_diagnostics_test PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
+
 # Test registration
 
 add_test(
@@ -45,6 +52,15 @@ add_test(
         ${PROJECT_SOURCE_DIR}/tests/python/import_smoke.py
         ${PROJECT_SOURCE_DIR}/python/src/pyyggdrasil/__init__.py
         $<TARGET_FILE:_pyyggdrasil>
+)
+
+add_test(
+    NAME python_diagnostics
+    COMMAND ${Python_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/python/diagnostics.py
+        ${PROJECT_SOURCE_DIR}/python/src/pyyggdrasil/__init__.py
+        $<TARGET_FILE:_pyyggdrasil>
+        $<TARGET_FILE:yggdrasil_diagnostics_test>
 )
 
 add_test(

@@ -139,4 +139,85 @@ TEST(YggdrasilX3Diagnostics, MaterializedDiagnosticsShareSourceAndOutliveParser)
               "In file utf8, line 1:\nnote: start\né  x\n^_\n");
 }
 
+TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttributes)
+{
+    const auto inner = diagnostics::context(":values")[x3::lit('(') >> x3::lit(":values") > x3::int_ > x3::lit(')')];
+    const auto grammar = x3::rule<NumberRule, Number> { "context_number" } =
+        diagnostics::context(":outer")[x3::lit('(') >> x3::lit(":outer") > inner > x3::lit(')')];
+    const auto source = std::string("  (:outer\n (:values 42");
+    auto first = source.cbegin();
+    auto output = std::ostringstream {};
+    auto handler = Handler(first, source.cend(), output, "context.txt");
+    auto ast = Number {};
+    EXPECT_FALSE(x3::phrase_parse(first, source.cend(), x3::with<ErrorHandlerTag>(std::ref(handler))[grammar], x3::ascii::space, ast));
+    const auto diagnostic = handler.diagnostic("fallback", first);
+    EXPECT_NE(diagnostic.message.find("while parsing :values"), std::string::npos);
+    ASSERT_TRUE(diagnostic.location);
+    EXPECT_EQ(diagnostic.location->begin(), source.size());
+    ASSERT_EQ(diagnostic.notes.size(), 1);
+    EXPECT_EQ(diagnostic.notes.front().message, ":values starts here");
+    ASSERT_TRUE(diagnostic.notes.front().location);
+    EXPECT_EQ(diagnostic.notes.front().location->begin(), source.find("(:values"));
+    EXPECT_EQ(output.str(), format_diagnostic(diagnostic));
+
+    const auto valid = std::string("(:outer (:values 42))");
+    first = valid.cbegin();
+    auto valid_handler = Handler(first, valid.cend(), output);
+    ASSERT_TRUE(x3::phrase_parse(first, valid.cend(), x3::with<ErrorHandlerTag>(std::ref(valid_handler))[grammar], x3::ascii::space, ast));
+    EXPECT_EQ(ast.value, 42);
+    EXPECT_FALSE(valid_handler.last_error());
+    const auto fallback = valid_handler.diagnostic("fallback", first);
+    EXPECT_EQ(fallback.message, "fallback");
+    EXPECT_TRUE(fallback.notes.empty());
+    EXPECT_EQ(fallback.location->begin(), valid.size());
+}
+
+TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
+{
+    const auto child = x3::lit('(') >> x3::lit(":child") > x3::int_ > x3::lit(')');
+    const auto body = x3::lit('(') >> x3::lit(":outer") > child > x3::lit(')');
+    const auto skipper = x3::ascii::space | (';' >> *(x3::char_ - x3::eol) >> (x3::eol | x3::eoi));
+    for (const auto contextual : { false, true })
+    {
+        const auto source = std::string("(:outer \t; ignored parenthesis )\n (:unknown))");
+        auto first = source.cbegin();
+        auto output = std::ostringstream {};
+        auto handler = Handler(first, source.cend(), output);
+        auto ast = Number {};
+        if (contextual)
+        {
+            const auto grammar = x3::rule<NumberRule, Number> { "outer" } = diagnostics::context(":outer")[body];
+            EXPECT_FALSE(x3::phrase_parse(first, source.cend(), x3::with<ErrorHandlerTag>(std::ref(handler))[grammar], skipper, ast));
+        }
+        else
+        {
+            const auto grammar = x3::rule<NumberRule, Number> { "outer" } = body;
+            EXPECT_FALSE(x3::phrase_parse(first, source.cend(), x3::with<ErrorHandlerTag>(std::ref(handler))[grammar], skipper, ast));
+        }
+        ASSERT_TRUE(handler.last_error());
+        EXPECT_EQ(handler.last_error()->position, source.cbegin() + source.find("(:unknown"));
+    }
+}
+
+TEST(YggdrasilX3Diagnostics, ExpectedContextUsesItsNameWithoutChangingErrorOwnership)
+{
+    const auto child = diagnostics::context(":values")[x3::lit('(') >> x3::lit(":values") > x3::int_ > x3::lit(')')];
+    EXPECT_EQ(x3::what(child), ":values");
+    const auto grammar = x3::rule<NumberRule, Number> { "outer" } = diagnostics::context(":outer")[x3::lit('(') >> x3::lit(":outer") > child > x3::lit(')')];
+    const auto source = std::string("(:outer (:unknown 42))");
+    auto first = source.cbegin();
+    auto output = std::ostringstream {};
+    auto handler = Handler(first, source.cend(), output);
+    auto ast = Number {};
+    EXPECT_FALSE(x3::phrase_parse(first, source.cend(), x3::with<ErrorHandlerTag>(std::ref(handler))[grammar], x3::ascii::space, ast));
+    const auto diagnostic = handler.diagnostic("fallback", first);
+    EXPECT_EQ(diagnostic.message, "Expected :values while parsing :outer");
+    ASSERT_TRUE(diagnostic.location);
+    EXPECT_EQ(diagnostic.location->begin(), source.find("(:unknown"));
+    ASSERT_EQ(diagnostic.notes.size(), 1);
+    EXPECT_EQ(diagnostic.notes.front().message, ":outer starts here");
+    ASSERT_TRUE(diagnostic.notes.front().location);
+    EXPECT_EQ(diagnostic.notes.front().location->begin(), 0);
+}
+
 }  // namespace ygg::tests

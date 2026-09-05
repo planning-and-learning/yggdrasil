@@ -37,6 +37,7 @@ public:
     {
         It position;
         std::string message;
+        std::vector<DiagnosticNote> notes = {};
     };
 
     ErrorHandler(It first, It last, std::ostream& output, std::string file = "", int tabs = 4) :
@@ -54,10 +55,23 @@ public:
     void clear_error() noexcept { m_error.reset(); }
     const std::optional<RecordedError>& last_error() const noexcept { return m_error; }
 
-    void record_error(It position, std::string message)
+    void record_error(It position, std::string message, std::vector<DiagnosticNote> notes = {})
     {
         if (!m_error)
-            m_error = RecordedError { position, std::move(message) };
+            m_error = RecordedError { position, std::move(message), std::move(notes) };
+    }
+
+    Diagnostic diagnostic(std::string fallback, It position) const
+    {
+        if (m_error)
+            return Diagnostic { m_error->message, source_span(m_error->position, m_error->position), m_error->notes };
+        return make_diagnostic(position, std::move(fallback));
+    }
+
+    void report_error() const
+    {
+        if (m_error)
+            m_output << format_diagnostic(diagnostic(m_error->message, m_error->position));
     }
 
     SourceSpan source_span(It first, It last) const
@@ -115,16 +129,58 @@ struct ErrorHandlerBase
     }
 
     template<typename It, typename Exception, typename Context>
-    x3::error_handler_result on_error(It&, const It&, const Exception& error, const Context& context)
+    x3::error_handler_result on_error(It&, const It& last, const Exception& error, const Context& context)
     {
         auto message = "Error! Expecting: " + std::string(error.which()) + " here:";
         auto& handler = x3::get<ErrorHandlerTag>(context).get();
-        handler.record_error(error.where(), message);
-        handler(error.where(), message);
+        auto position = error.where();
+        x3::skip_over(position, last, context);
+        handler.record_error(position, message);
+        handler.report_error();
         return x3::error_handler_result::fail;
     }
 };
 
+/// Label a grammar expression without changing its grammar or scanning its input separately.
+struct ContextDirective
+{
+    std::string name;
+
+    template<typename Subject>
+    auto operator[](const Subject& subject) const
+    {
+        return x3::as_parser(subject).on_error(*this);
+    }
+
+    template<typename It, typename Exception, typename Context>
+    x3::error_handler_result operator()(It& first, const It& last, const Exception& error, const Context& parser_context) const
+    {
+        auto start = first;
+        x3::skip_over(start, last, parser_context);
+        auto position = error.where();
+        x3::skip_over(position, last, parser_context);
+        auto& handler = x3::get<ErrorHandlerTag>(parser_context).get();
+        handler.record_error(position,
+                             "Expected " + std::string(error.which()) + " while parsing " + name,
+                             { DiagnosticNote { name + " starts here", handler.source_span(start, start) } });
+        return x3::error_handler_result::rethrow;
+    }
+};
+
+inline auto context(std::string name) { return ContextDirective { std::move(name) }; }
+
 }  // namespace ygg::diagnostics
+
+namespace boost::spirit::x3
+{
+
+template<typename Subject>
+struct get_info<guard<Subject, ygg::diagnostics::ContextDirective>>
+{
+    using result_type = std::string;
+    std::string operator()(const guard<Subject, ygg::diagnostics::ContextDirective>& parser) const { return parser.handler.name; }
+};
+
+}  // namespace boost::spirit::x3
 
 #endif
