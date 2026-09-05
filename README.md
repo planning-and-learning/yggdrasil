@@ -3,7 +3,7 @@
 `pyyggdrasil` packages the native dependency prefix used by the planning projects
 in this repository family.
 
-The Python distribution name and import package are both `pyyggdrasil`.
+The Python distribution name and import package are both `pyyggdrasil`; Python 3.11 or newer is required.
 
 `pyyggdrasil` is the base of the planning-and-learning package chain. The shared
 workspace layout, the layered install order, and the common

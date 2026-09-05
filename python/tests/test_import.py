@@ -56,6 +56,7 @@ def test_public_package_exports_are_explicit() -> None:
         "include_dir",
         "library_dirs",
         "native_prefix",
+        "diagnostics",
         "execution",
     ]
     for name in pyyggdrasil.__all__:
@@ -223,7 +224,7 @@ def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
             cmake_minimum_required(VERSION 3.21)
             project(pyyggdrasil_provider_probe LANGUAGES CXX)
 
-            find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+            find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
             find_package(yggdrasil 0.1.2 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(nanobind CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(tomlplusplus 3.4 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)

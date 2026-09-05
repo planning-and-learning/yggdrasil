@@ -2,7 +2,7 @@ enable_testing()
 
 # Dependencies and targets
 
-find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
 yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
 find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 add_subdirectory(unit)

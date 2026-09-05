@@ -10,7 +10,7 @@ yggdrasil_source(YGGDRASIL_NANOBIND_SUBMODULES nanobind submodules)
 
 message(STATUS "Dependency \"nanobind\"...")
 
-find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
+find_package(Python 3.11 COMPONENTS Interpreter Development.Module REQUIRED)
 find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG QUIET PATHS ${CMAKE_INSTALL_PREFIX} NO_DEFAULT_PATH)
 
 if(NOT nanobind_FOUND)

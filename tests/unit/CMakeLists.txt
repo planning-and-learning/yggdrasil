@@ -61,6 +61,9 @@ add_yggdrasil_gtest(core_core "core/core.cpp")
 add_yggdrasil_gtest(core_path "core/path.cpp")
 add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
+add_yggdrasil_gtest(diagnostics_diagnostic "diagnostics/diagnostic.cpp")
+add_yggdrasil_gtest(diagnostics_x3 "diagnostics/x3.cpp")
+
 add_yggdrasil_gtest(formatting_formatter "formatting/formatter.cpp")
 
 add_yggdrasil_gtest(io_iostream "io/iostream.cpp")

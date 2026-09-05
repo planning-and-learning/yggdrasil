@@ -2,6 +2,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Tuple
 
+from . import diagnostics as diagnostics
 from . import execution as execution
 
 
@@ -88,5 +89,6 @@ __all__ = [
     "include_dir",
     "library_dirs",
     "native_prefix",
+    "diagnostics",
     "execution",
 ]

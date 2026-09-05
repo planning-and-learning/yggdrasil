@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Tuple
 
+from . import diagnostics as diagnostics
 from . import execution as execution
 
 __version__: str

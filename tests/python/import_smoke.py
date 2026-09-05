@@ -10,15 +10,12 @@ def main() -> None:
         raise SystemExit("usage: import_smoke.py <package-init> <extension>")
 
     package_init = Path(sys.argv[1]).resolve()
-    execution_init = package_init.parent / "execution" / "__init__.py"
     extension = Path(sys.argv[2]).resolve()
 
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-import-") as tmp:
         tmp_dir = Path(tmp).resolve()
         package_dir = tmp_dir / "pyyggdrasil"
         package_dir.mkdir()
-        execution_dir = package_dir / "execution"
-        execution_dir.mkdir()
         lib_dir = package_dir / "lib"
         cmake_dir = lib_dir / "cmake"
         cmake_dir.mkdir(parents=True)
@@ -28,7 +25,10 @@ def main() -> None:
             "# test placeholder\n", encoding="utf-8"
         )
         shutil.copy2(package_init, package_dir / "__init__.py")
-        shutil.copy2(execution_init, execution_dir / "__init__.py")
+        for name in ("diagnostics", "execution"):
+            submodule_dir = package_dir / name
+            submodule_dir.mkdir()
+            shutil.copy2(package_init.parent / name / "__init__.py", submodule_dir / "__init__.py")
         shutil.copy2(extension, package_dir / extension.name)
 
         sys.path.insert(0, str(tmp_dir))
@@ -43,6 +43,7 @@ def main() -> None:
                 "include_dir",
                 "library_dirs",
                 "native_prefix",
+                "diagnostics",
                 "execution",
             ]
             assert pyyggdrasil.__version__ != ""
@@ -56,6 +57,17 @@ def main() -> None:
             import pyyggdrasil.execution as execution
 
             assert execution is pyyggdrasil.execution
+
+            import pyyggdrasil.diagnostics as diagnostics
+
+            assert diagnostics is pyyggdrasil.diagnostics
+            source = diagnostics.Source("policy", "policy.txt")
+            location = diagnostics.SourceSpan(source, 0, 6)
+            diagnostic = diagnostics.Diagnostic("Unexpected policy", location)
+            assert diagnostic.location is not None
+            assert diagnostic.location.source.text == "policy"
+            assert "policy.txt" in str(diagnostic)
+            assert str(diagnostic) == diagnostics.format_diagnostic(diagnostic)
 
             source_root = tmp_dir / "source-tree"
             source_package_dir = source_root / "python" / "src" / "pyyggdrasil"

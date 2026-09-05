@@ -13,7 +13,7 @@ description = "Native dependency provider for Dominik Drexler's planning project
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     {name = "Dominik Drexler", email = "dominik.drexler@liu.se"},
 ]
@@ -40,7 +40,7 @@ build.targets = ["pyyggdrasil_wheel"]
 cmake.build-type = "Release"
 install.components = ["pyyggdrasil"]
 wheel.packages = []
-wheel.py-api = "cp310"
+wheel.py-api = "cp311"
 
 [tool.scikit-build.sdist]
 include = [
@@ -69,7 +69,7 @@ YGGDRASIL_ENABLE_LTO = {env = "YGGDRASIL_ENABLE_LTO", default = false}
 CMAKE_INSTALL_LIBDIR = "lib"
 
 [tool.cibuildwheel]
-build = "cp310-*"
+build = "cp311-*"
 container-engine = "docker"
 test-requires = ["cmake>=3.21"]
 test-command = "python {project}/python/tests/test_mpi.py"

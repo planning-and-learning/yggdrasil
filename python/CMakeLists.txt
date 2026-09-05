@@ -2,7 +2,7 @@ set(YGGDRASIL_INSTALL_PACKAGEDIR "pyyggdrasil")
 
 # Dependencies
 
-find_package(Python 3.10 REQUIRED
+find_package(Python 3.11 REQUIRED
     COMPONENTS Interpreter Development.Module
     OPTIONAL_COMPONENTS Development.SABIModule
 )
@@ -16,6 +16,7 @@ find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_P
 nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
+    src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
 )
 
@@ -49,6 +50,7 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/repair.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
+    pyyggdrasil/diagnostics/__init__.py
     pyyggdrasil/execution/__init__.py
 )
 
