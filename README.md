@@ -53,8 +53,9 @@ minor version. The exported CMake package version file uses
 
 ### Serialization Tables
 
-`pyyggdrasil.serialization` provides the shared `JSONValue`, `Row`, `Table`,
-and `EnumEntry` types and a small renderer backed by `tabulate`:
+`pyyggdrasil.serialization.table` provides the shared `JSONValue`, `Row`, and `Table`
+types and a small renderer backed by `tabulate`. These are also
+exported from `pyyggdrasil.serialization`:
 
 ```python
 from pyyggdrasil.serialization import Row, render_table
@@ -66,9 +67,13 @@ rows: list[Row] = [
 print(render_table(rows, prefix="n"))
 ```
 
-The first column contains references `n0` and `n1`. Nested lists and objects
-become compact JSON cells; scalar values use tabulate's usual formatting.
-Use `tablefmt="github"` for Markdown. Empty input produces an empty string.
+The first column contains references `n0` and `n1`. Dictionaries expand recursively
+into columns with grouped headers. Parent names appear above their first child;
+all leaf labels share the bottom header row. Empty dictionaries have no columns.
+Lists remain compact JSON cells, and scalar values use tabulate's usual formatting.
+The default `presto` format separates columns with pipes and adds one line below
+the headers, with no lines between data rows. Flat tables can use
+`tablefmt="github"` for Markdown. Empty input produces an empty string.
 
 For a serialization dictionary, render its snapshots directly:
 
@@ -76,14 +81,9 @@ For a serialization dictionary, render its snapshots directly:
 for name, table in dictionaries.tables().items():
     print(name)
     print(render_table(table["rows"], prefix=table["prefix"]))
-
-for name, entries in dictionaries.enums().items():
-    print(name)
-    print(render_table(entries))
 ```
 
-Enum entries contain `ref`, `id`, and `name`: serialized enum values and
-variant kinds use the short `ref`, while `id` retains the native integer.
+Enums and variant kinds use their textual names directly.
 The surrounding output order and text belong to the caller.
 
 ## Build Python

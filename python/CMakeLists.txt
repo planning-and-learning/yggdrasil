@@ -53,7 +53,8 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__main__.py
     pyyggdrasil/build_support.py
     pyyggdrasil/repair.py
-    pyyggdrasil/serialization.py
+    pyyggdrasil/serialization/__init__.py
+    pyyggdrasil/serialization/table.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
     pyyggdrasil/diagnostics/__init__.py
@@ -173,7 +174,8 @@ if(UNIX)
             COMPONENT pyyggdrasil
         )
     endforeach()
-    install(PROGRAMS "${YGGDRASIL_NATIVE_PREFIX}/bin/mpiexec.hydra"
+    file(REAL_PATH "${YGGDRASIL_NATIVE_PREFIX}/bin/mpiexec" mpi_launcher)
+    install(PROGRAMS "${mpi_launcher}"
         DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/bin"
         RENAME mpiexec
         COMPONENT pyyggdrasil

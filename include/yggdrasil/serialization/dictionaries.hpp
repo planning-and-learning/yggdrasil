@@ -3,7 +3,6 @@
 
 #include "yggdrasil/serialization/conversion.hpp"
 
-#include <algorithm>
 #include <any>
 #include <stdexcept>
 #include <string>
@@ -14,6 +13,7 @@
 #include <vector>
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/concepts.hpp>
+#include <yggdrasil/formatting/formatter.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/semantics/hash.hpp>
 
@@ -39,8 +39,6 @@ class Dictionaries
 
     std::vector<Table> m_tables;
     std::unordered_map<std::type_index, size_t> m_types;
-    boost::json::object m_enums;
-    size_t m_next_kind_index = 0;
     bool m_started = false;
     bool m_failed = false;
 
@@ -53,12 +51,11 @@ class Dictionaries
     class Archive
     {
         Dictionaries& m_dictionaries;
-        std::string m_type_name;
 
     public:
         boost::json::object fields;
 
-        Archive(Dictionaries& dictionaries, std::string name) : m_dictionaries(dictionaries), m_type_name(std::move(name)) {}
+        explicit Archive(Dictionaries& dictionaries) : m_dictionaries(dictionaries) {}
 
         template<typename T>
         void field(std::string_view name, const T& value)
@@ -74,39 +71,37 @@ class Dictionaries
             {
                 using Alternative = std::remove_cvref_t<decltype(alternative)>;
                 const auto& item = value.template get<Alternative>();
-                const auto kind = value.index_variant().index();
-                fields["kind"] = m_dictionaries.add_kind(m_type_name, kind, TypeName<std::remove_cvref_t<decltype(item)>>::get());
+                fields["kind"] = TypeName<std::remove_cvref_t<decltype(item)>>::get();
                 fields["value"] = boost::json::value_from(item, &m_dictionaries);
             }, value.index_variant());
         }
     };
 
     template<typename T, typename Body>
-    boost::json::value collect(const T&, Body&& body)
-    {
-        return body();
-    }
-
-    template<Hashable T, typename Body>
     boost::json::value collect(const T& value, Body&& body)
     {
-        if (const auto found = m_types.find(typeid(T)); found != m_types.end())
+        if constexpr (Hashable<T>)
         {
-            auto& table = m_tables[found->second];
-            auto& index = std::any_cast<detail::Index<T>&>(table.index);
-            const auto [entry, inserted] = index.try_emplace(value, table.rows.size());
-            const auto id = entry->second;
-            const auto reference = table.prefix + std::to_string(id);
-            if (inserted)
+            if (const auto found = m_types.find(typeid(T)); found != m_types.end())
             {
-                table.rows.emplace_back(nullptr);
-                // Descendants may append to this table. Keep the index, not a reference to its row.
-                auto row = body();
-                table.rows[id] = std::move(row);
+                auto& table = m_tables[found->second];
+                auto& index = std::any_cast<detail::Index<T>&>(table.index);
+                const auto [entry, inserted] = index.try_emplace(value, table.rows.size());
+                const auto id = entry->second;
+                const auto reference = table.prefix + std::to_string(id);
+                if (inserted)
+                {
+                    table.rows.emplace_back(nullptr);
+                    // Descendants may append to this table. Keep the index, not a reference to its row.
+                    auto row = body();
+                    table.rows[id] = std::move(row);
+                }
+                return boost::json::value(reference);
             }
-            return boost::json::value(reference);
         }
-        return body();
+        // Unregistered entities use native text. A missing formatter must fail to compile;
+        // do not fall back to structural serialization, which silently changes the representation.
+        return boost::json::value(ygg::to_string(value));
     }
 
 public:
@@ -115,26 +110,10 @@ public:
     {
         result = collect(value, [&]
         {
-            Archive archive(*this, TypeName<T>::get());
+            Archive archive(*this);
             fields(archive);
             return std::move(archive.fields);
         });
-    }
-
-    std::string add_kind(std::string_view type, size_t id, std::string name)
-    {
-        auto [entry, inserted] = m_enums.emplace(type, boost::json::array {});
-        auto& rows = entry->value().as_array();
-        const auto position = std::ranges::find_if(rows, [id](const auto& row) { return row.as_object().at("id").as_uint64() >= id; });
-        if (position != rows.end() && position->as_object().at("id").as_uint64() == id)
-        {
-            const auto& reference = position->as_object().at("ref").as_string();
-            return {reference.data(), reference.size()};
-        }
-        auto reference = "@" + std::to_string(m_next_kind_index);
-        rows.insert(position, boost::json::object {{"ref", reference}, {"id", id}, {"name", std::move(name)}});
-        ++m_next_kind_index;
-        return reference;
     }
 
     template<Hashable T>
@@ -145,8 +124,6 @@ public:
             throw std::logic_error("Register tables before serialization begins");
         if (name.empty() || prefix.empty() || (prefix.back() >= '0' && prefix.back() <= '9'))
             throw std::invalid_argument("Table name and prefix must be nonempty; prefix must end in a non-digit");
-        if (prefix == "@")
-            throw std::invalid_argument("The @ prefix is reserved for enum and variant references");
         if (m_types.contains(typeid(T)))
             throw std::invalid_argument("Type already has a dictionary table");
         for (const auto& table : m_tables)
@@ -185,11 +162,6 @@ public:
         return result;
     }
 
-    boost::json::object enums() const
-    {
-        check_valid();
-        return m_enums;
-    }
 };
 
 }
