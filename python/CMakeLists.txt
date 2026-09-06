@@ -13,11 +13,16 @@ find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_P
 
 # Targets
 
+file(GLOB_RECURSE YGGDRASIL_PUBLIC_HEADERS CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/include/yggdrasil/*.hpp"
+)
+
 nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
+    ${YGGDRASIL_PUBLIC_HEADERS}
 )
 
 target_compile_features(_pyyggdrasil PRIVATE cxx_std_20)
