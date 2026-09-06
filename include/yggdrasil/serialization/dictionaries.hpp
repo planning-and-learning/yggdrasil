@@ -3,7 +3,10 @@
 
 #include "yggdrasil/serialization/conversion.hpp"
 
+#include <algorithm>
 #include <any>
+#include <functional>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -35,6 +38,8 @@ class Dictionaries
         std::string prefix;
         boost::json::array rows;
         std::any index;
+        std::optional<std::vector<std::string>> fields;
+        std::any project;
     };
 
     std::vector<Table> m_tables;
@@ -48,19 +53,30 @@ class Dictionaries
             throw std::logic_error("Serialization failed; create a new dictionary registry");
     }
 
+public:
     class Archive
     {
         Dictionaries& m_dictionaries;
+        const std::optional<std::vector<std::string>>& m_selected_fields;
 
     public:
         boost::json::object fields;
 
-        explicit Archive(Dictionaries& dictionaries) : m_dictionaries(dictionaries) {}
+        Archive(Dictionaries& dictionaries, const std::optional<std::vector<std::string>>& selected_fields) :
+            m_dictionaries(dictionaries), m_selected_fields(selected_fields)
+        {}
+
+        bool accepts(std::string_view name) const
+        {
+            return !m_selected_fields || std::ranges::find(*m_selected_fields, name) != m_selected_fields->end();
+        }
 
         template<typename T>
         void field(std::string_view name, const T& value)
         {
-            fields[name] = boost::json::value_from(value, &m_dictionaries);
+            // Filter before conversion: omitted fields must not collect descendants into other tables.
+            if (accepts(name))
+                fields[name] = boost::json::value_from(value, &m_dictionaries);
         }
 
         template<typename Variant>
@@ -71,12 +87,13 @@ class Dictionaries
             {
                 using Alternative = std::remove_cvref_t<decltype(alternative)>;
                 const auto& item = value.template get<Alternative>();
-                fields["kind"] = TypeName<std::remove_cvref_t<decltype(item)>>::get();
-                fields["value"] = boost::json::value_from(item, &m_dictionaries);
+                field("kind", TypeName<std::remove_cvref_t<decltype(item)>>::get());
+                field("value", item);
             }, value.index_variant());
         }
     };
 
+private:
     template<typename T, typename Body>
     boost::json::value collect(const T& value, Body&& body)
     {
@@ -93,7 +110,7 @@ class Dictionaries
                 {
                     table.rows.emplace_back(nullptr);
                     // Descendants may append to this table. Keep the index, not a reference to its row.
-                    auto row = body();
+                    auto row = body(table);
                     table.rows[id] = std::move(row);
                 }
                 return boost::json::value(reference);
@@ -108,16 +125,23 @@ public:
     template<typename T, typename Fields>
     void object(boost::json::value& result, const T& value, Fields&& fields)
     {
-        result = collect(value, [&]
+        result = collect(value, [&](const Table& table)
         {
-            Archive archive(*this);
-            fields(archive);
+            Archive archive(*this, table.fields);
+            const auto& project = std::any_cast<const std::function<void(Archive&, const T&)>&>(table.project);
+            if (project)
+                project(archive, value);
+            else
+                fields(archive);
             return std::move(archive.fields);
         });
     }
 
     template<Hashable T>
-    void register_table(std::string name, std::string prefix)
+    void register_table(std::string name,
+                        std::string prefix,
+                        std::optional<std::vector<std::string>> fields = std::nullopt,
+                        std::function<void(Archive&, const T&)> project = {})
     {
         check_valid();
         if (m_started)
@@ -130,7 +154,7 @@ public:
             if (table.name == name || table.prefix == prefix)
                 throw std::invalid_argument("Table names and prefixes must be unique");
         const auto position = m_tables.size();
-        m_tables.push_back({std::move(name), std::move(prefix), {}, detail::Index<T> {}});
+        m_tables.push_back({std::move(name), std::move(prefix), {}, detail::Index<T> {}, std::move(fields), std::move(project)});
         m_types.emplace(typeid(T), position);
     }
 
