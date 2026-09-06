@@ -3,6 +3,7 @@ from typing import Tuple
 
 from . import diagnostics as diagnostics
 from . import execution as execution
+from . import serialization as serialization
 
 __version__: str
 

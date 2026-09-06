@@ -53,6 +53,7 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__main__.py
     pyyggdrasil/build_support.py
     pyyggdrasil/repair.py
+    pyyggdrasil/serialization.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
     pyyggdrasil/diagnostics/__init__.py

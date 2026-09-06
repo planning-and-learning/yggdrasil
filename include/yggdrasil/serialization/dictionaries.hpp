@@ -40,6 +40,7 @@ class Dictionaries
     std::vector<Table> m_tables;
     std::unordered_map<std::type_index, size_t> m_types;
     boost::json::object m_enums;
+    size_t m_next_kind_index = 0;
     bool m_started = false;
     bool m_failed = false;
 
@@ -74,8 +75,7 @@ class Dictionaries
                 using Alternative = std::remove_cvref_t<decltype(alternative)>;
                 const auto& item = value.template get<Alternative>();
                 const auto kind = value.index_variant().index();
-                m_dictionaries.add_kind(m_type_name, kind, TypeName<std::remove_cvref_t<decltype(item)>>::get());
-                fields["kind"] = kind;
+                fields["kind"] = m_dictionaries.add_kind(m_type_name, kind, TypeName<std::remove_cvref_t<decltype(item)>>::get());
                 fields["value"] = boost::json::value_from(item, &m_dictionaries);
             }, value.index_variant());
         }
@@ -121,13 +121,20 @@ public:
         });
     }
 
-    void add_kind(std::string_view type, size_t id, std::string name)
+    std::string add_kind(std::string_view type, size_t id, std::string name)
     {
         auto [entry, inserted] = m_enums.emplace(type, boost::json::array {});
         auto& rows = entry->value().as_array();
         const auto position = std::ranges::find_if(rows, [id](const auto& row) { return row.as_object().at("id").as_uint64() >= id; });
-        if (position == rows.end() || position->as_object().at("id").as_uint64() != id)
-            rows.insert(position, boost::json::object {{"id", id}, {"name", std::move(name)}});
+        if (position != rows.end() && position->as_object().at("id").as_uint64() == id)
+        {
+            const auto& reference = position->as_object().at("ref").as_string();
+            return {reference.data(), reference.size()};
+        }
+        auto reference = "@" + std::to_string(m_next_kind_index);
+        rows.insert(position, boost::json::object {{"ref", reference}, {"id", id}, {"name", std::move(name)}});
+        ++m_next_kind_index;
+        return reference;
     }
 
     template<Hashable T>
@@ -138,6 +145,8 @@ public:
             throw std::logic_error("Register tables before serialization begins");
         if (name.empty() || prefix.empty() || (prefix.back() >= '0' && prefix.back() <= '9'))
             throw std::invalid_argument("Table name and prefix must be nonempty; prefix must end in a non-digit");
+        if (prefix == "@")
+            throw std::invalid_argument("The @ prefix is reserved for enum and variant references");
         if (m_types.contains(typeid(T)))
             throw std::invalid_argument("Type already has a dictionary table");
         for (const auto& table : m_tables)

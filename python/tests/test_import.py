@@ -58,6 +58,7 @@ def test_public_package_exports_are_explicit() -> None:
         "native_prefix",
         "diagnostics",
         "execution",
+        "serialization",
     ]
     for name in pyyggdrasil.__all__:
         assert hasattr(pyyggdrasil, name)

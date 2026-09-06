@@ -4,6 +4,7 @@ from typing import Tuple
 
 from . import diagnostics as diagnostics
 from . import execution as execution
+from . import serialization as serialization
 
 
 def _has_yggdrasil_headers(path: Path) -> bool:
@@ -91,4 +92,5 @@ __all__ = [
     "native_prefix",
     "diagnostics",
     "execution",
+    "serialization",
 ]

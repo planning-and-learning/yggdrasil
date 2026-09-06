@@ -5,7 +5,9 @@
 #include <cista/containers/string.h>
 #include <ranges>
 #include <type_traits>
+#include <utility>
 #include <yggdrasil/containers/optional.hpp>
+#include <yggdrasil/containers/pair.hpp>
 
 namespace boost::json
 {
@@ -23,6 +25,13 @@ namespace ygg::serialization
 {
 
 class Dictionaries;
+
+template<typename First, typename Second, typename C>
+void tag_invoke(boost::json::value_from_tag, boost::json::value& result,
+                const ygg::View<cista::pair<First, Second>, C>& value, Dictionaries* dictionaries)
+{
+    result = boost::json::value_from(std::make_pair(value.get_first(), value.get_second()), dictionaries);
+}
 
 // Boost's sequence conversion requires legacy iterator traits, which some C++20 input views lack.
 template<std::ranges::view T>

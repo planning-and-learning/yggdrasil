@@ -51,6 +51,41 @@ The bundled shared libraries make the coupling ABI-level, so pin to the same
 minor version. The exported CMake package version file uses
 `SameMinorVersion` compatibility accordingly.
 
+### Serialization Tables
+
+`pyyggdrasil.serialization` provides the shared `JSONValue`, `Row`, `Table`,
+and `EnumEntry` types and a small renderer backed by `tabulate`:
+
+```python
+from pyyggdrasil.serialization import Row, render_table
+
+rows: list[Row] = [
+    {"name": "first", "children": ["n1", "n2"]},
+    {"name": "second", "children": []},
+]
+print(render_table(rows, prefix="n"))
+```
+
+The first column contains references `n0` and `n1`. Nested lists and objects
+become compact JSON cells; scalar values use tabulate's usual formatting.
+Use `tablefmt="github"` for Markdown. Empty input produces an empty string.
+
+For a serialization dictionary, render its snapshots directly:
+
+```python
+for name, table in dictionaries.tables().items():
+    print(name)
+    print(render_table(table["rows"], prefix=table["prefix"]))
+
+for name, entries in dictionaries.enums().items():
+    print(name)
+    print(render_table(entries))
+```
+
+Enum entries contain `ref`, `id`, and `name`: serialized enum values and
+variant kinds use the short `ref`, while `id` retains the native integer.
+The surrounding output order and text belong to the caller.
+
 ## Build Python
 
 Build a wheel from source:
