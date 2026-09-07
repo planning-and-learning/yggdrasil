@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <any>
+#include <boost/core/demangle.hpp>
 #include <functional>
 #include <optional>
 #include <stdexcept>
@@ -86,9 +87,7 @@ public:
             std::visit([&](const auto& alternative)
             {
                 using Alternative = std::remove_cvref_t<decltype(alternative)>;
-                const auto& item = value.template get<Alternative>();
-                field(detail::variant_fields[0], TypeName<std::remove_cvref_t<decltype(item)>>::get());
-                field(detail::variant_fields[1], item);
+                field(detail::variant_field, value.template get<Alternative>());
             }, value.index_variant());
         }
     };
@@ -118,7 +117,7 @@ private:
         }
         // Missing registrations must not silently emit potentially huge native text, including in nested fields.
         // A projection can explicitly convert an entity to a string when that representation is wanted.
-        throw std::invalid_argument("Unregistered serialization type: " + TypeName<T>::get());
+        throw std::invalid_argument("Unregistered serialization type: " + boost::core::demangle(typeid(T).name()));
     }
 
 public:

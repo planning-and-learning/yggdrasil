@@ -1,7 +1,6 @@
 #ifndef YGG_SERIALIZATION_FIELDS_HPP_
 #define YGG_SERIALIZATION_FIELDS_HPP_
 
-#include <array>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -14,7 +13,7 @@ namespace ygg::serialization
 
 namespace detail
 {
-inline constexpr std::array<std::string_view, 2> variant_fields {"kind", "value"};
+inline constexpr std::string_view variant_field = "variant";
 }
 
 // Keep the visitors in this namespace: ADL must find describe_fields overloads
@@ -27,11 +26,7 @@ struct FieldNames
     void field(std::string_view name, Accessor) { names.emplace_back(name); }
 
     template<typename Accessor>
-    void variant(Accessor)
-    {
-        for (const auto name : detail::variant_fields)
-            names.emplace_back(name);
-    }
+    void variant(Accessor) { names.emplace_back(detail::variant_field); }
 };
 
 template<typename Archive, typename T>
@@ -50,7 +45,7 @@ struct FieldWriter
     template<typename Accessor>
     void variant(Accessor accessor)
     {
-        if (archive.accepts(detail::variant_fields[0]) || archive.accepts(detail::variant_fields[1]))
+        if (archive.accepts(detail::variant_field))
             archive.variant(std::invoke(accessor, value));
     }
 };

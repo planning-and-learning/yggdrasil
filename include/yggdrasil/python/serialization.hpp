@@ -84,6 +84,22 @@ inline nanobind::object to_python(const boost::json::value& value)
 }
 
 template<typename... Ts>
+// Keep the large native-type dispatch frame out of recursive container conversion.
+NB_NOINLINE std::optional<boost::json::value> from_python_native(serialization::Dictionaries& dictionaries,
+                                                               nanobind::handle value,
+                                                               TypeList<Ts...>,
+                                                               std::vector<nanobind::object>& owners)
+{
+    boost::json::value result;
+    // Retain yielded native objects while dictionary keys refer to them.
+    if (((nanobind::isinstance<Ts>(value)
+          && (owners.emplace_back(nanobind::borrow<nanobind::object>(value)),
+              result = dictionaries.serialize(nanobind::cast<std::conditional_t<std::is_enum_v<Ts>, Ts, const Ts&>>(value)), true)) || ...))
+        return result;
+    return std::nullopt;
+}
+
+template<typename... Ts>
 boost::json::value from_python(serialization::Dictionaries& dictionaries,
                               nanobind::handle value,
                               TypeList<Ts...> types,
@@ -109,12 +125,18 @@ boost::json::value from_python(serialization::Dictionaries& dictionaries,
     if (nanobind::isinstance<nanobind::str>(value))
         return boost::json::value(nanobind::cast<std::string>(value));
 
+    // Native views may be iterable themselves, so handle them before containers.
+    if (auto native = from_python_native(dictionaries, value, types, owners))
+        return std::move(*native);
+
+    if (Py_EnterRecursiveCall(" while serializing a projection"))
+        throw nanobind::python_error();
+    struct RecursionGuard
+    {
+        ~RecursionGuard() { Py_LeaveRecursiveCall(); }
+    } guard;
+
     boost::json::value result;
-    // Native views may be iterable themselves. Retain yielded native objects while dictionary keys refer to them.
-    if (((nanobind::isinstance<Ts>(value)
-          && (owners.emplace_back(nanobind::borrow<nanobind::object>(value)),
-              result = dictionaries.serialize(nanobind::cast<std::conditional_t<std::is_enum_v<Ts>, Ts, const Ts&>>(value)), true)) || ...))
-        return result;
     if (nanobind::isinstance<nanobind::dict>(value))
     {
         auto& object = result.emplace_object();

@@ -43,9 +43,6 @@ void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const T
         array.push_back(boost::json::value_from(item, dictionaries, array.storage()));
 }
 
-template<typename T>
-struct TypeName;
-
 }
 
 #endif
