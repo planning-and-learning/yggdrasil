@@ -129,6 +129,9 @@ foreach(native_dir IN ITEMS include lib lib64)
         install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
             DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
             COMPONENT pyyggdrasil
+            # An installed pyyggdrasil prefix can supply dependencies, but must not overwrite this build's own files.
+            REGEX "/include/yggdrasil$" EXCLUDE
+            REGEX "/cmake/yggdrasil$" EXCLUDE
             REGEX "/pkgconfig$" EXCLUDE
             REGEX "\\.(a|la)$" EXCLUDE
             REGEX "/libboost_[^/]*\\.(so|dylib)[^/]*$" EXCLUDE

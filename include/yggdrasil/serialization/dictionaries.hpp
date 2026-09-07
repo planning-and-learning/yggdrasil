@@ -2,6 +2,7 @@
 #define YGG_SERIALIZATION_DICTIONARIES_HPP_
 
 #include "yggdrasil/serialization/conversion.hpp"
+#include "yggdrasil/serialization/fields.hpp"
 
 #include <algorithm>
 #include <any>
@@ -87,8 +88,8 @@ public:
             {
                 using Alternative = std::remove_cvref_t<decltype(alternative)>;
                 const auto& item = value.template get<Alternative>();
-                field("kind", TypeName<std::remove_cvref_t<decltype(item)>>::get());
-                field("value", item);
+                field(detail::variant_fields[0], TypeName<std::remove_cvref_t<decltype(item)>>::get());
+                field(detail::variant_fields[1], item);
             }, value.index_variant());
         }
     };
@@ -187,6 +188,17 @@ public:
     }
 
 };
+
+template<typename T>
+    requires requires(FieldNames& archive) { describe_fields(archive, std::type_identity<T> {}); }
+void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const T& value, Dictionaries* dictionaries)
+{
+    dictionaries->object(result, value, [&](auto& archive)
+    {
+        auto writer = FieldWriter {archive, value};
+        describe_fields(writer, std::type_identity<T> {});
+    });
+}
 
 }
 
