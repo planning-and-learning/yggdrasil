@@ -14,12 +14,10 @@ def main() -> None:
     package_init, provider, extension = (Path(argument).resolve() for argument in sys.argv[1:])
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-diagnostics-") as temporary:
         package_dir = Path(temporary) / "pyyggdrasil"
-        package_dir.mkdir()
-        shutil.copy2(package_init, package_dir / "__init__.py")
+        shutil.copytree(
+            package_init.parent, package_dir, ignore=shutil.ignore_patterns("__pycache__")
+        )
         shutil.copy2(provider, package_dir / provider.name)
-        for name in ("diagnostics", "execution"):
-            (package_dir / name).mkdir()
-            shutil.copy2(package_init.parent / name / "__init__.py", package_dir / name / "__init__.py")
 
         sys.path.insert(0, temporary)
         try:

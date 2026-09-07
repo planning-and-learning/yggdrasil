@@ -15,7 +15,9 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-import-") as tmp:
         tmp_dir = Path(tmp).resolve()
         package_dir = tmp_dir / "pyyggdrasil"
-        package_dir.mkdir()
+        shutil.copytree(
+            package_init.parent, package_dir, ignore=shutil.ignore_patterns("__pycache__")
+        )
         lib_dir = package_dir / "lib"
         cmake_dir = lib_dir / "cmake"
         cmake_dir.mkdir(parents=True)
@@ -24,11 +26,6 @@ def main() -> None:
         (yggdrasil_cmake_dir / "yggdrasilConfig.cmake").write_text(
             "# test placeholder\n", encoding="utf-8"
         )
-        shutil.copy2(package_init, package_dir / "__init__.py")
-        for name in ("diagnostics", "execution"):
-            submodule_dir = package_dir / name
-            submodule_dir.mkdir()
-            shutil.copy2(package_init.parent / name / "__init__.py", submodule_dir / "__init__.py")
         shutil.copy2(extension, package_dir / extension.name)
 
         sys.path.insert(0, str(tmp_dir))
@@ -45,6 +42,7 @@ def main() -> None:
                 "native_prefix",
                 "diagnostics",
                 "execution",
+                "serialization",
             ]
             assert pyyggdrasil.__version__ != ""
             assert pyyggdrasil.native_prefix() == package_dir
@@ -68,6 +66,13 @@ def main() -> None:
             assert diagnostic.location.source.text == "policy"
             assert "policy.txt" in str(diagnostic)
             assert str(diagnostic) == diagnostics.format_diagnostic(diagnostic)
+
+            import pyyggdrasil.serialization as serialization
+            import pyyggdrasil.serialization.table as table
+
+            assert serialization is pyyggdrasil.serialization
+            assert table is serialization.table
+            assert serialization.Dictionaries().tables() == {}
 
             source_root = tmp_dir / "source-tree"
             source_package_dir = source_root / "python" / "src" / "pyyggdrasil"
