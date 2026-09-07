@@ -54,26 +54,29 @@ minor version. The exported CMake package version file uses
 ### Serialization Tables
 
 `pyyggdrasil.serialization.table` provides the shared `JSONValue`, `Row`, and `Table`
-types and a small renderer backed by `tabulate`. These are also
-exported from `pyyggdrasil.serialization`:
+types and a pipe-separated table renderer:
 
 ```python
-from pyyggdrasil.serialization import Row, render_table
+from pyyggdrasil.serialization.table import Row, render_table
 
 rows: list[Row] = [
     {"name": "first", "children": ["n1", "n2"]},
     {"name": "second", "children": []},
 ]
-print(render_table(rows, prefix="n"))
+print(render_table(rows, prefix="n", aligned=False))  # Compact default.
+print(render_table(rows, prefix="n", aligned=True))   # Pad columns for alignment.
 ```
 
-The first column contains references `n0` and `n1`. Dictionaries expand recursively
+The first column contains references `n0` and `n1` under the `id` header.
+Both modes use pipes without decorative separator rows. Dictionaries expand recursively
 into columns with grouped headers. Parent names appear above their first child;
 all leaf labels share the bottom header row. Empty dictionaries have no columns.
-Lists remain compact JSON cells, and scalar values use tabulate's usual formatting.
-The default `presto` format separates columns with pipes and adds one line below
-the headers, with no lines between data rows. Flat tables can use
-`tablefmt="github"` for Markdown. Empty input produces an empty string.
+
+Flat lists of unambiguous scalars use comma-separated cells, such as `n1,n2`
+or `n1` for a singleton. Empty lists render as `[]`; nested or ambiguous lists
+use compact JSON. `None` renders as a blank cell; numbers and booleans use
+`str`. Pipes, backslashes, carriage returns, newlines, and tabs are escaped,
+so cells never span multiple lines. Empty input produces an empty string.
 
 For a serialization dictionary, render its snapshots directly:
 
@@ -84,6 +87,9 @@ for name, table in dictionaries.tables().items():
 ```
 
 Enums and variant kinds use their textual names directly.
+Native entities require registered tables, including entities encountered in nested
+fields. Missing registrations raise an error naming the type. Convert an entity
+to a string explicitly in a projection when its native text is wanted.
 The surrounding output order and text belong to the caller.
 
 ## Build Python

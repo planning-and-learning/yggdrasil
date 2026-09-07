@@ -17,7 +17,6 @@
 #include <vector>
 #include <yggdrasil/containers/variant.hpp>
 #include <yggdrasil/core/concepts.hpp>
-#include <yggdrasil/formatting/formatter.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/semantics/hash.hpp>
 
@@ -117,9 +116,9 @@ private:
                 return boost::json::value(reference);
             }
         }
-        // Unregistered entities use native text. A missing formatter must fail to compile;
-        // do not fall back to structural serialization, which silently changes the representation.
-        return boost::json::value(ygg::to_string(value));
+        // Missing registrations must not silently emit potentially huge native text, including in nested fields.
+        // A projection can explicitly convert an entity to a string when that representation is wanted.
+        throw std::invalid_argument("Unregistered serialization type: " + TypeName<T>::get());
     }
 
 public:
