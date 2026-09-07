@@ -13,7 +13,7 @@ import pyyggdrasil.execution as execution
 def test_native_prefix_layout() -> None:
     native_prefix = pyyggdrasil.native_prefix()
 
-    assert pyyggdrasil.__version__ == "0.1.2"
+    assert pyyggdrasil.__version__ == "0.2.0"
     assert pyyggdrasil.execution.ExecutionContext(1).num_threads == 1
     assert pyyggdrasil.execution.ExecutionContext.max_num_threads() >= 1
     assert pyyggdrasil.include_dir() == native_prefix / "include"
@@ -226,7 +226,7 @@ def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
             project(pyyggdrasil_provider_probe LANGUAGES CXX)
 
             find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
-            find_package(yggdrasil 0.1.2 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
+            find_package(yggdrasil 0.2.0 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(nanobind CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(tomlplusplus 3.4 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
 
