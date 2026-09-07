@@ -2,6 +2,7 @@
 
 #include "pyyggdrasil/diagnostics/module.hpp"
 #include "pyyggdrasil/execution/module.hpp"
+#include "pyyggdrasil/serialization/module.hpp"
 
 namespace yggdrasil
 {
@@ -17,6 +18,9 @@ void bind_module_definitions(nb::module_& m)
     auto execution = m.def_submodule("execution", "Execution utilities.");
     bind_execution_module_definitions(execution);
     m.attr("execution") = execution;
+
+    auto serialization = m.def_submodule("serialization", "Shared reference dictionaries and table rendering.");
+    bind_serialization_module_definitions(serialization);
 }
 
 }  // namespace yggdrasil

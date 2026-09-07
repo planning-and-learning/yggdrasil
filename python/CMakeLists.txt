@@ -10,6 +10,9 @@ find_package(Python 3.11 REQUIRED
 yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
 find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(Boost CONFIG REQUIRED COMPONENTS json PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(fmt CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(cista CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
 # Targets
 
@@ -22,6 +25,7 @@ nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
+    src/pyyggdrasil/serialization/module.cpp
     ${YGGDRASIL_PUBLIC_HEADERS}
 )
 
@@ -32,7 +36,7 @@ target_include_directories(_pyyggdrasil PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
 )
 
-target_link_libraries(_pyyggdrasil PRIVATE TBB::tbb)
+target_link_libraries(_pyyggdrasil PRIVATE TBB::tbb Boost::json fmt::fmt cista::cista)
 
 if(APPLE)
     set_target_properties(_pyyggdrasil PROPERTIES

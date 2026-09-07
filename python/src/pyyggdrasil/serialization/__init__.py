@@ -1,6 +1,3 @@
-"""Shared serialization snapshots and table rendering."""
+"""Shared reference dictionaries."""
 
-from . import table
-from .table import JSONValue, Row, Table, render_table
-
-__all__ = ["table", "JSONValue", "Row", "Table", "render_table"]
+from .._pyyggdrasil.serialization import Dictionaries as Dictionaries

@@ -3,7 +3,10 @@
 
 #include <boost/json.hpp>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/typing.h>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -160,6 +163,32 @@ nanobind::object table(serialization::Dictionaries& dictionaries, nanobind::type
     if (!((native_type.is(nanobind::type<Ts>()) && (result = to_python(dictionaries.table<Ts>()), true)) || ...))
         throw nanobind::type_error("this native type cannot be registered as a table");
     return result;
+}
+
+template<typename... Registered, typename... Serialized, typename... Projected>
+void bind_serialization(nanobind::module_& module, TypeList<Registered...>, TypeList<Serialized...>, TypeList<Projected...>)
+{
+    namespace nb = nanobind;
+    using namespace nb::literals;
+    using serialization::Dictionaries;
+
+    module.attr("NativeT") = nb::type_var("NativeT");
+    module.def("register_table",
+               [](Dictionaries& dictionaries, nb::type_object native_type, const std::string& name, const std::string& prefix,
+                  const std::optional<std::vector<std::string>>& fields, nb::object project)
+               { register_table(dictionaries, native_type, name, prefix, TypeList<Registered...> {}, TypeList<Projected...> {}, fields, project); },
+               "dictionaries"_a, "native_type"_a, "name"_a, "prefix"_a, "fields"_a = nb::none(), "project"_a = nb::none(),
+               nb::sig("def register_table(dictionaries: pyyggdrasil.serialization.Dictionaries, native_type: type[NativeT], "
+                       "name: str, prefix: str, fields: collections.abc.Sequence[str] | None = None, "
+                       "project: collections.abc.Callable[[NativeT], dict[str, object]] | None = None) -> None"));
+    module.def("serialize",
+               [](Dictionaries& dictionaries, nb::handle value) { return serialize(dictionaries, value, TypeList<Serialized...> {}); },
+               "dictionaries"_a, "value"_a, nb::keep_alive<1, 2>(),
+               nb::sig("def serialize(dictionaries: pyyggdrasil.serialization.Dictionaries, value: object) -> str"));
+    module.def("table",
+               [](Dictionaries& dictionaries, nb::type_object native_type) { return table(dictionaries, native_type, TypeList<Registered...> {}); },
+               "dictionaries"_a, "native_type"_a,
+               nb::sig("def table(dictionaries: pyyggdrasil.serialization.Dictionaries, native_type: type) -> list[pyyggdrasil.serialization.table.Row]"));
 }
 
 }  // namespace ygg::python

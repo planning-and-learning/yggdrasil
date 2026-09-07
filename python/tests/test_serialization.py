@@ -6,7 +6,7 @@ from tabulate import tabulate
 
 import pyyggdrasil
 import pyyggdrasil.serialization as serialization
-from pyyggdrasil.serialization import Row, render_table
+from pyyggdrasil.serialization.table import Row, render_table
 
 
 def test_serialization_submodule_is_public() -> None:
