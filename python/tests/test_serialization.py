@@ -28,7 +28,7 @@ def test_render_table_preserves_rows_and_adds_references(aligned: bool) -> None:
     assert len(lines) == 4
     assert lines[0] == ["", "", "", "", "expression", "", ""]
     assert lines[1] == ["id", "id", "label", "items", "kind", "value", "note"]
-    assert lines[2] == ["x0", "7", "001", "a,b", "constant", "True", ""]
+    assert lines[2] == ["x0", "7", "001", "[a,b]", "constant", "True", ""]
     assert lines[3] == ["x1", "8", "", "", "", "", "café"]
 
 
@@ -55,8 +55,8 @@ def test_recursive_headers_keep_groups_together_and_lists_intact(aligned: bool) 
 
 def test_compact_and_aligned_layouts() -> None:
     rows: list[Row] = [{"id": "a", "items": ["x", "yy"]}, {"id": "long", "items": []}]
-    assert render_table(rows) == "id|items\na|x,yy\nlong|[]"
-    assert render_table(rows, aligned=True) == "id   | items\na    | x,yy\nlong | []"
+    assert render_table(rows) == "id|items\na|[x,yy]\nlong|[]"
+    assert render_table(rows, aligned=True) == "id   | items\na    | [x,yy]\nlong | []"
 
 
 @pytest.mark.parametrize("aligned", [False, True])
@@ -83,7 +83,7 @@ def test_empty_singleton_and_ambiguous_lists() -> None:
         {"items": [None]},
     ]
     assert render_table(rows).splitlines() == [
-        "items", "[]", "a", "a,b", "1,2.5,True", '["a,b","c"]', '[""]', '[" a "]', '[["a","b"],["c"]]', "[null]",
+        "items", "[]", "[a]", "[a,b]", "[1,2.5,True]", '["a,b","c"]', '[""]', '[" a "]', '[["a","b"],["c"]]', "[null]",
     ]
 
 

@@ -72,8 +72,8 @@ Both modes use pipes without decorative separator rows. Dictionaries expand recu
 into columns with grouped headers. Parent names appear above their first child;
 all leaf labels share the bottom header row. Empty dictionaries have no columns.
 
-Flat lists of unambiguous scalars use comma-separated cells, such as `n1,n2`
-or `n1` for a singleton. Empty lists render as `[]`; nested or ambiguous lists
+Flat lists of unambiguous scalars use brackets and commas, such as `[n1,n2]`
+or `[n1]` for a singleton. Empty lists render as `[]`; nested or ambiguous lists
 use compact JSON. `None` renders as a blank cell; numbers and booleans use
 `str`. Pipes, backslashes, carriage returns, newlines, and tabs are escaped,
 so cells never span multiple lines. Empty input produces an empty string.

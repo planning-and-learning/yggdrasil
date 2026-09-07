@@ -30,11 +30,11 @@ def _cell(value: object) -> str:
     if isinstance(value, list):
         values = cast(list[object], value)
         items = [str(item) for item in values]
-        if items and all(isinstance(item, (str, int, float, bool)) for item in values) and all(
+        if all(isinstance(item, (str, int, float, bool)) for item in values) and all(
             item and item == item.strip() and not any(char in item for char in ',[]{}"\\|\r\n\t')
             for item in items
         ):
-            text = ",".join(items)
+            text = "[" + ",".join(items) + "]"
         else:
             text = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
     else:
@@ -51,8 +51,8 @@ def render_table(
     """Render pipe-separated columns, optionally padded to align their contents.
 
     Leaf labels share the bottom header row. Empty dictionaries have no columns.
-    Simple lists use commas (a singleton has no brackets); empty, nested, or
-    ambiguous lists use compact JSON. Backslashes, pipes, and line breaks are
+    Lists keep brackets with no spaces between items. Simple items are unquoted;
+    nested or ambiguous lists use compact JSON. Backslashes, pipes, and line breaks are
     escaped. Neither layout adds decorative lines.
     """
     cells = [dict(_flatten(row)) for row in rows]
