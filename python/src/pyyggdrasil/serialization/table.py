@@ -56,9 +56,9 @@ def render_table(
     escaped. Neither layout adds decorative lines.
     """
     cells = [dict(_flatten(row)) for row in rows]
-    if not cells:
-        return ""
     columns = list(dict.fromkeys(column for row in cells for column in row))
+    if not cells or (not columns and prefix is None):
+        return ""
 
     # Keep siblings together even when later rows introduce additional fields.
     order: dict[tuple[str, ...], int] = {}
@@ -85,8 +85,6 @@ def render_table(
         headers.insert(0, [""] * (height - 1) + ["id"])
         for index, row in enumerate(body):
             row.insert(0, _cell(f"{prefix}{index}"))
-    if not headers:
-        return ""
     grid = [list(row) for row in zip(*headers, strict=True)] + body
     if not aligned:
         return "\n".join("|".join(row) for row in grid)

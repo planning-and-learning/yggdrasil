@@ -60,39 +60,27 @@ inline std::optional<std::vector<std::string>> selected_fields(nanobind::handle 
 
 inline nanobind::object to_python(const boost::json::value& value)
 {
-    switch (value.kind())
+    return boost::json::visit([]<typename T>(const T& item) -> nanobind::object
     {
-        case boost::json::kind::null:
-            return nanobind::none();
-        case boost::json::kind::bool_:
-            return nanobind::bool_(value.as_bool());
-        case boost::json::kind::int64:
-            return nanobind::int_(value.as_int64());
-        case boost::json::kind::uint64:
-            return nanobind::int_(value.as_uint64());
-        case boost::json::kind::double_:
-            return nanobind::float_(value.as_double());
-        case boost::json::kind::string:
-        {
-            const auto& text = value.as_string();
-            return nanobind::str(text.data(), text.size());
-        }
-        case boost::json::kind::array:
+        if constexpr (std::is_same_v<T, boost::json::array>)
         {
             auto result = nanobind::list();
-            for (const auto& item : value.as_array())
-                result.append(to_python(item));
+            for (const auto& element : item)
+                result.append(to_python(element));
             return result;
         }
-        case boost::json::kind::object:
+        else if constexpr (std::is_same_v<T, boost::json::object>)
         {
             auto result = nanobind::dict();
-            for (const auto& item : value.as_object())
-                result[nanobind::str(item.key().data(), item.key().size())] = to_python(item.value());
+            for (const auto& entry : item)
+                result[nanobind::str(entry.key().data(), entry.key().size())] = to_python(entry.value());
             return result;
         }
-    }
-    throw nanobind::type_error("unsupported JSON value");
+        else if constexpr (std::is_same_v<T, boost::json::string>)
+            return nanobind::str(item.data(), item.size());
+        else
+            return nanobind::cast(item);
+    }, value);
 }
 
 template<typename... Ts>
@@ -175,7 +163,7 @@ void register_table(serialization::Dictionaries& dictionaries,
                         throw nanobind::type_error("serialization mapping keys must be strings");
                     const auto field = nanobind::cast<std::string>(key);
                     if (archive.accepts(field))
-                        archive.field(field, from_python(dictionaries, item, TypeList<Serialized...> {}, owners));
+                        archive.fields[field] = from_python(dictionaries, item, TypeList<Serialized...> {}, owners);
                 }
             };
         }
@@ -202,28 +190,6 @@ nanobind::object table(serialization::Dictionaries& dictionaries, nanobind::type
     if (!((native_type.is(nanobind::type<Ts>()) && (result = to_python(dictionaries.table<Ts>()), true)) || ...))
         throw nanobind::type_error("this native type cannot be registered as a table");
     return result;
-}
-
-template<typename... Ts>
-std::vector<std::string> fields(nanobind::type_object native_type, TypeList<Ts...>)
-{
-    std::vector<std::string> result;
-    if (!((native_type.is(nanobind::type<Ts>()) && (result = serialization::fields<Ts>(), true)) || ...))
-        throw nanobind::type_error("this native type does not support serialization");
-    return result;
-}
-
-template<typename... Serialized>
-void bind_field_discovery(nanobind::module_& module, TypeList<Serialized...>)
-{
-    namespace nb = nanobind;
-    using namespace nb::literals;
-
-    module.def("fields",
-               [](nb::type_object native_type) { return fields(native_type, TypeList<Serialized...> {}); },
-               "native_type"_a,
-               "Return default serialized field names in declaration order, without evaluating accessors. "
-               "Table field selection and custom projections do not change this declaration.");
 }
 
 inline std::string registration_signature(nanobind::handle native_type)
@@ -293,7 +259,6 @@ void bind_serialization(nanobind::module_& module, TypeList<Registered...>, Type
 {
     (bind_fields<Serialized>(), ...);
     module.attr("NativeT") = nanobind::type_var("NativeT");
-    bind_field_discovery(module, TypeList<Serialized...> {});
     bind_registration_overloads(module, TypeList<Registered...> {}, TypeList<Projected...> {});
     bind_serialize(module, TypeList<Serialized...> {});
     bind_table(module, TypeList<Registered...> {});

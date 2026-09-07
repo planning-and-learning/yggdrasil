@@ -87,9 +87,10 @@ def test_empty_singleton_and_ambiguous_lists() -> None:
     ]
 
 
-def test_empty_rows_keep_their_references() -> None:
-    assert render_table([{}, {}], prefix="s") == "id\ns0\ns1"
-    assert render_table([{}, {}]) == ""
+@pytest.mark.parametrize("aligned", [False, True])
+def test_empty_rows_keep_their_references(aligned: bool) -> None:
+    assert render_table([{}, {}], prefix="s", aligned=aligned) == "id\ns0\ns1"
+    assert render_table([{}, {}], aligned=aligned) == ""
 
 
 @pytest.mark.parametrize("prefix", [None, "s"])
