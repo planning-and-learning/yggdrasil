@@ -199,44 +199,36 @@ class ProviderBackend:
         text = re.sub(r"os\.PathLike(?!\[)", "os.PathLike[str]", text)
         return text
 
-    def _fix_wheel_stubs(self, wheel_path: str | os.PathLike[str]) -> None:
-        wheel_path = Path(wheel_path)
-        with TemporaryDirectory(prefix=f"{self.package}-wheel-") as tmp:
-            wheel_root = Path(tmp) / "wheel"
-            with zipfile.ZipFile(wheel_path) as wheel:
-                wheel.extractall(wheel_root)
+    def _fix_stubs(self, wheel_root: Path) -> None:
+        package_root = wheel_root / self.package
 
-            package_root = wheel_root / self.package
+        def install_stub(path: Path, target: Path) -> None:
+            package_dir = target.with_suffix("")
+            if package_dir.is_dir():
+                target = package_dir / "__init__.pyi"
 
-            def install_stub(path: Path, target: Path) -> None:
-                package_dir = target.with_suffix("")
-                if package_dir.is_dir():
-                    target = package_dir / "__init__.pyi"
+            # Handwritten (or otherwise pre-existing) public stubs win over
+            # generated ones, matching yggdrasil_patch_python_stubs.
+            if target.exists():
+                return
 
-                # Handwritten (or otherwise pre-existing) public stubs win over
-                # generated ones, matching yggdrasil_patch_python_stubs.
-                if target.exists():
-                    return
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(self._patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
 
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(self._patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
+        private_stub_roots = sorted(
+            path
+            for path in package_root.glob(f"_{self.package}*")
+            if path.is_dir() and (path.name == f"_{self.package}" or path.name.startswith(f"_{self.package}."))
+        )
+        for private_stub_root in private_stub_roots:
+            for path in sorted(private_stub_root.rglob("*.pyi")):
+                install_stub(path, package_root / path.relative_to(private_stub_root))
+            shutil.rmtree(private_stub_root)
 
-            private_stub_roots = sorted(
-                path
-                for path in package_root.glob(f"_{self.package}*")
-                if path.is_dir() and (path.name == f"_{self.package}" or path.name.startswith(f"_{self.package}."))
-            )
-            for private_stub_root in private_stub_roots:
-                for path in sorted(private_stub_root.rglob("*.pyi")):
-                    install_stub(path, package_root / path.relative_to(private_stub_root))
-                shutil.rmtree(private_stub_root)
+        for path in sorted(wheel_root.rglob("*.pyi")):
+            path.write_text(self._patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
 
-            for path in sorted(wheel_root.rglob("*.pyi")):
-                path.write_text(self._patch_stub_text(path.read_text(encoding="utf-8")), encoding="utf-8")
-
-            _repack_wheel(wheel_path, wheel_root)
-
-    def _strip_wheel_native_libraries(self, wheel_path: str | os.PathLike[str]) -> None:
+    def _strip_native_libraries(self, wheel_root: Path) -> None:
         if _is_disabled(os.environ.get(self.strip_env, "ON")):
             return
 
@@ -244,20 +236,24 @@ class ProviderBackend:
         if strip is None:
             return
 
-        wheel_path = Path(wheel_path)
+        for path in wheel_root.rglob("*"):
+            if path.is_file() and _is_native_library(path):
+                subprocess.run(
+                    [strip, *_strip_args(), str(path)],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+    def _process_wheel(self, wheel_path: Path, *, strip: bool = True) -> None:
         with TemporaryDirectory(prefix=f"{self.package}-wheel-") as tmp:
             wheel_root = Path(tmp) / "wheel"
             with zipfile.ZipFile(wheel_path) as wheel:
                 wheel.extractall(wheel_root)
 
-            for path in wheel_root.rglob("*"):
-                if path.is_file() and _is_native_library(path):
-                    subprocess.run(
-                        [strip, *_strip_args(), str(path)],
-                        check=False,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+            self._fix_stubs(wheel_root)
+            if strip:
+                self._strip_native_libraries(wheel_root)
 
             _repack_wheel(wheel_path, wheel_root)
 
@@ -280,9 +276,7 @@ class ProviderBackend:
     ) -> str:
         self._prepare_native_build()
         wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
-        wheel_path = Path(wheel_directory) / wheel_filename
-        self._fix_wheel_stubs(wheel_path)
-        self._strip_wheel_native_libraries(wheel_path)
+        self._process_wheel(Path(wheel_directory) / wheel_filename)
         return wheel_filename
 
     def build_editable(
@@ -293,7 +287,7 @@ class ProviderBackend:
     ) -> str:
         self._prepare_native_build()
         wheel_filename = scikit_build.build_editable(wheel_directory, config_settings, metadata_directory)
-        self._fix_wheel_stubs(Path(wheel_directory) / wheel_filename)
+        self._process_wheel(Path(wheel_directory) / wheel_filename, strip=False)
         return wheel_filename
 
     def build_sdist(self, sdist_directory: str, config_settings: ConfigSettings | None = None) -> str:

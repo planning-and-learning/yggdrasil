@@ -1,16 +1,23 @@
+import base64
 import csv
+import hashlib
 import io
 import os
 import shlex
+import shutil
+import subprocess
 import sys
 import types
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 import pytest
+from scikit_build_core import build as scikit_build
 
+import pyyggdrasil.build_support as build_support
 from pyyggdrasil.build_support import ProviderBackend
 
 
@@ -30,10 +37,6 @@ def _num_jobs(backend: ProviderBackend) -> int:
 
 def _prepare_native_build(backend: ProviderBackend) -> None:
     cast(Callable[[], None], getattr(backend, "_prepare_native_build"))()
-
-
-def _fix_wheel_stubs(backend: ProviderBackend, wheel_path: Path) -> None:
-    cast(Callable[[Path], None], getattr(backend, "_fix_wheel_stubs"))(wheel_path)
 
 
 def _fake_provider(name: str, prefix: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,7 +111,8 @@ def test_num_jobs_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.parametrize("private_root", ("_consumer", "_consumer.cpython-313-x86_64-linux-gnu"))
-def test_default_stub_rewriting_and_publication(tmp_path: Path, private_root: str) -> None:
+@pytest.mark.parametrize("mode", ("wheel", "disabled_strip", "missing_strip", "editable"))
+def test_default_stub_rewriting_and_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, private_root: str, mode: str) -> None:
     backend = _backend()
     assert backend.rename_packages == ("consumer", "provider", "pyyggdrasil")
     assert ProviderBackend("consumer", ("pyyggdrasil",), rename_packages=()).rename_packages == ()
@@ -118,6 +122,7 @@ def test_default_stub_rewriting_and_publication(tmp_path: Path, private_root: st
         "ref: consumer._consumer.api provider._provider pyyggdrasil._pyyggdrasil\n"
         "def load(path: os.PathLike, typed: os.PathLike[str]) -> None: ...\n"
     )
+    native_library = "consumer/native/lib/libconsumer.so"
     _write_wheel(
         wheel_path,
         {
@@ -126,11 +131,31 @@ def test_default_stub_rewriting_and_publication(tmp_path: Path, private_root: st
             "consumer/py.typed": "",
             f"consumer/{private_root}/__init__.pyi": "generated root must not replace public\n",
             f"consumer/{private_root}/api.pyi": generated_stub,
+            native_library: "unstripped library\n",
             "consumer-1.0.0.dist-info/RECORD": "",
         },
     )
 
-    _fix_wheel_stubs(backend, wheel_path)
+    def build(*_args: object) -> str:
+        return wheel_path.name
+
+    def strip_library(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        Path(command[-1]).write_bytes(b"stripped library\n")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(backend, "_prepare_native_build", lambda: None)
+    monkeypatch.setattr(scikit_build, "build_editable" if mode == "editable" else "build_wheel", build)
+    monkeypatch.setenv("CONSUMER_STRIP_WHEEL", "OFF" if mode == "disabled_strip" else "ON")
+    with (
+        patch.object(shutil, "which", return_value=None if mode == "missing_strip" else "/fake/strip"),
+        patch.object(zipfile.ZipFile, "extractall", autospec=True, side_effect=zipfile.ZipFile.extractall) as extract,
+        patch.object(build_support, "_repack_wheel", wraps=getattr(build_support, "_repack_wheel")) as repack,
+        patch.object(subprocess, "run", side_effect=strip_library) as strip,
+    ):
+        hook = backend.build_editable if mode == "editable" else backend.build_wheel
+        assert hook(str(tmp_path)) == wheel_path.name
+        assert extract.call_count == repack.call_count == 1
+        assert strip.call_count == (1 if mode == "wheel" else 0)
 
     files = _read_wheel(wheel_path)
     public_stub = "consumer/api/__init__.pyi"
@@ -140,11 +165,14 @@ def test_default_stub_rewriting_and_publication(tmp_path: Path, private_root: st
         "def load(path: os.PathLike[str], typed: os.PathLike[str]) -> None: ...\n"
     )
     assert not any(name.startswith(f"consumer/{private_root}/") for name in files)
+    assert files[native_library] == ("stripped library\n" if mode == "wheel" else "unstripped library\n")
 
     record_path = "consumer-1.0.0.dist-info/RECORD"
     record = {row[0]: row[1:] for row in csv.reader(io.StringIO(files[record_path]))}
     assert f"consumer/{private_root}/api.pyi" not in record
-    assert record[public_stub][0].startswith("sha256=")
-    assert record[public_stub][1] == str(len(files[public_stub].encode()))
+    for name in (public_stub, native_library):
+        content = files[name].encode()
+        digest = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).rstrip(b"=").decode()
+        assert record[name] == [f"sha256={digest}", str(len(content))]
     assert record["consumer/py.typed"][1] == "0"
     assert record[record_path] == ["", ""]
