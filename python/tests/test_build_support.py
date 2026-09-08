@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import shlex
 import sys
 import types
 import zipfile
@@ -55,7 +56,8 @@ def _read_wheel(path: Path) -> dict[str, str]:
         return {name: wheel.read(name).decode() for name in wheel.namelist() if not name.endswith("/")}
 
 
-def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("provider_name", ["provider", "provider with spaces"])
+def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider_name: str) -> None:
     backend = _backend()
     monkeypatch.delenv("CONSUMER_JOBS", raising=False)
     monkeypatch.setattr(os, "cpu_count", lambda: 4)
@@ -63,7 +65,7 @@ def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("CONSUMER_JOBS", "6")
     assert _num_jobs(backend) == 6
 
-    provider_prefix = tmp_path / "provider"
+    provider_prefix = tmp_path / provider_name
     provider_library = provider_prefix / "lib"
     provider_library.mkdir(parents=True)
     yggdrasil_prefix = tmp_path / "yggdrasil"
@@ -72,7 +74,7 @@ def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.M
     _fake_provider("provider", provider_prefix, monkeypatch)
     _fake_provider("pyyggdrasil", yggdrasil_prefix, monkeypatch)
 
-    monkeypatch.setenv("CMAKE_ARGS", "-DUSER_OPTION=ON")
+    monkeypatch.setenv("CMAKE_ARGS", "-DUSER_OPTION=ON '-DUSER_PATH=/user path'")
     monkeypatch.delenv("CMAKE_BUILD_PARALLEL_LEVEL", raising=False)
     monkeypatch.setenv("LD_LIBRARY_PATH", "/existing/ld")
     monkeypatch.setenv("DYLD_LIBRARY_PATH", "/existing/dyld")
@@ -86,16 +88,15 @@ def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.M
     assert os.environ["DYLD_LIBRARY_PATH"] == os.pathsep.join(
         (str(provider_library), str(yggdrasil_library), "/existing/dyld")
     )
-    assert os.environ["CMAKE_ARGS"] == " ".join(
-        (
-            f"-DCMAKE_PREFIX_PATH={provider_prefix.resolve()};{yggdrasil_prefix.resolve()}",
-            f"-DYGGDRASIL_NATIVE_PREFIX={yggdrasil_prefix.resolve()}",
-            f"-DPython_EXECUTABLE={sys.executable}",
-            "-DCONSUMER=ON",
-            "-DEXTRA=ON",
-            "-DUSER_OPTION=ON",
-        )
-    )
+    assert shlex.split(os.environ["CMAKE_ARGS"]) == [
+        f"-DCMAKE_PREFIX_PATH={provider_prefix.resolve()};{yggdrasil_prefix.resolve()}",
+        f"-DYGGDRASIL_NATIVE_PREFIX={yggdrasil_prefix.resolve()}",
+        f"-DPython_EXECUTABLE={sys.executable}",
+        "-DCONSUMER=ON",
+        "-DEXTRA=ON",
+        "-DUSER_OPTION=ON",
+        "-DUSER_PATH=/user path",
+    ]
 
 
 def test_num_jobs_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch) -> None:

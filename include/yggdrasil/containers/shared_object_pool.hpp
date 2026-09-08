@@ -112,14 +112,7 @@ public:
             inc_ref_count();
     }
 
-    SharedObjectPoolPtr(const SharedObjectPoolPtr& other) noexcept : SharedObjectPoolPtr()
-    {
-        m_pool = other.m_pool;
-        m_entry = other.m_entry;
-
-        if (m_pool && m_entry)
-            inc_ref_count();
-    }
+    SharedObjectPoolPtr(const SharedObjectPoolPtr& other) noexcept : SharedObjectPoolPtr(other.m_pool, other.m_entry) {}
 
     SharedObjectPoolPtr& operator=(const SharedObjectPoolPtr& other)
     {
@@ -137,11 +130,9 @@ public:
         return *this;
     }
 
-    SharedObjectPoolPtr(SharedObjectPoolPtr&& other) noexcept : m_pool(other.m_pool), m_entry(other.m_entry)
-    {
-        other.m_pool = nullptr;
-        other.m_entry = nullptr;
-    }
+    SharedObjectPoolPtr(SharedObjectPoolPtr&& other) noexcept :
+        m_pool(std::exchange(other.m_pool, nullptr)), m_entry(std::exchange(other.m_entry, nullptr))
+    {}
 
     SharedObjectPoolPtr& operator=(SharedObjectPoolPtr&& other) noexcept
     {
@@ -150,11 +141,8 @@ public:
             if (m_pool && m_entry)
                 dec_ref_count();
 
-            m_pool = other.m_pool;
-            m_entry = other.m_entry;
-
-            other.m_pool = nullptr;
-            other.m_entry = nullptr;
+            m_pool = std::exchange(other.m_pool, nullptr);
+            m_entry = std::exchange(other.m_entry, nullptr);
         }
         return *this;
     }

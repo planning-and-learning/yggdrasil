@@ -110,16 +110,20 @@ def test_execution_context_supports_context_manager() -> None:
             raise RuntimeError("boom")
 
 
-def test_source_version_reads_pyproject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("version_line", ['version = "1.2.3"', "version = '1.2.3' # release"])
+def test_source_version_reads_pyproject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version_line: str) -> None:
     package_dir = tmp_path / "src" / "pyyggdrasil"
     package_dir.mkdir(parents=True)
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
         textwrap.dedent(
-            """\
+            f"""\
+            [build-system]
+            version = "9.9.9"
+
             [project]
             name = "pyyggdrasil"
-            version = "1.2.3"
+            {version_line}
             """
         ),
         encoding="utf-8",

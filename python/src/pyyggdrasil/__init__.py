@@ -1,5 +1,6 @@
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+import tomllib as _tomllib
 from typing import Tuple
 
 from . import diagnostics as diagnostics
@@ -17,9 +18,9 @@ def _source_version() -> str:
         if not pyproject.exists():
             continue
 
-        for line in pyproject.read_text(encoding="utf-8").splitlines():
-            if line.startswith("version"):
-                return line.split("=", maxsplit=1)[1].strip().strip("\"")
+        project_version = _tomllib.loads(pyproject.read_text(encoding="utf-8")).get("project", {}).get("version")
+        if project_version is not None:
+            return project_version
 
     return "0.0.0"
 

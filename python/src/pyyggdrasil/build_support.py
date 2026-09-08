@@ -18,6 +18,7 @@ import importlib
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -104,8 +105,8 @@ def _prepend_env_paths(name: str, paths: Sequence[Path]) -> None:
 
 
 def _prepend_cmake_args(*args: str) -> None:
-    existing = os.environ.get("CMAKE_ARGS", "")
-    os.environ["CMAKE_ARGS"] = " ".join([*args, existing]).strip()
+    existing = shlex.split(os.environ.get("CMAKE_ARGS", ""))
+    os.environ["CMAKE_ARGS"] = shlex.join([*args, *existing])
 
 
 class ProviderBackend:

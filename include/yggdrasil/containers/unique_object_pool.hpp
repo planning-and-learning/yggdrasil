@@ -56,11 +56,9 @@ public:
     UniqueObjectPoolPtr& operator=(const UniqueObjectPoolPtr& other) = delete;
 
     // Movable
-    UniqueObjectPoolPtr(UniqueObjectPoolPtr&& other) noexcept : m_pool(other.m_pool), m_entry(other.m_entry)
-    {
-        other.m_pool = nullptr;
-        other.m_entry = nullptr;
-    }
+    UniqueObjectPoolPtr(UniqueObjectPoolPtr&& other) noexcept :
+        m_pool(std::exchange(other.m_pool, nullptr)), m_entry(std::exchange(other.m_entry, nullptr))
+    {}
 
     UniqueObjectPoolPtr& operator=(UniqueObjectPoolPtr&& other) noexcept
     {
@@ -69,11 +67,8 @@ public:
             if (m_pool && m_entry)
                 deallocate();
 
-            m_pool = other.m_pool;
-            m_entry = other.m_entry;
-
-            other.m_pool = nullptr;
-            other.m_entry = nullptr;
+            m_pool = std::exchange(other.m_pool, nullptr);
+            m_entry = std::exchange(other.m_entry, nullptr);
         }
         return *this;
     }
