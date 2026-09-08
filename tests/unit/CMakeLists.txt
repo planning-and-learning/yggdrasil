@@ -79,3 +79,23 @@ add_yggdrasil_gtest(semantics_hash "semantics/hash.cpp")
 add_yggdrasil_gtest(serialization_json "serialization/json.cpp")
 add_yggdrasil_gtest(serialization_json_loader "serialization/json_loader.cpp")
 add_yggdrasil_gtest(serialization_json_suite "serialization/json_suite.cpp")
+
+add_library(serialization_dictionaries_library SHARED "serialization/dictionaries_library.cpp")
+target_compile_features(serialization_dictionaries_library PRIVATE cxx_std_20)
+target_include_directories(serialization_dictionaries_library PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    "${YGGDRASIL_NATIVE_PREFIX}/include"
+    "${CMAKE_CURRENT_BINARY_DIR}"
+)
+target_link_libraries(serialization_dictionaries_library PRIVATE Boost::json fmt::fmt)
+include(GenerateExportHeader)
+generate_export_header(serialization_dictionaries_library)
+
+add_yggdrasil_gtest(serialization_dictionaries "serialization/dictionaries.cpp")
+target_include_directories(serialization_dictionaries PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(serialization_dictionaries PRIVATE serialization_dictionaries_library)
+# Match separately built Python extension modules, whose native RTTI is hidden.
+set_target_properties(serialization_dictionaries_library serialization_dictionaries PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN YES
+)

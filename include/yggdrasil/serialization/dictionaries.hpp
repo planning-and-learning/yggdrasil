@@ -5,14 +5,14 @@
 #include "yggdrasil/serialization/fields.hpp"
 
 #include <algorithm>
-#include <any>
 #include <boost/core/demangle.hpp>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <typeindex>
+#include <typeinfo>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -33,18 +33,24 @@ using Index = std::unordered_map<T, size_t, Hash<T>, EqualTo<T>>;
 /// Objects referenced by stored keys must remain valid while the dictionaries are used.
 class Dictionaries
 {
+public:
+    class Archive;
+
+private:
     struct Table
     {
         std::string name;
         std::string prefix;
         boost::json::array rows;
-        std::any index;
+        std::function<std::pair<size_t, bool>(const void*, size_t)> index;
         std::optional<std::vector<std::string>> fields;
-        std::any project;
+        std::function<void(Archive&, const void*)> project;
     };
 
     std::vector<Table> m_tables;
-    std::unordered_map<std::type_index, size_t> m_types;
+    // Hidden RTTI can differ across native modules (notably on macOS). Compare type names,
+    // as nanobind does; the callbacks keep typed storage in the module that registered it.
+    std::unordered_map<std::string, size_t> m_types;
     bool m_started = false;
     bool m_failed = false;
 
@@ -98,12 +104,10 @@ private:
     {
         if constexpr (Hashable<T>)
         {
-            if (const auto found = m_types.find(typeid(T)); found != m_types.end())
+            if (const auto found = m_types.find(typeid(T).name()); found != m_types.end())
             {
                 auto& table = m_tables[found->second];
-                auto& index = std::any_cast<detail::Index<T>&>(table.index);
-                const auto [entry, inserted] = index.try_emplace(value, table.rows.size());
-                const auto id = entry->second;
+                const auto [id, inserted] = table.index(std::addressof(value), table.rows.size());
                 const auto reference = table.prefix + std::to_string(id);
                 if (inserted)
                 {
@@ -127,9 +131,8 @@ public:
         result = collect(value, [&](const Table& table)
         {
             Archive archive(*this, table.fields);
-            const auto& project = std::any_cast<const std::function<void(Archive&, const T&)>&>(table.project);
-            if (project)
-                project(archive, value);
+            if (table.project)
+                table.project(archive, std::addressof(value));
             else
                 fields(archive);
             return std::move(archive.fields);
@@ -147,14 +150,22 @@ public:
             throw std::logic_error("Register tables before serialization begins");
         if (name.empty() || prefix.empty() || (prefix.back() >= '0' && prefix.back() <= '9'))
             throw std::invalid_argument("Table name and prefix must be nonempty; prefix must end in a non-digit");
-        if (m_types.contains(typeid(T)))
+        if (m_types.contains(typeid(T).name()))
             throw std::invalid_argument("Type already has a dictionary table");
         for (const auto& table : m_tables)
             if (table.name == name || table.prefix == prefix)
                 throw std::invalid_argument("Table names and prefixes must be unique");
         const auto position = m_tables.size();
-        m_tables.push_back({std::move(name), std::move(prefix), {}, detail::Index<T> {}, std::move(fields), std::move(project)});
-        m_types.emplace(typeid(T), position);
+        auto index = [entries = detail::Index<T> {}](const void* value, size_t next) mutable
+        {
+            const auto [entry, inserted] = entries.try_emplace(*static_cast<const T*>(value), next);
+            return std::make_pair(entry->second, inserted);
+        };
+        std::function<void(Archive&, const void*)> projection;
+        if (project)
+            projection = [project = std::move(project)](Archive& archive, const void* value) { project(archive, *static_cast<const T*>(value)); };
+        m_tables.push_back({std::move(name), std::move(prefix), {}, std::move(index), std::move(fields), std::move(projection)});
+        m_types.emplace(typeid(T).name(), position);
     }
 
     template<typename T>
@@ -170,7 +181,7 @@ public:
     boost::json::array table() const
     {
         check_valid();
-        const auto found = m_types.find(typeid(T));
+        const auto found = m_types.find(typeid(T).name());
         if (found == m_types.end())
             throw std::invalid_argument("Type has no registered dictionary table");
         return m_tables[found->second].rows;
