@@ -58,7 +58,7 @@ public:
     }
 
     template<typename F>
-    decltype(auto) apply(F&& f) const noexcept
+    decltype(auto) apply(F&& f) const
     {
         return std::visit(
             [&](auto&& arg) -> decltype(auto)
@@ -83,13 +83,13 @@ private:
 };
 
 template<typename Visitor, typename C, typename... T>
-constexpr auto visit(Visitor&& vis, View<::cista::offset::variant<T...>, C>&& v) noexcept
+constexpr auto visit(Visitor&& vis, View<::cista::offset::variant<T...>, C>&& v)
 {
     return v.apply(std::forward<Visitor>(vis));
 }
 
 template<typename Visitor, typename C, typename... T>
-constexpr auto visit(Visitor&& vis, const View<::cista::offset::variant<T...>, C>& v) noexcept
+constexpr auto visit(Visitor&& vis, const View<::cista::offset::variant<T...>, C>& v)
 {
     return v.apply(vis);
 }
