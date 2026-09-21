@@ -109,6 +109,10 @@ public:
     /// Retains allocated tuple and hash-table storage for the next evaluation.
     void clear() noexcept;
 
+    /// Relabels columns without changing rows or reallocating storage.
+    /// Requires matching arity and invalidates borrowed schema views.
+    void rename(ColumnsView columns);
+
     /// Clears rows and relabels columns, retaining storage when arity matches.
     /// Requires intact storage and invalidates outstanding views.
     /// Used by UniqueObjectPool on checkout.

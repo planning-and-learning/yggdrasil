@@ -10,13 +10,15 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 namespace ygg::database
 {
 
 namespace detail
 {
-inline void projection_positions(ColumnsView input, ColumnsView columns, std::vector<size_t>& positions)
+template<typename Positions>
+void projection_positions(ColumnsView input, ColumnsView columns, Positions& positions)
 {
     positions.clear();
     positions.reserve(columns.size());
@@ -24,12 +26,8 @@ inline void projection_positions(ColumnsView input, ColumnsView columns, std::ve
         positions.push_back(input.column_index(column));
 }
 
-inline void join_positions(ColumnsView lhs,
-                           ColumnsView rhs,
-                           std::vector<Column>& columns,
-                           std::vector<size_t>& lhs_keys,
-                           std::vector<size_t>& rhs_keys,
-                           std::vector<size_t>& rhs_payload)
+template<typename Positions>
+void join_positions(ColumnsView lhs, ColumnsView rhs, std::vector<Column>& columns, Positions& lhs_keys, Positions& rhs_keys, Positions& rhs_payload)
 {
     columns.assign(lhs.begin(), lhs.end());
     lhs_keys.clear();

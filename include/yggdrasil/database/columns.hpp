@@ -8,10 +8,12 @@
 
 #include "yggdrasil/core/config.hpp"
 
+#include <cista/containers/vector.h>
 #include <concepts>
 #include <cstddef>
 #include <initializer_list>
 #include <span>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -59,11 +61,12 @@ public:
 class Columns
 {
 private:
-    std::vector<Column> m_columns;
+    cista::offset::vector<Column> m_columns;
     friend class ColumnsView;
 
 public:
-    explicit Columns(std::vector<Column> columns = {});
+    Columns() = default;
+    explicit Columns(const std::vector<Column>& columns);
     Columns(std::initializer_list<Column> columns);
     explicit Columns(ColumnsView columns);
 
@@ -71,10 +74,13 @@ public:
     ColumnsView view() const&& = delete;
     size_t size() const noexcept { return m_columns.size(); }
     bool empty() const noexcept { return m_columns.empty(); }
-    size_t memory_usage() const noexcept { return m_columns.capacity() * sizeof(Column); }
+    size_t memory_usage() const noexcept { return m_columns.allocated_size_ * sizeof(Column); }
     size_t column_index(Column column) const;
 
     void assign(ColumnsView columns);
+
+    auto cista_members() noexcept { return std::tie(m_columns); }
+    auto cista_members() const noexcept { return std::tie(m_columns); }
 };
 
 }  // namespace ygg::database

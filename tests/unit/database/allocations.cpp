@@ -20,8 +20,8 @@
 
 // This executable replaces C++ allocation functions only. That covers the
 // default std/GTL allocators and RawArraySet's geometric byte storage, including
-// aligned allocations. It does not claim to intercept unrelated direct malloc
-// calls. Tracking is restricted to the evaluating thread and excludes GTest,
+// aligned allocations. It does not intercept direct malloc/free calls, including
+// Cista column/plan storage. Tracking is restricted to the evaluating thread and excludes GTest,
 // setup, warmup, and destruction of the retained evaluation objects.
 namespace allocation_tracking
 {

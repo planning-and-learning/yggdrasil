@@ -164,6 +164,14 @@ void Relation<T>::clear() noexcept
 }
 
 template<TriviallyCopyable T>
+void Relation<T>::rename(ColumnsView columns)
+{
+    if (columns.size() != arity())
+        throw std::invalid_argument("Relation: rename requires matching arity.");
+    m_columns.assign(columns);
+}
+
+template<TriviallyCopyable T>
 void Relation<T>::initialize(ColumnsView columns)
 {
     if (columns.size() != m_rows.array_size())

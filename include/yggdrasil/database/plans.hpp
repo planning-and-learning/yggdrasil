@@ -8,10 +8,11 @@
 
 #include "yggdrasil/database/columns.hpp"
 
+#include <cista/containers/vector.h>
 #include <cstddef>
 #include <initializer_list>
 #include <span>
-#include <vector>
+#include <tuple>
 
 namespace ygg::database
 {
@@ -23,9 +24,10 @@ class ProjectionPlan
 private:
     Columns m_input;
     Columns m_output;
-    std::vector<size_t> m_positions;
+    cista::offset::vector<size_t> m_positions;
 
 public:
+    ProjectionPlan() = default;
     ProjectionPlan(ColumnsView input, ColumnsView columns);
     ProjectionPlan(std::span<const Column> input, std::span<const Column> columns);
     ProjectionPlan(ColumnsView input, std::initializer_list<Column> columns);
@@ -36,7 +38,10 @@ public:
     ColumnsView input_columns() const&& = delete;
     ColumnsView output_columns() const& noexcept { return m_output.view(); }
     ColumnsView output_columns() const&& = delete;
-    std::span<const size_t> positions() const noexcept { return m_positions; }
+    std::span<const size_t> positions() const noexcept { return { m_positions.data(), m_positions.size() }; }
+
+    auto cista_members() noexcept { return std::tie(m_input, m_output, m_positions); }
+    auto cista_members() const noexcept { return std::tie(m_input, m_output, m_positions); }
 };
 
 /// Owns schemas and resolves natural-join keys/payload positions once. The
@@ -47,11 +52,12 @@ private:
     Columns m_lhs;
     Columns m_rhs;
     Columns m_output;
-    std::vector<size_t> m_lhs_keys;
-    std::vector<size_t> m_rhs_keys;
-    std::vector<size_t> m_rhs_payload;
+    cista::offset::vector<size_t> m_lhs_keys;
+    cista::offset::vector<size_t> m_rhs_keys;
+    cista::offset::vector<size_t> m_rhs_payload;
 
 public:
+    JoinPlan() = default;
     JoinPlan(ColumnsView lhs, ColumnsView rhs);
     JoinPlan(std::span<const Column> lhs, std::span<const Column> rhs);
     JoinPlan(std::initializer_list<Column> lhs, std::initializer_list<Column> rhs);
@@ -62,9 +68,12 @@ public:
     ColumnsView rhs_columns() const&& = delete;
     ColumnsView output_columns() const& noexcept { return m_output.view(); }
     ColumnsView output_columns() const&& = delete;
-    std::span<const size_t> lhs_keys() const noexcept { return m_lhs_keys; }
-    std::span<const size_t> rhs_keys() const noexcept { return m_rhs_keys; }
-    std::span<const size_t> rhs_payload() const noexcept { return m_rhs_payload; }
+    std::span<const size_t> lhs_keys() const noexcept { return { m_lhs_keys.data(), m_lhs_keys.size() }; }
+    std::span<const size_t> rhs_keys() const noexcept { return { m_rhs_keys.data(), m_rhs_keys.size() }; }
+    std::span<const size_t> rhs_payload() const noexcept { return { m_rhs_payload.data(), m_rhs_payload.size() }; }
+
+    auto cista_members() noexcept { return std::tie(m_lhs, m_rhs, m_output, m_lhs_keys, m_rhs_keys, m_rhs_payload); }
+    auto cista_members() const noexcept { return std::tie(m_lhs, m_rhs, m_output, m_lhs_keys, m_rhs_keys, m_rhs_payload); }
 };
 
 }  // namespace ygg::database

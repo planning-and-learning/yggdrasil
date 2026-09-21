@@ -4,6 +4,7 @@
  */
 
 #include <array>
+#include <cista/serialization.h>
 #include <gtest/gtest.h>
 #include <initializer_list>
 #include <limits>
@@ -129,6 +130,15 @@ namespace
 {
 
 template<typename T>
+auto relocated_serialization(T value)
+{
+    const auto original = cista::serialize(value);
+    auto relocated = original;
+    EXPECT_NE(relocated.data(), original.data());
+    return relocated;
+}
+
+template<typename T>
 void expect_relation(const Relation<T>& relation,
                      std::initializer_list<Column> columns,
                      std::initializer_list<std::initializer_list<std::type_identity_t<T>>> rows)
@@ -231,6 +241,43 @@ TEST(YggdrasilTests, DatabaseColumnsAssignmentRetainsStorageForSelfSubviews)
     EXPECT_EQ(columns.view().data(), storage);
     EXPECT_EQ(columns.memory_usage(), memory);
     EXPECT_EQ(columns.column_index(8), 3);
+}
+
+TEST(YggdrasilTests, DatabaseRelationRenamePreservesRowsAndStorage)
+{
+    Relation<> relation { 1, 2 };
+    relation.insert({ 10, 20 });
+    relation.insert({ 30, 40 });
+    const auto* columns = relation.columns().data();
+    const auto* first_row = relation[0].data();
+    const auto* second_row = relation[1].data();
+    const auto memory = relation.memory_usage();
+    {
+        const Columns labels { 4, 9 };
+        relation.rename(labels);
+        relation.rename(labels);
+    }
+    relation.rename(relation.columns());
+    expect_relation(relation, { 4, 9 }, { { 10, 20 }, { 30, 40 } });
+    EXPECT_EQ(relation.columns().data(), columns);
+    EXPECT_EQ(relation[0].data(), first_row);
+    EXPECT_EQ(relation[1].data(), second_row);
+    EXPECT_EQ(relation.memory_usage(), memory);
+    EXPECT_EQ(relation.insert({ 10, 20 }), 0);
+
+    const Columns wrong_arity { 4 };
+    EXPECT_THROW(relation.rename(wrong_arity), std::invalid_argument);
+    expect_relation(relation, { 4, 9 }, { { 10, 20 }, { 30, 40 } });
+    EXPECT_EQ(relation.columns().data(), columns);
+    EXPECT_EQ(relation[0].data(), first_row);
+    EXPECT_EQ(relation[1].data(), second_row);
+
+    Relation<> nullary;
+    nullary.rename(ColumnsView());
+    EXPECT_TRUE(nullary.empty());
+    nullary.insert({});
+    nullary.rename(nullary.columns());
+    expect_relation(nullary, {}, { {} });
 }
 
 TEST(YggdrasilTests, DatabaseRelationMaintainsSetAndSchemaInvariants)
@@ -423,6 +470,84 @@ TEST(YggdrasilTests, DatabasePlansOwnSchemasAndReuseResolvedPositions)
     left.clear();
     project(left.view(), guard, exists, workspace);
     expect_relation(exists, {}, {});
+}
+
+TEST(YggdrasilTests, DatabaseColumnsAndPlansSurviveCistaRelocation)
+{
+    // The owning objects and original byte buffers are gone before decoding.
+    auto columns_bytes = relocated_serialization(Columns { 3, 1, 2 });
+    auto projection_bytes = relocated_serialization(ProjectionPlan({ 3, 1, 2, 4 }, { 4, 3 }));
+    auto join_bytes = relocated_serialization(JoinPlan({ 3, 1, 2 }, { 2, 4, 1 }));
+    const auto* columns = cista::deserialize<Columns>(columns_bytes);
+    const auto* projection = cista::deserialize<ProjectionPlan>(projection_bytes);
+    const auto* joining = cista::deserialize<JoinPlan>(join_bytes);
+    const auto values = [](auto range) { return std::vector(range.begin(), range.end()); };
+    EXPECT_EQ(values(columns->view()), (std::vector<Column> { 3, 1, 2 }));
+    EXPECT_EQ(columns->column_index(1), 1);
+    EXPECT_EQ(values(projection->input_columns()), (std::vector<Column> { 3, 1, 2, 4 }));
+    EXPECT_EQ(values(projection->output_columns()), (std::vector<Column> { 4, 3 }));
+    EXPECT_EQ(values(projection->positions()), (std::vector<size_t> { 3, 0 }));
+    EXPECT_EQ(values(joining->lhs_columns()), (std::vector<Column> { 3, 1, 2 }));
+    EXPECT_EQ(values(joining->rhs_columns()), (std::vector<Column> { 2, 4, 1 }));
+    EXPECT_EQ(values(joining->output_columns()), (std::vector<Column> { 3, 1, 2, 4 }));
+    EXPECT_EQ(values(joining->lhs_keys()), (std::vector<size_t> { 2, 1 }));
+    EXPECT_EQ(values(joining->rhs_keys()), (std::vector<size_t> { 0, 2 }));
+    EXPECT_EQ(values(joining->rhs_payload()), (std::vector<size_t> { 1 }));
+
+    // Keep the relocated buffers unchanged and alive while using decoded plans.
+    Relation<> left(columns->view());
+    Relation<> right(joining->rhs_columns());
+    left.insert({ 10, 1, 2 });
+    left.insert({ 11, 1, 3 });
+    right.insert({ 2, 20, 1 });
+    right.insert({ 3, 30, 1 });
+    right.insert({ 2, 99, 9 });
+    Relation<> joined(joining->output_columns());
+    Relation<> projected(projection->output_columns());
+    Workspace<> workspace;
+    join(left.view(), right.view(), *joining, joined, workspace);
+    expect_relation(joined, { 3, 1, 2, 4 }, { { 10, 1, 2, 20 }, { 11, 1, 3, 30 } });
+    project(joined.view(), *projection, projected, workspace);
+    expect_relation(projected, { 4, 3 }, { { 20, 10 }, { 30, 11 } });
+}
+
+TEST(YggdrasilTests, DatabaseDefaultPlansRoundTripAndEvaluateNullaryRelations)
+{
+    auto columns_bytes = relocated_serialization(Columns());
+    auto projection_bytes = relocated_serialization(ProjectionPlan());
+    auto join_bytes = relocated_serialization(JoinPlan());
+    const auto* columns = cista::deserialize<Columns>(columns_bytes);
+    const auto* projection = cista::deserialize<ProjectionPlan>(projection_bytes);
+    const auto* joining = cista::deserialize<JoinPlan>(join_bytes);
+    EXPECT_TRUE(columns->empty());
+    EXPECT_TRUE(projection->input_columns().empty());
+    EXPECT_TRUE(projection->output_columns().empty());
+    EXPECT_TRUE(projection->positions().empty());
+    EXPECT_TRUE(joining->lhs_columns().empty());
+    EXPECT_TRUE(joining->rhs_columns().empty());
+    EXPECT_TRUE(joining->output_columns().empty());
+    EXPECT_TRUE(joining->lhs_keys().empty());
+    EXPECT_TRUE(joining->rhs_keys().empty());
+    EXPECT_TRUE(joining->rhs_payload().empty());
+
+    Relation<> left, right, projected, joined;
+    Workspace<> workspace;
+    for (const bool lhs_nonempty : { false, true })
+        for (const bool rhs_nonempty : { false, true })
+        {
+            left.clear();
+            right.clear();
+            if (lhs_nonempty)
+                left.insert({});
+            if (rhs_nonempty)
+                right.insert({});
+            project(left.view(), *projection, projected, workspace);
+            EXPECT_EQ(projected.arity(), 0);
+            EXPECT_EQ(projected.size(), lhs_nonempty ? 1 : 0);
+            join(left.view(), right.view(), *joining, joined, workspace);
+            EXPECT_EQ(joined.arity(), 0);
+            EXPECT_EQ(joined.size(), lhs_nonempty && rhs_nonempty ? 1 : 0);
+        }
 }
 
 TEST(YggdrasilTests, DatabasePreparedPlansValidateSchemasAndAliasesBeforeClearingOutputs)

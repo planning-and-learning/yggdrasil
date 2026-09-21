@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <stdexcept>
-#include <utility>
 
 namespace ygg::database
 {
@@ -25,7 +24,7 @@ ColumnsView::ColumnsView(std::span<C, Extent> columns) : m_columns(columns)
             throw std::invalid_argument("Columns: duplicate column label.");
 }
 
-inline ColumnsView::ColumnsView(const Columns& columns) noexcept : m_columns(columns.m_columns) {}
+inline ColumnsView::ColumnsView(const Columns& columns) noexcept : m_columns(columns.m_columns.data(), columns.m_columns.size()) {}
 
 inline ColumnsView::operator std::span<const Column>() const noexcept { return span(); }
 
@@ -37,9 +36,9 @@ inline size_t ColumnsView::column_index(Column column) const
     return static_cast<size_t>(it - m_columns.begin());
 }
 
-inline Columns::Columns(std::vector<Column> columns) : m_columns(std::move(columns)) { (void) ColumnsView(std::span<const Column>(m_columns)); }
+inline Columns::Columns(const std::vector<Column>& columns) : Columns(ColumnsView(std::span<const Column>(columns))) {}
 
-inline Columns::Columns(std::initializer_list<Column> columns) : Columns(std::vector<Column>(columns)) {}
+inline Columns::Columns(std::initializer_list<Column> columns) : Columns(ColumnsView(std::span<const Column>(columns))) {}
 
 inline Columns::Columns(ColumnsView columns) : m_columns(columns.begin(), columns.end()) {}
 
@@ -57,7 +56,7 @@ inline void Columns::assign(ColumnsView columns)
         m_columns.resize(columns.size());
     }
     else
-        m_columns.assign(columns.begin(), columns.end());
+        m_columns.set(columns.begin(), columns.end());
 }
 
 }  // namespace ygg::database
