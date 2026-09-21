@@ -18,30 +18,23 @@
 #include <initializer_list>
 #include <span>
 #include <type_traits>
-#include <variant>
 #include <vector>
 
 namespace ygg::database
 {
 
-/// Borrows immutable row access and either borrows or owns its schema.
-/// Borrowed storage must outlive the view and remain stationary. Borrowed
-/// schemas must also remain unchanged. Neither may be concurrently modified.
+/// Borrows immutable row access and schema. Both must outlive the view; row
+/// storage must remain stationary and schema labels unchanged. Neither may be
+/// concurrently modified.
 template<TriviallyCopyable T = uint_t>
 class RelationView
 {
 private:
     const RawArraySet<T>* m_rows;
-    using Schema = std::variant<ColumnsView, Columns>;
-    Schema m_columns;
-
-    RelationView(const RawArraySet<T>& rows, Schema columns);
+    ColumnsView m_columns;
 
 public:
-    RelationView(const RawArraySet<T>& rows, Columns columns);
     RelationView(const RawArraySet<T>& rows, ColumnsView columns);
-    RelationView(const RawArraySet<T>& rows, std::vector<Column> columns);
-    RelationView(const RawArraySet<T>& rows, std::initializer_list<Column> columns);
 
     /// Borrowing requires an explicit span; containers cannot convert implicitly.
     template<typename C, size_t Extent>
@@ -55,8 +48,7 @@ public:
     RelationView(RawArraySet<T>&&, std::initializer_list<Column>) = delete;
     RelationView(const RawArraySet<T>&&, std::initializer_list<Column>) = delete;
 
-    ColumnsView columns() const& noexcept;
-    ColumnsView columns() const&& = delete;
+    ColumnsView columns() const noexcept;
     size_t arity() const noexcept { return columns().size(); }
     size_t size() const noexcept { return m_rows->size(); }
     bool empty() const noexcept { return m_rows->empty(); }
@@ -83,7 +75,7 @@ private:
 public:
     explicit Relation(Columns columns);
     explicit Relation(ColumnsView columns);
-    explicit Relation(std::vector<Column> columns = {});
+    explicit Relation(const std::vector<Column>& columns = {});
     Relation(std::initializer_list<Column> columns);
     Relation(const Relation&) = delete;
     Relation& operator=(const Relation&) = delete;

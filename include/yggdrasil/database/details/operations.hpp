@@ -51,21 +51,9 @@ inline void require_plan_columns(std::span<const Column> actual, std::span<const
 }  // namespace detail
 
 template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, Columns columns)
-{
-    return RelationView<T>(input.storage(), std::move(columns));
-}
-
-template<TriviallyCopyable T>
 RelationView<T> rename(const RelationView<T>& input, ColumnsView columns)
 {
     return RelationView<T>(input.storage(), columns);
-}
-
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, std::vector<Column> columns)
-{
-    return RelationView<T>(input.storage(), std::move(columns));
 }
 
 template<TriviallyCopyable T, typename C, size_t Extent>
@@ -73,12 +61,6 @@ template<TriviallyCopyable T, typename C, size_t Extent>
 RelationView<T> rename(const RelationView<T>& input, std::span<C, Extent> columns)
 {
     return RelationView<T>(input.storage(), columns);
-}
-
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, std::initializer_list<Column> columns)
-{
-    return rename(input, std::vector<Column>(columns));
 }
 
 namespace detail
@@ -169,9 +151,9 @@ Relation<T> project(const RelationView<T>& input, ColumnsView columns)
 }
 
 template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, std::vector<Column> columns)
+Relation<T> project(const RelationView<T>& input, const std::vector<Column>& columns)
 {
-    return project(input, Columns(std::move(columns)));
+    return project(input, Columns(columns));
 }
 
 template<TriviallyCopyable T>

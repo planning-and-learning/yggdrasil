@@ -42,24 +42,16 @@ struct Workspace
 };
 
 /// Relabels columns positionally, without copying any tuples. New labels must
-/// be unique. To identify two columns, select their equality and project.
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, Columns columns);
-
+/// be unique and outlive the view. To identify two columns, select their
+/// equality and project.
 template<TriviallyCopyable T>
 RelationView<T> rename(const RelationView<T>& input, ColumnsView columns);
-
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, std::vector<Column> columns);
 
 /// Borrows labels as well as rows. Pass a span explicitly; its underlying
 /// labels must outlive the returned view.
 template<TriviallyCopyable T, typename C, size_t Extent>
     requires std::same_as<std::remove_const_t<C>, Column>
 RelationView<T> rename(const RelationView<T>& input, std::span<C, Extent> columns);
-
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, std::initializer_list<Column> columns);
 
 /// Keeps columns in the requested order and eliminates duplicate result rows.
 /// Output overloads replace rows, retain capacity, and require a matching
@@ -92,7 +84,7 @@ template<TriviallyCopyable T>
 Relation<T> project(const RelationView<T>& input, ColumnsView columns);
 
 template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, std::vector<Column> columns);
+Relation<T> project(const RelationView<T>& input, const std::vector<Column>& columns);
 
 template<TriviallyCopyable T>
 Relation<T> project(const RelationView<T>& input, std::initializer_list<Column> columns);

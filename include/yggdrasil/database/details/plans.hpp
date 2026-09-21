@@ -9,7 +9,6 @@
 #include "yggdrasil/database/plans.hpp"
 
 #include <algorithm>
-#include <utility>
 #include <vector>
 
 namespace ygg::database
@@ -78,7 +77,7 @@ inline JoinPlan::JoinPlan(ColumnsView lhs, ColumnsView rhs) : m_lhs(lhs), m_rhs(
 {
     auto columns = std::vector<Column>();
     detail::join_positions(lhs, rhs, columns, m_lhs_keys, m_rhs_keys, m_rhs_payload);
-    m_output = Columns(std::move(columns));
+    m_output = Columns(columns);
 }
 
 inline JoinPlan::JoinPlan(std::span<const Column> lhs, std::span<const Column> rhs) : JoinPlan(ColumnsView(lhs), ColumnsView(rhs)) {}

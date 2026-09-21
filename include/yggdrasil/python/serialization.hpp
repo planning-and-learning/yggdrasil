@@ -305,8 +305,6 @@ void bind_serialization(nanobind::module_& module, TypeList<Registered...>, Type
 {
     (bind_fields<Serialized>(), ...);
     (bind_native_serializer<Projected>(), ...);
-    if (!nanobind::hasattr(module, "NativeT"))
-        module.attr("NativeT") = nanobind::type_var("NativeT");
     bind_registration_overloads(module, TypeList<Registered...> {});
     bind_serialize(module, TypeList<Serialized...> {});
     bind_table(module, TypeList<Registered...> {});

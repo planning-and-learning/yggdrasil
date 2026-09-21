@@ -142,13 +142,13 @@ const auto labels = renamed_columns.view();
 auto renamed = rename(eligible.view(), labels);
 ```
 
-Passing a `Columns`, vector, or initializer list directly to `rename` creates an
-owning schema. Raw spans are still supported and validated at the API boundary;
-explicit spans prevent temporary arrays from accidentally becoming dangling
-schemas. Projection, pool checkout, and relation reinitialization accept
-validated views without repeating uniqueness checks. Existing raw-label
-overloads remain available. Arity and operation-specific schema compatibility
-checks still apply.
+`RelationView` and `rename` always borrow both rows and labels. Pass a
+`ColumnsView`, a live `Columns` owner, or an explicit span; the labels must
+outlive the returned view. Temporary owners and implicit container borrowing
+are rejected. Raw spans are validated at the API boundary. Projection, pool
+checkout, and relation reinitialization accept validated views without repeating
+uniqueness checks. Arity and operation-specific schema compatibility checks
+still apply.
 
 For recursive evaluation, `<yggdrasil/database/relation_pool.hpp>` provides
 `RelationPool<T>`, using Yggdrasil's `UniqueObjectPool` separately for each arity:

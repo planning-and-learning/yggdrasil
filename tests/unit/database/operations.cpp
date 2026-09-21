@@ -81,11 +81,15 @@ using TestRows = RawArraySet<uint_t>;
 static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, TestColumns>);
 static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, const TestColumns>);
 static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, TestColumns&>);
-static_assert(std::is_constructible_v<RelationView<>, const TestRows&, std::vector<Column>>);
+static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, std::vector<Column>>);
+static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, std::initializer_list<Column>>);
+static_assert(std::is_constructible_v<RelationView<>, const TestRows&, const Columns&>);
+static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, Columns&&>);
+static_assert(!std::is_constructible_v<RelationView<>, const TestRows&, const Columns&&>);
 static_assert(std::is_constructible_v<RelationView<>, const TestRows&, std::span<Column, 2>>);
 static_assert(std::is_constructible_v<RelationView<>, const TestRows&, std::span<const Column>>);
 static_assert(!std::is_constructible_v<RelationView<>, TestRows&&, std::span<const Column>>);
-static_assert(!std::is_constructible_v<RelationView<>, const TestRows&&, std::vector<Column>>);
+static_assert(!std::is_constructible_v<RelationView<>, const TestRows&&, std::span<const Column>>);
 
 static_assert(std::is_constructible_v<ColumnsView, const Columns&>);
 static_assert(!std::is_constructible_v<ColumnsView, Columns&&>);
@@ -110,7 +114,7 @@ concept CanBorrowPlanColumns = requires(Plan&& plan) { std::forward<Plan>(plan).
 static_assert(CanBorrowRelationColumns<const Relation<>&>);
 static_assert(!CanBorrowRelationColumns<Relation<>>);
 static_assert(CanBorrowRelationColumns<const RelationView<>&>);
-static_assert(!CanBorrowRelationColumns<RelationView<>>);
+static_assert(CanBorrowRelationColumns<RelationView<>>);
 static_assert(CanBorrowPlanColumns<const ProjectionPlan&>);
 static_assert(!CanBorrowPlanColumns<ProjectionPlan>);
 static_assert(CanBorrowPlanColumns<const JoinPlan&>);
@@ -122,7 +126,11 @@ concept CanRename = requires(RelationView<> view, Columns&& columns) { rename(vi
 static_assert(!CanRename<TestColumns>);
 static_assert(!CanRename<const TestColumns>);
 static_assert(!CanRename<TestColumns&>);
-static_assert(CanRename<std::vector<Column>>);
+static_assert(!CanRename<std::vector<Column>>);
+static_assert(!CanRename<std::initializer_list<Column>>);
+static_assert(CanRename<const Columns&>);
+static_assert(!CanRename<Columns>);
+static_assert(!CanRename<const Columns>);
 static_assert(CanRename<std::span<Column, 2>>);
 static_assert(CanRename<std::span<const Column>>);
 
@@ -305,20 +313,24 @@ TEST(YggdrasilTests, DatabaseRelationMaintainsSetAndSchemaInvariants)
     EXPECT_EQ(relation.insert({ 5, 6 }), 0);
 }
 
-TEST(YggdrasilTests, DatabaseRenameOnlyChangesOwnedViewMetadata)
+TEST(YggdrasilTests, DatabaseRenameOnlyChangesBorrowedViewMetadata)
 {
     Relation<> relation({ 1, 2 });
     relation.insert({ 7, 8 });
-    auto renamed = rename(relation.view(), { 3, 4 });
+    const Columns first_labels { 3, 4 };
+    const Columns second_labels { 5, 6 };
+    auto renamed = rename(relation.view(), first_labels);
     auto copied = renamed;
-    renamed = rename(relation.view(), { 5, 6 });
+    renamed = rename(relation.view(), second_labels);
     EXPECT_EQ(copied.column_index(3), 0);
     EXPECT_EQ(copied.column_index(4), 1);
     EXPECT_EQ(copied[0].data(), relation[0].data());
     EXPECT_EQ(renamed[0].data(), relation[0].data());
     EXPECT_EQ(relation.columns()[0], 1);
-    EXPECT_THROW(rename(relation.view(), { 3 }), std::invalid_argument);
-    EXPECT_THROW(rename(relation.view(), { 3, 3 }), std::invalid_argument);
+    const Columns wrong_arity { 3 };
+    const std::array<Column, 2> duplicates { 3, 3 };
+    EXPECT_THROW(rename(relation.view(), wrong_arity), std::invalid_argument);
+    EXPECT_THROW(rename(relation.view(), std::span(duplicates)), std::invalid_argument);
     auto projected = project(copied, { 4, 3 });
     expect_relation(projected, { 4, 3 }, { { 8, 7 } });
     auto projected_view = project(copied, projected.columns());
@@ -342,11 +354,6 @@ TEST(YggdrasilTests, DatabaseBorrowedViewsShareSchemasAndObserveRefills)
     EXPECT_TRUE(view.empty());
     relation.insert({ 9, 10 });
     EXPECT_TRUE(moved.contains({ 9, 10 }));
-    auto owned = rename(view, { 5, 6 });
-    auto owned_move = std::move(owned);
-    EXPECT_EQ(owned_move.column_index(6), 1);
-    auto direct_owned = RelationView<>(relation.storage(), std::vector<Column> { 5, 6 });
-    EXPECT_EQ(direct_owned.column_index(6), 1);
     std::array<Column, 2> mutable_labels { 7, 8 };
     auto direct_borrowed = RelationView<>(relation.storage(), std::span(mutable_labels));
     EXPECT_EQ(direct_borrowed.columns().data(), mutable_labels.data());
@@ -356,10 +363,10 @@ TEST(YggdrasilTests, DatabaseBorrowedViewsShareSchemasAndObserveRefills)
     const Columns validated { 11, 12 };
     auto validated_borrowed = RelationView<>(relation.storage(), validated.view());
     EXPECT_EQ(validated_borrowed.columns().data(), validated.view().data());
-    auto validated_owned = RelationView<>(relation.storage(), validated);
-    auto validated_copy = validated_owned;
-    EXPECT_NE(validated_owned.columns().data(), validated.view().data());
-    EXPECT_NE(validated_copy.columns().data(), validated_owned.columns().data());
+    auto direct_borrowed_schema = RelationView<>(relation.storage(), validated);
+    auto validated_copy = direct_borrowed_schema;
+    EXPECT_EQ(direct_borrowed_schema.columns().data(), validated.view().data());
+    EXPECT_EQ(validated_copy.columns().data(), validated.view().data());
     EXPECT_EQ(validated_copy.column_index(12), 1);
 }
 
@@ -750,7 +757,7 @@ TEST(YggdrasilTests, DatabaseOutputGuardsPreserveExistingResults)
     EXPECT_THROW(union_(input.view(), rhs_only.view(), rhs_only), std::invalid_argument);
     EXPECT_THROW(difference(input.view(), rhs_only.view(), rhs_only), std::invalid_argument);
     expect_relation(rhs_only, { 1, 2 }, { { 9, 10 } });
-    auto alias = rename(input.view(), { 1, 2 });
+    auto alias = rename(input.view(), input.columns());
     EXPECT_THROW(select(alias, keep, input), std::invalid_argument);
     expect_relation(input, { 1, 2 }, { { 3, 4 } });
     Relation<> output({ 1, 2 });

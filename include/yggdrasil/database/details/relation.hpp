@@ -20,30 +20,10 @@ namespace ygg::database
 {
 
 template<TriviallyCopyable T>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, Schema columns) : m_rows(&rows), m_columns(std::move(columns))
+RelationView<T>::RelationView(const RawArraySet<T>& rows, ColumnsView columns) : m_rows(&rows), m_columns(columns)
 {
-    if (this->columns().size() != rows.array_size())
+    if (columns.size() != rows.array_size())
         throw std::invalid_argument("RelationView: schema arity does not match row storage.");
-}
-
-template<TriviallyCopyable T>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, Columns columns) : RelationView(rows, Schema(std::move(columns)))
-{
-}
-
-template<TriviallyCopyable T>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, ColumnsView columns) : RelationView(rows, Schema(columns))
-{
-}
-
-template<TriviallyCopyable T>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, std::vector<Column> columns) : RelationView(rows, Columns(std::move(columns)))
-{
-}
-
-template<TriviallyCopyable T>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, std::initializer_list<Column> columns) : RelationView(rows, std::vector<Column>(columns))
-{
 }
 
 template<TriviallyCopyable T>
@@ -54,9 +34,9 @@ RelationView<T>::RelationView(const RawArraySet<T>& rows, std::span<C, Extent> c
 }
 
 template<TriviallyCopyable T>
-ColumnsView RelationView<T>::columns() const& noexcept
+ColumnsView RelationView<T>::columns() const noexcept
 {
-    return std::visit([](const auto& columns) { return ColumnsView(columns); }, m_columns);
+    return m_columns;
 }
 
 template<TriviallyCopyable T>
@@ -103,7 +83,7 @@ Relation<T>::Relation(ColumnsView columns) : Relation(Columns(columns))
 }
 
 template<TriviallyCopyable T>
-Relation<T>::Relation(std::vector<Column> columns) : Relation(Columns(std::move(columns)))
+Relation<T>::Relation(const std::vector<Column>& columns) : Relation(Columns(columns))
 {
 }
 
