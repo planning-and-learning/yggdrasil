@@ -15,6 +15,9 @@ Each binary release has a matching complete corresponding-source archive on the
 [GitHub releases page](https://github.com/planning-and-learning/yggdrasil/releases),
 containing Yggdrasil and its exact native dependency sources.
 
+The C++ headers also include a small [relational-algebra library](docs/database.md)
+for arbitrary-arity tuple sets and queries.
+
 ## Python Integration
 
 Install the wheel and query the native prefix:

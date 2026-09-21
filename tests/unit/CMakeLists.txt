@@ -50,6 +50,7 @@ add_yggdrasil_gtest(containers_unique_object_pool "containers/unique_object_pool
 target_link_libraries(containers_shared_object_pool PRIVATE Threads::Threads)
 target_link_libraries(containers_tree_vector_set PRIVATE Threads::Threads)
 target_link_libraries(containers_unique_object_pool PRIVATE Threads::Threads)
+add_yggdrasil_gtest(containers_unordered_multi_map "containers/unordered_multi_map.cpp")
 add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
 
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
@@ -60,6 +61,9 @@ add_yggdrasil_gtest(core_concepts "core/concepts.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
 add_yggdrasil_gtest(core_path "core/path.cpp")
 add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
+
+add_yggdrasil_gtest(database_operations "database/operations.cpp")
+add_yggdrasil_gtest(database_allocations "database/allocations.cpp")
 
 add_yggdrasil_gtest(diagnostics_diagnostic "diagnostics/diagnostic.cpp")
 add_yggdrasil_gtest(diagnostics_x3 "diagnostics/x3.cpp")
