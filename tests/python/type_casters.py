@@ -22,6 +22,11 @@ def main() -> None:
     assert module.nested_view() == [(6, 7), (8, 9)]
     assert module.concurrent_bit_packed_view() == [1, 2, 3]
 
+    for value in (42, 3.5, -7):
+        result = module.roundtrip_variant(value)
+        assert type(result) is type(value)
+        assert result == value
+
     assert module.empty_interval() is None
     assert module.singleton_interval() == 2.5
     assert module.bounded_interval() == (1.25, 3.5)

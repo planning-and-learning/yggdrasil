@@ -19,6 +19,7 @@
 
 #include <cista/containers/array.h>
 #include <cista/containers/pair.h>
+#include <cista/containers/variant.h>
 #include <nanobind/nanobind.h>
 #include <yggdrasil/containers/bit_packed_array_pool.hpp>
 
@@ -67,6 +68,8 @@ NB_MODULE(yggdrasil_type_casters_test, m)
               static constexpr auto context = 0;
               return ygg::View<Array, int>(view, context);
           });
+
+    m.def("roundtrip_variant", [](::cista::offset::variant<int, double> value) { return value; });
 
     m.def("empty_interval", [] { return Interval {}; });
     m.def("singleton_interval", [] { return Interval { 2.5, 2.5 }; });

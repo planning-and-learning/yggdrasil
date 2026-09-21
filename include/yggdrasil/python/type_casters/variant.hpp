@@ -47,26 +47,14 @@ struct type_caster<::ygg::View<::cista::offset::variant<Ts...>, C>>
     }
 };
 
-// Taken from nanobind/stl/variant.h
+// Adapted from nanobind/stl/variant.h
 template<typename... Ts>
-struct type_caster<::cista::offset::variant<Ts...>> : private variant_caster_storage<variant_is_defaultable<Ts...>, Ts...>
+struct type_caster<::cista::offset::variant<Ts...>>
 {
-    // We don't use NB_TYPE_CASTER so that we can customize the cast operators
-    // to use `variant_caster_storage`, in order to support variants that are
-    // not default-constructible.
-    using Value = ::cista::offset::variant<Ts...>;
-    static constexpr auto Name = union_name(make_caster<Ts>::Name...);
+    using Variant = ::cista::offset::variant<Ts...>;
 
-    template<typename T>
-    using Cast = movable_cast_t<T>;
-    template<typename T>
-    static constexpr bool can_cast()
-    {
-        return true;
-    }
-    explicit operator Value*() { return &this->get(); }
-    explicit operator Value&() { return (Value&) this->get(); }
-    explicit operator Value&&() { return (Value&&) this->get(); }
+    // Cista variants are default-constructible even if their alternatives are not.
+    NB_TYPE_CASTER(Variant, union_name(make_caster<Ts>::Name...))
 
     template<typename T>
     bool try_variant(const handle& src, uint32_t flags, cleanup_list* cleanup)
@@ -78,7 +66,7 @@ struct type_caster<::cista::offset::variant<Ts...>> : private variant_caster_sto
         if (!caster.from_python(src, flags_for_local_caster<T>(flags), cleanup) || !caster.template can_cast<T>())
             return false;
 
-        this->store(caster.operator cast_t<T>());
+        value = caster.operator cast_t<T>();
 
         return true;
     }
@@ -93,14 +81,6 @@ struct type_caster<::cista::offset::variant<Ts...>> : private variant_caster_sto
             }
         }
         return (try_variant<Ts>(src, flags, cleanup) || ...);
-    }
-
-    template<typename T>
-    static handle from_cpp(T* value, rv_policy policy, cleanup_list* cleanup)
-    {
-        if (!value)
-            return none().release();
-        return from_cpp(*value, policy, cleanup);
     }
 
     template<typename T>
