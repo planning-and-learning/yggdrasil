@@ -83,27 +83,38 @@ inline nanobind::object to_python(const boost::json::value& value)
     }, value);
 }
 
-template<typename... Ts>
-// Keep the large native-type dispatch frame out of recursive container conversion.
-NB_NOINLINE std::optional<boost::json::value> from_python_native(serialization::Dictionaries& dictionaries,
-                                                               nanobind::handle value,
-                                                               TypeList<Ts...>,
-                                                               std::vector<nanobind::object>& owners)
+using NativeSerializer = boost::json::value (*)(serialization::Dictionaries&, nanobind::handle);
+inline constexpr char native_serializer_capsule_name[] = "ygg.native_serializer.v1";
+
+template<typename T>
+void bind_native_serializer()
 {
-    boost::json::value result;
-    // Retain yielded native objects while dictionary keys refer to them.
-    if (((nanobind::isinstance<Ts>(value)
-          && (owners.emplace_back(nanobind::borrow<nanobind::object>(value)),
-              result = dictionaries.serialize(nanobind::cast<std::conditional_t<std::is_enum_v<Ts>, Ts, const Ts&>>(value)), true)) || ...))
-        return result;
-    return std::nullopt;
+    const auto native_type = nanobind::type<T>();
+    if (nanobind::cast<bool>(native_type.attr("__dict__").attr("__contains__")("_ygg_serialize")))
+        return;
+    static const NativeSerializer serializer = [](serialization::Dictionaries& dictionaries, nanobind::handle value)
+    { return dictionaries.serialize(nanobind::cast<std::conditional_t<std::is_enum_v<T>, T, const T&>>(value)); };
+    native_type.attr("_ygg_serialize") = nanobind::capsule(&serializer, native_serializer_capsule_name);
 }
 
-template<typename... Ts>
-boost::json::value from_python(serialization::Dictionaries& dictionaries,
-                              nanobind::handle value,
-                              TypeList<Ts...> types,
-                              std::vector<nanobind::object>& owners)
+inline std::optional<boost::json::value> from_python_native(serialization::Dictionaries& dictionaries,
+                                                           nanobind::handle value,
+                                                           std::vector<nanobind::object>& owners)
+{
+    const auto hook = nanobind::getattr(value.type(), "_ygg_serialize", nanobind::none());
+    if (hook.is_none())
+        return std::nullopt;
+    if (!PyCapsule_IsValid(hook.ptr(), native_serializer_capsule_name))
+        throw nanobind::type_error("invalid native serialization hook");
+    const auto serializer = static_cast<const NativeSerializer*>(PyCapsule_GetPointer(hook.ptr(), native_serializer_capsule_name));
+    // Retain yielded native objects while dictionary keys refer to them.
+    owners.emplace_back(nanobind::borrow<nanobind::object>(value));
+    return (*serializer)(dictionaries, value);
+}
+
+inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
+                                     nanobind::handle value,
+                                     std::vector<nanobind::object>& owners)
 {
     if (value.is_none())
         return nullptr;
@@ -126,7 +137,7 @@ boost::json::value from_python(serialization::Dictionaries& dictionaries,
         return boost::json::value(nanobind::cast<std::string>(value));
 
     // Native views may be iterable themselves, so handle them before containers.
-    if (auto native = from_python_native(dictionaries, value, types, owners))
+    if (auto native = from_python_native(dictionaries, value, owners))
         return std::move(*native);
 
     if (Py_EnterRecursiveCall(" while serializing a projection"))
@@ -144,23 +155,22 @@ boost::json::value from_python(serialization::Dictionaries& dictionaries,
         {
             if (!nanobind::isinstance<nanobind::str>(key))
                 throw nanobind::type_error("serialization mapping keys must be strings");
-            object[nanobind::cast<std::string>(key)] = from_python(dictionaries, item, types, owners);
+            object[nanobind::cast<std::string>(key)] = from_python(dictionaries, item, owners);
         }
         return result;
     }
     auto& array = result.emplace_array();
     for (const auto item : nanobind::iter(value))
-        array.push_back(from_python(dictionaries, item, types, owners));
+        array.push_back(from_python(dictionaries, item, owners));
     return result;
 }
 
-template<typename... Registered, typename... Serialized>
+template<typename... Registered>
 void register_table(serialization::Dictionaries& dictionaries,
                     nanobind::type_object native_type,
                     const std::string& name,
                     const std::string& prefix,
                     TypeList<Registered...>,
-                    TypeList<Serialized...>,
                     nanobind::object fields = nanobind::none(),
                     nanobind::object project = nanobind::none())
 {
@@ -185,7 +195,7 @@ void register_table(serialization::Dictionaries& dictionaries,
                         throw nanobind::type_error("serialization mapping keys must be strings");
                     const auto field = nanobind::cast<std::string>(key);
                     if (archive.accepts(field))
-                        archive.fields[field] = from_python(dictionaries, item, TypeList<Serialized...> {}, owners);
+                        archive.fields[field] = from_python(dictionaries, item, owners);
                 }
             };
         }
@@ -234,54 +244,70 @@ void bind_registration_overload(nanobind::module_& module, const Function& funct
                nb::sig(signature.c_str()));
 }
 
-template<typename... Registered, typename... Projected>
-void bind_registration_overloads(nanobind::module_& module, TypeList<Registered...>, TypeList<Projected...>)
+template<typename T>
+void bind_registration(nanobind::module_& module)
 {
     namespace nb = nanobind;
     using serialization::Dictionaries;
 
-    const auto register_function = [](Dictionaries& dictionaries, nb::type_object native_type, const std::string& name, const std::string& prefix,
-                                      nb::object fields, nb::object project)
-    { register_table(dictionaries, native_type, name, prefix, TypeList<Registered...> {}, TypeList<Projected...> {}, fields, project); };
-    (bind_registration_overload(module, register_function, registration_signature(nb::type<Registered>())), ...);
-    bind_registration_overload(module, register_function,
-                               "def register_table(dictionaries: pyyggdrasil.serialization.Dictionaries, native_type: type[NativeT], "
-                               "name: str, prefix: str, fields: collections.abc.Sequence[str] | None = None, "
-                               "project: collections.abc.Callable[[NativeT], dict[str, object]] | None = None) -> None");
+    bind_registration_overload(module,
+                               [](Dictionaries& dictionaries, nb::type_object_t<T> native_type,
+                                  const std::string& name, const std::string& prefix, nb::object fields, nb::object project)
+                               { register_table(dictionaries, native_type, name, prefix, TypeList<T> {}, fields, project); },
+                               registration_signature(nb::type<T>()));
 }
 
-template<typename... Serialized>
-void bind_serialize(nanobind::module_& module, TypeList<Serialized...>)
+template<typename... Registered>
+void bind_registration_overloads(nanobind::module_& module, TypeList<Registered...>)
+{
+    (bind_registration<Registered>(module), ...);
+}
+
+template<typename T>
+void bind_serialize(nanobind::module_& module)
 {
     namespace nb = nanobind;
     using namespace nb::literals;
     using serialization::Dictionaries;
 
     module.def("serialize",
-               [](Dictionaries& dictionaries, nb::handle value) { return serialize(dictionaries, value, TypeList<Serialized...> {}); },
-               "dictionaries"_a, "value"_a, nb::keep_alive<1, 2>(),
-               nb::sig("def serialize(dictionaries: pyyggdrasil.serialization.Dictionaries, value: object) -> str"));
+               [](Dictionaries& dictionaries, const T& value) { return to_python(dictionaries.serialize(value)); },
+               "dictionaries"_a, "value"_a.noconvert(), nb::keep_alive<1, 2>());
 }
 
-template<typename... Registered>
-void bind_table(nanobind::module_& module, TypeList<Registered...>)
+template<typename... Serialized>
+void bind_serialize(nanobind::module_& module, TypeList<Serialized...>)
+{
+    (bind_serialize<Serialized>(module), ...);
+}
+
+template<typename T>
+void bind_table(nanobind::module_& module)
 {
     namespace nb = nanobind;
     using namespace nb::literals;
     using serialization::Dictionaries;
 
     module.def("table",
-               [](Dictionaries& dictionaries, nb::type_object native_type) { return table(dictionaries, native_type, TypeList<Registered...> {}); },
-               "dictionaries"_a, "native_type"_a,
-               nb::sig("def table(dictionaries: pyyggdrasil.serialization.Dictionaries, native_type: type) -> list[pyyggdrasil.serialization.table.Row]"));
+               [](Dictionaries& dictionaries, nb::type_object_t<T> native_type)
+               { return table(dictionaries, native_type, TypeList<T> {}); },
+               "dictionaries"_a, "native_type"_a);
+}
+
+template<typename... Registered>
+void bind_table(nanobind::module_& module, TypeList<Registered...>)
+{
+    (bind_table<Registered>(module), ...);
 }
 
 template<typename... Registered, typename... Serialized, typename... Projected>
 void bind_serialization(nanobind::module_& module, TypeList<Registered...>, TypeList<Serialized...>, TypeList<Projected...>)
 {
     (bind_fields<Serialized>(), ...);
-    module.attr("NativeT") = nanobind::type_var("NativeT");
-    bind_registration_overloads(module, TypeList<Registered...> {}, TypeList<Projected...> {});
+    (bind_native_serializer<Projected>(), ...);
+    if (!nanobind::hasattr(module, "NativeT"))
+        module.attr("NativeT") = nanobind::type_var("NativeT");
+    bind_registration_overloads(module, TypeList<Registered...> {});
     bind_serialize(module, TypeList<Serialized...> {});
     bind_table(module, TypeList<Registered...> {});
 }
