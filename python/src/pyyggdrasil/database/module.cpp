@@ -37,7 +37,9 @@ void bind_database_module_definitions(nb::module_& m)
             {
                 if (index < 0)
                     index += static_cast<std::ptrdiff_t>(relation.size());
-                return relation.at(static_cast<std::size_t>(index));
+                if (index < 0 || static_cast<std::size_t>(index) >= relation.size())
+                    throw nb::index_error();
+                return relation[index];
             },
             nb::keep_alive<0, 1>())
         .def("arity", &Relation::arity)
