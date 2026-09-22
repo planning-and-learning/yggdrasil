@@ -12,11 +12,15 @@ namespace yggdrasil
 void bind_database_module_definitions(nb::module_& m)
 {
     using Relation = ygg::database::Relation<>;
+    using RelationView = ygg::database::RelationView<>;
     using RelationPtr = ygg::UniqueObjectPoolPtr<Relation>;
     using RelationPool = ygg::database::RelationPool<>;
     using Row = std::span<const ygg::uint_t>;
 
-    nb::class_<Row>(m, "RelationRow", "Read-only row that keeps its relation alive.")
+    nb::class_<Row>(m,
+                    "RelationRow",
+                    "Read-only borrowed row or column labels. Keeps its Python owner alive, but clearing "
+                    "the owning relation or evaluation cache invalidates the borrowed data.")
         .def("__len__", &Row::size)
         .def("__getitem__",
              [](Row row, std::ptrdiff_t index)
@@ -27,6 +31,27 @@ void bind_database_module_definitions(nb::module_& m)
                      throw nb::index_error();
                  return row[index];
              });
+
+    nb::class_<RelationView>(m,
+                             "RelationView",
+                             "Read-only borrowed relation. Clearing the owning relation or evaluation cache "
+                             "invalidates this view and its rows, even while their Python owners remain alive.")
+        .def("__len__", &RelationView::size)
+        .def(
+            "__getitem__",
+            [](const RelationView& relation, std::ptrdiff_t index)
+            {
+                if (index < 0)
+                    index += static_cast<std::ptrdiff_t>(relation.size());
+                if (index < 0 || static_cast<std::size_t>(index) >= relation.size())
+                    throw nb::index_error();
+                return relation[index];
+            },
+            nb::keep_alive<0, 1>())
+        .def("arity", &RelationView::arity)
+        .def("empty", &RelationView::empty)
+        .def("at", &RelationView::at, nb::arg("index"), nb::keep_alive<0, 1>())
+        .def("columns", [](const RelationView& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
 
     nb::class_<Relation>(m, "Relation", "Set of fixed-arity tuples with unique column labels.")
         .def(nb::init<const std::vector<ygg::database::Column>&>(), nb::arg("columns") = std::vector<ygg::database::Column> {})
@@ -45,6 +70,8 @@ void bind_database_module_definitions(nb::module_& m)
         .def("arity", &Relation::arity)
         .def("empty", &Relation::empty)
         .def("at", &Relation::at, nb::arg("index"), nb::keep_alive<0, 1>())
+        .def("columns", [](const Relation& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>())
+        .def("view", [](const Relation& relation) { return relation.view(); }, nb::keep_alive<0, 1>())
         .def("insert", [](Relation& relation, const std::vector<ygg::uint_t>& row) { return relation.insert(row); }, nb::arg("row"));
 
     nb::class_<RelationPtr>(m, "RelationPtr", "Owns a pooled relation until the handle and its borrowed rows are released.")

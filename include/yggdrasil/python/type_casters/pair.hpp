@@ -10,12 +10,25 @@
 #pragma once
 
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/pair.h>
 #include <type_traits>
 #include <utility>
 #include <yggdrasil/containers/pair.hpp>
 
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)
+
+// Reuse Nanobind's pair conversions, constructing a Cista pair on input.
+template<typename T1, typename T2>
+struct type_caster<::cista::pair<T1, T2>> : type_caster<std::pair<T1, T2>>
+{
+    using Value = ::cista::pair<T1, T2>;
+
+    template<typename T>
+    using Cast = Value;
+
+    explicit operator Value() { return Value { this->caster1.operator cast_t<T1>(), this->caster2.operator cast_t<T2>() }; }
+};
 
 // Adapted from nanobind/stl/pair.h
 template<typename C, typename T1, typename T2>

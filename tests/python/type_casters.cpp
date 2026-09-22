@@ -18,8 +18,10 @@
 #include "yggdrasil/python/type_casters.hpp"
 
 #include <cista/containers/array.h>
+#include <cista/containers/optional.h>
 #include <cista/containers/pair.h>
 #include <cista/containers/variant.h>
+#include <cista/containers/vector.h>
 #include <nanobind/nanobind.h>
 #include <yggdrasil/containers/bit_packed_array_pool.hpp>
 
@@ -68,6 +70,9 @@ NB_MODULE(yggdrasil_type_casters_test, m)
               static constexpr auto context = 0;
               return ygg::View<Array, int>(view, context);
           });
+
+    m.def("roundtrip_pair", [](::cista::pair<int, int> value) { return value; });
+    m.def("roundtrip_optional_pairs", [](::cista::offset::vector<::cista::optional<::cista::pair<int, int>>> values) { return values; });
 
     m.def("roundtrip_variant", [](::cista::offset::variant<int, double> value) { return value; });
 

@@ -8,7 +8,7 @@ from pyyggdrasil import database
 
 def test_relation_rows_and_validation() -> None:
     assert database is pyyggdrasil.database
-    assert database.__all__ == ["Relation", "RelationPool", "RelationPtr", "RelationRow"]
+    assert database.__all__ == ["Relation", "RelationPool", "RelationPtr", "RelationRow", "RelationView"]
     relation = database.Relation([10, 20])
     assert relation.arity() == 2
     assert relation.empty()
@@ -111,3 +111,36 @@ def test_iterators_keep_pooled_rows_alive() -> None:
     assert list(values) == [3, 4]
     with pytest.raises(StopIteration):
         next(values)
+
+
+@pytest.mark.parametrize("columns, values", [([10, 20], [(3, 4), (5, 6)]), ([], [()]), ([], [])])
+def test_relation_views_borrow_rows_and_keep_owners_alive(columns, values) -> None:
+    pool = database.RelationPool()
+    handle = pool.get_or_allocate(columns)
+    relation = handle.get()
+    for value in values:
+        relation.insert(value)
+    view = relation.view()
+    assert isinstance(view, database.RelationView)
+    assert len(view) == len(values)
+    assert view.arity() == len(columns)
+    assert view.empty() == (not values)
+    assert tuple(view.columns()) == tuple(relation.columns()) == tuple(columns)
+    assert [tuple(row) for row in view] == values
+    for index in (-len(values) - 1, len(values)):
+        with pytest.raises(IndexError):
+            _ = view[index]
+    with pytest.raises(IndexError):
+        view.at(len(values))
+    assert not hasattr(view, "insert")
+
+    labels = view.columns()
+    rows = iter(view)
+    del view, relation, handle, pool
+    gc.collect()
+    assert tuple(labels) == tuple(columns)
+    retained = list(rows)
+    assert [tuple(row) for row in retained] == values
+    del rows, labels
+    gc.collect()
+    assert [tuple(row) for row in retained] == values
