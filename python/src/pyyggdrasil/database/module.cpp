@@ -1,9 +1,6 @@
 #include "module.hpp"
 
-#include <boost/iterator/counting_iterator.hpp>
-#include <boost/iterator/transform_iterator.hpp>
 #include <cstddef>
-#include <nanobind/make_iterator.h>
 #include <nanobind/stl/vector.h>
 #include <span>
 #include <vector>
@@ -21,10 +18,6 @@ void bind_database_module_definitions(nb::module_& m)
 
     nb::class_<Row>(m, "RelationRow", "Read-only row that keeps its relation alive.")
         .def("__len__", &Row::size)
-        .def(
-            "__iter__",
-            [](Row row) { return nb::make_iterator(nb::type<Row>(), "Iterator", row.begin(), row.end()); },
-            nb::keep_alive<0, 1>())
         .def("__getitem__",
              [](Row row, std::ptrdiff_t index)
              {
@@ -39,24 +32,18 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<const std::vector<ygg::database::Column>&>(), nb::arg("columns") = std::vector<ygg::database::Column> {})
         .def("__len__", &Relation::size)
         .def(
-            "__iter__",
-            [](const Relation& relation)
+            "__getitem__",
+            [](const Relation& relation, std::ptrdiff_t index)
             {
-                const auto row_at = [&relation](std::size_t index) { return relation[index]; };
-                return nb::make_iterator(nb::type<Relation>(),
-                                         "Iterator",
-                                         boost::make_transform_iterator(boost::counting_iterator<std::size_t>(0), row_at),
-                                         boost::make_transform_iterator(boost::counting_iterator<std::size_t>(relation.size()), row_at),
-                                         nb::keep_alive<0, 1>());
+                if (index < 0)
+                    index += static_cast<std::ptrdiff_t>(relation.size());
+                return relation.at(static_cast<std::size_t>(index));
             },
             nb::keep_alive<0, 1>())
         .def("arity", &Relation::arity)
         .def("empty", &Relation::empty)
         .def("at", &Relation::at, nb::arg("index"), nb::keep_alive<0, 1>())
-        .def(
-            "insert",
-            [](Relation& relation, const std::vector<ygg::uint_t>& row) { return relation.insert(std::span<const ygg::uint_t>(row)); },
-            nb::arg("row"));
+        .def("insert", [](Relation& relation, const std::vector<ygg::uint_t>& row) { return relation.insert(row); }, nb::arg("row"));
 
     nb::class_<RelationPtr>(m, "RelationPtr", "Owns a pooled relation until the handle and its borrowed rows are released.")
         .def("get", &RelationPtr::get, nb::rv_policy::reference_internal);
@@ -65,8 +52,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<>())
         .def(
             "get_or_allocate",
-            [](RelationPool& pool, const std::vector<ygg::database::Column>& columns)
-            { return pool.get_or_allocate(std::span<const ygg::database::Column>(columns)); },
+            [](RelationPool& pool, const std::vector<ygg::database::Column>& columns) { return pool.get_or_allocate(columns); },
             nb::arg("columns"),
             nb::keep_alive<0, 1>());
 }

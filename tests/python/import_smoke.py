@@ -40,6 +40,7 @@ def main() -> None:
                 "include_dir",
                 "library_dirs",
                 "native_prefix",
+                "database",
                 "diagnostics",
                 "execution",
                 "serialization",

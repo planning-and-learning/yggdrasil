@@ -18,6 +18,10 @@ def test_relation_rows_and_validation() -> None:
     assert len(relation) == 1
     assert not relation.empty()
     assert tuple(row) == (3, 4)
+    assert tuple(relation[0]) == tuple(relation[-1]) == (3, 4)
+    for index in (-2, 1):
+        with pytest.raises(IndexError):
+            _ = relation[index]
     assert row[-1] == 4
     assert row[-2] == 3
     for index in (-3, 2):
