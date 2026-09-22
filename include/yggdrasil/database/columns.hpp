@@ -15,7 +15,6 @@
 #include <span>
 #include <tuple>
 #include <type_traits>
-#include <vector>
 
 namespace ygg::database
 {
@@ -66,7 +65,7 @@ private:
 
 public:
     Columns() = default;
-    explicit Columns(const std::vector<Column>& columns);
+    explicit Columns(std::span<const Column> columns);
     Columns(std::initializer_list<Column> columns);
     explicit Columns(ColumnsView columns);
 

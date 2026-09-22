@@ -23,6 +23,7 @@ file(GLOB_RECURSE YGGDRASIL_PUBLIC_HEADERS CONFIGURE_DEPENDS
 nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
+    src/pyyggdrasil/database/module.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
     src/pyyggdrasil/serialization/module.cpp
@@ -61,6 +62,7 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/serialization/table.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
+    pyyggdrasil/database/__init__.py
     pyyggdrasil/diagnostics/__init__.py
     pyyggdrasil/execution/__init__.py
 )

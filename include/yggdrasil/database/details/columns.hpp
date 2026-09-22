@@ -36,7 +36,7 @@ inline size_t ColumnsView::column_index(Column column) const
     return static_cast<size_t>(it - m_columns.begin());
 }
 
-inline Columns::Columns(const std::vector<Column>& columns) : Columns(ColumnsView(std::span<const Column>(columns))) {}
+inline Columns::Columns(std::span<const Column> columns) : Columns(ColumnsView(columns)) {}
 
 inline Columns::Columns(std::initializer_list<Column> columns) : Columns(ColumnsView(std::span<const Column>(columns))) {}
 

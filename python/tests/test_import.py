@@ -57,6 +57,7 @@ def test_public_package_exports_are_explicit() -> None:
         "include_dir",
         "library_dirs",
         "native_prefix",
+        "database",
         "diagnostics",
         "execution",
         "serialization",

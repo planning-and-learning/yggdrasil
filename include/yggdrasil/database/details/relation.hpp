@@ -83,7 +83,7 @@ Relation<T>::Relation(ColumnsView columns) : Relation(Columns(columns))
 }
 
 template<TriviallyCopyable T>
-Relation<T>::Relation(const std::vector<Column>& columns) : Relation(Columns(columns))
+Relation<T>::Relation(std::span<const Column> columns) : Relation(Columns(columns))
 {
 }
 

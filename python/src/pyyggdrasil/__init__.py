@@ -3,6 +3,7 @@ from pathlib import Path
 import tomllib as _tomllib
 from typing import Tuple
 
+from . import database as database
 from . import diagnostics as diagnostics
 from . import execution as execution
 from . import serialization as serialization
@@ -91,6 +92,7 @@ __all__ = [
     "include_dir",
     "library_dirs",
     "native_prefix",
+    "database",
     "diagnostics",
     "execution",
     "serialization",

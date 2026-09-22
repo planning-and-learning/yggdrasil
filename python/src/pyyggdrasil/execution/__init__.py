@@ -1,3 +1,5 @@
-from .._pyyggdrasil.execution import ExecutionContext as ExecutionContext
+from .._pyyggdrasil.execution import (
+    ExecutionContext,
+)
 
 __all__ = ["ExecutionContext"]

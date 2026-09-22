@@ -151,7 +151,7 @@ Relation<T> project(const RelationView<T>& input, ColumnsView columns)
 }
 
 template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, const std::vector<Column>& columns)
+Relation<T> project(const RelationView<T>& input, std::span<const Column> columns)
 {
     return project(input, Columns(columns));
 }

@@ -1,3 +1,6 @@
 """Shared reference dictionaries."""
 
-from .._pyyggdrasil.serialization import Dictionaries as Dictionaries
+from .._pyyggdrasil.serialization import (
+    Dictionaries,
+)
+

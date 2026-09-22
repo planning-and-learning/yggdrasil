@@ -18,7 +18,6 @@
 #include <initializer_list>
 #include <span>
 #include <type_traits>
-#include <vector>
 
 namespace ygg::database
 {
@@ -75,7 +74,7 @@ private:
 public:
     explicit Relation(Columns columns);
     explicit Relation(ColumnsView columns);
-    explicit Relation(const std::vector<Column>& columns = {});
+    explicit Relation(std::span<const Column> columns = {});
     Relation(std::initializer_list<Column> columns);
     Relation(const Relation&) = delete;
     Relation& operator=(const Relation&) = delete;

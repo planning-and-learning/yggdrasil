@@ -438,6 +438,26 @@ TEST(YggdrasilTests, DatabaseProjectionReordersDeduplicatesAndOwnsResults)
     expect_relation(output, { 2, 1 }, {});
 }
 
+TEST(YggdrasilTests, DatabaseRawColumnInputsAcceptSpansArraysAndVectors)
+{
+    std::array<Column, 3> labels { 1, 2, 3 };
+    Columns columns { std::span<const Column>(labels) };
+    Relation<> relation(labels);
+    relation.insert({ 7, 8, 9 });
+    labels.fill(0);
+    EXPECT_EQ(columns.column_index(3), 2);
+    expect_relation(relation, { 1, 2, 3 }, { { 7, 8, 9 } });
+
+    std::array<Column, 2> output_labels { 3, 1 };
+    auto from_span = project(relation.view(), std::span(output_labels));
+    auto from_array = project(relation.view(), output_labels);
+    auto from_vector = project(relation.view(), std::vector<Column> { 3, 1 });
+    output_labels.fill(0);
+    expect_relation(from_span, { 3, 1 }, { { 9, 7 } });
+    expect_relation(from_array, { 3, 1 }, { { 9, 7 } });
+    expect_relation(from_vector, { 3, 1 }, { { 9, 7 } });
+}
+
 TEST(YggdrasilTests, DatabasePlansOwnSchemasAndReuseResolvedPositions)
 {
     constexpr auto large = std::numeric_limits<Column>::max();
