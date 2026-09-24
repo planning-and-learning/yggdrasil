@@ -20,7 +20,7 @@ namespace ygg::database
 {
 
 template<TriviallyCopyable T>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, ColumnsView columns) : m_rows(&rows), m_columns(columns)
+RelationView<T>::RelationView(const RawArraySet<T>& rows, ColumnsView columns, size_t index) : m_rows(&rows), m_columns(columns), m_index(index)
 {
     if (columns.size() != rows.array_size())
         throw std::invalid_argument("RelationView: schema arity does not match row storage.");
@@ -29,7 +29,7 @@ RelationView<T>::RelationView(const RawArraySet<T>& rows, ColumnsView columns) :
 template<TriviallyCopyable T>
 template<typename C, size_t Extent>
     requires std::same_as<std::remove_const_t<C>, Column>
-RelationView<T>::RelationView(const RawArraySet<T>& rows, std::span<C, Extent> columns) : RelationView(rows, ColumnsView(columns))
+RelationView<T>::RelationView(const RawArraySet<T>& rows, std::span<C, Extent> columns, size_t index) : RelationView(rows, ColumnsView(columns), index)
 {
 }
 
@@ -156,7 +156,9 @@ void Relation<T>::initialize(ColumnsView columns)
 {
     if (columns.size() != m_rows.array_size())
     {
-        *this = Relation(columns);
+        auto replacement = Relation<T>(columns);
+        replacement.m_index = m_index;
+        *this = std::move(replacement);
         return;
     }
     m_columns.assign(columns);
@@ -178,7 +180,7 @@ void Relation<T>::initialize(std::initializer_list<Column> columns)
 template<TriviallyCopyable T>
 RelationView<T> Relation<T>::view() const&
 {
-    return RelationView<T>(m_rows, m_columns.view());
+    return RelationView<T>(m_rows, m_columns.view(), m_index);
 }
 
 }  // namespace ygg::database

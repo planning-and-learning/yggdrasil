@@ -20,10 +20,10 @@
 
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/dependent_false.hpp"
-#include "yggdrasil/semantics/murmurhash3.hpp"
 
 #include <array>
-#include <bit>
+#include <boost/container_hash/hash.hpp>
+#include <boost/hash2/xxhash.hpp>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -45,21 +45,29 @@
 namespace ygg
 {
 
-// The deterministic hashing below fixes all algorithms and constants for 64-bit hash values, so that
-// hash values are identical across standard libraries, compilers, and platform word sizes. Native
-// hash-table APIs may narrow these values to size_t internally.
+// Hashes are deterministic for a fixed Boost version and platform word size. Byte-hashed ranges
+// additionally depend on their element representation. The public result is 64-bit; hash_combine
+// uses Boost.ContainerHash's native-size mixing.
 
 /// Deterministic hashing primitives with fixed algorithms and constants.
 namespace hashing
 {
 
-/// MurmurHash3 (x64_128, fixed zero seed) over a byte range, truncated to 64 bits.
-inline hash_t hash_bytes(const char* data, size_t size) noexcept
+/// xxHash64 with a fixed zero seed over a byte range.
+inline hash_t hash_bytes(const void* data, size_t size) noexcept
 {
-    uint64_t out[2];  ///< MurmurHash3_x64_128 writes two 64-bit words.
-    MurmurHash3_x64_128(data, static_cast<int>(size), 0U, out);
-    return out[0];
+    auto hash = boost::hash2::xxhash_64 {};
+    hash.update(data, size);
+    return hash.result();
 }
+
+/// Byte equality must agree with value equality; custom Hash specializations retain value hashing.
+template<typename T>
+concept ByteHashable = (std::integral<T> || Enumeration<T>) && !std::same_as<T, bool> && std::has_unique_object_representations_v<T>
+                      && requires { requires Hash<T>::is_identity; };
+
+template<typename Range>
+concept ByteHashableRange = std::ranges::input_range<Range> && std::ranges::sized_range<Range> && ByteHashable<std::ranges::range_value_t<Range>>;
 
 }
 
@@ -79,7 +87,14 @@ inline hash_t hash_combine(const Ts&... rest) noexcept;
 template<std::ranges::input_range Range>
 inline hash_t hash_range(Range&& range) noexcept;
 
-/// @brief `Hash` is our custom hasher, like std::hash, but with fixed, platform-independent algorithms.
+template<hashing::ByteHashableRange Range>
+inline hash_t hash_range(Range&& range) noexcept;
+
+template<hashing::ByteHashableRange Range>
+    requires std::ranges::contiguous_range<Range> && (!std::is_volatile_v<std::remove_reference_t<std::ranges::range_reference_t<Range>>>)
+inline hash_t hash_range(Range&& range) noexcept;
+
+/// @brief `Hash` is our custom hasher, using explicit algorithms instead of implementation-defined std::hash.
 ///
 /// There is deliberately no fallback to std::hash: its algorithms for floating-point and string types
 /// differ between standard library implementations, which makes hash container iteration orders (and
@@ -93,12 +108,17 @@ struct Hash;
 template<std::integral T>
 struct Hash<T>
 {
+    // Custom specializations omit this marker and retain element-wise range hashing.
+    static constexpr bool is_identity = true;
+
     hash_t operator()(const T& el) const noexcept { return static_cast<hash_t>(el); }
 };
 
 template<Enumeration T>
 struct Hash<T>
 {
+    static constexpr bool is_identity = requires { requires Hash<std::underlying_type_t<T>>::is_identity; };
+
     hash_t operator()(const T& el) const noexcept { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
 };
 
@@ -145,16 +165,8 @@ struct Hash<T>
 
     hash_t operator()(const T& el) const noexcept
     {
-        if (std::isnan(el))
-            return 0x9e3779b97f4a7c15ULL;  // any fixed salt
-
-        if (el == T(0))
-            return 0;  // +0.0 and -0.0 compare equal, so they must hash alike
-
-        if constexpr (std::is_same_v<T, float>)
-            return std::bit_cast<uint32_t>(el);
-        else
-            return std::bit_cast<uint64_t>(el);
+        // EqualTo treats all NaNs as equal; Boost already normalizes signed zero.
+        return std::isnan(el) ? hash_t { 0x9e3779b97f4a7c15ULL } : boost::hash<T> {}(el);
     }
 };
 
@@ -289,10 +301,29 @@ inline hash_t hash_range(Range&& range) noexcept
     return seed;
 }
 
+// Decoded and segmented ranges must hash identically to contiguous ranges of the same element type.
+template<hashing::ByteHashableRange Range>
+inline hash_t hash_range(Range&& range) noexcept
+{
+    auto hash = boost::hash2::xxhash_64 {};
+    for (std::ranges::range_value_t<Range> value : range)
+        hash.update(&value, sizeof(value));
+    return hash.result();
+}
+
+template<hashing::ByteHashableRange Range>
+    requires std::ranges::contiguous_range<Range> && (!std::is_volatile_v<std::remove_reference_t<std::ranges::range_reference_t<Range>>>)
+inline hash_t hash_range(Range&& range) noexcept
+{
+    return hashing::hash_bytes(std::ranges::data(range), std::ranges::size(range) * sizeof(std::ranges::range_value_t<Range>));
+}
+
 template<typename T>
 inline void hash_combine(hash_t& seed, const T& value) noexcept
 {
-    seed ^= Hash<std::remove_cvref_t<T>> {}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    auto combined = static_cast<size_t>(seed);
+    boost::hash_combine(combined, Hash<std::remove_cvref_t<T>> {}(value));
+    seed = combined;
 }
 
 template<typename T, typename... Rest>

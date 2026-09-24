@@ -277,6 +277,41 @@ struct Evaluation
     }
 };
 
+struct CachedJoinEvaluation
+{
+    RelationPool<> pool;
+    UniqueObjectPoolPtr<Relation<>> build = pool.get_or_allocate({ 1, 2 });
+    Relation<> probe { { 1, 3 } };
+    JoinPlan forward { build->columns(), probe.columns() };
+    JoinPlan reverse { probe.columns(), build->columns() };
+    Relation<> forward_result { forward.output_columns() };
+    Relation<> reverse_result { reverse.output_columns() };
+    JoinIndexCache<> cache;
+    Workspace<> workspace;
+
+    CachedJoinEvaluation() { fill(*build, 128, 1000); }
+
+    bool evaluate(size_t left_size, size_t right_size, uint_t offset)
+    {
+        bool valid = true;
+        for (const auto probe_size : { left_size, right_size })
+        {
+            fill(probe, probe_size, offset);
+            join(build->view(), probe.view(), forward, cache, JoinReuse { true, false }, forward_result, workspace);
+            join(probe.view(), build->view(), reverse, cache, JoinReuse { false, true }, reverse_result, workspace);
+            valid &= forward_result.size() == joined_size(build->size(), probe_size);
+            valid &= reverse_result.size() == forward_result.size();
+            valid &= cache.size() == 1;
+            if (probe_size != 0)
+            {
+                valid &= forward_result.contains({ 0, 1000, offset });
+                valid &= reverse_result.contains({ 0, offset, 1000 });
+            }
+        }
+        return valid;
+    }
+};
+
 struct PooledEvaluation
 {
     Relation<> left { { 1, 2 } };
@@ -470,6 +505,12 @@ TEST(YggdrasilTests, DatabaseWarmedEvaluationReusesAllStorageAcrossChangingState
 TEST(YggdrasilTests, DatabaseWarmedPooledIntermediatesAllocateAndFreeNothing)
 {
     PooledEvaluation evaluation;
+    expect_no_allocations_after_warmup(evaluation);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedCachedJoinsAllocateAndFreeNothing)
+{
+    CachedJoinEvaluation evaluation;
     expect_no_allocations_after_warmup(evaluation);
 }
 

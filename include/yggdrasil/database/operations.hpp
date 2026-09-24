@@ -10,7 +10,7 @@
 #ifndef YGG_DATABASE_OPERATIONS_HPP_
 #define YGG_DATABASE_OPERATIONS_HPP_
 
-#include "yggdrasil/containers/unordered_multi_map.hpp"
+#include "yggdrasil/database/join_index.hpp"
 #include "yggdrasil/database/plans.hpp"
 #include "yggdrasil/database/relation.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -39,6 +39,13 @@ struct Workspace
     std::vector<size_t> rhs_payload;
     std::vector<T> row;
     UnorderedMultiMap<hash_t, size_t> join_index;
+};
+
+/// Marks inputs whose row storage remains immutable for the cache lifetime.
+struct JoinReuse
+{
+    bool lhs = false;
+    bool rhs = false;
 };
 
 /// Relabels columns positionally, without copying any tuples. New labels must
@@ -117,6 +124,24 @@ Relation<T> select_equal_value(const RelationView<T>& input, Column column, cons
 /// transient index. Collisions are resolved by comparing the actual values.
 template<TriviallyCopyable T>
 void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, Relation<T>& out, Workspace<T>& workspace);
+
+/// Reuses an index on either input instead of rebuilding the smaller side.
+/// The index must match that input's storage and the plan's ordered key positions.
+/// Result row order is unspecified, as for the other relational operations.
+template<TriviallyCopyable T>
+void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, const JoinIndex<T>& index, Relation<T>& out, Workspace<T>& workspace);
+
+/// Reuses the one marked input, or the smaller input when both are marked.
+/// With neither marked, uses an ordinary transient index. Empty inputs and
+/// Cartesian products do not create cached indexes.
+template<TriviallyCopyable T>
+void join(const RelationView<T>& lhs,
+          const RelationView<T>& rhs,
+          const JoinPlan& plan,
+          JoinIndexCache<T>& cache,
+          JoinReuse reuse,
+          Relation<T>& out,
+          Workspace<T>& workspace);
 
 template<TriviallyCopyable T>
 void join(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out, Workspace<T>& workspace);

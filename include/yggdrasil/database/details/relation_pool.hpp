@@ -12,9 +12,18 @@ namespace ygg::database
 {
 
 template<TriviallyCopyable T>
+RelationPool<T> RelationPoolFactory<T>::create_pool()
+{
+    return RelationPool<T>(*this);
+}
+
+template<TriviallyCopyable T>
 UniqueObjectPoolPtr<Relation<T>> RelationPool<T>::get_or_allocate(ColumnsView columns)
 {
-    return m_pools[columns.size()].get_or_allocate(columns);
+    auto relation = m_pools[columns.size()].get_or_allocate(columns);
+    if (relation->m_index == std::numeric_limits<size_t>::max())
+        relation->m_index = m_factory.next_index();
+    return relation;
 }
 
 template<TriviallyCopyable T>

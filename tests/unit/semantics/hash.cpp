@@ -16,6 +16,7 @@
  */
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <gtest/gtest.h>
@@ -24,6 +25,9 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 #include <yggdrasil/containers/associative_containers.hpp>
@@ -42,22 +46,21 @@ struct HashContext
 {
 };
 
-// Golden values: ygg::Hash fixes its algorithms (MurmurHash3) precisely so that hash values are
-// identical across standard libraries, compilers, and platforms. These constants pin that contract;
-// if this test fails, hash-order-dependent results (e.g., downstream test fixtures) change with it.
-TEST(YggdrasilTests, CommonHashValuesArePlatformIndependent)
+// Golden values pin scalar hashing and xxHash64 byte hashing across standard libraries and compilers.
+TEST(YggdrasilTests, CommonHashValuesMatchDefinedAlgorithms)
 {
     static_assert(std::same_as<decltype(ygg::Hash<int> {}(42)), ygg::hash_t>);
     static_assert(sizeof(ygg::hash_t) == 8);
     EXPECT_EQ(ygg::Hash<int> {}(42), 0x000000000000002aULL);
     EXPECT_EQ(ygg::Hash<int> {}(0), 0x0000000000000000ULL);
     EXPECT_EQ(ygg::Hash<int> {}(-1), 0xffffffffffffffffULL);
-    EXPECT_EQ(ygg::Hash<double> {}(1.5), 0x3ff8000000000000ULL);
+    if constexpr (sizeof(size_t) == sizeof(uint64_t))
+        EXPECT_EQ(ygg::Hash<double> {}(1.5), 0x3ff8000000000000ULL);
     EXPECT_EQ(ygg::Hash<float> {}(1.5F), 0x000000003fc00000ULL);
     EXPECT_EQ(ygg::Hash<double> {}(-0.0), ygg::Hash<double> {}(0.0));
-    EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), 0x7728ac0c932a3086ULL);
+    EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), 0x79adda5dd5464cb6ULL);
     EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), ygg::Hash<std::string_view> {}(std::string_view("yggdrasil")));
-    EXPECT_EQ(ygg::Hash<std::string> {}(std::string()), 0x0000000000000000ULL);
+    EXPECT_EQ(ygg::Hash<std::string> {}(std::string()), 0xef46db3751d8e999ULL);
 }
 
 TEST(YggdrasilTests, CommonHashSupportsUnalignedByteRanges)
@@ -66,7 +69,39 @@ TEST(YggdrasilTests, CommonHashSupportsUnalignedByteRanges)
     const auto text = std::string_view(storage + 1, sizeof(storage) - 2);
 
     ASSERT_NE(reinterpret_cast<uintptr_t>(text.data()) % alignof(uint64_t), 0);
-    EXPECT_EQ(ygg::Hash<std::string_view> {}(text), 0x4be06d94cf4ad1a7ULL);
+    EXPECT_EQ(ygg::Hash<std::string_view> {}(text), 0x5c5b90c34e376d0bULL);
+}
+
+TEST(YggdrasilTests, CommonHashBytesMatchesXxHashReferenceAcrossBlockBoundaries)
+{
+    auto bytes = std::array<unsigned char, 66> {};
+    for (size_t i = 0; i < bytes.size(); ++i)
+        bytes[i] = static_cast<unsigned char>(i * 37);
+
+    // Seed-zero results from the reference xxHash implementation, including unaligned input.
+    const auto cases = std::array<std::pair<size_t, ygg::hash_t>, 15> {{
+        { 0, 0xef46db3751d8e999ULL },
+        { 1, 0x89ac406afd6cd3b7ULL },
+        { 3, 0x614123b469e8f204ULL },
+        { 4, 0x0b0552d04906db7bULL },
+        { 7, 0x547bf259c8d24ca9ULL },
+        { 8, 0xfd161ba5079f032fULL },
+        { 15, 0x280ecabe993ce430ULL },
+        { 16, 0x1bb38a0220bb17b3ULL },
+        { 17, 0xb4ff4a6c0661ca93ULL },
+        { 31, 0xbd93c8cc6c5f4d8eULL },
+        { 32, 0x7fd19ac913684e8aULL },
+        { 33, 0xfb548bf9f10abcd1ULL },
+        { 63, 0x70781206707beec8ULL },
+        { 64, 0x6892b7f3d78396eeULL },
+        { 65, 0x4948c637675f5150ULL },
+    }};
+    EXPECT_EQ(ygg::hashing::hash_bytes(nullptr, 0), 0xef46db3751d8e999ULL);
+    for (const auto& [size, expected] : cases)
+    {
+        SCOPED_TRACE(size);
+        EXPECT_EQ(ygg::hashing::hash_bytes(bytes.data() + 1, size), expected);
+    }
 }
 
 TEST(YggdrasilTests, CommonHashAdaptersNormalizeFloatingPointNaN)
@@ -86,7 +121,109 @@ TEST(YggdrasilTests, CommonHashRangeMatchesContainerHash)
     EXPECT_EQ(ygg::hash_range(std::span<const int>(values)), ygg::Hash<std::span<const int>> {}(std::span<const int>(values)));
 }
 
-TEST(YggdrasilTests, CommonHashRangeKeepsSizeInSeed)
+TEST(YggdrasilTests, CommonHashRangeMatchesArrayAndSpanAdapters)
+{
+    auto values = std::array<uint8_t, 4> { 0, 1, 127, 255 };
+    const auto expected = ygg::hashing::hash_bytes(values.data(), values.size());
+
+    EXPECT_EQ(ygg::Hash<> {}(values), expected);
+    EXPECT_EQ(ygg::Hash<> {}(std::span<uint8_t>(values)), expected);
+    EXPECT_EQ(ygg::Hash<> {}(std::span<const uint8_t>(values)), expected);
+    EXPECT_EQ(ygg::Hash<> {}(std::span<uint8_t, 4>(values)), expected);
+    EXPECT_EQ(ygg::Hash<> {}(std::span<const uint8_t, 4>(values)), expected);
+}
+
+TEST(YggdrasilTests, CommonHashRangeMatchesNativeBytesAcrossContainers)
+{
+    const auto check = []<typename T>()
+    {
+        for (const auto size : { 0U, 1U, 3U, 4U, 7U, 8U, 15U, 16U, 17U, 65U, 1000U })
+        {
+            SCOPED_TRACE(size);
+            auto values = std::vector<T> {};
+            auto cista_values = ::cista::offset::vector<T> {};
+            auto segmented = ygg::SegmentedVector<T, 2> {};
+            for (auto i = 0U; i < size; ++i)
+            {
+                const auto value = static_cast<T>(static_cast<int>(i % 251) - 125);
+                values.push_back(value);
+                cista_values.emplace_back(value);
+                segmented.push_back(value);
+            }
+            auto transformed = values | std::views::transform([](T value) { return value; });
+            static_assert(std::ranges::sized_range<decltype(transformed)>);
+            static_assert(!std::ranges::contiguous_range<decltype(transformed)>);
+            const auto expected = ygg::hashing::hash_bytes(values.data(), values.size() * sizeof(T));
+            const auto context = HashContext {};
+            using VectorView = ygg::View<::cista::offset::vector<T>, HashContext>;
+            EXPECT_EQ(ygg::Hash<> {}(values), expected);
+            EXPECT_EQ(ygg::Hash<> {}(std::span<T>(values)), expected);
+            EXPECT_EQ(ygg::Hash<> {}(std::span<const T>(values)), expected);
+            EXPECT_EQ(ygg::Hash<> {}(cista_values), expected);
+            EXPECT_EQ(ygg::Hash<> {}(VectorView(cista_values, context)), expected);
+            EXPECT_EQ(ygg::Hash<> {}(segmented), expected);
+            EXPECT_EQ(ygg::hash_range(transformed), expected);
+            if constexpr (std::unsigned_integral<T>)
+            {
+                auto storage = std::vector<T>(size + 1);
+                using PackedView = ygg::BasicBitPackedArrayView<T, ygg::bit::ForwardingBlockCoder<T>>;
+                auto packed = PackedView(storage.data(), size, std::numeric_limits<T>::digits, 1);
+                packed = std::span<const T>(values);
+                EXPECT_EQ(ygg::hash_range(packed), expected);
+                EXPECT_EQ(ygg::Hash<> {}(packed), expected);
+            }
+        }
+    };
+
+    enum class Code : uint16_t
+    {
+    };
+    check.operator()<uint8_t>();
+    check.operator()<uint16_t>();
+    check.operator()<uint32_t>();
+    check.operator()<uint64_t>();
+    check.operator()<int8_t>();
+    check.operator()<int16_t>();
+    check.operator()<int32_t>();
+    check.operator()<int64_t>();
+    check.operator()<std::byte>();
+    check.operator()<Code>();
+}
+
+TEST(YggdrasilTests, CommonHashRangePreservesElementHashSemantics)
+{
+    const auto elementwise_hash = [](const auto& values)
+    {
+        auto seed = ygg::hash_t { values.size() };
+        for (const auto& value : values)
+            ygg::hash_combine(seed, value);
+        return seed;
+    };
+
+    const auto floats = std::array { -0.0, 1.5, std::numeric_limits<double>::quiet_NaN() };
+    EXPECT_EQ(ygg::hash_range(floats), elementwise_hash(floats));
+    EXPECT_EQ(ygg::hash_range(floats), ygg::hash_range(std::array { 0.0, 1.5, std::numeric_limits<double>::signaling_NaN() }));
+    const auto booleans = std::array { false, true, false };
+    const auto packed_booleans = std::vector<bool> { false, true, false };
+    EXPECT_EQ(ygg::hash_range(booleans), elementwise_hash(booleans));
+    EXPECT_EQ(ygg::hash_range(packed_booleans), elementwise_hash(booleans));
+
+    struct ModuloValue
+    {
+        uint32_t value;
+
+        auto identifying_members() const noexcept { return std::tuple(value % 10); }
+        bool operator==(const ModuloValue& other) const noexcept { return value % 10 == other.value % 10; }
+    };
+    static_assert(std::has_unique_object_representations_v<ModuloValue>);
+    const auto lhs = std::array { ModuloValue { 1 }, ModuloValue { 2 } };
+    const auto rhs = std::array { ModuloValue { 11 }, ModuloValue { 22 } };
+    ASSERT_EQ(lhs, rhs);
+    EXPECT_EQ(ygg::hash_range(lhs), elementwise_hash(lhs));
+    EXPECT_EQ(ygg::hash_range(lhs), ygg::hash_range(rhs));
+}
+
+TEST(YggdrasilTests, CommonHashRangeDistinguishesLengths)
 {
     const auto one = std::array<int, 1> { 0 };
     const auto two = std::array<int, 2> { 0, 0 };
@@ -279,6 +416,7 @@ TEST(YggdrasilTests, CommonArrayHashAdaptersHashViews)
 
     EXPECT_EQ(ygg::Hash<BlockView> {}(lhs), ygg::Hash<BlockView> {}(rhs));
     EXPECT_NE(ygg::Hash<BlockView> {}(lhs), ygg::Hash<BlockView> {}(different));
+    EXPECT_EQ(ygg::Hash<BlockView> {}(lhs), ygg::hash_range(lhs_storage));
 
     const auto context = HashContext {};
     using WrappedView = ygg::View<BlockView, HashContext>;
@@ -297,6 +435,8 @@ TEST(YggdrasilTests, CommonArrayHashAdaptersHashViews)
 
     EXPECT_EQ(ygg::Hash<BitPackedView> {}(bit_lhs), ygg::Hash<BitPackedView> {}(bit_rhs));
     EXPECT_NE(ygg::Hash<BitPackedView> {}(bit_lhs), ygg::Hash<BitPackedView> {}(bit_different));
+    EXPECT_EQ(ygg::hash_range(bit_lhs), ygg::hash_range(lhs_storage));
+    EXPECT_EQ(ygg::Hash<BitPackedView> {}(bit_lhs), ygg::hash_range(lhs_storage));
 
     using WrappedBitPackedView = ygg::View<BitPackedView, HashContext>;
     EXPECT_EQ(ygg::Hash<WrappedBitPackedView> {}(WrappedBitPackedView(bit_lhs, context)),

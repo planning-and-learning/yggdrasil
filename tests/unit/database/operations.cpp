@@ -25,6 +25,7 @@ struct DatabaseCountedValue
 {
     uint_t value;
     static inline size_t comparisons = 0;
+    static inline size_t hashes = 0;
     friend bool operator==(const DatabaseCountedValue& lhs, const DatabaseCountedValue& rhs)
     {
         ++comparisons;
@@ -46,7 +47,11 @@ namespace ygg
 template<>
 struct Hash<tests::DatabaseCountedValue>
 {
-    hash_t operator()(const tests::DatabaseCountedValue& value) const noexcept { return value.value; }
+    hash_t operator()(const tests::DatabaseCountedValue& value) const noexcept
+    {
+        ++tests::DatabaseCountedValue::hashes;
+        return value.value;
+    }
 };
 
 template<>
@@ -588,38 +593,48 @@ TEST(YggdrasilTests, DatabasePreparedPlansValidateSchemasAndAliasesBeforeClearin
     Relation<> joined({ 1, 2, 3 });
     joined.insert({ 99, 99, 99 });
     Workspace<> workspace;
+    JoinIndexCache<> cache;
+    const JoinReuse reuse { true, true };
 
     // A stale plan must be rejected even when its input contains no rows.
     left.initialize({ 2, 1 });
     EXPECT_THROW(project(left.view(), projection, projected, workspace), std::invalid_argument);
     EXPECT_THROW(join(left.view(), right.view(), joining, joined, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left.view(), right.view(), joining, cache, reuse, joined, workspace), std::invalid_argument);
     left.initialize({ 1, 4 });
     EXPECT_THROW(project(left.view(), projection, projected, workspace), std::invalid_argument);
     EXPECT_THROW(join(left.view(), right.view(), joining, joined, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left.view(), right.view(), joining, cache, reuse, joined, workspace), std::invalid_argument);
     left.initialize({ 1, 2 });
     right.initialize({ 3, 2 });
     EXPECT_THROW(join(left.view(), right.view(), joining, joined, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left.view(), right.view(), joining, cache, reuse, joined, workspace), std::invalid_argument);
     right.initialize({ 2, 4 });
     EXPECT_THROW(join(left.view(), right.view(), joining, joined, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left.view(), right.view(), joining, cache, reuse, joined, workspace), std::invalid_argument);
     expect_relation(projected, { 1 }, { { 99 } });
     expect_relation(joined, { 1, 2, 3 }, { { 99, 99, 99 } });
 
     right.initialize({ 2, 3 });
+    left.insert({ 7, 8 });
+    right.insert({ 8, 9 });
     projected.initialize({ 2 });
     projected.insert({ 88 });
     joined.initialize({ 1, 3, 2 });
     joined.insert({ 88, 88, 88 });
     EXPECT_THROW(project(left.view(), projection, projected, workspace), std::invalid_argument);
     EXPECT_THROW(join(left.view(), right.view(), joining, joined, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left.view(), right.view(), joining, cache, reuse, joined, workspace), std::invalid_argument);
     expect_relation(projected, { 2 }, { { 88 } });
     expect_relation(joined, { 1, 3, 2 }, { { 88, 88, 88 } });
 
-    left.insert({ 7, 8 });
     const ProjectionPlan identity(left.columns(), left.columns());
     const JoinPlan same(left.columns(), left.columns());
     EXPECT_THROW(project(left.view(), identity, left, workspace), std::invalid_argument);
     EXPECT_THROW(join(left.view(), left.view(), same, left, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left.view(), left.view(), same, cache, reuse, left, workspace), std::invalid_argument);
     expect_relation(left, { 1, 2 }, { { 7, 8 } });
+    EXPECT_EQ(cache.size(), 0);
 
     EXPECT_THROW((ProjectionPlan({ 1, 1 }, { 1 })), std::invalid_argument);
     EXPECT_THROW((ProjectionPlan({ 1, 2 }, { 1, 1 })), std::invalid_argument);
@@ -675,6 +690,250 @@ TEST(YggdrasilTests, DatabaseJoinPreservesAllMatchingRowsAndLogicalColumnOrder)
     right.clear();
     join(left.view(), right.view(), output);
     expect_relation(output, { 3, 1, 2, 4 }, {});
+}
+
+TEST(YggdrasilTests, DatabasePoolFactoryIdentifiesStorageAcrossPoolsAndRenames)
+{
+    RelationPoolFactory<> factory;
+    auto copy = factory;
+    auto first_pool = factory.create_pool();
+    auto second_pool = copy.create_pool();
+    auto first = first_pool.get_or_allocate({ 1 });
+    auto second = second_pool.get_or_allocate({ 1 });
+    EXPECT_NE(first->get_index(), second->get_index());
+    first->insert({ 4 });
+    second->insert({ 5 });
+    JoinIndexCache<> cache;
+    const std::array<size_t, 1> keys { 0 };
+    cache.get_or_create(first->view(), keys);
+    cache.get_or_create(second->view(), keys);
+    EXPECT_EQ(cache.size(), 2);
+    const Columns labels { 2 };
+    const auto renamed = rename(first->view(), labels);
+    EXPECT_EQ(renamed.get_index(), first->get_index());
+    EXPECT_EQ(&cache.get_or_create(renamed, keys), &cache.get_or_create(first->view(), keys));
+
+    cache.clear();  // Cached rows must be released before storage is reused.
+    const auto index = first->get_index();
+    first = {};
+    auto reused = first_pool.get_or_allocate({ 9 });
+    EXPECT_EQ(reused->get_index(), index);
+    EXPECT_TRUE(reused->empty());
+    reused->insert({ 8 });
+    cache.get_or_create(reused->view(), keys);
+    EXPECT_EQ(cache.size(), 1);
+    auto pair = first_pool.get_or_allocate({ 1, 2 });
+    EXPECT_NE(pair->get_index(), index);
+}
+
+TEST(YggdrasilTests, DatabaseJoinIndexRejectsUnidentifiedStorage)
+{
+    Relation<> left({ 1 });
+    Relation<> right({ 1 });
+    left.insert({ 1 });
+    right.insert({ 1 });
+    const std::array<size_t, 1> keys { 0 };
+    EXPECT_THROW((JoinIndex<>(left.view(), keys)), std::invalid_argument);
+    JoinIndexCache<> cache;
+    EXPECT_THROW(cache.get_or_create(left.view(), keys), std::invalid_argument);
+    EXPECT_EQ(cache.size(), 0);
+    Workspace<> workspace;
+    const JoinPlan plan(left.columns(), right.columns());
+    Relation<> result({ 1 });
+    result.insert({ 99 });
+    EXPECT_THROW(join(left.view(), right.view(), plan, cache, JoinReuse { true, false }, result, workspace), std::invalid_argument);
+    expect_relation(result, { 1 }, { { 99 } });
+    // Uncached operations continue to accept directly constructed relations.
+    join(left.view(), right.view(), plan, result, workspace);
+    expect_relation(result, { 1 }, { { 1 } });
+}
+
+TEST(YggdrasilTests, DatabaseJoinIndexReusesImmutableRowsWithChangingProbes)
+{
+    RelationPool<> pool;
+    auto build = pool.get_or_allocate({ 3, 1, 2 });
+    Relation<> probe({ 2, 4, 1 });
+    build->insert({ 10, 1, 2 });
+    build->insert({ 11, 1, 2 });
+    build->insert({ 12, 1, 3 });
+    const JoinPlan left_plan(build->columns(), probe.columns());
+    const JoinPlan right_plan(probe.columns(), build->columns());
+    const JoinIndex<> left_index(build->view(), left_plan.lhs_keys());
+    const JoinIndex<> right_index(build->view(), right_plan.rhs_keys());
+    Relation<> left_result(left_plan.output_columns());
+    Relation<> right_result(right_plan.output_columns());
+    Workspace<> workspace;
+    JoinIndexCache<> cache;
+    for (uint_t generation = 0; generation < 3; ++generation)
+    {
+        probe.clear();
+        probe.insert({ 2, 20 + generation, 1 });
+        probe.insert({ 3, 30 + generation, 1 });
+        probe.insert({ 2, 40 + generation, 9 });
+        join(build->view(), probe.view(), left_plan, left_index, left_result, workspace);
+        expect_relation(left_result, { 3, 1, 2, 4 }, { { 10, 1, 2, 20 + generation }, { 11, 1, 2, 20 + generation }, { 12, 1, 3, 30 + generation } });
+        join(probe.view(), build->view(), right_plan, right_index, right_result, workspace);
+        expect_relation(right_result, { 2, 4, 1, 3 }, { { 2, 20 + generation, 1, 10 }, { 2, 20 + generation, 1, 11 }, { 3, 30 + generation, 1, 12 } });
+        join(build->view(), probe.view(), left_plan, cache, JoinReuse { true, false }, left_result, workspace);
+        expect_relation(left_result, { 3, 1, 2, 4 }, { { 10, 1, 2, 20 + generation }, { 11, 1, 2, 20 + generation }, { 12, 1, 3, 30 + generation } });
+        join(probe.view(), build->view(), right_plan, cache, JoinReuse { false, true }, right_result, workspace);
+        expect_relation(right_result, { 2, 4, 1, 3 }, { { 2, 20 + generation, 1, 10 }, { 2, 20 + generation, 1, 11 }, { 3, 30 + generation, 1, 12 } });
+        EXPECT_EQ(cache.size(), 2);
+    }
+    probe.clear();
+    join(build->view(), probe.view(), left_plan, left_index, left_result, workspace);
+    EXPECT_TRUE(left_result.empty());
+    join(build->view(), probe.view(), left_plan, cache, JoinReuse { true, false }, left_result, workspace);
+    EXPECT_TRUE(left_result.empty());
+    join(probe.view(), build->view(), right_plan, cache, JoinReuse { false, true }, right_result, workspace);
+    EXPECT_TRUE(right_result.empty());
+    EXPECT_EQ(cache.size(), 2);
+}
+
+TEST(YggdrasilTests, DatabaseJoinIndexCacheSharesStorageAndOrderedPositionsAcrossPlans)
+{
+    RelationPool<> pool;
+    auto build = pool.get_or_allocate({ 1, 2, 3 });
+    Relation<> probe({ 1, 2, 4 });
+    build->insert({ 7, 8, 90 });
+    build->insert({ 8, 7, 91 });
+    probe.insert({ 7, 8, 10 });
+    const JoinPlan plan(build->columns(), probe.columns());
+    const JoinPlan reversed(probe.columns(), build->columns());
+    Relation<> result(plan.output_columns());
+    Relation<> reverse_result(reversed.output_columns());
+    Workspace<> workspace;
+    JoinIndexCache<> cache;
+
+    join(build->view(), probe.view(), plan, cache, JoinReuse { true, false }, result, workspace);
+    expect_relation(result, { 1, 2, 3, 4 }, { { 7, 8, 90, 10 } });
+    EXPECT_EQ(cache.size(), 1);
+    const std::array<size_t, 2> keys { 0, 1 };
+    EXPECT_EQ(&cache.get_or_create(build->view(), plan.lhs_keys()), &cache.get_or_create(build->view(), keys));
+    join(probe.view(), build->view(), reversed, cache, JoinReuse { false, true }, reverse_result, workspace);
+    expect_relation(reverse_result, { 1, 2, 4, 3 }, { { 7, 8, 10, 90 } });
+    EXPECT_EQ(cache.size(), 1);
+
+    const Columns build_labels { 11, 12, 13 };
+    const Columns probe_labels { 11, 12, 14 };
+    const auto renamed_build = rename(build->view(), build_labels);
+    const auto renamed_probe = rename(probe.view(), probe_labels);
+    const JoinPlan renamed_plan(renamed_build.columns(), renamed_probe.columns());
+    result.initialize(renamed_plan.output_columns());
+    join(renamed_build, renamed_probe, renamed_plan, cache, JoinReuse { true, false }, result, workspace);
+    expect_relation(result, { 11, 12, 13, 14 }, { { 7, 8, 90, 10 } });
+    EXPECT_EQ(cache.size(), 1);
+
+    const Columns reordered_labels { 2, 1, 4 };
+    const auto reordered_probe = rename(probe.view(), reordered_labels);
+    const JoinPlan reordered_plan(build->columns(), reordered_probe.columns());
+    result.initialize(reordered_plan.output_columns());
+    join(build->view(), reordered_probe, reordered_plan, cache, JoinReuse { true, false }, result, workspace);
+    expect_relation(result, { 1, 2, 3, 4 }, { { 8, 7, 91, 10 } });
+    EXPECT_EQ(cache.size(), 2);
+
+    auto other = pool.get_or_allocate(build->columns());
+    other->insert({ 7, 8, 92 });
+    join(other->view(), probe.view(), plan, cache, JoinReuse { true, false }, result, workspace);
+    expect_relation(result, { 1, 2, 3, 4 }, { { 7, 8, 92, 10 } });
+    EXPECT_EQ(cache.size(), 3);
+
+    cache.clear();
+    EXPECT_EQ(cache.size(), 0);
+    build->clear();
+    build->insert({ 7, 8, 93 });
+    join(build->view(), probe.view(), plan, cache, JoinReuse { true, false }, result, workspace);
+    expect_relation(result, { 1, 2, 3, 4 }, { { 7, 8, 93, 10 } });
+    EXPECT_EQ(cache.size(), 1);
+}
+
+TEST(YggdrasilTests, DatabaseJoinIndexCacheSkipsEmptyCartesianAndNonreusableInputs)
+{
+    Relation<> left({ 1 });
+    Relation<> right({ 1 });
+    right.insert({ 7 });
+    const JoinPlan plan(left.columns(), right.columns());
+    Relation<> result(plan.output_columns());
+    Workspace<> workspace;
+    JoinIndexCache<> cache;
+    for (const auto reuse : { JoinReuse {}, JoinReuse { true, false }, JoinReuse { false, true }, JoinReuse { true, true } })
+    {
+        result.insert({ 99 });
+        join(left.view(), right.view(), plan, cache, reuse, result, workspace);
+        EXPECT_TRUE(result.empty());
+        result.insert({ 99 });
+        join(right.view(), left.view(), plan, cache, reuse, result, workspace);
+        EXPECT_TRUE(result.empty());
+        EXPECT_EQ(cache.size(), 0);
+    }
+    left.insert({ 7 });
+    join(left.view(), right.view(), plan, cache, JoinReuse {}, result, workspace);
+    expect_relation(result, { 1 }, { { 7 } });
+    EXPECT_EQ(cache.size(), 0);
+
+    const Columns labels { 2 };
+    const auto renamed_right = rename(right.view(), labels);
+    const JoinPlan cartesian(left.columns(), renamed_right.columns());
+    result.initialize(cartesian.output_columns());
+    join(left.view(), renamed_right, cartesian, cache, JoinReuse { true, true }, result, workspace);
+    expect_relation(result, { 1, 2 }, { { 7, 7 } });
+    EXPECT_EQ(cache.size(), 0);
+}
+
+TEST(YggdrasilTests, DatabaseJoinIndexRejectsWrongStorageAndKeysBeforeClearingOutput)
+{
+    RelationPool<> pool;
+    auto left = pool.get_or_allocate({ 1, 2 });
+    auto right = pool.get_or_allocate({ 2, 3 });
+    auto other = pool.get_or_allocate({ 1, 2 });
+    const JoinPlan plan(left->columns(), right->columns());
+    const JoinIndex<> unrelated(other->view(), plan.lhs_keys());
+    const std::array<size_t, 1> wrong_position { 0 };
+    const JoinIndex<> wrong_keys(left->view(), wrong_position);
+    const std::array<size_t, 1> out_of_bounds { 2 };
+    EXPECT_THROW((JoinIndex<>(left->view(), out_of_bounds)), std::out_of_range);
+    Relation<> result(plan.output_columns());
+    result.insert({ 7, 8, 9 });
+    Workspace<> workspace;
+    EXPECT_THROW(join(left->view(), right->view(), plan, unrelated, result, workspace), std::invalid_argument);
+    EXPECT_THROW(join(left->view(), right->view(), plan, wrong_keys, result, workspace), std::invalid_argument);
+    expect_relation(result, { 1, 2, 3 }, { { 7, 8, 9 } });
+
+    const JoinPlan same(left->columns(), left->columns());
+    const JoinIndex<> same_index(left->view(), same.lhs_keys());
+    EXPECT_THROW(join(left->view(), left->view(), same, same_index, *left, workspace), std::invalid_argument);
+}
+
+TEST(YggdrasilTests, DatabaseJoinIndexDoesNotRehashBuildRowsWhenProbing)
+{
+    using Value = DatabaseCountedValue;
+    RelationPool<Value> pool;
+    auto build = pool.get_or_allocate({ 1, 2 });
+    Relation<Value> probe({ 1 });
+    for (uint_t i = 0; i < 2048; ++i)
+        build->insert({ Value { i }, Value { i + 1 } });
+    const JoinPlan plan(probe.columns(), build->columns());
+    const JoinIndex<Value> index(build->view(), plan.rhs_keys());
+    JoinIndexCache<Value> cache;
+    cache.get_or_create(build->view(), plan.rhs_keys());
+    Relation<Value> result(plan.output_columns());
+    Workspace<Value> workspace;
+    for (uint_t key : { 5, 1000, 1500 })
+    {
+        probe.clear();
+        probe.insert({ Value { key } });
+        for (const bool cached : { false, true })
+        {
+            Value::hashes = 0;
+            if (cached)
+                join(probe.view(), build->view(), plan, cache, JoinReuse { false, true }, result, workspace);
+            else
+                join(probe.view(), build->view(), plan, index, result, workspace);
+            EXPECT_LT(Value::hashes, 16);
+            ASSERT_EQ(result.size(), 1);
+            EXPECT_EQ(result[0][1].value, key + 1);
+        }
+    }
 }
 
 TEST(YggdrasilTests, DatabaseJoinHandlesCartesianProductsAndAllSharedColumns)
@@ -793,17 +1052,28 @@ TEST(YggdrasilTests, DatabaseOutputGuardsPreserveExistingResults)
 TEST(YggdrasilTests, DatabaseOperatorsRespectCustomEqualityDespiteHashCollisions)
 {
     using Value = DatabaseCollisionValue;
-    Relation<Value> left({ 1, 2 });
-    Relation<Value> right({ 1, 3 });
-    left.insert({ Value { 1 }, Value { 2 } });
-    left.insert({ Value { 3 }, Value { 4 } });
-    EXPECT_EQ(left.insert({ Value { 11 }, Value { 12 } }), 0);
-    right.insert({ Value { 11 }, Value { 5 } });
-    right.insert({ Value { 6 }, Value { 7 } });
-    auto joined = join(left.view(), right.view());
+    RelationPool<Value> pool;
+    auto left = pool.get_or_allocate({ 1, 2 });
+    auto right = pool.get_or_allocate({ 1, 3 });
+    left->insert({ Value { 1 }, Value { 2 } });
+    left->insert({ Value { 3 }, Value { 4 } });
+    EXPECT_EQ(left->insert({ Value { 11 }, Value { 12 } }), 0);
+    right->insert({ Value { 11 }, Value { 5 } });
+    right->insert({ Value { 6 }, Value { 7 } });
+    auto joined = join(left->view(), right->view());
     EXPECT_EQ(joined.size(), 1);
     EXPECT_TRUE(joined.contains({ Value { 1 }, Value { 2 }, Value { 5 } }));
-    auto selected = select_equal_value(left.view(), 1, Value { 11 });
+    const JoinPlan plan(left->columns(), right->columns());
+    const JoinIndex<Value> left_index(left->view(), plan.lhs_keys());
+    const JoinIndex<Value> right_index(right->view(), plan.rhs_keys());
+    Workspace<Value> workspace;
+    for (const auto* index : { &left_index, &right_index })
+    {
+        join(left->view(), right->view(), plan, *index, joined, workspace);
+        EXPECT_EQ(joined.size(), 1);
+        EXPECT_TRUE(joined.contains({ Value { 1 }, Value { 2 }, Value { 5 } }));
+    }
+    auto selected = select_equal_value(left->view(), 1, Value { 11 });
     EXPECT_EQ(selected.size(), 1);
     EXPECT_TRUE(selected.contains({ Value { 1 }, Value { 2 } }));
     Relation<Value> pairs({ 1, 2 });
@@ -834,6 +1104,7 @@ TEST(YggdrasilTests, DatabaseKeyedJoinDoesNotCompareEveryPairOfRows)
 
 TEST(YggdrasilTests, DatabaseNaturalJoinMatchesSmallReferenceAcrossSchemas)
 {
+    RelationPool<> pool;
     using SchemaPair = std::pair<std::vector<Column>, std::vector<Column>>;
     const std::array<SchemaPair, 6> schemas = { {
         { { 1, 2, 3 }, { 3, 4, 1 } },
@@ -852,9 +1123,9 @@ TEST(YggdrasilTests, DatabaseNaturalJoinMatchesSmallReferenceAcrossSchemas)
         for (size_t trial = 0; trial < 25; ++trial)
         {
             SCOPED_TRACE(trial);
-            Relation<> left(left_columns);
-            Relation<> right(right_columns);
-            for (auto* relation : { &left, &right })
+            auto left = pool.get_or_allocate(left_columns);
+            auto right = pool.get_or_allocate(right_columns);
+            for (auto* relation : { left.get(), right.get() })
             {
                 const auto count = random() % 9;
                 std::vector<uint_t> row(relation->arity());
@@ -865,15 +1136,32 @@ TEST(YggdrasilTests, DatabaseNaturalJoinMatchesSmallReferenceAcrossSchemas)
                     relation->insert(row);
                 }
             }
-            const auto expected = reference_join(left.view(), right.view());
-            auto result = join(left.view(), right.view());
+            const auto expected = reference_join(left->view(), right->view());
+            auto result = join(left->view(), right->view());
             ASSERT_EQ(result.size(), expected.size());
             for (const auto& row : expected)
                 EXPECT_TRUE(result.contains(row));
-            join(left.view(), right.view(), join_plan, result, workspace);
+            join(left->view(), right->view(), join_plan, result, workspace);
             ASSERT_EQ(result.size(), expected.size());
             for (const auto& row : expected)
                 EXPECT_TRUE(result.contains(row));
+            const JoinIndex<> left_index(left->view(), join_plan.lhs_keys());
+            const JoinIndex<> right_index(right->view(), join_plan.rhs_keys());
+            for (const auto* index : { &left_index, &right_index })
+            {
+                join(left->view(), right->view(), join_plan, *index, result, workspace);
+                ASSERT_EQ(result.size(), expected.size());
+                for (const auto& row : expected)
+                    EXPECT_TRUE(result.contains(row));
+            }
+            JoinIndexCache<> cache;
+            for (const auto reuse : { JoinReuse {}, JoinReuse { true, false }, JoinReuse { false, true }, JoinReuse { true, true } })
+            {
+                join(left->view(), right->view(), join_plan, cache, reuse, result, workspace);
+                ASSERT_EQ(result.size(), expected.size());
+                for (const auto& row : expected)
+                    EXPECT_TRUE(result.contains(row));
+            }
             Relation<> projected(left_columns);
             project(result.view(), project_plan, projected, workspace);
             std::set<std::vector<uint_t>> expected_projection;
@@ -893,7 +1181,7 @@ TEST(YggdrasilTests, DatabaseNaturalJoinMatchesSmallReferenceAcrossSchemas)
             }
             EXPECT_EQ(std::vector<Column>(result.columns().begin(), result.columns().end()), expected_columns);
             // Reuse one workspace across changing cardinalities and schemas.
-            join(left.view(), right.view(), result, workspace);
+            join(left->view(), right->view(), result, workspace);
             ASSERT_EQ(result.size(), expected.size());
             for (const auto& row : expected)
                 EXPECT_TRUE(result.contains(row));

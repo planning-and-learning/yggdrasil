@@ -16,8 +16,10 @@
  */
 
 #include <array>
+#include <bit>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <type_traits>
@@ -162,6 +164,49 @@ TEST(YggdrasilTests, CommonRawVectorSetInsertHashesEachElementOnce)
     RawVectorSetCountingElement::hash_calls = 0;
     EXPECT_EQ(set.insert(value), 0);
     EXPECT_EQ(RawVectorSetCountingElement::hash_calls, value.size());
+}
+
+TEST(YggdrasilTests, CommonRawVectorSetDefaultHashPreservesFloatingEquality)
+{
+    auto set = ygg::RawVectorSet<uint8_t, float, 32>();
+    const auto first = std::array { 0.0F, std::bit_cast<float>(uint32_t { 0x7fc00001 }) };
+    const auto equivalent = std::array { -0.0F, std::bit_cast<float>(uint32_t { 0x7fc00002 }) };
+
+    EXPECT_EQ(set.insert(first), 0);
+    EXPECT_EQ(set.insert(equivalent), 0);
+    EXPECT_EQ(set.find(equivalent), 0);
+    EXPECT_EQ(set.size(), 1);
+}
+
+TEST(YggdrasilTests, CommonRawVectorSetIntegerHashSurvivesGrowthAndClear)
+{
+    auto set = ygg::RawVectorSet<uint8_t, uint_t, 32>();
+    const auto empty = std::span<const uint_t> {};
+    EXPECT_EQ(set.insert(empty), 0);
+    EXPECT_EQ(set.insert(empty), 0);
+
+    constexpr uint_t num_values = 2048;
+    for (uint_t i = 0; i < num_values; ++i)
+    {
+        const auto value = std::array<uint_t, 7> { i, i + 1, 0, i, 0, 0, i + 2 };
+        EXPECT_EQ(set.insert(value), i + 1);
+    }
+    for (uint_t i = 0; i < num_values; ++i)
+    {
+        const auto value = std::array<uint_t, 7> { i, i + 1, 0, i, 0, 0, i + 2 };
+        EXPECT_EQ(set.find(value), i + 1);
+        EXPECT_EQ(set.insert(value), i + 1);
+    }
+    EXPECT_EQ(set.find(empty), 0);
+    EXPECT_EQ(set.size(), num_values + 1);
+
+    set.clear();
+    EXPECT_EQ(set.find(empty), std::nullopt);
+    const auto value = std::array<uint_t, 1> { 42 };
+    EXPECT_EQ(set.insert(value), 0);
+    EXPECT_EQ(set.insert(value), 0);
+    EXPECT_EQ(set.insert(empty), 1);
+    EXPECT_EQ(set.find(empty), 1);
 }
 
 TEST(YggdrasilTests, CommonRawVectorSetMoveKeepsHashFunctorsBoundToStorage)

@@ -16,11 +16,15 @@
 #include <concepts>
 #include <cstddef>
 #include <initializer_list>
+#include <limits>
 #include <span>
 #include <type_traits>
 
 namespace ygg::database
 {
+
+template<TriviallyCopyable T>
+class RelationPool;
 
 /// Borrows immutable row access and schema. Both must outlive the view; row
 /// storage must remain stationary and schema labels unchanged. Neither may be
@@ -31,22 +35,25 @@ class RelationView
 private:
     const RawArraySet<T>* m_rows;
     ColumnsView m_columns;
+    size_t m_index;
 
 public:
-    RelationView(const RawArraySet<T>& rows, ColumnsView columns);
+    RelationView(const RawArraySet<T>& rows, ColumnsView columns, size_t index = std::numeric_limits<size_t>::max());
 
     /// Borrowing requires an explicit span; containers cannot convert implicitly.
     template<typename C, size_t Extent>
         requires std::same_as<std::remove_const_t<C>, Column>
-    RelationView(const RawArraySet<T>& rows, std::span<C, Extent> columns);
+    RelationView(const RawArraySet<T>& rows, std::span<C, Extent> columns, size_t index = std::numeric_limits<size_t>::max());
 
     template<typename SchemaType>
-    RelationView(RawArraySet<T>&&, SchemaType&&) = delete;
+    RelationView(RawArraySet<T>&&, SchemaType&&, size_t = std::numeric_limits<size_t>::max()) = delete;
     template<typename SchemaType>
-    RelationView(const RawArraySet<T>&&, SchemaType&&) = delete;
-    RelationView(RawArraySet<T>&&, std::initializer_list<Column>) = delete;
-    RelationView(const RawArraySet<T>&&, std::initializer_list<Column>) = delete;
+    RelationView(const RawArraySet<T>&&, SchemaType&&, size_t = std::numeric_limits<size_t>::max()) = delete;
+    RelationView(RawArraySet<T>&&, std::initializer_list<Column>, size_t = std::numeric_limits<size_t>::max()) = delete;
+    RelationView(const RawArraySet<T>&&, std::initializer_list<Column>, size_t = std::numeric_limits<size_t>::max()) = delete;
 
+    /// Factory-local row-storage identity; max() means no factory assigned it.
+    size_t get_index() const noexcept { return m_index; }
     ColumnsView columns() const noexcept;
     size_t arity() const noexcept { return columns().size(); }
     size_t size() const noexcept { return m_rows->size(); }
@@ -68,6 +75,9 @@ template<TriviallyCopyable T = uint_t>
 class Relation
 {
 private:
+    friend class RelationPool<T>;
+
+    size_t m_index = std::numeric_limits<size_t>::max();
     Columns m_columns;
     RawArraySet<T> m_rows;
 
@@ -81,6 +91,9 @@ public:
     Relation(Relation&&) = default;
     Relation& operator=(Relation&&) = default;
 
+    /// Stable across clear/initialize/rename; unique within the creating factory.
+    /// Directly constructed relations have max() and cannot be indexed by JoinIndex.
+    size_t get_index() const noexcept { return m_index; }
     ColumnsView columns() const& noexcept;
     ColumnsView columns() const&& = delete;
     size_t arity() const noexcept { return m_columns.size(); }

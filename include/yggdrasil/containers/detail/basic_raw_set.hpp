@@ -54,8 +54,8 @@ private:
         IndexableHash() noexcept = default;
         explicit IndexableHash(const pool_type& pool_) noexcept : pool(&pool_) {}
 
-        size_t operator()(index_type index) const noexcept { return ygg::hash_range((*pool)[index]); }
-        size_t operator()(std::span<const value_type> value) const noexcept { return ygg::hash_range(value); }
+        size_t operator()(index_type index) const noexcept { return ygg::Hash<std::span<const value_type>> {}((*pool)[index]); }
+        size_t operator()(std::span<const value_type> value) const noexcept { return ygg::Hash<std::span<const value_type>> {}(value); }
     };
 
     struct IndexableEqualTo

@@ -53,14 +53,14 @@ inline void require_plan_columns(std::span<const Column> actual, std::span<const
 template<TriviallyCopyable T>
 RelationView<T> rename(const RelationView<T>& input, ColumnsView columns)
 {
-    return RelationView<T>(input.storage(), columns);
+    return RelationView<T>(input.storage(), columns, input.get_index());
 }
 
 template<TriviallyCopyable T, typename C, size_t Extent>
     requires std::same_as<std::remove_const_t<C>, Column>
 RelationView<T> rename(const RelationView<T>& input, std::span<C, Extent> columns)
 {
-    return RelationView<T>(input.storage(), columns);
+    return RelationView<T>(input.storage(), columns, input.get_index());
 }
 
 namespace detail
@@ -221,10 +221,11 @@ void join_rows(const RelationView<T>& lhs,
                std::span<const size_t> lhs_keys,
                std::span<const size_t> rhs_keys,
                std::span<const size_t> rhs_payload,
+               bool build_left,
+               const UnorderedMultiMap<hash_t, size_t>& index,
                Relation<T>& out,
                Workspace<T>& workspace)
 {
-    prepare_output(out, columns, { &lhs.storage(), &rhs.storage() });
     if (lhs.empty() || rhs.empty())
         return;
 
@@ -246,30 +247,18 @@ void join_rows(const RelationView<T>& lhs,
         return;
     }
 
-    const bool build_left = lhs.size() <= rhs.size();
     const auto& build = build_left ? lhs : rhs;
     const auto& probe = build_left ? rhs : lhs;
     const auto& build_keys = build_left ? lhs_keys : rhs_keys;
     const auto& probe_keys = build_left ? rhs_keys : lhs_keys;
-    const auto key_values = [](std::span<const T> tuple, std::span<const size_t> positions)
-    {
-        return positions | std::views::transform([tuple](size_t position) -> const T& { return tuple[position]; });
-    };
-
-    auto& index = workspace.join_index;
-    index.clear();
-    index.reserve(build.size());
-    for (size_t i = 0; i < build.size(); ++i)
-        index.insert(ygg::hash_range(key_values(build[i], build_keys)), i);
-
     for (size_t i = 0; i < probe.size(); ++i)
     {
         const auto probe_row = probe[i];
-        const auto probe_key = key_values(probe_row, probe_keys);
+        const auto probe_key = join_key_values(probe_row, probe_keys);
         for (const auto match : index.values(ygg::hash_range(probe_key)))
         {
             const auto build_row = build[match];
-            if (!ygg::equal_range(key_values(build_row, build_keys), probe_key))
+            if (!ygg::equal_range(join_key_values(build_row, build_keys), probe_key))
                 continue;
             const auto left = build_left ? build_row : probe_row;
             const auto right = build_left ? probe_row : build_row;
@@ -278,7 +267,70 @@ void join_rows(const RelationView<T>& lhs,
     }
 }
 
+template<TriviallyCopyable T>
+void join_rows(const RelationView<T>& lhs,
+               const RelationView<T>& rhs,
+               std::span<const Column> columns,
+               std::span<const size_t> lhs_keys,
+               std::span<const size_t> rhs_keys,
+               std::span<const size_t> rhs_payload,
+               Relation<T>& out,
+               Workspace<T>& workspace)
+{
+    prepare_output(out, columns, { &lhs.storage(), &rhs.storage() });
+    const bool build_left = lhs.size() <= rhs.size();
+    if (!lhs_keys.empty() && !lhs.empty() && !rhs.empty())
+        build_join_index(build_left ? lhs : rhs, build_left ? lhs_keys : rhs_keys, workspace.join_index);
+    join_rows(lhs, rhs, columns, lhs_keys, rhs_keys, rhs_payload, build_left, workspace.join_index, out, workspace);
+}
+
 }  // namespace detail
+
+template<TriviallyCopyable T>
+void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, const JoinIndex<T>& index, Relation<T>& out, Workspace<T>& workspace)
+{
+    detail::require_plan_columns(lhs.columns(), plan.lhs_columns());
+    detail::require_plan_columns(rhs.columns(), plan.rhs_columns());
+    const bool build_left = index.matches(lhs, plan.lhs_keys());
+    if (!build_left && !index.matches(rhs, plan.rhs_keys()))
+        throw std::invalid_argument("Relational operation: join index does not match either input's storage and keys.");
+    detail::prepare_output(out, plan.output_columns(), { &lhs.storage(), &rhs.storage() });
+    detail::join_rows(lhs, rhs, plan.output_columns(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, index.index(), out, workspace);
+}
+
+template<TriviallyCopyable T>
+void join(const RelationView<T>& lhs,
+          const RelationView<T>& rhs,
+          const JoinPlan& plan,
+          JoinIndexCache<T>& cache,
+          JoinReuse reuse,
+          Relation<T>& out,
+          Workspace<T>& workspace)
+{
+    detail::require_plan_columns(lhs.columns(), plan.lhs_columns());
+    detail::require_plan_columns(rhs.columns(), plan.rhs_columns());
+    bool build_left = lhs.size() <= rhs.size();
+    if (reuse.lhs || reuse.rhs)
+        build_left = reuse.lhs && (!reuse.rhs || build_left);
+    if (!lhs.empty() && !rhs.empty() && !plan.lhs_keys().empty() && (reuse.lhs || reuse.rhs)
+        && (build_left ? lhs : rhs).get_index() == std::numeric_limits<size_t>::max())
+        throw std::invalid_argument("Relational operation: cached joins require factory-created inputs.");
+    detail::prepare_output(out, plan.output_columns(), { &lhs.storage(), &rhs.storage() });
+    if (lhs.empty() || rhs.empty())
+        return;
+
+    const auto* index = &workspace.join_index;
+    if (!plan.lhs_keys().empty())
+    {
+        if (reuse.lhs || reuse.rhs)
+        {
+            index = &cache.get_or_create(build_left ? lhs : rhs, build_left ? plan.lhs_keys() : plan.rhs_keys()).index();
+        }
+        else
+            detail::build_join_index(build_left ? lhs : rhs, build_left ? plan.lhs_keys() : plan.rhs_keys(), workspace.join_index);
+    }
+    detail::join_rows(lhs, rhs, plan.output_columns(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, *index, out, workspace);
+}
 
 template<TriviallyCopyable T>
 void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, Relation<T>& out, Workspace<T>& workspace)
