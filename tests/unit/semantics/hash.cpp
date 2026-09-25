@@ -204,9 +204,11 @@ TEST(YggdrasilTests, CommonHashRangePreservesElementHashSemantics)
     EXPECT_EQ(ygg::hash_range(floats), elementwise_hash(floats));
     EXPECT_EQ(ygg::hash_range(floats), ygg::hash_range(std::array { 0.0, 1.5, std::numeric_limits<double>::signaling_NaN() }));
     const auto booleans = std::array { false, true, false };
-    const auto packed_booleans = std::vector<bool> { false, true, false };
+    auto packed_booleans = std::vector<bool> { false, true, false };
     EXPECT_EQ(ygg::hash_range(booleans), elementwise_hash(booleans));
     EXPECT_EQ(ygg::hash_range(packed_booleans), elementwise_hash(booleans));
+    EXPECT_EQ(ygg::hash_range(std::as_const(packed_booleans)), elementwise_hash(booleans));
+    EXPECT_EQ(ygg::Hash<std::vector<bool>> {}(packed_booleans), elementwise_hash(booleans));
 
     struct ModuloValue
     {

@@ -295,7 +295,7 @@ inline hash_t hash_range(Range&& range) noexcept
     if constexpr (std::ranges::sized_range<Range>)
         seed = std::ranges::size(range);
 
-    for (const auto& value : range)
+    for (const std::ranges::range_value_t<Range>& value : range)
         ygg::hash_combine(seed, value);
 
     return seed;
