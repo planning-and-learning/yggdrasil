@@ -264,4 +264,74 @@ TEST(YggdrasilTests, CommonThreadSafeSharedObjectPoolInitializesOutsideLock)
     EXPECT_EQ(pool.free_size(), 2);
 }
 
+template<bool ThreadSafe>
+struct ReleasingSharedPoolValue
+{
+    ygg::SharedObjectPool<ReleasingSharedPoolValue, ThreadSafe>* pool = nullptr;
+    ygg::SharedObjectPoolPtr<ReleasingSharedPoolValue, ThreadSafe> child;
+    std::vector<int> buffer;
+    int* releases = nullptr;
+    size_t free_before_release = 0;
+
+    void initialize(ygg::SharedObjectPool<ReleasingSharedPoolValue, ThreadSafe>& owner, int& count) noexcept
+    {
+        pool = &owner;
+        releases = &count;
+    }
+
+    void on_pool_release() noexcept
+    {
+        ++*releases;
+        free_before_release = pool->free_size();
+        child = {};
+        buffer.clear();
+    }
+};
+
+template<bool ThreadSafe>
+void expect_shared_pool_release_hook_waits_for_final_owner_and_releases_children()
+{
+    auto releases = 0;
+    auto pool = ygg::SharedObjectPool<ReleasingSharedPoolValue<ThreadSafe>, ThreadSafe>();
+    {
+        auto value = pool.get_or_allocate(pool, releases);
+        value->child = pool.get_or_allocate(pool, releases);
+        value->buffer.assign(64, 7);
+        const auto slot = value.get();
+        const auto child = value->child.get();
+        const auto capacity = value->buffer.capacity();
+        auto copy = value;
+        value = {};
+        EXPECT_EQ(releases, 0);
+        EXPECT_EQ(pool.free_size(), 0);
+        EXPECT_TRUE(copy->child);
+        EXPECT_EQ(copy->buffer.size(), 64);
+        {
+            auto last_owner = std::move(copy);
+            EXPECT_FALSE(copy);
+            EXPECT_EQ(last_owner.ref_count(), 1);
+            EXPECT_EQ(releases, 0);
+        }
+        EXPECT_EQ(releases, 2);
+        EXPECT_EQ(pool.free_size(), 2);
+        // Releasing the child reenters the pool before the parent becomes reusable.
+        EXPECT_EQ(slot->free_before_release, 0);
+        EXPECT_EQ(child->free_before_release, 0);
+
+        auto reused = pool.get_or_allocate(pool, releases);
+        EXPECT_EQ(reused.get(), slot);
+        EXPECT_FALSE(reused->child);
+        EXPECT_TRUE(reused->buffer.empty());
+        EXPECT_EQ(reused->buffer.capacity(), capacity);
+    }
+    EXPECT_EQ(releases, 3);
+    EXPECT_EQ(pool.free_size(), pool.size());
+}
+
+TEST(YggdrasilTests, CommonSharedObjectPoolReleaseHookWaitsForFinalOwnerAndReleasesChildren)
+{
+    expect_shared_pool_release_hook_waits_for_final_owner_and_releases_children<false>();
+    expect_shared_pool_release_hook_waits_for_final_owner_and_releases_children<true>();
+}
+
 }  // namespace ygg::tests

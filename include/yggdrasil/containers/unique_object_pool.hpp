@@ -111,13 +111,25 @@ public:
     explicit operator bool() const noexcept { return m_entry != nullptr; }
 };
 
+/// If T provides on_pool_release(), it must be noexcept. The pool calls it when
+/// the handle is released, before returning the slot to the free list and outside
+/// the bookkeeping lock. Use it to release child owners while retaining buffers.
+/// It also runs if initialize() throws, so it must handle partial initialization.
 template<typename T, bool ThreadSafe>
 class UniqueObjectPool
 {
 private:
     detail::ObjectPoolStorage<T, ThreadSafe> m_storage;
 
-    void free(T* element) noexcept { m_storage.release(element); }
+    void free(T* element) noexcept
+    {
+        if constexpr (requires { element->on_pool_release(); })
+        {
+            static_assert(noexcept(element->on_pool_release()), "UniqueObjectPool: on_pool_release() must be noexcept.");
+            element->on_pool_release();
+        }
+        m_storage.release(element);
+    }
 
     friend class UniqueObjectPoolPtr<T, ThreadSafe>;
 

@@ -256,4 +256,69 @@ TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolInitializesOutsideLock)
     EXPECT_EQ(pool.free_size(), 2);
 }
 
+template<bool ThreadSafe>
+struct ReleasingUniquePoolValue
+{
+    ygg::UniqueObjectPool<ReleasingUniquePoolValue, ThreadSafe>* pool = nullptr;
+    ygg::UniqueObjectPoolPtr<ReleasingUniquePoolValue, ThreadSafe> child;
+    std::vector<int> buffer;
+    int* releases = nullptr;
+    size_t free_before_release = 0;
+
+    void initialize(ygg::UniqueObjectPool<ReleasingUniquePoolValue, ThreadSafe>& owner, int& count) noexcept
+    {
+        pool = &owner;
+        releases = &count;
+    }
+
+    void on_pool_release() noexcept
+    {
+        ++*releases;
+        free_before_release = pool->free_size();
+        child = {};
+        buffer.clear();
+    }
+};
+
+template<bool ThreadSafe>
+void expect_unique_pool_release_hook_preserves_buffers_and_releases_children()
+{
+    auto releases = 0;
+    auto pool = ygg::UniqueObjectPool<ReleasingUniquePoolValue<ThreadSafe>, ThreadSafe>();
+    {
+        auto value = pool.get_or_allocate(pool, releases);
+        value->child = pool.get_or_allocate(pool, releases);
+        value->buffer.assign(64, 7);
+        const auto slot = value.get();
+        const auto child = value->child.get();
+        const auto capacity = value->buffer.capacity();
+        auto moved = std::move(value);
+        EXPECT_FALSE(value);
+        EXPECT_EQ(releases, 0);
+
+        auto replacement = pool.get_or_allocate(pool, releases);
+        moved = std::move(replacement);
+        EXPECT_FALSE(replacement);
+        EXPECT_EQ(releases, 2);
+        EXPECT_EQ(pool.free_size(), 2);
+        // Neither parent nor child is reusable until its hook completes.
+        EXPECT_EQ(slot->free_before_release, 0);
+        EXPECT_EQ(child->free_before_release, 0);
+
+        auto reused = pool.get_or_allocate(pool, releases);
+        EXPECT_EQ(reused.get(), slot);
+        EXPECT_FALSE(reused->child);
+        EXPECT_TRUE(reused->buffer.empty());
+        EXPECT_EQ(reused->buffer.capacity(), capacity);
+    }
+    EXPECT_EQ(releases, 4);
+    EXPECT_EQ(pool.free_size(), pool.size());
+}
+
+TEST(YggdrasilTests, CommonUniqueObjectPoolReleaseHookPreservesBuffersAndReleasesChildren)
+{
+    expect_unique_pool_release_hook_preserves_buffers_and_releases_children<false>();
+    expect_unique_pool_release_hook_preserves_buffers_and_releases_children<true>();
+}
+
 }  // namespace ygg::tests
