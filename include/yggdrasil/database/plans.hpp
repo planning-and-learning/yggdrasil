@@ -22,22 +22,20 @@ namespace ygg::database
 class ProjectionPlan
 {
 private:
-    Columns m_input;
-    Columns m_output;
+    Builder<Columns> m_input;
+    Builder<Columns> m_output;
     cista::offset::vector<size_t> m_positions;
 
 public:
     ProjectionPlan() = default;
-    ProjectionPlan(ColumnsView input, ColumnsView columns);
-    ProjectionPlan(std::span<const Column> input, std::span<const Column> columns);
-    ProjectionPlan(ColumnsView input, std::initializer_list<Column> columns);
-    ProjectionPlan(std::span<const Column> input, std::initializer_list<Column> columns);
-    ProjectionPlan(std::initializer_list<Column> input, std::initializer_list<Column> columns);
+    ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns);
+    ProjectionPlan(std::span<const Index<Column>> input, std::initializer_list<Index<Column>> columns);
+    ProjectionPlan(std::initializer_list<Index<Column>> input, std::initializer_list<Index<Column>> columns);
 
-    ColumnsView input_columns() const& noexcept { return m_input.view(); }
-    ColumnsView input_columns() const&& = delete;
-    ColumnsView output_columns() const& noexcept { return m_output.view(); }
-    ColumnsView output_columns() const&& = delete;
+    auto input_columns() const& noexcept { return make_view(m_input, *this); }
+    auto input_columns() const&& = delete;
+    auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    auto output_columns() const&& = delete;
     std::span<const size_t> positions() const noexcept { return { m_positions.data(), m_positions.size() }; }
 
     auto cista_members() noexcept { return std::tie(m_input, m_output, m_positions); }
@@ -49,25 +47,24 @@ public:
 class JoinPlan
 {
 private:
-    Columns m_lhs;
-    Columns m_rhs;
-    Columns m_output;
+    Builder<Columns> m_lhs;
+    Builder<Columns> m_rhs;
+    Builder<Columns> m_output;
     cista::offset::vector<size_t> m_lhs_keys;
     cista::offset::vector<size_t> m_rhs_keys;
     cista::offset::vector<size_t> m_rhs_payload;
 
 public:
     JoinPlan() = default;
-    JoinPlan(ColumnsView lhs, ColumnsView rhs);
-    JoinPlan(std::span<const Column> lhs, std::span<const Column> rhs);
-    JoinPlan(std::initializer_list<Column> lhs, std::initializer_list<Column> rhs);
+    JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs);
+    JoinPlan(std::initializer_list<Index<Column>> lhs, std::initializer_list<Index<Column>> rhs);
 
-    ColumnsView lhs_columns() const& noexcept { return m_lhs.view(); }
-    ColumnsView lhs_columns() const&& = delete;
-    ColumnsView rhs_columns() const& noexcept { return m_rhs.view(); }
-    ColumnsView rhs_columns() const&& = delete;
-    ColumnsView output_columns() const& noexcept { return m_output.view(); }
-    ColumnsView output_columns() const&& = delete;
+    auto lhs_columns() const& noexcept { return make_view(m_lhs, *this); }
+    auto lhs_columns() const&& = delete;
+    auto rhs_columns() const& noexcept { return make_view(m_rhs, *this); }
+    auto rhs_columns() const&& = delete;
+    auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    auto output_columns() const&& = delete;
     std::span<const size_t> lhs_keys() const noexcept { return { m_lhs_keys.data(), m_lhs_keys.size() }; }
     std::span<const size_t> rhs_keys() const noexcept { return { m_rhs_keys.data(), m_rhs_keys.size() }; }
     std::span<const size_t> rhs_payload() const noexcept { return { m_rhs_payload.data(), m_rhs_payload.size() }; }

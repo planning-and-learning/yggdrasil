@@ -64,6 +64,7 @@ add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
 add_yggdrasil_gtest(database_operations "database/operations.cpp")
 add_yggdrasil_gtest(database_allocations "database/allocations.cpp")
+add_yggdrasil_gtest(database_relation_repository "database/relation_repository.cpp")
 
 add_yggdrasil_gtest(diagnostics_diagnostic "diagnostics/diagnostic.cpp")
 add_yggdrasil_gtest(diagnostics_x3 "diagnostics/x3.cpp")

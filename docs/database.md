@@ -8,22 +8,26 @@ Public headers expose the API and include their implementations from `details/`
 automatically. Continue including the public headers; no separate library or
 additional include is required.
 
-`Relation<T>` owns rows stored in Yggdrasil's `RawArraySet<T>`. The default value
+`ygg::Builder<Relation<T>>` owns rows stored in Yggdrasil's `RawArraySet<T>`. The default value
 type is `ygg::uint_t`, suitable for interned object IDs. Values must be trivially
 copyable, support copying into scratch vectors, and provide consistent
 `ygg::Hash<T>` / `ygg::EqualTo<T>` semantics. Column labels are query-local
-`Column` IDs (`ygg::uint_t`); callers can intern variable names once rather than
-hashing strings while evaluating tuples. All columns have the same value type.
+`ygg::Index<Column>` values with `ygg::uint_t` storage; callers can intern variable
+names once rather than hashing strings while evaluating tuples. `Column` is an
+entity tag distinct from tuple values. All columns have the same value type.
 
-`Columns` owns an ordered schema and enforces unique labels. `ColumnsView` borrows
-an already validated schema without allocating or checking duplicates again.
-Relations and plans own `Columns`; their schema accessors return `ColumnsView`.
-Use `columns.view()` to borrow an owning schema, or construct a `ColumnsView`
-from an explicit span to validate and borrow external labels. Borrowed labels
+`Columns` is the schema entity tag. `ygg::Builder<Columns>` owns an ordered
+schema and enforces unique labels. Relation builders and plans own schema
+builders; canonical schemas live in their repository. Relation builders expose
+their schema builder by const reference. Contextual relations and plans expose
+standard `ygg::View` schema views. Use `.span()` for a borrowed
+`std::span<const ygg::Index<Column>>`, or `ygg::make_view(columns, context)`
+for contextual access. Borrowing does not validate or allocate. Borrowed labels
 must remain alive and unchanged. Temporary owning schemas cannot be borrowed.
-`Columns::assign(validated_columns)` retains capacity where possible and
-invalidates existing views. Lookup through `column_index(label)` throws if the
-label is missing. These types are also available through `columns.hpp`.
+`columns.assign(labels)` validates the replacement labels, retains capacity
+where possible, and invalidates existing views. Lookup through
+`column_index(label)` throws if the label is missing. These types are available
+through `columns.hpp`.
 
 ## Example
 
@@ -31,31 +35,31 @@ label is missing. These types are also available through `columns.hpp`.
 #include <yggdrasil/database/operations.hpp>
 
 using namespace ygg::database;
-constexpr Column package = 0, truck = 1, destination = 2;
+constexpr ygg::Index<Column> package {0}, truck {1}, destination {2};
 
-Relation<> options({package, truck, destination});
+ygg::Builder<Relation<>> options({package, truck, destination});
 options.insert({10, 20, 30});
 options.insert({10, 21, 31});
 options.insert({11, 20, 31});
 
-Relation<> goals({package, destination});
+ygg::Builder<Relation<>> goals({package, destination});
 goals.insert({10, 30});
 goals.insert({11, 31});
 
 // Match both package and destination before dropping the destination.
-auto matched = join(options.view(), goals.view());
-auto eligible = project(matched.view(), {package, truck});
+auto matched = join<ygg::uint_t>(options, goals);
+auto eligible = project<ygg::uint_t>(matched, {package, truck});
 // eligible contains (10,20) and (11,20).
 
-auto for_truck_20 = select_equal_value(eligible.view(), truck, 20);
-auto packages = project(for_truck_20.view(), {package});
-auto guard = project(packages.view(), {});
+auto for_truck_20 = select_equal_value<ygg::uint_t>(eligible, truck, 20);
+auto packages = project<ygg::uint_t>(for_truck_20, {package});
+auto guard = project<ygg::uint_t>(packages, {});
 bool any_package = !guard.empty();
 
 // Reuse both output and scratch storage on subsequent evaluations.
-Relation<> output({package, truck});
+ygg::Builder<Relation<>> output({package, truck});
 Workspace<> workspace;
-project(matched.view(), {package, truck}, output, workspace);
+project(matched, {package, truck}, output, workspace);
 ```
 
 The library operates on concrete relations; it does not parse a query language
@@ -63,18 +67,28 @@ or attach meaning to predicate, variable, or object IDs.
 
 ## Operations
 
-All operations take `RelationView<T>` inputs, obtained with `relation.view()`.
+Materializing operations accept read-only inputs satisfying `RelationViewConcept`,
+including builders directly and contextual views over builders, data records,
+or typed indexes.
+
+Materializing operations have an explicit element-type parameter `T` and
+constrain each input with `RelationViewConcept<V, T>`. Overloads taking an
+output builder or workspace deduce `T` from those arguments. Convenience
+overloads that return a new builder require it explicitly, for example
+`join<ygg::uint_t>(lhs, rhs)` or `project<ygg::uint_t>(input, labels)`.
+Renaming does not require an element-type argument.
 
 | Function | Semantics |
 | --- | --- |
-| `rename(input, labels)` | Replace labels positionally; shares tuple storage. |
-| `select(input, predicate)` | Keep rows for which the predicate returns true. |
-| `select_equal_columns(input, a, b)` | Keep rows with equal values in the two labelled columns. |
-| `select_equal_value(input, column, value)` | Keep rows matching a constant. |
-| `join(lhs, rhs)` | Natural join on all common labels; output has lhs columns followed by rhs-only columns. |
-| `project(input, labels)` | Keep columns in the supplied order and eliminate duplicates. |
-| `union_(lhs, rhs)` | Set union. The suffix avoids the C++ keyword. |
-| `difference(lhs, rhs)` | Set difference. |
+| `builder.rename(labels)` | Replace the builder's column labels in place, retaining its rows. |
+| `repository.rename(canonical_view, labels)` | Intern replacement labels and share canonical rows. |
+| `select<T>(input, predicate)` | Keep rows for which the predicate returns true. |
+| `select_equal_columns<T>(input, a, b)` | Keep rows with equal values in the two labelled columns. |
+| `select_equal_value<T>(input, column, value)` | Keep rows matching a constant. |
+| `join<T>(lhs, rhs)` | Natural join on all common labels; output has lhs columns followed by rhs-only columns. |
+| `project<T>(input, labels)` | Keep columns in the supplied order and eliminate duplicates. |
+| `union_<T>(lhs, rhs)` | Set union. The suffix avoids the C++ keyword. |
+| `difference<T>(lhs, rhs)` | Set difference. |
 
 The selection predicate receives `std::span<const T>` in input column order.
 Use `view.column_index(label)` once outside the predicate to resolve a label.
@@ -87,7 +101,7 @@ away the redundant column. Duplicate labels and wrong tuple lengths are errors.
 Unknown labels throw `std::out_of_range`; incompatible schemas throw
 `std::invalid_argument`.
 
-Every materializing operation also accepts a final `Relation<T>& out` argument.
+Every materializing operation also accepts a final `ygg::Builder<Relation<T>>& out` argument.
 The output must have the exact expected schema and must not share storage with
 any input, including a renamed view. These checks happen before clearing its
 previous rows. Valid calls replace the output's contents; exceptions during
@@ -108,18 +122,15 @@ When schemas stay the same, prepare column positions once with `JoinPlan` and
 
 ```cpp
 // Once per expression. Plans own their schemas and resolved column positions.
-const JoinPlan joining(options.columns(), goals.columns());
-const ProjectionPlan projecting(joining.output_columns(), {package, truck});
-Relation<> matched({package, truck, destination});
-Relation<> eligible({package, truck});
+const JoinPlan joining(options.columns().span(), goals.columns().span());
+const ProjectionPlan projecting(joining.output_columns().span(), {package, truck});
+ygg::Builder<Relation<>> matched({package, truck, destination});
+ygg::Builder<Relation<>> eligible({package, truck});
 Workspace<> workspace;
-auto options_view = options.view();
-auto goals_view = goals.view();
-auto matched_view = matched.view();
 
 // For each state, after refreshing options:
-join(options_view, goals_view, joining, matched, workspace);
-project(matched_view, projecting, eligible, workspace);
+join(options, goals, joining, matched, workspace);
+project(matched, projecting, eligible, workspace);
 ```
 
 Prepared execution uses stored positions without resolving labels again. It
@@ -130,25 +141,26 @@ with different relation objects, copied, or shared across evaluators. Each
 evaluator still needs its own workspace and outputs. The hash index is rebuilt
 from current rows, and the smaller join input is chosen each time.
 
-`relation.view()` borrows rows and validated column labels without allocating
-or repeating duplicate-label checks. Clearing and refilling rows is supported;
-owners must stay alive and stationary, and borrowed labels must stay unchanged.
-For renaming in a state loop, construct labels once and borrow their view:
+Pass builders directly when a context is unnecessary. A contextual view created
+with `ygg::make_view(builder, context)` borrows the builder and context without
+allocating; both must outlive the view. It observes the builder's current rows
+and schema.
+
+To rename a builder in a state loop, prepare the labels once and assign them
+without changing its rows:
 
 ```cpp
-const Columns renamed_columns {package, truck};
-const auto labels = renamed_columns.view();
+const ygg::Builder<Columns> renamed_columns {package, truck};
 // Inside each evaluation:
-auto renamed = rename(eligible.view(), labels);
+eligible.rename(renamed_columns.span());
 ```
 
-`RelationView` and `rename` always borrow both rows and labels. Pass a
-`ColumnsView`, a live `Columns` owner, or an explicit span; the labels must
-outlive the returned view. Temporary owners and implicit container borrowing
-are rejected. Raw spans are validated at the API boundary. Projection, pool
-checkout, and relation reinitialization accept validated views without repeating
-uniqueness checks. Arity and operation-specific schema compatibility checks
-still apply.
+The builder owns its assigned labels. Renaming requires matching arity and
+invalidates previously borrowed schema spans. Creating or assigning a
+`ygg::Builder<Columns>` validates uniqueness, including during pool checkout and relation
+reinitialization. The repository also validates schemas when publishing
+canonical relation records. Borrowing a schema view or label span performs none
+of these checks; arity and operation-specific schema compatibility checks still apply.
 
 For recursive evaluation, `<yggdrasil/database/relation_pool.hpp>` provides
 `RelationPool<T>`, using Yggdrasil's `UniqueObjectPool` separately for each arity:
@@ -156,22 +168,22 @@ For recursive evaluation, `<yggdrasil/database/relation_pool.hpp>` provides
 ```cpp
 RelationPool<> temporaries;
 Workspace<> workspace;
-const JoinPlan joining(options.columns(), goals.columns());
-const ProjectionPlan projecting(joining.output_columns(), {package, truck});
+const JoinPlan joining(options.columns().span(), goals.columns().span());
+const ProjectionPlan projecting(joining.output_columns().span(), {package, truck});
 
 // Inside each evaluation; fill options for the current state first.
-auto matched = temporaries.get_or_allocate(joining.output_columns());
-join(options.view(), goals.view(), joining, *matched, workspace);
-auto eligible = temporaries.get_or_allocate(projecting.output_columns());
-project(matched->view(), projecting, *eligible, workspace);
+auto matched = temporaries.get_or_allocate(joining.output_columns().span());
+join(options, goals, joining, *matched, workspace);
+auto eligible = temporaries.get_or_allocate(projecting.output_columns().span());
+project(*matched, projecting, *eligible, workspace);
 // Consume eligible before releasing its handle. Handle destruction returns the
 // whole relation, including its allocated buffers, to the pool.
 ```
 
 Checkout clears old rows and sets the labels. Grouping by arity avoids replacing
 the fixed-arity tuple storage when different intermediate schemas are needed.
-`Relation::initialize(labels)` supports the same reuse with a caller-managed
-`UniqueObjectPool<Relation<T>>`; keep each such pool at one arity.
+`Builder<Relation<T>>::initialize(labels)` supports the same reuse with a caller-managed
+`UniqueObjectPool<ygg::Builder<Relation<T>>>`; keep each such pool at one arity.
 Move pool handles to transfer ownership while retaining the pooled relation and
 its buffers. Pooled relations must retain their storage; moving from `*handle`
 is unsupported. A moved-from standalone relation may only be destroyed or
@@ -184,9 +196,112 @@ seen by each buffer until its owner is destroyed. Use a separate workspace and
 relation pool for each evaluator/thread. A workspace can serve sequential
 operations; it must not be used by overlapping calls.
 
+## Interned relations
+
+`<yggdrasil/database/relation_repository.hpp>` separates mutable computation
+from canonical storage using the same `Builder`, `Data`, `Index`, and `View`
+structure as other Yggdrasil entities. `Relation<T>` is the entity tag:
+
+- `ygg::Builder<Relation<T>>` owns reusable mutable schema and row buffers.
+- `ygg::Data<Relation<T>>` contains an `Index<Relation<T>>`, an
+  `Index<Columns>` for its canonical schema, an `Index<RelationRowSet<T>>`
+  for its canonical row-ID vector, and the caller's schema namespace.
+  The assigned relation index is excluded from `identifying_members()`.
+- `ygg::Index<Relation<T>>` identifies a record within one relation repository.
+- `ygg::View<Handle, Context>` provides read-only relation access for a
+  `Builder<Relation<T>>`, `Data<Relation<T>>`, or `Index<Relation<T>>` handle.
+  Builder and data views borrow their handle; index views resolve their record
+  through the context. Canonical data and index views access the repository's
+  schemas and rows directly. All three satisfy `RelationViewConcept`.
+
+Schemas use the same structure. `ygg::Data<Columns>` contains its assigned
+`ygg::Index<Columns>` and an owned `cista::offset::vector<ygg::Index<Column>>`
+of labels; its identity depends only on the ordered labels. Contextual views
+over `Builder<Columns>`, `Data<Columns>`, and `Index<Columns>` provide read-only
+schema access and satisfy `ColumnsViewConcept`. Indexed schema views resolve through
+`get_columns_repository(context)`.
+
+Use `intern_columns(builder, repository)` to obtain a canonical schema view
+and a boolean indicating whether it was inserted. The lower-level path is
+`make_data(builder, data)` followed by `repository.get_or_create(data)`;
+`repository.find(data)` and `repository[index]` also accept the schema entity.
+`repository.intern_columns(labels)` accepts a typed label span, available from
+builders and schema views through `.span()`, and returns the canonical schema
+view. It copies labels into retained scratch storage before
+publication, so subsequent calls within warmed capacities do not allocate.
+Schema publication validates unique labels. Canonical schema records use the
+existing symbol repository arena; there is no additional schema interner.
+
+Canonical row-ID vectors contain `ygg::Index<RelationRow<T>>` values.
+The schema, row, and row-set index types use the existing `IndexMixin` with
+`uint_t` storage. Raw row containers still address slots with `uint_t`; the
+repository converts between those slots and typed handles at its boundary.
+This keeps schema, row, and row-set references distinct without changing the
+generic containers.
+
+`RelationView<T>` names the index view with a `RelationRepository<T>`
+context. Its identity combines the typed index and the repository's
+factory-local identity. Create repositories used together from one
+`RelationRepositoryFactory<T>`. A custom context can provide the repository
+through `get_relation_repository(context)`.
+
+```cpp
+#include <yggdrasil/database/relation_repository.hpp>
+
+using namespace ygg::database;
+RelationRepositoryFactory<> factory;
+auto repository = factory.create();
+using ColumnIndex = ygg::Index<Column>;
+ygg::Builder<Relation<>> builder({ColumnIndex {0}, ColumnIndex {1}});
+builder.insert({10, 20});
+
+auto [result, inserted] = intern_relation(builder, repository);
+auto pending = ygg::make_view(builder, repository);
+auto stored = ygg::make_view(result.get_data(), repository);
+// result, pending, and stored expose the same read-only relation operations.
+
+const ygg::Builder<Columns> labels {ColumnIndex {2}, ColumnIndex {3}};
+auto renamed = repository.rename(result, labels.span());
+builder.clear(); // result and renamed retain their canonical rows.
+```
+
+Interning stores each distinct row in a `RawVectorSet`, sorts and deduplicates
+its row IDs, and interns that ID vector in another `RawVectorSet`. Ordered
+schemas and compact relation records are interned in one
+`SymbolRepository<Columns, Relation<T>>`. Relations with the same schema and rows therefore share
+one identity regardless of builder insertion order. Canonical iteration follows
+sorted row IDs, whose assignment depends on the repository's row-interning
+history; it does not preserve builder insertion order or sort row values.
+
+The builder remains independent and can be reused immediately. Relations can
+share individual canonical rows as well as entire row-ID vectors. Canonical
+relations are renamed through `repository.rename`, which interns another
+schema while retaining the same row-ID vector. A builder's `rename` method
+changes its own schema in place. Pass a
+`schema_namespace` when the same numeric labels belong to different
+caller-owned naming contexts.
+Renaming preserves the source namespace unless an explicit replacement is
+supplied, and requires a source from the same repository.
+
+Repository `clear()` invalidates its views, rows, and labels while retaining
+storage for reuse. Clear any memoization and join indexes borrowing that
+storage first. When temporary builders and canonical relations share a join
+index cache, construct their factories from the same `RelationPoolFactory<T>`
+so their row-storage identities share one sequence.
+
+Python keeps `database.Relation` as the mutable builder and exposes
+`RelationRepositoryFactory`, `RelationRepository`, `RelationIndex`,
+`RelationView`, and `intern_relation(builder, repository,
+schema_namespace=0)`. The Python interning function returns the canonical view.
+Python constructors, pool checkout, and rename accept integer column labels;
+`.columns()` returns a read-only borrowed `ColumnIndices` sequence exposing
+integers without copying the schema. Rows use the separate `RelationRow` type.
+Views, borrowed rows, and labels keep their owners alive; an explicit repository
+`clear()` still invalidates them. Resetting memoization alone leaves them valid.
+
 ## Nullary relations and object domains
 
-`Relation<> boolean;` is initially false (no tuples). `boolean.insert({});`
+`ygg::Builder<Relation<>> boolean;` is initially false (no tuples). `boolean.insert({});`
 makes it true (the unique empty tuple). Projecting a nonempty relation to zero
 columns produces true. Joining with true preserves a relation; joining with
 false empties it. These rules also hold with an empty object domain.
@@ -198,8 +313,9 @@ goal, and register relations are ordinary inputs populated by the caller.
 
 ## Storage and cost
 
-Rows use pooled fixed-length storage and hash-based deduplication. Renaming
-shares tuple storage. Projection and joins reuse one scratch tuple per
+Builders use pooled fixed-length row storage and hash-based deduplication;
+canonical relations use shared rows and sorted row-ID vectors. Renaming shares
+the corresponding row storage. Projection and joins reuse one scratch tuple per
 operation. A join indexes the smaller input in `ygg::UnorderedMultiMap<hash_t, size_t>`
 from `<yggdrasil/containers/unordered_multi_map.hpp>`. It uses a flat hash map
 from each key hash to its first entry, plus a contiguous vector of row indices
@@ -213,15 +329,17 @@ disjoint schemas necessarily produce a Cartesian product.
 join index is rebuilt per call. Row iteration order is not part of relational
 semantics; use membership to compare results.
 
-Relations are movable but not copyable. Views borrow row storage and either own
-or borrow column metadata. Keep borrowed storage alive and stationary while
-using a view; borrowed labels must remain unchanged. Insertion preserves existing
-row spans, while `clear()` invalidates them. Views observe subsequent insertions
-and clears. Reinitializing a relation invalidates its views. Returning a pooled
-relation ends the permitted lifetime of all its views and row spans; cached
-results must own separate storage. There is no internal synchronization.
+Builders are movable but not copyable. Contextual builder views borrow the
+builder and context; keep both alive and stationary while using the view.
+Insertion preserves existing row spans, while `clear()` invalidates them.
+Views observe the builder's current contents. Reinitializing or renaming a
+builder invalidates borrowed schema spans. Returning a pooled builder ends
+the permitted lifetime of its views, rows, and labels; cached results must be
+interned in a repository or retain their builder. There is no internal
+synchronization.
 
-The CMake test targets are `database_operations` and `database_allocations`; run
+The CMake test targets are `database_operations`, `database_relation_repository`,
+and `database_allocations`; run
 them with `ctest --test-dir <build> -R '^database_' --output-on-failure`.
 The allocation regression counts allocation and deallocation calls during
 changing-state evaluations after warmup.

@@ -18,24 +18,18 @@ RelationPool<T> RelationPoolFactory<T>::create_pool()
 }
 
 template<TriviallyCopyable T>
-UniqueObjectPoolPtr<Relation<T>> RelationPool<T>::get_or_allocate(ColumnsView columns)
+UniqueObjectPoolPtr<ygg::Builder<Relation<T>>> RelationPool<T>::get_or_allocate(std::span<const Index<Column>> columns)
 {
     auto relation = m_pools[columns.size()].get_or_allocate(columns);
-    if (relation->m_index == std::numeric_limits<size_t>::max())
-        relation->m_index = m_factory.next_index();
+    if (relation->m_storage_index == std::numeric_limits<size_t>::max())
+        relation->m_storage_index = m_factory.next_index();
     return relation;
 }
 
 template<TriviallyCopyable T>
-UniqueObjectPoolPtr<Relation<T>> RelationPool<T>::get_or_allocate(std::span<const Column> columns)
+UniqueObjectPoolPtr<ygg::Builder<Relation<T>>> RelationPool<T>::get_or_allocate(std::initializer_list<Index<Column>> columns)
 {
-    return get_or_allocate(ColumnsView(columns));
-}
-
-template<TriviallyCopyable T>
-UniqueObjectPoolPtr<Relation<T>> RelationPool<T>::get_or_allocate(std::initializer_list<Column> columns)
-{
-    return get_or_allocate(std::span<const Column>(columns));
+    return get_or_allocate(std::span<const Index<Column>>(columns));
 }
 
 }  // namespace ygg::database

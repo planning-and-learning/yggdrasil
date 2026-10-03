@@ -1,9 +1,25 @@
 from .._pyyggdrasil.database import (
+    ColumnIndices,
     Relation,
+    RelationIndex,
     RelationPool,
     RelationPtr,
+    RelationRepository,
+    RelationRepositoryFactory,
     RelationRow,
-    RelationView
+    RelationView,
+    intern_relation,
 )
 
-__all__ = ["Relation", "RelationPool", "RelationPtr", "RelationRow", "RelationView"]
+__all__ = [
+    "ColumnIndices",
+    "Relation",
+    "RelationIndex",
+    "RelationPool",
+    "RelationPtr",
+    "RelationRepository",
+    "RelationRepositoryFactory",
+    "RelationRow",
+    "RelationView",
+    "intern_relation",
+]

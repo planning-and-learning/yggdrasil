@@ -17,16 +17,21 @@ namespace ygg::database
 namespace detail
 {
 template<typename Positions>
-void projection_positions(ColumnsView input, ColumnsView columns, Positions& positions)
+void projection_positions(std::span<const Index<Column>> input, std::span<const Index<Column>> columns, Positions& positions)
 {
     positions.clear();
     positions.reserve(columns.size());
     for (const auto column : columns)
-        positions.push_back(input.column_index(column));
+        positions.push_back(column_index(input, column));
 }
 
 template<typename Positions>
-void join_positions(ColumnsView lhs, ColumnsView rhs, std::vector<Column>& columns, Positions& lhs_keys, Positions& rhs_keys, Positions& rhs_payload)
+void join_positions(std::span<const Index<Column>> lhs,
+                    std::span<const Index<Column>> rhs,
+                    std::vector<Index<Column>>& columns,
+                    Positions& lhs_keys,
+                    Positions& rhs_keys,
+                    Positions& rhs_payload)
 {
     columns.assign(lhs.begin(), lhs.end());
     lhs_keys.clear();
@@ -49,41 +54,30 @@ void join_positions(ColumnsView lhs, ColumnsView rhs, std::vector<Column>& colum
 }
 }  // namespace detail
 
-inline ProjectionPlan::ProjectionPlan(ColumnsView input, ColumnsView columns) : m_input(input), m_output(columns)
+inline ProjectionPlan::ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns) : m_input(input), m_output(columns)
 {
-    detail::projection_positions(input, columns, m_positions);
+    detail::projection_positions(m_input.span(), m_output.span(), m_positions);
 }
 
-inline ProjectionPlan::ProjectionPlan(std::span<const Column> input, std::span<const Column> columns) : ProjectionPlan(ColumnsView(input), ColumnsView(columns))
-{
-}
-
-inline ProjectionPlan::ProjectionPlan(ColumnsView input, std::initializer_list<Column> columns) :
-    ProjectionPlan(input, ColumnsView(std::span<const Column>(columns)))
+inline ProjectionPlan::ProjectionPlan(std::span<const Index<Column>> input, std::initializer_list<Index<Column>> columns) :
+    ProjectionPlan(input, std::span<const Index<Column>>(columns))
 {
 }
 
-inline ProjectionPlan::ProjectionPlan(std::span<const Column> input, std::initializer_list<Column> columns) :
-    ProjectionPlan(input, std::span<const Column>(columns))
+inline ProjectionPlan::ProjectionPlan(std::initializer_list<Index<Column>> input, std::initializer_list<Index<Column>> columns) :
+    ProjectionPlan(std::span<const Index<Column>>(input), std::span<const Index<Column>>(columns))
 {
 }
 
-inline ProjectionPlan::ProjectionPlan(std::initializer_list<Column> input, std::initializer_list<Column> columns) :
-    ProjectionPlan(std::span<const Column>(input), std::span<const Column>(columns))
+inline JoinPlan::JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs) : m_lhs(lhs), m_rhs(rhs)
 {
+    auto columns = std::vector<Index<Column>>();
+    detail::join_positions(m_lhs.span(), m_rhs.span(), columns, m_lhs_keys, m_rhs_keys, m_rhs_payload);
+    m_output = Builder<Columns>(columns);
 }
 
-inline JoinPlan::JoinPlan(ColumnsView lhs, ColumnsView rhs) : m_lhs(lhs), m_rhs(rhs)
-{
-    auto columns = std::vector<Column>();
-    detail::join_positions(lhs, rhs, columns, m_lhs_keys, m_rhs_keys, m_rhs_payload);
-    m_output = Columns(columns);
-}
-
-inline JoinPlan::JoinPlan(std::span<const Column> lhs, std::span<const Column> rhs) : JoinPlan(ColumnsView(lhs), ColumnsView(rhs)) {}
-
-inline JoinPlan::JoinPlan(std::initializer_list<Column> lhs, std::initializer_list<Column> rhs) :
-    JoinPlan(std::span<const Column>(lhs), std::span<const Column>(rhs))
+inline JoinPlan::JoinPlan(std::initializer_list<Index<Column>> lhs, std::initializer_list<Index<Column>> rhs) :
+    JoinPlan(std::span<const Index<Column>>(lhs), std::span<const Index<Column>>(rhs))
 {
 }
 

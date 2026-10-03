@@ -6,59 +6,71 @@
 #ifndef YGG_DATABASE_DETAILS_COLUMNS_HPP_
 #define YGG_DATABASE_DETAILS_COLUMNS_HPP_
 
-#include "yggdrasil/database/columns.hpp"
+#include "yggdrasil/database/columns_view.hpp"
 
 #include <algorithm>
 #include <stdexcept>
 
 namespace ygg::database
 {
-
-template<typename C, size_t Extent>
-    requires std::same_as<std::remove_const_t<C>, Column>
-ColumnsView::ColumnsView(std::span<C, Extent> columns) : m_columns(columns)
+inline void validate_columns(std::span<const Index<Column>> columns)
 {
     // ponytail: quadratic in arity; use a temporary set if wide schemas make validation costly.
-    for (auto it = m_columns.begin(); it != m_columns.end(); ++it)
-        if (std::find(m_columns.begin(), it, *it) != it)
+    for (auto it = columns.begin(); it != columns.end(); ++it)
+        if (std::find(columns.begin(), it, *it) != it)
             throw std::invalid_argument("Columns: duplicate column label.");
 }
 
-inline ColumnsView::ColumnsView(const Columns& columns) noexcept : m_columns(columns.m_columns.data(), columns.m_columns.size()) {}
-
-inline ColumnsView::operator std::span<const Column>() const noexcept { return span(); }
-
-inline size_t ColumnsView::column_index(Column column) const
+inline size_t column_index(std::span<const Index<Column>> columns, Index<Column> column)
 {
-    const auto it = std::ranges::find(m_columns, column);
-    if (it == m_columns.end())
+    const auto it = std::ranges::find(columns, column);
+    if (it == columns.end())
         throw std::out_of_range("Columns: unknown column label.");
-    return static_cast<size_t>(it - m_columns.begin());
+    return static_cast<size_t>(it - columns.begin());
 }
+}  // namespace ygg::database
 
-inline Columns::Columns(std::span<const Column> columns) : Columns(ColumnsView(columns)) {}
-
-inline Columns::Columns(std::initializer_list<Column> columns) : Columns(ColumnsView(std::span<const Column>(columns))) {}
-
-inline Columns::Columns(ColumnsView columns) : m_columns(columns.begin(), columns.end()) {}
-
-inline ColumnsView Columns::view() const& noexcept { return ColumnsView(*this); }
-
-inline size_t Columns::column_index(Column column) const { return view().column_index(column); }
-
-inline void Columns::assign(ColumnsView columns)
+namespace ygg
 {
-    if (columns.size() <= m_columns.size())
+inline Builder<database::Columns>::Builder(std::span<const Index<database::Column>> columns) { assign(columns); }
+inline Builder<database::Columns>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns))
+{
+}
+inline size_t Builder<database::Columns>::column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
+
+inline void Builder<database::Columns>::assign(std::span<const Index<database::Column>> columns)
+{
+    database::validate_columns(columns);
+    auto& values = m_data.values;
+    if (columns.size() <= values.size())
     {
         // Copy before shrinking: columns may refer to a slice of this schema.
-        if (columns.data() != m_columns.data())
-            std::copy(columns.begin(), columns.end(), m_columns.begin());
-        m_columns.resize(columns.size());
+        if (columns.data() != values.data())
+            std::copy(columns.begin(), columns.end(), values.begin());
+        values.resize(columns.size());
     }
     else
-        m_columns.set(columns.begin(), columns.end());
+        values.set(columns.begin(), columns.end());
+    ygg::clear(m_data.index);
 }
 
+inline void Builder<database::Columns>::assign(std::initializer_list<Index<database::Column>> columns)
+{
+    assign(std::span<const Index<database::Column>>(columns));
+}
+inline void Builder<database::Columns>::initialize(std::span<const Index<database::Column>> columns) { assign(columns); }
+inline void Builder<database::Columns>::initialize(std::initializer_list<Index<database::Column>> columns) { assign(columns); }
+}  // namespace ygg
+
+namespace ygg::database
+{
+inline Data<Columns>& make_data(const Builder<Columns>& builder, Data<Columns>& data)
+{
+    if (&builder.get_data() != &data)
+        data.values.set(builder.get_data().values);
+    ygg::clear(data.index);
+    return data;
+}
 }  // namespace ygg::database
 
 #endif

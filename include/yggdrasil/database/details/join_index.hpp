@@ -24,8 +24,8 @@ auto join_key_values(std::span<const T> tuple, std::span<const size_t> positions
     return positions | std::views::transform([tuple](size_t position) -> const T& { return tuple[position]; });
 }
 
-template<TriviallyCopyable T>
-void build_join_index(const RelationView<T>& build, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
+template<RelationViewConcept V>
+void build_join_index(const V& build, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
 {
     index.clear();
     index.reserve(build.size());
@@ -35,8 +35,9 @@ void build_join_index(const RelationView<T>& build, std::span<const size_t> keys
 }  // namespace detail
 
 template<TriviallyCopyable T>
-JoinIndex<T>::JoinIndex(const RelationView<T>& build, std::span<const size_t> key_positions) :
-    m_relation_index(build.get_index()),
+template<RelationViewConcept<T> V>
+JoinIndex<T>::JoinIndex(const V& build, std::span<const size_t> key_positions) :
+    m_relation_index(build.get_storage_index()),
     m_keys(key_positions.begin(), key_positions.end())
 {
     if (m_relation_index == std::numeric_limits<size_t>::max())
@@ -49,15 +50,22 @@ JoinIndex<T>::JoinIndex(const RelationView<T>& build, std::span<const size_t> ke
 }
 
 template<TriviallyCopyable T>
-bool JoinIndex<T>::matches(const RelationView<T>& relation, std::span<const size_t> key_positions) const noexcept
+template<RelationViewConcept<T> V>
+bool JoinIndex<T>::matches(const V& relation, std::span<const size_t> key_positions) const noexcept
 {
-    return ygg::EqualTo<JoinIndex<T>> {}(*this, std::make_tuple(relation.get_index(), key_positions));
+    return ygg::EqualTo<JoinIndex<T>> {}(*this, std::make_tuple(relation.get_storage_index(), key_positions));
 }
 
 template<TriviallyCopyable T>
-const JoinIndex<T>& JoinIndexCache<T>::get_or_create(const RelationView<T>& relation, std::span<const size_t> key_positions)
+template<RelationViewConcept<T> V>
+const JoinIndex<T>& JoinIndexCache<T>::get_or_create(const V& relation, std::span<const size_t> key_positions)
 {
-    const auto found = m_indexes.find(std::make_tuple(relation.get_index(), key_positions));
+    // Canonical empty row sets can be shared across different schema arities.
+    // Validate the current schema even when the row-storage key is cached.
+    for (const auto position : key_positions)
+        if (position >= relation.arity())
+            throw std::out_of_range("JoinIndex: key position is outside the relation schema.");
+    const auto found = m_indexes.find(std::make_tuple(relation.get_storage_index(), key_positions));
     if (found != m_indexes.end())
         return *found;
     return *m_indexes.emplace(relation, key_positions).first;

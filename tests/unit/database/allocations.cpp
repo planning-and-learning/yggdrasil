@@ -13,6 +13,7 @@
 #include <utility>
 #include <yggdrasil/database/operations.hpp>
 #include <yggdrasil/database/relation_pool.hpp>
+#include <yggdrasil/database/relation_repository.hpp>
 
 #if defined(_MSC_VER)
 #include <malloc.h>
@@ -164,6 +165,7 @@ void operator delete[](void* pointer, std::align_val_t, const std::nothrow_t&) n
 namespace ygg::tests
 {
 using namespace database;
+using ColumnIndex = Index<database::Column>;
 
 namespace
 {
@@ -203,7 +205,7 @@ size_t projected_right_size(size_t left_size, size_t right_size)
     return result;
 }
 
-void fill(Relation<>& relation, size_t rows, uint_t offset)
+void fill(Builder<Relation<>>& relation, size_t rows, uint_t offset)
 {
     relation.clear();
     for (size_t i = 0; i < rows; ++i)
@@ -212,52 +214,52 @@ void fill(Relation<>& relation, size_t rows, uint_t offset)
 
 struct Evaluation
 {
-    Relation<> left { { 1, 2 } };
-    Relation<> right { { 1, 3 } };
-    Relation<> joined { { 1, 2, 3 } };
-    Relation<> selected { { 1, 2, 3 } };
-    Relation<> projected { { 3 } };
-    Relation<> renamed_projection { { 6 } };
-    Relation<> left_keys { { 1 } };
-    Relation<> right_keys { { 1 } };
-    Relation<> either_keys { { 1 } };
-    Relation<> only_left_keys { { 1 } };
-    Relation<> exists;
+    Builder<Relation<>> left { { ColumnIndex(1), ColumnIndex(2) } };
+    Builder<Relation<>> right { { ColumnIndex(1), ColumnIndex(3) } };
+    Builder<Relation<>> joined { { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) } };
+    Builder<Relation<>> selected { { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) } };
+    Builder<Relation<>> projected { { ColumnIndex(3) } };
+    Builder<Relation<>> renamed_projection { { ColumnIndex(6) } };
+    Builder<Relation<>> left_keys { { ColumnIndex(1) } };
+    Builder<Relation<>> right_keys { { ColumnIndex(1) } };
+    Builder<Relation<>> either_keys { { ColumnIndex(1) } };
+    Builder<Relation<>> only_left_keys { { ColumnIndex(1) } };
+    Builder<Relation<>> exists;
     Workspace<> workspace;
-    const std::array<Column, 3> renamed_columns { 4, 5, 6 };
-    const std::array<Column, 1> projected_columns { 6 };
-    const ColumnsView renamed_schema { std::span<const Column>(renamed_columns) };
-    const ColumnsView projected_schema { std::span<const Column>(projected_columns) };
-    Columns retained_columns { 4, 5, 6 };
+    const Builder<Columns> joined_columns { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
+    const std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
+    const std::array<ColumnIndex, 1> projected_columns { ColumnIndex(6) };
+    const std::span<const ColumnIndex> renamed_schema { std::span<const ColumnIndex>(renamed_columns) };
+    const std::span<const ColumnIndex> projected_schema { std::span<const ColumnIndex>(projected_columns) };
+    Builder<Columns> retained_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
 
     bool evaluate(size_t left_size, size_t right_size, uint_t offset)
     {
         const auto schema_memory = retained_columns.memory_usage();
         retained_columns.assign(projected_schema);
-        bool valid = std::ranges::equal(retained_columns.view(), projected_schema);
-        retained_columns.assign(ColumnsView {});
+        bool valid = std::ranges::equal(retained_columns.span(), projected_schema);
+        retained_columns.assign(std::span<const ColumnIndex>());
         valid &= retained_columns.empty();
         retained_columns.assign(renamed_schema);
-        valid &= std::ranges::equal(retained_columns.view(), renamed_schema);
+        valid &= std::ranges::equal(retained_columns.span(), renamed_schema);
         valid &= retained_columns.memory_usage() == schema_memory;
         fill(left, left_size, offset);
         fill(right, right_size, offset + 10000);
-        join(left.view(), right.view(), joined, workspace);
-        select(joined.view(), [](std::span<const uint_t> row) { return row[0] < key_count / 2; }, selected);
-        project(joined.view(), { 3 }, projected, workspace);
-        // Borrowed views and borrowed rename schemas are deliberately constructed
-        // inside the measured path, so accidental schema copies are detected.
-        auto renamed = rename(joined.view(), std::span<const Column>(renamed_columns));
-        project(renamed, std::span<const Column>(projected_columns), renamed_projection, workspace);
-        auto typed_renamed = rename(joined.view(), renamed_schema);
-        valid &= typed_renamed.columns().data() == renamed_schema.data();
-        valid &= &typed_renamed.storage() == &joined.storage();
-        valid &= std::ranges::equal(typed_renamed.columns(), retained_columns.view());
-        project(left.view(), { 1 }, left_keys, workspace);
-        project(right.view(), { 1 }, right_keys, workspace);
-        union_(left_keys.view(), right_keys.view(), either_keys);
-        difference(left_keys.view(), right_keys.view(), only_left_keys);
-        project(joined.view(), {}, exists, workspace);
+        join(left, right, joined, workspace);
+        select(joined, [](std::span<const uint_t> row) { return row[0] < key_count / 2; }, selected);
+        project(joined, { ColumnIndex(3) }, projected, workspace);
+        // Relabel and restore the reusable builder within the measured path.
+        const auto* schema_storage = joined.columns().data();
+        joined.rename(renamed_schema);
+        project(joined, std::span<const ColumnIndex>(projected_columns), renamed_projection, workspace);
+        valid &= joined.columns().data() == schema_storage;
+        valid &= std::ranges::equal(joined.columns(), retained_columns.span());
+        joined.rename(joined_columns.span());
+        project(left, { ColumnIndex(1) }, left_keys, workspace);
+        project(right, { ColumnIndex(1) }, right_keys, workspace);
+        union_(left_keys, right_keys, either_keys);
+        difference(left_keys, right_keys, only_left_keys);
+        project(joined, {}, exists, workspace);
         const auto left_count = distinct_keys(left_size);
         const auto right_count = distinct_keys(right_size);
         valid &= joined.size() == joined_size(left_size, right_size);
@@ -280,12 +282,12 @@ struct Evaluation
 struct CachedJoinEvaluation
 {
     RelationPool<> pool;
-    UniqueObjectPoolPtr<Relation<>> build = pool.get_or_allocate({ 1, 2 });
-    Relation<> probe { { 1, 3 } };
+    UniqueObjectPoolPtr<Builder<Relation<>>> build = pool.get_or_allocate({ ColumnIndex(1), ColumnIndex(2) });
+    Builder<Relation<>> probe { { ColumnIndex(1), ColumnIndex(3) } };
     JoinPlan forward { build->columns(), probe.columns() };
     JoinPlan reverse { probe.columns(), build->columns() };
-    Relation<> forward_result { forward.output_columns() };
-    Relation<> reverse_result { reverse.output_columns() };
+    Builder<Relation<>> forward_result { forward.output_columns() };
+    Builder<Relation<>> reverse_result { reverse.output_columns() };
     JoinIndexCache<> cache;
     Workspace<> workspace;
 
@@ -297,8 +299,8 @@ struct CachedJoinEvaluation
         for (const auto probe_size : { left_size, right_size })
         {
             fill(probe, probe_size, offset);
-            join(build->view(), probe.view(), forward, cache, JoinReuse { true, false }, forward_result, workspace);
-            join(probe.view(), build->view(), reverse, cache, JoinReuse { false, true }, reverse_result, workspace);
+            join(*build, probe, forward, cache, JoinReuse { true, false }, forward_result, workspace);
+            join(probe, *build, reverse, cache, JoinReuse { false, true }, reverse_result, workspace);
             valid &= forward_result.size() == joined_size(build->size(), probe_size);
             valid &= reverse_result.size() == forward_result.size();
             valid &= cache.size() == 1;
@@ -314,8 +316,8 @@ struct CachedJoinEvaluation
 
 struct PooledEvaluation
 {
-    Relation<> left { { 1, 2 } };
-    Relation<> right { { 1, 3 } };
+    Builder<Relation<>> left { { ColumnIndex(1), ColumnIndex(2) } };
+    Builder<Relation<>> right { { ColumnIndex(1), ColumnIndex(3) } };
     RelationPool<> pool;
     Workspace<> workspace;
 
@@ -323,16 +325,16 @@ struct PooledEvaluation
     {
         fill(left, left_size, offset);
         fill(right, right_size, offset + 10000);
-        auto joined = pool.get_or_allocate({ 1, 2, 3 });
-        auto left_keys = pool.get_or_allocate({ 1 });
-        auto right_keys = pool.get_or_allocate({ 1 });
-        auto either = pool.get_or_allocate({ 1 });
+        auto joined = pool.get_or_allocate({ ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) });
+        auto left_keys = pool.get_or_allocate({ ColumnIndex(1) });
+        auto right_keys = pool.get_or_allocate({ ColumnIndex(1) });
+        auto either = pool.get_or_allocate({ ColumnIndex(1) });
         auto exists = pool.get_or_allocate({});
-        join(left.view(), right.view(), *joined, workspace);
-        project(left.view(), { 1 }, *left_keys, workspace);
-        project(right.view(), { 1 }, *right_keys, workspace);
-        union_(left_keys->view(), right_keys->view(), *either);
-        project(joined->view(), {}, *exists, workspace);
+        join(left, right, *joined, workspace);
+        project(left, { ColumnIndex(1) }, *left_keys, workspace);
+        project(right, { ColumnIndex(1) }, *right_keys, workspace);
+        union_(*left_keys, *right_keys, *either);
+        project(*joined, {}, *exists, workspace);
         bool valid = joined->size() == joined_size(left_size, right_size);
         const auto left_count = distinct_keys(left_size);
         const auto right_count = distinct_keys(right_size);
@@ -349,17 +351,17 @@ struct PooledEvaluation
 struct PreparedPooledEvaluation
 {
     // Sparse labels must not be interpreted as positions or dense-map sizes.
-    static constexpr Column key_column = 900000001;
-    static constexpr Column left_column = 3;
-    static constexpr Column right_column = 800000001;
-    Relation<> left { { left_column, key_column } };
-    Relation<> right { { key_column, right_column } };
+    static constexpr ColumnIndex key_column = ColumnIndex(900000001);
+    static constexpr ColumnIndex left_column = ColumnIndex(3);
+    static constexpr ColumnIndex right_column = ColumnIndex(800000001);
+    Builder<Relation<>> left { { left_column, key_column } };
+    Builder<Relation<>> right { { key_column, right_column } };
     JoinPlan joining { left.columns(), right.columns() };
     ProjectionPlan projecting { joining.output_columns(), { right_column, left_column } };
     ProjectionPlan projecting_left_keys { left.columns(), { key_column } };
     ProjectionPlan projecting_right_keys { right.columns(), { key_column } };
     ProjectionPlan testing_existence { joining.output_columns(), {} };
-    const Columns alternate_join_columns { 7, 8, 9 };
+    const Builder<Columns> alternate_join_columns { ColumnIndex(7), ColumnIndex(8), ColumnIndex(9) };
     RelationPool<> pool;
     Workspace<> workspace;
 
@@ -379,14 +381,14 @@ struct PreparedPooledEvaluation
                 right.insert({ right_key_offset + static_cast<uint_t>(i % key_count), offset + 10000 + static_cast<uint_t>(i) });
 
             // Relabel the same pooled relation before each prepared checkout.
-            // Both schema changes and view construction stay in the measurement.
+            // Schema changes and read-only access stay in the measurement.
             {
-                auto relabeled = pool.get_or_allocate(alternate_join_columns.view());
+                auto relabeled = pool.get_or_allocate(alternate_join_columns.span());
                 valid &= relabeled->empty();
                 relabeled->insert({ offset, offset + 1, offset + 2 });
-                const auto borrowed = relabeled->view();
+                const auto& borrowed = *relabeled;
                 valid &= borrowed.size() == 1;
-                valid &= std::ranges::equal(borrowed.columns(), alternate_join_columns.view());
+                valid &= std::ranges::equal(borrowed.columns(), alternate_join_columns.span());
             }
             auto joined = pool.get_or_allocate(joining.output_columns());
             valid &= joined->empty();
@@ -396,12 +398,12 @@ struct PreparedPooledEvaluation
             auto right_keys = pool.get_or_allocate(projecting_right_keys.output_columns());
             auto either = pool.get_or_allocate(projecting_left_keys.output_columns());
             auto exists = pool.get_or_allocate(testing_existence.output_columns());
-            join(left.view(), right.view(), joining, *joined, workspace);
-            project(joined->view(), projecting, *projected, workspace);
-            project(left.view(), projecting_left_keys, *left_keys, workspace);
-            project(right.view(), projecting_right_keys, *right_keys, workspace);
-            union_(left_keys->view(), right_keys->view(), *either);
-            project(joined->view(), testing_existence, *exists, workspace);
+            join(left, right, joining, *joined, workspace);
+            project(*joined, projecting, *projected, workspace);
+            project(left, projecting_left_keys, *left_keys, workspace);
+            project(right, projecting_right_keys, *right_keys, workspace);
+            union_(*left_keys, *right_keys, *either);
+            project(*joined, testing_existence, *exists, workspace);
 
             const auto expected_size = disjoint ? 0 : joined_size(left_size, right_size);
             const auto left_count = distinct_keys(left_size);
@@ -419,6 +421,64 @@ struct PreparedPooledEvaluation
             }
             // Pool checkout and return both stay inside the measurement.
         }
+        return valid;
+    }
+};
+
+struct InterningEvaluation
+{
+    RelationPoolFactory<> row_factory;
+    RelationPool<> pool = row_factory.create_pool();
+    RelationRepositoryFactory<> factory { row_factory };
+    RelationRepository<> repository = factory.create();
+    Builder<Columns> schema_builder;
+    Data<Columns> schema_data;
+    const std::array<ColumnIndex, 3> columns { ColumnIndex(11), ColumnIndex(12), ColumnIndex(13) };
+    const std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(21), ColumnIndex(22), ColumnIndex(23) };
+
+    bool evaluate(bool reverse, uint_t generation)
+    {
+        repository.clear();
+        bool valid = true;
+        constexpr size_t count = 512;
+        for (size_t i = 0; i < count; ++i)
+        {
+            // Vary row lengths and registration order across repository clears.
+            const auto logical_index = reverse ? count - i - 1 : i;
+            const auto arity = 1 + logical_index % 3;
+            const auto schema = std::span<const ColumnIndex>(columns.data(), arity);
+            schema_builder.assign(schema);
+            const auto interned_schema = intern_columns(schema_builder, repository).first;
+            make_data(schema_builder, schema_data);
+            const auto [duplicate_schema, schema_created] = repository.get_or_create(schema_data);
+            valid &= !schema_created && interned_schema.get_index() == duplicate_schema.get_index();
+            valid &= std::ranges::equal(interned_schema.span(), schema);
+            auto builder = pool.get_or_allocate(schema);
+            const auto seed = generation * 8192 + static_cast<uint_t>(logical_index) * 4;
+            const std::array<uint_t, 3> first_row { seed, seed + 1, seed + 2 };
+            const std::array<uint_t, 3> second_row { seed + 1, seed + 2, seed + 3 };
+            builder->insert(std::span<const uint_t>(first_row.data(), arity));
+            builder->insert(std::span<const uint_t>(second_row.data(), arity));
+            const auto [original, created] = intern_relation(*builder, repository, generation);
+            builder->clear();
+            builder->insert(std::span<const uint_t>(second_row.data(), arity));
+            builder->insert(std::span<const uint_t>(first_row.data(), arity));
+            const auto [duplicate, duplicate_created] = intern_relation(*builder, repository, generation);
+            const auto renamed = repository.rename(original, std::span<const ColumnIndex>(renamed_columns.data(), arity), generation);
+            valid &= created && !duplicate_created;
+            valid &= original.get_index() == duplicate.get_index();
+            valid &= original.get_index() != renamed.get_index();
+            valid &= original.get_storage_index() == renamed.get_storage_index();
+            valid &= original.at(0).data() == renamed.at(0).data();
+            valid &= original.size() == 2 && renamed.arity() == arity;
+            valid &= renamed.contains(std::span<const uint_t>(first_row.data(), arity));
+        }
+        auto nullary = pool.get_or_allocate({});
+        const auto false_view = intern_relation(*nullary, repository, generation).first;
+        nullary->insert({});
+        const auto true_view = intern_relation(*nullary, repository, generation).first;
+        valid &= false_view.empty() && true_view.size() == 1;
+        valid &= repository.size() == 2 * count + 2;
         return valid;
     }
 };
@@ -518,6 +578,30 @@ TEST(YggdrasilTests, DatabaseWarmedPreparedPooledEvaluationAllocatesAndFreesNoth
 {
     PreparedPooledEvaluation evaluation;
     expect_no_allocations_after_warmup(evaluation);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedRelationInterningRetainsStorageAcrossReorderedArities)
+{
+    InterningEvaluation evaluation;
+    bool valid = true;
+    for (uint_t generation = 0; generation < 8; ++generation)
+        valid &= evaluation.evaluate(generation % 2, generation);
+    ASSERT_TRUE(valid);
+
+    const auto* schema_builder_storage = evaluation.schema_builder.span().data();
+    const auto* schema_data_storage = evaluation.schema_data.values.data();
+    const auto schema_data_capacity = evaluation.schema_data.values.allocated_size_;
+
+    allocation_tracking::Scope measured;
+    for (uint_t generation = 8; generation < 108; ++generation)
+        valid &= evaluation.evaluate(generation % 2, generation);
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(evaluation.schema_builder.span().data(), schema_builder_storage);
+    EXPECT_EQ(evaluation.schema_data.values.data(), schema_data_storage);
+    EXPECT_EQ(evaluation.schema_data.values.allocated_size_, schema_data_capacity);
 }
 
 }  // namespace ygg::tests

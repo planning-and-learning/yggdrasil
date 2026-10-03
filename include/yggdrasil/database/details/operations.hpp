@@ -26,49 +26,36 @@ namespace ygg::database
 namespace detail
 {
 template<TriviallyCopyable T>
-void prepare_output(Relation<T>& out, std::span<const Column> columns, std::initializer_list<const RawArraySet<T>*> inputs)
+void prepare_output(Builder<Relation<T>>& out, std::span<const Index<Column>> columns, std::initializer_list<const void*> inputs)
 {
-    if (!std::ranges::equal(out.columns(), columns))
+    if (!std::ranges::equal(out.columns().span(), columns))
         throw std::invalid_argument("Relational operation: output schema does not match.");
     for (const auto* input : inputs)
-        if (input == &out.storage())
+        if (input == out.get_storage_address())
             throw std::invalid_argument("Relational operation: output aliases an input.");
     out.clear();
 }
 
-template<TriviallyCopyable T>
-void require_same_columns(const RelationView<T>& lhs, const RelationView<T>& rhs)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void require_same_columns(const L& lhs, const R& rhs)
 {
-    if (!std::ranges::equal(lhs.columns(), rhs.columns()))
+    if (!std::ranges::equal(lhs.columns().span(), rhs.columns().span()))
         throw std::invalid_argument("Relational operation: input schemas must have the same column order.");
 }
 
-inline void require_plan_columns(std::span<const Column> actual, std::span<const Column> expected)
+inline void require_plan_columns(std::span<const Index<Column>> actual, std::span<const Index<Column>> expected)
 {
     if (!std::ranges::equal(actual, expected))
         throw std::invalid_argument("Relational operation: input schema does not match prepared plan.");
 }
 }  // namespace detail
 
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, ColumnsView columns)
-{
-    return RelationView<T>(input.storage(), columns, input.get_index());
-}
-
-template<TriviallyCopyable T, typename C, size_t Extent>
-    requires std::same_as<std::remove_const_t<C>, Column>
-RelationView<T> rename(const RelationView<T>& input, std::span<C, Extent> columns)
-{
-    return RelationView<T>(input.storage(), columns, input.get_index());
-}
-
 namespace detail
 {
-template<TriviallyCopyable T>
-void project_rows(const RelationView<T>& input, std::span<const Column> columns, std::span<const size_t> positions, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project_rows(const V& input, std::span<const Index<Column>> columns, std::span<const size_t> positions, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::prepare_output(out, columns, { &input.storage() });
+    detail::prepare_output(out, columns, { input.get_storage_address() });
 
     if (positions.empty())
     {
@@ -91,139 +78,121 @@ void project_rows(const RelationView<T>& input, std::span<const Column> columns,
 
 }  // namespace detail
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, const ProjectionPlan& plan, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, const ProjectionPlan& plan, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::require_plan_columns(input.columns(), plan.input_columns());
-    detail::project_rows(input, plan.output_columns(), plan.positions(), out, workspace);
+    detail::require_plan_columns(input.columns().span(), plan.input_columns().span());
+    detail::project_rows(input, plan.output_columns().span(), plan.positions(), out, workspace);
 }
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, ColumnsView columns, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::projection_positions(input.columns(), columns, workspace.lhs_keys);
+    detail::projection_positions(input.columns().span(), columns, workspace.lhs_keys);
     detail::project_rows(input, columns, workspace.lhs_keys, out, workspace);
 }
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::span<const Column> columns, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    project(input, ColumnsView(columns), out, workspace);
+    project(input, std::span<const Index<Column>>(columns), out, workspace);
 }
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::initializer_list<Column> columns, Relation<T>& out, Workspace<T>& workspace)
-{
-    project(input, std::span<const Column>(columns), out, workspace);
-}
-
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, ColumnsView columns, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<T>>& out)
 {
     auto workspace = Workspace<T>();
     project(input, columns, out, workspace);
 }
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::span<const Column> columns, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<T>>& out)
 {
-    project(input, ColumnsView(columns), out);
+    project(input, std::span<const Index<Column>>(columns), out);
 }
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::initializer_list<Column> columns, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> project(const V& input, Builder<Columns> columns)
 {
-    project(input, std::span<const Column>(columns), out);
-}
-
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, Columns columns)
-{
-    auto out = Relation<T>(std::move(columns));
-    project(input, out.columns(), out);
+    auto out = Builder<Relation<T>>(std::move(columns));
+    project(input, out.columns().span(), out);
     return out;
 }
 
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, ColumnsView columns)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> project(const V& input, std::span<const Index<Column>> columns)
 {
-    return project(input, Columns(columns));
+    return project<T>(input, Builder<Columns>(columns));
 }
 
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, std::span<const Column> columns)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> project(const V& input, std::initializer_list<Index<Column>> columns)
 {
-    return project(input, Columns(columns));
+    return project<T>(input, Builder<Columns>(columns));
 }
 
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, std::initializer_list<Column> columns)
-{
-    return project(input, Columns(columns));
-}
-
-template<TriviallyCopyable T, typename Predicate>
+template<TriviallyCopyable T, RelationViewConcept<T> V, typename Predicate>
     requires std::predicate<Predicate&, std::span<const T>>
-void select(const RelationView<T>& input, Predicate predicate, Relation<T>& out)
+void select(const V& input, Predicate predicate, Builder<Relation<T>>& out)
 {
-    detail::prepare_output(out, input.columns(), { &input.storage() });
+    detail::prepare_output(out, input.columns().span(), { input.get_storage_address() });
     for (size_t i = 0; i < input.size(); ++i)
         if (std::invoke(predicate, input[i]))
             out.insert(input[i]);
 }
 
-template<TriviallyCopyable T, typename Predicate>
+template<TriviallyCopyable T, RelationViewConcept<T> V, typename Predicate>
     requires std::predicate<Predicate&, std::span<const T>>
-Relation<T> select(const RelationView<T>& input, Predicate predicate)
+Builder<Relation<T>> select(const V& input, Predicate predicate)
 {
-    auto out = Relation<T>(input.columns());
+    auto out = Builder<Relation<T>>(input.columns().span());
     select(input, std::move(predicate), out);
     return out;
 }
 
-template<TriviallyCopyable T>
-void select_equal_columns(const RelationView<T>& input, Column lhs, Column rhs, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation<T>>& out)
 {
     const auto lhs_index = input.column_index(lhs);
     const auto rhs_index = input.column_index(rhs);
     select(input, [=](std::span<const T> row) { return ygg::EqualTo<T> {}(row[lhs_index], row[rhs_index]); }, out);
 }
 
-template<TriviallyCopyable T>
-Relation<T> select_equal_columns(const RelationView<T>& input, Column lhs, Column rhs)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs)
 {
-    auto out = Relation<T>(input.columns());
+    auto out = Builder<Relation<T>>(input.columns().span());
     select_equal_columns(input, lhs, rhs, out);
     return out;
 }
 
-template<TriviallyCopyable T>
-void select_equal_value(const RelationView<T>& input, Column column, const std::type_identity_t<T>& value, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void select_equal_value(const V& input, Index<Column> column, const std::type_identity_t<T>& value, Builder<Relation<T>>& out)
 {
     const auto index = input.column_index(column);
     select(input, [=](std::span<const T> row) { return ygg::EqualTo<T> {}(row[index], value); }, out);
 }
 
-template<TriviallyCopyable T>
-Relation<T> select_equal_value(const RelationView<T>& input, Column column, const std::type_identity_t<T>& value)
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> select_equal_value(const V& input, Index<Column> column, const std::type_identity_t<T>& value)
 {
-    auto out = Relation<T>(input.columns());
+    auto out = Builder<Relation<T>>(input.columns().span());
     select_equal_value(input, column, value, out);
     return out;
 }
 
 namespace detail
 {
-template<TriviallyCopyable T>
-void join_rows(const RelationView<T>& lhs,
-               const RelationView<T>& rhs,
-               std::span<const Column> columns,
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join_rows(const L& lhs,
+               const R& rhs,
+               std::span<const Index<Column>> columns,
                std::span<const size_t> lhs_keys,
                std::span<const size_t> rhs_keys,
                std::span<const size_t> rhs_payload,
                bool build_left,
                const UnorderedMultiMap<hash_t, size_t>& index,
-               Relation<T>& out,
+               Builder<Relation<T>>& out,
                Workspace<T>& workspace)
 {
     if (lhs.empty() || rhs.empty())
@@ -247,75 +216,77 @@ void join_rows(const RelationView<T>& lhs,
         return;
     }
 
-    const auto& build = build_left ? lhs : rhs;
-    const auto& probe = build_left ? rhs : lhs;
-    const auto& build_keys = build_left ? lhs_keys : rhs_keys;
-    const auto& probe_keys = build_left ? rhs_keys : lhs_keys;
-    for (size_t i = 0; i < probe.size(); ++i)
+    const auto probe_rows = [&](const auto& build, const auto& probe, auto build_keys, auto probe_keys)
     {
-        const auto probe_row = probe[i];
-        const auto probe_key = join_key_values(probe_row, probe_keys);
-        for (const auto match : index.values(ygg::hash_range(probe_key)))
+        for (size_t i = 0; i < probe.size(); ++i)
         {
-            const auto build_row = build[match];
-            if (!ygg::equal_range(join_key_values(build_row, build_keys), probe_key))
-                continue;
-            const auto left = build_left ? build_row : probe_row;
-            const auto right = build_left ? probe_row : build_row;
-            emit(left, right);
+            const auto probe_row = probe[i];
+            const auto probe_key = join_key_values(probe_row, probe_keys);
+            for (const auto match : index.values(ygg::hash_range(probe_key)))
+            {
+                const auto build_row = build[match];
+                if (!ygg::equal_range(join_key_values(build_row, build_keys), probe_key))
+                    continue;
+                const auto left = build_left ? build_row : probe_row;
+                const auto right = build_left ? probe_row : build_row;
+                emit(left, right);
+            }
         }
-    }
+    };
+    if (build_left)
+        probe_rows(lhs, rhs, lhs_keys, rhs_keys);
+    else
+        probe_rows(rhs, lhs, rhs_keys, lhs_keys);
 }
 
-template<TriviallyCopyable T>
-void join_rows(const RelationView<T>& lhs,
-               const RelationView<T>& rhs,
-               std::span<const Column> columns,
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join_rows(const L& lhs,
+               const R& rhs,
+               std::span<const Index<Column>> columns,
                std::span<const size_t> lhs_keys,
                std::span<const size_t> rhs_keys,
                std::span<const size_t> rhs_payload,
-               Relation<T>& out,
+               Builder<Relation<T>>& out,
                Workspace<T>& workspace)
 {
-    prepare_output(out, columns, { &lhs.storage(), &rhs.storage() });
+    prepare_output(out, columns, { lhs.get_storage_address(), rhs.get_storage_address() });
     const bool build_left = lhs.size() <= rhs.size();
     if (!lhs_keys.empty() && !lhs.empty() && !rhs.empty())
-        build_join_index(build_left ? lhs : rhs, build_left ? lhs_keys : rhs_keys, workspace.join_index);
+    {
+        if (build_left)
+            build_join_index(lhs, lhs_keys, workspace.join_index);
+        else
+            build_join_index(rhs, rhs_keys, workspace.join_index);
+    }
     join_rows(lhs, rhs, columns, lhs_keys, rhs_keys, rhs_payload, build_left, workspace.join_index, out, workspace);
 }
 
 }  // namespace detail
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, const JoinIndex<T>& index, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex<T>& index, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::require_plan_columns(lhs.columns(), plan.lhs_columns());
-    detail::require_plan_columns(rhs.columns(), plan.rhs_columns());
+    detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
+    detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
     const bool build_left = index.matches(lhs, plan.lhs_keys());
     if (!build_left && !index.matches(rhs, plan.rhs_keys()))
         throw std::invalid_argument("Relational operation: join index does not match either input's storage and keys.");
-    detail::prepare_output(out, plan.output_columns(), { &lhs.storage(), &rhs.storage() });
-    detail::join_rows(lhs, rhs, plan.output_columns(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, index.index(), out, workspace);
+    detail::prepare_output(out, plan.output_columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
+    detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, index.index(), out, workspace);
 }
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs,
-          const RelationView<T>& rhs,
-          const JoinPlan& plan,
-          JoinIndexCache<T>& cache,
-          JoinReuse reuse,
-          Relation<T>& out,
-          Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache<T>& cache, JoinReuse reuse, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::require_plan_columns(lhs.columns(), plan.lhs_columns());
-    detail::require_plan_columns(rhs.columns(), plan.rhs_columns());
+    detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
+    detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
     bool build_left = lhs.size() <= rhs.size();
     if (reuse.lhs || reuse.rhs)
         build_left = reuse.lhs && (!reuse.rhs || build_left);
     if (!lhs.empty() && !rhs.empty() && !plan.lhs_keys().empty() && (reuse.lhs || reuse.rhs)
-        && (build_left ? lhs : rhs).get_index() == std::numeric_limits<size_t>::max())
+        && (build_left ? lhs.get_storage_index() : rhs.get_storage_index()) == std::numeric_limits<size_t>::max())
         throw std::invalid_argument("Relational operation: cached joins require factory-created inputs.");
-    detail::prepare_output(out, plan.output_columns(), { &lhs.storage(), &rhs.storage() });
+    detail::prepare_output(out, plan.output_columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     if (lhs.empty() || rhs.empty())
         return;
 
@@ -324,79 +295,81 @@ void join(const RelationView<T>& lhs,
     {
         if (reuse.lhs || reuse.rhs)
         {
-            index = &cache.get_or_create(build_left ? lhs : rhs, build_left ? plan.lhs_keys() : plan.rhs_keys()).index();
+            index = &(build_left ? cache.get_or_create(lhs, plan.lhs_keys()) : cache.get_or_create(rhs, plan.rhs_keys())).index();
         }
+        else if (build_left)
+            detail::build_join_index(lhs, plan.lhs_keys(), workspace.join_index);
         else
-            detail::build_join_index(build_left ? lhs : rhs, build_left ? plan.lhs_keys() : plan.rhs_keys(), workspace.join_index);
+            detail::build_join_index(rhs, plan.rhs_keys(), workspace.join_index);
     }
-    detail::join_rows(lhs, rhs, plan.output_columns(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, *index, out, workspace);
+    detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, *index, out, workspace);
 }
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::require_plan_columns(lhs.columns(), plan.lhs_columns());
-    detail::require_plan_columns(rhs.columns(), plan.rhs_columns());
-    detail::join_rows(lhs, rhs, plan.output_columns(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), out, workspace);
+    detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
+    detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
+    detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), out, workspace);
 }
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out, Workspace<T>& workspace)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, Builder<Relation<T>>& out, Workspace<T>& workspace)
 {
-    detail::join_positions(lhs.columns(), rhs.columns(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
+    detail::join_positions(lhs.columns().span(), rhs.columns().span(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
     detail::join_rows(lhs, rhs, workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload, out, workspace);
 }
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, Builder<Relation<T>>& out)
 {
     auto workspace = Workspace<T>();
     join(lhs, rhs, out, workspace);
 }
 
-template<TriviallyCopyable T>
-Relation<T> join(const RelationView<T>& lhs, const RelationView<T>& rhs)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+Builder<Relation<T>> join(const L& lhs, const R& rhs)
 {
     auto workspace = Workspace<T>();
-    detail::join_positions(lhs.columns(), rhs.columns(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
-    auto out = Relation<T>(workspace.columns);
+    detail::join_positions(lhs.columns().span(), rhs.columns().span(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
+    auto out = Builder<Relation<T>>(workspace.columns);
     detail::join_rows(lhs, rhs, workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload, out, workspace);
     return out;
 }
 
-template<TriviallyCopyable T>
-void union_(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void union_(const L& lhs, const R& rhs, Builder<Relation<T>>& out)
 {
-    detail::require_same_columns(lhs, rhs);
-    detail::prepare_output(out, lhs.columns(), { &lhs.storage(), &rhs.storage() });
+    detail::require_same_columns<T>(lhs, rhs);
+    detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     for (size_t i = 0; i < lhs.size(); ++i)
         out.insert(lhs[i]);
     for (size_t i = 0; i < rhs.size(); ++i)
         out.insert(rhs[i]);
 }
 
-template<TriviallyCopyable T>
-Relation<T> union_(const RelationView<T>& lhs, const RelationView<T>& rhs)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+Builder<Relation<T>> union_(const L& lhs, const R& rhs)
 {
-    auto out = Relation<T>(lhs.columns());
+    auto out = Builder<Relation<T>>(lhs.columns().span());
     union_(lhs, rhs, out);
     return out;
 }
 
-template<TriviallyCopyable T>
-void difference(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void difference(const L& lhs, const R& rhs, Builder<Relation<T>>& out)
 {
-    detail::require_same_columns(lhs, rhs);
-    detail::prepare_output(out, lhs.columns(), { &lhs.storage(), &rhs.storage() });
+    detail::require_same_columns<T>(lhs, rhs);
+    detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     for (size_t i = 0; i < lhs.size(); ++i)
         if (!rhs.contains(lhs[i]))
             out.insert(lhs[i]);
 }
 
-template<TriviallyCopyable T>
-Relation<T> difference(const RelationView<T>& lhs, const RelationView<T>& rhs)
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+Builder<Relation<T>> difference(const L& lhs, const R& rhs)
 {
-    auto out = Relation<T>(lhs.columns());
+    auto out = Builder<Relation<T>>(lhs.columns().span());
     difference(lhs, rhs, out);
     return out;
 }

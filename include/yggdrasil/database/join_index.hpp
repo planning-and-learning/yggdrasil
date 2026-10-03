@@ -8,7 +8,7 @@
 
 #include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/containers/unordered_set.hpp"
-#include "yggdrasil/database/relation.hpp"
+#include "yggdrasil/database/relation_view.hpp"
 
 #include <cstddef>
 #include <span>
@@ -31,9 +31,11 @@ private:
     UnorderedMultiMap<hash_t, size_t> m_index;
 
 public:
-    JoinIndex(const RelationView<T>& build, std::span<const size_t> key_positions);
+    template<RelationViewConcept<T> V>
+    JoinIndex(const V& build, std::span<const size_t> key_positions);
 
-    bool matches(const RelationView<T>& relation, std::span<const size_t> key_positions) const noexcept;
+    template<RelationViewConcept<T> V>
+    bool matches(const V& relation, std::span<const size_t> key_positions) const noexcept;
     const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
     auto identifying_members() const noexcept { return std::make_tuple(m_relation_index, std::span<const size_t>(m_keys)); }
 };
@@ -51,7 +53,8 @@ private:
 public:
     /// Hits borrow the lookup key and allocate nothing. Returned references
     /// remain valid until an insertion or clear().
-    const JoinIndex<T>& get_or_create(const RelationView<T>& relation, std::span<const size_t> key_positions);
+    template<RelationViewConcept<T> V>
+    const JoinIndex<T>& get_or_create(const V& relation, std::span<const size_t> key_positions);
 
     size_t size() const noexcept { return m_indexes.size(); }
     void clear() noexcept { m_indexes.clear(); }

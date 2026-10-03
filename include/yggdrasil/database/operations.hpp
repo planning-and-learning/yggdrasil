@@ -12,7 +12,7 @@
 
 #include "yggdrasil/database/join_index.hpp"
 #include "yggdrasil/database/plans.hpp"
-#include "yggdrasil/database/relation.hpp"
+#include "yggdrasil/database/relation_view.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
@@ -33,7 +33,7 @@ namespace ygg::database
 template<TriviallyCopyable T = uint_t>
 struct Workspace
 {
-    std::vector<Column> columns;
+    std::vector<Index<Column>> columns;
     std::vector<size_t> lhs_keys;
     std::vector<size_t> rhs_keys;
     std::vector<size_t> rhs_payload;
@@ -48,124 +48,99 @@ struct JoinReuse
     bool rhs = false;
 };
 
-/// Relabels columns positionally, without copying any tuples. New labels must
-/// be unique and outlive the view. To identify two columns, select their
-/// equality and project.
-template<TriviallyCopyable T>
-RelationView<T> rename(const RelationView<T>& input, ColumnsView columns);
-
-/// Borrows labels as well as rows. Pass a span explicitly; its underlying
-/// labels must outlive the returned view.
-template<TriviallyCopyable T, typename C, size_t Extent>
-    requires std::same_as<std::remove_const_t<C>, Column>
-RelationView<T> rename(const RelationView<T>& input, std::span<C, Extent> columns);
-
+/// Element type T is deduced from output/workspace arguments. Return-by-value
+/// overloads require an explicit T, for example project<uint_t>(input, columns).
 /// Keeps columns in the requested order and eliminates duplicate result rows.
 /// Output overloads replace rows, retain capacity, and require a matching
 /// schema and storage distinct from every input (including renamed views).
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, const ProjectionPlan& plan, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, const ProjectionPlan& plan, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, ColumnsView columns, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::span<const Column> columns, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::initializer_list<Column> columns, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, ColumnsView columns, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::span<const Column> columns, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> project(const V& input, Builder<Columns> columns);
 
-template<TriviallyCopyable T>
-void project(const RelationView<T>& input, std::initializer_list<Column> columns, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> project(const V& input, std::span<const Index<Column>> columns);
 
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, Columns columns);
-
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, ColumnsView columns);
-
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, std::span<const Column> columns);
-
-template<TriviallyCopyable T>
-Relation<T> project(const RelationView<T>& input, std::initializer_list<Column> columns);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> project(const V& input, std::initializer_list<Index<Column>> columns);
 
 /// The predicate receives a row span in input column order. It must not mutate
 /// inputs or output. A throwing predicate can leave a partial output result.
-template<TriviallyCopyable T, typename Predicate>
+template<TriviallyCopyable T, RelationViewConcept<T> V, typename Predicate>
     requires std::predicate<Predicate&, std::span<const T>>
-void select(const RelationView<T>& input, Predicate predicate, Relation<T>& out);
+void select(const V& input, Predicate predicate, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T, typename Predicate>
+template<TriviallyCopyable T, RelationViewConcept<T> V, typename Predicate>
     requires std::predicate<Predicate&, std::span<const T>>
-Relation<T> select(const RelationView<T>& input, Predicate predicate);
+Builder<Relation<T>> select(const V& input, Predicate predicate);
 
-template<TriviallyCopyable T>
-void select_equal_columns(const RelationView<T>& input, Column lhs, Column rhs, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-Relation<T> select_equal_columns(const RelationView<T>& input, Column lhs, Column rhs);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs);
 
-template<TriviallyCopyable T>
-void select_equal_value(const RelationView<T>& input, Column column, const std::type_identity_t<T>& value, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+void select_equal_value(const V& input, Index<Column> column, const std::type_identity_t<T>& value, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-Relation<T> select_equal_value(const RelationView<T>& input, Column column, const std::type_identity_t<T>& value);
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>> select_equal_value(const V& input, Index<Column> column, const std::type_identity_t<T>& value);
 
 /// Natural join: match common labels and return lhs columns followed by
 /// rhs-only columns. Disjoint schemas produce the Cartesian product.
 /// Hashes the smaller input, retaining only hashes and row indices in the
 /// transient index. Collisions are resolved by comparing the actual values.
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
 /// Reuses an index on either input instead of rebuilding the smaller side.
 /// The index must match that input's storage and the plan's ordered key positions.
 /// Result row order is unspecified, as for the other relational operations.
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, const JoinPlan& plan, const JoinIndex<T>& index, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex<T>& index, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
 /// Reuses the one marked input, or the smaller input when both are marked.
 /// With neither marked, uses an ordinary transient index. Empty inputs and
 /// Cartesian products do not create cached indexes.
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs,
-          const RelationView<T>& rhs,
-          const JoinPlan& plan,
-          JoinIndexCache<T>& cache,
-          JoinReuse reuse,
-          Relation<T>& out,
-          Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache<T>& cache, JoinReuse reuse, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out, Workspace<T>& workspace);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, Builder<Relation<T>>& out, Workspace<T>& workspace);
 
-template<TriviallyCopyable T>
-void join(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void join(const L& lhs, const R& rhs, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-Relation<T> join(const RelationView<T>& lhs, const RelationView<T>& rhs);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+Builder<Relation<T>> join(const L& lhs, const R& rhs);
 
 /// Union and difference require identical ordered schemas. Project one input
 /// first to align a differently ordered schema. The trailing underscore avoids
 /// the C++ keyword union.
-template<TriviallyCopyable T>
-void union_(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void union_(const L& lhs, const R& rhs, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-Relation<T> union_(const RelationView<T>& lhs, const RelationView<T>& rhs);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+Builder<Relation<T>> union_(const L& lhs, const R& rhs);
 
-template<TriviallyCopyable T>
-void difference(const RelationView<T>& lhs, const RelationView<T>& rhs, Relation<T>& out);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+void difference(const L& lhs, const R& rhs, Builder<Relation<T>>& out);
 
-template<TriviallyCopyable T>
-Relation<T> difference(const RelationView<T>& lhs, const RelationView<T>& rhs);
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+Builder<Relation<T>> difference(const L& lhs, const R& rhs);
 
 }  // namespace ygg::database
 
