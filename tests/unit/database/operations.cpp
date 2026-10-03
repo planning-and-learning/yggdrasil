@@ -365,7 +365,7 @@ TEST(YggdrasilTests, DatabasePoolKeepsLiveRelationsDistinctAndReusesByArity)
     expect_relation(*reused, { ColumnIndex(7), ColumnIndex(8) }, {});
     expect_relation(*first, { ColumnIndex(1), ColumnIndex(2) }, { { 3, 4 } });
     const std::array<ColumnIndex, 2> duplicates { ColumnIndex(9), ColumnIndex(9) };
-    EXPECT_THROW(pool.get_or_allocate(std::span(duplicates)), std::invalid_argument);
+    EXPECT_THROW((void) pool.get_or_allocate(std::span(duplicates)), std::invalid_argument);
     expect_relation(*first, { ColumnIndex(1), ColumnIndex(2) }, { { 3, 4 } });
     expect_relation(*reused, { ColumnIndex(7), ColumnIndex(8) }, {});
     auto boolean = pool.get_or_allocate({});
@@ -419,7 +419,7 @@ TEST(YggdrasilTests, DatabaseRawColumnInputsAcceptSpansArraysAndVectors)
 TEST(YggdrasilTests, DatabasePlansOwnSchemasAndReuseResolvedPositions)
 {
     constexpr auto large = ColumnIndex::max();
-    auto plans = []
+    auto plans = [large]
     {
         std::array<ColumnIndex, 3> lhs { large, ColumnIndex(1), ColumnIndex(2) };
         std::array<ColumnIndex, 3> rhs { ColumnIndex(2), ColumnIndex(3), large };
