@@ -77,8 +77,13 @@ Builder<Relation<T>> project(const V& input, std::span<const Index<Column>> colu
 template<TriviallyCopyable T, RelationViewConcept<T> V>
 Builder<Relation<T>> project(const V& input, std::initializer_list<Index<Column>> columns);
 
-/// Extract rows into existing storage. The output must have the same ordered
-/// schema and distinct storage; the operation retains its reusable capacity.
+/// Replace ordered columns and rows, invalidating the destination's canonical
+/// index. Self-assignment is supported. Storage identity is preserved, and
+/// matching arity retains reusable capacity; changing arity replaces storage.
+/// A source sharing destination storage must expose the same complete rows;
+/// it may relabel columns.
+/// Borrowed destination rows and schema spans are invalidated. An insertion
+/// failure may leave partial output. Schema namespaces belong to publication.
 template<TriviallyCopyable T, RelationViewConcept<T> V>
 Builder<Relation<T>>& assign(Builder<Relation<T>>& destination, const V& source);
 

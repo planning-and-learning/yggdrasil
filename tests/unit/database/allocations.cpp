@@ -465,9 +465,15 @@ struct InterningEvaluation
             const auto [copied, copied_created] = database::copy(original, copied_repository);
             valid &= copied_created && copied.get_data().schema_namespace == generation;
             valid &= !database::copy(original, copied_repository).second;
-            auto extracted = pool.get_or_allocate(schema);
+            auto extracted = pool.get_or_allocate(std::span<const ColumnIndex>(renamed_columns.data(), arity));
+            const auto storage_index = extracted->get_storage_index();
+            const auto* schema_storage = extracted->columns().data();
             assign(*extracted, copied);
+            assign(*extracted, *extracted);
+            assign(*extracted, make_view(*extracted, repository));
             valid &= extracted->get_index().is_max() && extracted->size() == original.size();
+            valid &= extracted->get_storage_index() == storage_index && extracted->columns().data() == schema_storage;
+            valid &= std::ranges::equal(extracted->columns(), schema);
             valid &= extracted->contains(std::span<const uint_t>(first_row.data(), arity));
             builder->clear();
             builder->insert(std::span<const uint_t>(second_row.data(), arity));

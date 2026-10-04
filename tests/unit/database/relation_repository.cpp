@@ -578,18 +578,64 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
     EXPECT_EQ(changed.first.get_data().schema_namespace, 43);
     EXPECT_EQ(pending.index, Index<RelationTag>(1234));
 
-    RelationBuilder output(source.columns());
+    RelationPool<> pool;
+    auto output_handle = pool.get_or_allocate({ ColumnIndex(3), ColumnIndex(7) });
+    auto& output = *output_handle;
+    const auto storage_index = output.get_storage_index();
+    output.insert({ 99, 88 });
     assign(output, source);
+    EXPECT_TRUE(std::ranges::equal(output.columns(), source.columns()));
+    expect_rows(output, { { 4, 5 }, { 1, 2 } });
     const auto capacity = output.memory_usage();
+    const auto* columns_storage = output.columns().data();
     const auto canonical = insert(source_repository, output).first;
     EXPECT_FALSE(output.get_index().is_max());
     EXPECT_EQ(&assign(output, target), &output);
     EXPECT_TRUE(output.get_index().is_max());
     EXPECT_EQ(output.memory_usage(), capacity);
+    EXPECT_EQ(output.columns().data(), columns_storage);
+    EXPECT_EQ(output.get_storage_index(), storage_index);
     expect_rows(output, { { 4, 5 }, { 1, 2 } });
-    EXPECT_THROW(assign(output, make_view(output, source_repository)), std::invalid_argument);
-    EXPECT_THROW(assign(seed, source), std::invalid_argument);
+
+    const auto* first_row = output[0].data();
+    (void) insert(source_repository, output);
+    EXPECT_EQ(&assign(output, output), &output);
+    EXPECT_TRUE(output.get_index().is_max());
+    EXPECT_EQ(output[0].data(), first_row);
+    (void) insert(source_repository, output);
+    EXPECT_EQ(&assign(output, make_view(output, source_repository)), &output);
+    EXPECT_TRUE(output.get_index().is_max());
+    EXPECT_EQ(output[0].data(), first_row);
+    EXPECT_EQ(output.columns().data(), columns_storage);
+    EXPECT_EQ(output.memory_usage(), capacity);
+    EXPECT_EQ(output.get_storage_index(), storage_index);
+    expect_rows(output, { { 4, 5 }, { 1, 2 } });
+
+    // A changed arity replaces storage; row values follow the source's column order.
+    assign(seed, source_builder);
+    EXPECT_TRUE(seed.get_index().is_max());
+    EXPECT_TRUE(std::ranges::equal(seed.columns(), source.columns()));
+    expect_rows(seed, { { 4, 5 }, { 1, 2 } });
+    assign(seed, make_view(pending, source_repository));
+    expect_rows(seed, { { 4, 5 }, { 1, 2 } });
     EXPECT_EQ(canonical.get_data().schema_namespace, 0);
+
+    RelationBuilder empty { ColumnIndex(9), ColumnIndex(8) };
+    assign(output, empty);
+    EXPECT_TRUE(output.empty());
+    EXPECT_TRUE(std::ranges::equal(output.columns(), empty.columns()));
+    EXPECT_EQ(output.memory_usage(), capacity);
+    EXPECT_EQ(output.get_storage_index(), storage_index);
+    expect_rows(canonical, { { 4, 5 }, { 1, 2 } });
+
+    RelationBuilder nullary;
+    assign(seed, nullary);
+    EXPECT_EQ(seed.arity(), 0);
+    EXPECT_TRUE(seed.empty());
+    nullary.insert({});
+    assign(seed, nullary);
+    EXPECT_EQ(seed.arity(), 0);
+    expect_rows(seed, { {} });
 
     source_repository.clear();
     source_builder.clear();

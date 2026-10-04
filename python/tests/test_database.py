@@ -268,15 +268,21 @@ def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
     assert database.copy(source, target_repository) == (target, False)
     assert database.copy(target, target_repository) == (target, False)
     assert tuple(target.columns()) == (7, 3)
-    output = database.Relation([7, 3])
+    output = database.Relation([3, 7])
+    output.insert([99, 88])
     assert database.assign(output, target) is output
+    assert tuple(output.columns()) == (7, 3)
     assert [tuple(row) for row in output] == [(4, 5)]
-    with pytest.raises(ValueError):
-        database.assign(output, output)
-    with pytest.raises(ValueError):
-        database.assign(database.Relation([3, 7]), target)
+    assert database.assign(output, output) is output
+    assert tuple(output.columns()) == (7, 3)
+    assert [tuple(row) for row in output] == [(4, 5)]
+    unary = database.Relation([99])
+    unary.insert([77])
+    assert database.assign(unary, output) is unary
+    assert tuple(unary.columns()) == (7, 3)
+    assert [tuple(row) for row in unary] == [(4, 5)]
     del target_result, source, source_repository, target_repository
-    del source_factory, target_factory, builder, output
+    del source_factory, target_factory, builder, output, unary
     gc.collect()
     assert [tuple(row) for row in target] == [(4, 5)]
     assert not hasattr(database, "intern_relation")

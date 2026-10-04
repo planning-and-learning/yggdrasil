@@ -345,11 +345,19 @@ changing-state evaluations after warmup.
 
 The conversion operations have separate responsibilities: `insert(repository,
 builder)` interns compatible mutable input and returns `(view, inserted)`;
-`assign(destination, source)` replaces mutable contents while retaining available
-capacity; `copy(source, repository)` remaps an interned relation into another
-repository and returns `(view, inserted)`. Copy preserves ordered columns and
-schema namespaces. Assignment requires matching ordered columns and distinct
-row storage. Obtain an appropriately shaped pool entry before assignment.
+`assign(destination, source)` replaces ordered columns and rows, supports
+self-assignment, and invalidates the destination's canonical index while keeping
+its storage identity. It copies tuples in source column order, without projecting
+or reordering their values. Matching arity retains available capacity; changing
+arity replaces tuple storage. In state loops, acquire a pool entry with the source
+arity to retain buffers. Treat borrowed destination rows and schema spans as
+invalidated; an insertion failure may leave partial output.
+
+`copy(source, repository)` remaps an interned relation into another repository and
+returns `(view, inserted)`, preserving ordered columns and schema namespaces.
+Mutable builders contain labels and rows, so assignment does not carry a schema
+namespace. Inserting the assigned builder uses the explicit namespace argument
+or its default of zero.
 
 Python uses these same names and argument order. Both `insert` and `copy` return
 `(view, inserted)` tuples, and the returned view retains its repository even after

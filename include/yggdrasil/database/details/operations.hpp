@@ -144,7 +144,14 @@ void select(const V& input, Predicate predicate, Builder<Relation<T>>& out)
 template<TriviallyCopyable T, RelationViewConcept<T> V>
 Builder<Relation<T>>& assign(Builder<Relation<T>>& destination, const V& source)
 {
-    select(source, [](std::span<const T>) { return true; }, destination);
+    if (destination.get_storage_address() == source.get_storage_address())
+    {
+        destination.rename(source.columns().span());
+        return destination;
+    }
+    destination.initialize(source.columns().span());
+    for (size_t i = 0; i < source.size(); ++i)
+        destination.insert(source[i]);
     return destination;
 }
 
