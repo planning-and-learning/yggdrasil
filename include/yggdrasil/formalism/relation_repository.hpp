@@ -23,6 +23,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <yggdrasil/core/type_list.hpp>
 #include <yggdrasil/core/types.hpp>
 #include <yggdrasil/formalism/basic_relation_repository.hpp>
 #include <yggdrasil/formalism/declarations.hpp>
@@ -56,6 +57,7 @@ private:
 
 public:
     using object_tag = ObjectTag;
+    using RelationTypes = TypeList<Ts...>;
     using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type, ThreadSafe>::container_type;
     using ConstViewType = typename container_type::ConstArrayView;
     static constexpr bool thread_safe = ThreadSafe;
@@ -68,19 +70,22 @@ public:
      */
 
     template<typename T>
-    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+        requires SupportsRelation<RelationRepositoryBase, T>
+    std::optional<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder,
+                                                                                                size_t h) const
     {
         const auto relation = builder.relation;
 
         if (auto row_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
-            return View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt }, repository());
+            return ::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt },
+                                                                                 repository());
 
         const auto* current = m_parent;
         while (current != nullptr)
         {
             if (auto row_or_nullopt = current->template get<T>().find_local_unsafe_with_hash(builder, h))
-                return View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt },
-                                                                              current->repository());
+                return ::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, *row_or_nullopt },
+                                                                                     current->repository());
 
             current = current->m_parent;
         }
@@ -89,13 +94,15 @@ public:
     }
 
     template<typename T>
-    std::optional<View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const
+        requires SupportsRelation<RelationRepositoryBase, T>
+    std::optional<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
         return find_with_hash(builder, RelationRepositoryBase::hash(builder));
     }
 
     template<typename T>
-    std::pair<View<Index<RelationBinding<T, ObjectTag>>, Repository>, bool> get_or_create(const Data<RelationBinding<T, ObjectTag>>& builder)
+        requires SupportsRelation<RelationRepositoryBase, T>
+    std::pair<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>, bool> insert(const Data<RelationBinding<T, ObjectTag>>& builder)
     {
         const auto relation = builder.relation;
         const auto h = RelationRepositoryBase::hash(builder);
@@ -108,10 +115,11 @@ public:
                   "branching!");
 
         const auto [row, success] = create_local_with_hash(builder, h);
-        return { View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, row }, repository()), success };
+        return { ::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>(Index<RelationBinding<T, ObjectTag>> { relation, row }, repository()), success };
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto operator[](Index<RelationBinding<T, ObjectTag>> index) const
     {
         const auto* current = this;
@@ -127,18 +135,21 @@ public:
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto front(Index<T> g) const
     {
         return (*this)[Index<RelationBinding<T, ObjectTag>> { g, Index<Row>(0) }];
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     size_t size(Index<T> g) const noexcept
     {
         return get<T>().size(g);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     const Repository& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const
     {
         const auto* current = this;
@@ -159,18 +170,21 @@ public:
      */
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() noexcept
     {
         return static_cast<BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     const BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() const noexcept
     {
         return static_cast<const BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         return get<T>().find_local_with_hash(builder, h);
@@ -178,72 +192,84 @@ public:
 
     /// Forwards the unsafe local-only lookup without traversing ancestors.
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         return get<T>().find_local_unsafe_with_hash(builder, h);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
     {
         return get<T>().find_local(builder);
     }
 
     template<typename T>
-    auto get_or_create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
+        requires SupportsRelation<RelationRepositoryBase, T>
+    auto insert_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
     {
-        return get<T>().get_or_create_local_with_hash(builder, h);
+        return get<T>().insert_local_with_hash(builder, h);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     std::pair<Index<Row>, bool> create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
     {
         return get<T>().create_local_with_hash(builder, h);
     }
 
     template<typename T>
-    auto get_or_create_local(const Data<RelationBinding<T, ObjectTag>>& builder)
+        requires SupportsRelation<RelationRepositoryBase, T>
+    auto insert_local(const Data<RelationBinding<T, ObjectTag>>& builder)
     {
-        return get<T>().get_or_create_local(builder);
+        return get<T>().insert_local(builder);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto at_local(Index<RelationBinding<T, ObjectTag>> index) const
     {
         return get<T>().at_local(index);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     auto front_local(Index<T> g) const
     {
         return get<T>().front_local(g);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     size_t local_size(Index<T> g) const noexcept
     {
         return get<T>().local_size(g);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     size_t parent_size(Index<T> g) const noexcept
     {
         return get<T>().parent_size(g);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
     {
         return get<T>().is_local(index);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     bool exists_parent_mutation(Index<T> g) const noexcept
     {
         return get<T>().exists_parent_mutation(g);
     }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     size_t memory_usage() const noexcept
     {
         return get<T>().memory_usage();
@@ -276,6 +302,7 @@ public:
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 
     template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
     {
         return BasicRelationRepository<ObjectTag, T, ThreadSafe>::hash(builder);

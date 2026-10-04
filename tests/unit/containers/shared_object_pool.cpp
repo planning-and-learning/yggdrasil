@@ -60,6 +60,12 @@ static_assert(!std::is_move_assignable_v<ygg::SharedObjectPool<SharedPoolValue>>
 static_assert(!std::is_move_constructible_v<ygg::SharedObjectPool<SharedPoolValue, true>>);
 static_assert(!std::is_move_assignable_v<ygg::SharedObjectPool<SharedPoolValue, true>>);
 
+template<typename Pool, typename Argument>
+concept CanInitializeSharedPool = requires(Pool& pool, Argument&& argument) { pool.get_or_allocate(std::forward<Argument>(argument)); };
+static_assert(CanInitializeSharedPool<ygg::SharedObjectPool<SharedPoolValue>, int>);
+static_assert(!CanInitializeSharedPool<ygg::SharedObjectPool<SharedPoolValue>, std::vector<int>>);
+static_assert(!CanInitializeSharedPool<ygg::SharedObjectPool<int>, int>);
+
 template<bool ThreadSafe>
 void expect_shared_pool_grows_and_reuses_across_capacity_boundaries()
 {

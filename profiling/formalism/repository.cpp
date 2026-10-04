@@ -151,7 +151,7 @@ void set_up_symbol(const benchmark::State& state)
     for (std::uint64_t key = 0; key < kPrefill; ++key)
     {
         set_key(data, key);
-        repository<Repository>->get_or_create(data);
+        repository<Repository>->insert(data);
     }
 }
 
@@ -166,7 +166,7 @@ void set_up_relation(const benchmark::State& state)
         for (std::uint64_t key = 0; key < kPrefill; ++key)
         {
             set_key(data, key);
-            repository<Repository>->get_or_create(data);
+            repository<Repository>->insert(data);
         }
     }
 }
@@ -237,7 +237,7 @@ void benchmark_symbol_mixed(benchmark::State& state)
                                 (operation * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1);
         ++operation;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->get_or_create(data);
+        const auto [view, was_created] = repository<Repository>->insert(data);
         created += was_created;
         checksum += view.get_index().get_value();
     }
@@ -258,7 +258,7 @@ void benchmark_symbol_insert(benchmark::State& state)
     {
         const auto key = static_cast<std::uint64_t>(state.thread_index()) + static_cast<std::uint64_t>(state.threads()) * operation++;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->get_or_create(data);
+        const auto [view, was_created] = repository<Repository>->insert(data);
         created += was_created;
         checksum += view.get_index().get_value();
     }
@@ -304,7 +304,7 @@ void benchmark_relation_mixed(benchmark::State& state)
                                 (operation * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1);
         ++operation;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->get_or_create(data);
+        const auto [view, was_created] = repository<Repository>->insert(data);
         created += was_created;
         checksum += view.get_index().row.get_value();
     }
@@ -327,7 +327,7 @@ void benchmark_relation_insert(benchmark::State& state)
         const auto key =
             PerThreadLane ? operation++ : static_cast<std::uint64_t>(state.thread_index()) + static_cast<std::uint64_t>(state.threads()) * operation++;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->get_or_create(data);
+        const auto [view, was_created] = repository<Repository>->insert(data);
         created += was_created;
         checksum += view.get_index().row.get_value();
     }

@@ -141,8 +141,13 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     builder = database.Relation([10, 20])
     builder.insert([3, 4])
     builder.insert([5, 6])
-    relation = database.intern_relation(builder, repository)
-    duplicate = database.intern_relation(builder, repository)
+    result = database.insert(repository, builder)
+    assert isinstance(result, tuple)
+    relation, created = result
+    duplicate, duplicate_created = database.insert(repository, builder)
+    assert created is True
+    assert duplicate_created is False
+    del result
     assert isinstance(relation, database.RelationView)
     assert isinstance(relation.get_index(), database.RelationIndex)
     assert relation == duplicate
@@ -153,8 +158,8 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     assert not hasattr(relation, "clear")
 
     other_repository = factory.create()
-    assert database.intern_relation(builder, other_repository) != relation
-    namespaced = database.intern_relation(builder, repository, schema_namespace=1)
+    assert database.insert(other_repository, builder)[0] != relation
+    namespaced = database.insert(repository, builder, schema_namespace=1)[0]
     assert namespaced != relation
     assert len(repository) == 2
     assert repository.rename(namespaced, [10, 20]) == namespaced
@@ -208,9 +213,9 @@ def test_interned_nullary_relations_and_repository_reset() -> None:
     factory = database.RelationRepositoryFactory()
     repository = factory.create()
     builder = database.Relation()
-    false = database.intern_relation(builder, repository)
+    false = database.insert(repository, builder)[0]
     builder.insert([])
-    true = database.intern_relation(builder, repository)
+    true = database.insert(repository, builder)[0]
     assert false.empty()
     assert list(false) == []
     assert [tuple(row) for row in true] == [()]
@@ -219,24 +224,24 @@ def test_interned_nullary_relations_and_repository_reset() -> None:
     del false, true
     repository.clear()
     assert len(repository) == 0
-    assert [tuple(row) for row in database.intern_relation(builder, repository)] == [()]
+    assert [tuple(row) for row in database.insert(repository, builder)[0]] == [()]
 
 
 def test_interning_ignores_row_insertion_order() -> None:
     repository = database.RelationRepositoryFactory().create()
     seed = database.Relation([10, 20])
     seed.insert([9, 8])
-    database.intern_relation(seed, repository)
+    database.insert(repository, seed)[0]
 
     builder = database.Relation([10, 20])
     builder.insert([3, 4])
     builder.insert([9, 8])
-    forward = database.intern_relation(builder, repository)
+    forward = database.insert(repository, builder)[0]
     builder.clear()
     builder.insert([9, 8])
     builder.insert([3, 4])
     builder.insert([3, 4])
-    reverse = database.intern_relation(builder, repository)
+    reverse = database.insert(repository, builder)[0]
 
     assert forward == reverse
     assert forward.get_index() == reverse.get_index()
@@ -246,3 +251,32 @@ def test_interning_ignores_row_insertion_order() -> None:
     # relations enumerate the sorted IDs, independent of builder order.
     assert [tuple(row) for row in forward] == [(9, 8), (3, 4)]
     assert [tuple(row) for row in reverse] == [(9, 8), (3, 4)]
+
+
+def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
+    source_factory = database.RelationRepositoryFactory()
+    target_factory = database.RelationRepositoryFactory()
+    source_repository = source_factory.create()
+    target_repository = target_factory.create()
+    builder = database.Relation([7, 3])
+    builder.insert([4, 5])
+    source, created = database.insert(source_repository, builder, schema_namespace=9)
+    assert created is True
+    target_result = database.copy(source, target_repository)
+    target, copied = target_result
+    assert copied is True
+    assert database.copy(source, target_repository) == (target, False)
+    assert database.copy(target, target_repository) == (target, False)
+    assert tuple(target.columns()) == (7, 3)
+    output = database.Relation([7, 3])
+    assert database.assign(output, target) is output
+    assert [tuple(row) for row in output] == [(4, 5)]
+    with pytest.raises(ValueError):
+        database.assign(output, output)
+    with pytest.raises(ValueError):
+        database.assign(database.Relation([3, 7]), target)
+    del target_result, source, source_repository, target_repository
+    del source_factory, target_factory, builder, output
+    gc.collect()
+    assert [tuple(row) for row in target] == [(4, 5)]
+    assert not hasattr(database, "intern_relation")

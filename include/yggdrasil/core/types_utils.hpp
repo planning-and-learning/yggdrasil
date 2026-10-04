@@ -18,6 +18,7 @@
 #ifndef YGG_CORE_TYPES_UTILS_HPP_
 #define YGG_CORE_TYPES_UTILS_HPP_
 
+#include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/dependent_false.hpp"
 #include "yggdrasil/core/types.hpp"
 
@@ -31,9 +32,6 @@
 
 namespace ygg
 {
-template<typename T>
-concept Clearable = requires(T& a) { a.clear(); };
-
 template<typename T>
 struct is_cista_variant_helper : std::false_type
 {

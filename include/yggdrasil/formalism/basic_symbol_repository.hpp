@@ -123,7 +123,7 @@ public:
 
     std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-    std::pair<Index<T>, bool> get_or_create_local_with_hash(Data<T>& builder, size_t h)
+    std::pair<Index<T>, bool> insert_local_with_hash(Data<T>& builder, size_t h)
     {
         if (const auto index = find_local_with_hash(builder, h))
         {
@@ -134,7 +134,7 @@ public:
         return create_local_with_hash(builder, h);
     }
 
-    std::pair<Index<T>, bool> get_or_create_local(Data<T>& builder) { return get_or_create_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
+    std::pair<Index<T>, bool> insert_local(Data<T>& builder) { return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
     /// Completes a hierarchy-wide miss by rechecking this layer before publishing
     /// storage.

@@ -6,9 +6,11 @@
 #include <optional>
 #include <span>
 #include <vector>
+#include <yggdrasil/database/operations.hpp>
 #include <yggdrasil/database/relation_pool.hpp>
 #include <yggdrasil/database/relation_repository.hpp>
 #include <yggdrasil/python/bindings.hpp>
+#include <yggdrasil/python/owner.hpp>
 
 namespace yggdrasil
 {
@@ -147,14 +149,44 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<>())
         .def("create", [](RelationRepositoryFactory& factory) { return new RelationRepository(factory.create()); }, nb::rv_policy::take_ownership);
 
+    const auto retainer = ygg::python::make_owner_retainer();
     m.def(
-        "intern_relation",
-        [](Relation& builder, RelationRepository& repository, std::size_t schema_namespace)
-        { return ygg::database::intern_relation(builder, repository, schema_namespace).first; },
-        nb::arg("builder"),
+        "insert",
+        [retainer](nb::typed<nb::handle, RelationRepository> owner, Relation& builder, std::size_t schema_namespace) -> nb::typed<nb::tuple, RelationView, bool>
+        {
+            auto result = ygg::database::insert(nb::cast<RelationRepository&>(owner), builder, schema_namespace);
+            return nb::borrow<nb::typed<nb::tuple, RelationView, bool>>(ygg::python::cast_with_owner(result, owner, retainer));
+        },
         nb::arg("repository"),
-        nb::arg("schema_namespace") = 0,
-        nb::keep_alive<0, 2>());
+        nb::arg("builder"),
+        nb::arg("schema_namespace") = 0);
+    m.def(
+        "copy",
+        [retainer](RelationView source, nb::typed<nb::handle, RelationRepository> owner) -> nb::typed<nb::tuple, RelationView, bool>
+        {
+            auto result = ygg::database::copy(source, nb::cast<RelationRepository&>(owner));
+            return nb::borrow<nb::typed<nb::tuple, RelationView, bool>>(ygg::python::cast_with_owner(result, owner, retainer));
+        },
+        nb::arg("source"),
+        nb::arg("repository"));
+    m.def(
+        "assign",
+        [](nb::typed<nb::handle, Relation> destination, RelationView source)
+        {
+            ygg::database::assign(nb::cast<Relation&>(destination), source);
+            return destination;
+        },
+        nb::arg("destination"),
+        nb::arg("source"));
+    m.def(
+        "assign",
+        [](nb::typed<nb::handle, Relation> destination, const Relation& source)
+        {
+            ygg::database::assign(nb::cast<Relation&>(destination), source);
+            return destination;
+        },
+        nb::arg("destination"),
+        nb::arg("source"));
 }
 
 }  // namespace yggdrasil

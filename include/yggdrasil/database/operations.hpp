@@ -77,6 +77,11 @@ Builder<Relation<T>> project(const V& input, std::span<const Index<Column>> colu
 template<TriviallyCopyable T, RelationViewConcept<T> V>
 Builder<Relation<T>> project(const V& input, std::initializer_list<Index<Column>> columns);
 
+/// Extract rows into existing storage. The output must have the same ordered
+/// schema and distinct storage; the operation retains its reusable capacity.
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>>& assign(Builder<Relation<T>>& destination, const V& source);
+
 /// The predicate receives a row span in input column order. It must not mutate
 /// inputs or output. A throwing predicate can leave a partial output result.
 template<TriviallyCopyable T, RelationViewConcept<T> V, typename Predicate>

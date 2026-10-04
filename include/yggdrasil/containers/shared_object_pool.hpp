@@ -130,9 +130,7 @@ public:
         return *this;
     }
 
-    SharedObjectPoolPtr(SharedObjectPoolPtr&& other) noexcept :
-        m_pool(std::exchange(other.m_pool, nullptr)), m_entry(std::exchange(other.m_entry, nullptr))
-    {}
+    SharedObjectPoolPtr(SharedObjectPoolPtr&& other) noexcept : m_pool(std::exchange(other.m_pool, nullptr)), m_entry(std::exchange(other.m_entry, nullptr)) {}
 
     SharedObjectPoolPtr& operator=(SharedObjectPoolPtr&& other) noexcept
     {
@@ -229,6 +227,7 @@ public:
     [[nodiscard]] SharedObjectPoolPtr<T, ThreadSafe> get_or_allocate() { return SharedObjectPoolPtr<T, ThreadSafe>(this, m_storage.acquire()); }
 
     template<typename... Args>
+        requires requires(T& value, Args&&... args) { value.initialize(std::forward<Args>(args)...); }
     [[nodiscard]] SharedObjectPoolPtr<T, ThreadSafe> get_or_allocate(Args&&... args)
     {
         // Only pool bookkeeping is serialized; the checked-out entry cannot

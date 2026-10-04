@@ -11,38 +11,40 @@
 #define YGG_FORMALISM_BUILDER_HPP_
 
 #include "yggdrasil/containers/unique_object_pool.hpp"
+#include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
 
-#include <concepts>
+#include <tuple>
 
 namespace ygg::formalism
 {
 
-template<typename T>
-class BasicBuilder
-{
-private:
-    ygg::UniqueObjectPool<ygg::Data<T>> m_data;
-
-public:
-    [[nodiscard]] auto get_builder() { return m_data.get_or_allocate(); }
-};
-
 template<typename... Ts>
-class BuilderStorage : private BasicBuilder<Ts>...
+class BuilderStorage
 {
+    std::tuple<UniqueObjectPool<Data<Ts>>...> m_data;
+
 public:
+    using Types = TypeList<Ts...>;
+
+    BuilderStorage() = default;
+    BuilderStorage(const BuilderStorage&) = delete;
+    BuilderStorage& operator=(const BuilderStorage&) = delete;
+    BuilderStorage(BuilderStorage&&) = delete;
+    BuilderStorage& operator=(BuilderStorage&&) = delete;
+
     /// Acquire pooled data without resetting its contents.
     template<typename T>
-        requires(std::same_as<T, Ts> || ...)
+        requires(Types::template contains<T>)
     [[nodiscard]] auto get_builder()
     {
-        return static_cast<BasicBuilder<T>&>(*this).get_builder();
+        return std::get<UniqueObjectPool<Data<T>>>(m_data).get_or_allocate();
     }
 
     /// Clear pooled data once, retaining its reusable buffers.
     template<typename T>
-        requires((std::same_as<T, Ts> || ...) && requires(Data<T>& data) { data.clear(); })
+        requires(Types::template contains<T> && Clearable<Data<T>>)
     [[nodiscard]] auto checkout()
     {
         auto data = get_builder<T>();

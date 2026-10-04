@@ -64,12 +64,28 @@ inline void Builder<database::Columns>::initialize(std::initializer_list<Index<d
 
 namespace ygg::database
 {
-inline Data<Columns>& make_data(const Builder<Columns>& builder, Data<Columns>& data)
+template<ColumnsViewConcept V>
+Data<Columns>& assign(Data<Columns>& data, const V& source)
 {
-    if (&builder.get_data() != &data)
-        data.values.set(builder.get_data().values);
+    const auto columns = source.span();
+    validate_columns(columns);
+    if (columns.size() <= data.values.size())
+    {
+        if (columns.data() != data.values.data())
+            std::copy(columns.begin(), columns.end(), data.values.begin());
+        data.values.resize(columns.size());
+    }
+    else
+        data.values.set(columns.begin(), columns.end());
     ygg::clear(data.index);
     return data;
+}
+
+template<ColumnsViewConcept V>
+Builder<Columns>& assign(Builder<Columns>& builder, const V& source)
+{
+    builder.assign(source.span());
+    return builder;
 }
 }  // namespace ygg::database
 

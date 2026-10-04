@@ -88,28 +88,37 @@ public:
     auto get_index() const noexcept { return m_handle; }
 };
 
-/// @brief Helper to create a view
+/// Whether a context exposes a canonical owner for a handle.
 template<typename T, typename C>
-auto make_view(const T& element, const C& context) noexcept
-{
-    return View<T, C>(element, context);
-}
-
-/// @brief A context that can map an element to the canonical context in which
-/// it is stored.
-template<typename T, typename C>
-concept CanonicalizableContext = requires(const C& a, const T& e) {
-    { a.get_canonical_context(e) } -> std::same_as<const C&>;
+concept CanonicalizableContext = requires(const C& context, const T& handle) {
+    { context.get_canonical_context(handle) } -> std::same_as<const C&>;
 };
 
 template<typename C, typename T>
 concept CanonicalizableContextFor = CanonicalizableContext<T, C>;
 
-/// @brief Helper to create a view
-template<typename T, CanonicalizableContextFor<T> C>
-auto make_view(const T& element, const C& context)
+/// Domain overloads may select the owner of an embedded handle.
+template<typename T, typename C>
+const C& get_canonical_context(const T&, const C& context) noexcept
 {
-    return View<T, C>(element, context.get_canonical_context(element));
+    return context;
+}
+
+template<typename T, CanonicalizableContextFor<T> C>
+const C& get_canonical_context(const T& handle, const C& context) noexcept(noexcept(context.get_canonical_context(handle)))
+{
+    return context.get_canonical_context(handle);
+}
+
+/// Construct the representation using its canonical owner, discovered by ADL.
+template<typename T, typename C>
+    requires std::constructible_from<View<T, C>, const T&, const C&> && requires(const T& handle, const C& context) {
+        { get_canonical_context(handle, context) } -> std::same_as<const C&>;
+    }
+View<T, C> make_view(const T& handle, const C& context) noexcept(noexcept(get_canonical_context(handle, context))
+                                                                 && std::is_nothrow_constructible_v<View<T, C>, const T&, const C&>)
+{
+    return View<T, C>(handle, get_canonical_context(handle, context));
 }
 
 template<typename T, typename C>

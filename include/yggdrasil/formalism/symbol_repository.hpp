@@ -61,16 +61,16 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::optional<View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
+    std::optional<::ygg::View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
         if (auto index_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
-            return View<Index<T>, Repository>(*index_or_nullopt, repository());
+            return ::ygg::View<Index<T>, Repository>(*index_or_nullopt, repository());
 
         const auto* current = m_parent;
         while (current != nullptr)
         {
             if (auto index_or_nullopt = current->template get<T>().find_local_unsafe_with_hash(builder, h))
-                return View<Index<T>, Repository>(*index_or_nullopt, current->repository());
+                return ::ygg::View<Index<T>, Repository>(*index_or_nullopt, current->repository());
 
             current = current->m_parent;
         }
@@ -80,14 +80,14 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::optional<View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
+    std::optional<::ygg::View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
     {
         return find_with_hash(builder, SymbolRepositoryBase::hash(builder));
     }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::pair<View<Index<T>, Repository>, bool> get_or_create(Data<T>& builder)
+    std::pair<::ygg::View<Index<T>, Repository>, bool> insert(Data<T>& builder)
     {
         const auto h = SymbolRepositoryBase::hash(builder);
         if (auto view_or_nullopt = find_with_hash(builder, h))
@@ -101,7 +101,7 @@ public:
                   "branching!");
 
         const auto [index, success] = create_local_with_hash(builder, h);
-        return { View<Index<T>, Repository>(index, repository()), success };
+        return { ::ygg::View<Index<T>, Repository>(index, repository()), success };
     }
 
     template<typename T>
@@ -194,9 +194,9 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto get_or_create_local_with_hash(Data<T>& builder, size_t h)
+    auto insert_local_with_hash(Data<T>& builder, size_t h)
     {
-        return get<T>().get_or_create_local_with_hash(builder, h);
+        return get<T>().insert_local_with_hash(builder, h);
     }
 
     template<typename T>
@@ -208,9 +208,9 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto get_or_create_local(Data<T>& builder)
+    auto insert_local(Data<T>& builder)
     {
-        return get<T>().get_or_create_local(builder);
+        return get<T>().insert_local(builder);
     }
 
     template<typename T>

@@ -45,7 +45,11 @@ public:
     View(Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     // This will return an ArrayView already
-    auto get_data() const noexcept { return get_repository(*m_context)[m_handle]; }
+    auto get_data() const noexcept
+        requires formalism::RelationContextFor<C, formalism::RelationBinding<RelationTag, ObjectTag>>
+    {
+        return get_repository(*m_context)[m_handle];
+    }
     const auto& get_context() const noexcept { return *m_context; }
     const auto& get_handle() const noexcept { return m_handle; }
 

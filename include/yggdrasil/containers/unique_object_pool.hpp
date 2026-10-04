@@ -56,9 +56,7 @@ public:
     UniqueObjectPoolPtr& operator=(const UniqueObjectPoolPtr& other) = delete;
 
     // Movable
-    UniqueObjectPoolPtr(UniqueObjectPoolPtr&& other) noexcept :
-        m_pool(std::exchange(other.m_pool, nullptr)), m_entry(std::exchange(other.m_entry, nullptr))
-    {}
+    UniqueObjectPoolPtr(UniqueObjectPoolPtr&& other) noexcept : m_pool(std::exchange(other.m_pool, nullptr)), m_entry(std::exchange(other.m_entry, nullptr)) {}
 
     UniqueObjectPoolPtr& operator=(UniqueObjectPoolPtr&& other) noexcept
     {
@@ -144,6 +142,7 @@ public:
     [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate() { return UniqueObjectPoolPtr<T, ThreadSafe>(this, m_storage.acquire()); }
 
     template<typename... Args>
+        requires requires(T& value, Args&&... args) { value.initialize(std::forward<Args>(args)...); }
     [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate(Args&&... args)
     {
         // Only pool bookkeeping is serialized; the checked-out object is

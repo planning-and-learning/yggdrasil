@@ -8,7 +8,9 @@ from .._pyyggdrasil.database import (
     RelationRepositoryFactory,
     RelationRow,
     RelationView,
-    intern_relation,
+    assign,
+    copy,
+    insert,
 )
 
 __all__ = [
@@ -21,5 +23,7 @@ __all__ = [
     "RelationRepositoryFactory",
     "RelationRow",
     "RelationView",
-    "intern_relation",
+    "assign",
+    "copy",
+    "insert",
 ]

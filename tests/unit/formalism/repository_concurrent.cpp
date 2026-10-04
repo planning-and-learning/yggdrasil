@@ -240,7 +240,7 @@ void expect_duplicate_same_relation_insertions()
                     {
                         const auto key = (offset + static_cast<uint_t>(thread)) % rows;
                         const auto data = make_binding<ObjectTag>(relation, key);
-                        const auto [view, was_created] = repository.get_or_create(data);
+                        const auto [view, was_created] = repository.insert(data);
                         created.fetch_add(was_created, std::memory_order_relaxed);
 
                         const auto returned_row = view.get_index().row.get_value();
@@ -280,7 +280,7 @@ void expect_unique_same_relation_insertions()
                     {
                         const auto key = static_cast<uint_t>(thread) * rows_per_thread + row;
                         const auto data = make_binding<ObjectTag>(relation, key);
-                        const auto [view, was_created] = repository.get_or_create(data);
+                        const auto [view, was_created] = repository.insert(data);
                         created.fetch_add(was_created, std::memory_order_relaxed);
                         if (!std::ranges::equal(view.get_data(), data.objects))
                             errors.fetch_add(1, std::memory_order_relaxed);
@@ -331,7 +331,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         const auto key = (offset + static_cast<uint_t>(thread)) % num_trivial;
                         auto data = Data<ConcurrentElement> {};
                         data.value = key;
-                        const auto [view, created] = repository.get_or_create(data);
+                        const auto [view, created] = repository.insert(data);
                         trivial_created.fetch_add(created, std::memory_order_relaxed);
                         if (view.get_data().value != key || view.get_data().index != view.get_index() || data.index != view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
@@ -365,7 +365,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         const auto key = (offset + static_cast<uint_t>(thread)) % num_serialized;
                         auto data = Data<ConcurrentSerializedElement> {};
                         data.values.push_back(Index<ConcurrentElement>(key));
-                        const auto [view, created] = repository.get_or_create(data);
+                        const auto [view, created] = repository.insert(data);
                         serialized_created.fetch_add(created, std::memory_order_relaxed);
                         if (view.get_data().values.size() != 1 || view.get_data().values.front().get_value() != key || view.get_data().index != view.get_index()
                             || data.index != view.get_index())
@@ -388,7 +388,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryUsesIndependentRelationGroupLa
                 {
                     const auto lane = Index<ConcurrentRelation>(static_cast<uint_t>(thread));
                     for (uint_t key = 0; key < lane_rows; ++key)
-                        lane_repository.get_or_create(make_binding<ObjectTag>(lane, key));
+                        lane_repository.insert(make_binding<ObjectTag>(lane, key));
                 });
 
     for (uint_t lane = 0; lane < kThreads; ++lane)
@@ -401,7 +401,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositorySupportsHighestRelationLane)
     auto repository = ConcurrentRepository<ObjectTag>(0, nullptr, formalism::RelationRepositoryConfig(12));
     const auto relation = Index<ConcurrentRelation>(std::numeric_limits<uint_t>::max() - 1);
 
-    const auto [view, created] = repository.get_or_create(make_binding<ObjectTag>(relation, 7));
+    const auto [view, created] = repository.insert(make_binding<ObjectTag>(relation, 7));
 
     EXPECT_TRUE(created);
     EXPECT_EQ(view.get_index().relation, relation);
@@ -415,8 +415,8 @@ TEST(YggdrasilTests, FormalismRepositoryRejectsReservedRelationIndex)
     auto sequential = SequentialRepository(0, nullptr, formalism::RelationRepositoryConfig(12));
     auto concurrent = ConcurrentRepository<ObjectTag>(0, nullptr, formalism::RelationRepositoryConfig(12));
 
-    EXPECT_THROW(sequential.get_or_create(make_binding<ObjectTag>(relation, 7)), std::invalid_argument);
-    EXPECT_THROW(concurrent.get_or_create(make_binding<ObjectTag>(relation, 7)), std::invalid_argument);
+    EXPECT_THROW(sequential.insert(make_binding<ObjectTag>(relation, 7)), std::invalid_argument);
+    EXPECT_THROW(concurrent.insert(make_binding<ObjectTag>(relation, 7)), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithoutMutation)
@@ -425,7 +425,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     using Object = formalism::Object<ObjectTag>;
     auto repository = ConcurrentRepository<ObjectTag>(0, nullptr, formalism::RelationRepositoryConfig(12));
     const auto relation = Index<ConcurrentRelation>(0);
-    const auto [view, created] = repository.get_or_create(make_binding<ObjectTag>(relation, 7));
+    const auto [view, created] = repository.insert(make_binding<ObjectTag>(relation, 7));
     ASSERT_TRUE(created);
 
     auto objects = IndexList<Object> {};
@@ -436,7 +436,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     static_assert(!noexcept(repository.find(wrong)));
 
     EXPECT_THROW(repository.find(wrong), std::invalid_argument);
-    EXPECT_THROW(repository.get_or_create(wrong), std::invalid_argument);
+    EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
     EXPECT_EQ(repository.size(relation), 1);
     EXPECT_EQ(view.get_data().size(), 4);
 }
@@ -458,7 +458,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocks
     using ObjectTag = ConcurrentPackedObjectTag;
     auto repository = ConcurrentRepository<ObjectTag>(0, nullptr, formalism::RelationRepositoryConfig(12));
     const auto relation = Index<ConcurrentRelation>(0);
-    const auto [first, created] = repository.get_or_create(make_binding<ObjectTag>(relation, 0));
+    const auto [first, created] = repository.insert(make_binding<ObjectTag>(relation, 0));
     ASSERT_TRUE(created);
     const auto first_data = first.get_data();
 
@@ -480,7 +480,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocks
     }
 
     for (uint_t key = 1; key < 3000; ++key)
-        repository.get_or_create(make_binding<ObjectTag>(relation, key));
+        repository.insert(make_binding<ObjectTag>(relation, key));
 
     stop.store(true, std::memory_order_release);
     for (auto& reader : readers)
@@ -496,16 +496,16 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
     auto parent = ConcurrentRepository<ObjectTag>(0, nullptr, formalism::RelationRepositoryConfig(12));
     auto parent_data = Data<ConcurrentElement> {};
     parent_data.value = 7;
-    const auto [parent_view, parent_created] = parent.get_or_create(parent_data);
+    const auto [parent_view, parent_created] = parent.insert(parent_data);
     ASSERT_TRUE(parent_created);
 
     auto parent_serialized_data = Data<ConcurrentSerializedElement> {};
     parent_serialized_data.values.push_back(parent_view.get_index());
-    const auto [parent_serialized_view, parent_serialized_created] = parent.get_or_create(parent_serialized_data);
+    const auto [parent_serialized_view, parent_serialized_created] = parent.insert(parent_serialized_data);
     ASSERT_TRUE(parent_serialized_created);
 
     const auto relation = Index<ConcurrentRelation>(0);
-    const auto [parent_binding_view, parent_binding_created] = parent.get_or_create(make_binding<ObjectTag>(relation, 7));
+    const auto [parent_binding_view, parent_binding_created] = parent.insert(make_binding<ObjectTag>(relation, 7));
     ASSERT_TRUE(parent_binding_created);
 
     auto child = ConcurrentRepository<ObjectTag>(1, &parent, formalism::RelationRepositoryConfig(12));
@@ -517,19 +517,19 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                 {
                     auto inherited = Data<ConcurrentElement> {};
                     inherited.value = 7;
-                    const auto [inherited_view, inherited_created] = child.get_or_create(inherited);
+                    const auto [inherited_view, inherited_created] = child.insert(inherited);
                     if (inherited_created || &inherited_view.get_context() != &parent || inherited.index != inherited_view.get_index())
                         errors.fetch_add(1, std::memory_order_relaxed);
 
                     auto inherited_serialized = Data<ConcurrentSerializedElement> {};
                     inherited_serialized.values.push_back(parent_view.get_index());
-                    const auto [inherited_serialized_view, inherited_serialized_created] = child.get_or_create(inherited_serialized);
+                    const auto [inherited_serialized_view, inherited_serialized_created] = child.insert(inherited_serialized);
                     if (inherited_serialized_created || &inherited_serialized_view.get_context() != &parent
                         || inherited_serialized_view.get_data().values.front() != parent_view.get_index()
                         || inherited_serialized.index != inherited_serialized_view.get_index())
                         errors.fetch_add(1, std::memory_order_relaxed);
 
-                    const auto [inherited_binding_view, inherited_binding_created] = child.get_or_create(make_binding<ObjectTag>(relation, 7));
+                    const auto [inherited_binding_view, inherited_binding_created] = child.insert(make_binding<ObjectTag>(relation, 7));
                     if (inherited_binding_created || &inherited_binding_view.get_context() != &parent
                         || !std::ranges::equal(inherited_binding_view.get_data(), parent_binding_view.get_data()))
                         errors.fetch_add(1, std::memory_order_relaxed);
@@ -543,7 +543,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                     {
                         auto local = Data<ConcurrentElement> {};
                         local.value = 1000 + static_cast<uint_t>(thread) * rows_per_thread + row;
-                        const auto [local_view, created] = child.get_or_create(local);
+                        const auto [local_view, created] = child.insert(local);
                         if (!created || &local_view.get_context() != &child || local_view.get_data().value != local.value
                             || local_view.get_data().index != local_view.get_index() || local.index != local_view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
@@ -573,13 +573,13 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     invalid_objects.push_back(Index<Object>(2));
     invalid_objects.push_back(Index<Object>(8));
     auto invalid = Data<Binding<ObjectTag>>(relation, 4, std::move(invalid_objects));
-    EXPECT_THROW(repository.get_or_create(invalid), std::out_of_range);
+    EXPECT_THROW(repository.insert(invalid), std::out_of_range);
     EXPECT_EQ(repository.size(relation), 0);
 
     auto valid_objects = IndexList<Object> {};
     for (uint_t value = 0; value < 4; ++value)
         valid_objects.push_back(Index<Object>(value));
-    const auto [view, created] = repository.get_or_create(Data<Binding<ObjectTag>>(relation, 4, std::move(valid_objects)));
+    const auto [view, created] = repository.insert(Data<Binding<ObjectTag>>(relation, 4, std::move(valid_objects)));
     EXPECT_TRUE(created);
     EXPECT_EQ(view.get_index().row, Index<formalism::Row>(0));
 
@@ -588,7 +588,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     auto reused_objects = IndexList<Object> {};
     for (uint_t value = 4; value < 8; ++value)
         reused_objects.push_back(Index<Object>(value));
-    const auto [reused, reused_created] = repository.get_or_create(Data<Binding<ObjectTag>>(relation, 4, std::move(reused_objects)));
+    const auto [reused, reused_created] = repository.insert(Data<Binding<ObjectTag>>(relation, 4, std::move(reused_objects)));
     EXPECT_TRUE(reused_created);
     EXPECT_EQ(reused.get_index().row, Index<formalism::Row>(0));
 }
@@ -611,7 +611,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailuresDoNotInterfereWit
                         const auto key = static_cast<uint_t>(thread / 2) * rows_per_thread + row;
                         try
                         {
-                            const auto [view, was_created] = repository.get_or_create(make_packed_binding(relation, key, thread % 2 == 0));
+                            const auto [view, was_created] = repository.insert(make_packed_binding(relation, key, thread % 2 == 0));
                             if (thread % 2 == 0)
                             {
                                 created.fetch_add(was_created, std::memory_order_relaxed);

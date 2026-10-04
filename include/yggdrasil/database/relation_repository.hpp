@@ -90,7 +90,8 @@ public:
     auto& get_row_set_repository() noexcept { return m_row_sets; }
     const auto& get_row_set_repository() const noexcept { return m_row_sets; }
 
-    Index<RelationRowSet<T>> intern_rows(const Builder<Relation<T>>& builder)
+    template<RelationViewConcept<T> V>
+    Index<RelationRowSet<T>> insert_rows(const V& builder)
     {
         m_row_indices.clear();
         m_row_indices.reserve(builder.size());
@@ -111,21 +112,21 @@ public:
         return std::nullopt;
     }
 
-    std::pair<View<Index<Columns>, RelationRepository>, bool> get_or_create(Data<Columns>& data)
+    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(Data<Columns>& data)
     {
         validate_columns(std::span<const Index<Column>>(data.values.data(), data.values.size()));
-        const auto [index, created] = m_symbols.template get_or_create_local<Columns>(data);
+        const auto [index, created] = m_symbols.template insert_local<Columns>(data);
         return { View<Index<Columns>, RelationRepository>(index, *this), created };
     }
 
-    View<Index<Columns>, RelationRepository> intern_columns(std::span<const Index<Column>> columns)
+    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(std::span<const Index<Column>> columns)
     {
         m_columns_data.clear();
         m_columns_data.values.set(columns.begin(), columns.end());
-        return get_or_create(m_columns_data).first;
+        return insert(m_columns_data);
     }
 
-    std::pair<RelationView<T>, bool> get_or_create(Data<Relation<T>>& data)
+    std::pair<RelationView<T>, bool> insert(Data<Relation<T>>& data)
     {
         if (!m_symbols.template is_local<Columns>(data.columns_index) || data.row_set_index.get_value() >= m_row_sets.size())
             throw std::invalid_argument("RelationRepository: invalid schema or row-set index.");
@@ -139,7 +140,7 @@ public:
                 throw std::invalid_argument("RelationRepository: row indices must be sorted and unique.");
         }
         ensure_storage_index(data.row_set_index);
-        const auto [index, created] = m_symbols.template get_or_create_local<Relation<T>>(data);
+        const auto [index, created] = m_symbols.template insert_local<Relation<T>>(data);
         return { RelationView<T>(index, *this), created };
     }
 
@@ -176,9 +177,9 @@ public:
             throw std::invalid_argument("RelationRepository: rename requires matching arity.");
         auto data = source.get_data();
         ygg::clear(data.index);
-        data.columns_index = intern_columns(columns).get_index();
+        data.columns_index = insert(columns).first.get_index();
         data.schema_namespace = schema_namespace;
-        return get_or_create(data).first;
+        return insert(data).first;
     }
 
     RelationView<T> rename(RelationView<T> source, std::span<const Index<Column>> columns)
@@ -230,41 +231,60 @@ const RelationRepository<T>& get_columns_repository(const RelationRepository<T>&
 // Validation stays in the raw repository members for both direct and prepared
 // calls.
 template<TriviallyCopyable T>
-void prepare_for_interning(RelationRepository<T>&, Data<Columns>&) noexcept
+void prepare_for_insert(RelationRepository<T>&, Data<Columns>&) noexcept
 {
 }
 
 template<TriviallyCopyable T>
-void prepare_for_interning(RelationRepository<T>&, Data<Relation<T>>&) noexcept
+void prepare_for_insert(RelationRepository<T>&, Data<Relation<T>>&) noexcept
 {
 }
 
-using formalism::get_or_create;
+using formalism::insert;
 
+/// Insert mutable schemas and synchronize their canonical identity.
 template<TriviallyCopyable T>
-auto intern_columns(Builder<Columns>& builder, RelationRepository<T>& repository)
+auto insert(RelationRepository<T>& repository, Builder<Columns>& builder)
 {
-    return get_or_create(repository, builder.get_data());
+    return formalism::insert(repository, builder.get_data());
 }
 
+/// Intern a compatible mutable relation without copying its tuple storage.
 template<TriviallyCopyable T>
-Data<Relation<T>>& make_data(const Builder<Relation<T>>& builder, Data<Relation<T>>& data, RelationRepository<T>& repository, size_t schema_namespace = 0)
-{
-    data.clear();
-    data.columns_index = repository.intern_columns(builder.columns()).get_index();
-    data.row_set_index = repository.intern_rows(builder);
-    data.schema_namespace = schema_namespace;
-    return data;
-}
-
-template<TriviallyCopyable T>
-auto intern_relation(Builder<Relation<T>>& builder, RelationRepository<T>& repository, size_t schema_namespace = 0)
+auto insert(RelationRepository<T>& repository, Builder<Relation<T>>& builder, size_t schema_namespace = 0)
 {
     auto data = Data<Relation<T>>();
-    make_data(builder, data, repository, schema_namespace);
-    auto result = get_or_create(repository, data);
+    data.columns_index = repository.insert(builder.columns().span()).first.get_index();
+    data.row_set_index = repository.insert_rows(builder);
+    data.schema_namespace = schema_namespace;
+    auto result = formalism::insert(repository, data);
     builder.set_index(result.first.get_index());
     return result;
+}
+
+/// Remap repository-local schema and row identities into the destination.
+template<TriviallyCopyable T, typename C>
+auto copy(View<Data<Relation<T>>, C> source, RelationRepository<T>& repository)
+{
+    auto data = Data<Relation<T>>();
+    data.columns_index = repository.insert(source.columns().span()).first.get_index();
+    data.row_set_index = repository.insert_rows(source);
+    data.schema_namespace = source.get_data().schema_namespace;
+    return formalism::insert(repository, data);
+}
+
+template<TriviallyCopyable T, typename C>
+auto copy(View<Index<Relation<T>>, C> source, RelationRepository<T>& repository)
+{
+    if (&get_relation_repository(source.get_context()) == &repository)
+        return std::pair { make_view(source.get_index(), repository), false };
+    return copy(make_view(source.get_data(), source.get_context()), repository);
+}
+
+template<TriviallyCopyable T, ColumnsViewConcept V>
+auto copy(const V& source, RelationRepository<T>& repository)
+{
+    return repository.insert(source.span());
 }
 
 }  // namespace ygg::database

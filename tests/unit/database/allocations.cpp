@@ -431,6 +431,7 @@ struct InterningEvaluation
     RelationPool<> pool = row_factory.create_pool();
     RelationRepositoryFactory<> factory { row_factory };
     RelationRepository<> repository = factory.create();
+    RelationRepository<> copied_repository = factory.create();
     Builder<Columns> schema_builder;
     Data<Columns> schema_data;
     const std::array<ColumnIndex, 3> columns { ColumnIndex(11), ColumnIndex(12), ColumnIndex(13) };
@@ -439,6 +440,7 @@ struct InterningEvaluation
     bool evaluate(bool reverse, uint_t generation)
     {
         repository.clear();
+        copied_repository.clear();
         bool valid = true;
         constexpr size_t count = 512;
         for (size_t i = 0; i < count; ++i)
@@ -448,9 +450,9 @@ struct InterningEvaluation
             const auto arity = 1 + logical_index % 3;
             const auto schema = std::span<const ColumnIndex>(columns.data(), arity);
             schema_builder.assign(schema);
-            const auto interned_schema = intern_columns(schema_builder, repository).first;
-            make_data(schema_builder, schema_data);
-            const auto [duplicate_schema, schema_created] = repository.get_or_create(schema_data);
+            const auto interned_schema = insert(repository, schema_builder).first;
+            assign(schema_data, schema_builder);
+            const auto [duplicate_schema, schema_created] = repository.insert(schema_data);
             valid &= !schema_created && interned_schema.get_index() == duplicate_schema.get_index();
             valid &= std::ranges::equal(interned_schema.span(), schema);
             auto builder = pool.get_or_allocate(schema);
@@ -459,11 +461,18 @@ struct InterningEvaluation
             const std::array<uint_t, 3> second_row { seed + 1, seed + 2, seed + 3 };
             builder->insert(std::span<const uint_t>(first_row.data(), arity));
             builder->insert(std::span<const uint_t>(second_row.data(), arity));
-            const auto [original, created] = intern_relation(*builder, repository, generation);
+            const auto [original, created] = insert(repository, *builder, generation);
+            const auto [copied, copied_created] = database::copy(original, copied_repository);
+            valid &= copied_created && copied.get_data().schema_namespace == generation;
+            valid &= !database::copy(original, copied_repository).second;
+            auto extracted = pool.get_or_allocate(schema);
+            assign(*extracted, copied);
+            valid &= extracted->get_index().is_max() && extracted->size() == original.size();
+            valid &= extracted->contains(std::span<const uint_t>(first_row.data(), arity));
             builder->clear();
             builder->insert(std::span<const uint_t>(second_row.data(), arity));
             builder->insert(std::span<const uint_t>(first_row.data(), arity));
-            const auto [duplicate, duplicate_created] = intern_relation(*builder, repository, generation);
+            const auto [duplicate, duplicate_created] = insert(repository, *builder, generation);
             const auto renamed = repository.rename(original, std::span<const ColumnIndex>(renamed_columns.data(), arity), generation);
             valid &= created && !duplicate_created;
             valid &= original.get_index() == duplicate.get_index();
@@ -474,9 +483,9 @@ struct InterningEvaluation
             valid &= renamed.contains(std::span<const uint_t>(first_row.data(), arity));
         }
         auto nullary = pool.get_or_allocate({});
-        const auto false_view = intern_relation(*nullary, repository, generation).first;
+        const auto false_view = insert(repository, *nullary, generation).first;
         nullary->insert({});
-        const auto true_view = intern_relation(*nullary, repository, generation).first;
+        const auto true_view = insert(repository, *nullary, generation).first;
         valid &= false_view.empty() && true_view.size() == 1;
         valid &= repository.size() == 2 * count + 2;
         return valid;

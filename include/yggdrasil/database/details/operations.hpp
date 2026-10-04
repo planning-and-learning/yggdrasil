@@ -141,6 +141,13 @@ void select(const V& input, Predicate predicate, Builder<Relation<T>>& out)
             out.insert(input[i]);
 }
 
+template<TriviallyCopyable T, RelationViewConcept<T> V>
+Builder<Relation<T>>& assign(Builder<Relation<T>>& destination, const V& source)
+{
+    select(source, [](std::span<const T>) { return true; }, destination);
+    return destination;
+}
+
 template<TriviallyCopyable T, RelationViewConcept<T> V, typename Predicate>
     requires std::predicate<Predicate&, std::span<const T>>
 Builder<Relation<T>> select(const V& input, Predicate predicate)

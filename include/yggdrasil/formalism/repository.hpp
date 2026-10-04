@@ -36,7 +36,7 @@
 namespace ygg::formalism
 {
 
-/// Concurrent repository aliases support overlapping find, get_or_create,
+/// Concurrent repository aliases support overlapping find, insert,
 /// published-index lookup, and size calls. Builders remain thread-confined;
 /// clear, memory accounting, and destruction require quiescence. Parent layers
 /// must remain frozen and outlive their descendants.
@@ -45,6 +45,8 @@ class Repository
 {
 public:
     using SymbolTypes = typename SymbolRepo::SymbolTypes;
+    using RelationTypes = typename RelationRepo::RelationTypes;
+    using object_tag = typename RelationRepo::object_tag;
 
 private:
     const Repository* m_parent;
@@ -80,7 +82,7 @@ private:
         return std::nullopt;
     }
 
-    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local
+    /// Cold half of insert_with_hash, see YGG_NOINLINE. Rechecks the local
     /// layer before publishing.
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
@@ -96,7 +98,7 @@ private:
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    std::pair<View<Index<T>, Repository>, bool> get_or_create_with_hash(Data<T>& builder, size_t h)
+    std::pair<View<Index<T>, Repository>, bool> insert_with_hash(Data<T>& builder, size_t h)
     {
         if (auto found = find_with_hash(builder, h))
         {
@@ -116,6 +118,7 @@ private:
      */
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     std::optional<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>>
     find_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h) const
     {
@@ -141,8 +144,9 @@ private:
     }
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
-    get_or_create_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
+    insert_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
     {
         if (auto found = find_with_hash(builder, h))
             return { *found, false };
@@ -150,9 +154,10 @@ private:
         return create_local_with_hash(builder, h);
     }
 
-    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local
+    /// Cold half of insert_with_hash, see YGG_NOINLINE. Rechecks the local
     /// lane before publishing.
     template<typename T>
+        requires SupportsRelation<Repository, T>
     YGG_NOINLINE std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
     create_local_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
     {
@@ -191,9 +196,9 @@ public:
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    std::pair<View<Index<T>, Repository>, bool> get_or_create(Data<T>& builder)
+    std::pair<View<Index<T>, Repository>, bool> insert(Data<T>& builder)
     {
-        return get_or_create_with_hash(builder, SymbolRepo::hash(builder));
+        return insert_with_hash(builder, SymbolRepo::hash(builder));
     }
 
     template<typename T>
@@ -257,6 +262,7 @@ public:
      */
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     std::optional<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>>
     find(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder) const
     {
@@ -264,13 +270,15 @@ public:
     }
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
-    get_or_create(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder)
+    insert(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder)
     {
-        return get_or_create_with_hash(builder, RelationRepo::hash(builder));
+        return insert_with_hash(builder, RelationRepo::hash(builder));
     }
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     auto operator[](Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const
     {
         const Repository* current = this;
@@ -285,26 +293,29 @@ public:
     }
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     auto front(Index<T> g) const
     {
         return (*this)[Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, Index<Row>(0) }];
     }
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     size_t size(Index<T> g) const noexcept
     {
         return m_relation_repository.size(g);
     }
 
     template<RelationBindingConcept T>
+        requires SupportsRelation<Repository, typename T::relation_tag> && std::same_as<typename T::object_tag, typename RelationRepo::object_tag>
     size_t memory_usage() const noexcept
     {
         using Binding = std::remove_cvref_t<T>;
-        static_assert(std::is_same_v<typename Binding::object_tag, typename RelationRepo::object_tag>);
         return m_relation_repository.template memory_usage<typename Binding::relation_tag>();
     }
 
     template<typename T>
+        requires SupportsRelation<Repository, T>
     const Repository& get_canonical_context(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const
     {
         const Repository* current = this;

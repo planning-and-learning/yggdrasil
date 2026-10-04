@@ -60,6 +60,12 @@ static_assert(!std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue>>
 static_assert(!std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue, true>>);
 static_assert(!std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue, true>>);
 
+template<typename Pool, typename Argument>
+concept CanInitializeUniquePool = requires(Pool& pool, Argument&& argument) { pool.get_or_allocate(std::forward<Argument>(argument)); };
+static_assert(CanInitializeUniquePool<ygg::UniqueObjectPool<UniquePoolValue>, int>);
+static_assert(!CanInitializeUniquePool<ygg::UniqueObjectPool<UniquePoolValue>, std::vector<int>>);
+static_assert(!CanInitializeUniquePool<ygg::UniqueObjectPool<int>, int>);
+
 template<bool ThreadSafe>
 void expect_unique_pool_grows_and_reuses_across_capacity_boundaries()
 {

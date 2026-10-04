@@ -388,7 +388,7 @@ public:
         return find_local_with_hash(builder, BasicRelationRepository::hash(builder));
     }
 
-    std::pair<Index<Row>, bool> get_or_create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
+    std::pair<Index<Row>, bool> insert_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
     {
         if (const auto index = find_local_with_hash(builder, h))
             return { *index, false };
@@ -396,9 +396,9 @@ public:
         return create_local_with_hash(builder, h);
     }
 
-    std::pair<Index<Row>, bool> get_or_create_local(const Data<RelationBinding<T, ObjectTag>>& builder)
+    std::pair<Index<Row>, bool> insert_local(const Data<RelationBinding<T, ObjectTag>>& builder)
     {
-        return get_or_create_local_with_hash(builder, BasicRelationRepository::hash(builder));
+        return insert_local_with_hash(builder, BasicRelationRepository::hash(builder));
     }
 
     /// Completes a hierarchy-wide miss by rechecking this lane before publishing storage.

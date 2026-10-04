@@ -221,13 +221,13 @@ over `Builder<Columns>`, `Data<Columns>`, and `Index<Columns>` provide read-only
 schema access and satisfy `ColumnsViewConcept`. Indexed schema views resolve through
 `get_columns_repository(context)`.
 
-Use `intern_columns(builder, repository)` to obtain a canonical schema view
+Use `insert(repository, builder)` to obtain a canonical schema view
 and a boolean indicating whether it was inserted. The lower-level path is
-`make_data(builder, data)` followed by `repository.get_or_create(data)`;
+`assign(data, builder)` followed by `repository.insert(data)`;
 `repository.find(data)` and `repository[index]` also accept the schema entity.
-`repository.intern_columns(labels)` accepts a typed label span, available from
+`repository.insert(labels)` accepts a typed label span, available from
 builders and schema views through `.span()`, and returns the canonical schema
-view. It copies labels into retained scratch storage before
+view together with its insertion flag. It copies labels into retained scratch storage before
 publication, so subsequent calls within warmed capacities do not allocate.
 Schema publication validates unique labels. Canonical schema records use the
 existing symbol repository arena; there is no additional schema interner.
@@ -255,7 +255,7 @@ using ColumnIndex = ygg::Index<Column>;
 ygg::Builder<Relation<>> builder({ColumnIndex {0}, ColumnIndex {1}});
 builder.insert({10, 20});
 
-auto [result, inserted] = intern_relation(builder, repository);
+auto [result, inserted] = insert(repository, builder);
 auto pending = ygg::make_view(builder, repository);
 auto stored = ygg::make_view(result.get_data(), repository);
 // result, pending, and stored expose the same read-only relation operations.
@@ -291,8 +291,7 @@ so their row-storage identities share one sequence.
 
 Python keeps `database.Relation` as the mutable builder and exposes
 `RelationRepositoryFactory`, `RelationRepository`, `RelationIndex`,
-`RelationView`, and `intern_relation(builder, repository,
-schema_namespace=0)`. The Python interning function returns the canonical view.
+`RelationView`, and `insert(repository, builder, schema_namespace=0)`. The Python insertion function returns `(view, inserted)`.
 Python constructors, pool checkout, and rename accept integer column labels;
 `.columns()` returns a read-only borrowed `ColumnIndices` sequence exposing
 integers without copying the schema. Rows use the separate `RelationRow` type.
@@ -343,3 +342,15 @@ and `database_allocations`; run
 them with `ctest --test-dir <build> -R '^database_' --output-on-failure`.
 The allocation regression counts allocation and deallocation calls during
 changing-state evaluations after warmup.
+
+The conversion operations have separate responsibilities: `insert(repository,
+builder)` interns compatible mutable input and returns `(view, inserted)`;
+`assign(destination, source)` replaces mutable contents while retaining available
+capacity; `copy(source, repository)` remaps an interned relation into another
+repository and returns `(view, inserted)`. Copy preserves ordered columns and
+schema namespaces. Assignment requires matching ordered columns and distinct
+row storage. Obtain an appropriately shaped pool entry before assignment.
+
+Python uses these same names and argument order. Both `insert` and `copy` return
+`(view, inserted)` tuples, and the returned view retains its repository even after
+the tuple is unpacked and released.

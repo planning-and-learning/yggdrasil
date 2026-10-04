@@ -18,13 +18,13 @@ namespace ygg::formalism
 /// repository.
 template<typename Repository, typename T>
     requires requires(Repository& repository, Data<T>& data) {
-        { prepare_for_interning(repository, data) } -> std::same_as<void>;
-        { repository.get_or_create(data) } -> std::same_as<std::pair<View<Index<T>, Repository>, bool>>;
+        { prepare_for_insert(repository, data) } -> std::same_as<void>;
+        { repository.insert(data) } -> std::same_as<std::pair<View<Index<T>, Repository>, bool>>;
     }
-[[nodiscard]] auto get_or_create(Repository& repository, Data<T>& data)
+[[nodiscard]] auto insert(Repository& repository, Data<T>& data)
 {
-    prepare_for_interning(repository, data);
-    return repository.get_or_create(data);
+    prepare_for_insert(repository, data);
+    return repository.insert(data);
 }
 
 }  // namespace ygg::formalism

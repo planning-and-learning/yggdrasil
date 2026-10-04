@@ -47,6 +47,9 @@ template<typename Range, typename Value>
 concept InputRangeOf = std::ranges::input_range<Range> && std::same_as<std::ranges::range_value_t<Range>, Value>;
 
 template<typename T>
+concept Clearable = requires(T& value) { value.clear(); };
+
+template<typename T>
 concept TriviallyCopyable = std::is_trivially_copyable_v<T>;
 
 template<typename T>
