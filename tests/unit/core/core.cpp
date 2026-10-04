@@ -176,6 +176,11 @@ TEST(YggdrasilTests, CommonCoreUmbrellaExposesLightweightHelpers)
     static_assert(InputRangeOf<std::vector<int>, int>);
     static_assert(TriviallyCopyable<int>);
 
+    static_assert(TypeList<int, double>::contains<int>);
+    static_assert(TypeList<int, double>::contains<double>);
+    static_assert(!TypeList<int, double>::contains<char>);
+    static_assert(!TypeList<int, double>::contains<const int>);
+    static_assert(!TypeList<>::contains<int>);
     using Tuple = TypeListToTupleT<TypeList<int, double>>;
     static_assert(std::is_same_v<Tuple, std::tuple<int, double>>);
     static_assert(std::is_same_v<ApplyTypeListT<std::tuple, TypeList<int, double>>, std::tuple<int, double>>);

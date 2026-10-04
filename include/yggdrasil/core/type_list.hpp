@@ -18,6 +18,7 @@
 #ifndef YGG_CORE_TYPE_LIST_HPP_
 #define YGG_CORE_TYPE_LIST_HPP_
 
+#include <concepts>
 #include <tuple>
 
 namespace ygg
@@ -26,6 +27,8 @@ namespace ygg
 template<typename... Ts>
 struct TypeList
 {
+    template<typename T>
+    static constexpr bool contains = (std::same_as<T, Ts> || ...);
 };
 
 template<template<typename...> typename T, typename List>

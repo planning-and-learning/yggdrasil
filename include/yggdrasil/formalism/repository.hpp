@@ -43,6 +43,9 @@ namespace ygg::formalism
 template<typename SymbolRepo, typename RelationRepo>
 class Repository
 {
+public:
+    using SymbolTypes = typename SymbolRepo::SymbolTypes;
+
 private:
     const Repository* m_parent;
     const Repository* m_root;
@@ -51,14 +54,15 @@ private:
     size_t m_index;
 
     /**
-     * Global methods traverse the current repository layer and its parent hierarchy.
-     * Handle-producing methods return views that retain the discovered canonical context.
+     * Global methods traverse the current repository layer and its parent
+     * hierarchy. Handle-producing methods return views that retain the discovered
+     * canonical context.
      *
      * Symbol operations.
      */
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     std::optional<View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
         if (auto index_or_nullopt = m_symbol_repository.find_local_with_hash(builder, h))
@@ -76,9 +80,10 @@ private:
         return std::nullopt;
     }
 
-    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local layer before publishing.
+    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local
+    /// layer before publishing.
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     YGG_NOINLINE std::pair<View<Index<T>, Repository>, bool> create_local_with_hash(Data<T>& builder, size_t h)
     {
         assert(!m_symbol_repository.template exists_parent_mutation<T>()
@@ -90,18 +95,22 @@ private:
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     std::pair<View<Index<T>, Repository>, bool> get_or_create_with_hash(Data<T>& builder, size_t h)
     {
         if (auto found = find_with_hash(builder, h))
+        {
+            builder.index = found->get_index();
             return { *found, false };
+        }
 
         return create_local_with_hash(builder, h);
     }
 
     /**
-     * Global methods traverse the current repository layer and its parent hierarchy.
-     * Handle-producing methods return views that retain the discovered canonical context.
+     * Global methods traverse the current repository layer and its parent
+     * hierarchy. Handle-producing methods return views that retain the discovered
+     * canonical context.
      *
      * Relation operations.
      */
@@ -141,7 +150,8 @@ private:
         return create_local_with_hash(builder, h);
     }
 
-    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local lane before publishing.
+    /// Cold half of get_or_create_with_hash, see YGG_NOINLINE. Rechecks the local
+    /// lane before publishing.
     template<typename T>
     YGG_NOINLINE std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
     create_local_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
@@ -165,28 +175,29 @@ public:
     friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
 
     /**
-     * Global methods traverse the current repository layer and its parent hierarchy.
-     * Handle-producing methods return views that retain the discovered canonical context.
+     * Global methods traverse the current repository layer and its parent
+     * hierarchy. Handle-producing methods return views that retain the discovered
+     * canonical context.
      *
      * Symbol operations.
      */
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     std::optional<View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
     {
         return find_with_hash(builder, SymbolRepo::hash(builder));
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     std::pair<View<Index<T>, Repository>, bool> get_or_create(Data<T>& builder)
     {
         return get_or_create_with_hash(builder, SymbolRepo::hash(builder));
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     const Data<T>& operator[](Index<T> index) const
     {
         const Repository* current = this;
@@ -201,28 +212,28 @@ public:
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     const Data<T>& front() const
     {
         return (*this)[Index<T>(0)];
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     size_t size() const noexcept
     {
         return m_symbol_repository.template size<T>();
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     size_t memory_usage() const noexcept
     {
         return m_symbol_repository.template memory_usage<T>();
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     const Repository& get_canonical_context(Index<T> index) const
     {
         const Repository* current = this;
@@ -238,8 +249,9 @@ public:
     }
 
     /**
-     * Global methods traverse the current repository layer and its parent hierarchy.
-     * Handle-producing methods return views that retain the discovered canonical context.
+     * Global methods traverse the current repository layer and its parent
+     * hierarchy. Handle-producing methods return views that retain the discovered
+     * canonical context.
      *
      * Relation operations.
      */

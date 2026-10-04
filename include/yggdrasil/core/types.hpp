@@ -78,7 +78,11 @@ private:
 public:
     View(Index<T> handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
 
-    decltype(auto) get_data() const { return (*m_context)[m_handle]; }
+    decltype(auto) get_data() const
+        requires requires(const C& context, Index<T> index) { context[index]; }
+    {
+        return (*m_context)[m_handle];
+    }
     const auto& get_context() const noexcept { return *m_context; }
     const auto& get_handle() const noexcept { return m_handle; }
     auto get_index() const noexcept { return m_handle; }
@@ -109,17 +113,17 @@ auto make_view(const T& element, const C& context)
 }
 
 template<typename T, typename C>
-concept ViewConcept = requires(T type, const C& context) {
+concept ViewConcept = requires(const T& type, const C& context, const View<T, C>& view) {
     // Constructor
     View<T, C>(type, context);
     // Helper
     { make_view(type, context) } -> std::same_as<View<T, C>>;
     // Method to retrieve the underlying Data.
-    { View<T, C>(type, context).get_data() };
+    view.get_data();
     // Method to retrieve the underlying context.
-    { View<T, C>(type, context).get_context() };
+    { view.get_context() } -> std::same_as<const C&>;
     // Method to retrieve the underlying lightweight handle or data.
-    { View<T, C>(type, context).get_handle() } -> std::same_as<const T&>;
+    { view.get_handle() } -> std::same_as<const T&>;
 };
 
 // Storage decision: trivially copyable data types are treated as flat in-memory

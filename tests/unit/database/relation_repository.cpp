@@ -75,6 +75,18 @@ static_assert(std::same_as<IndexView, RelationView<>>);
 static_assert(RelationViewConcept<BuilderView>);
 static_assert(RelationViewConcept<DataView>);
 static_assert(RelationViewConcept<IndexView>);
+static_assert(ViewConcept<RelationBuilder, Repository>);
+static_assert(ViewConcept<Data<RelationTag>, Repository>);
+static_assert(ViewConcept<Index<RelationTag>, Repository>);
+static_assert(ViewConcept<Builder<Columns>, Repository>);
+static_assert(ViewConcept<Data<Columns>, Repository>);
+static_assert(ViewConcept<Index<Columns>, Repository>);
+static_assert(std::same_as<Repository::SymbolTypes, TypeList<Columns, RelationTag>>);
+static_assert(formalism::SupportsSymbol<Repository, Columns>);
+static_assert(formalism::SupportsSymbol<Repository, RelationTag>);
+static_assert(!formalism::SupportsSymbol<Repository, Column>);
+static_assert(!formalism::SupportsSymbol<Repository, Relation<double>>);
+
 static_assert(std::same_as<typename BuilderView::ElementType, uint_t>);
 static_assert(std::same_as<typename DataView::ElementType, uint_t>);
 static_assert(std::same_as<typename IndexView::ElementType, uint_t>);
@@ -121,6 +133,16 @@ void expect_rows(const ViewType& view, std::initializer_list<std::initializer_li
 }
 }  // namespace
 
+TEST(YggdrasilTests, DatabasePreparedInterningRetainsRawSchemaValidation)
+{
+    auto repository = RelationRepositoryFactory<>().create();
+    auto invalid = Data<Columns>();
+    invalid.values.push_back(ColumnIndex(3));
+    invalid.values.push_back(ColumnIndex(3));
+    EXPECT_THROW((void) database::get_or_create(repository, invalid), std::invalid_argument);
+    EXPECT_FALSE(repository.find(invalid));
+}
+
 TEST(YggdrasilTests, DatabaseColumnsInternOrderedSchemasThroughBuilderDataAndIndexViews)
 {
     RelationRepositoryFactory<> factory;
@@ -145,8 +167,10 @@ TEST(YggdrasilTests, DatabaseColumnsInternOrderedSchemasThroughBuilderDataAndInd
     EXPECT_EQ(&data_view.get_handle(), &pending);
     EXPECT_EQ(&index_view.get_data(), &repository[original.get_index()]);
 
-    const auto [duplicate, duplicate_created] = repository.get_or_create(pending);
+    pending.index = Index<Columns>(99);
+    const auto [duplicate, duplicate_created] = database::get_or_create(repository, pending);
     EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(pending.index, original.get_index());
     EXPECT_TRUE(EqualTo<ColumnsIndexView> {}(original, duplicate));
     EXPECT_EQ(Hash<ColumnsIndexView> {}(original), Hash<ColumnsIndexView> {}(duplicate));
     ASSERT_TRUE(repository.find(pending));

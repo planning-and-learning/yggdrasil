@@ -20,12 +20,87 @@
 #include <span>
 #include <vector>
 #include <yggdrasil/core/concepts.hpp>
+#include <yggdrasil/core/types.hpp>
 #include <yggdrasil/semantics/comparators.hpp>
 #include <yggdrasil/semantics/equal_to.hpp>
 #include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::tests
 {
+struct ViewContractValue;
+struct MutableViewHandle;
+struct CopiedContextViewHandle;
+struct CopiedHandleViewHandle;
+struct ViewContractContext;
+struct MissingViewLookupContext
+{
+};
+}
+
+namespace ygg
+{
+template<>
+struct Data<tests::ViewContractValue>
+{
+    int value = 0;
+};
+template<>
+struct Index<tests::ViewContractValue>
+{
+    unsigned value = 0;
+};
+
+template<>
+struct View<tests::MutableViewHandle, tests::ViewContractContext>
+{
+    View(const tests::MutableViewHandle&, const tests::ViewContractContext&);
+    const int& get_data();
+    const tests::ViewContractContext& get_context() const;
+    const tests::MutableViewHandle& get_handle() const;
+};
+
+template<>
+struct View<tests::CopiedContextViewHandle, tests::ViewContractContext>
+{
+    View(const tests::CopiedContextViewHandle&, const tests::ViewContractContext&);
+    const int& get_data() const;
+    tests::ViewContractContext get_context() const;
+    const tests::CopiedContextViewHandle& get_handle() const;
+};
+
+template<>
+struct View<tests::CopiedHandleViewHandle, tests::ViewContractContext>
+{
+    View(const tests::CopiedHandleViewHandle&, const tests::ViewContractContext&);
+    const int& get_data() const;
+    const tests::ViewContractContext& get_context() const;
+    tests::CopiedHandleViewHandle get_handle() const;
+};
+}
+
+namespace ygg::tests
+{
+struct MutableViewHandle
+{
+};
+struct CopiedContextViewHandle
+{
+};
+struct CopiedHandleViewHandle
+{
+};
+struct ViewContractContext
+{
+    Data<ViewContractValue> value;
+    const Data<ViewContractValue>& operator[](Index<ViewContractValue>) const { return value; }
+};
+
+static_assert(ViewConcept<Data<ViewContractValue>, ViewContractContext>);
+static_assert(ViewConcept<Index<ViewContractValue>, ViewContractContext>);
+static_assert(!ViewConcept<Index<ViewContractValue>, MissingViewLookupContext>);
+static_assert(!ViewConcept<MutableViewHandle, ViewContractContext>);
+static_assert(!ViewConcept<CopiedContextViewHandle, ViewContractContext>);
+static_assert(!ViewConcept<CopiedHandleViewHandle, ViewContractContext>);
 
 struct IdentifiableConceptFixture
 {

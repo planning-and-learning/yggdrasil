@@ -16,6 +16,7 @@
  */
 
 #include "gtest/gtest.h"
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -25,6 +26,7 @@
 #include <yggdrasil/formalism/binding_data.hpp>
 #include <yggdrasil/formalism/binding_view.hpp>
 #include <yggdrasil/formalism/builder.hpp>
+#include <yggdrasil/formalism/interning.hpp>
 #include <yggdrasil/formalism/relation_repository.hpp>
 #include <yggdrasil/formalism/repository.hpp>
 #include <yggdrasil/formalism/repository_factory.hpp>
@@ -42,6 +44,7 @@ struct RepositoryTypesRelation;
 struct RepositoryTypesObjectTag;
 struct RepositoryTypesPackedObjectTag;
 struct RepositoryTypesBuilderOther;
+struct RepositoryTypesCheckout;
 
 struct RepositoryTypesContext
 {
@@ -115,6 +118,21 @@ struct Data<tests::RepositoryTypesBuilderOther>
     auto identifying_members() const noexcept { return std::tie(value); }
 };
 
+template<>
+struct Data<tests::RepositoryTypesCheckout>
+{
+    int index = -1;
+    std::vector<int> values;
+    size_t clear_count = 0;
+
+    void clear() noexcept
+    {
+        index = -1;
+        values.clear();
+        ++clear_count;
+    }
+};
+
 }  // namespace ygg
 
 namespace ygg::formalism
@@ -172,6 +190,179 @@ TEST(YggdrasilTests, CommonBuilderStorageReusesReleasedBuildersByType)
     auto other_builder = storage.get_builder<RepositoryTypesBuilderOther>();
     other_builder->value = 3;
     EXPECT_NE(static_cast<const void*>(other_builder.get()), static_cast<const void*>(reused_element_builder.get()));
+}
+
+template<typename T, typename Storage>
+concept CanCheckout = requires(Storage& storage) {
+    storage.template checkout<T>();
+    ygg::formalism::checkout<T>(storage);
+};
+
+static_assert(CanCheckout<RepositoryTypesCheckout, ygg::formalism::BuilderStorage<RepositoryTypesCheckout>>);
+static_assert(!CanCheckout<RepositoryTypesCheckout, ygg::formalism::BuilderStorage<RepositoryTypesElement>>);
+static_assert(!CanCheckout<RepositoryTypesElement, ygg::formalism::BuilderStorage<RepositoryTypesElement>>);
+
+TEST(YggdrasilTests, CommonBuilderCheckoutClearsOnceAndRetainsCapacity)
+{
+    auto storage = ygg::formalism::BuilderStorage<RepositoryTypesCheckout>();
+    auto data = storage.get_builder<RepositoryTypesCheckout>();
+    data->index = 7;
+    data->values.assign(32, 42);
+    const auto* address = data.get();
+    const auto* buffer = data->values.data();
+    const auto capacity = data->values.capacity();
+    data = {};
+
+    auto raw = storage.get_builder<RepositoryTypesCheckout>();
+    EXPECT_EQ(raw->index, 7);
+    EXPECT_EQ(raw->values.size(), 32);
+    EXPECT_EQ(raw->clear_count, 0);
+    raw = {};
+
+    auto cleared = ygg::formalism::checkout<RepositoryTypesCheckout>(storage);
+    EXPECT_EQ(cleared.get(), address);
+    EXPECT_EQ(cleared->index, -1);
+    EXPECT_TRUE(cleared->values.empty());
+    EXPECT_EQ(cleared->values.data(), buffer);
+    EXPECT_EQ(cleared->values.capacity(), capacity);
+    EXPECT_EQ(cleared->clear_count, 1);
+    cleared = {};
+
+    auto again = storage.checkout<RepositoryTypesCheckout>();
+    EXPECT_EQ(again->clear_count, 2);
+    EXPECT_EQ(again->values.capacity(), capacity);
+}
+
+template<typename Repository, typename T>
+concept CanUseAnySymbolOperation =
+    requires(Repository& repository, Data<T>& data) { repository.get_or_create(data); }
+    || requires(const Repository& repository, const Data<T>& data) { repository.find(data); }
+    || requires(const Repository& repository, Index<T> index) { repository[index]; }
+    || requires(const Repository& repository, Index<T> index) { repository.get_canonical_context(index); }
+    || requires(const Repository& repository) { repository.template size<T>(); } || requires(const Repository& repository) { repository.template front<T>(); }
+    || requires(const Repository& repository) { repository.template memory_usage<T>(); };
+
+template<typename Repository, typename T>
+concept CanUseAnyLocalSymbolOperation =
+    requires(Repository& repository) { repository.template get<T>(); } || requires(const Repository& repository) { repository.template get<T>(); }
+    || requires(const Data<T>& data) { Repository::hash(data); }
+    || requires(const Repository& repository, const Data<T>& data) { repository.find_with_hash(data, 0); }
+    || requires(const Repository& repository, const Data<T>& data) { repository.find_local(data); }
+    || requires(const Repository& repository, const Data<T>& data) { repository.find_local_with_hash(data, 0); }
+    || requires(const Repository& repository, const Data<T>& data) { repository.find_local_unsafe_with_hash(data, 0); }
+    || requires(Repository& repository, Data<T>& data) { repository.get_or_create_local(data); }
+    || requires(Repository& repository, Data<T>& data) { repository.get_or_create_local_with_hash(data, 0); }
+    || requires(Repository& repository, Data<T>& data) { repository.create_local_with_hash(data, 0); }
+    || requires(const Repository& repository, Index<T> index) { repository.at_local(index); }
+    || requires(const Repository& repository, Index<T> index) { repository.is_local(index); }
+    || requires(const Repository& repository) { repository.template front_local<T>(); }
+    || requires(const Repository& repository) { repository.template local_size<T>(); }
+    || requires(const Repository& repository) { repository.template parent_size<T>(); }
+    || requires(const Repository& repository) { repository.template exists_parent_mutation<T>(); };
+
+using ContractSymbols = formalism::SymbolRepository<RepositoryTypesElement>;
+using ContractConcurrentSymbols = formalism::ConcurrentSymbolRepository<RepositoryTypesElement>;
+using ContractRepository = formalism::Repository<ContractSymbols, formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>>;
+using ContractBinding = formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+static_assert(std::same_as<ContractSymbols::SymbolTypes, TypeList<RepositoryTypesElement>>);
+static_assert(std::same_as<ContractConcurrentSymbols::SymbolTypes, ContractSymbols::SymbolTypes>);
+static_assert(std::same_as<ContractRepository::SymbolTypes, ContractSymbols::SymbolTypes>);
+static_assert(formalism::SupportsSymbol<const ContractSymbols&, RepositoryTypesElement>);
+static_assert(formalism::SupportsSymbol<ContractConcurrentSymbols, RepositoryTypesElement>);
+static_assert(formalism::SupportsSymbol<ContractRepository, RepositoryTypesElement>);
+static_assert(!formalism::SupportsSymbol<ContractSymbols, RepositoryTypesSerializedElement>);
+static_assert(!formalism::SupportsSymbol<ContractRepository, ContractBinding>);
+static_assert(!formalism::SupportsSymbol<int, RepositoryTypesElement>);
+static_assert(!CanUseAnySymbolOperation<ContractSymbols, RepositoryTypesSerializedElement>);
+static_assert(!CanUseAnyLocalSymbolOperation<ContractSymbols, RepositoryTypesSerializedElement>);
+static_assert(!CanUseAnySymbolOperation<ContractConcurrentSymbols, RepositoryTypesSerializedElement>);
+static_assert(!CanUseAnyLocalSymbolOperation<ContractConcurrentSymbols, RepositoryTypesSerializedElement>);
+static_assert(!CanUseAnySymbolOperation<ContractRepository, RepositoryTypesSerializedElement>);
+static_assert(ViewConcept<Index<RepositoryTypesElement>, ContractSymbols>);
+static_assert(!ViewConcept<Index<RepositoryTypesSerializedElement>, ContractSymbols>);
+static_assert(!ViewConcept<Index<RepositoryTypesSerializedElement>, ContractRepository>);
+
+struct PreparedRepository
+{
+    ContractSymbols symbols;
+    size_t preparation_count = 0;
+    size_t raw_count = 0;
+
+    std::pair<View<Index<RepositoryTypesElement>, PreparedRepository>, bool> get_or_create(Data<RepositoryTypesElement>& data)
+    {
+        ++raw_count;
+        const auto [index, created] = symbols.get_or_create_local(data);
+        return { View<Index<RepositoryTypesElement>, PreparedRepository>(index, *this), created };
+    }
+    const auto& operator[](Index<RepositoryTypesElement> index) const { return symbols[index]; }
+};
+
+void prepare_for_interning(PreparedRepository& repository, Data<RepositoryTypesElement>& data)
+{
+    ++repository.preparation_count;
+    data.value %= 10;
+}
+
+struct MissingPreparationRepository
+{
+    std::pair<View<Index<RepositoryTypesElement>, MissingPreparationRepository>, bool> get_or_create(Data<RepositoryTypesElement>&);
+};
+struct WrongPreparationRepository
+{
+    std::pair<View<Index<RepositoryTypesElement>, WrongPreparationRepository>, bool> get_or_create(Data<RepositoryTypesElement>&);
+};
+int prepare_for_interning(WrongPreparationRepository&, Data<RepositoryTypesElement>&);
+struct WrongInterningResultRepository
+{
+    Index<RepositoryTypesElement> get_or_create(Data<RepositoryTypesElement>&);
+};
+void prepare_for_interning(WrongInterningResultRepository&, Data<RepositoryTypesElement>&);
+
+void prepare_for_interning(ContractRepository&, Data<ContractBinding>&) noexcept {}
+
+template<typename Repository, typename T>
+concept CanPrepareAndIntern = requires(Repository& repository, Data<T>& data) { formalism::get_or_create(repository, data); };
+static_assert(CanPrepareAndIntern<PreparedRepository, RepositoryTypesElement>);
+static_assert(CanPrepareAndIntern<ContractRepository, ContractBinding>);
+static_assert(!CanPrepareAndIntern<MissingPreparationRepository, RepositoryTypesElement>);
+static_assert(!CanPrepareAndIntern<WrongPreparationRepository, RepositoryTypesElement>);
+static_assert(!CanPrepareAndIntern<WrongInterningResultRepository, RepositoryTypesElement>);
+
+TEST(YggdrasilTests, CommonInterningPreparesExactlyOnceBeforeRawInterning)
+{
+    auto repository = PreparedRepository();
+    auto data = Data<RepositoryTypesElement>();
+    data.value = 17;
+    const auto [first, created] = formalism::get_or_create(repository, data);
+    EXPECT_TRUE(created);
+    EXPECT_EQ(first.get_data().value, 7);
+    EXPECT_EQ(data.index, first.get_index());
+    EXPECT_EQ(repository.preparation_count, 1);
+    EXPECT_EQ(repository.raw_count, 1);
+
+    data.value = 27;
+    data.index = Index<RepositoryTypesElement>(99);
+    const auto [duplicate, duplicate_created] = formalism::get_or_create(repository, data);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate.get_index(), first.get_index());
+    EXPECT_EQ(data.index, first.get_index());
+    EXPECT_EQ(repository.preparation_count, 2);
+    EXPECT_EQ(repository.raw_count, 2);
+}
+
+TEST(YggdrasilTests, CommonInterningAcceptsRelationBindingsWithoutSymbolIdentity)
+{
+    auto repository = ContractRepository(0);
+    using Object = formalism::Object<RepositoryTypesObjectTag>;
+    auto objects = IndexList<Object>();
+    objects.push_back(Index<Object>(3));
+    auto data = Data<ContractBinding>(Index<RepositoryTypesRelation>(0), 1, std::move(objects));
+    const auto [first, created] = formalism::get_or_create(repository, data);
+    EXPECT_TRUE(created);
+    const auto [duplicate, duplicate_created] = formalism::get_or_create(repository, data);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate.get_index(), first.get_index());
+    EXPECT_EQ(first.get_data().front(), Index<Object>(3));
 }
 
 TEST(YggdrasilTests, CommonRepositoryFactoryAssignsIncreasingIndicesAndParents)
@@ -251,6 +442,65 @@ TEST(YggdrasilTests, CommonRelationBindingDataValidatesArity)
     EXPECT_THROW((ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects)), std::invalid_argument);
 }
 
+TEST(YggdrasilTests, CommonBasicSymbolRepositorySynchronizesScratchIdentityOnEveryInsertionPath)
+{
+    auto repository = formalism::BasicSymbolRepository<RepositoryTypesElement>();
+    auto data = Data<RepositoryTypesElement>();
+    data.index = Index<RepositoryTypesElement>(99);
+    data.value = 7;
+    const auto [index, created] = repository.get_or_create_local(data);
+    EXPECT_TRUE(created);
+    EXPECT_EQ(index, Index<RepositoryTypesElement>(0));
+    EXPECT_EQ(data.index, index);
+
+    data.index = Index<RepositoryTypesElement>(99);
+    const auto [duplicate, duplicate_created] = repository.get_or_create_local(data);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate, index);
+    EXPECT_EQ(data.index, index);
+
+    data.index = Index<RepositoryTypesElement>(99);
+    const auto [rechecked, rechecked_created] = repository.create_local_with_hash(data, decltype(repository)::hash(data));
+    EXPECT_FALSE(rechecked_created);
+    EXPECT_EQ(rechecked, index);
+    EXPECT_EQ(data.index, index);
+    EXPECT_EQ(repository.local_size(), 1);
+}
+
+TEST(YggdrasilTests, CommonCompositeRepositorySynchronizesLocalAndInheritedScratchIdentity)
+{
+    auto root = ContractRepository(0);
+    auto data = Data<RepositoryTypesElement>();
+    data.index = Index<RepositoryTypesElement>(99);
+    data.value = 7;
+    const auto [original, created] = root.get_or_create(data);
+    EXPECT_TRUE(created);
+    EXPECT_EQ(data.index, original.get_index());
+
+    data.index = Index<RepositoryTypesElement>(99);
+    const auto [duplicate, duplicate_created] = root.get_or_create(data);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate.get_index(), original.get_index());
+    EXPECT_EQ(data.index, original.get_index());
+
+    auto child = ContractRepository(1, &root);
+    data.index = Index<RepositoryTypesElement>(99);
+    const auto [inherited, inherited_created] = child.get_or_create(data);
+    EXPECT_FALSE(inherited_created);
+    EXPECT_EQ(data.index, original.get_index());
+    EXPECT_EQ(&inherited.get_context(), &root);
+
+    data.index = Index<RepositoryTypesElement>(99);
+    data.value = 11;
+    const auto [local, local_created] = child.get_or_create(data);
+    EXPECT_TRUE(local_created);
+    EXPECT_EQ(data.index, local.get_index());
+    EXPECT_NE(local.get_index(), inherited.get_index());
+    EXPECT_EQ(&local.get_context(), &child);
+    EXPECT_EQ(root.size<RepositoryTypesElement>(), 1);
+    EXPECT_EQ(child.size<RepositoryTypesElement>(), 2);
+}
+
 TEST(YggdrasilTests, CommonBasicSymbolRepositoryFrontLocalIsChecked)
 {
     auto repository = ygg::formalism::BasicSymbolRepository<RepositoryTypesElement>();
@@ -289,9 +539,11 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositorySupportsSerializedStorageAfterMo
     EXPECT_EQ(repository.front_local().values[0], ygg::Index<RepositoryTypesElement>(7));
     EXPECT_GT(repository.memory_usage(), 0);
 
+    data.index = ygg::Index<Tag>(99);
     const auto [duplicate_index, duplicate_created] = repository.get_or_create_local(data);
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(duplicate_index, index);
+    EXPECT_EQ(data.index, index);
 
     auto moved = std::move(repository);
     EXPECT_EQ(moved.find_local(data), index);
@@ -377,8 +629,16 @@ TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
     EXPECT_EQ(root.front<RepositoryTypesElement>().value, 7);
     EXPECT_EQ(&root.get_canonical_context(view.get_index()), &root);
 
+    data.index = ygg::Index<RepositoryTypesElement>(99);
+    const auto [duplicate_view, duplicate_created] = root.get_or_create(data);
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(data.index, view.get_index());
+    EXPECT_EQ(duplicate_view.get_index(), view.get_index());
+
     auto child = Repository(&root);
+    data.index = ygg::Index<RepositoryTypesElement>(99);
     const auto [child_view, child_created] = child.get_or_create(data);
+    EXPECT_EQ(data.index, view.get_index());
 
     EXPECT_FALSE(child_created);
     EXPECT_EQ(child_view.get_index(), view.get_index());

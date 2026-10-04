@@ -15,6 +15,10 @@
 namespace ygg::formalism
 {
 
+/// Whether a repository's symbol inventory contains T.
+template<typename Repository, typename T>
+concept SupportsSymbol = std::remove_cvref_t<Repository>::SymbolTypes::template contains<T>;
+
 template<typename Tag>
 struct Object
 {
@@ -50,6 +54,6 @@ concept RelationBindingConcept = is_relation_binding_v<T>;
 template<typename T>
 concept NonRelationBindingConcept = !RelationBindingConcept<T>;
 
-}
+}  // namespace ygg::formalism
 
 #endif

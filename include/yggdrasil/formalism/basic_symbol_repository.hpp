@@ -92,7 +92,8 @@ public:
 
     /**
      * Local methods access only the current repository layer.
-     * Handle-producing methods return raw handles because the caller already knows the context.
+     * Handle-producing methods return raw handles because the caller already
+     * knows the context.
      */
 
     std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
@@ -125,14 +126,18 @@ public:
     std::pair<Index<T>, bool> get_or_create_local_with_hash(Data<T>& builder, size_t h)
     {
         if (const auto index = find_local_with_hash(builder, h))
+        {
+            builder.index = *index;
             return { *index, false };
+        }
 
         return create_local_with_hash(builder, h);
     }
 
     std::pair<Index<T>, bool> get_or_create_local(Data<T>& builder) { return get_or_create_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-    /// Completes a hierarchy-wide miss by rechecking this layer before publishing storage.
+    /// Completes a hierarchy-wide miss by rechecking this layer before publishing
+    /// storage.
     std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
     {
         auto& container = m_slot.container;

@@ -333,7 +333,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         data.value = key;
                         const auto [view, created] = repository.get_or_create(data);
                         trivial_created.fetch_add(created, std::memory_order_relaxed);
-                        if (view.get_data().value != key || view.get_data().index != view.get_index())
+                        if (view.get_data().value != key || view.get_data().index != view.get_index() || data.index != view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -367,8 +367,8 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         data.values.push_back(Index<ConcurrentElement>(key));
                         const auto [view, created] = repository.get_or_create(data);
                         serialized_created.fetch_add(created, std::memory_order_relaxed);
-                        if (view.get_data().values.size() != 1 || view.get_data().values.front().get_value() != key
-                            || view.get_data().index != view.get_index())
+                        if (view.get_data().values.size() != 1 || view.get_data().values.front().get_value() != key || view.get_data().index != view.get_index()
+                            || data.index != view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -518,14 +518,15 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                     auto inherited = Data<ConcurrentElement> {};
                     inherited.value = 7;
                     const auto [inherited_view, inherited_created] = child.get_or_create(inherited);
-                    if (inherited_created || &inherited_view.get_context() != &parent)
+                    if (inherited_created || &inherited_view.get_context() != &parent || inherited.index != inherited_view.get_index())
                         errors.fetch_add(1, std::memory_order_relaxed);
 
                     auto inherited_serialized = Data<ConcurrentSerializedElement> {};
                     inherited_serialized.values.push_back(parent_view.get_index());
                     const auto [inherited_serialized_view, inherited_serialized_created] = child.get_or_create(inherited_serialized);
                     if (inherited_serialized_created || &inherited_serialized_view.get_context() != &parent
-                        || inherited_serialized_view.get_data().values.front() != parent_view.get_index())
+                        || inherited_serialized_view.get_data().values.front() != parent_view.get_index()
+                        || inherited_serialized.index != inherited_serialized_view.get_index())
                         errors.fetch_add(1, std::memory_order_relaxed);
 
                     const auto [inherited_binding_view, inherited_binding_created] = child.get_or_create(make_binding<ObjectTag>(relation, 7));
@@ -544,7 +545,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                         local.value = 1000 + static_cast<uint_t>(thread) * rows_per_thread + row;
                         const auto [local_view, created] = child.get_or_create(local);
                         if (!created || &local_view.get_context() != &child || local_view.get_data().value != local.value
-                            || local_view.get_data().index != local_view.get_index())
+                            || local_view.get_data().index != local_view.get_index() || local.index != local_view.get_index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });

@@ -9,6 +9,7 @@
 #include "yggdrasil/containers/raw_vector_set.hpp"
 #include "yggdrasil/database/relation_pool.hpp"
 #include "yggdrasil/database/relation_view.hpp"
+#include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
 
 #include <algorithm>
@@ -42,9 +43,10 @@ public:
     [[nodiscard]] std::shared_ptr<RelationRepository<T>> create_shared();
 };
 
-/// Interns column schemas and compact relation records alongside rows and sorted row-ID sets.
-/// Builders are supplied by callers and never retained. All borrowed views are
-/// valid until clear/destruction; clear retains allocation for subsequent states.
+/// Interns column schemas and compact relation records alongside rows and
+/// sorted row-ID sets. Builders are supplied by callers and never retained. All
+/// borrowed views are valid until clear/destruction; clear retains allocation
+/// for subsequent states.
 template<TriviallyCopyable T>
 class RelationRepository
 {
@@ -52,6 +54,8 @@ class RelationRepository
 
 public:
     using SymbolRepository = formalism::SymbolRepository<Columns, Relation<T>>;
+
+    using SymbolTypes = typename SymbolRepository::SymbolTypes;
     using RowRepository = RawVectorSet<uint_t, T>;
     using RowSetRepository = RawVectorSet<uint_t, Index<RelationRow<T>>>;
 
@@ -99,6 +103,7 @@ public:
     }
 
     template<typename Entity>
+        requires formalism::SupportsSymbol<RelationRepository, Entity>
     std::optional<View<Index<Entity>, RelationRepository>> find(const Data<Entity>& data) const noexcept
     {
         if (const auto index = m_symbols.template find_local<Entity>(data))
@@ -139,6 +144,7 @@ public:
     }
 
     template<typename Entity>
+        requires formalism::SupportsSymbol<RelationRepository, Entity>
     const Data<Entity>& operator[](Index<Entity> index) const noexcept
     {
         assert(m_symbols.template is_local<Entity>(index));
@@ -146,6 +152,7 @@ public:
     }
 
     template<typename Entity>
+        requires formalism::SupportsSymbol<RelationRepository, Entity>
     const RelationRepository& get_canonical_context(Index<Entity>) const noexcept
     {
         return *this;
@@ -220,18 +227,24 @@ const RelationRepository<T>& get_columns_repository(const RelationRepository<T>&
     return repository;
 }
 
+// Validation stays in the raw repository members for both direct and prepared
+// calls.
 template<TriviallyCopyable T>
-auto get_or_create(RelationRepository<T>& repository, Data<Columns>& data)
+void prepare_for_interning(RelationRepository<T>&, Data<Columns>&) noexcept
 {
-    return repository.get_or_create(data);
 }
+
+template<TriviallyCopyable T>
+void prepare_for_interning(RelationRepository<T>&, Data<Relation<T>>&) noexcept
+{
+}
+
+using formalism::get_or_create;
 
 template<TriviallyCopyable T>
 auto intern_columns(Builder<Columns>& builder, RelationRepository<T>& repository)
 {
-    auto result = get_or_create(repository, builder.get_data());
-    builder.set_index(result.first.get_index());
-    return result;
+    return get_or_create(repository, builder.get_data());
 }
 
 template<TriviallyCopyable T>
@@ -242,12 +255,6 @@ Data<Relation<T>>& make_data(const Builder<Relation<T>>& builder, Data<Relation<
     data.row_set_index = repository.intern_rows(builder);
     data.schema_namespace = schema_namespace;
     return data;
-}
-
-template<TriviallyCopyable T>
-auto get_or_create(RelationRepository<T>& repository, Data<Relation<T>>& data)
-{
-    return repository.get_or_create(data);
 }
 
 template<TriviallyCopyable T>
