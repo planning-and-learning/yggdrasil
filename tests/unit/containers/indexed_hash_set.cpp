@@ -15,10 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/indexed_hash_set.hpp"
+
 #include <cstddef>
 #include <gtest/gtest.h>
 #include <stdexcept>
-#include <yggdrasil/containers/indexed_hash_set.hpp>
 
 namespace ygg::tests
 {

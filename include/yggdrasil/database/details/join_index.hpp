@@ -30,7 +30,7 @@ void build_join_index(const V& build, std::span<const size_t> keys, UnorderedMul
     index.clear();
     index.reserve(build.size());
     for (size_t i = 0; i < build.size(); ++i)
-        index.insert(ygg::hash_range(join_key_values(build[i], keys)), i);
+        index.insert(ygg::hash_range(join_key_values(build.row(i), keys)), i);
 }
 }  // namespace detail
 

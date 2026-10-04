@@ -15,10 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/core/closed_interval.hpp"
+
 #include <gtest/gtest.h>
 #include <sstream>
 #include <tuple>
-#include <yggdrasil/core/closed_interval.hpp>
 
 namespace ygg::tests
 {

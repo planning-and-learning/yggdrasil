@@ -1,10 +1,12 @@
+#include "yggdrasil/containers/associative_containers.hpp"
+
+#include "yggdrasil/containers/unordered_set.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include <gtest/gtest.h>
 #include <string>
-#include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/containers/unordered_set.hpp>
-#include <yggdrasil/semantics/comparators.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::tests
 {

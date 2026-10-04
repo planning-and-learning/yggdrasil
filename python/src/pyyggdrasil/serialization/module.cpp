@@ -1,6 +1,6 @@
 #include "module.hpp"
 
-#include <yggdrasil/python/serialization.hpp>
+#include "yggdrasil/python/serialization.hpp"
 
 namespace yggdrasil
 {

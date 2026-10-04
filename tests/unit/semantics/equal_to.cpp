@@ -15,6 +15,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/semantics/equal_to.hpp"
+
+#include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/core/observer_ptr_equal_to.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/semantics/containers/block_array_equal_to.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp"
+#include "yggdrasil/semantics/containers/segmented_vector_equal_to.hpp"
+#include "yggdrasil/serialization/cista_equal_to.hpp"
+
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -24,14 +34,6 @@
 #include <span>
 #include <variant>
 #include <vector>
-#include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/core/observer_ptr_equal_to.hpp>
-#include <yggdrasil/semantics/comparators.hpp>
-#include <yggdrasil/semantics/containers/block_array_equal_to.hpp>
-#include <yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp>
-#include <yggdrasil/semantics/containers/segmented_vector_equal_to.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/serialization/cista_equal_to.hpp>
 
 namespace ygg::tests
 {

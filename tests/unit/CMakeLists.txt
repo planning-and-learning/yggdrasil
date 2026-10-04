@@ -51,6 +51,7 @@ target_link_libraries(containers_shared_object_pool PRIVATE Threads::Threads)
 target_link_libraries(containers_tree_vector_set PRIVATE Threads::Threads)
 target_link_libraries(containers_unique_object_pool PRIVATE Threads::Threads)
 add_yggdrasil_gtest(containers_unordered_multi_map "containers/unordered_multi_map.cpp")
+add_yggdrasil_gtest(containers_span "containers/span.cpp")
 add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
 
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")

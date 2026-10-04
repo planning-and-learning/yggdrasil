@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "yggdrasil/database/operations.hpp"
+
+#include "yggdrasil/database/relation_pool.hpp"
+#include "yggdrasil/database/relation_repository.hpp"
+
 #include <array>
 #include <cista/serialization.h>
 #include <gtest/gtest.h>
@@ -15,9 +20,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <yggdrasil/database/operations.hpp>
-#include <yggdrasil/database/relation_pool.hpp>
-#include <yggdrasil/database/relation_repository.hpp>
 
 namespace ygg::tests
 {

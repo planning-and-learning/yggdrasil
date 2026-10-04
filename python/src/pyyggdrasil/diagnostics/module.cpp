@@ -1,10 +1,11 @@
 #include "module.hpp"
 
+#include "yggdrasil/diagnostics/diagnostic.hpp"
+
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
-#include <yggdrasil/diagnostics/diagnostic.hpp>
 
 namespace yggdrasil
 {

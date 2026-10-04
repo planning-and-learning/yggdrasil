@@ -15,6 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/segmented_bit_vector.hpp"
+
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -22,7 +24,6 @@
 #include <ranges>
 #include <stdexcept>
 #include <utility>
-#include <yggdrasil/containers/segmented_bit_vector.hpp>
 
 namespace ygg::tests
 {

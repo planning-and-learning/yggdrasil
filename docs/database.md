@@ -71,6 +71,16 @@ Materializing operations accept read-only inputs satisfying `RelationViewConcept
 including builders directly and contextual views over builders, data records,
 or typed indexes.
 
+`row(i)` provides the stored `std::span<const T>` used by relational operations.
+Contextual indexing, `at(i)`, and iteration return generic span views from
+`<yggdrasil/containers/span.hpp>`. These copy the span handle and borrow its
+elements and context; their iterators also remain valid after the temporary
+view is destroyed. Elements resolve through `get_repository(context)`, so a
+relation of typed indices can yield semantic object views without copying rows.
+The element repository may differ from `get_relation_repository(context)`,
+which owns the relation's data. `repository.rename(view, labels)` preserves
+the source view's context while sharing its rows.
+
 Materializing operations have an explicit element-type parameter `T` and
 constrain each input with `RelationViewConcept<V, T>`. Overloads taking an
 output builder or workspace deduce `T` from those arguments. Convenience

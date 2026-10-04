@@ -18,18 +18,19 @@
 #ifndef YGG_FORMALISM_BINDING_VIEW_HPP_
 #define YGG_FORMALISM_BINDING_VIEW_HPP_
 
+#include "yggdrasil/containers/vector.hpp"
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/binding_index.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/object_index.hpp"
+#include "yggdrasil/semantics/containers/block_array_ordering.hpp"
+
 #include <iterator>
 #include <ranges>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/containers/vector.hpp>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/formalism/binding_index.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/formalism/object_index.hpp>
-#include <yggdrasil/semantics/containers/block_array_ordering.hpp>
 
 namespace ygg
 {

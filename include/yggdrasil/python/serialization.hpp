@@ -1,22 +1,23 @@
 #ifndef YGG_PYTHON_SERIALIZATION_HPP_
 #define YGG_PYTHON_SERIALIZATION_HPP_
 
+#include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/serialization/dictionaries.hpp"
+
 #include <boost/json.hpp>
+#include <cstdint>
 #include <fmt/format.h>
+#include <functional>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/typing.h>
-#include <cstdint>
-#include <functional>
 #include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <yggdrasil/core/type_list.hpp>
-#include <yggdrasil/serialization/dictionaries.hpp>
 
 namespace ygg::python
 {

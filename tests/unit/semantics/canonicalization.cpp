@@ -15,13 +15,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/semantics/canonicalization.hpp"
+
+#include "yggdrasil/ids/index_mixins.hpp"
+
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <string>
 #include <tuple>
 #include <vector>
-#include <yggdrasil/ids/index_mixins.hpp>
-#include <yggdrasil/semantics/canonicalization.hpp>
 
 namespace ygg::tests
 {

@@ -15,6 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/tree_vector_set.hpp"
+
 #include <array>
 #include <benchmark/benchmark.h>
 #include <cstddef>
@@ -22,7 +24,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <yggdrasil/containers/tree_vector_set.hpp>
 
 namespace ygg::profiling
 {

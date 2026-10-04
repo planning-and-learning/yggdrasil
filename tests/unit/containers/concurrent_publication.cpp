@@ -15,6 +15,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/containers/block_array_pool.hpp"
+#include "yggdrasil/containers/raw_array_pool.hpp"
+#include "yggdrasil/containers/raw_array_set.hpp"
+#include "yggdrasil/containers/raw_vector_pool.hpp"
+#include "yggdrasil/containers/raw_vector_set.hpp"
+#include "yggdrasil/containers/segmented_bit_vector.hpp"
+#include "yggdrasil/containers/segmented_vector.hpp"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -24,14 +33,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include <yggdrasil/containers/bit_packed_array_pool.hpp>
-#include <yggdrasil/containers/block_array_pool.hpp>
-#include <yggdrasil/containers/raw_array_pool.hpp>
-#include <yggdrasil/containers/raw_array_set.hpp>
-#include <yggdrasil/containers/raw_vector_pool.hpp>
-#include <yggdrasil/containers/raw_vector_set.hpp>
-#include <yggdrasil/containers/segmented_bit_vector.hpp>
-#include <yggdrasil/containers/segmented_vector.hpp>
 
 #ifndef NDEBUG
 #error "Concurrent publication tests must be compiled with NDEBUG."

@@ -18,16 +18,18 @@
 #ifndef YGG_FORMALISM_RELATION_REPOSITORY_HPP_
 #define YGG_FORMALISM_RELATION_REPOSITORY_HPP_
 
+#include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/basic_relation_repository.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/membership.hpp"
+#include "yggdrasil/formalism/object_index.hpp"
+
 #include <cassert>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/core/type_list.hpp>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/formalism/basic_relation_repository.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/formalism/object_index.hpp>
 
 namespace ygg::formalism
 {
@@ -64,6 +66,22 @@ public:
 
     friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
 
+private:
+    template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
+    const RelationRepositoryBase* find_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const noexcept
+    {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (current->template get<T>().is_local(index))
+                return current;
+            current = current->m_parent;
+        }
+        return nullptr;
+    }
+
+public:
     /**
      * Global methods traverse the current repository layer and its parent hierarchy.
      * Handle-producing methods return views that retain the discovered canonical context.
@@ -122,15 +140,8 @@ public:
         requires SupportsRelation<RelationRepositoryBase, T>
     auto operator[](Index<RelationBinding<T, ObjectTag>> index) const
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->template get<T>().is_local(index))
-                return current->template get<T>().at_local(index);
-
-            current = current->m_parent;
-        }
-
+        if (const auto* owner = find_canonical_context(index))
+            return owner->template get<T>().at_local(index);
         throw std::out_of_range("Relation binding index not found in any repository layer.");
     }
 
@@ -152,16 +163,23 @@ public:
         requires SupportsRelation<RelationRepositoryBase, T>
     const Repository& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->template get<T>().is_local(index))
-                return current->repository();
-
-            current = current->m_parent;
-        }
-
+        if (const auto* owner = find_canonical_context(index))
+            return owner->repository();
         throw std::out_of_range("Relation binding index not found in any repository layer.");
+    }
+
+    template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
+    bool contains(Index<RelationBinding<T, ObjectTag>> index) const noexcept
+    {
+        return find_canonical_context(index) != nullptr;
+    }
+
+    template<typename T, typename C>
+        requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
+    bool contains(const ::ygg::View<Index<T>, C>& view) const
+    {
+        return ::ygg::formalism::contains(repository(), view);
     }
 
     /**

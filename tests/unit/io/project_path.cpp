@@ -15,9 +15,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/io/project_path.hpp"
+
 #include <filesystem>
 #include <gtest/gtest.h>
-#include <yggdrasil/io/project_path.hpp>
 
 namespace ygg::tests
 {

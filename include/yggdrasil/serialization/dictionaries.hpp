@@ -1,6 +1,10 @@
 #ifndef YGG_SERIALIZATION_DICTIONARIES_HPP_
 #define YGG_SERIALIZATION_DICTIONARIES_HPP_
 
+#include "yggdrasil/containers/variant.hpp"
+#include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/serialization/conversion.hpp"
 #include "yggdrasil/serialization/fields.hpp"
 
@@ -16,10 +20,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <yggdrasil/containers/variant.hpp>
-#include <yggdrasil/core/concepts.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::serialization
 {

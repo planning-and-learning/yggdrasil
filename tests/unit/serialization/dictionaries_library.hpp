@@ -2,10 +2,10 @@
 #define YGG_TESTS_SERIALIZATION_DICTIONARIES_LIBRARY_HPP_
 
 #include "serialization_dictionaries_library_export.h"
+#include "yggdrasil/serialization/dictionaries.hpp"
 
 #include <tuple>
 #include <typeinfo>
-#include <yggdrasil/serialization/dictionaries.hpp>
 
 namespace ygg::tests
 {

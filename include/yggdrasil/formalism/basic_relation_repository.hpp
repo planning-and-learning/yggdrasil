@@ -18,6 +18,19 @@
 #ifndef YGG_FORMALISM_BASIC_RELATION_REPOSITORY_HPP_
 #define YGG_FORMALISM_BASIC_RELATION_REPOSITORY_HPP_
 
+#include "yggdrasil/containers/bit_packed_array_set.hpp"
+#include "yggdrasil/containers/block_array_set.hpp"
+#include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/tuple.hpp"
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/binding_data.hpp"
+#include "yggdrasil/formalism/binding_index.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/object_index.hpp"
+#include "yggdrasil/ids/index_coder.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -31,17 +44,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <yggdrasil/containers/bit_packed_array_set.hpp>
-#include <yggdrasil/containers/block_array_set.hpp>
-#include <yggdrasil/containers/detail/geometric_segment_layout.hpp>
-#include <yggdrasil/containers/tuple.hpp>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/formalism/binding_data.hpp>
-#include <yggdrasil/formalism/binding_index.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/formalism/object_index.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::formalism
 {
@@ -93,22 +95,13 @@ template<typename ObjectTag, typename T, bool ThreadSafe = false>
 class BasicRelationRepository
 {
 private:
-    template<std::unsigned_integral Block>
-    struct Coder
-    {
-        using value_type = Index<Object<ObjectTag>>;
-
-        static constexpr value_type decode(Block block) noexcept { return value_type(block); }
-        static constexpr Block encode(value_type value) noexcept { return static_cast<Block>((static_cast<ygg::uint_t>(value))); }
-    };
-
     static constexpr ygg::uint_t kInvalid = std::numeric_limits<ygg::uint_t>::max();
 
     using storage_type = typename RelationRepositoryTraits<ObjectTag>::storage_type;
 
     static auto make_container(size_t arity, std::uint8_t object_index_width)
     {
-        return storage_type::template make<ygg::uint_t, Coder<ygg::uint_t>, ThreadSafe>(arity, object_index_width);
+        return storage_type::template make<ygg::uint_t, IndexCoder<Index<Object<ObjectTag>>, ygg::uint_t>, ThreadSafe>(arity, object_index_width);
     }
 
     using internal_container_type = decltype(make_container(size_t {}, std::uint8_t {}));

@@ -15,13 +15,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/bit_packed_array_set.hpp"
+
+#include "yggdrasil/core/config.hpp"
+
 #include <array>
 #include <gtest/gtest.h>
 #include <span>
 #include <stdexcept>
 #include <vector>
-#include <yggdrasil/containers/bit_packed_array_set.hpp>
-#include <yggdrasil/core/config.hpp>
 
 namespace ygg::tests
 {

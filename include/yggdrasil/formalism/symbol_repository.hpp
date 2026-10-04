@@ -18,16 +18,18 @@
 #ifndef YGG_FORMALISM_SYMBOL_REPOSITORY_HPP_
 #define YGG_FORMALISM_SYMBOL_REPOSITORY_HPP_
 
+#include "yggdrasil/buffer/declarations.hpp"
+#include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/basic_symbol_repository.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/membership.hpp"
+
 #include <cassert>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/buffer/declarations.hpp>
-#include <yggdrasil/core/type_list.hpp>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/formalism/basic_symbol_repository.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
 
 namespace ygg::formalism
 {
@@ -53,6 +55,24 @@ public:
 
     using SymbolTypes = TypeList<Ts...>;
 
+    friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
+
+private:
+    template<typename T>
+        requires SupportsSymbol<SymbolRepositoryBase, T>
+    const SymbolRepositoryBase* find_canonical_context(Index<T> index) const noexcept
+    {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (current->template get<T>().is_local(index))
+                return current;
+            current = current->m_parent;
+        }
+        return nullptr;
+    }
+
+public:
     /**
      * Global methods traverse the current repository layer and its parent
      * hierarchy. Handle-producing methods return views that retain the discovered
@@ -108,15 +128,8 @@ public:
         requires SupportsSymbol<SymbolRepositoryBase, T>
     const Data<T>& operator[](Index<T> index) const
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->template get<T>().is_local(index))
-                return current->template get<T>().at_local(index);
-
-            current = current->m_parent;
-        }
-
+        if (const auto* owner = find_canonical_context(index))
+            return owner->template get<T>().at_local(index);
         throw std::out_of_range("Symbol index not found in any repository layer.");
     }
 
@@ -138,16 +151,23 @@ public:
         requires SupportsSymbol<SymbolRepositoryBase, T>
     const Repository& get_canonical_context(Index<T> index) const
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->template get<T>().is_local(index))
-                return current->repository();
-
-            current = current->m_parent;
-        }
-
+        if (const auto* owner = find_canonical_context(index))
+            return owner->repository();
         throw std::out_of_range("Symbol index not found in any repository layer.");
+    }
+
+    template<typename T>
+        requires SupportsSymbol<SymbolRepositoryBase, T>
+    bool contains(Index<T> index) const noexcept
+    {
+        return find_canonical_context(index) != nullptr;
+    }
+
+    template<typename T, typename C>
+        requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
+    bool contains(const ::ygg::View<Index<T>, C>& view) const
+    {
+        return ::ygg::formalism::contains(repository(), view);
     }
 
     /**

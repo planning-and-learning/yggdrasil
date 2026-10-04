@@ -18,10 +18,11 @@
 #ifndef YGG_BUFFER_DECLARATIONS_HPP_
 #define YGG_BUFFER_DECLARATIONS_HPP_
 
+#include "yggdrasil/core/types.hpp"
+
 #include <cista/serialization.h>
 #include <cstdint>
 #include <vector>
-#include <yggdrasil/core/types.hpp>
 
 namespace cista
 {

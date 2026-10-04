@@ -17,13 +17,14 @@
 
 #include "yggdrasil/python/type_casters.hpp"
 
+#include "yggdrasil/containers/bit_packed_array_pool.hpp"
+
 #include <cista/containers/array.h>
 #include <cista/containers/optional.h>
 #include <cista/containers/pair.h>
 #include <cista/containers/variant.h>
 #include <cista/containers/vector.h>
 #include <nanobind/nanobind.h>
-#include <yggdrasil/containers/bit_packed_array_pool.hpp>
 
 namespace nb = nanobind;
 

@@ -7,13 +7,14 @@
  * (at your option) any later version.
  */
 
+#include "yggdrasil/diagnostics/x3.hpp"
+
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <functional>
 #include <gtest/gtest.h>
 #include <memory>
 #include <sstream>
 #include <string>
-#include <yggdrasil/diagnostics/x3.hpp>
 
 namespace ygg::tests
 {

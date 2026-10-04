@@ -15,17 +15,19 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/dynamic_bitset.hpp"
+
+#include "yggdrasil/core/config.hpp"
+#include "yggdrasil/formatting/dynamic_bitset_formatters.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_hash.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp"
+
 #include <boost/dynamic_bitset.hpp>
 #include <concepts>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <vector>
-#include <yggdrasil/containers/dynamic_bitset.hpp>
-#include <yggdrasil/core/config.hpp>
-#include <yggdrasil/formatting/dynamic_bitset_formatters.hpp>
-#include <yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp>
-#include <yggdrasil/semantics/containers/dynamic_bitset_hash.hpp>
-#include <yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp>
 
 namespace ygg::tests
 {

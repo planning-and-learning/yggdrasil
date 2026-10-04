@@ -15,11 +15,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/vector.hpp"
+
+#include "yggdrasil/core/config.hpp"
+
 #include <compare>
 #include <concepts>
 #include <gtest/gtest.h>
-#include <yggdrasil/containers/vector.hpp>
-#include <yggdrasil/core/config.hpp>
 
 namespace ygg::tests
 {

@@ -9,11 +9,12 @@
 
 #pragma once
 
+#include "yggdrasil/containers/pair.hpp"
+
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/containers/pair.hpp>
 
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)

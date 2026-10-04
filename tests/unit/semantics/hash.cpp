@@ -15,6 +15,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/semantics/hash.hpp"
+
+#include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/core/observer_ptr_hash.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/semantics/containers/block_array_hash.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_hash.hpp"
+#include "yggdrasil/semantics/containers/segmented_vector_hash.hpp"
+#include "yggdrasil/serialization/cista_hash.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -30,14 +40,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-#include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/core/observer_ptr_hash.hpp>
-#include <yggdrasil/semantics/comparators.hpp>
-#include <yggdrasil/semantics/containers/block_array_hash.hpp>
-#include <yggdrasil/semantics/containers/dynamic_bitset_hash.hpp>
-#include <yggdrasil/semantics/containers/segmented_vector_hash.hpp>
-#include <yggdrasil/semantics/hash.hpp>
-#include <yggdrasil/serialization/cista_hash.hpp>
 
 namespace ygg::tests
 {

@@ -15,12 +15,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/buffer/segmented_buffer.hpp"
+
 #include <array>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
 #include <stdexcept>
-#include <yggdrasil/buffer/segmented_buffer.hpp>
 
 namespace ygg::tests
 {

@@ -18,6 +18,8 @@
 #ifndef YGG_BUFFER_SEGMENTED_BUFFER_HPP_
 #define YGG_BUFFER_SEGMENTED_BUFFER_HPP_
 
+#include "yggdrasil/core/bit.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -28,7 +30,6 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <yggdrasil/core/bit.hpp>
 
 namespace ygg::buffer
 {

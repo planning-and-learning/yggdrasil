@@ -15,6 +15,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/formatting/formatter.hpp"
+
+#include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/formatting/associative_container_formatters.hpp"
+#include "yggdrasil/formatting/cista_formatters.hpp"
+#include "yggdrasil/formatting/dynamic_bitset_formatters.hpp"
+#include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <memory>
@@ -24,14 +34,6 @@
 #include <string_view>
 #include <variant>
 #include <vector>
-#include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/formatting/associative_container_formatters.hpp>
-#include <yggdrasil/formatting/cista_formatters.hpp>
-#include <yggdrasil/formatting/dynamic_bitset_formatters.hpp>
-#include <yggdrasil/formatting/formatter.hpp>
-#include <yggdrasil/semantics/comparators.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::tests
 {

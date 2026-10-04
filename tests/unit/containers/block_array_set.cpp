@@ -15,6 +15,12 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/block_array_set.hpp"
+
+#include "yggdrasil/core/config.hpp"
+#include "yggdrasil/database/columns_index.hpp"
+#include "yggdrasil/ids/index_coder.hpp"
+
 #include <array>
 #include <concepts>
 #include <gtest/gtest.h>
@@ -24,8 +30,6 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <yggdrasil/containers/block_array_set.hpp>
-#include <yggdrasil/core/config.hpp>
 
 namespace ygg::tests
 {
@@ -339,6 +343,28 @@ TEST(YggdrasilTests, CommonBlockArraySet)
         EXPECT_EQ(set.capacity(), 31);
         EXPECT_GT(set.memory_usage(), 0);
     }
+}
+
+TEST(YggdrasilTests, IndexCoderPreservesIdentityAndRejectsNarrowing)
+{
+    using I = Index<database::Column>;
+    using Coder = IndexCoder<I>;
+    using ByteCoder = IndexCoder<I, uint8_t>;
+    using WideCoder = IndexCoder<I, uint64_t>;
+    static_assert(bit::BlockCoder<Coder, uint_t>);
+    static_assert(Coder::decode(Coder::encode(I(17))) == I(17));
+    static_assert(noexcept(Coder::encode(I(0))) && noexcept(Coder::decode(0)));
+    EXPECT_EQ(Coder::decode(Coder::encode(I::max())), I::max());
+    EXPECT_EQ(ByteCoder::decode(ByteCoder::encode(I(255))), I(255));
+    EXPECT_THROW((void) ByteCoder::encode(I(256)), std::out_of_range);
+    EXPECT_EQ(WideCoder::decode(WideCoder::encode(I::max())), I::max());
+
+    auto rows = BlockArraySet<uint_t, Coder>(2);
+    const auto values = std::array { I(7), I(13) };
+    const auto [index, inserted] = rows.insert(values);
+    ASSERT_TRUE(inserted);
+    EXPECT_TRUE(std::ranges::equal(rows[index], values));
+    EXPECT_FALSE(rows.insert(values).second);
 }
 
 }  // namespace ygg::tests

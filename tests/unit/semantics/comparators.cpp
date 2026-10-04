@@ -15,6 +15,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/semantics/comparators.hpp"
+
+#include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/core/observer_ptr_ordering.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
+#include "yggdrasil/semantics/containers/block_array_ordering.hpp"
+#include "yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp"
+#include "yggdrasil/semantics/containers/segmented_vector_ordering.hpp"
+#include "yggdrasil/serialization/cista_ordering.hpp"
+
 #include <array>
 #include <compare>
 #include <cstdint>
@@ -28,14 +38,6 @@
 #include <tuple>
 #include <variant>
 #include <vector>
-#include <yggdrasil/containers/associative_containers.hpp>
-#include <yggdrasil/core/observer_ptr_ordering.hpp>
-#include <yggdrasil/semantics/comparators.hpp>
-#include <yggdrasil/semantics/comparison.hpp>
-#include <yggdrasil/semantics/containers/block_array_ordering.hpp>
-#include <yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp>
-#include <yggdrasil/semantics/containers/segmented_vector_ordering.hpp>
-#include <yggdrasil/serialization/cista_ordering.hpp>
 
 namespace ygg::tests
 {

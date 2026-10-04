@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "yggdrasil/containers/unordered_multi_map.hpp"
+
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <memory>
@@ -10,7 +12,6 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
-#include <yggdrasil/containers/unordered_multi_map.hpp>
 
 namespace ygg::tests
 {

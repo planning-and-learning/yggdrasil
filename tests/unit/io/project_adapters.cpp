@@ -15,8 +15,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/io/project_adapters.hpp"
+
 #include <gtest/gtest.h>
-#include <yggdrasil/io/project_adapters.hpp>
 
 namespace ygg::tests
 {

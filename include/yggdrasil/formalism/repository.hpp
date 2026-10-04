@@ -18,20 +18,22 @@
 #ifndef YGG_FORMALISM_REPOSITORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_HPP_
 
+#include "yggdrasil/buffer/declarations.hpp"
+#include "yggdrasil/buffer/segmented_buffer.hpp"
+#include "yggdrasil/containers/tuple.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/membership.hpp"
+#include "yggdrasil/formalism/relation_repository.hpp"
+#include "yggdrasil/formalism/symbol_repository.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include <cassert>
 #include <optional>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/buffer/declarations.hpp>
-#include <yggdrasil/buffer/segmented_buffer.hpp>
-#include <yggdrasil/containers/tuple.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/formalism/relation_repository.hpp>
-#include <yggdrasil/formalism/symbol_repository.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::formalism
 {
@@ -54,6 +56,34 @@ private:
     SymbolRepo m_symbol_repository;
     RelationRepo m_relation_repository;
     size_t m_index;
+
+    template<typename T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+    const Repository* find_canonical_context(Index<T> index) const noexcept
+    {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (current->m_symbol_repository.is_local(index))
+                return current;
+            current = current->m_parent;
+        }
+        return nullptr;
+    }
+
+    template<typename T>
+        requires SupportsRelation<Repository, T>
+    const Repository* find_canonical_context(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const noexcept
+    {
+        const auto* current = this;
+        while (current != nullptr)
+        {
+            if (current->m_relation_repository.is_local(index))
+                return current;
+            current = current->m_parent;
+        }
+        return nullptr;
+    }
 
     /**
      * Global methods traverse the current repository layer and its parent
@@ -205,14 +235,8 @@ public:
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     const Data<T>& operator[](Index<T> index) const
     {
-        const Repository* current = this;
-        while (current != nullptr)
-        {
-            if (current->m_symbol_repository.is_local(index))
-                return current->m_symbol_repository.at_local(index);
-
-            current = current->m_parent;
-        }
+        if (const auto* owner = find_canonical_context(index))
+            return owner->m_symbol_repository.at_local(index);
         throw std::out_of_range("Symbol index not found in any repository layer.");
     }
 
@@ -239,17 +263,17 @@ public:
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+    bool contains(Index<T> index) const noexcept
+    {
+        return find_canonical_context(index) != nullptr;
+    }
+
+    template<typename T>
+        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     const Repository& get_canonical_context(Index<T> index) const
     {
-        const Repository* current = this;
-        while (current != nullptr)
-        {
-            if (current->m_symbol_repository.is_local(index))
-                return *current;
-
-            current = current->m_parent;
-        }
-
+        if (const auto* owner = find_canonical_context(index))
+            return *owner;
         throw std::out_of_range("Symbol index not found in any repository layer.");
     }
 
@@ -281,14 +305,8 @@ public:
         requires SupportsRelation<Repository, T>
     auto operator[](Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const
     {
-        const Repository* current = this;
-        while (current != nullptr)
-        {
-            if (current->m_relation_repository.is_local(index))
-                return current->m_relation_repository.at_local(index);
-
-            current = current->m_parent;
-        }
+        if (const auto* owner = find_canonical_context(index))
+            return owner->m_relation_repository.at_local(index);
         throw std::out_of_range("Relation binding index not found in any repository layer.");
     }
 
@@ -316,18 +334,25 @@ public:
 
     template<typename T>
         requires SupportsRelation<Repository, T>
+    bool contains(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const noexcept
+    {
+        return find_canonical_context(index) != nullptr;
+    }
+
+    template<typename T>
+        requires SupportsRelation<Repository, T>
     const Repository& get_canonical_context(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const
     {
-        const Repository* current = this;
-        while (current != nullptr)
-        {
-            if (current->m_relation_repository.is_local(index))
-                return *current;
-
-            current = current->m_parent;
-        }
-
+        if (const auto* owner = find_canonical_context(index))
+            return *owner;
         throw std::out_of_range("Relation binding index not found in any repository layer.");
+    }
+
+    template<typename T, typename C>
+        requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
+    bool contains(const ::ygg::View<Index<T>, C>& view) const
+    {
+        return ::ygg::formalism::contains(*this, view);
     }
 
     /**

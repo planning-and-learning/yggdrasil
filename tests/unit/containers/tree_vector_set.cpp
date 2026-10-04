@@ -15,6 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/tree_vector_set.hpp"
+
 #include <array>
 #include <atomic>
 #include <barrier>
@@ -25,7 +27,6 @@
 #include <thread>
 #include <tuple>
 #include <vector>
-#include <yggdrasil/containers/tree_vector_set.hpp>
 
 namespace ygg::tests
 {

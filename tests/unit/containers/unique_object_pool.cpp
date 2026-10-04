@@ -15,6 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/unique_object_pool.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <future>
@@ -22,7 +24,6 @@
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
-#include <yggdrasil/containers/unique_object_pool.hpp>
 
 namespace ygg::tests
 {

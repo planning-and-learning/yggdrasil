@@ -18,14 +18,15 @@
 #ifndef YGG_FORMALISM_BINDING_DATA_HPP_
 #define YGG_FORMALISM_BINDING_DATA_HPP_
 
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/core/types_utils.hpp"
+#include "yggdrasil/formalism/binding_index.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/object_index.hpp"
+
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/core/types_utils.hpp>
-#include <yggdrasil/formalism/binding_index.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/formalism/object_index.hpp>
 
 namespace ygg
 {

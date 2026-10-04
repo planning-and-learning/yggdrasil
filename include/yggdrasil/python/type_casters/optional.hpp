@@ -9,10 +9,11 @@
 
 #pragma once
 
+#include "yggdrasil/containers/optional.hpp"
+
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
 #include <type_traits>
-#include <yggdrasil/containers/optional.hpp>
 
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)

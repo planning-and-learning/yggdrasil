@@ -68,7 +68,7 @@ void project_rows(const V& input, std::span<const Index<Column>> columns, std::s
     row.reserve(positions.size());
     for (size_t i = 0; i < input.size(); ++i)
     {
-        const auto source = input[i];
+        const auto source = input.row(i);
         row.clear();
         for (const auto position : positions)
             row.push_back(source[position]);
@@ -137,8 +137,8 @@ void select(const V& input, Predicate predicate, Builder<Relation<T>>& out)
 {
     detail::prepare_output(out, input.columns().span(), { input.get_storage_address() });
     for (size_t i = 0; i < input.size(); ++i)
-        if (std::invoke(predicate, input[i]))
-            out.insert(input[i]);
+        if (std::invoke(predicate, input.row(i)))
+            out.insert(input.row(i));
 }
 
 template<TriviallyCopyable T, RelationViewConcept<T> V>
@@ -151,7 +151,7 @@ Builder<Relation<T>>& assign(Builder<Relation<T>>& destination, const V& source)
     }
     destination.initialize(source.columns().span());
     for (size_t i = 0; i < source.size(); ++i)
-        destination.insert(source[i]);
+        destination.insert(source.row(i));
     return destination;
 }
 
@@ -226,7 +226,7 @@ void join_rows(const L& lhs,
     {
         for (size_t i = 0; i < lhs.size(); ++i)
             for (size_t j = 0; j < rhs.size(); ++j)
-                emit(lhs[i], rhs[j]);
+                emit(lhs.row(i), rhs.row(j));
         return;
     }
 
@@ -234,11 +234,11 @@ void join_rows(const L& lhs,
     {
         for (size_t i = 0; i < probe.size(); ++i)
         {
-            const auto probe_row = probe[i];
+            const auto probe_row = probe.row(i);
             const auto probe_key = join_key_values(probe_row, probe_keys);
             for (const auto match : index.values(ygg::hash_range(probe_key)))
             {
-                const auto build_row = build[match];
+                const auto build_row = build.row(match);
                 if (!ygg::equal_range(join_key_values(build_row, build_keys), probe_key))
                     continue;
                 const auto left = build_left ? build_row : probe_row;
@@ -357,9 +357,9 @@ void union_(const L& lhs, const R& rhs, Builder<Relation<T>>& out)
     detail::require_same_columns<T>(lhs, rhs);
     detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     for (size_t i = 0; i < lhs.size(); ++i)
-        out.insert(lhs[i]);
+        out.insert(lhs.row(i));
     for (size_t i = 0; i < rhs.size(); ++i)
-        out.insert(rhs[i]);
+        out.insert(rhs.row(i));
 }
 
 template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
@@ -376,8 +376,8 @@ void difference(const L& lhs, const R& rhs, Builder<Relation<T>>& out)
     detail::require_same_columns<T>(lhs, rhs);
     detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     for (size_t i = 0; i < lhs.size(); ++i)
-        if (!rhs.contains(lhs[i]))
-            out.insert(lhs[i]);
+        if (!rhs.contains(lhs.row(i)))
+            out.insert(lhs.row(i));
 }
 
 template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>

@@ -15,6 +15,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/bit_packed_array_pool.hpp"
+
+#include "yggdrasil/core/config.hpp"
+
 #include <array>
 #include <concepts>
 #include <cstdint>
@@ -25,8 +29,6 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <yggdrasil/containers/bit_packed_array_pool.hpp>
-#include <yggdrasil/core/config.hpp>
 
 namespace ygg::tests
 {

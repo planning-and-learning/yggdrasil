@@ -96,7 +96,7 @@ public:
         m_row_indices.clear();
         m_row_indices.reserve(builder.size());
         for (size_t i = 0; i < builder.size(); ++i)
-            m_row_indices.emplace_back(m_rows.insert(builder[i]));
+            m_row_indices.emplace_back(m_rows.insert(builder.row(i)));
         std::ranges::sort(m_row_indices);
         const auto index = Index<RelationRowSet<T>>(m_row_sets.insert(m_row_indices));
         ensure_storage_index(index);
@@ -169,9 +169,10 @@ public:
         return m_storage_indices[row_set_index.get_value()];
     }
 
-    RelationView<T> rename(RelationView<T> source, std::span<const Index<Column>> columns, size_t schema_namespace)
+    template<typename C>
+    View<Index<Relation<T>>, C> rename(View<Index<Relation<T>>, C> source, std::span<const Index<Column>> columns, size_t schema_namespace)
     {
-        if (&source.get_context() != this)
+        if (&get_relation_repository(source.get_context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
         if (columns.size() != source.arity())
             throw std::invalid_argument("RelationRepository: rename requires matching arity.");
@@ -179,10 +180,11 @@ public:
         ygg::clear(data.index);
         data.columns_index = insert(columns).first.get_index();
         data.schema_namespace = schema_namespace;
-        return insert(data).first;
+        return make_view(insert(data).first.get_index(), source.get_context());
     }
 
-    RelationView<T> rename(RelationView<T> source, std::span<const Index<Column>> columns)
+    template<typename C>
+    View<Index<Relation<T>>, C> rename(View<Index<Relation<T>>, C> source, std::span<const Index<Column>> columns)
     {
         return rename(source, columns, source.get_data().schema_namespace);
     }
@@ -214,6 +216,12 @@ template<TriviallyCopyable T>
 std::shared_ptr<RelationRepository<T>> RelationRepositoryFactory<T>::create_shared()
 {
     return std::shared_ptr<RelationRepository<T>>(new RelationRepository<T>(next_index(), *this, m_rows));
+}
+
+template<TriviallyCopyable T>
+const RelationRepository<T>& get_repository(const RelationRepository<T>& repository) noexcept
+{
+    return repository;
 }
 
 template<TriviallyCopyable T>

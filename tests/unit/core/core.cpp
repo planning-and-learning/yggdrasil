@@ -15,6 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/core.hpp"
+
+#include "yggdrasil/core/atomic_bit.hpp"
+#include "yggdrasil/ids/index_mixins.hpp"
+
 #include <array>
 #include <chrono>
 #include <cista/containers/vector.h>
@@ -27,9 +32,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <yggdrasil/core.hpp>
-#include <yggdrasil/core/atomic_bit.hpp>
-#include <yggdrasil/ids/index_mixins.hpp>
 
 namespace ygg::tests
 {

@@ -15,13 +15,14 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/serialization/json.hpp"
+
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
 #include <optional>
 #include <string>
-#include <yggdrasil/serialization/json.hpp>
 
 namespace ygg::tests
 {

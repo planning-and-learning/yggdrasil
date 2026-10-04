@@ -7,11 +7,12 @@
  * (at your option) any later version.
  */
 
+#include "yggdrasil/diagnostics/diagnostic.hpp"
+
 #include <gtest/gtest.h>
 #include <limits>
 #include <memory>
 #include <string>
-#include <yggdrasil/diagnostics/diagnostic.hpp>
 
 namespace ygg::tests
 {

@@ -1,9 +1,10 @@
 #include "module.hpp"
 
+#include "yggdrasil/execution/onetbb.hpp"
+
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <string>
-#include <yggdrasil/execution/onetbb.hpp>
 
 namespace yggdrasil
 {

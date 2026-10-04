@@ -18,12 +18,13 @@
 #ifndef YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 
+#include "yggdrasil/core/bit.hpp"
+#include "yggdrasil/formalism/repository.hpp"
+
 #include <algorithm>
 #include <limits>
 #include <memory>
 #include <stdexcept>
-#include <yggdrasil/core/bit.hpp>
-#include <yggdrasil/formalism/repository.hpp>
 
 namespace ygg::formalism
 {

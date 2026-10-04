@@ -15,17 +15,19 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/semantics/comparison.hpp"
+
+#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/ids/uint_mixins.hpp"
+#include "yggdrasil/serialization/cista_equal_to.hpp"
+#include "yggdrasil/serialization/cista_ordering.hpp"
+
 #include <array>
 #include <cmath>
 #include <compare>
 #include <gtest/gtest.h>
 #include <limits>
 #include <tuple>
-#include <yggdrasil/ids/index_mixins.hpp>
-#include <yggdrasil/ids/uint_mixins.hpp>
-#include <yggdrasil/semantics/comparison.hpp>
-#include <yggdrasil/serialization/cista_equal_to.hpp>
-#include <yggdrasil/serialization/cista_ordering.hpp>
 
 namespace ygg
 {

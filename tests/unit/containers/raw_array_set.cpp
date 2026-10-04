@@ -15,6 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/raw_array_set.hpp"
+
 #include <algorithm>
 #include <array>
 #include <concepts>
@@ -24,7 +26,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <yggdrasil/containers/raw_array_set.hpp>
 
 namespace ygg::tests
 {

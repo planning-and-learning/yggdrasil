@@ -18,6 +18,16 @@
 #ifndef YGG_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 #define YGG_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 
+#include "yggdrasil/buffer/declarations.hpp"
+#include "yggdrasil/buffer/indexed_hash_set.hpp"
+#include "yggdrasil/buffer/segmented_buffer.hpp"
+#include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/tuple.hpp"
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include <cassert>
 #include <memory>
 #include <optional>
@@ -25,15 +35,6 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/buffer/declarations.hpp>
-#include <yggdrasil/buffer/indexed_hash_set.hpp>
-#include <yggdrasil/buffer/segmented_buffer.hpp>
-#include <yggdrasil/containers/indexed_hash_set.hpp>
-#include <yggdrasil/containers/tuple.hpp>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::formalism
 {

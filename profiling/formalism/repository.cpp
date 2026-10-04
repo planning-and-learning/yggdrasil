@@ -7,6 +7,12 @@
  * (at your option) any later version.
  */
 
+#include "yggdrasil/formalism/repository.hpp"
+
+#include "yggdrasil/containers/vector.hpp"
+#include "yggdrasil/formalism/binding_data.hpp"
+#include "yggdrasil/ids/index_mixins.hpp"
+
 #include <benchmark/benchmark.h>
 #include <cstdint>
 #include <memory>
@@ -14,10 +20,6 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/containers/vector.hpp>
-#include <yggdrasil/formalism/binding_data.hpp>
-#include <yggdrasil/formalism/repository.hpp>
-#include <yggdrasil/ids/index_mixins.hpp>
 
 namespace ygg::profiling
 {

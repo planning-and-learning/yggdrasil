@@ -15,6 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/containers.hpp"
+
 #include <array>
 #include <compare>
 #include <cstddef>
@@ -23,7 +25,6 @@
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
-#include <yggdrasil/containers/containers.hpp>
 
 namespace ygg::tests
 {

@@ -9,12 +9,13 @@
 
 #pragma once
 
+#include "yggdrasil/containers/variant.hpp"
+
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <yggdrasil/containers/variant.hpp>
 
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)

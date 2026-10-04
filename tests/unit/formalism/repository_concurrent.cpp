@@ -7,6 +7,16 @@
  * (at your option) any later version.
  */
 
+#include "yggdrasil/buffer/buffer.hpp"
+#include "yggdrasil/containers/bit_packed_array_set.hpp"
+#include "yggdrasil/containers/block_array_set.hpp"
+#include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/vector.hpp"
+#include "yggdrasil/formalism/binding_data.hpp"
+#include "yggdrasil/formalism/binding_view.hpp"
+#include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/ids/index_mixins.hpp"
+
 #include "gtest/gtest.h"
 #include <algorithm>
 #include <array>
@@ -20,15 +30,6 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-#include <yggdrasil/buffer/buffer.hpp>
-#include <yggdrasil/containers/bit_packed_array_set.hpp>
-#include <yggdrasil/containers/block_array_set.hpp>
-#include <yggdrasil/containers/indexed_hash_set.hpp>
-#include <yggdrasil/containers/vector.hpp>
-#include <yggdrasil/formalism/binding_data.hpp>
-#include <yggdrasil/formalism/binding_view.hpp>
-#include <yggdrasil/formalism/repository.hpp>
-#include <yggdrasil/ids/index_mixins.hpp>
 
 namespace ygg::tests
 {

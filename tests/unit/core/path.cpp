@@ -15,12 +15,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/core/path.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <string>
-#include <yggdrasil/core/path.hpp>
 
 namespace ygg::tests
 {

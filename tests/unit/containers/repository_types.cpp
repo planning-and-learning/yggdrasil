@@ -15,26 +15,32 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/repository_types.hpp"
+
+#include "yggdrasil/containers/span.hpp"
+#include "yggdrasil/formalism/binding_data.hpp"
+#include "yggdrasil/formalism/binding_view.hpp"
+#include "yggdrasil/formalism/builder.hpp"
+#include "yggdrasil/formalism/detail/view.hpp"
+#include "yggdrasil/formalism/interning.hpp"
+#include "yggdrasil/formalism/membership.hpp"
+#include "yggdrasil/formalism/relation_repository.hpp"
+#include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/formalism/repository_factory.hpp"
+#include "yggdrasil/formalism/symbol_repository.hpp"
+#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include "gtest/gtest.h"
+#include <array>
 #include <concepts>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
-#include <yggdrasil/containers/repository_types.hpp>
-#include <yggdrasil/formalism/binding_data.hpp>
-#include <yggdrasil/formalism/binding_view.hpp>
-#include <yggdrasil/formalism/builder.hpp>
-#include <yggdrasil/formalism/detail/view.hpp>
-#include <yggdrasil/formalism/interning.hpp>
-#include <yggdrasil/formalism/relation_repository.hpp>
-#include <yggdrasil/formalism/repository.hpp>
-#include <yggdrasil/formalism/repository_factory.hpp>
-#include <yggdrasil/formalism/symbol_repository.hpp>
-#include <yggdrasil/ids/index_mixins.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::tests
 {
@@ -249,6 +255,7 @@ concept CanUseAnySymbolOperation =
     || requires(const Repository& repository, const Data<T>& data) { repository.find(data); }
     || requires(const Repository& repository, Index<T> index) { repository[index]; }
     || requires(const Repository& repository, Index<T> index) { repository.get_canonical_context(index); }
+    || requires(const Repository& repository, Index<T> index) { repository.contains(index); }
     || requires(const Repository& repository) { repository.template size<T>(); } || requires(const Repository& repository) { repository.template front<T>(); }
     || requires(const Repository& repository) { repository.template memory_usage<T>(); };
 
@@ -318,6 +325,7 @@ concept CanUseUnsupportedRelation =
     requires(Repository& repository, Data<formalism::RelationBinding<T, RepositoryTypesObjectTag>>& data) { repository.insert(data); }
     || requires(const Repository& repository, Data<formalism::RelationBinding<T, RepositoryTypesObjectTag>>& data) { repository.find(data); }
     || requires(const Repository& repository, Index<formalism::RelationBinding<T, RepositoryTypesObjectTag>> index) { repository[index]; }
+    || requires(const Repository& repository, Index<formalism::RelationBinding<T, RepositoryTypesObjectTag>> index) { repository.contains(index); }
     || requires(const Repository& repository, Index<T> index) { repository.size(index); } || requires(Repository& repository) { repository.template get<T>(); };
 static_assert(!CanUseUnsupportedRelation<ContractRelations, RepositoryTypesElement>);
 static_assert(!CanUseUnsupportedRelation<ContractConcurrentRelations, RepositoryTypesElement>);
@@ -561,6 +569,10 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesFactoryLocalRepository
     EXPECT_FALSE(ygg::EqualTo<BindingView> {}(first, second));
     EXPECT_NE(ygg::Hash<BindingView> {}(first), ygg::Hash<BindingView> {}(second));
     EXPECT_TRUE(ygg::EqualTo<BindingView> {}(first, independent));
+    EXPECT_TRUE(first_repository.contains(first));
+    EXPECT_FALSE(first_repository.contains(second));
+    EXPECT_FALSE(first_repository.contains(independent));
+    EXPECT_TRUE(first_repository.contains(independent.get_index()));
     EXPECT_EQ(ygg::Hash<BindingView> {}(first), ygg::Hash<BindingView> {}(independent));
     EXPECT_FALSE(ygg::Less<> {}(first.get_key(), second.get_key()));
     EXPECT_FALSE(ygg::Less<> {}(second.get_key(), first.get_key()));
@@ -1174,6 +1186,128 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
     EXPECT_THROW(ygg::make_view(missing_row, repository), std::out_of_range);
     EXPECT_THROW(repository[missing_relation], std::out_of_range);
     EXPECT_THROW(ygg::make_view(missing_relation, repository), std::out_of_range);
+}
+
+template<typename Repository>
+Repository make_membership_repository(size_t index, const Repository* parent = nullptr)
+{
+    if constexpr (std::constructible_from<Repository, size_t, const Repository*>)
+        return Repository(index, parent);
+    else
+        return Repository(parent);
+}
+
+template<typename Repository>
+void check_symbol_membership()
+{
+    using Handle = Index<RepositoryTypesElement>;
+    using ElementView = View<Handle, Repository>;
+    auto root = make_membership_repository<Repository>(0);
+    auto data = Data<RepositoryTypesElement> {};
+    data.value = 7;
+    const auto root_view = root.insert(data).first;
+    auto child = make_membership_repository<Repository>(1, &root);
+    data.value = 11;
+    const auto child_view = child.insert(data).first;
+    auto grandchild = make_membership_repository<Repository>(2, &child);
+    data.value = 13;
+    const auto local_view = grandchild.insert(data).first;
+
+    EXPECT_TRUE(grandchild.contains(root_view));
+    EXPECT_TRUE(formalism::contains(grandchild, root_view));
+    EXPECT_TRUE(grandchild.contains(child_view));
+    EXPECT_TRUE(grandchild.contains(local_view));
+    EXPECT_FALSE(root.contains(child_view));
+    EXPECT_FALSE(child.contains(local_view));
+    EXPECT_TRUE(root.contains(ElementView(root_view.get_index(), grandchild)));
+    EXPECT_FALSE(grandchild.contains(ElementView(local_view.get_index(), root)));
+
+    const auto indices = std::array { root_view.get_index(), child_view.get_index(), local_view.get_index() };
+    EXPECT_TRUE(formalism::contains_all(grandchild, indices));
+    EXPECT_FALSE(formalism::contains_all(child, indices));
+    EXPECT_TRUE(formalism::contains_all(grandchild, make_view(std::span<const Handle>(indices), grandchild)));
+    EXPECT_TRUE(formalism::contains_all(root, std::span<const Handle> {}));
+    EXPECT_TRUE(formalism::contains_all(root, std::span<const ElementView> {}));
+    EXPECT_FALSE(formalism::contains_all(grandchild, std::array { root_view.get_index(), Handle::max() }));
+    EXPECT_FALSE(grandchild.contains(Handle(3)));
+    EXPECT_FALSE(grandchild.contains(ElementView(Handle::max(), grandchild)));
+
+    auto unrelated = make_membership_repository<Repository>(0);
+    EXPECT_FALSE(grandchild.contains(ElementView(root_view.get_index(), unrelated)));
+    data.value = 7;
+    const auto unrelated_view = unrelated.insert(data).first;
+    ASSERT_EQ(unrelated_view.get_index(), root_view.get_index());
+    EXPECT_TRUE(grandchild.contains(unrelated_view.get_index()));
+    EXPECT_FALSE(grandchild.contains(unrelated_view));
+    EXPECT_FALSE(formalism::contains(grandchild, unrelated_view));
+    EXPECT_FALSE(formalism::contains_all(grandchild, std::array { root_view, unrelated_view }));
+}
+
+TEST(YggdrasilTests, CommonSymbolMembershipChecksCanonicalOwnersAcrossLayers)
+{
+    check_symbol_membership<ContractSymbols>();
+    check_symbol_membership<ContractConcurrentSymbols>();
+    check_symbol_membership<ContractRepository>();
+    check_symbol_membership<formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>>();
+}
+
+template<typename Repository>
+void check_relation_membership()
+{
+    using Handle = Index<ContractBinding>;
+    using BindingView = View<Handle, Repository>;
+    using Object = formalism::Object<RepositoryTypesObjectTag>;
+    const auto relation = Index<RepositoryTypesRelation>(0);
+    auto objects = IndexList<Object> {};
+    objects.push_back(Index<Object>(0));
+    auto root = Repository(0);
+    const auto root_view = root.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    auto child = Repository(1, &root);
+    objects[0] = Index<Object>(1);
+    const auto child_view = child.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    auto grandchild = Repository(2, &child);
+    objects[0] = Index<Object>(2);
+    const auto local_view = grandchild.insert(Data<ContractBinding>(relation, 1, objects)).first;
+
+    EXPECT_TRUE(grandchild.contains(root_view));
+    EXPECT_TRUE(formalism::contains(grandchild, root_view));
+    EXPECT_TRUE(grandchild.contains(child_view));
+    EXPECT_TRUE(grandchild.contains(local_view));
+    EXPECT_FALSE(root.contains(child_view));
+    EXPECT_FALSE(child.contains(local_view));
+    EXPECT_TRUE(root.contains(BindingView(root_view.get_index(), grandchild)));
+    EXPECT_FALSE(grandchild.contains(BindingView(local_view.get_index(), root)));
+    EXPECT_TRUE(formalism::contains_all(grandchild, std::array { root_view, child_view, local_view }));
+    EXPECT_TRUE(formalism::contains_all(grandchild, std::array { root_view.get_index(), child_view.get_index(), local_view.get_index() }));
+    EXPECT_TRUE(formalism::contains_all(root, std::span<const Handle> {}));
+    EXPECT_TRUE(formalism::contains_all(root, std::span<const BindingView> {}));
+
+    const auto missing_row = Handle { relation, Index<formalism::Row>(3) };
+    const auto missing_relation = Handle { Index<RepositoryTypesRelation>(1), Index<formalism::Row>(0) };
+    const auto max_row = Handle { relation, Index<formalism::Row>::max() };
+    const auto max_relation = Handle { Index<RepositoryTypesRelation>::max(), Index<formalism::Row>(0) };
+    for (const auto index : { missing_row, missing_relation, max_row, max_relation })
+    {
+        EXPECT_FALSE(grandchild.contains(index));
+        EXPECT_FALSE(grandchild.contains(BindingView(index, grandchild)));
+    }
+    EXPECT_FALSE(formalism::contains_all(grandchild, std::array { root_view.get_index(), max_row }));
+
+    auto unrelated = Repository(0);
+    EXPECT_FALSE(grandchild.contains(BindingView(root_view.get_index(), unrelated)));
+    objects[0] = Index<Object>(0);
+    const auto unrelated_view = unrelated.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    EXPECT_TRUE(grandchild.contains(unrelated_view.get_index()));
+    EXPECT_FALSE(grandchild.contains(unrelated_view));
+    EXPECT_FALSE(formalism::contains(grandchild, unrelated_view));
+}
+
+TEST(YggdrasilTests, CommonRelationMembershipChecksCanonicalOwnersAcrossLayers)
+{
+    check_relation_membership<ContractRelations>();
+    check_relation_membership<ContractConcurrentRelations>();
+    check_relation_membership<ContractRepository>();
+    check_relation_membership<formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>>();
 }
 
 }  // namespace ygg::tests

@@ -1,3 +1,5 @@
+#include "yggdrasil/containers/segmented_vector.hpp"
+
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -7,7 +9,6 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <yggdrasil/containers/segmented_vector.hpp>
 
 namespace ygg::tests
 {

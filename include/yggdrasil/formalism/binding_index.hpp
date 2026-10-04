@@ -18,13 +18,14 @@
 #ifndef YGG_FORMALISM_BINDING_INDEX_HPP_
 #define YGG_FORMALISM_BINDING_INDEX_HPP_
 
+#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/ids/index_mixins.hpp"
+
 #include <concepts>
 #include <ranges>
 #include <tuple>
 #include <type_traits>
-#include <yggdrasil/core/types.hpp>
-#include <yggdrasil/formalism/declarations.hpp>
-#include <yggdrasil/ids/index_mixins.hpp>
 
 namespace ygg
 {

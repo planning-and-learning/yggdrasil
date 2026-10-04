@@ -15,11 +15,12 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/serialization/json_suite.hpp"
+
 #include <boost/json.hpp>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <stdexcept>
-#include <yggdrasil/serialization/json_suite.hpp>
 
 namespace ygg::tests
 {

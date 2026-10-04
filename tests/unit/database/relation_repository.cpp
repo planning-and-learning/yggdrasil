@@ -3,6 +3,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "yggdrasil/database/relation_repository.hpp"
+
+#include "yggdrasil/database/operations.hpp"
+#include "yggdrasil/database/relation_pool.hpp"
+#include "yggdrasil/semantics/equal_to.hpp"
+#include "yggdrasil/semantics/hash.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cista/serialization.h>
@@ -13,11 +20,6 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <yggdrasil/database/operations.hpp>
-#include <yggdrasil/database/relation_pool.hpp>
-#include <yggdrasil/database/relation_repository.hpp>
-#include <yggdrasil/semantics/equal_to.hpp>
-#include <yggdrasil/semantics/hash.hpp>
 
 namespace ygg::tests
 {
@@ -69,6 +71,7 @@ struct RelationContext
 {
     const Repository& repository;
     friend const Repository& get_relation_repository(const RelationContext& context) noexcept { return context.repository; }
+    friend const Repository& get_repository(const RelationContext& context) noexcept { return context.repository; }
 };
 
 static_assert(std::same_as<IndexView, RelationView<>>);
@@ -641,6 +644,91 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
     source_builder.clear();
     expect_rows(target, { { 4, 5 }, { 1, 2 } });
     expect_rows(changed.first, { { 4, 5 }, { 1, 2 } });
+}
+
+
+namespace
+{
+// The row's entity owner is separate from the relation's physical storage.
+struct TypedRelationContext
+{
+    const RelationRepository<ColumnsIndex>& rows;
+    const Repository& entities;
+    friend const auto& get_relation_repository(const TypedRelationContext& context) noexcept { return context.rows; }
+    friend const auto& get_repository(const TypedRelationContext& context) noexcept { return context.entities; }
+};
+}
+
+TEST(YggdrasilTests, TypedRelationsResolveRowsThroughTheirElementRepository)
+{
+    auto entities = RelationRepositoryFactory<>().create();
+    const auto first = entities.insert(std::array { ColumnIndex(7) }).first;
+    const auto second = entities.insert(std::array { ColumnIndex(9) }).first;
+    auto rows = RelationRepositoryFactory<ColumnsIndex>().create();
+    const auto context = TypedRelationContext { rows, entities };
+    auto builder = Builder<Relation<ColumnsIndex>>({ ColumnIndex(1), ColumnIndex(2) });
+    builder.insert({ first.get_index(), second.get_index() });
+    const auto published = database::insert(rows, builder, 42).first;
+    const auto index_view = make_view(published.get_index(), context);
+    const auto data_view = make_view(published.get_data(), context);
+    const auto builder_view = make_view(builder, context);
+    static_assert(RelationViewConcept<decltype(index_view), ColumnsIndex>);
+    static_assert(std::ranges::forward_range<decltype(index_view)>);
+    static_assert(std::ranges::borrowed_range<decltype(index_view)>);
+    static_assert(std::same_as<decltype(index_view[0][0]), ColumnsIndexView>);
+    const auto check = [&](const auto& view)
+    {
+        ASSERT_EQ(view.size(), 1);
+        EXPECT_EQ(view.row(0)[0], first.get_index());
+        EXPECT_EQ(view[0][0], first);
+        EXPECT_EQ(view.at(0)[1], second);
+        EXPECT_THROW(view.at(1), std::out_of_range);
+        size_t count = 0;
+        for (auto objects : view)
+        {
+            EXPECT_EQ(objects.front(), first);
+            EXPECT_EQ(objects.back(), second);
+            EXPECT_EQ(&objects.get_context(), &entities);
+            ++count;
+        }
+        EXPECT_EQ(count, 1);
+    };
+    check(index_view);
+    check(data_view);
+    check(builder_view);
+    const auto iterator = make_view(published.get_index(), context).begin();
+    EXPECT_EQ((*iterator)[1], second);
+    const auto element_iterator = make_view(published.get_index(), context)[0].begin();
+    EXPECT_EQ(*element_iterator, first);
+
+    const auto renamed = rows.rename(index_view, std::array { ColumnIndex(3), ColumnIndex(4) });
+    static_assert(std::same_as<decltype(renamed), decltype(index_view)>);
+    EXPECT_EQ(&renamed.get_context(), &context);
+    EXPECT_EQ(renamed.get_data().schema_namespace, 42);
+    EXPECT_EQ(renamed.get_storage_address(), index_view.get_storage_address());
+    EXPECT_EQ(renamed[0][0], first);
+    auto other_rows = RelationRepositoryFactory<ColumnsIndex>().create();
+    EXPECT_THROW(other_rows.rename(index_view, std::array { ColumnIndex(3), ColumnIndex(4) }), std::invalid_argument);
+
+    auto probe = Builder<Relation<ColumnsIndex>>({ ColumnIndex(2) });
+    probe.insert({ second.get_index() });
+    auto joined = join<ColumnsIndex>(data_view, make_view(probe, context));
+    EXPECT_TRUE(joined.contains({ first.get_index(), second.get_index() }));
+    auto projected = project<ColumnsIndex>(index_view, { ColumnIndex(2) });
+    EXPECT_TRUE(projected.contains({ second.get_index() }));
+    auto assigned = Builder<Relation<ColumnsIndex>>();
+    assign(assigned, index_view);
+    EXPECT_TRUE(assigned.contains({ first.get_index(), second.get_index() }));
+    const auto copied = database::copy(index_view, other_rows).first;
+    EXPECT_TRUE(copied.contains({ first.get_index(), second.get_index() }));
+
+    auto truth = Builder<Relation<ColumnsIndex>>();
+    truth.insert({});
+    const auto truth_view = make_view(truth, context);
+    EXPECT_TRUE((*truth_view.begin()).empty());
+    EXPECT_EQ(std::ranges::distance(truth_view), 1);
+    truth.clear();
+    EXPECT_EQ(truth_view.begin(), truth_view.end());
 }
 
 }  // namespace ygg::tests

@@ -1,16 +1,17 @@
 #include "module.hpp"
 
+#include "yggdrasil/database/operations.hpp"
+#include "yggdrasil/database/relation_pool.hpp"
+#include "yggdrasil/database/relation_repository.hpp"
+#include "yggdrasil/python/bindings.hpp"
+#include "yggdrasil/python/owner.hpp"
+
 #include <cstddef>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/vector.h>
 #include <optional>
 #include <span>
 #include <vector>
-#include <yggdrasil/database/operations.hpp>
-#include <yggdrasil/database/relation_pool.hpp>
-#include <yggdrasil/database/relation_repository.hpp>
-#include <yggdrasil/python/bindings.hpp>
-#include <yggdrasil/python/owner.hpp>
 
 namespace yggdrasil
 {
@@ -77,7 +78,7 @@ void bind_database_module_definitions(nb::module_& m)
                     index += static_cast<std::ptrdiff_t>(relation.size());
                 if (index < 0 || static_cast<std::size_t>(index) >= relation.size())
                     throw nb::index_error();
-                return relation[index];
+                return relation.row(index);
             },
             nb::keep_alive<0, 1>())
         .def("arity", &Relation::arity)
@@ -117,12 +118,21 @@ void bind_database_module_definitions(nb::module_& m)
                                     index += static_cast<std::ptrdiff_t>(relation.size());
                                 if (index < 0 || static_cast<std::size_t>(index) >= relation.size())
                                     throw nb::index_error();
-                                return relation[index];
+                                return relation.row(index);
                             },
                             nb::keep_alive<0, 1>())
                         .def("arity", &RelationView::arity)
                         .def("empty", &RelationView::empty)
-                        .def("at", &RelationView::at, nb::arg("index"), nb::keep_alive<0, 1>())
+                        .def(
+                            "at",
+                            [](const RelationView& relation, std::size_t index)
+                            {
+                                if (index >= relation.size())
+                                    throw nb::index_error();
+                                return relation.row(index);
+                            },
+                            nb::arg("index"),
+                            nb::keep_alive<0, 1>())
                         .def("columns", [](const RelationView& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
     ygg::add_comparison(interned);
     ygg::add_hash(interned);

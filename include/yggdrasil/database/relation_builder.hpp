@@ -64,7 +64,8 @@ public:
     bool contains(std::span<const T> row) const;
     bool contains(std::initializer_list<T> row) const;
 
-    std::span<const T> operator[](size_t index) const noexcept;
+    std::span<const T> row(size_t index) const noexcept;
+    std::span<const T> operator[](size_t index) const noexcept { return row(index); }
     std::span<const T> at(size_t index) const;
 
     /// Retains allocated tuple and hash-table storage for the next evaluation.
@@ -82,7 +83,7 @@ public:
 
     auto identifying_members() const noexcept
     {
-        return std::make_tuple(columns().span(), std::views::iota(size_t { 0 }, size()) | std::views::transform([this](size_t i) { return (*this)[i]; }));
+        return std::make_tuple(columns().span(), std::views::iota(size_t { 0 }, size()) | std::views::transform([this](size_t i) { return row(i); }));
     }
 };
 
@@ -133,7 +134,7 @@ bool Builder<database::Relation<T>>::contains(std::initializer_list<T> row) cons
 }
 
 template<TriviallyCopyable T>
-std::span<const T> Builder<database::Relation<T>>::operator[](size_t index) const noexcept
+std::span<const T> Builder<database::Relation<T>>::row(size_t index) const noexcept
 {
     assert(index < size());
     return m_rows[static_cast<uint_t>(index)];
