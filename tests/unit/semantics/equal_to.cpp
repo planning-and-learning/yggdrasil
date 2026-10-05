@@ -20,6 +20,7 @@
 #include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/core/observer_ptr_equal_to.hpp"
 #include "yggdrasil/semantics/comparators.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
 #include "yggdrasil/semantics/containers/block_array_equal_to.hpp"
 #include "yggdrasil/semantics/containers/dynamic_bitset_equal_to.hpp"
 #include "yggdrasil/semantics/containers/segmented_vector_equal_to.hpp"
@@ -30,8 +31,10 @@
 #include <functional>
 #include <gtest/gtest.h>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <variant>
 #include <vector>
 
@@ -332,6 +335,80 @@ TEST(YggdrasilTests, CommonCistaEqualToAdaptersComparePairAndNestedArrayViews)
     EXPECT_FALSE(ygg::EqualTo<PairView> {}(PairView(lhs[1], context), PairView(different[1], context)));
     EXPECT_TRUE(ygg::EqualTo<ArrayView> {}(ArrayView(lhs, context), ArrayView(rhs, context)));
     EXPECT_FALSE(ygg::EqualTo<ArrayView> {}(ArrayView(lhs, context), ArrayView(different, context)));
+}
+
+TEST(YggdrasilTests, CommonEqualRangePropagatesTraversalErrors)
+{
+    const auto values = std::array { 1, 2, 3 };
+    auto decoded = values
+                   | std::views::transform(
+                       [](int value) -> int
+                       {
+                           if (value == 2)
+                               throw std::runtime_error("range dereference");
+                           return value;
+                       });
+    EXPECT_THROW(ygg::equal_range(decoded, values), std::runtime_error);
+    EXPECT_THROW(ygg::equal_range(values, decoded), std::runtime_error);
+}
+
+TEST(YggdrasilTests, CommonEqualRangeComparesProxyValuesWithoutCopyingReferenceElements)
+{
+    auto proxies = std::vector<bool> { true, false, true };
+    const auto values = std::array { true, false, true };
+    EXPECT_TRUE(ygg::equal_range(proxies, std::span<const bool>(values)));
+    EXPECT_TRUE(ygg::equal_range(std::span<const bool>(values), proxies));
+    proxies[1] = true;
+    EXPECT_FALSE(ygg::equal_range(proxies, values));
+
+    struct Noncopyable
+    {
+        int value;
+        explicit Noncopyable(int value_) : value(value_) {}
+        Noncopyable(const Noncopyable&) = delete;
+        bool operator==(const Noncopyable&) const = default;
+    };
+    const auto lhs = std::array { Noncopyable(1), Noncopyable(2) };
+    const auto rhs = std::array { Noncopyable(1), Noncopyable(2) };
+    EXPECT_TRUE(ygg::equal_range(lhs, rhs));
+}
+
+struct EqualToThrowingConversion
+{
+    operator unsigned() const { throw std::runtime_error("decoded conversion"); }
+};
+
+struct EqualToConvertingCoder : bit::ForwardingBlockCoder<unsigned>
+{
+    static EqualToThrowingConversion decode(unsigned) noexcept { return {}; }
+};
+
+TEST(YggdrasilTests, CommonEqualToAdaptersPropagateNestedConversionErrors)
+{
+    const auto storage = std::array { 3U };
+    const auto context = EqualToContext {};
+    const auto decoded = BasicBlockArrayView<const unsigned, EqualToConvertingCoder>(storage.data(), storage.size());
+    const auto wrapped = View<std::remove_cvref_t<decltype(decoded)>, EqualToContext>(decoded, context);
+    const auto packed = BasicBitPackedArrayView<const unsigned, EqualToConvertingCoder>(storage.data(), 1, 2, 0);
+    const auto wrapped_packed = View<std::remove_cvref_t<decltype(packed)>, EqualToContext>(packed, context);
+    EXPECT_THROW(ygg::EqualTo<> {}(decoded, decoded), std::runtime_error);
+    EXPECT_THROW(ygg::EqualTo<> {}(wrapped, wrapped), std::runtime_error);
+    const auto observer = ygg::make_observer(wrapped);
+    EXPECT_THROW(ygg::EqualTo<> {}(observer, observer), std::runtime_error);
+    EXPECT_THROW(ygg::EqualTo<> {}(packed, packed), std::runtime_error);
+    EXPECT_THROW(ygg::EqualTo<> {}(wrapped_packed, wrapped_packed), std::runtime_error);
+
+    const auto nested = std::tuple { std::array { std::optional { wrapped } } };
+    EXPECT_THROW(ygg::EqualTo<> {}(nested, nested), std::runtime_error);
+
+    struct Record
+    {
+        decltype(wrapped) values;
+        auto identifying_members() const noexcept { return std::tie(values); }
+    };
+    const auto record = Record { wrapped };
+    EXPECT_THROW(ygg::EqualTo<> {}(record, record), std::runtime_error);
+    EXPECT_THROW(ygg::operator==(record, record), std::runtime_error);
 }
 
 }  // namespace ygg::tests

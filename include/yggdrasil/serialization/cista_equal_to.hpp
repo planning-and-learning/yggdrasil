@@ -41,7 +41,7 @@ struct EqualTo<View<::cista::array<T, N>, C>>
 {
     using Type = View<::cista::array<T, N>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
 };
 
 template<typename T1, typename T2>
@@ -49,7 +49,7 @@ struct EqualTo<::cista::pair<T1, T2>>
 {
     using Type = ::cista::pair<T1, T2>;
 
-    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const
     {
         return EqualTo<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second);
     }
@@ -60,7 +60,7 @@ struct EqualTo<View<::cista::pair<T1, T2>, C>>
 {
     using Type = View<::cista::pair<T1, T2>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
     {
         return EqualTo<std::remove_cvref_t<decltype(lhs.get_first())>> {}(lhs.get_first(), rhs.get_first())
                && EqualTo<std::remove_cvref_t<decltype(lhs.get_second())>> {}(lhs.get_second(), rhs.get_second());
@@ -80,7 +80,7 @@ struct EqualTo<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Al
 {
     using Type = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
 };
 
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
@@ -88,7 +88,7 @@ struct EqualTo<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeTyp
 {
     using Type = View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
 };
 
 template<typename... Ts>
@@ -96,7 +96,7 @@ struct EqualTo<::cista::offset::variant<Ts...>>
 {
     using Type = ::cista::offset::variant<Ts...>;
 
-    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const
     {
         if (lhs.valid() != rhs.valid())
             return false;
@@ -126,7 +126,7 @@ struct EqualTo<View<::cista::offset::variant<Ts...>, C>>
 {
     using Type = View<::cista::offset::variant<Ts...>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
     {
         if (lhs.valid() != rhs.valid())
             return false;
@@ -156,7 +156,7 @@ struct EqualTo<::cista::optional<T>>
 {
     using Type = ::cista::optional<T>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
     {
         if (!lhs.has_value() && !rhs.has_value())
             return true;
@@ -173,7 +173,7 @@ struct EqualTo<View<::cista::optional<T>, C>>
 {
     using Type = View<::cista::optional<T>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
     {
         if (!lhs.has_value() && !rhs.has_value())
             return true;

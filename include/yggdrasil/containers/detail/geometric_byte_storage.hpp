@@ -170,21 +170,32 @@ public:
         return *this;
     }
 
-    std::byte* allocate(size_t size)
+    /// Fill unpublished storage before committing its cursor; failed fills retain capacity.
+    /// The callback must not reenter or mutate this storage.
+    template<typename Fill>
+    std::byte* allocate_with(size_t size, Fill&& fill)
     {
         assert(size > 0);
-        while (m_current_segment < m_segments.size())
+        auto segment = m_current_segment;
+        while (segment < m_segments.size() && m_segments[segment].remaining() < size)
+            ++segment;
+
+        if (segment == m_segments.size())
         {
-            if (m_segments[m_current_segment].remaining() >= size)
-                return m_segments[m_current_segment].allocate(size);
-            ++m_current_segment;
+            m_segments.emplace_back(next_capacity(size));
+            publish(segment);
         }
 
-        const auto segment = m_segments.size();
-        m_segments.emplace_back(next_capacity(size));
-        publish(segment);
+        auto* result = m_segments[segment].storage + m_segments[segment].used;
+        std::forward<Fill>(fill)(result);
+        m_segments[segment].allocate(size);
         m_current_segment = segment;
-        return m_segments.back().allocate(size);
+        return result;
+    }
+
+    std::byte* allocate(size_t size)
+    {
+        return allocate_with(size, [](std::byte*) noexcept {});
     }
 
 private:

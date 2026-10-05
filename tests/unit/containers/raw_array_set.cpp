@@ -17,10 +17,15 @@
 
 #include "yggdrasil/containers/raw_array_set.hpp"
 
+#include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/containers/block_array_pool.hpp"
+
 #include <algorithm>
 #include <array>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <limits>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <type_traits>
@@ -189,6 +194,164 @@ TEST(YggdrasilTests, CommonRawArraySetMoveKeepsHashFunctorsBoundToStorage)
     assigned = std::move(moved);
     EXPECT_EQ(assigned.find(value), 0);
     EXPECT_TRUE(std::ranges::equal(assigned[0], value));
+}
+
+template<bool ThreadSafe>
+void check_decoded_raw_array_ranges()
+{
+    using BlockView = BasicBlockArrayView<const uint_t, bit::ForwardingBlockCoder<uint_t>>;
+    using PackedView = BasicBitPackedArrayView<uint_t, bit::ForwardingBlockCoder<uint_t>>;
+    static_assert(SizedForwardRangeOf<BlockView, uint_t>);
+    static_assert(SizedForwardRangeOf<PackedView, uint_t>);
+    const auto values = std::array<uint_t, 3> { 2, 5, 7 };
+    const auto blocks = BlockView(values.data(), values.size());
+    auto packed_storage = std::array<uint_t, 1> {};
+    auto packed = PackedView(packed_storage.data(), values.size(), 3, 1);
+    packed = std::span<const uint_t>(values);
+    auto set = RawArraySet<uint_t, 1, ThreadSafe>(values.size());
+    EXPECT_EQ(set.insert(blocks), 0);
+    const auto memory = set.memory_usage();
+    EXPECT_EQ(set.insert(packed), 0);
+    EXPECT_EQ(set.insert(values), 0);
+    EXPECT_EQ(set.size(), 1);
+    EXPECT_EQ(set.memory_usage(), memory);
+    EXPECT_TRUE(set.contains(packed));
+    EXPECT_EQ(set.find(blocks), 0);
+    EXPECT_TRUE(std::ranges::equal(set[0], values));
+    EXPECT_THROW(set.insert(BlockView(values.data(), 2)), std::invalid_argument);
+    EXPECT_THROW(set.find(BlockView(values.data(), 2)), std::invalid_argument);
+    EXPECT_EQ(set.size(), 1);
+    set.clear();
+    EXPECT_EQ(set.insert(packed), 0);
+    EXPECT_EQ(set.memory_usage(), memory);
+
+    auto empty = RawArraySet<uint_t, 1, ThreadSafe>(0);
+    const auto empty_row = BlockView(nullptr, 0);
+    EXPECT_EQ(empty.insert(empty_row), 0);
+    EXPECT_EQ(empty.insert(std::span<const uint_t>()), 0);
+    EXPECT_TRUE(empty.contains(empty_row));
+    EXPECT_EQ(empty.size(), 1);
+}
+
+TEST(YggdrasilTests, CommonRawArraySetAcceptsDecodedRanges)
+{
+    check_decoded_raw_array_ranges<false>();
+    check_decoded_raw_array_ranges<true>();
+}
+
+template<bool ThreadSafe>
+void test_raw_array_set_failed_range()
+{
+    const auto values = std::array { 11, 12, 13 };
+    // The first traversal hashes, the second fills the unpublished row.
+    for (const auto failure : { size_t { 0 }, size_t { 1 }, size_t { 3 }, size_t { 4 } })
+    {
+        auto set = RawArraySet<int, 1, ThreadSafe>(values.size());
+        auto reads = size_t { 0 };
+        auto throw_at = failure;
+        const auto row = values
+                         | std::views::transform(
+                             [&](int value)
+                             {
+                                 if (reads++ == throw_at)
+                                     throw std::runtime_error("range traversal failed");
+                                 return value;
+                             });
+        EXPECT_THROW(set.insert(row), std::runtime_error);
+        EXPECT_TRUE(set.empty());
+        const auto retained = set.memory_usage();
+        reads = 0;
+        EXPECT_THROW(set.insert(row), std::runtime_error);
+        EXPECT_EQ(set.memory_usage(), retained);
+
+        throw_at = std::numeric_limits<size_t>::max();
+        EXPECT_EQ(set.insert(row), 0);
+        const auto* first = set[0].data();
+        // A duplicate's second traversal compares against its stored row.
+        throw_at = values.size() + 1;
+        reads = 0;
+        EXPECT_THROW(set.insert(row), std::runtime_error);
+        reads = 0;
+        EXPECT_THROW(set.contains(row), std::runtime_error);
+        throw_at = 0;
+        reads = 0;
+        EXPECT_THROW(set.find(row), std::runtime_error);
+        EXPECT_EQ(set.size(), 1);
+        EXPECT_EQ(set[0].data(), first);
+        EXPECT_TRUE(std::ranges::equal(set[0], values));
+
+        throw_at = std::numeric_limits<size_t>::max();
+        EXPECT_EQ(set.find(row), 0);
+        EXPECT_EQ(set.insert(row), 0);
+        EXPECT_EQ(set.insert(std::array { 21, 22, 23 }), 1);
+        EXPECT_EQ(set.find(values), 0);
+    }
+}
+
+TEST(YggdrasilTests, CommonRawArraySetRangeExceptionsLeaveNoPublishedPlaceholder)
+{
+    test_raw_array_set_failed_range<false>();
+    test_raw_array_set_failed_range<true>();
+}
+
+template<bool ThreadSafe>
+void test_raw_array_set_populated_fill_failure()
+{
+    const auto first = std::array { 11, 12, 13 };
+    const auto second = std::array { 21, 22, 23 };
+    auto set = RawArraySet<int, 1, ThreadSafe>(first.size());
+    ASSERT_EQ(set.insert(first), 0);
+    const auto* first_storage = set[0].data();
+    auto second_value_reads = size_t { 0 };
+    auto fail = true;
+    const auto row = second
+                     | std::views::transform(
+                         [&](int value)
+                         {
+                             // Collision probes reject at 21 != 11. Reading 22 twice reaches the fill.
+                             if (value == 22 && second_value_reads++ == 1 && fail)
+                                 throw std::runtime_error("fill failed");
+                             return value;
+                         });
+    EXPECT_THROW(set.insert(row), std::runtime_error);
+    const auto retained = set.memory_usage();
+    second_value_reads = 0;
+    EXPECT_THROW(set.insert(row), std::runtime_error);
+    EXPECT_EQ(set.memory_usage(), retained);
+    EXPECT_EQ(set.size(), 1);
+    EXPECT_EQ(set.find(first), 0);
+    EXPECT_FALSE(set.contains(second));
+    EXPECT_EQ(set[0].data(), first_storage);
+    fail = false;
+    EXPECT_EQ(set.insert(row), 1);
+    EXPECT_EQ(set.insert(first), 0);
+    EXPECT_EQ(set.find(second), 1);
+}
+
+TEST(YggdrasilTests, CommonRawArraySetFailedFillPreservesExistingIndexZero)
+{
+    test_raw_array_set_populated_fill_failure<false>();
+    test_raw_array_set_populated_fill_failure<true>();
+}
+
+template<bool ThreadSafe>
+void test_raw_array_set_proxy_range()
+{
+    auto values = std::vector<bool> { true, false, true };
+    const auto row = std::ranges::subrange(values.begin(), values.end());
+    static_assert(SizedForwardRangeOf<decltype(row), bool>);
+    auto set = RawArraySet<bool, 1, ThreadSafe>(values.size());
+    EXPECT_EQ(set.insert(row), 0);
+    EXPECT_EQ(set.insert(std::array { true, false, true }), 0);
+    EXPECT_TRUE(set.contains(row));
+    EXPECT_EQ(set.find(row), 0);
+    EXPECT_EQ(set.size(), 1);
+}
+
+TEST(YggdrasilTests, CommonRawArraySetConvertsProxyRangeValuesConsistently)
+{
+    test_raw_array_set_proxy_range<false>();
+    test_raw_array_set_proxy_range<true>();
 }
 
 }  // namespace ygg::tests

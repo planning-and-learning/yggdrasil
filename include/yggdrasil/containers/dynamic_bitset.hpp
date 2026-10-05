@@ -26,6 +26,8 @@
 #include <concepts>
 #include <cstddef>
 #include <limits>
+#include <iterator>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <tuple>
@@ -201,6 +203,19 @@ public:
             cnt += std::popcount(m_data[i]);
 
         return cnt;
+    }
+
+    template<std::unsigned_integral OtherBlock>
+        requires SameAsIgnoringConst<OtherBlock, U>
+    size_t count_intersection(const BitsetSpan<OtherBlock>& other) const
+    {
+        check_same_size(other);
+        assert(trailing_bits_zero());
+        assert(other.trailing_bits_zero());
+        size_t result = 0;
+        for (size_t i = 0; i < num_blocks(m_num_bits); ++i)
+            result += std::popcount(static_cast<U>(m_data[i] & other.m_data[i]));
+        return result;
     }
 
     size_t count_zeros() const noexcept
@@ -610,6 +625,79 @@ private:
     size_t m_num_bits;
 };
 
+/// Iterators borrow the bit storage, independently of the span and range wrappers.
+/// Keep the storage alive and unchanged throughout iteration.
+template<std::unsigned_integral Block>
+class SetBitIndices : public std::ranges::view_interface<SetBitIndices<Block>>
+{
+    using Bitset = BitsetSpan<const Block>;
+    Bitset m_bits { nullptr, 0 };
+
+public:
+    class Iterator
+    {
+        Bitset m_bits { nullptr, 0 };
+        size_t m_word_offset = Bitset::npos;
+        typename Bitset::U m_remaining = 0;
+
+    public:
+        using value_type = size_t;
+        using difference_type = std::ptrdiff_t;
+        using iterator_category = std::forward_iterator_tag;
+        using iterator_concept = std::forward_iterator_tag;
+
+        Iterator() noexcept = default;
+        Iterator(Bitset bits, size_t position) noexcept : m_bits(bits), m_word_offset(position == Bitset::npos ? position : position & ~Bitset::BlockMask)
+        {
+            if (position != Bitset::npos)
+                m_remaining = bits.blocks()[Bitset::block_index(position)] & (Bitset::full_mask() << Bitset::block_pos(position));
+        }
+        size_t operator*() const noexcept { return m_word_offset + std::countr_zero(m_remaining); }
+        Iterator& operator++() noexcept
+        {
+            m_remaining &= m_remaining - 1;
+            if (m_remaining != 0)
+                return *this;
+
+            const auto blocks = m_bits.blocks();
+            for (size_t block = Bitset::block_index(m_word_offset) + 1; block < blocks.size(); ++block)
+            {
+                m_remaining = blocks[block];
+                if (m_remaining != 0)
+                {
+                    m_word_offset = block * Bitset::Digits;
+                    return *this;
+                }
+            }
+            m_word_offset = Bitset::npos;
+            return *this;
+        }
+        Iterator operator++(int) noexcept
+        {
+            auto result = *this;
+            ++*this;
+            return result;
+        }
+        friend bool operator==(const Iterator& iterator, std::default_sentinel_t) noexcept { return iterator.m_word_offset == Bitset::npos; }
+        friend bool operator==(const Iterator& lhs, const Iterator& rhs) noexcept
+        {
+            return lhs.m_bits.data() == rhs.m_bits.data() && lhs.m_bits.size() == rhs.m_bits.size() && lhs.m_word_offset == rhs.m_word_offset
+                   && lhs.m_remaining == rhs.m_remaining;
+        }
+    };
+
+    SetBitIndices() noexcept = default;
+    explicit SetBitIndices(Bitset bits) noexcept : m_bits(bits) {}
+    Iterator begin() const noexcept { return Iterator(m_bits, m_bits.find_first()); }
+    std::default_sentinel_t end() const noexcept { return {}; }
+};
+
+template<std::unsigned_integral Block>
+auto set_bit_indices(BitsetSpan<Block> bits) noexcept
+{
+    return SetBitIndices<std::remove_const_t<Block>>(BitsetSpan<const std::remove_const_t<Block>>(bits));
+}
+
 template<std::unsigned_integral B1, std::unsigned_integral B2>
     requires SameAsIgnoringConst<B1, B2>
 constexpr bool operator==(const BitsetSpan<B1>& lhs, const BitsetSpan<B2>& rhs) noexcept
@@ -685,5 +773,11 @@ void for_each_bit(Callback&& callback, BlockCombiner&& combiner, const BitsetSpa
 }
 
 }  // namespace ygg
+
+namespace std::ranges
+{
+template<std::unsigned_integral Block>
+inline constexpr bool enable_borrowed_range<ygg::SetBitIndices<Block>> = true;
+}
 
 #endif

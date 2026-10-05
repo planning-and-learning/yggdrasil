@@ -41,7 +41,7 @@ struct Hash<View<::cista::array<T, N>, C>>
 {
     using Type = View<::cista::array<T, N>, C>;
 
-    hash_t operator()(const Type& el) const noexcept { return ygg::hash_range(el); }
+    hash_t operator()(const Type& el) const { return ygg::hash_range(el); }
 };
 
 template<typename T1, typename T2>
@@ -49,7 +49,7 @@ struct Hash<::cista::pair<T1, T2>>
 {
     using Type = ::cista::pair<T1, T2>;
 
-    hash_t operator()(const Type& el) const noexcept { return ygg::hash_combine(el.first, el.second); }
+    hash_t operator()(const Type& el) const { return ygg::hash_combine(el.first, el.second); }
 };
 
 template<typename C, typename T1, typename T2>
@@ -57,7 +57,7 @@ struct Hash<View<::cista::pair<T1, T2>, C>>
 {
     using Type = View<::cista::pair<T1, T2>, C>;
 
-    hash_t operator()(const Type& el) const noexcept { return ygg::hash_combine(el.get_first(), el.get_second()); }
+    hash_t operator()(const Type& el) const { return ygg::hash_combine(el.get_first(), el.get_second()); }
 };
 
 template<>
@@ -74,7 +74,7 @@ struct Hash<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Alloc
 {
     using Type = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
 
-    hash_t operator()(const Type& el) const noexcept { return ygg::hash_range(el); }
+    hash_t operator()(const Type& el) const { return ygg::hash_range(el); }
 };
 
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
@@ -82,7 +82,7 @@ struct Hash<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, 
 {
     using Type = View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
 
-    hash_t operator()(const Type& el) const noexcept { return ygg::hash_range(el); }
+    hash_t operator()(const Type& el) const { return ygg::hash_range(el); }
 };
 
 template<typename... Ts>
@@ -90,7 +90,7 @@ struct Hash<::cista::offset::variant<Ts...>>
 {
     using Type = ::cista::offset::variant<Ts...>;
 
-    hash_t operator()(const Type& el) const noexcept
+    hash_t operator()(const Type& el) const
     {
         hash_t seed = el.index();
         if (el.valid())
@@ -104,7 +104,7 @@ struct Hash<View<::cista::offset::variant<Ts...>, C>>
 {
     using Type = View<::cista::offset::variant<Ts...>, C>;
 
-    hash_t operator()(const Type& el) const noexcept
+    hash_t operator()(const Type& el) const
     {
         hash_t seed = el.index_variant().index();
         if (el.valid())
@@ -118,7 +118,7 @@ struct Hash<::cista::optional<T>>
 {
     using Type = ::cista::optional<T>;
 
-    hash_t operator()(const Type& el) const noexcept
+    hash_t operator()(const Type& el) const
     {
         hash_t seed = el.has_value() ? 1 : 0;
         if (el.has_value())
@@ -132,7 +132,7 @@ struct Hash<View<::cista::optional<T>, C>>
 {
     using Type = View<::cista::optional<T>, C>;
 
-    hash_t operator()(const Type& el) const noexcept
+    hash_t operator()(const Type& el) const
     {
         hash_t seed = el.has_value() ? 1 : 0;
         if (el.has_value())

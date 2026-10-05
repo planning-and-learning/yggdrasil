@@ -20,6 +20,7 @@
 
 #include "yggdrasil/containers/detail/concurrency.hpp"
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
@@ -32,6 +33,8 @@
 namespace ygg::detail
 {
 
+/// Stored-value hashing and equality must not throw. Reading an input range may throw;
+/// failed insertions preserve stored rows and retain any newly acquired capacity.
 template<typename Pool>
 class BasicRawSet
 {
@@ -56,6 +59,11 @@ private:
 
         size_t operator()(index_type index) const noexcept { return ygg::Hash<std::span<const value_type>> {}((*pool)[index]); }
         size_t operator()(std::span<const value_type> value) const noexcept { return ygg::Hash<std::span<const value_type>> {}(value); }
+        template<SizedForwardRangeOf<value_type> R>
+        size_t operator()(const R& value) const
+        {
+            return ygg::hash_range(value);
+        }
     };
 
     struct IndexableEqualTo
@@ -71,15 +79,27 @@ private:
         bool operator()(std::span<const value_type> lhs, index_type rhs) const noexcept { return equal_range(lhs, (*pool)[rhs]); }
         bool operator()(index_type lhs, std::span<const value_type> rhs) const noexcept { return equal_range((*pool)[lhs], rhs); }
         bool operator()(std::span<const value_type> lhs, std::span<const value_type> rhs) const noexcept { return equal_range(lhs, rhs); }
+
+        template<SizedForwardRangeOf<value_type> R>
+        bool operator()(const R& lhs, index_type rhs) const
+        {
+            return equal_range(lhs, (*pool)[rhs]);
+        }
+        template<SizedForwardRangeOf<value_type> R>
+        bool operator()(index_type lhs, const R& rhs) const
+        {
+            return (*this)(rhs, lhs);
+        }
     };
 
     using SetType = HashSetType<index_type, IndexableHash, IndexableEqualTo, ThreadSafe>;
 
-    void ensure_fits(std::span<const value_type> value) const
+    template<SizedForwardRangeOf<value_type> R>
+    void ensure_fits(const R& value) const
     {
         if constexpr (requires(const pool_type& pool) { pool.array_size(); })
         {
-            if (value.size() != m_pool->array_size())
+            if (std::ranges::size(value) != m_pool->array_size())
                 throw std::invalid_argument("BasicRawSet: wrong number of elements.");
         }
     }
@@ -107,6 +127,29 @@ public:
     bool contains(std::span<const value_type> value) const { return find(value).has_value(); }
 
     index_type insert(std::span<const value_type> value)
+    {
+        ensure_fits(value);
+        const auto hash = m_set.hash(value);
+        return find_or_lazy_insert_value_with_hash<ThreadSafe>(m_set, value, hash, [&] { return m_pool->insert(value); }).first;
+    }
+
+    template<SizedForwardRangeOf<value_type> R>
+    std::optional<index_type> find(const R& value) const
+    {
+        ensure_fits(value);
+        const auto hash = m_set.hash(value);
+        return find_value_with_hash<ThreadSafe>(m_set, value, hash);
+    }
+
+    template<SizedForwardRangeOf<value_type> R>
+    bool contains(const R& value) const
+    {
+        return find(value).has_value();
+    }
+
+    template<SizedForwardRangeOf<value_type> R>
+        requires requires(pool_type& pool, const R& value) { pool.insert(value); }
+    index_type insert(const R& value)
     {
         ensure_fits(value);
         const auto hash = m_set.hash(value);

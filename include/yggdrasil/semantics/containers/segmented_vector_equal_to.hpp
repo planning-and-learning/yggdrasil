@@ -27,7 +27,7 @@ namespace ygg
 template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe>
 struct EqualTo<SegmentedVector<T, FirstSegmentSize, ThreadSafe>>
 {
-    bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& lhs, const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& rhs) const noexcept
+    bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& lhs, const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& rhs) const
     {
         return equal_range(lhs, rhs);
     }

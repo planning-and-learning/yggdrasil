@@ -24,6 +24,9 @@
 #include "yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp"
 
 #include <boost/dynamic_bitset.hpp>
+#include <algorithm>
+#include <array>
+#include <ranges>
 #include <concepts>
 #include <gtest/gtest.h>
 #include <stdexcept>
@@ -154,6 +157,7 @@ TEST(YggdrasilTests, CommonDynamicBitsetRejectsMismatchedSpanSizes)
 
     EXPECT_FALSE(lhs == rhs);
     EXPECT_THROW(lhs.intersects(rhs), std::invalid_argument);
+    EXPECT_THROW(lhs.count_intersection(rhs), std::invalid_argument);
     EXPECT_THROW(lhs.is_subset_of(rhs), std::invalid_argument);
     EXPECT_THROW(lhs.is_proper_subset_of(rhs), std::invalid_argument);
     EXPECT_THROW(lhs.is_superset_of(rhs), std::invalid_argument);
@@ -221,6 +225,106 @@ TEST(YggdrasilTests, CommonDynamicBitsetAdaptersHashAndCompareSpans)
     EXPECT_FALSE(ygg::EqualTo<ygg::BitsetSpan<uint64_t>> {}(lhs, rhs));
     EXPECT_NE(ygg::Hash<ygg::BitsetSpan<uint64_t>> {}(lhs), ygg::Hash<ygg::BitsetSpan<uint64_t>> {}(rhs));
     EXPECT_EQ(fmt::format("{}", lhs), "{1}");
+}
+
+static_assert(std::ranges::forward_range<SetBitIndices<uint64_t>>);
+static_assert(std::ranges::borrowed_range<SetBitIndices<uint64_t>>);
+static_assert(std::same_as<std::ranges::range_value_t<SetBitIndices<uint64_t>>, size_t>);
+
+TEST(YggdrasilTests, CommonDynamicBitsetCountsIntersectionsAcrossWordBoundaries)
+{
+    for (const auto size : { 0U, 1U, 63U, 64U, 65U, 130U })
+    {
+        auto lhs_blocks = std::vector<uint64_t>(BitsetSpan<uint64_t>::num_blocks(size));
+        auto rhs_blocks = lhs_blocks;
+        auto lhs = BitsetSpan<uint64_t>(lhs_blocks.data(), size);
+        auto rhs = BitsetSpan<uint64_t>(rhs_blocks.data(), size);
+        EXPECT_EQ(lhs.count_intersection(rhs), 0);
+        lhs.set();
+        rhs.set();
+        EXPECT_EQ(lhs.count_intersection(BitsetSpan<const uint64_t>(rhs)), size);
+        lhs.reset();
+        rhs.reset();
+        size_t expected = 0;
+        for (size_t i = 0; i < size; ++i)
+        {
+            lhs.set(i, i % 2 == 0);
+            rhs.set(i, i % 3 == 0);
+            expected += i % 6 == 0;
+        }
+        EXPECT_EQ(BitsetSpan<const uint64_t>(lhs).count_intersection(rhs), expected);
+        rhs.copy_from(lhs);
+        rhs.flip();
+        EXPECT_EQ(lhs.count_intersection(rhs), 0);
+    }
+}
+
+TEST(YggdrasilTests, CommonDynamicBitsetSetIndicesBorrowStorageNotWrappers)
+{
+    auto blocks = std::array<uint64_t, 3> {};
+    auto bits = BitsetSpan<uint64_t>(blocks.data(), 130);
+    for (const auto position : { 0U, 63U, 64U, 65U, 129U })
+        bits.set(position);
+    const auto expected = std::array<size_t, 5> { 0, 63, 64, 65, 129 };
+    EXPECT_TRUE(std::ranges::equal(set_bit_indices(bits), expected));
+    EXPECT_TRUE(std::ranges::equal(set_bit_indices(BitsetSpan<const uint64_t>(bits)), expected));
+
+    auto iterator = set_bit_indices(BitsetSpan<const uint64_t>(blocks.data(), 130)).begin();
+    const auto end = set_bit_indices(bits).end();
+    auto copy = iterator;
+    EXPECT_EQ(*copy, 0);
+    EXPECT_EQ(*iterator++, 0);
+    EXPECT_EQ(*iterator, 63);
+    EXPECT_EQ(*copy, 0);
+    ++copy;
+    EXPECT_EQ(copy, iterator);
+    while (iterator != end)
+        ++iterator;
+    EXPECT_EQ(iterator, end);
+    EXPECT_TRUE(SetBitIndices<uint64_t>().empty());
+    EXPECT_TRUE(set_bit_indices(BitsetSpan<const uint64_t>(nullptr, 0)).empty());
+    auto other_blocks = blocks;
+    EXPECT_NE(set_bit_indices(bits).begin(), set_bit_indices(BitsetSpan<const uint64_t>(other_blocks.data(), 130)).begin());
+}
+
+TEST(YggdrasilTests, CommonDynamicBitsetSetIndicesSkipEmptyWordsAndPreserveEndIdentity)
+{
+    const auto check = []<typename Block>()
+    {
+        using Bits = BitsetSpan<Block>;
+        using Iterator = typename SetBitIndices<Block>::Iterator;
+        constexpr size_t size = Bits::Digits * 4 + 3;
+        auto blocks = std::vector<Block>(Bits::num_blocks(size));
+        auto bits = Bits(blocks.data(), size);
+        const auto expected = std::array<size_t, 4> { 0, Bits::Digits - 1, Bits::Digits * 3 + 2, size - 1 };
+        for (const auto position : expected)
+            bits.set(position);
+        EXPECT_TRUE(std::ranges::equal(set_bit_indices(bits), expected));
+        auto iterator = set_bit_indices(bits).begin();
+        for (const auto position : expected)
+        {
+            auto copy = iterator;
+            EXPECT_EQ(*iterator, position);
+            ++iterator;
+            EXPECT_EQ(*copy, position);
+            ++copy;
+            EXPECT_EQ(copy, iterator);
+        }
+        EXPECT_EQ(iterator, std::default_sentinel);
+        EXPECT_EQ(iterator, Iterator(bits, Bits::npos));
+        EXPECT_EQ(Iterator(), std::default_sentinel);
+
+        bits.set();
+        EXPECT_TRUE(std::ranges::equal(set_bit_indices(bits), std::views::iota(size_t { 0 }, size)));
+        bits.reset();
+        bits.set(size - 1);
+        EXPECT_TRUE(std::ranges::equal(set_bit_indices(bits), std::array<size_t, 1> { size - 1 }));
+        bits.reset();
+        EXPECT_TRUE(set_bit_indices(bits).empty());
+    };
+    check.template operator()<uint8_t>();
+    check.template operator()<uint32_t>();
+    check.template operator()<uint64_t>();
 }
 
 }  // namespace ygg::tests

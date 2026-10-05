@@ -22,12 +22,14 @@
 #include <array>
 #include <atomic>
 #include <barrier>
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <ranges>
 #include <stdexcept>
 #include <thread>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -152,6 +154,80 @@ static_assert(ConcurrentRepository<ConcurrentObjectTag>::thread_safe);
 static_assert(!SequentialRepository::thread_safe);
 static_assert(!MixedRepository::thread_safe);
 static_assert(alignof(ConcurrentRepository<ConcurrentObjectTag>) < 256);
+
+struct ChildRepositoryContext
+{
+};
+
+class PublishedRepository : public formalism::SymbolRepositoryBase<PublishedRepository, TypeList<ConcurrentElement, ConcurrentSerializedElement>>
+{
+    ChildRepositoryContext m_child;
+
+public:
+    template<typename T>
+        requires formalism::SupportsSymbol<PublishedRepository, T>
+    const Data<T>& operator[](Index<T> index) const noexcept
+    {
+        return at_local(index);
+    }
+
+    template<typename T>
+        requires formalism::SupportsSymbol<PublishedRepository, T>
+    const PublishedRepository& get_canonical_context(Index<T>) const noexcept
+    {
+        return *this;
+    }
+
+    // A published context may resolve child symbols through a different repository.
+    friend const ChildRepositoryContext& get_repository(const PublishedRepository& repository) noexcept { return repository.m_child; }
+};
+
+static_assert(formalism::SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
+static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation>);
+static_assert(!std::is_move_constructible_v<PublishedRepository>);
+static_assert(!std::is_copy_constructible_v<PublishedRepository>);
+static_assert(std::same_as<decltype(get_repository(std::declval<const PublishedRepository&>())), const ChildRepositoryContext&>);
+static_assert(noexcept(std::declval<const PublishedRepository&>()[std::declval<Index<ConcurrentElement>>()]));
+static_assert(noexcept(make_view(std::declval<Index<ConcurrentElement>>(), std::declval<const PublishedRepository&>())));
+
+TEST(YggdrasilTests, PublicSymbolRepositoryBasePreservesPublishedContextAndScratchIndices)
+{
+    auto repository = PublishedRepository {};
+    auto data = Data<ConcurrentElement> { Index<ConcurrentElement>(42), 7 };
+    const auto [view, inserted] = repository.insert(data);
+    EXPECT_TRUE(inserted);
+    EXPECT_EQ(&view.get_context(), &repository);
+    EXPECT_EQ(&view.get_data(), &repository[view.get_index()]);
+    EXPECT_EQ(view.get_data().value, 7);
+    EXPECT_EQ(data.index, view.get_index());
+
+    data.index = Index<ConcurrentElement>(84);
+    const auto [duplicate, duplicate_inserted] = repository.insert(data);
+    EXPECT_FALSE(duplicate_inserted);
+    EXPECT_EQ(duplicate.get_index(), view.get_index());
+    EXPECT_EQ(&duplicate.get_context(), &repository);
+    EXPECT_EQ(data.index, view.get_index());
+    const auto found = repository.find(data);
+    ASSERT_TRUE(found);
+    EXPECT_EQ(found->get_index(), view.get_index());
+    EXPECT_EQ(&found->get_context(), &repository);
+
+    auto serialized = Data<ConcurrentSerializedElement> {};
+    serialized.values.push_back(view.get_index());
+    const auto [serialized_view, serialized_inserted] = repository.insert(serialized);
+    EXPECT_TRUE(serialized_inserted);
+    EXPECT_EQ(&serialized_view.get_context(), &repository);
+    EXPECT_EQ(serialized.index, serialized_view.get_index());
+    serialized.index = Index<ConcurrentSerializedElement>(84);
+    const auto [serialized_duplicate, serialized_duplicate_inserted] = repository.insert(serialized);
+    EXPECT_FALSE(serialized_duplicate_inserted);
+    EXPECT_EQ(serialized.index, serialized_view.get_index());
+    EXPECT_EQ(&serialized_duplicate.get_data(), &serialized_view.get_data());
+
+    repository.clear();
+    EXPECT_EQ(repository.size<ConcurrentElement>(), 0);
+    EXPECT_EQ(repository.size<ConcurrentSerializedElement>(), 0);
+}
 
 template<typename Set, typename Element, typename IndexType>
 void expect_concurrent_complete_miss_canonicalizes(Set& set, const Element& element, IndexType expected)

@@ -29,7 +29,7 @@ namespace ygg
 template<typename T>
 struct EqualTo<ObserverPtr<T>>
 {
-    bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept { return EqualTo<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
+    bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const { return EqualTo<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
 };
 
 }  // namespace ygg

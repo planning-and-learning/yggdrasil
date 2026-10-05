@@ -232,14 +232,14 @@ public:
             m_offset = position.bit_offset;
         }
 
-        reference operator*() const
+        reference operator*() const noexcept(is_const_iterator && noexcept(static_cast<value_type>(Coder::decode(block_type {}))))
         {
             if constexpr (is_const_iterator)
             {
                 if constexpr (ThreadSafe)
-                    return Coder::decode(bit::atomic_read_int<block_type>(m_word, m_offset, m_width));
+                    return static_cast<value_type>(Coder::decode(bit::atomic_read_int<block_type>(m_word, m_offset, m_width)));
                 else
-                    return Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width));
+                    return static_cast<value_type>(Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width)));
             }
             else
                 return reference_type(m_word, m_offset, m_width);
@@ -338,7 +338,7 @@ public:
         return reference_type(word, position.bit_offset, m_width);
     }
 
-    value_type operator[](size_t pos) const noexcept
+    value_type operator[](size_t pos) const noexcept(noexcept(static_cast<value_type>(Coder::decode(block_type {}))))
     {
         assert(pos < m_length);
 
@@ -346,9 +346,9 @@ public:
         const auto* word = m_data + position.block_index;
 
         if constexpr (ThreadSafe)
-            return Coder::decode(bit::atomic_read_int<block_type>(word, position.bit_offset, m_width));
+            return static_cast<value_type>(Coder::decode(bit::atomic_read_int<block_type>(word, position.bit_offset, m_width)));
         else
-            return Coder::decode(bit::read_int<block_type>(word, position.bit_offset, m_width));
+            return static_cast<value_type>(Coder::decode(bit::read_int<block_type>(word, position.bit_offset, m_width)));
     }
 
     reference_type at(size_t pos)

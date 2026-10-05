@@ -23,12 +23,61 @@
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <cstddef>
+#include <iterator>
 #include <gtest/gtest.h>
 #include <span>
 #include <vector>
 
 namespace ygg::tests
 {
+template<bool Copy, bool Dereference, bool Increment>
+struct RangeContractIterator
+{
+    using value_type = int;
+    using difference_type = std::ptrdiff_t;
+    using iterator_concept = std::forward_iterator_tag;
+    const int* position = nullptr;
+    RangeContractIterator() = default;
+    RangeContractIterator(const RangeContractIterator&) noexcept(Copy) = default;
+    RangeContractIterator& operator=(const RangeContractIterator&) noexcept(Copy) = default;
+    int operator*() const noexcept(Dereference) { return *position; }
+    RangeContractIterator& operator++() noexcept(Increment) { ++position; return *this; }
+    RangeContractIterator operator++(int) noexcept(Copy && Increment) { auto old = *this; ++*this; return old; }
+    friend bool operator==(const RangeContractIterator&, const RangeContractIterator&) noexcept = default;
+};
+
+template<bool Copy = true, bool Dereference = true, bool Increment = true, bool Size = true>
+struct RangeContractFixture
+{
+    using Iterator = RangeContractIterator<Copy, Dereference, Increment>;
+    Iterator begin() const noexcept { return {}; }
+    Iterator end() const noexcept { return {}; }
+    size_t size() const noexcept(Size) { return 0; }
+};
+
+struct ThrowingRangeData
+{
+    const int* begin() const noexcept { return nullptr; }
+    const int* end() const noexcept { return nullptr; }
+    size_t size() const noexcept { return 0; }
+    const int* data() const { return nullptr; }
+};
+
+static_assert(std::ranges::contiguous_range<const ThrowingRangeData>);
+static_assert(SizedForwardRangeOf<ThrowingRangeData, int>);
+static_assert(!SizedForwardRangeOf<std::span<volatile int>, int>);
+static_assert(!SizedForwardRangeOf<std::span<const volatile int>, int>);
+static_assert(SizedForwardRangeOf<std::span<const int>, int>);
+static_assert(SizedForwardRangeOf<std::vector<int>, int>);
+static_assert(SizedForwardRangeOf<std::ranges::subrange<std::vector<bool>::iterator>, bool>);
+static_assert(SizedForwardRangeOf<RangeContractFixture<>, int>);
+static_assert(!SizedForwardRangeOf<std::span<const int>, long>);
+static_assert(SizedForwardRangeOf<RangeContractFixture<false>, int>);
+static_assert(SizedForwardRangeOf<RangeContractFixture<true, false>, int>);
+static_assert(SizedForwardRangeOf<RangeContractFixture<true, true, false>, int>);
+static_assert(SizedForwardRangeOf<RangeContractFixture<true, true, true, false>, int>);
+static_assert(!SizedForwardRangeOf<std::ranges::istream_view<int>, int>);
+
 struct ViewContractValue;
 struct MutableViewHandle;
 struct CopiedContextViewHandle;

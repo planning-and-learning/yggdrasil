@@ -31,8 +31,10 @@
 #include <functional>
 #include <gtest/gtest.h>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -481,6 +483,89 @@ TEST(YggdrasilTests, CommonCistaHashAdaptersHashPairAndNestedArrayViews)
     EXPECT_NE(ygg::Hash<PairView> {}(PairView(lhs[1], context)), ygg::Hash<PairView> {}(PairView(different[1], context)));
     EXPECT_EQ(ygg::Hash<ArrayView> {}(ArrayView(lhs, context)), ygg::Hash<ArrayView> {}(ArrayView(rhs, context)));
     EXPECT_NE(ygg::Hash<ArrayView> {}(ArrayView(lhs, context)), ygg::Hash<ArrayView> {}(ArrayView(different, context)));
+}
+
+struct HashThrowingDataRange
+{
+    std::span<const unsigned> values;
+    bool throw_on_size;
+
+    auto begin() const noexcept { return values.begin(); }
+    auto end() const noexcept { return values.end(); }
+    size_t size() const
+    {
+        if (throw_on_size)
+            throw std::runtime_error("range size");
+        return values.size();
+    }
+    const unsigned* data() const
+    {
+        if (!throw_on_size)
+            throw std::runtime_error("range data");
+        return values.data();
+    }
+};
+
+TEST(YggdrasilTests, CommonHashRangePropagatesTraversalErrors)
+{
+    const auto values = std::array { 1U, 2U, 3U };
+    auto decoded = values
+                   | std::views::transform(
+                       [](unsigned value) -> unsigned
+                       {
+                           if (value == 2)
+                               throw std::runtime_error("range dereference");
+                           return value;
+                       });
+    EXPECT_THROW(ygg::hash_range(decoded), std::runtime_error);
+
+    auto filtered = values | std::views::filter([](unsigned) -> bool { throw std::runtime_error("range begin"); });
+    EXPECT_THROW(ygg::hash_range(filtered), std::runtime_error);
+
+    auto non_byte_values = values | std::views::transform([](unsigned) -> double { throw std::runtime_error("value hashing traversal"); });
+    EXPECT_THROW(ygg::hash_range(non_byte_values), std::runtime_error);
+
+    static_assert(std::ranges::contiguous_range<HashThrowingDataRange>);
+    for (const bool throw_on_size : { false, true })
+    {
+        const auto range = HashThrowingDataRange { values, throw_on_size };
+        static_assert(!noexcept(ygg::hash_range(range)));
+        EXPECT_THROW(ygg::hash_range(range), std::runtime_error);
+    }
+    static_assert(noexcept(ygg::hash_range(std::span<const unsigned>(values))));
+    static_assert(noexcept(ygg::Hash<unsigned> {}(1U)));
+}
+
+struct HashThrowingCoder : bit::ForwardingBlockCoder<unsigned>
+{
+    static unsigned decode(unsigned) { throw std::runtime_error("decode"); }
+};
+
+TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
+{
+    const auto storage = std::array { 3U };
+    const auto context = HashContext {};
+    const auto decoded = BasicBlockArrayView<const unsigned, HashThrowingCoder>(storage.data(), storage.size());
+    const auto wrapped = View<std::remove_cvref_t<decltype(decoded)>, HashContext>(decoded, context);
+    const auto packed = BasicBitPackedArrayView<const unsigned, HashThrowingCoder>(storage.data(), 1, 2, 0);
+    const auto wrapped_packed = View<std::remove_cvref_t<decltype(packed)>, HashContext>(packed, context);
+    EXPECT_THROW(ygg::Hash<> {}(decoded), std::runtime_error);
+    EXPECT_THROW(ygg::Hash<> {}(wrapped), std::runtime_error);
+    EXPECT_THROW(ygg::Hash<> {}(ygg::make_observer(wrapped)), std::runtime_error);
+    EXPECT_THROW(ygg::Hash<> {}(packed), std::runtime_error);
+    EXPECT_THROW(ygg::Hash<> {}(wrapped_packed), std::runtime_error);
+
+    const auto nested = std::tuple { std::array { std::optional { wrapped } } };
+    EXPECT_THROW(ygg::Hash<> {}(nested), std::runtime_error);
+    EXPECT_THROW(ygg::hash_combine(nested), std::runtime_error);
+
+    struct Record
+    {
+        decltype(wrapped) values;
+        auto identifying_members() const noexcept { return std::tie(values); }
+    };
+    const auto record = Record { wrapped };
+    EXPECT_THROW(ygg::Hash<> {}(record), std::runtime_error);
 }
 
 }  // namespace ygg::tests

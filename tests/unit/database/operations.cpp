@@ -5,8 +5,11 @@
 
 #include "yggdrasil/database/operations.hpp"
 
+#include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/containers/block_array_pool.hpp"
 #include "yggdrasil/database/relation_pool.hpp"
 #include "yggdrasil/database/relation_repository.hpp"
+#include "yggdrasil/ids/index_coder.hpp"
 
 #include <array>
 #include <cista/serialization.h>
@@ -14,6 +17,7 @@
 #include <initializer_list>
 #include <limits>
 #include <random>
+#include <ranges>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -1159,6 +1163,109 @@ TEST(YggdrasilTests, DatabaseNaturalJoinMatchesSmallReferenceAcrossSchemas)
                 EXPECT_TRUE(result.contains(row));
         }
     }
+}
+
+struct DatabaseThrowingIndexCoder : IndexCoder<ColumnIndex>
+{
+    static ColumnIndex decode(uint_t value) { return ColumnIndex(value); }
+};
+
+struct DatabaseThrowingDecodeConversion
+{
+    uint_t value;
+    static inline bool fail = false;
+    operator ColumnIndex() const
+    {
+        if (fail)
+            throw std::runtime_error("decode conversion failed");
+        return ColumnIndex(value);
+    }
+};
+
+struct DatabaseConvertingIndexCoder : IndexCoder<ColumnIndex>
+{
+    static DatabaseThrowingDecodeConversion decode(uint_t value) noexcept { return { value }; }
+};
+
+struct DatabaseReferenceIndexCoder : IndexCoder<ColumnIndex>
+{
+    static ColumnIndex decode(const uint_t& value) { return ColumnIndex(value); }
+    static ColumnIndex decode(uint_t&& value) noexcept { return ColumnIndex(value); }
+};
+
+template<typename R>
+concept CanInsertTypedRow = requires(Builder<Relation<ColumnIndex>>& relation, const R& row) { relation.insert(row); };
+
+using DatabaseDecodedRow = BasicBlockArrayView<const uint_t, IndexCoder<ColumnIndex>>;
+using DatabasePackedRow = BasicBitPackedArrayView<uint_t, IndexCoder<ColumnIndex>>;
+using DatabaseThrowingRow = BasicBlockArrayView<const uint_t, DatabaseThrowingIndexCoder>;
+static_assert(CanInsertTypedRow<DatabaseDecodedRow>);
+static_assert(CanInsertTypedRow<DatabasePackedRow>);
+static_assert(CanInsertTypedRow<DatabaseThrowingRow>);
+static_assert(!CanInsertTypedRow<std::span<const uint_t>>);
+static_assert(CanInsertTypedRow<BasicBlockArrayView<const uint_t, DatabaseConvertingIndexCoder>>);
+static_assert(CanInsertTypedRow<BasicBitPackedArrayView<const uint_t, DatabaseConvertingIndexCoder>>);
+static_assert(CanInsertTypedRow<BasicBlockArrayView<const uint_t, DatabaseReferenceIndexCoder>>);
+static_assert(CanInsertTypedRow<BasicBitPackedArrayView<const uint_t, DatabaseReferenceIndexCoder>>);
+
+TEST(YggdrasilTests, DatabaseRelationInsertsTypedDecodedRowsWithoutStaging)
+{
+    const auto values = std::array { ColumnIndex(2), ColumnIndex(5), ColumnIndex(7) };
+    const auto words = std::array<uint_t, 3> { 2, 5, 7 };
+    const auto decoded = DatabaseDecodedRow(words.data(), words.size());
+    auto packed_storage = std::array<uint_t, 1> {};
+    auto packed = DatabasePackedRow(packed_storage.data(), values.size(), 3, 1);
+    packed = std::span<const ColumnIndex>(values);
+    auto relation = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1), ColumnIndex(2) });
+    EXPECT_EQ(relation.insert(decoded), 0);
+    relation.set_index(Index<Relation<ColumnIndex>>(17));
+    EXPECT_EQ(relation.insert(packed), 0);
+    EXPECT_NE(relation.get_index(), Index<Relation<ColumnIndex>>(17));
+    EXPECT_EQ(relation.insert(values), 0);
+    EXPECT_EQ(relation.size(), 1);
+    EXPECT_TRUE(relation.contains(decoded));
+    EXPECT_TRUE(relation.contains(packed));
+    EXPECT_TRUE(std::ranges::equal(relation.row(0), values));
+    EXPECT_EQ(ygg::hash_range(decoded), ygg::hash_range(std::span<const ColumnIndex>(values)));
+    EXPECT_EQ(ygg::hash_range(packed), ygg::hash_range(std::span<const ColumnIndex>(values)));
+}
+
+TEST(YggdrasilTests, DatabaseRelationFailedInsertionPreservesCanonicalIndex)
+{
+    const auto values = std::array { ColumnIndex(2), ColumnIndex(5), ColumnIndex(7) };
+    auto relation = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1), ColumnIndex(2) });
+    const auto canonical = Index<Relation<ColumnIndex>>(17);
+    relation.set_index(canonical);
+    auto reads = size_t { 0 };
+    auto fail = true;
+    const auto row = values
+                     | std::views::transform(
+                         [&](ColumnIndex value)
+                         {
+                             if (reads++ == 4 && fail)
+                                 throw std::runtime_error("fill failed");
+                             return value;
+                         });
+    EXPECT_THROW(relation.insert(row), std::runtime_error);
+    EXPECT_EQ(relation.get_index(), canonical);
+    EXPECT_TRUE(relation.empty());
+    EXPECT_THROW(relation.insert(std::span<const ColumnIndex>(values.data(), 2)), std::invalid_argument);
+    EXPECT_EQ(relation.get_index(), canonical);
+
+    const auto words = std::array<uint_t, 3> { 2, 5, 7 };
+    const auto converted = BasicBlockArrayView<const uint_t, DatabaseConvertingIndexCoder>(words.data(), words.size());
+    DatabaseThrowingDecodeConversion::fail = true;
+    EXPECT_THROW(relation.insert(converted), std::runtime_error);
+    EXPECT_THROW(relation.contains(converted), std::runtime_error);
+    DatabaseThrowingDecodeConversion::fail = false;
+    EXPECT_EQ(relation.get_index(), canonical);
+    EXPECT_TRUE(relation.empty());
+
+    fail = false;
+    EXPECT_EQ(relation.insert(row), 0);
+    EXPECT_NE(relation.get_index(), canonical);
+    EXPECT_TRUE(relation.contains(converted));
+    EXPECT_TRUE(std::ranges::equal(relation.row(0), values));
 }
 
 }  // namespace ygg::tests

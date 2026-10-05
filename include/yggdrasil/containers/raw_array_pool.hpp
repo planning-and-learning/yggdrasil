@@ -98,26 +98,26 @@ public:
 
     uint_t insert(std::span<const T> value)
     {
-        if (value.size() != m_array_size)
-            throw std::invalid_argument("RawArrayPool: wrong number of elements.");
+        return insert_with(value.size(), [&](std::byte* destination) noexcept { std::memcpy(destination, value.data(), m_array_size_bytes); });
+    }
 
-        return detail::with_lock<ThreadSafe>(m_writer_mutex,
-                                             [&]
-                                             {
-                                                 const auto index = detail::load_size<ThreadSafe>(m_size);
-                                                 if (index == std::numeric_limits<size_t>::max() || index > std::numeric_limits<uint_t>::max())
-                                                     throw std::length_error("RawArrayPool: index is too large.");
-
-                                                 if (m_array_size_bytes > 0)
-                                                 {
-                                                     auto* result = m_storage.allocate(m_array_size_bytes);
-                                                     assert(result == m_storage.data_at(index));
-                                                     std::memcpy(result, value.data(), m_array_size_bytes);
-                                                 }
-
-                                                 detail::store_size<ThreadSafe>(m_size, index + 1);
-                                                 return static_cast<uint_t>(index);
-                                             });
+    template<SizedForwardRangeOf<T> R>
+    uint_t insert(const R& value)
+    {
+        if constexpr (std::ranges::contiguous_range<const R>)
+            return insert(std::span<const T>(std::ranges::data(value), std::ranges::size(value)));
+        else
+            return insert_with(std::ranges::size(value),
+                               [&](std::byte* destination)
+                               {
+                                   const auto end = std::ranges::end(value);
+                                   for (auto iterator = std::ranges::begin(value); iterator != end; ++iterator)
+                                   {
+                                       const T& element = *iterator;
+                                       std::memcpy(destination, &element, sizeof(T));
+                                       destination += sizeof(T);
+                                   }
+                               });
     }
 
     ConstView operator[](size_t array_index) const noexcept
@@ -160,6 +160,34 @@ public:
     size_t array_size() const noexcept { return m_array_size; }
 
 private:
+    template<typename Fill>
+    uint_t insert_with(size_t size, Fill&& fill)
+    {
+        if (size != m_array_size)
+            throw std::invalid_argument("RawArrayPool: wrong number of elements.");
+
+        return detail::with_lock<ThreadSafe>(m_writer_mutex,
+                                             [&]
+                                             {
+                                                 const auto index = detail::load_size<ThreadSafe>(m_size);
+                                                 if (index == std::numeric_limits<size_t>::max() || index > std::numeric_limits<uint_t>::max())
+                                                     throw std::length_error("RawArrayPool: index is too large.");
+
+                                                 if (m_array_size_bytes > 0)
+                                                 {
+                                                     m_storage.allocate_with(m_array_size_bytes,
+                                                                             [&](std::byte* result)
+                                                                             {
+                                                                                 assert(result == m_storage.data_at(index));
+                                                                                 std::forward<Fill>(fill)(result);
+                                                                             });
+                                                 }
+
+                                                 detail::store_size<ThreadSafe>(m_size, index + 1);
+                                                 return static_cast<uint_t>(index);
+                                             });
+    }
+
     size_t m_array_size;
     size_t m_array_size_bytes;
     Storage m_storage;

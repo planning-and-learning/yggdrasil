@@ -195,4 +195,53 @@ TEST(YggdrasilTests, CommonContainersUmbrellaHeaderCompiles)
     EXPECT_EQ(variant_view.get<unsigned>(), 7U);
 }
 
+struct ArrayThrowingDecodeCoder : bit::ForwardingBlockCoder<unsigned>
+{
+    static unsigned decode(unsigned) { throw std::runtime_error("array decode"); }
+};
+
+struct ArrayThrowingDecodeConversion
+{
+    operator unsigned() const { throw std::runtime_error("array conversion"); }
+};
+
+struct ArrayConvertingCoder : bit::ForwardingBlockCoder<unsigned>
+{
+    static ArrayThrowingDecodeConversion decode(unsigned) noexcept { return {}; }
+};
+
+TEST(YggdrasilTests, CommonDecodedArrayViewsPropagateDecodeAndConversionErrors)
+{
+    const auto check = []<typename Coder>()
+    {
+        const auto storage = std::array { 3U };
+        const auto context = 0;
+        const auto block = BasicBlockArrayView<const unsigned, Coder>(storage.data(), storage.size());
+        const auto packed = BasicBitPackedArrayView<const unsigned, Coder>(storage.data(), 1, 2, 0);
+        const auto check_view = [&](const auto& raw)
+        {
+            using Raw = std::remove_cvref_t<decltype(raw)>;
+            const auto view = View<Raw, int>(raw, context);
+            static_assert(!noexcept(*view.begin()));
+            static_assert(!noexcept(view.begin()[0]));
+            static_assert(!noexcept(view[0]));
+            static_assert(noexcept(++std::declval<typename decltype(view)::const_iterator&>()));
+            EXPECT_THROW(*view.begin(), std::runtime_error);
+            EXPECT_THROW(view.begin()[0], std::runtime_error);
+            EXPECT_THROW(raw[0], std::runtime_error);
+            EXPECT_THROW(view[0], std::runtime_error);
+            EXPECT_THROW(view.front(), std::runtime_error);
+            EXPECT_THROW(view.back(), std::runtime_error);
+        };
+        check_view(block);
+        check_view(packed);
+    };
+    check.template operator()<ArrayThrowingDecodeCoder>();
+    check.template operator()<ArrayConvertingCoder>();
+
+    using Raw = BasicBlockArrayView<const unsigned, bit::ForwardingBlockCoder<unsigned>>;
+    static_assert(noexcept(*std::declval<const Raw&>().begin()));
+    static_assert(noexcept(std::declval<const Raw&>()[0]));
+}
+
 }  // namespace ygg::tests

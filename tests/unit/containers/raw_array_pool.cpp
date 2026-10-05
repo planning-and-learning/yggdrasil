@@ -21,7 +21,9 @@
 #include <array>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <iterator>
 #include <limits>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <type_traits>
@@ -203,6 +205,229 @@ TEST(YggdrasilTests, CommonRawArrayPoolMovesLeaveSourcesReusable)
 {
     test_raw_array_pool_move<false>();
     test_raw_array_pool_move<true>();
+}
+
+template<bool ThreadSafe>
+void test_raw_array_pool_failed_fill()
+{
+    const auto values = std::array { 11, 12, 13 };
+    // Fail in a fresh segment, at growth, and in already acquired capacity.
+    for (size_t initial_size = 0; initial_size < 3; ++initial_size)
+    {
+        auto pool = RawArrayPool<int, 1, ThreadSafe>(values.size());
+        for (size_t i = 0; i < initial_size; ++i)
+            ASSERT_EQ(pool.insert(values), i);
+        const auto* first = initial_size == 0 ? nullptr : pool[0].data();
+        auto fail = true;
+        const auto row = values
+                         | std::views::transform(
+                             [&](int value)
+                             {
+                                 if (fail && value == 12)
+                                     throw std::runtime_error("fill failed");
+                                 return value;
+                             });
+
+        EXPECT_THROW(pool.insert(row), std::runtime_error);
+        const auto retained = pool.memory_usage();
+        EXPECT_THROW(pool.insert(row), std::runtime_error);
+        EXPECT_EQ(pool.memory_usage(), retained);
+        EXPECT_EQ(pool.size(), initial_size);
+        for (size_t i = 0; i < initial_size; ++i)
+            EXPECT_TRUE(std::ranges::equal(pool[i], values));
+
+        fail = false;
+        EXPECT_EQ(pool.insert(row), initial_size);
+        EXPECT_EQ(pool.memory_usage(), retained);
+        EXPECT_TRUE(std::ranges::equal(pool[initial_size], values));
+        if (first)
+            EXPECT_EQ(pool[0].data(), first);
+    }
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolFailedRangeFillPreservesNextIndex)
+{
+    test_raw_array_pool_failed_fill<false>();
+    test_raw_array_pool_failed_fill<true>();
+}
+
+enum class PoolRangeOperation
+{
+    None,
+    Begin,
+    End,
+    Size,
+    Dereference,
+    Increment,
+    Compare
+};
+
+struct ThrowingPoolRange
+{
+    std::span<const int> values;
+    PoolRangeOperation failure;
+    size_t skip;
+    mutable size_t visits = 0;
+
+    void check(PoolRangeOperation operation) const
+    {
+        if (failure == operation && visits++ == skip)
+            throw std::runtime_error("range operation failed");
+    }
+
+    struct Iterator
+    {
+        using value_type = int;
+        using difference_type = std::ptrdiff_t;
+        using iterator_concept = std::forward_iterator_tag;
+        const int* position = nullptr;
+        const ThrowingPoolRange* range = nullptr;
+
+        const int& operator*() const
+        {
+            range->check(PoolRangeOperation::Dereference);
+            return *position;
+        }
+        Iterator& operator++()
+        {
+            range->check(PoolRangeOperation::Increment);
+            ++position;
+            return *this;
+        }
+        Iterator operator++(int)
+        {
+            auto old = *this;
+            ++*this;
+            return old;
+        }
+        friend bool operator==(const Iterator& lhs, const Iterator& rhs)
+        {
+            if (lhs.range)
+                lhs.range->check(PoolRangeOperation::Compare);
+            return lhs.position == rhs.position;
+        }
+    };
+
+    Iterator begin() const
+    {
+        check(PoolRangeOperation::Begin);
+        return { values.data(), this };
+    }
+    Iterator end() const
+    {
+        check(PoolRangeOperation::End);
+        return { values.data() + values.size(), this };
+    }
+    size_t size() const
+    {
+        check(PoolRangeOperation::Size);
+        return values.size();
+    }
+};
+
+static_assert(SizedForwardRangeOf<ThrowingPoolRange, int>);
+
+template<bool ThreadSafe>
+void test_raw_array_pool_throwing_operations()
+{
+    const auto values = std::array { 11, 12, 13 };
+    const auto failures = std::array { std::pair { PoolRangeOperation::Begin, size_t { 0 } },     std::pair { PoolRangeOperation::End, size_t { 0 } },
+                                       std::pair { PoolRangeOperation::Size, size_t { 0 } },      std::pair { PoolRangeOperation::Dereference, size_t { 1 } },
+                                       std::pair { PoolRangeOperation::Increment, size_t { 2 } }, std::pair { PoolRangeOperation::Compare, size_t { 3 } } };
+    for (const auto [operation, skip] : failures)
+    {
+        auto pool = RawArrayPool<int, 1, ThreadSafe>(values.size());
+        ASSERT_EQ(pool.insert(values), 0);
+        const auto* first = pool[0].data();
+        auto row = ThrowingPoolRange { values, operation, skip };
+        EXPECT_THROW(pool.insert(row), std::runtime_error);
+        EXPECT_EQ(pool.size(), 1);
+        EXPECT_EQ(pool[0].data(), first);
+        EXPECT_TRUE(std::ranges::equal(pool[0], values));
+        row.failure = PoolRangeOperation::None;
+        EXPECT_EQ(pool.insert(row), 1);
+        EXPECT_TRUE(std::ranges::equal(pool[1], values));
+    }
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolTraversalExceptionsPreservePublication)
+{
+    test_raw_array_pool_throwing_operations<false>();
+    test_raw_array_pool_throwing_operations<true>();
+}
+
+struct ThrowingPoolDataRange
+{
+    std::span<const int> values;
+    bool fail = true;
+    const int* begin() const { return values.data(); }
+    const int* end() const { return values.data() + values.size(); }
+    size_t size() const { return values.size(); }
+    const int* data() const
+    {
+        if (fail)
+            throw std::runtime_error("range data failed");
+        return values.data();
+    }
+};
+
+template<bool ThreadSafe>
+void test_raw_array_pool_throwing_data()
+{
+    const auto values = std::array { 11, 12, 13 };
+    auto pool = RawArrayPool<int, 1, ThreadSafe>(values.size());
+    auto row = ThrowingPoolDataRange { values };
+    EXPECT_THROW(pool.insert(row), std::runtime_error);
+    EXPECT_TRUE(pool.empty());
+    EXPECT_EQ(pool.memory_usage(), 0);
+    row.fail = false;
+    EXPECT_EQ(pool.insert(row), 0);
+    EXPECT_TRUE(std::ranges::equal(pool[0], values));
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolContiguousDataExceptionsPropagate)
+{
+    test_raw_array_pool_throwing_data<false>();
+    test_raw_array_pool_throwing_data<true>();
+}
+
+TEST(YggdrasilTests, CommonRawArrayStorageFailedFillPreservesEarlierSegmentSpace)
+{
+    auto storage = detail::GeometricByteStorage<4, alignof(int), false>();
+    auto* first = storage.allocate(3);
+    std::byte* failed = nullptr;
+    EXPECT_THROW(storage.allocate_with(3,
+                                       [&](std::byte* destination)
+                                       {
+                                           failed = destination;
+                                           throw std::runtime_error("fill failed");
+                                       }),
+                 std::runtime_error);
+    const auto retained = storage.memory_usage();
+    EXPECT_EQ(storage.allocate(1), first + 3);
+    EXPECT_EQ(storage.allocate(3), failed);
+    EXPECT_EQ(storage.memory_usage(), retained);
+}
+
+struct NoncopyablePoolValue
+{
+    int value;
+    explicit NoncopyablePoolValue(int value_) : value(value_) {}
+    NoncopyablePoolValue(const NoncopyablePoolValue&) = delete;
+    NoncopyablePoolValue(NoncopyablePoolValue&&) = default;
+};
+
+static_assert(TriviallyCopyable<NoncopyablePoolValue>);
+static_assert(SizedForwardRangeOf<std::span<const NoncopyablePoolValue>, NoncopyablePoolValue>);
+
+TEST(YggdrasilTests, CommonRawArrayPoolBindsNoncopyableRangeReferences)
+{
+    const auto values = std::array { NoncopyablePoolValue(11), NoncopyablePoolValue(12) };
+    const auto row = values | std::views::transform([](const NoncopyablePoolValue& value) -> const NoncopyablePoolValue& { return value; });
+    auto pool = RawArrayPool<NoncopyablePoolValue>(values.size());
+    EXPECT_EQ(pool.insert(row), 0);
+    EXPECT_EQ(pool[0][0].value, 11);
+    EXPECT_EQ(pool[0][1].value, 12);
 }
 
 }  // namespace ygg::tests

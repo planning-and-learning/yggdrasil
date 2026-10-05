@@ -155,10 +155,10 @@ public:
         BasicIterator() noexcept : m_pos(0), m_data(nullptr) {}
         BasicIterator(view_type& view, size_t pos) noexcept : m_pos(pos), m_data(view.m_data) {}
 
-        reference operator*() const
+        reference operator*() const noexcept(is_const_iterator && noexcept(static_cast<value_type>(Coder::decode(std::declval<const block_type&>()))))
         {
             if constexpr (is_const_iterator)
-                return Coder::decode(m_data[m_pos]);
+                return static_cast<value_type>(Coder::decode(m_data[m_pos]));
             else
                 return reference_type(m_data + m_pos);
         }
@@ -242,10 +242,10 @@ public:
         return reference_type(m_data + pos);
     }
 
-    value_type operator[](size_t pos) const noexcept
+    value_type operator[](size_t pos) const noexcept(noexcept(static_cast<value_type>(Coder::decode(std::declval<Block&>()))))
     {
         assert(pos < m_length);
-        return Coder::decode(m_data[pos]);
+        return static_cast<value_type>(Coder::decode(m_data[pos]));
     }
 
     reference_type at(size_t pos)

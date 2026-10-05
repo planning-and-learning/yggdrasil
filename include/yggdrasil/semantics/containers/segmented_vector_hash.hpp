@@ -27,7 +27,7 @@ namespace ygg
 template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe>
 struct Hash<SegmentedVector<T, FirstSegmentSize, ThreadSafe>>
 {
-    hash_t operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& value) const noexcept { return ygg::hash_range(value); }
+    hash_t operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& value) const { return ygg::hash_range(value); }
 };
 
 }

@@ -61,8 +61,20 @@ public:
 
     uint_t insert(std::span<const T> row);
     uint_t insert(std::initializer_list<T> row);
+    template<SizedForwardRangeOf<T> R>
+    uint_t insert(const R& row)
+    {
+        const auto index = m_rows.insert(row);
+        ygg::clear(m_index);
+        return index;
+    }
     bool contains(std::span<const T> row) const;
     bool contains(std::initializer_list<T> row) const;
+    template<SizedForwardRangeOf<T> R>
+    bool contains(const R& row) const
+    {
+        return m_rows.contains(row);
+    }
 
     std::span<const T> row(size_t index) const noexcept;
     std::span<const T> operator[](size_t index) const noexcept { return row(index); }
@@ -111,8 +123,9 @@ const Builder<database::Columns>& Builder<database::Relation<T>>::columns() cons
 template<TriviallyCopyable T>
 uint_t Builder<database::Relation<T>>::insert(std::span<const T> row)
 {
+    const auto index = m_rows.insert(row);
     ygg::clear(m_index);
-    return m_rows.insert(row);
+    return index;
 }
 
 template<TriviallyCopyable T>

@@ -28,7 +28,7 @@ namespace ygg
 {
 
 template<Identifiable T>
-constexpr bool operator==(const T& lhs, const T& rhs) noexcept
+constexpr bool operator==(const T& lhs, const T& rhs)
 {
     return EqualTo<T> {}(lhs, rhs);
 }
@@ -45,7 +45,7 @@ namespace comparison
 template<typename Derived>
 struct Mixin
 {
-    friend constexpr bool operator==(const Derived& lhs, const Derived& rhs) noexcept
+    friend constexpr bool operator==(const Derived& lhs, const Derived& rhs)
         requires Identifiable<Derived>
     {
         return ygg::operator==(lhs, rhs);

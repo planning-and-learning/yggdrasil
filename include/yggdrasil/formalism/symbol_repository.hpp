@@ -39,10 +39,12 @@ class SymbolRepository;
 template<typename... Ts>
 class ConcurrentSymbolRepository;
 
-namespace detail
-{
+/// Owns symbol storage and publishes indexed views with the derived repository as context.
+template<typename Repository, typename Types, bool ThreadSafe = false>
+class SymbolRepositoryBase;
+
 template<typename Repository, bool ThreadSafe, typename... Ts>
-class SymbolRepositoryBase : private BasicSymbolRepository<Ts, ThreadSafe>...
+class SymbolRepositoryBase<Repository, TypeList<Ts...>, ThreadSafe> : private BasicSymbolRepository<Ts, ThreadSafe>...
 {
 private:
     const SymbolRepositoryBase* m_parent;
@@ -54,8 +56,6 @@ public:
     static constexpr bool thread_safe = ThreadSafe;
 
     using SymbolTypes = TypeList<Ts...>;
-
-    friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
 
 private:
     template<typename T>
@@ -310,24 +310,27 @@ public:
         return BasicSymbolRepository<T, ThreadSafe>::hash(builder);
     }
 };
-}  // namespace detail
 
 template<typename... Ts>
-class SymbolRepository : public detail::SymbolRepositoryBase<SymbolRepository<Ts...>, false, Ts...>
+class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, TypeList<Ts...>>
 {
-    using Base = detail::SymbolRepositoryBase<SymbolRepository<Ts...>, false, Ts...>;
+    using Base = SymbolRepositoryBase<SymbolRepository<Ts...>, TypeList<Ts...>>;
 
 public:
     SymbolRepository(const SymbolRepository* parent = nullptr) : Base(parent) {}
+
+    friend const SymbolRepository& get_repository(const SymbolRepository& repository) noexcept { return repository; }
 };
 
 template<typename... Ts>
-class ConcurrentSymbolRepository : public detail::SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, true, Ts...>
+class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, TypeList<Ts...>, true>
 {
-    using Base = detail::SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, true, Ts...>;
+    using Base = SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, TypeList<Ts...>, true>;
 
 public:
     ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent = nullptr) : Base(parent) {}
+
+    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository) noexcept { return repository; }
 };
 
 }  // namespace ygg::formalism

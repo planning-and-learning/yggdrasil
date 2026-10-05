@@ -3,16 +3,20 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "yggdrasil/containers/bit_packed_array_pool.hpp"
 #include "yggdrasil/database/operations.hpp"
 #include "yggdrasil/database/relation_pool.hpp"
 #include "yggdrasil/database/relation_repository.hpp"
+#include "yggdrasil/ids/index_coder.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <gtest/gtest.h>
+#include <limits>
 #include <new>
+#include <ranges>
 #include <span>
 #include <utility>
 
@@ -618,6 +622,91 @@ TEST(YggdrasilTests, DatabaseWarmedRelationInterningRetainsStorageAcrossReordere
     EXPECT_EQ(evaluation.schema_builder.span().data(), schema_builder_storage);
     EXPECT_EQ(evaluation.schema_data.values.data(), schema_data_storage);
     EXPECT_EQ(evaluation.schema_data.values.allocated_size_, schema_data_capacity);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedDecodedRowInsertionAllocatesAndFreesNothing)
+{
+    auto relation = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1) });
+    auto storage = std::array<uint_t, 1> {};
+    auto row = BasicBitPackedArrayView<uint_t, IndexCoder<ColumnIndex>>(storage.data(), 2, 3, 0);
+    row = std::array { ColumnIndex(2), ColumnIndex(5) };
+    for (size_t i = 0; i < 8; ++i)
+    {
+        relation.clear();
+        ASSERT_EQ(relation.insert(row), 0);
+    }
+    auto valid = true;
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 1000; ++i)
+    {
+        relation.clear();
+        valid &= relation.insert(row) == 0;
+        valid &= relation.insert(row) == 0;
+        valid &= relation.contains(row);
+        valid &= relation.size() == 1;
+    }
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+}
+
+struct AllocationRangeFillFailure
+{
+};
+
+template<bool ThreadSafe>
+void test_warmed_failed_range_insertion()
+{
+    auto set = RawArraySet<int, 1, ThreadSafe>(3);
+    const auto values = std::array { 11, 12, 13 };
+    auto reads = size_t { 0 };
+    auto throw_at = size_t { 4 };
+    const auto row = values
+                     | std::views::transform(
+                         [&](int value)
+                         {
+                             if (reads++ == throw_at)
+                                 throw AllocationRangeFillFailure {};
+                             return value;
+                         });
+    auto valid = true;
+    const auto cycle = [&]
+    {
+        set.clear();
+        reads = 0;
+        throw_at = 4;
+        try
+        {
+            set.insert(row);
+            valid = false;
+        }
+        catch (const AllocationRangeFillFailure&)
+        {
+            valid &= set.empty();
+        }
+        throw_at = std::numeric_limits<size_t>::max();
+        valid &= set.insert(row) == 0;
+        valid &= set.insert(row) == 0;
+        valid &= set.contains(row);
+        valid &= set.size() == 1;
+    };
+    cycle();
+    ASSERT_TRUE(valid);
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 100; ++i)
+        cycle();
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedFailedRangeInsertionRetainsAllocatedStorage)
+{
+    // C++ exception-runtime allocation is outside the operator-new tracking above.
+    test_warmed_failed_range_insertion<false>();
+    test_warmed_failed_range_insertion<true>();
 }
 
 }  // namespace ygg::tests
