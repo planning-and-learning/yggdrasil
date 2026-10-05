@@ -63,19 +63,41 @@ struct ThrowingRangeData
     const int* data() const { return nullptr; }
 };
 
+struct MutableOnlyRange
+{
+    const int* begin();
+    const int* end();
+    size_t size();
+};
+
+static_assert(std::ranges::forward_range<MutableOnlyRange&>);
+static_assert(!SizedForwardRangeOf<MutableOnlyRange, int>);
+static_assert(!SizedForwardRangeOf<MutableOnlyRange&, int>);
+static_assert(!SizedForwardRangeOf<const MutableOnlyRange&, int>);
+static_assert(!SizedForwardRangeOf<MutableOnlyRange&&, int>);
 static_assert(std::ranges::contiguous_range<const ThrowingRangeData>);
 static_assert(SizedForwardRangeOf<ThrowingRangeData, int>);
 static_assert(!SizedForwardRangeOf<std::span<volatile int>, int>);
 static_assert(!SizedForwardRangeOf<std::span<const volatile int>, int>);
 static_assert(SizedForwardRangeOf<std::span<const int>, int>);
+static_assert(SizedForwardRangeOf<std::span<const int>&, int>);
+static_assert(SizedForwardRangeOf<const std::span<const int>&, int>);
+static_assert(SizedForwardRangeOf<std::span<const int>&&, int>);
+static_assert(SizedForwardRangeOf<const std::span<const int>&&, int>);
+static_assert(!SizedForwardRangeOf<volatile std::span<const int>&, int>);
+static_assert(!SizedForwardRangeOf<const volatile std::span<const int>&, int>);
+static_assert(!SizedForwardRangeOf<std::span<volatile int>&, int>);
 static_assert(SizedForwardRangeOf<std::vector<int>, int>);
 static_assert(SizedForwardRangeOf<std::ranges::subrange<std::vector<bool>::iterator>, bool>);
+static_assert(SizedForwardRangeOf<const std::ranges::subrange<std::vector<bool>::iterator>&, bool>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<>, int>);
 static_assert(!SizedForwardRangeOf<std::span<const int>, long>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<false>, int>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<true, false>, int>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<true, true, false>, int>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<true, true, true, false>, int>);
+static_assert(SizedForwardRangeOf<RangeContractFixture<false, false, false, false>&, int>);
+static_assert(SizedForwardRangeOf<const RangeContractFixture<false, false, false, false>&&, int>);
 static_assert(!SizedForwardRangeOf<std::ranges::istream_view<int>, int>);
 
 struct ViewContractValue;

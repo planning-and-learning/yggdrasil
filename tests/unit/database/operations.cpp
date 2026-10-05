@@ -86,7 +86,7 @@ using ColumnIndex = Index<database::Column>;
 
 static_assert(!std::is_copy_constructible_v<Builder<Relation<>>>);
 static_assert(std::is_move_constructible_v<Builder<Relation<>>>);
-static_assert(RelationViewConcept<Builder<Relation<>>>);
+static_assert(RelationViewConcept<Builder<Relation<>>, uint_t>);
 
 static_assert(!std::same_as<ColumnIndex, uint_t>);
 static_assert(!std::is_convertible_v<uint_t, ColumnIndex> && !std::is_convertible_v<ColumnIndex, uint_t>);

@@ -268,9 +268,9 @@ void join_rows(const L& lhs,
     if (!lhs_keys.empty() && !lhs.empty() && !rhs.empty())
     {
         if (build_left)
-            build_join_index(lhs, lhs_keys, workspace.join_index);
+            build_join_index<T>(lhs, lhs_keys, workspace.join_index);
         else
-            build_join_index(rhs, rhs_keys, workspace.join_index);
+            build_join_index<T>(rhs, rhs_keys, workspace.join_index);
     }
     join_rows(lhs, rhs, columns, lhs_keys, rhs_keys, rhs_payload, build_left, workspace.join_index, out, workspace);
 }
@@ -312,9 +312,9 @@ void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache<T>& c
             index = &(build_left ? cache.get_or_create(lhs, plan.lhs_keys()) : cache.get_or_create(rhs, plan.rhs_keys())).index();
         }
         else if (build_left)
-            detail::build_join_index(lhs, plan.lhs_keys(), workspace.join_index);
+            detail::build_join_index<T>(lhs, plan.lhs_keys(), workspace.join_index);
         else
-            detail::build_join_index(rhs, plan.rhs_keys(), workspace.join_index);
+            detail::build_join_index<T>(rhs, plan.rhs_keys(), workspace.join_index);
     }
     detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, *index, out, workspace);
 }

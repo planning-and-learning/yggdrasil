@@ -326,11 +326,11 @@ static_assert(std::same_as<ContractConcurrentRelations::RelationTypes, ContractR
 static_assert(std::same_as<ContractRepository::RelationTypes, ContractRelations::RelationTypes>);
 static_assert(formalism::SupportsRelation<ContractRelations, RepositoryTypesRelation>);
 static_assert(formalism::SupportsRelation<ContractRepository, RepositoryTypesRelation>);
-static_assert(formalism::RelationRepositoryFor<ContractRelations, ContractBinding>);
-static_assert(formalism::RelationRepositoryFor<ContractRepository, ContractBinding>);
-static_assert(formalism::RelationContextFor<ContractRepository, ContractBinding>);
-static_assert(!formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesElement>);
-static_assert(!formalism::RelationContextFor<ContractRepository, formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesPackedObjectTag>>);
+static_assert(formalism::RelationRepositoryFor<ContractRelations, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationContextFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesElement, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationContextFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
 static_assert(!formalism::SupportsRelation<ContractRelations, RepositoryTypesElement>);
 static_assert(!formalism::SupportsRelation<int, RepositoryTypesRelation>);
 static_assert(formalism::SymbolRepositoryFor<const ContractSymbols&, RepositoryTypesElement>);
@@ -407,7 +407,34 @@ struct WrongRelationObjectRows
     using RelationTypes = TypeList<RepositoryTypesRelation>;
     std::vector<Index<formalism::Object<RepositoryTypesPackedObjectTag>>> operator[](Index<ContractBinding>) const;
 };
-static_assert(!formalism::RelationRepositoryFor<WrongRelationObjectRows, ContractBinding>);
+static_assert(!formalism::RelationRepositoryFor<WrongRelationObjectRows, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+
+struct AliasFreeRelationRows
+{
+    using RelationTypes = TypeList<RepositoryTypesRelation>;
+    template<typename RelationTag>
+    std::span<const Index<formalism::Object<RepositoryTypesObjectTag>>> operator[](Index<formalism::RelationBinding<RelationTag, RepositoryTypesObjectTag>>) const;
+    friend const AliasFreeRelationRows& get_repository(const AliasFreeRelationRows& repository) noexcept { return repository; }
+};
+
+struct MutableRelationRows : AliasFreeRelationRows
+{
+    std::span<const Index<formalism::Object<RepositoryTypesObjectTag>>> operator[](Index<ContractBinding>);
+};
+
+struct MutableRelationContext
+{
+    friend const AliasFreeRelationRows& get_repository(MutableRelationContext&);
+};
+
+static_assert(formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationRepositoryFor<const AliasFreeRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationContextFor<AliasFreeRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
+static_assert(!formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesElement, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationRepositoryFor<MutableRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationContextFor<MutableRelationContext&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationRepositoryFor<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 
 template<typename Relations>
 void expect_binding_access_for_each_relation_type()
@@ -417,10 +444,10 @@ void expect_binding_access_for_each_relation_type()
     using FirstBinding = formalism::RelationBinding<RepositoryTypesRelation, ObjectTag>;
     using SecondBinding = formalism::RelationBinding<RepositoryTypesElement, ObjectTag>;
     using Repository = formalism::Repository<ContractConcurrentSymbols, Relations>;
-    static_assert(formalism::RelationRepositoryFor<Relations, FirstBinding>);
-    static_assert(formalism::RelationRepositoryFor<Relations, SecondBinding>);
-    static_assert(formalism::RelationContextFor<Repository, FirstBinding>);
-    static_assert(formalism::RelationContextFor<Repository, SecondBinding>);
+    static_assert(formalism::RelationRepositoryFor<Relations, RepositoryTypesRelation, ObjectTag>);
+    static_assert(formalism::RelationRepositoryFor<Relations, RepositoryTypesElement, ObjectTag>);
+    static_assert(formalism::RelationContextFor<Repository, RepositoryTypesRelation, ObjectTag>);
+    static_assert(formalism::RelationContextFor<Repository, RepositoryTypesElement, ObjectTag>);
     static_assert(ViewConcept<Index<FirstBinding>, Repository>);
     static_assert(ViewConcept<Index<SecondBinding>, Repository>);
 
@@ -612,6 +639,14 @@ using BorrowedContractBindingView = View<Data<ContractBinding>, BindingViewRepos
 using PublishedContractBindingView = View<Index<ContractBinding>, BindingViewRepository>;
 static_assert(formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(formalism::RelationBindingViewConcept<PublishedContractBindingView, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationBindingViewConcept<const PublishedContractBindingView&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationBindingViewConcept<BorrowedContractBindingView&&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+
+struct MutableBindingView : PublishedContractBindingView
+{
+    std::pair<Index<RepositoryTypesRelation>, std::span<const Index<formalism::Object<RepositoryTypesObjectTag>>>> get_key();
+};
+static_assert(!formalism::RelationBindingViewConcept<MutableBindingView&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
 static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesElement, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationBindingViewConcept<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);

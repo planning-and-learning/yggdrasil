@@ -76,10 +76,36 @@ struct RelationContext
     friend const Repository& get_repository(const RelationContext& context) noexcept { return context.repository; }
 };
 
+struct AliasFreeRelationView
+{
+    const Builder<Columns>& columns() const;
+    size_t arity() const;
+    size_t size() const;
+    bool empty() const;
+    const void* get_storage_address() const;
+    size_t get_storage_index() const;
+    size_t column_index(ColumnIndex) const;
+    std::span<const uint_t> row(size_t) const;
+    bool contains(std::span<const uint_t>) const;
+};
+
+struct MutableRelationView : AliasFreeRelationView
+{
+    std::span<const uint_t> row(size_t);
+};
+
+static_assert(RelationViewConcept<AliasFreeRelationView, uint_t>);
+static_assert(RelationViewConcept<AliasFreeRelationView&, uint_t>);
+static_assert(RelationViewConcept<const AliasFreeRelationView&, uint_t>);
+static_assert(RelationViewConcept<AliasFreeRelationView&&, uint_t>);
+static_assert(!RelationViewConcept<AliasFreeRelationView, double>);
+static_assert(!RelationViewConcept<AliasFreeRelationView, void>);
+static_assert(!RelationViewConcept<MutableRelationView&, uint_t>);
+static_assert(!RelationViewConcept<int, uint_t>);
 static_assert(std::same_as<IndexView, RelationView<>>);
-static_assert(RelationViewConcept<BuilderView>);
-static_assert(RelationViewConcept<DataView>);
-static_assert(RelationViewConcept<IndexView>);
+static_assert(RelationViewConcept<BuilderView, uint_t>);
+static_assert(RelationViewConcept<DataView, uint_t>);
+static_assert(RelationViewConcept<IndexView, uint_t>);
 static_assert(std::ranges::random_access_range<BuilderView>);
 static_assert(std::ranges::random_access_range<DataView>);
 static_assert(std::ranges::random_access_range<IndexView>);
@@ -363,7 +389,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
 
     const RelationContext context { repository };
     const auto contextual_index_view = make_view(right_view.get_index(), context);
-    static_assert(RelationViewConcept<decltype(contextual_index_view)>);
+    static_assert(RelationViewConcept<decltype(contextual_index_view), uint_t>);
     EXPECT_EQ(&contextual_index_view.get_context(), &context);
     EXPECT_EQ(&contextual_index_view.get_data(), &right_view.get_data());
     EXPECT_EQ(Hash<decltype(contextual_index_view)> {}(contextual_index_view), Hash<IndexView> {}(right_view));
@@ -391,7 +417,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
 
     right.rename(labels.span());
     const auto borrowed = make_view(right, repository);
-    static_assert(RelationViewConcept<decltype(borrowed)>);
+    static_assert(RelationViewConcept<decltype(borrowed), uint_t>);
     EXPECT_EQ(borrowed.get_storage_address(), &right.storage());
     project(borrowed, { ColumnIndex(30) }, renamed_projection, workspace);
     expect_rows(renamed_projection, { { 400 }, { 600 } });

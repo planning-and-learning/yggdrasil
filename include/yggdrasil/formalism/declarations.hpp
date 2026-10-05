@@ -75,16 +75,15 @@ template<typename T>
 concept NonRelationBindingConcept = !RelationBindingConcept<T>;
 
 /// Read access to a supported binding's row representation.
-template<typename Repository, typename Binding>
-concept RelationRepositoryFor = RelationBindingConcept<Binding> && SupportsRelation<Repository, typename Binding::relation_tag>
-                                && std::same_as<typename Binding::object_tag, typename std::remove_cvref_t<Repository>::object_tag>
-                                && requires(const std::remove_reference_t<Repository>& repository, Index<Binding> index) {
-                                       { repository[index] } -> InputRangeOf<Index<Object<typename Binding::object_tag>>>;
+template<typename Repository, typename RelationTag, typename ObjectTag>
+concept RelationRepositoryFor = SupportsRelation<Repository, RelationTag>
+                                && requires(const std::remove_reference_t<Repository>& repository, Index<RelationBinding<RelationTag, ObjectTag>> index) {
+                                       { repository[index] } -> InputRangeOf<Index<Object<ObjectTag>>>;
                                    };
 
-template<typename C, typename Binding>
-concept RelationContextFor = requires(const C& context) {
-    { get_repository(context) } -> RelationRepositoryFor<Binding>;
+template<typename C, typename RelationTag, typename ObjectTag>
+concept RelationContextFor = requires(const std::remove_reference_t<C>& context) {
+    { get_repository(context) } -> RelationRepositoryFor<RelationTag, ObjectTag>;
 };
 
 }  // namespace ygg::formalism

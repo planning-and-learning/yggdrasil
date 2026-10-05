@@ -261,11 +261,8 @@ namespace ygg::database
 {
 /// Raw read-only row access shared by builders and contextual Builder/Data/Index views.
 /// Contextual indexing and iteration may resolve stored elements into semantic views.
-template<typename V, typename T = void>
-concept RelationViewConcept = requires(const V& view, size_t i, Index<Column> column, std::span<const typename V::ElementType> row) {
-    typename V::ElementType;
-    requires TriviallyCopyable<typename V::ElementType>;
-    requires std::same_as<T, void> || std::same_as<T, typename V::ElementType>;
+template<typename V, typename T>
+concept RelationViewConcept = TriviallyCopyable<T> && requires(const std::remove_reference_t<V>& view, size_t i, Index<Column> column, std::span<const T> row) {
     { view.columns() } -> ColumnsViewConcept;
     { view.arity() } -> std::same_as<size_t>;
     { view.size() } -> std::same_as<size_t>;
@@ -273,7 +270,7 @@ concept RelationViewConcept = requires(const V& view, size_t i, Index<Column> co
     { view.get_storage_address() } -> std::same_as<const void*>;
     { view.get_storage_index() } -> std::same_as<size_t>;
     { view.column_index(column) } -> std::same_as<size_t>;
-    { view.row(i) } -> std::same_as<std::span<const typename V::ElementType>>;
+    { view.row(i) } -> std::same_as<std::span<const T>>;
     { view.contains(row) } -> std::same_as<bool>;
 };
 

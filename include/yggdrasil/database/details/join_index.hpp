@@ -24,7 +24,7 @@ auto join_key_values(std::span<const T> tuple, std::span<const size_t> positions
     return positions | std::views::transform([tuple](size_t position) -> const T& { return tuple[position]; });
 }
 
-template<RelationViewConcept V>
+template<TriviallyCopyable T, RelationViewConcept<T> V>
 void build_join_index(const V& build, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
 {
     index.clear();
@@ -46,7 +46,7 @@ JoinIndex<T>::JoinIndex(const V& build, std::span<const size_t> key_positions) :
         if (position >= build.arity())
             throw std::out_of_range("JoinIndex: key position is outside the relation schema.");
     if (!key_positions.empty())
-        detail::build_join_index(build, key_positions, m_index);
+        detail::build_join_index<T>(build, key_positions, m_index);
 }
 
 template<TriviallyCopyable T>

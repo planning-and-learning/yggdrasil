@@ -161,7 +161,7 @@ public:
 
     // This will return an ArrayView already
     auto get_data() const noexcept
-        requires formalism::RelationContextFor<C, formalism::RelationBinding<RelationTag, ObjectTag>>
+        requires formalism::RelationContextFor<C, RelationTag, ObjectTag>
     {
         return get_repository(*m_context)[m_handle];
     }
@@ -311,15 +311,15 @@ namespace ygg::formalism
 /// Shared read interface for published and borrowed bindings. Publication identity
 /// is deliberately absent; a logical key consists of the relation and object row.
 template<typename V, typename RelationTag, typename ObjectTag>
-concept RelationBindingViewConcept = requires(const V& view) {
+concept RelationBindingViewConcept = requires(const std::remove_reference_t<V>& view) {
     view.get_data();
     view.get_handle();
     view.get_context();
     { view.get_relation().get_index() } -> std::same_as<Index<RelationTag>>;
     { view.get_objects()[size_t {}].get_index() } -> std::same_as<Index<Object<ObjectTag>>>;
-    requires SizedForwardRangeOf<std::remove_cvref_t<decltype(view.get_objects().get_data())>, Index<Object<ObjectTag>>>;
-    requires std::same_as<std::remove_cvref_t<decltype(view.get_key().first)>, Index<RelationTag>>;
-    requires SizedForwardRangeOf<std::remove_cvref_t<decltype(view.get_key().second)>, Index<Object<ObjectTag>>>;
+    { view.get_objects().get_data() } -> SizedForwardRangeOf<Index<Object<ObjectTag>>>;
+    { view.get_key().first } -> SameAsIgnoringCvref<Index<RelationTag>>;
+    { view.get_key().second } -> SizedForwardRangeOf<Index<Object<ObjectTag>>>;
 };
 }  // namespace ygg::formalism
 

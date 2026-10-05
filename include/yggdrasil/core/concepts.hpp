@@ -50,8 +50,9 @@ concept InputRangeOf = std::ranges::input_range<Range> && std::same_as<std::rang
 /// A read-only, multipass range whose elements bind to the requested value type.
 template<typename Range, typename Value>
 concept SizedForwardRangeOf =
-    std::ranges::forward_range<const Range> && std::ranges::sized_range<const Range> && std::same_as<std::ranges::range_value_t<const Range>, Value>
-    && std::convertible_to<std::ranges::range_reference_t<const Range>, const Value&>;
+    std::ranges::forward_range<const std::remove_reference_t<Range>> && std::ranges::sized_range<const std::remove_reference_t<Range>>
+    && std::same_as<std::ranges::range_value_t<const std::remove_reference_t<Range>>, Value>
+    && std::convertible_to<std::ranges::range_reference_t<const std::remove_reference_t<Range>>, const Value&>;
 
 template<typename T>
 concept Clearable = requires(T& value) { value.clear(); };

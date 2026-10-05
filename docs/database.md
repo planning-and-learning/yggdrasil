@@ -222,7 +222,8 @@ structure as other Yggdrasil entities. `Relation<T>` is the entity tag:
   `Builder<Relation<T>>`, `Data<Relation<T>>`, or `Index<Relation<T>>` handle.
   Builder and data views borrow their handle; index views resolve their record
   through the context. Canonical data and index views access the repository's
-  schemas and rows directly. All three satisfy `RelationViewConcept`.
+  schemas and rows directly. All three satisfy `RelationViewConcept<V, T>`; the
+  element type is explicit and no `V::ElementType` alias is required.
 
 Schemas use the same structure. `ygg::Data<Columns>` contains its assigned
 `ygg::Index<Columns>` and an owned `cista::offset::vector<ygg::Index<Column>>`
