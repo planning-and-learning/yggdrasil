@@ -1230,6 +1230,86 @@ TEST(YggdrasilTests, DatabaseRelationInsertsTypedDecodedRowsWithoutStaging)
     EXPECT_EQ(ygg::hash_range(packed), ygg::hash_range(std::span<const ColumnIndex>(values)));
 }
 
+template<typename V, typename R>
+concept CanQueryTypedRow = requires(const V& view, const R& row) {
+    { view.contains(row) } -> std::same_as<bool>;
+};
+
+using TypedRelationRepository = RelationRepository<ColumnIndex>;
+using TypedBuilderView = View<Builder<Relation<ColumnIndex>>, TypedRelationRepository>;
+using TypedDataView = View<Data<Relation<ColumnIndex>>, TypedRelationRepository>;
+using TypedIndexView = View<Index<Relation<ColumnIndex>>, TypedRelationRepository>;
+static_assert(CanQueryTypedRow<TypedBuilderView, DatabaseDecodedRow>);
+static_assert(CanQueryTypedRow<TypedDataView, DatabaseDecodedRow>);
+static_assert(CanQueryTypedRow<TypedIndexView, DatabaseDecodedRow>);
+static_assert(CanQueryTypedRow<TypedBuilderView, DatabasePackedRow>);
+static_assert(CanQueryTypedRow<TypedDataView, DatabasePackedRow>);
+static_assert(CanQueryTypedRow<TypedIndexView, DatabasePackedRow>);
+static_assert(!CanQueryTypedRow<TypedBuilderView, std::span<const uint_t>>);
+static_assert(!CanQueryTypedRow<TypedDataView, std::span<const uint_t>>);
+static_assert(!CanQueryTypedRow<TypedIndexView, std::span<const uint_t>>);
+
+TEST(YggdrasilTests, DatabaseRelationViewsQueryDecodedRowsWithinTheirOwnRowSet)
+{
+    auto repository = RelationRepositoryFactory<ColumnIndex>().create();
+    auto relation = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1), ColumnIndex(2) });
+    const auto words = std::array<uint_t, 3> { 2, 5, 7 };
+    const auto values = std::array { ColumnIndex(2), ColumnIndex(5), ColumnIndex(7) };
+    const auto decoded = DatabaseDecodedRow(words.data(), words.size());
+    auto packed_storage = std::array<uint_t, 1> {};
+    auto packed = DatabasePackedRow(packed_storage.data(), values.size(), 3, 1);
+    packed = std::span<const ColumnIndex>(values);
+    relation.insert(decoded);
+    const auto indexed = insert(repository, relation).first;
+    const auto data_view = make_view(indexed.get_data(), repository);
+    const auto builder_view = make_view(relation, repository);
+
+    auto other = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1), ColumnIndex(2) });
+    const auto other_words = std::array<uint_t, 3> { 2, 5, 6 };
+    const auto other_row = DatabaseDecodedRow(other_words.data(), other_words.size());
+    other.insert(other_row);
+    const auto other_indexed = insert(repository, other).first;
+    ASSERT_TRUE(other_indexed.contains(other_row));
+    const auto missing_words = std::array<uint_t, 3> { 2, 5, 4 };
+    const auto missing = DatabaseDecodedRow(missing_words.data(), missing_words.size());
+    const auto short_row = DatabaseDecodedRow(words.data(), 2);
+    const auto converting = BasicBlockArrayView<const uint_t, DatabaseConvertingIndexCoder>(words.data(), words.size());
+    const auto verify = [&](const auto& view)
+    {
+        EXPECT_TRUE(view.contains(decoded));
+        EXPECT_TRUE(view.contains(packed));
+        EXPECT_TRUE(view.contains(values));
+        EXPECT_FALSE(view.contains(other_row));
+        EXPECT_FALSE(view.contains(missing));
+        EXPECT_THROW(view.contains(short_row), std::invalid_argument);
+        DatabaseThrowingDecodeConversion::fail = true;
+        EXPECT_THROW(view.contains(converting), std::runtime_error);
+        DatabaseThrowingDecodeConversion::fail = false;
+        EXPECT_TRUE(view.contains(converting));
+    };
+    verify(relation);
+    verify(builder_view);
+    verify(data_view);
+    verify(indexed);
+}
+
+TEST(YggdrasilTests, DatabaseRelationViewsQueryEmptyDecodedRows)
+{
+    auto repository = RelationRepositoryFactory<ColumnIndex>().create();
+    auto relation = Builder<Relation<ColumnIndex>>();
+    const auto decoded = DatabaseDecodedRow(nullptr, 0);
+    const auto empty = insert(repository, relation).first;
+    EXPECT_FALSE(make_view(relation, repository).contains(decoded));
+    EXPECT_FALSE(make_view(empty.get_data(), repository).contains(decoded));
+    EXPECT_FALSE(empty.contains(decoded));
+    relation.insert(decoded);
+    const auto unit = insert(repository, relation).first;
+    EXPECT_TRUE(make_view(relation, repository).contains(decoded));
+    EXPECT_TRUE(make_view(unit.get_data(), repository).contains(decoded));
+    EXPECT_TRUE(unit.contains(decoded));
+    EXPECT_FALSE(empty.contains(decoded));
+}
+
 TEST(YggdrasilTests, DatabaseRelationFailedInsertionPreservesCanonicalIndex)
 {
     const auto values = std::array { ColumnIndex(2), ColumnIndex(5), ColumnIndex(7) };

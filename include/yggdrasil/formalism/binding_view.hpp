@@ -18,8 +18,10 @@
 #ifndef YGG_FORMALISM_BINDING_VIEW_HPP_
 #define YGG_FORMALISM_BINDING_VIEW_HPP_
 
+#include "yggdrasil/containers/span.hpp"
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/object_index.hpp"
@@ -27,10 +29,122 @@
 
 #include <iterator>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+
+namespace ygg::formalism::detail
+{
+/// Borrows the row sequence and context, independently of its binding-range wrapper.
+/// Comparing or subtracting iterators requires that they belong to the same sequence.
+template<typename RelationTag, typename ObjectTag, std::forward_iterator BaseIterator, typename C>
+class RelationBindingIterator
+{
+    const C* m_context = nullptr;
+    BaseIterator m_it {};
+    Index<RelationTag> m_relation {};
+
+public:
+    using difference_type = std::iter_difference_t<BaseIterator>;
+    using value_type = ygg::View<Index<RelationBinding<RelationTag, ObjectTag>>, C>;
+    using reference = value_type;
+    using pointer = void;
+    using iterator_concept =
+        std::conditional_t<std::random_access_iterator<BaseIterator>,
+                           std::random_access_iterator_tag,
+                           std::conditional_t<std::bidirectional_iterator<BaseIterator>, std::bidirectional_iterator_tag, std::forward_iterator_tag>>;
+    using iterator_category = iterator_concept;
+
+    RelationBindingIterator() = default;
+    RelationBindingIterator(Index<RelationTag> relation, BaseIterator it, const C& context) : m_context(&context), m_it(std::move(it)), m_relation(relation) {}
+
+    reference operator*() const { return ygg::make_view(Index<RelationBinding<RelationTag, ObjectTag>> { m_relation, *m_it }, *m_context); }
+    RelationBindingIterator& operator++()
+    {
+        ++m_it;
+        return *this;
+    }
+    RelationBindingIterator operator++(int)
+    {
+        auto old = *this;
+        ++*this;
+        return old;
+    }
+    RelationBindingIterator& operator--()
+        requires std::bidirectional_iterator<BaseIterator>
+    {
+        --m_it;
+        return *this;
+    }
+    RelationBindingIterator operator--(int)
+        requires std::bidirectional_iterator<BaseIterator>
+    {
+        auto old = *this;
+        --*this;
+        return old;
+    }
+    RelationBindingIterator& operator+=(difference_type n)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        m_it += n;
+        return *this;
+    }
+    RelationBindingIterator& operator-=(difference_type n)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        m_it -= n;
+        return *this;
+    }
+    friend RelationBindingIterator operator+(RelationBindingIterator it, difference_type n)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return it += n;
+    }
+    friend RelationBindingIterator operator+(difference_type n, RelationBindingIterator it)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return it += n;
+    }
+    friend RelationBindingIterator operator-(RelationBindingIterator it, difference_type n)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return it -= n;
+    }
+    friend difference_type operator-(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return lhs.m_it - rhs.m_it;
+    }
+    reference operator[](difference_type n) const
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return *(*this + n);
+    }
+    friend bool operator==(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs) { return lhs.m_it == rhs.m_it; }
+    friend bool operator<(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return lhs.m_it < rhs.m_it;
+    }
+    friend bool operator>(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return rhs < lhs;
+    }
+    friend bool operator<=(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return !(rhs < lhs);
+    }
+    friend bool operator>=(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
+        requires std::random_access_iterator<BaseIterator>
+    {
+        return !(lhs < rhs);
+    }
+};
+}  // namespace ygg::formalism::detail
 
 namespace ygg
 {
@@ -64,6 +178,28 @@ public:
     auto identifying_members() const noexcept { return std::make_tuple(m_handle, m_context->get_index()); }
 };
 
+/// Borrows a complete binding without publishing a row identity. Data and context
+/// must outlive the view and all object ranges; keep the data unchanged while used.
+template<typename RelationTag, typename ObjectTag, typename C>
+class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C>
+{
+    using BindingData = Data<formalism::RelationBinding<RelationTag, ObjectTag>>;
+    const BindingData* m_handle;
+    const C* m_context;
+
+    auto objects() const noexcept { return std::span<const Index<formalism::Object<ObjectTag>>>(m_handle->objects.data(), m_handle->objects.size()); }
+
+public:
+    View(const BindingData& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
+
+    const BindingData& get_data() const noexcept { return *m_handle; }
+    const BindingData& get_handle() const noexcept { return *m_handle; }
+    const C& get_context() const noexcept { return *m_context; }
+    auto get_relation() const noexcept { return make_view(m_handle->relation, *m_context); }
+    auto get_objects() const noexcept { return make_view(objects(), *m_context); }
+    auto get_key() const noexcept { return std::make_pair(m_handle->relation, objects()); }
+};
+
 template<typename RelationTag, typename ObjectTag, std::ranges::forward_range BindingRange, typename C>
     requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 class View<ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>, C>
@@ -90,41 +226,7 @@ public:
         return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
-    struct const_iterator
-    {
-        using BaseIt = std::ranges::iterator_t<const BindingRange>;
-
-        const C* ctx;
-        BaseIt it;
-        I1 relation;
-
-        using difference_type = std::ptrdiff_t;
-        using value_type = ::ygg::View<T, C>;
-        using iterator_category = std::forward_iterator_tag;
-        using iterator_concept = std::forward_iterator_tag;
-
-        const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(I1 relation, BaseIt it, const C& ctx) noexcept : ctx(&ctx), it(it), relation(relation) {}
-
-        auto operator*() const noexcept { return ygg::make_view(T { relation, *it }, *ctx); }
-
-        const_iterator& operator++() noexcept
-        {
-            ++it;
-            return *this;
-        }
-
-        const_iterator operator++(int) noexcept
-        {
-            auto tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
-
-        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
-    };
+    using const_iterator = formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const BindingRange>, C>;
 
     const_iterator begin() const noexcept { return const_iterator { get_data().relation, std::ranges::begin(get_data().rows), get_context() }; }
 
@@ -181,94 +283,7 @@ public:
         return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
-    struct const_iterator
-    {
-        using BaseIt = std::ranges::iterator_t<const BindingRange>;
-
-        const C* ctx;
-        BaseIt it;
-        I1 relation;
-
-        using difference_type = std::ptrdiff_t;
-        using value_type = ::ygg::View<T, C>;
-        using iterator_category = std::random_access_iterator_tag;
-        using iterator_concept = std::random_access_iterator_tag;
-
-        const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(I1 relation, BaseIt it, const C& ctx) noexcept : ctx(&ctx), it(it), relation(relation) {}
-
-        auto operator*() const noexcept { return ygg::make_view(T { relation, *it }, *ctx); }
-
-        const_iterator& operator++() noexcept
-        {
-            ++it;
-            return *this;
-        }
-
-        const_iterator operator++(int) noexcept
-        {
-            auto tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        const_iterator& operator--() noexcept
-        {
-            --it;
-            return *this;
-        }
-
-        const_iterator operator--(int) noexcept
-        {
-            auto tmp = *this;
-            --(*this);
-            return tmp;
-        }
-
-        const_iterator& operator+=(difference_type n) noexcept
-        {
-            it += n;
-            return *this;
-        }
-
-        const_iterator& operator-=(difference_type n) noexcept
-        {
-            it -= n;
-            return *this;
-        }
-
-        friend const_iterator operator+(const const_iterator& it, difference_type n) noexcept
-        {
-            auto tmp = it;
-            tmp += n;
-            return tmp;
-        }
-
-        friend const_iterator operator+(difference_type n, const const_iterator& it) noexcept
-        {
-            auto tmp = it;
-            tmp += n;
-            return tmp;
-        }
-
-        friend const_iterator operator-(const const_iterator& it, difference_type n) noexcept
-        {
-            auto tmp = it;
-            tmp -= n;
-            return tmp;
-        }
-
-        friend difference_type operator-(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it - rhs.it; }
-
-        auto operator[](difference_type n) const noexcept { return ygg::make_view(T { relation, it[n] }, *ctx); }
-
-        friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
-        friend bool operator!=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs == rhs); }
-        friend bool operator<(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it < rhs.it; }
-        friend bool operator>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return rhs < lhs; }
-        friend bool operator<=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(rhs < lhs); }
-        friend bool operator>=(const const_iterator& lhs, const const_iterator& rhs) noexcept { return !(lhs < rhs); }
-    };
+    using const_iterator = formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const BindingRange>, C>;
 
     const_iterator begin() const noexcept { return const_iterator { get_data().relation, std::ranges::begin(get_data().rows), get_context() }; }
 
@@ -290,5 +305,22 @@ private:
 };
 
 }  // namespace ygg
+
+namespace ygg::formalism
+{
+/// Shared read interface for published and borrowed bindings. Publication identity
+/// is deliberately absent; a logical key consists of the relation and object row.
+template<typename V, typename RelationTag, typename ObjectTag>
+concept RelationBindingViewConcept = requires(const V& view) {
+    view.get_data();
+    view.get_handle();
+    view.get_context();
+    { view.get_relation().get_index() } -> std::same_as<Index<RelationTag>>;
+    { view.get_objects()[size_t {}].get_index() } -> std::same_as<Index<Object<ObjectTag>>>;
+    requires SizedForwardRangeOf<std::remove_cvref_t<decltype(view.get_objects().get_data())>, Index<Object<ObjectTag>>>;
+    requires std::same_as<std::remove_cvref_t<decltype(view.get_key().first)>, Index<RelationTag>>;
+    requires SizedForwardRangeOf<std::remove_cvref_t<decltype(view.get_key().second)>, Index<Object<ObjectTag>>>;
+};
+}  // namespace ygg::formalism
 
 #endif

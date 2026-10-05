@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <compare>
 #include <concepts>
 #include <iterator>
 #include <optional>
@@ -24,21 +25,25 @@
 namespace ygg::database::detail
 {
 /// Keeps the lightweight relation view alive, independently of the range expression.
+/// Comparing or subtracting iterators requires that they belong to the same sequence.
 template<typename V>
 class RelationIterator
 {
     std::optional<V> m_view;
-    size_t m_position = 0;
+    std::ptrdiff_t m_position = 0;
 
 public:
     using difference_type = std::ptrdiff_t;
     using value_type = std::remove_cvref_t<decltype(std::declval<const V&>()[size_t {}])>;
-    using iterator_category = std::forward_iterator_tag;
-    using iterator_concept = std::forward_iterator_tag;
+    using reference = value_type;
+    using pointer = void;
+    using iterator_category = std::random_access_iterator_tag;
+    using iterator_concept = std::random_access_iterator_tag;
 
     RelationIterator() noexcept = default;
-    RelationIterator(V view, size_t position) noexcept : m_view(view), m_position(position) {}
-    auto operator*() const noexcept { return (*m_view)[m_position]; }
+    RelationIterator(V view, size_t position) noexcept : m_view(view), m_position(static_cast<difference_type>(position)) {}
+    reference operator*() const noexcept { return (*m_view)[static_cast<size_t>(m_position)]; }
+    reference operator[](difference_type n) const noexcept { return *(*this + n); }
     RelationIterator& operator++() noexcept
     {
         ++m_position;
@@ -50,13 +55,33 @@ public:
         ++*this;
         return old;
     }
-    friend bool operator==(const RelationIterator& lhs, const RelationIterator& rhs) noexcept
+    RelationIterator& operator--() noexcept
     {
-        if (!lhs.m_view || !rhs.m_view)
-            return !lhs.m_view && !rhs.m_view;
-        return &lhs.m_view->get_context() == &rhs.m_view->get_context() && lhs.m_view->get_storage_address() == rhs.m_view->get_storage_address()
-               && lhs.m_position == rhs.m_position;
+        --m_position;
+        return *this;
     }
+    RelationIterator operator--(int) noexcept
+    {
+        auto old = *this;
+        --*this;
+        return old;
+    }
+    RelationIterator& operator+=(difference_type n) noexcept
+    {
+        m_position += n;
+        return *this;
+    }
+    RelationIterator& operator-=(difference_type n) noexcept
+    {
+        m_position -= n;
+        return *this;
+    }
+    friend RelationIterator operator+(RelationIterator it, difference_type n) noexcept { return it += n; }
+    friend RelationIterator operator+(difference_type n, RelationIterator it) noexcept { return it += n; }
+    friend RelationIterator operator-(RelationIterator it, difference_type n) noexcept { return it -= n; }
+    friend difference_type operator-(const RelationIterator& lhs, const RelationIterator& rhs) noexcept { return lhs.m_position - rhs.m_position; }
+    friend bool operator==(const RelationIterator& lhs, const RelationIterator& rhs) noexcept { return lhs.m_position == rhs.m_position; }
+    friend auto operator<=>(const RelationIterator& lhs, const RelationIterator& rhs) noexcept { return lhs.m_position <=> rhs.m_position; }
 };
 }  // namespace ygg::database::detail
 
@@ -95,6 +120,12 @@ public:
     auto end() const noexcept { return database::detail::RelationIterator<View>(*this, size()); }
     auto cbegin() const noexcept { return begin(); }
     auto cend() const noexcept { return end(); }
+
+    template<SizedForwardRangeOf<T> R>
+    bool contains(const R& row) const
+    {
+        return m_handle->contains(row);
+    }
 
     bool contains(std::span<const T> row) const { return m_handle->contains(row); }
     bool contains(std::initializer_list<T> row) const { return m_handle->contains(row); }
@@ -148,13 +179,16 @@ public:
     auto cbegin() const noexcept { return begin(); }
     auto cend() const noexcept { return end(); }
 
-    bool contains(std::span<const T> row) const
+    template<SizedForwardRangeOf<T> R>
+    bool contains(const R& row) const
     {
-        if (row.size() != arity())
+        if (std::ranges::size(row) != arity())
             throw std::invalid_argument("Relation: row arity does not match schema.");
         const auto index = repository().get_row_repository().find(row);
         return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<T>>(*index));
     }
+
+    bool contains(std::span<const T> row) const { return contains<std::span<const T>>(row); }
 
     bool contains(std::initializer_list<T> row) const { return contains(std::span<const T>(row.begin(), row.size())); }
 };
@@ -207,13 +241,16 @@ public:
     auto cbegin() const noexcept { return begin(); }
     auto cend() const noexcept { return end(); }
 
-    bool contains(std::span<const T> row) const
+    template<SizedForwardRangeOf<T> R>
+    bool contains(const R& row) const
     {
-        if (row.size() != arity())
+        if (std::ranges::size(row) != arity())
             throw std::invalid_argument("Relation: row arity does not match schema.");
         const auto index = repository().get_row_repository().find(row);
         return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<T>>(*index));
     }
+
+    bool contains(std::span<const T> row) const { return contains<std::span<const T>>(row); }
 
     bool contains(std::initializer_list<T> row) const { return contains(std::span<const T>(row.begin(), row.size())); }
     auto identifying_members() const noexcept { return std::make_tuple(m_handle, repository().get_index()); }

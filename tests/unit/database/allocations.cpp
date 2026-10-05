@@ -651,6 +651,36 @@ TEST(YggdrasilTests, DatabaseWarmedDecodedRowInsertionAllocatesAndFreesNothing)
     EXPECT_EQ(counts.deallocated, 0);
 }
 
+TEST(YggdrasilTests, DatabaseDecodedMembershipAcrossViewsAllocatesAndFreesNothing)
+{
+    auto repository = RelationRepositoryFactory<ColumnIndex>().create();
+    auto relation = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1) });
+    auto storage = std::array<uint_t, 1> {};
+    auto row = BasicBitPackedArrayView<uint_t, IndexCoder<ColumnIndex>>(storage.data(), 2, 3, 0);
+    row = std::array { ColumnIndex(2), ColumnIndex(5) };
+    relation.insert(row);
+    const auto indexed = insert(repository, relation).first;
+    const auto data_view = make_view(indexed.get_data(), repository);
+    const auto builder_view = make_view(relation, repository);
+    auto other = Builder<Relation<ColumnIndex>>({ ColumnIndex(0), ColumnIndex(1) });
+    const auto other_values = std::array { ColumnIndex(2), ColumnIndex(6) };
+    other.insert(other_values);
+    const auto other_indexed = insert(repository, other).first;
+    ASSERT_TRUE(other_indexed.contains(other_values));
+    const auto missing = other_values | std::views::transform([](ColumnIndex index) { return index; });
+    auto valid = true;
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 1000; ++i)
+    {
+        valid &= relation.contains(row) && builder_view.contains(row) && data_view.contains(row) && indexed.contains(row);
+        valid &= !relation.contains(missing) && !builder_view.contains(missing) && !data_view.contains(missing) && !indexed.contains(missing);
+    }
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+}
+
 struct AllocationRangeFillFailure
 {
 };

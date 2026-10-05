@@ -36,7 +36,11 @@
 #include <array>
 #include <concepts>
 #include <cstdint>
+#include <forward_list>
+#include <iterator>
 #include <limits>
+#include <list>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <tuple>
@@ -108,6 +112,22 @@ struct Index<tests::RepositoryTypesRelation> : IndexMixin<Index<tests::Repositor
 {
     using Base = IndexMixin<Index<tests::RepositoryTypesRelation>>;
     using Base::Base;
+};
+
+template<>
+struct Data<tests::RepositoryTypesRelation>
+{
+    Index<tests::RepositoryTypesRelation> index;
+    uint_t value = 0;
+    auto identifying_members() const noexcept { return std::tie(value); }
+};
+
+template<>
+struct Data<formalism::Object<tests::RepositoryTypesObjectTag>>
+{
+    Index<formalism::Object<tests::RepositoryTypesObjectTag>> index;
+    uint_t value = 0;
+    auto identifying_members() const noexcept { return std::tie(value); }
 };
 
 template<>
@@ -581,6 +601,65 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesFactoryLocalRepository
     const auto [larger, larger_created] = second_repository.insert(ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects));
     ASSERT_TRUE(larger_created);
     EXPECT_TRUE(ygg::Less<> {}(first.get_key(), larger.get_key()));
+}
+
+template<typename V>
+concept HasPublishedBindingIndex = requires(const V& view) { view.get_index(); };
+
+using BindingViewRepository =
+    formalism::Repository<formalism::SymbolRepository<RepositoryTypesRelation, formalism::Object<RepositoryTypesObjectTag>>, ContractRelations>;
+using BorrowedContractBindingView = View<Data<ContractBinding>, BindingViewRepository>;
+using PublishedContractBindingView = View<Index<ContractBinding>, BindingViewRepository>;
+static_assert(formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(formalism::RelationBindingViewConcept<PublishedContractBindingView, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
+static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesElement, RepositoryTypesObjectTag>);
+static_assert(!formalism::RelationBindingViewConcept<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+static_assert(!HasPublishedBindingIndex<BorrowedContractBindingView>);
+static_assert(HasPublishedBindingIndex<PublishedContractBindingView>);
+static_assert(std::same_as<decltype(std::declval<const BorrowedContractBindingView&>().get_data()), const Data<ContractBinding>&>);
+static_assert(std::same_as<decltype(std::declval<const BorrowedContractBindingView&>().get_handle()), const Data<ContractBinding>&>);
+
+TEST(YggdrasilTests, CommonBorrowedBindingViewReadsWithoutPublishingAndMaterializesConstData)
+{
+    using Object = formalism::Object<RepositoryTypesObjectTag>;
+    auto repository = BindingViewRepository(0);
+    auto relation_data = Data<RepositoryTypesRelation>();
+    const auto relation = repository.insert(relation_data).first.get_index();
+    auto object_data = Data<Object>();
+    for (uint_t i = 0; i < 8; ++i)
+    {
+        object_data.value = i;
+        repository.insert(object_data);
+    }
+    auto data = Data<ContractBinding>();
+    data.relation = relation;
+    data.objects.push_back(Index<Object>(2));
+    data.objects.push_back(Index<Object>(5));
+    const auto borrowed = make_view(data, repository);
+    EXPECT_EQ(&borrowed.get_data(), &data);
+    EXPECT_EQ(&borrowed.get_handle(), &data);
+    EXPECT_EQ(&borrowed.get_context(), &repository);
+    EXPECT_EQ(borrowed.get_relation().get_index(), relation);
+    EXPECT_EQ(borrowed.get_objects().get_data().data(), data.objects.data());
+    EXPECT_EQ(borrowed.get_objects()[1].get_index(), Index<Object>(5));
+    EXPECT_EQ(borrowed.get_key().first, relation);
+    EXPECT_EQ(borrowed.get_key().second.data(), data.objects.data());
+    EXPECT_FALSE(repository.find(data));
+
+    const auto [published, created] = repository.insert(borrowed.get_data());
+    ASSERT_TRUE(created);
+    EXPECT_EQ(&published.get_context(), &repository);
+    EXPECT_TRUE(std::ranges::equal(published.get_key().second, borrowed.get_key().second));
+    const auto [duplicate, duplicate_created] = repository.insert(borrowed.get_data());
+    EXPECT_FALSE(duplicate_created);
+    EXPECT_EQ(duplicate.get_index(), published.get_index());
+
+    // A returned object span borrows Data directly, independently of the wrapper.
+    const auto objects = make_view(data, repository).get_objects();
+    data.objects[0] = Index<Object>(7);
+    EXPECT_EQ(objects[0].get_index(), Index<Object>(7));
+    EXPECT_EQ(published.get_objects()[0].get_index(), Index<Object>(2));
 }
 
 TEST(YggdrasilTests, CommonRelationBindingDataValidatesArity)
@@ -1125,6 +1204,104 @@ TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
     EXPECT_EQ(empty_random_access_view.size(), 0);
     EXPECT_THROW(empty_random_access_view.front(), std::out_of_range);
     EXPECT_THROW(empty_random_access_view.back(), std::out_of_range);
+}
+
+TEST(YggdrasilTests, CommonRelationBindingIteratorsPreserveUnderlyingTraversal)
+{
+    using Row = Index<formalism::Row>;
+    using ForwardRows = std::forward_list<Row>;
+    using BidirectionalRows = std::list<Row>;
+    using RandomAccessRows = std::vector<Row>;
+    using Forward = formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, ForwardRows>;
+    using Bidirectional = formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, BidirectionalRows>;
+    using RandomAccess = formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, RandomAccessRows>;
+    using ExplicitRandomAccess = formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, RandomAccessRows>;
+    using ForwardView = View<Forward, RepositoryTypesContext>;
+    using BidirectionalView = View<Bidirectional, RepositoryTypesContext>;
+    using RandomAccessView = View<RandomAccess, RepositoryTypesContext>;
+    using ExplicitRandomAccessView = View<ExplicitRandomAccess, RepositoryTypesContext>;
+    static_assert(std::ranges::forward_range<ForwardView>);
+    static_assert(!std::ranges::bidirectional_range<ForwardView>);
+    static_assert(std::ranges::bidirectional_range<BidirectionalView>);
+    static_assert(!std::ranges::random_access_range<BidirectionalView>);
+    static_assert(std::ranges::random_access_range<RandomAccessView>);
+    static_assert(std::ranges::random_access_range<ExplicitRandomAccessView>);
+    static_assert(std::same_as<RandomAccessView::const_iterator, ExplicitRandomAccessView::const_iterator>);
+    static_assert(!std::ranges::contiguous_range<RandomAccessView>);
+
+    const auto relation = Index<RepositoryTypesRelation>(4);
+    const auto context = RepositoryTypesContext {};
+    const auto check = [&](auto view)
+    {
+        using V = decltype(view);
+        using Iterator = std::ranges::iterator_t<V>;
+        static_assert(std::same_as<typename std::iterator_traits<Iterator>::reference, typename Iterator::value_type>);
+        static_assert(std::same_as<typename std::iterator_traits<Iterator>::pointer, void>);
+        EXPECT_EQ(Iterator {}, Iterator {});
+        // Iterators borrow the backing rows/context, not the temporary wrapper.
+        const auto begin = V(view).begin();
+        const auto end = V(view).end();
+        EXPECT_EQ(std::ranges::distance(begin, end), 3);
+        auto it = begin;
+        const auto copy = it;
+        EXPECT_EQ(it++, copy);
+        EXPECT_EQ((*copy).get_index().relation, relation);
+        EXPECT_EQ((*copy).get_index().row, Row(2));
+        EXPECT_EQ((*it).get_index().row, Row(3));
+        EXPECT_EQ((*++it).get_index().row, Row(4));
+        EXPECT_EQ(++it, end);
+        // This fixture returns nullary rows for each binding.
+        EXPECT_TRUE((*copy).get_data().empty());
+        if constexpr (std::bidirectional_iterator<Iterator>)
+        {
+            EXPECT_EQ(it--, end);
+            EXPECT_EQ((*it).get_index().row, Row(4));
+            EXPECT_EQ((*--it).get_index().row, Row(3));
+        }
+        if constexpr (std::random_access_iterator<Iterator>)
+        {
+            EXPECT_EQ(end - begin, 3);
+            EXPECT_EQ(begin - end, -3);
+            EXPECT_LT(begin, end);
+            EXPECT_LE(begin, begin);
+            EXPECT_GT(end, begin);
+            EXPECT_GE(end, end);
+            EXPECT_NE(begin, end);
+            it = begin;
+            it += 3;
+            EXPECT_EQ(it, end);
+            it += -2;
+            EXPECT_EQ(it, 1 + begin);
+            it -= -1;
+            EXPECT_EQ(it, end - 1);
+            it -= 2;
+            EXPECT_EQ(it, begin);
+            EXPECT_EQ(end[-1].get_index().row, Row(4));
+            EXPECT_EQ((begin + 1)[-1].get_index().row, Row(2));
+        }
+    };
+    const auto forward_rows = ForwardRows { Row(2), Row(3), Row(4) };
+    const auto bidirectional_rows = BidirectionalRows { Row(2), Row(3), Row(4) };
+    const auto random_access_rows = RandomAccessRows { Row(2), Row(3), Row(4) };
+    check(ForwardView(Forward { relation, forward_rows }, context));
+    check(BidirectionalView(Bidirectional { relation, bidirectional_rows }, context));
+    check(RandomAccessView(RandomAccess { relation, random_access_rows }, context));
+    check(ExplicitRandomAccessView(ExplicitRandomAccess { relation, random_access_rows }, context));
+
+    const auto check_empty = [](auto view)
+    {
+        EXPECT_TRUE(view.empty());
+        EXPECT_EQ(view.begin(), view.end());
+        EXPECT_EQ(std::ranges::distance(view), 0);
+        EXPECT_THROW(view.front(), std::out_of_range);
+    };
+    const auto empty_forward = ForwardRows {};
+    const auto empty_bidirectional = BidirectionalRows {};
+    const auto empty_random_access = RandomAccessRows {};
+    check_empty(ForwardView(Forward { relation, empty_forward }, context));
+    check_empty(BidirectionalView(Bidirectional { relation, empty_bidirectional }, context));
+    check_empty(RandomAccessView(RandomAccess { relation, empty_random_access }, context));
+    check_empty(ExplicitRandomAccessView(ExplicitRandomAccess { relation, empty_random_access }, context));
 }
 
 TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)

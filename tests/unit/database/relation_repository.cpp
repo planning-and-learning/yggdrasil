@@ -15,7 +15,9 @@
 #include <cista/serialization.h>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <iterator>
 #include <limits>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <type_traits>
@@ -78,6 +80,13 @@ static_assert(std::same_as<IndexView, RelationView<>>);
 static_assert(RelationViewConcept<BuilderView>);
 static_assert(RelationViewConcept<DataView>);
 static_assert(RelationViewConcept<IndexView>);
+static_assert(std::ranges::random_access_range<BuilderView>);
+static_assert(std::ranges::random_access_range<DataView>);
+static_assert(std::ranges::random_access_range<IndexView>);
+static_assert(std::ranges::borrowed_range<BuilderView>);
+static_assert(std::ranges::borrowed_range<DataView>);
+static_assert(std::ranges::borrowed_range<IndexView>);
+static_assert(!std::ranges::contiguous_range<IndexView>);
 static_assert(ViewConcept<RelationBuilder, Repository>);
 static_assert(ViewConcept<Data<RelationTag>, Repository>);
 static_assert(ViewConcept<Index<RelationTag>, Repository>);
@@ -646,6 +655,78 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
     expect_rows(changed.first, { { 4, 5 }, { 1, 2 } });
 }
 
+TEST(YggdrasilTests, DatabaseRelationIteratorsSupportRandomAccessThroughTemporaryViews)
+{
+    auto repository = RelationRepositoryFactory<>().create();
+    auto builder = RelationBuilder { ColumnIndex(0) };
+    builder.insert({ 10 });
+    builder.insert({ 20 });
+    builder.insert({ 30 });
+    const auto stored = database::insert(repository, builder).first;
+    const auto check = [](auto view)
+    {
+        using V = decltype(view);
+        using Iterator = std::ranges::iterator_t<V>;
+        static_assert(std::random_access_iterator<Iterator>);
+        static_assert(std::same_as<typename std::iterator_traits<Iterator>::reference, typename Iterator::value_type>);
+        static_assert(std::same_as<typename std::iterator_traits<Iterator>::pointer, void>);
+        EXPECT_EQ(Iterator {}, Iterator {});
+        const auto begin = V(view).begin();
+        const auto end = V(view).end();
+        EXPECT_EQ(end - begin, 3);
+        EXPECT_EQ(begin - end, -3);
+        EXPECT_EQ(std::ranges::distance(begin, end), 3);
+        EXPECT_LT(begin, end);
+        EXPECT_LE(begin, begin);
+        EXPECT_GT(end, begin);
+        EXPECT_GE(end, end);
+        EXPECT_NE(begin, end);
+        auto it = begin;
+        const auto copy = it;
+        EXPECT_EQ(it++, copy);
+        EXPECT_TRUE(std::ranges::equal(*copy, view[0]));
+        EXPECT_TRUE(std::ranges::equal(*it, view[1]));
+        EXPECT_EQ(++it, begin + 2);
+        EXPECT_EQ(it--, begin + 2);
+        EXPECT_EQ(--it, begin);
+        it += 3;
+        EXPECT_EQ(it, end);
+        it += -2;
+        EXPECT_EQ(it, 1 + begin);
+        it -= -1;
+        EXPECT_EQ(it, end - 1);
+        it -= 2;
+        EXPECT_EQ(it, begin);
+        EXPECT_TRUE(std::ranges::equal(end[-1], view[2]));
+        EXPECT_TRUE(std::ranges::equal((begin + 1)[-1], view[0]));
+    };
+    check(make_view(builder, repository));
+    check(make_view(stored.get_data(), repository));
+    check(make_view(stored.get_index(), repository));
+
+    auto nullary = RelationBuilder {};
+    const auto check_empty = [](auto view)
+    {
+        EXPECT_EQ(view.begin(), view.end());
+        EXPECT_EQ(view.end() - view.begin(), 0);
+    };
+    const auto empty = database::insert(repository, nullary).first;
+    check_empty(make_view(nullary, repository));
+    check_empty(make_view(empty.get_data(), repository));
+    check_empty(make_view(empty.get_index(), repository));
+    nullary.insert({});
+    const auto unit = database::insert(repository, nullary).first;
+    const auto check_unit = [](auto view)
+    {
+        using V = decltype(view);
+        const auto it = V(view).end() - 1;
+        EXPECT_TRUE((*it).empty());
+        EXPECT_EQ(it + 1, view.end());
+    };
+    check_unit(make_view(nullary, repository));
+    check_unit(make_view(unit.get_data(), repository));
+    check_unit(make_view(unit.get_index(), repository));
+}
 
 namespace
 {
