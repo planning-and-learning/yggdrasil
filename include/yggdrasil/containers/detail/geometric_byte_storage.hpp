@@ -238,6 +238,18 @@ public:
         return data(segment) + Layout::segment_offset(unit_index, segment) * m_unit_size;
     }
 
+    /// Undo the last successful allocation, retaining every segment.
+    /// size must match that allocation; outstanding readers require quiescence.
+    void pop_back(size_t size) noexcept
+    {
+        assert(size > 0);
+        assert(m_current_segment < m_segments.size());
+        assert(size <= m_segments[m_current_segment].used);
+        m_segments[m_current_segment].used -= size;
+        while (m_current_segment > 0 && m_segments[m_current_segment].used == 0)
+            --m_current_segment;
+    }
+
     void clear() noexcept
     {
         for (auto& segment : m_segments)

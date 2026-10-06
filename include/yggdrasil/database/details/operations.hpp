@@ -197,7 +197,12 @@ Builder<Relation<T>> select_equal_value(const V& input, Index<Column> column, co
 
 namespace detail
 {
-template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R>
+/// Appends joined rows. Lookup values are row positions in the selected build
+/// input for a key hash; actual key equality resolves hash collisions.
+template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R, typename Lookup>
+    requires requires(const Lookup& index, hash_t key) {
+        { index.values(key) } -> InputRangeOf<size_t>;
+    }
 void join_rows(const L& lhs,
                const R& rhs,
                std::span<const Index<Column>> columns,
@@ -205,7 +210,7 @@ void join_rows(const L& lhs,
                std::span<const size_t> rhs_keys,
                std::span<const size_t> rhs_payload,
                bool build_left,
-               const UnorderedMultiMap<hash_t, size_t>& index,
+               const Lookup& index,
                Builder<Relation<T>>& out,
                Workspace<T>& workspace)
 {

@@ -22,3 +22,13 @@ target_include_directories(
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(formalism_repository PRIVATE benchmark::benchmark_main TBB::tbb Threads::Threads)
+
+add_executable(database_incremental_benchmark "database/incremental.cpp")
+target_compile_features(database_incremental_benchmark PRIVATE cxx_std_20)
+target_include_directories(
+    database_incremental_benchmark
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+        "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
+target_link_libraries(database_incremental_benchmark PRIVATE benchmark::benchmark_main Threads::Threads)

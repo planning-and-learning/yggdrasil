@@ -13,6 +13,7 @@
 
 #include <cassert>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <tuple>
@@ -20,8 +21,8 @@
 namespace ygg
 {
 /// A set of fixed-arity tuples. Values use ygg::Hash<T> and ygg::EqualTo<T>.
-/// Rows are pooled, deduplicated, and immutable once inserted. A zero-column
-/// relation is false when empty and true when it contains the empty tuple.
+/// Rows are pooled and deduplicated; erase moves the final row into its place.
+/// A zero-column relation is false when empty and true when it contains the empty tuple.
 template<TriviallyCopyable T>
 struct Builder<database::Relation<T>>
 {
@@ -68,6 +69,24 @@ public:
         ygg::clear(m_index);
         return index;
     }
+    std::optional<uint_t> find(std::span<const T> row) const { return m_rows.find(row); }
+    std::optional<uint_t> find(std::initializer_list<T> row) const { return find(std::span<const T>(row.begin(), row.size())); }
+    template<SizedForwardRangeOf<T> R>
+    std::optional<uint_t> find(const R& row) const
+    {
+        return m_rows.find(row);
+    }
+
+    /// Remove row index, moving the final row into its place and retaining capacity.
+    /// Invalidates the erased and moved rows' positions and borrowed spans.
+    void erase(size_t index)
+    {
+        if (index >= size())
+            throw std::out_of_range("Relation: row index out of range.");
+        m_rows.erase(static_cast<uint_t>(index));
+        ygg::clear(m_index);
+    }
+
     bool contains(std::span<const T> row) const;
     bool contains(std::initializer_list<T> row) const;
     template<SizedForwardRangeOf<T> R>

@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/database/incremental/join.hpp"
+#include "yggdrasil/database/incremental/projection.hpp"
 #include "yggdrasil/database/operations.hpp"
 #include "yggdrasil/database/relation_pool.hpp"
 #include "yggdrasil/database/relation_repository.hpp"
@@ -576,6 +578,38 @@ TEST(YggdrasilTests, UnorderedMultiMapWarmedRebuildsAllocateAndFreeNothing)
     EXPECT_EQ(counts.deallocated, 0);
 }
 
+TEST(YggdrasilTests, UnorderedMultiMapWarmedErasureReusesSlotsAcrossNovelKeys)
+{
+    UnorderedMultiMap<size_t, size_t> map;
+    constexpr size_t count = 1024;
+    map.reserve(count);
+    for (size_t value = 0; value < count; ++value)
+        map.insert(value, value);
+    bool valid = true;
+    const auto advance = [&](size_t generation)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            const auto old_value = generation * count + i;
+            valid &= map.erase(old_value, old_value);
+            map.insert(old_value + count, old_value + count);
+        }
+        valid &= map.size() == count;
+    };
+    for (size_t generation = 0; generation < 16; ++generation)
+        advance(generation);
+    const auto retained = map.memory_usage();
+
+    allocation_tracking::Scope measured;
+    for (size_t generation = 16; generation < 272; ++generation)
+        advance(generation);
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(map.memory_usage(), retained);
+}
+
 TEST(YggdrasilTests, DatabaseWarmedEvaluationReusesAllStorageAcrossChangingStates)
 {
     Evaluation evaluation;
@@ -679,6 +713,204 @@ TEST(YggdrasilTests, DatabaseDecodedMembershipAcrossViewsAllocatesAndFreesNothin
     EXPECT_TRUE(valid);
     EXPECT_EQ(counts.allocated, 0);
     EXPECT_EQ(counts.deallocated, 0);
+}
+
+namespace
+{
+struct IncrementalEvaluation
+{
+    static constexpr size_t rows = 128;
+    static constexpr size_t changed_rows = 32;
+    static constexpr size_t fanout = 8;
+    incremental::JoinEvaluator<uint_t> joining { JoinPlan({ ColumnIndex(1), ColumnIndex(2) }, { ColumnIndex(1), ColumnIndex(3) }) };
+    const Builder<Relation<>> unchanged { ColumnIndex(1), ColumnIndex(3) };
+    // Every output has eight join witnesses. Replacing a source row exercises
+    // both support counts and mutable result storage without retaining history.
+    incremental::ProjectionEvaluator<uint_t> projecting { ProjectionPlan({ ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) }, { ColumnIndex(2) }) };
+    incremental::Delta<uint_t> delta { ColumnIndex(1), ColumnIndex(2) };
+    std::array<uint_t, rows> values {};
+    Workspace<> workspace;
+
+    IncrementalEvaluation()
+    {
+        Builder<Relation<>> initial { ColumnIndex(1), ColumnIndex(2) };
+        for (size_t i = 0; i < rows; ++i)
+        {
+            values[i] = static_cast<uint_t>(i);
+            initial.insert({ static_cast<uint_t>(i % key_count), values[i] });
+        }
+        Builder<Relation<>> fixed { ColumnIndex(1), ColumnIndex(3) };
+        for (uint_t key = 0; key < key_count; ++key)
+            for (uint_t match = 0; match < fanout; ++match)
+                fixed.insert({ key, match });
+        joining.initialize(initial, fixed, workspace);
+        projecting.initialize(joining.get_result(), workspace);
+    }
+
+    bool evaluate(uint_t generation)
+    {
+        auto valid = true;
+        const auto replace = [&](size_t begin, uint_t phase)
+        {
+            delta.clear();
+            for (size_t i = begin; i < begin + changed_rows; ++i)
+            {
+                const auto key = static_cast<uint_t>(i % key_count);
+                delta.removed.insert({ key, values[i] });
+                values[i] = static_cast<uint_t>(i + (phase == 0 ? 0 : (generation * 3 + phase) * rows));
+                delta.added.insert({ key, values[i] });
+            }
+            joining.update(delta.added, delta.removed, unchanged, unchanged, workspace);
+            const auto& joined_delta = joining.get_delta();
+            projecting.update(joined_delta.added, joined_delta.removed, workspace);
+            valid &= joining.get_result().size() == rows * fanout;
+            valid &= projecting.get_result().size() == rows;
+            valid &= joined_delta.added.size() == changed_rows * fanout;
+            valid &= joined_delta.removed.size() == changed_rows * fanout;
+            valid &= projecting.get_delta().added.size() == changed_rows;
+            valid &= projecting.get_delta().removed.size() == changed_rows;
+            for (size_t i = begin; i < begin + changed_rows; ++i)
+                valid &= projecting.get_result().contains({ values[i] });
+        };
+        replace(0, 1);
+        replace(changed_rows, 2);
+        replace(changed_rows, 0);
+        replace(0, 0);
+        replace(2 * changed_rows, 3);
+        replace(2 * changed_rows, 0);
+        for (size_t i = 0; i < rows; ++i)
+            valid &= values[i] == i && projecting.get_result().contains({ static_cast<uint_t>(i) });
+        return valid;
+    }
+
+    size_t memory_usage() const
+    {
+        return joining.memory_usage() + projecting.memory_usage() + delta.memory_usage() + unchanged.memory_usage() + workspace.row.capacity() * sizeof(uint_t);
+    }
+};
+}  // namespace
+
+TEST(YggdrasilTests, DatabaseWarmedIncrementalForwardUndoAndSiblingUpdatesRetainStorage)
+{
+    IncrementalEvaluation evaluation;
+    auto valid = true;
+    for (uint_t generation = 0; generation < 16; ++generation)
+        valid &= evaluation.evaluate(generation);
+    ASSERT_TRUE(valid);
+    const auto retained_bytes = evaluation.memory_usage();
+
+    allocation_tracking::Scope measured;
+    // Novel tuples on every cycle detect storage growing with historical values,
+    // even though the live input/result cardinalities remain bounded throughout.
+    for (uint_t generation = 16; generation < 272; ++generation)
+    {
+        valid &= evaluation.evaluate(generation);
+        valid &= evaluation.memory_usage() == retained_bytes;
+    }
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(evaluation.memory_usage(), retained_bytes);
+}
+
+namespace
+{
+struct ChangingJoinEvaluation
+{
+    static constexpr size_t rows = 128;
+    static constexpr size_t witnesses = 8;
+    // Partial key groups force mutable-index bucket updates as well as complete
+    // key disappearance; moved last rows must remain reachable after erasure.
+    static constexpr size_t changed_rows = 17;
+
+    incremental::JoinEvaluator<uint_t> joining { JoinPlan({ ColumnIndex(1), ColumnIndex(2) }, { ColumnIndex(1), ColumnIndex(3) }) };
+    incremental::Delta<uint_t> lhs_delta { ColumnIndex(1), ColumnIndex(2) };
+    incremental::Delta<uint_t> rhs_delta { ColumnIndex(1), ColumnIndex(3) };
+    std::array<std::array<uint_t, 2>, rows> values {};
+    Workspace<> workspace;
+
+    ChangingJoinEvaluation()
+    {
+        Builder<Relation<>> lhs { ColumnIndex(1), ColumnIndex(2) };
+        Builder<Relation<>> rhs { ColumnIndex(1), ColumnIndex(3) };
+        for (size_t i = 0; i < rows; ++i)
+        {
+            values[i] = { static_cast<uint_t>(i / witnesses), static_cast<uint_t>(i) };
+            lhs.insert(values[i]);
+            rhs.insert(values[i]);
+        }
+        joining.initialize(lhs, rhs, workspace);
+    }
+
+    bool evaluate(uint_t generation)
+    {
+        auto valid = true;
+        const auto replace = [&](size_t begin, uint_t phase)
+        {
+            lhs_delta.clear();
+            rhs_delta.clear();
+            const auto offset = phase == 0 ? uint_t { 0 } : static_cast<uint_t>((generation * 3 + phase) * rows);
+            for (size_t i = begin; i < begin + changed_rows; ++i)
+            {
+                lhs_delta.removed.insert(values[i]);
+                rhs_delta.removed.insert(values[i]);
+                values[i] = { static_cast<uint_t>(i / witnesses + offset), static_cast<uint_t>(i + offset) };
+                lhs_delta.added.insert(values[i]);
+                rhs_delta.added.insert(values[i]);
+            }
+            // Overlapping changes exercise old/old, old/new, and new/new join
+            // matches without double-reporting the tuples affected on both sides.
+            joining.update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed, workspace);
+            size_t expected = 0;
+            for (const auto& lhs : values)
+                for (const auto& rhs : values)
+                    if (lhs[0] == rhs[0])
+                    {
+                        ++expected;
+                        valid &= joining.get_result().contains({ lhs[0], lhs[1], rhs[1] });
+                    }
+            valid &= joining.get_result().size() == expected;
+        };
+        replace(0, 1);
+        replace(changed_rows, 2);
+        replace(changed_rows, 0);
+        replace(0, 0);
+        replace(2 * changed_rows, 3);
+        replace(2 * changed_rows, 0);
+        for (size_t i = 0; i < rows; ++i)
+            valid &= values[i][0] == i / witnesses && values[i][1] == i;
+        return valid;
+    }
+
+    size_t memory_usage() const
+    {
+        return joining.memory_usage() + lhs_delta.memory_usage() + rhs_delta.memory_usage() + workspace.row.capacity() * sizeof(uint_t)
+               + workspace.join_index.memory_usage();
+    }
+};
+}  // namespace
+
+TEST(YggdrasilTests, DatabaseWarmedChangingJoinReusesStorageAcrossNovelKeysAndCompaction)
+{
+    ChangingJoinEvaluation evaluation;
+    auto valid = true;
+    for (uint_t generation = 0; generation < 16; ++generation)
+        valid &= evaluation.evaluate(generation);
+    ASSERT_TRUE(valid);
+    const auto retained_bytes = evaluation.memory_usage();
+
+    allocation_tracking::Scope measured;
+    for (uint_t generation = 16; generation < 272; ++generation)
+    {
+        valid &= evaluation.evaluate(generation);
+        valid &= evaluation.memory_usage() == retained_bytes;
+    }
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(evaluation.memory_usage(), retained_bytes);
 }
 
 struct AllocationRangeFillFailure

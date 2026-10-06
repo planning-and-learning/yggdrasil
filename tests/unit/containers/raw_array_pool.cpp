@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <iterator>
 #include <limits>
@@ -36,12 +37,17 @@ namespace ygg::tests
 template<typename Pool>
 concept HasAllocate = requires(Pool& pool) { pool.allocate(); };
 
+template<typename Pool>
+concept HasPoolErase = requires(Pool& pool) { pool.erase(uint_t { 0 }); };
+
 using DefaultRawArrayPool = RawArrayPool<int, 2>;
 using ConcurrentRawArrayPool = RawArrayPool<int, 2, true>;
 
 static_assert(!DefaultRawArrayPool::thread_safe);
 static_assert(ConcurrentRawArrayPool::thread_safe);
 static_assert(!HasAllocate<DefaultRawArrayPool>);
+static_assert(HasPoolErase<DefaultRawArrayPool>);
+static_assert(!HasPoolErase<ConcurrentRawArrayPool>);
 static_assert(std::same_as<decltype(std::declval<DefaultRawArrayPool&>()[0]), std::span<const int>>);
 static_assert(std::same_as<decltype(std::declval<ConcurrentRawArrayPool&>()[0]), std::span<const int>>);
 static_assert(!std::is_copy_constructible_v<DefaultRawArrayPool>);
@@ -167,6 +173,112 @@ TEST(YggdrasilTests, CommonRawArrayPoolGrowthKeepsPointersStable)
     EXPECT_TRUE(std::ranges::equal(pool[0], first_value));
     EXPECT_TRUE(std::ranges::equal(pool[2], third_value));
     EXPECT_EQ(pool.memory_usage(), 6 * sizeof(int));
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolErasesCompactlyAcrossSegments)
+{
+    auto pool = RawArrayPool<int, 1>(2);
+    for (int value = 0; value < 4; ++value)
+        ASSERT_EQ(pool.insert(std::array { value, value + 10 }), static_cast<uint_t>(value));
+    const auto retained = pool.memory_usage();
+    const auto* last_storage = pool[3].data();
+
+    pool.erase(1);
+    ASSERT_EQ(pool.size(), 3);
+    EXPECT_TRUE(std::ranges::equal(pool[1], std::array { 3, 13 }));
+    EXPECT_TRUE(std::ranges::equal(pool[2], std::array { 2, 12 }));
+    EXPECT_EQ(pool.insert(std::array { 4, 14 }), 3);
+    EXPECT_EQ(pool[3].data(), last_storage);
+    pool.erase(3);
+    pool.erase(0);
+    ASSERT_EQ(pool.size(), 2);
+    EXPECT_TRUE(std::ranges::equal(pool[0], std::array { 2, 12 }));
+    pool.erase(1);
+    pool.erase(0);
+    EXPECT_TRUE(pool.empty());
+    EXPECT_THROW(pool.erase(0), std::out_of_range);
+
+    for (int value = 0; value < 4; ++value)
+        EXPECT_EQ(pool.insert(std::array { value, value + 20 }), static_cast<uint_t>(value));
+    EXPECT_EQ(pool.memory_usage(), retained);
+    EXPECT_THROW(pool.erase(4), std::out_of_range);
+    EXPECT_EQ(pool.size(), 4);
+    EXPECT_TRUE(std::ranges::equal(pool[3], std::array { 3, 23 }));
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolErasePreservesAlignmentAndNoncopyableValues)
+{
+    struct alignas(64) Value
+    {
+        int value;
+        explicit Value(int value_) : value(value_) {}
+        Value(const Value&) = delete;
+        Value(Value&&) = default;
+    };
+    static_assert(TriviallyCopyable<Value>);
+    auto pool = RawArrayPool<Value, 1>(2);
+    const auto first = std::array { Value(11), Value(12) };
+    const auto second = std::array { Value(21), Value(22) };
+    pool.insert(first);
+    pool.insert(second);
+    const auto* reused = pool[1].data();
+    const auto retained = pool.memory_usage();
+    pool.erase(0);
+    ASSERT_EQ(pool.size(), 1);
+    EXPECT_EQ(pool[0][0].value, 21);
+    EXPECT_EQ(pool[0][1].value, 22);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[0].data()) % alignof(Value), 0);
+    EXPECT_EQ(pool.insert(first), 1);
+    EXPECT_EQ(pool[1].data(), reused);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[1].data()) % alignof(Value), 0);
+    EXPECT_EQ(pool[1][0].value, 11);
+    EXPECT_EQ(pool.memory_usage(), retained);
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolErasesZeroLengthRows)
+{
+    auto pool = RawArrayPool<int, 1>(0);
+    const auto empty = std::array<int, 0> {};
+    pool.insert(empty);
+    pool.insert(empty);
+    pool.erase(0);
+    EXPECT_EQ(pool.size(), 1);
+    EXPECT_TRUE(pool[0].empty());
+    pool.erase(0);
+    EXPECT_TRUE(pool.empty());
+    EXPECT_EQ(pool.insert(empty), 0);
+    EXPECT_EQ(pool.memory_usage(), 0);
+}
+
+TEST(YggdrasilTests, CommonRawArrayPoolEraseIgnoresUnpublishedSegment)
+{
+    auto pool = RawArrayPool<int, 1>(2);
+    const auto values = std::array { 11, 12 };
+    pool.insert(values);
+    const auto failing = values
+                         | std::views::transform([](int value)
+                                                 {
+                                                     if (value == 12)
+                                                         throw std::runtime_error("fill failed");
+                                                     return value;
+                                                 });
+    EXPECT_THROW(pool.insert(failing), std::runtime_error);
+    ASSERT_EQ(pool.size(), 1);
+    const auto retained = pool.memory_usage();
+    pool.erase(0);
+    EXPECT_EQ(pool.insert(values), 0);
+    EXPECT_EQ(pool.insert(values), 1);
+    EXPECT_EQ(pool.memory_usage(), retained);
+    EXPECT_TRUE(std::ranges::equal(pool[0], values));
+    EXPECT_TRUE(std::ranges::equal(pool[1], values));
+
+    pool.erase(0);
+    auto moved = std::move(pool);
+    EXPECT_EQ(moved.insert(values), 1);
+    EXPECT_EQ(moved.memory_usage(), retained);
+    moved.clear();
+    EXPECT_EQ(moved.insert(values), 0);
+    EXPECT_EQ(moved.memory_usage(), retained);
 }
 
 template<bool ThreadSafe>

@@ -10,19 +10,24 @@
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
+#include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace ygg
 {
 
-/// Append-and-clear multimap: one flat hash-table entry per distinct key,
-/// with values and their next indices stored together in a contiguous vector.
+/// Multimap with one flat hash-table entry per distinct key and contiguous
+/// value slots. Erasure destroys the value and links its slot into a free list;
+/// insertion reuses those slots before growing the vector.
 /// Duplicate key/value pairs are retained. Value order is unspecified.
 /// clear() and reserve() retain capacity; values may own additional storage.
 /// Mutations invalidate all returned ranges, iterators, and references.
@@ -34,12 +39,14 @@ private:
 
     struct Entry
     {
-        Value value;
+        std::optional<Value> value;
         size_t next;
     };
 
     UnorderedMap<Key, size_t> m_heads;
     std::vector<Entry> m_entries;
+    size_t m_free_head = npos;
+    size_t m_size = 0;
 
 public:
     class ValueIterator
@@ -59,7 +66,7 @@ public:
         using iterator_category = std::forward_iterator_tag;
 
         ValueIterator() = default;
-        reference operator*() const noexcept { return m_entries[m_index].value; }
+        reference operator*() const noexcept { return *m_entries[m_index].value; }
         pointer operator->() const noexcept { return std::addressof(operator*()); }
         ValueIterator& operator++() noexcept
         {
@@ -78,15 +85,46 @@ public:
     UnorderedMultiMap() = default;
     UnorderedMultiMap(const UnorderedMultiMap&) = delete;
     UnorderedMultiMap& operator=(const UnorderedMultiMap&) = delete;
-    UnorderedMultiMap(UnorderedMultiMap&&) = default;
-    UnorderedMultiMap& operator=(UnorderedMultiMap&&) = default;
+    UnorderedMultiMap(UnorderedMultiMap&& other) noexcept(std::is_nothrow_move_constructible_v<UnorderedMap<Key, size_t>>) :
+        m_heads(std::move(other.m_heads)),
+        m_entries(std::move(other.m_entries)),
+        m_free_head(std::exchange(other.m_free_head, npos)),
+        m_size(std::exchange(other.m_size, 0))
+    {
+    }
+
+    UnorderedMultiMap& operator=(UnorderedMultiMap&& other) noexcept(std::is_nothrow_move_assignable_v<UnorderedMap<Key, size_t>>)
+    {
+        if (this != &other)
+        {
+            m_heads = std::move(other.m_heads);
+            m_entries = std::move(other.m_entries);
+            m_free_head = std::exchange(other.m_free_head, npos);
+            m_size = std::exchange(other.m_size, 0);
+        }
+        return *this;
+    }
 
     void insert(const Key& key, Value value)
     {
         const auto [head, inserted] = m_heads.try_emplace(key, npos);
         try
         {
-            m_entries.push_back({ std::move(value), head->second });
+            if (m_free_head == npos)
+            {
+                m_entries.push_back({ std::move(value), head->second });
+                head->second = m_entries.size() - 1;
+            }
+            else
+            {
+                auto& entry = m_entries[m_free_head];
+                entry.value.emplace(std::move(value));
+                const auto position = m_free_head;
+                m_free_head = entry.next;
+                entry.next = head->second;
+                head->second = position;
+            }
+            ++m_size;
         }
         catch (...)
         {
@@ -94,20 +132,77 @@ public:
                 m_heads.erase(head);
             throw;
         }
-        head->second = m_entries.size() - 1;
+    }
+
+    /// Remove one matching pair and retain its slot. Other duplicates remain.
+    bool erase(const Key& key, const Value& value)
+        requires EqualityComparableByEqualTo<Value>
+    {
+        const auto head = m_heads.find(key);
+        if (head == m_heads.end())
+            return false;
+        // ponytail: finding a value scans its key chain; add direct handles only
+        // if profiling shows highly skewed keys dominate update time.
+        auto* link = &head->second;
+        while (*link != npos)
+        {
+            const auto position = *link;
+            auto& entry = m_entries[position];
+            if (EqualTo<Value> {}(*entry.value, value))
+            {
+                if (position == head->second && entry.next == npos)
+                {
+                    // Acquire deletion headroom before mutation so GTL can clean
+                    // tombstones in place during subsequent bounded-size churn.
+                    if (m_heads.size() > std::numeric_limits<size_t>::max() / 2)
+                        throw std::length_error("UnorderedMultiMap: erase headroom exceeds addressable memory.");
+                    m_heads.reserve(m_heads.size() * 2);
+                    m_heads.erase(key);
+                }
+                else
+                    *link = entry.next;
+                entry.value.reset();
+                entry.next = m_free_head;
+                m_free_head = position;
+                --m_size;
+                return true;
+            }
+            link = &entry.next;
+        }
+        return false;
+    }
+
+    /// Replace one matching mapped value without changing its key or slot.
+    bool replace(const Key& key, const Value& old_value, Value new_value)
+        requires EqualityComparableByEqualTo<Value> && std::assignable_from<Value&, Value>
+    {
+        const auto head = m_heads.find(key);
+        if (head == m_heads.end())
+            return false;
+        for (auto position = head->second; position != npos; position = m_entries[position].next)
+            if (EqualTo<Value> {}(*m_entries[position].value, old_value))
+            {
+                *m_entries[position].value = std::move(new_value);
+                return true;
+            }
+        return false;
     }
 
     /// Read-only range of values associated with key; empty for a missing key.
-    auto values(const Key& key) const
+    auto values(const Key& key) const&
     {
         const auto head = m_heads.find(key);
         return std::ranges::subrange(ValueIterator(m_entries.data(), head == m_heads.end() ? npos : head->second), ValueIterator(m_entries.data(), npos));
     }
 
+    auto values(const Key& key) const&& = delete;
+
     void clear() noexcept
     {
         m_heads.clear();
         m_entries.clear();
+        m_free_head = npos;
+        m_size = 0;
     }
 
     /// Reserve for at most count values and count distinct keys, without shrinking.
@@ -119,8 +214,14 @@ public:
         m_entries.reserve(count);
     }
 
-    size_t size() const noexcept { return m_entries.size(); }
-    bool empty() const noexcept { return m_entries.empty(); }
+    /// Retained entries and hash slots; excludes the container's fixed storage.
+    size_t memory_usage() const noexcept
+    {
+        return m_entries.capacity() * sizeof(Entry) + m_heads.capacity() * (sizeof(std::pair<const Key, size_t>) + sizeof(gtl::priv::ctrl_t));
+    }
+
+    size_t size() const noexcept { return m_size; }
+    bool empty() const noexcept { return m_size == 0; }
 };
 
 }  // namespace ygg

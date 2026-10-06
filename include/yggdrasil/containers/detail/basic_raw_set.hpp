@@ -24,6 +24,8 @@
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
+#include <cassert>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -108,6 +110,33 @@ protected:
     explicit BasicRawSet(std::unique_ptr<pool_type> pool) : m_pool(std::move(pool)), m_set(0, IndexableHash(*m_pool), IndexableEqualTo(*m_pool)) {}
 
     const pool_type& storage() const noexcept { return *m_pool; }
+
+    /// Used by fixed-array sets whose pool supports compact erasure.
+    void erase_index(index_type index)
+        requires(!ThreadSafe)
+    {
+        if (index >= size())
+            throw std::out_of_range("BasicRawSet: index out of range.");
+        // Acquire headroom before mutation. GTL can then clean tombstones in place
+        // for moved keys and subsequent insertions, although cleanup may scan the table.
+        if (size() > std::numeric_limits<size_t>::max() / 2)
+            throw std::length_error("BasicRawSet: erase headroom exceeds addressable memory.");
+        m_set.reserve(size() * 2);
+        const auto last = static_cast<index_type>(size() - 1);
+        if (index == last)
+        {
+            m_set.erase(index);
+            m_pool->erase(index);
+            return;
+        }
+
+        m_set.erase(index);
+        auto moved = m_set.extract(last);
+        m_pool->erase(index);
+        moved.value() = index;
+        const auto result = m_set.insert(std::move(moved));
+        assert(result.inserted);
+    }
 
 public:
     static constexpr bool thread_safe = ThreadSafe;

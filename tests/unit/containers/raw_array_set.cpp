@@ -35,11 +35,16 @@
 namespace ygg::tests
 {
 
+template<typename Set>
+concept HasSetErase = requires(Set& set) { set.erase(uint_t { 0 }); };
+
 using DefaultRawArraySet = RawArraySet<int, 2>;
 using ConcurrentRawArraySet = RawArraySet<int, 2, true>;
 
 static_assert(!DefaultRawArraySet::thread_safe);
 static_assert(ConcurrentRawArraySet::thread_safe);
+static_assert(HasSetErase<DefaultRawArraySet>);
+static_assert(!HasSetErase<ConcurrentRawArraySet>);
 static_assert(std::same_as<decltype(std::declval<DefaultRawArraySet&>()[0]), std::span<const int>>);
 static_assert(std::same_as<decltype(std::declval<ConcurrentRawArraySet&>()[0]), std::span<const int>>);
 static_assert(!std::is_copy_constructible_v<DefaultRawArraySet>);
@@ -165,6 +170,81 @@ TEST(YggdrasilTests, CommonRawArraySetClearKeepsContainerReusable)
     EXPECT_EQ(set.size(), 1);
     EXPECT_TRUE(set.contains(value));
     EXPECT_EQ(set.find(value), 0);
+}
+
+TEST(YggdrasilTests, CommonRawArraySetEraseRepairsMovedRowLookup)
+{
+    auto set = RawArraySet<int, 1>(2);
+    const auto first = std::array { 1, 11 };
+    const auto second = std::array { 2, 12 };
+    const auto third = std::array { 3, 13 };
+    set.insert(first);
+    set.insert(second);
+    set.insert(third);
+    EXPECT_THROW(set.erase(3), std::out_of_range);
+    EXPECT_EQ(set.size(), 3);
+
+    set.erase(0);
+    EXPECT_EQ(set.size(), 2);
+    EXPECT_FALSE(set.contains(first));
+    EXPECT_EQ(set.find(third), 0);
+    EXPECT_EQ(set.find(second), 1);
+    EXPECT_EQ(set.insert(third), 0);
+    EXPECT_TRUE(std::ranges::equal(set[0], third));
+    set.erase(1);
+    EXPECT_FALSE(set.contains(second));
+    EXPECT_EQ(set.find(third), 0);
+    set.erase(0);
+    EXPECT_TRUE(set.empty());
+    EXPECT_FALSE(set.contains(third));
+    EXPECT_THROW(set.erase(0), std::out_of_range);
+    EXPECT_EQ(set.insert(first), 0);
+
+    auto moved = std::move(set);
+    moved.erase(0);
+    EXPECT_EQ(moved.insert(third), 0);
+    EXPECT_EQ(moved.find(third), 0);
+}
+
+TEST(YggdrasilTests, CommonRawArraySetEraseReusesStorageDuringChurn)
+{
+    for (const auto erase_last : { false, true })
+    {
+        auto set = RawArraySet<int, 1>(2);
+        for (int value = 0; value < 32; ++value)
+            set.insert(std::array { value, value + 1 });
+        set.erase(erase_last ? 31 : 0);
+        set.insert(std::array { 32, 33 });
+        const auto retained = set.memory_usage();
+
+        for (int value = 33; value < 2081; ++value)
+        {
+            const auto index = static_cast<uint_t>(erase_last ? 31 : value % 32);
+            const auto removed = std::array { set[index][0], set[index][1] };
+            const auto moved = std::array { set[31][0], set[31][1] };
+            set.erase(index);
+            EXPECT_FALSE(set.contains(removed));
+            if (index != 31)
+                EXPECT_EQ(set.find(moved), index);
+            const auto inserted = std::array { value, value + 1 };
+            EXPECT_EQ(set.insert(inserted), 31);
+            EXPECT_EQ(set.find(inserted), 31);
+            EXPECT_EQ(set.size(), 32);
+        }
+        EXPECT_EQ(set.memory_usage(), retained);
+    }
+}
+
+TEST(YggdrasilTests, CommonRawArraySetErasesZeroLengthRow)
+{
+    auto set = RawArraySet<int, 1>(0);
+    const auto empty = std::array<int, 0> {};
+    set.insert(empty);
+    set.erase(0);
+    EXPECT_TRUE(set.empty());
+    EXPECT_FALSE(set.contains(empty));
+    EXPECT_EQ(set.insert(empty), 0);
+    EXPECT_EQ(set.find(empty), 0);
 }
 
 TEST(YggdrasilTests, CommonRawArraySetInsertHashesEachElementOnce)

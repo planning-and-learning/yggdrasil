@@ -147,6 +147,22 @@ public:
         return (*this)[size() - 1];
     }
 
+    /// Move the last row into index and remove the last slot, retaining storage.
+    /// Invalidates the erased and moved rows' indices and borrowed spans.
+    void erase(uint_t index)
+        requires(!ThreadSafe)
+    {
+        ensure_index(index);
+        const auto last = size() - 1;
+        if (m_array_size_bytes > 0)
+        {
+            if (index != last)
+                std::memcpy(m_storage.data_at(index), m_storage.data_at(last), m_array_size_bytes);
+            m_storage.pop_back(m_array_size_bytes);
+        }
+        detail::store_size<ThreadSafe>(m_size, last);
+    }
+
     void clear() noexcept
     {
         m_storage.clear();
