@@ -78,9 +78,36 @@ const ygg::Data<CanonicalizationTestTag>& CanonicalizationContext::operator[](yg
     return data->at(index.get_value());
 }
 
+struct InvalidCanonicalizationContext
+{
+};
+int get_canonical_context(const ygg::Index<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&);
+int get_canonical_context(const ygg::Data<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&);
+
 namespace
 {
 using Tag = CanonicalizationTestTag;
+
+template<typename C, typename List>
+concept CanCheckCanonicalization = requires(const C& context, const List& list) {
+    ygg::is_canonical(context, list);
+    ygg::is_canonical<false>(context, list);
+};
+
+template<typename C, typename List>
+concept CanCanonicalize = requires(const C& context, List& list) {
+    ygg::canonicalize(context, list);
+    ygg::canonicalize<false>(context, list);
+};
+
+static_assert(CanCheckCanonicalization<CanonicalizationContext, ygg::IndexList<Tag>>);
+static_assert(CanCheckCanonicalization<CanonicalizationContext, ygg::DataList<Tag>>);
+static_assert(CanCanonicalize<CanonicalizationContext, ygg::IndexList<Tag>>);
+static_assert(CanCanonicalize<CanonicalizationContext, ygg::DataList<Tag>>);
+static_assert(!CanCheckCanonicalization<InvalidCanonicalizationContext, ygg::IndexList<Tag>>);
+static_assert(!CanCheckCanonicalization<InvalidCanonicalizationContext, ygg::DataList<Tag>>);
+static_assert(!CanCanonicalize<InvalidCanonicalizationContext, ygg::IndexList<Tag>>);
+static_assert(!CanCanonicalize<InvalidCanonicalizationContext, ygg::DataList<Tag>>);
 }
 
 TEST(YggdrasilTests, CommonCanonicalizeIndexListSortsAndDeduplicates)

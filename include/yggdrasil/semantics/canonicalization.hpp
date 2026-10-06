@@ -43,7 +43,6 @@ std::string fmt_key(const C& context, const Element& element)
 }
 
 template<bool Deduplicate, typename C, typename List>
-    requires ViewConcept<typename List::value_type, C>
 bool is_canonical(const C& context, const List& list)
 {
     if (list.size() < 2)
@@ -66,7 +65,6 @@ bool is_canonical(const C& context, const List& list)
 }
 
 template<bool Deduplicate, typename C, typename List>
-    requires ViewConcept<typename List::value_type, C>
 void canonicalize(const C& context, List& list)
 {
     using Element = typename List::value_type;
@@ -147,29 +145,32 @@ void canonicalize(::cista::optional<T>&)
 }
 
 template<bool Deduplicate = true, typename C, typename T>
+    requires ViewConcept<Index<T>, C>
 bool is_canonical(const C& context, const IndexList<T>& list)
 {
     return detail::is_canonical<Deduplicate>(context, list);
 }
 
 template<bool Deduplicate = true, typename C, typename T>
+    requires ViewConcept<Data<T>, C>
 bool is_canonical(const C& context, const DataList<T>& list)
 {
     return detail::is_canonical<Deduplicate>(context, list);
 }
 
 template<bool Deduplicate = true, typename C, typename T>
+    requires ViewConcept<Index<T>, C>
 void canonicalize(const C& context, IndexList<T>& list)
 {
     detail::canonicalize<Deduplicate>(context, list);
 }
 
 template<bool Deduplicate = true, typename C, typename T>
+    requires ViewConcept<Data<T>, C>
 void canonicalize(const C& context, DataList<T>& list)
 {
     detail::canonicalize<Deduplicate>(context, list);
 }
-
 }
 
 #endif

@@ -200,8 +200,7 @@ public:
     auto get_key() const noexcept { return std::make_pair(m_handle->relation, objects()); }
 };
 
-template<typename RelationTag, typename ObjectTag, std::ranges::forward_range BindingRange, typename C>
-    requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
+template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
 class View<ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>, C>
 {
 public:
@@ -211,10 +210,10 @@ public:
 
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
-    bool empty() const noexcept { return std::ranges::begin(get_data().rows) == std::ranges::end(get_data().rows); }
+    bool empty() const { return std::ranges::begin(get_data().rows) == std::ranges::end(get_data().rows); }
 
-    size_t size() const noexcept
-        requires std::ranges::sized_range<BindingRange>
+    size_t size() const
+        requires std::ranges::sized_range<const std::remove_reference_t<BindingRange>>
     {
         return std::ranges::size(get_data().rows);
     }
@@ -226,11 +225,12 @@ public:
         return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
-    using const_iterator = formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const BindingRange>, C>;
+    using const_iterator =
+        formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;
 
-    const_iterator begin() const noexcept { return const_iterator { get_data().relation, std::ranges::begin(get_data().rows), get_context() }; }
+    const_iterator begin() const { return const_iterator { get_data().relation, std::ranges::begin(get_data().rows), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { get_data().relation, std::ranges::end(get_data().rows), get_context() }; }
+    const_iterator end() const { return const_iterator { get_data().relation, std::ranges::end(get_data().rows), get_context() }; }
 
     const auto& get_data() const noexcept { return m_handle; }
     const auto& get_context() const noexcept { return *m_context; }
@@ -247,9 +247,7 @@ private:
     Container m_handle;
 };
 
-template<typename RelationTag, typename ObjectTag, std::ranges::random_access_range BindingRange, typename C>
-    requires std::ranges::sized_range<BindingRange>
-             && std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
+template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
 class View<ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>, C>
 {
 public:
@@ -259,9 +257,9 @@ public:
 
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
-    bool empty() const noexcept { return std::ranges::begin(get_data().rows) == std::ranges::end(get_data().rows); }
+    bool empty() const { return std::ranges::begin(get_data().rows) == std::ranges::end(get_data().rows); }
 
-    size_t size() const noexcept { return std::ranges::size(get_data().rows); }
+    size_t size() const { return std::ranges::size(get_data().rows); }
 
     decltype(auto) front() const
     {
@@ -277,17 +275,18 @@ public:
         return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
-    decltype(auto) operator[](size_t i) const noexcept
+    decltype(auto) operator[](size_t i) const
     {
         auto it = std::ranges::begin(get_data().rows) + static_cast<std::ptrdiff_t>(i);
         return ygg::make_view(T { get_data().relation, *it }, get_context());
     }
 
-    using const_iterator = formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const BindingRange>, C>;
+    using const_iterator =
+        formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;
 
-    const_iterator begin() const noexcept { return const_iterator { get_data().relation, std::ranges::begin(get_data().rows), get_context() }; }
+    const_iterator begin() const { return const_iterator { get_data().relation, std::ranges::begin(get_data().rows), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { get_data().relation, std::ranges::end(get_data().rows), get_context() }; }
+    const_iterator end() const { return const_iterator { get_data().relation, std::ranges::end(get_data().rows), get_context() }; }
 
     const auto& get_data() const noexcept { return m_handle; }
     const auto& get_context() const noexcept { return *m_context; }

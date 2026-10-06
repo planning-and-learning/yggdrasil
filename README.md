@@ -127,6 +127,21 @@ debugging with:
 YGGDRASIL_STRIP_WHEEL=OFF uv build --wheel
 ```
 
+## C++ contracts
+
+Use `CanonicalizableContext<Context, Handle>`; it replaces the former
+handle-first ordering and the `CanonicalizableContextFor` wrapper.
+`extend` and range `set` require iteration through a const range and append
+its elements through const references.
+
+`RelationBindingsForwardRange` and `RelationBindingsRandomAccessRange` require
+const iteration with the corresponding traversal capability, matching iterator
+and sentinel types, and typed row indices. They borrow the source rows, which
+must outlive the wrapper and its views. Reference-qualified range parameters
+also provide const access. Generic binding-range view accessors propagate
+exceptions from the underlying range and canonical-owner lookup; they are no
+longer unconditionally `noexcept`.
+
 ## Build C++
 
 ### Native Dependencies

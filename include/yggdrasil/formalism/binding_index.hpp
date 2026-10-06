@@ -18,6 +18,7 @@
 #ifndef YGG_FORMALISM_BINDING_INDEX_HPP_
 #define YGG_FORMALISM_BINDING_INDEX_HPP_
 
+#include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/ids/index_mixins.hpp"
@@ -50,20 +51,23 @@ struct Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 namespace ygg::formalism
 {
 
-template<typename RelationTag, typename ObjectTag, std::ranges::forward_range BindingRange>
-    requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
+template<typename RelationTag, typename ObjectTag, typename BindingRange>
+    requires std::ranges::forward_range<const std::remove_reference_t<BindingRange>> && std::ranges::common_range<const std::remove_reference_t<BindingRange>>
+             && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 struct RelationBindingsForwardRange
 {
     const Index<RelationTag>& relation;
-    const BindingRange& rows;
+    const std::remove_reference_t<BindingRange>& rows;
 };
 
-template<typename RelationTag, typename ObjectTag, std::ranges::random_access_range BindingRange>
-    requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
+template<typename RelationTag, typename ObjectTag, typename BindingRange>
+    requires std::ranges::random_access_range<const std::remove_reference_t<BindingRange>>
+             && std::ranges::common_range<const std::remove_reference_t<BindingRange>>
+             && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 struct RelationBindingsRandomAccessRange
 {
     const Index<RelationTag>& relation;
-    const BindingRange& rows;
+    const std::remove_reference_t<BindingRange>& rows;
 };
 }  // namespace ygg::formalism
 

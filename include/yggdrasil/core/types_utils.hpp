@@ -96,8 +96,9 @@ void append(View<Data<T>, C> view, DataList<T>& ref_list)
     ref_list.push_back(view.get_data());
 }
 
-template<std::ranges::input_range Range, typename List>
-    requires requires(std::ranges::range_reference_t<Range> view, List& ref_list) { append(view, ref_list); }
+template<typename Range, typename List>
+    requires std::ranges::input_range<const Range>
+             && requires(std::ranges::range_reference_t<const Range> view, List& ref_list) { append(std::as_const(view), ref_list); }
 void extend(const Range& views, List& ref_list)
 {
     for (const auto& view : views)
@@ -142,7 +143,7 @@ void set(const std::optional<View<Data<T>, C>>& view, ::cista::optional<Data<T>>
     }
 }
 
-template<std::ranges::input_range Range, typename List>
+template<typename Range, typename List>
     requires requires(const Range& views, List& out_list) {
         out_list.clear();
         extend(views, out_list);
@@ -150,7 +151,7 @@ template<std::ranges::input_range Range, typename List>
 void set(const Range& views, List& out_list)
 {
     out_list.clear();
-    if constexpr (std::ranges::sized_range<Range> && requires(List& list, const Range& range) { list.reserve(std::ranges::size(range)); })
+    if constexpr (requires(List& list, const Range& range) { list.reserve(std::ranges::size(range)); })
     {
         out_list.reserve(std::ranges::size(views));
     }

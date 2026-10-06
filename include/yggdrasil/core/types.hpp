@@ -89,13 +89,10 @@ public:
 };
 
 /// Whether a context exposes a canonical owner for a handle.
-template<typename T, typename C>
+template<typename C, typename T>
 concept CanonicalizableContext = requires(const C& context, const T& handle) {
     { context.get_canonical_context(handle) } -> std::same_as<const C&>;
 };
-
-template<typename C, typename T>
-concept CanonicalizableContextFor = CanonicalizableContext<T, C>;
 
 /// Domain overloads may select the owner of an embedded handle.
 template<typename T, typename C>
@@ -104,7 +101,7 @@ const C& get_canonical_context(const T&, const C& context) noexcept
     return context;
 }
 
-template<typename T, CanonicalizableContextFor<T> C>
+template<typename T, CanonicalizableContext<T> C>
 const C& get_canonical_context(const T& handle, const C& context) noexcept(noexcept(context.get_canonical_context(handle)))
 {
     return context.get_canonical_context(handle);

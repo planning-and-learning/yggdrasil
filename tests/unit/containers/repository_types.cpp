@@ -197,8 +197,7 @@ inline const RepositoryTypesRepository& get_repository(const RepositoryTypesCont
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles)
 {
-    static_assert(CanonicalizableContext<RepositoryTypesElement, RepositoryTypesContext>);
-    static_assert(CanonicalizableContextFor<RepositoryTypesContext, RepositoryTypesElement>);
+    static_assert(CanonicalizableContext<RepositoryTypesContext, RepositoryTypesElement>);
 
     SUCCEED();
 }
@@ -868,7 +867,7 @@ TEST(YggdrasilTests, CommonSymbolRepositoryTracksParentAndLocalSize)
 TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
 {
     using Repository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
-    static_assert(ygg::CanonicalizableContext<ygg::Index<RepositoryTypesElement>, Repository>);
+    static_assert(ygg::CanonicalizableContext<Repository, ygg::Index<RepositoryTypesElement>>);
     static_assert(ygg::ViewConcept<ygg::Index<RepositoryTypesElement>, Repository>);
 
     auto root = Repository();
@@ -966,7 +965,7 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
     using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
     using Repository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
-    static_assert(ygg::CanonicalizableContext<ygg::Index<Binding>, Repository>);
+    static_assert(ygg::CanonicalizableContext<Repository, ygg::Index<Binding>>);
     static_assert(ygg::ViewConcept<ygg::Index<Binding>, Repository>);
 
     auto root = Repository(0);
@@ -1187,6 +1186,99 @@ TEST(YggdrasilTests, CommonRelationRepositoryValidatesObjectIndexWidth)
     }
 }
 
+template<typename Range>
+concept CanMakeForwardBindingRange = requires { typename formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, Range>; };
+
+template<typename Range>
+concept CanMakeRandomAccessBindingRange =
+    requires { typename formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, Range>; };
+
+struct MutableOnlyBindingRows
+{
+    Index<formalism::Row>* begin();
+    Index<formalism::Row>* end();
+};
+
+using NonCommonBindingRows = std::ranges::subrange<std::counted_iterator<const Index<formalism::Row>*>, std::default_sentinel_t>;
+static_assert(std::ranges::random_access_range<MutableOnlyBindingRows>);
+static_assert(std::ranges::random_access_range<const NonCommonBindingRows>);
+static_assert(!CanMakeForwardBindingRange<MutableOnlyBindingRows>);
+static_assert(!CanMakeForwardBindingRange<MutableOnlyBindingRows&>);
+static_assert(!CanMakeRandomAccessBindingRange<MutableOnlyBindingRows>);
+static_assert(!CanMakeForwardBindingRange<NonCommonBindingRows>);
+static_assert(!CanMakeRandomAccessBindingRange<NonCommonBindingRows>);
+static_assert(!CanMakeForwardBindingRange<std::vector<int>>);
+static_assert(!CanMakeRandomAccessBindingRange<std::vector<int>>);
+static_assert(CanMakeForwardBindingRange<std::forward_list<Index<formalism::Row>>>);
+static_assert(!CanMakeRandomAccessBindingRange<std::forward_list<Index<formalism::Row>>>);
+static_assert(CanMakeForwardBindingRange<std::vector<Index<formalism::Row>>&>);
+static_assert(CanMakeRandomAccessBindingRange<const std::vector<Index<formalism::Row>>&>);
+
+struct ThrowingBindingRows
+{
+    enum class Failure
+    {
+        NONE,
+        BEGIN,
+        END,
+        SIZE
+    };
+    Failure failure = Failure::NONE;
+    std::array<Index<formalism::Row>, 1> rows { Index<formalism::Row>(2) };
+
+    const Index<formalism::Row>* begin() const
+    {
+        if (failure == Failure::BEGIN)
+            throw std::runtime_error("begin");
+        return rows.data();
+    }
+    const Index<formalism::Row>* end() const
+    {
+        if (failure == Failure::END)
+            throw std::runtime_error("end");
+        return rows.data() + rows.size();
+    }
+    size_t size() const
+    {
+        if (failure == Failure::SIZE)
+            throw std::runtime_error("size");
+        return rows.size();
+    }
+};
+
+TEST(YggdrasilTests, CommonRelationBindingRangeViewsPropagateRangeExceptions)
+{
+    auto rows = ThrowingBindingRows {};
+    const auto relation = Index<RepositoryTypesRelation>(4);
+    const auto context = RepositoryTypesContext {};
+    const auto check = [&](auto view)
+    {
+        static_assert(!noexcept(view.begin()));
+        static_assert(!noexcept(view.end()));
+        static_assert(!noexcept(view.empty()));
+        static_assert(!noexcept(view.size()));
+        rows.failure = ThrowingBindingRows::Failure::BEGIN;
+        EXPECT_THROW((void) view.begin(), std::runtime_error);
+        EXPECT_THROW((void) view.empty(), std::runtime_error);
+        if constexpr (requires { view[0]; })
+        {
+            static_assert(!noexcept(view[0]));
+            EXPECT_THROW((void) view[0], std::runtime_error);
+        }
+        rows.failure = ThrowingBindingRows::Failure::END;
+        EXPECT_THROW((void) view.end(), std::runtime_error);
+        rows.failure = ThrowingBindingRows::Failure::SIZE;
+        EXPECT_THROW((void) view.size(), std::runtime_error);
+        rows.failure = ThrowingBindingRows::Failure::NONE;
+        EXPECT_FALSE(view.empty());
+        EXPECT_EQ(view.front().get_index().row, rows.rows.front());
+    };
+    check(
+        make_view(formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, ThrowingBindingRows> { relation, rows }, context));
+    check(make_view(formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, ThrowingBindingRows> { relation, rows },
+                    context));
+}
+
 TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
 {
     using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
@@ -1251,6 +1343,10 @@ TEST(YggdrasilTests, CommonRelationBindingIteratorsPreserveUnderlyingTraversal)
     using Bidirectional = formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, BidirectionalRows>;
     using RandomAccess = formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, RandomAccessRows>;
     using ExplicitRandomAccess = formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, RandomAccessRows>;
+    using BorrowedForward = formalism::RelationBindingsForwardRange<RepositoryTypesRelation, RepositoryTypesObjectTag, RandomAccessRows&>;
+    using BorrowedRandomAccess = formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, RandomAccessRows&>;
+    static_assert(std::same_as<decltype(std::declval<BorrowedForward>().rows), const RandomAccessRows&>);
+    static_assert(std::same_as<decltype(std::declval<BorrowedRandomAccess>().rows), const RandomAccessRows&>);
     using ForwardView = View<Forward, RepositoryTypesContext>;
     using BidirectionalView = View<Bidirectional, RepositoryTypesContext>;
     using RandomAccessView = View<RandomAccess, RepositoryTypesContext>;
@@ -1322,6 +1418,8 @@ TEST(YggdrasilTests, CommonRelationBindingIteratorsPreserveUnderlyingTraversal)
     check(BidirectionalView(Bidirectional { relation, bidirectional_rows }, context));
     check(RandomAccessView(RandomAccess { relation, random_access_rows }, context));
     check(ExplicitRandomAccessView(ExplicitRandomAccess { relation, random_access_rows }, context));
+    check(make_view(BorrowedForward { relation, random_access_rows }, context));
+    check(make_view(BorrowedRandomAccess { relation, random_access_rows }, context));
 
     const auto check_empty = [](auto view)
     {
@@ -1380,6 +1478,11 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
     EXPECT_THROW(repository.front(relation), std::out_of_range);
     EXPECT_THROW(repository.get_canonical_context(missing), std::out_of_range);
     EXPECT_THROW(ygg::make_view(missing, repository), std::out_of_range);
+    const auto rows = std::array { ygg::Index<ygg::formalism::Row>(0) };
+    const auto bindings =
+        ygg::make_view(formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, decltype(rows)> { relation, rows },
+                       repository);
+    EXPECT_THROW((void) bindings[0], std::out_of_range);
 
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));

@@ -26,6 +26,8 @@
 #include <concepts>
 #include <gtest/gtest.h>
 #include <limits>
+#include <ranges>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
@@ -122,6 +124,24 @@ struct CoreTypeUtilsContext
 
     const ygg::Data<CoreTypeUtilsTag>& operator[](ygg::Index<CoreTypeUtilsTag> index) const { return data.at(index.get_value()); }
 };
+
+template<typename Range, typename List>
+concept CanExtendCoreRange = requires(const Range& range, List& list) { ygg::extend(range, list); };
+
+template<typename Range, typename List>
+concept CanSetCoreRange = requires(const Range& range, List& list) { ygg::set(range, list); };
+
+struct MutableAppendValue
+{
+};
+struct MutableAppendList
+{
+    void clear();
+};
+void append(MutableAppendValue&, MutableAppendList&);
+
+static_assert(!CanExtendCoreRange<std::span<MutableAppendValue>, MutableAppendList>);
+static_assert(!CanSetCoreRange<std::span<MutableAppendValue>, MutableAppendList>);
 
 template<typename T>
 using CoreAddConst = const T;
@@ -244,6 +264,10 @@ TEST(YggdrasilTests, CommonCoreTypeUtilsExtendsAnyInputRange)
     const auto first = ygg::View<ygg::Index<CoreTypeUtilsTag>, CoreTypeUtilsContext>(ygg::Index<CoreTypeUtilsTag>(0), context);
     const auto second = ygg::View<ygg::Index<CoreTypeUtilsTag>, CoreTypeUtilsContext>(ygg::Index<CoreTypeUtilsTag>(1), context);
     const auto views = std::array { first, second };
+    const auto mutable_only = views | std::views::filter([](const auto&) { return true; });
+    static_assert(std::ranges::input_range<std::remove_const_t<decltype(mutable_only)>>);
+    static_assert(!CanExtendCoreRange<decltype(mutable_only), IndexList<CoreTypeUtilsTag>>);
+    static_assert(!CanSetCoreRange<decltype(mutable_only), IndexList<CoreTypeUtilsTag>>);
 
     auto indices = ygg::IndexList<CoreTypeUtilsTag> {};
     ygg::extend(views, indices);
@@ -254,6 +278,15 @@ TEST(YggdrasilTests, CommonCoreTypeUtilsExtendsAnyInputRange)
 
     indices.push_back(ygg::Index<CoreTypeUtilsTag>(0));
     ygg::set(views, indices);
+
+    ASSERT_EQ(indices.size(), 2);
+    EXPECT_EQ(indices[0], ygg::Index<CoreTypeUtilsTag>(0));
+    EXPECT_EQ(indices[1], ygg::Index<CoreTypeUtilsTag>(1));
+
+    const auto values = views | std::views::transform([](auto view) { return view; });
+    static_assert(!std::is_reference_v<std::ranges::range_reference_t<decltype(values)>>);
+    static_assert(CanExtendCoreRange<decltype(values), IndexList<CoreTypeUtilsTag>>);
+    ygg::set(values, indices);
 
     ASSERT_EQ(indices.size(), 2);
     EXPECT_EQ(indices[0], ygg::Index<CoreTypeUtilsTag>(0));
