@@ -17,7 +17,6 @@
 #include <memory>
 #include <optional>
 #include <ranges>
-#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -151,14 +150,7 @@ public:
             if (EqualTo<Value> {}(*entry.value, value))
             {
                 if (position == head->second && entry.next == npos)
-                {
-                    // Acquire deletion headroom before mutation so GTL can clean
-                    // tombstones in place during subsequent bounded-size churn.
-                    if (m_heads.size() > std::numeric_limits<size_t>::max() / 2)
-                        throw std::length_error("UnorderedMultiMap: erase headroom exceeds addressable memory.");
-                    m_heads.reserve(m_heads.size() * 2);
-                    m_heads.erase(key);
-                }
+                    m_heads.erase(head);
                 else
                     *link = entry.next;
                 entry.value.reset();
@@ -211,8 +203,11 @@ public:
         // GTL reserve(0) would release an empty hash table's retained storage.
         if (count != 0)
             m_heads.reserve(count);
-        m_entries.reserve(count);
+        reserve_values(count);
     }
+
+    /// Reserve value slots without estimating the number of distinct keys.
+    void reserve_values(size_t count) { m_entries.reserve(count); }
 
     /// Retained entries and hash slots; excludes the container's fixed storage.
     size_t memory_usage() const noexcept

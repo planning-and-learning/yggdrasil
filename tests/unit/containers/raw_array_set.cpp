@@ -206,6 +206,17 @@ TEST(YggdrasilTests, CommonRawArraySetEraseRepairsMovedRowLookup)
     EXPECT_EQ(moved.find(third), 0);
 }
 
+TEST(YggdrasilTests, CommonRawArraySetErasingLastRowDoesNotGrowStorage)
+{
+    auto set = RawArraySet<int>(1);
+    for (int value = 0; value < 1024; ++value)
+        set.insert(std::array { value });
+    const auto retained = set.memory_usage();
+    while (!set.empty())
+        set.erase(static_cast<uint_t>(set.size() - 1));
+    EXPECT_EQ(set.memory_usage(), retained);
+}
+
 TEST(YggdrasilTests, CommonRawArraySetEraseReusesStorageDuringChurn)
 {
     for (const auto erase_last : { false, true })

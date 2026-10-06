@@ -74,7 +74,7 @@ template<RelationViewConcept<T> V>
 void JoinEvaluator<T>::insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
 {
     if (!keys.empty())
-        index.reserve(rows.size() + input.size());
+        index.reserve_values(rows.size() + input.size());
     for (size_t i = 0; i < input.size(); ++i)
     {
         const auto row = input.row(i);

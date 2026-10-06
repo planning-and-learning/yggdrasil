@@ -32,7 +32,8 @@ private:
     Index<database::Relation<T>> m_index;
     size_t m_storage_index = std::numeric_limits<size_t>::max();
     Builder<database::Columns> m_columns;
-    RawArraySet<T> m_rows;
+    // Intermediates often contain few rows; geometric growth retains larger workloads.
+    RawArraySet<T, 64> m_rows;
 
 public:
     using ElementType = T;
@@ -56,7 +57,7 @@ public:
     size_t size() const noexcept { return m_rows.size(); }
     bool empty() const noexcept { return m_rows.empty(); }
     size_t memory_usage() const noexcept { return m_columns.memory_usage() + m_rows.memory_usage(); }
-    const RawArraySet<T>& storage() const noexcept { return m_rows; }
+    const RawArraySet<T, 64>& storage() const noexcept { return m_rows; }
     const void* get_storage_address() const noexcept { return &m_rows; }
     size_t column_index(Index<database::Column> column) const { return m_columns.column_index(column); }
 

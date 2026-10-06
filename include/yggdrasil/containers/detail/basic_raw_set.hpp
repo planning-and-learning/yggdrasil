@@ -117,11 +117,6 @@ protected:
     {
         if (index >= size())
             throw std::out_of_range("BasicRawSet: index out of range.");
-        // Acquire headroom before mutation. GTL can then clean tombstones in place
-        // for moved keys and subsequent insertions, although cleanup may scan the table.
-        if (size() > std::numeric_limits<size_t>::max() / 2)
-            throw std::length_error("BasicRawSet: erase headroom exceeds addressable memory.");
-        m_set.reserve(size() * 2);
         const auto last = static_cast<index_type>(size() - 1);
         if (index == last)
         {
@@ -129,6 +124,12 @@ protected:
             m_pool->erase(index);
             return;
         }
+
+        // Acquire headroom before mutation. GTL can then clean tombstones in place
+        // for moved keys and subsequent insertions, although cleanup may scan the table.
+        if (size() > std::numeric_limits<size_t>::max() / 2)
+            throw std::length_error("BasicRawSet: erase headroom exceeds addressable memory.");
+        m_set.reserve(size() * 2);
 
         m_set.erase(index);
         auto moved = m_set.extract(last);

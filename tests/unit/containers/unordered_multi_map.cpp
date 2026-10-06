@@ -245,6 +245,40 @@ TEST(YggdrasilTests, UnorderedMultiMapErasesHeadMiddleTailAndReusesSlotsAcrossKe
     EXPECT_EQ(map.size(), 2);
 }
 
+TEST(YggdrasilTests, UnorderedMultiMapReservesValuesIndependentlyOfKeys)
+{
+    UnorderedMultiMap<int, int> map;
+    UnorderedMultiMap<int, int> distinct;
+    map.reserve_values(1024);
+    distinct.reserve(1024);
+    for (int value = 0; value < 1024; ++value)
+        map.insert(1, value);
+    EXPECT_EQ(map.size(), 1024);
+    EXPECT_EQ(std::ranges::distance(map.values(1)), 1024);
+    EXPECT_LT(map.memory_usage(), distinct.memory_usage());
+    const auto retained = map.memory_usage();
+    map.reserve_values(0);
+    map.reserve_values(1);
+    EXPECT_EQ(map.memory_usage(), retained);
+    map.clear();
+    for (int value = 0; value < 1024; ++value)
+        map.insert(2, value);
+    EXPECT_EQ(map.memory_usage(), retained);
+}
+
+TEST(YggdrasilTests, UnorderedMultiMapErasureDoesNotGrowStorage)
+{
+    UnorderedMultiMap<int, int> map;
+    map.reserve(1024);
+    for (int value = 0; value < 1024; ++value)
+        map.insert(value, value);
+    const auto retained = map.memory_usage();
+    for (int value = 0; value < 1024; ++value)
+        ASSERT_TRUE(map.erase(value, value));
+    EXPECT_TRUE(map.empty());
+    EXPECT_EQ(map.memory_usage(), retained);
+}
+
 TEST(YggdrasilTests, UnorderedMultiMapReusesSlotsAcrossNovelKeys)
 {
     auto map = UnorderedMultiMap<int, int>();
