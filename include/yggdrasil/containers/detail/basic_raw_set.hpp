@@ -131,11 +131,12 @@ protected:
             throw std::length_error("BasicRawSet: erase headroom exceeds addressable memory.");
         m_set.reserve(size() * 2);
 
+        const auto moved_hash = m_set.hash(last);
         m_set.erase(index);
-        auto moved = m_set.extract(last);
+        auto moved = m_set.extract(m_set.find(last, moved_hash));
         m_pool->erase(index);
         moved.value() = index;
-        const auto result = m_set.insert(std::move(moved));
+        const auto result = m_set.insert(std::move(moved), moved_hash);
         assert(result.inserted);
     }
 

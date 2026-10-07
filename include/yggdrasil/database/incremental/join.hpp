@@ -32,17 +32,17 @@ class JoinEvaluator
     JoinPlan m_plan;
     Builder<Relation<T>> m_lhs;
     Builder<Relation<T>> m_rhs;
-    UnorderedMultiMap<hash_t, size_t> m_lhs_index;
-    UnorderedMultiMap<hash_t, size_t> m_rhs_index;
+    UnorderedMultiMap<hash_t, uint_t> m_lhs_index;
+    UnorderedMultiMap<hash_t, uint_t> m_rhs_index;
     Builder<Relation<T>> m_result;
     Delta<T> m_delta;
     bool m_initialized = false;
 
     template<RelationViewConcept<T> V>
-    static void insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index);
+    static void insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index);
 
     template<RelationViewConcept<T> V>
-    static void erase_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index);
+    static void erase_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index);
 
     template<RelationViewConcept<T> L, RelationViewConcept<T> R>
     void join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<T>>& output, Workspace<T>& workspace) const;
@@ -71,7 +71,7 @@ public:
 
 template<TriviallyCopyable T>
 template<RelationViewConcept<T> V>
-void JoinEvaluator<T>::insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
+void JoinEvaluator<T>::insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index)
 {
     if (!keys.empty())
         index.reserve_values(rows.size() + input.size());
@@ -89,26 +89,26 @@ void JoinEvaluator<T>::insert_rows(const V& input, Builder<Relation<T>>& rows, s
 
 template<TriviallyCopyable T>
 template<RelationViewConcept<T> V>
-void JoinEvaluator<T>::erase_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
+void JoinEvaluator<T>::erase_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index)
 {
     for (size_t i = 0; i < input.size(); ++i)
     {
         const auto position = rows.find(input.row(i));
         if (!position)
             throw std::invalid_argument("Incremental join: removed row is absent from the input.");
-        const auto last = rows.size() - 1;
+        const auto last = ygg::to_uint_t(rows.size() - 1);
         if (keys.empty())
         {
             rows.erase(*position);
             continue;
         }
         const auto removed_key = ygg::hash_range(database::detail::join_key_values(rows.row(*position), keys));
-        const auto moved_key = ygg::hash_range(database::detail::join_key_values(rows.row(last), keys));
         rows.erase(*position);
         [[maybe_unused]] const auto erased = index.erase(removed_key, *position);
         assert(erased);
         if (*position != last)
         {
+            const auto moved_key = ygg::hash_range(database::detail::join_key_values(rows.row(*position), keys));
             [[maybe_unused]] const auto replaced = index.replace(moved_key, last, *position);
             assert(replaced);
         }

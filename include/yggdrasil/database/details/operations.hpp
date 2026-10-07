@@ -201,7 +201,7 @@ namespace detail
 /// input for a key hash; actual key equality resolves hash collisions.
 template<TriviallyCopyable T, RelationViewConcept<T> L, RelationViewConcept<T> R, typename Lookup>
     requires requires(const Lookup& index, hash_t key) {
-        { index.values(key) } -> InputRangeOf<size_t>;
+        { index.values(key) } -> std::ranges::input_range;
     }
 void join_rows(const L& lhs,
                const R& rhs,

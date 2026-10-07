@@ -272,6 +272,22 @@ TEST(YggdrasilTests, CommonRawArraySetInsertHashesEachElementOnce)
     EXPECT_EQ(RawArraySetCountingElement::hash_calls, value.size());
 }
 
+TEST(YggdrasilTests, CommonRawArraySetEraseHashesMovedRowOnce)
+{
+    auto set = RawArraySet<RawArraySetCountingElement, 2>(2);
+    for (int i = 0; i < 8; ++i)
+        set.insert(std::array { RawArraySetCountingElement { i }, RawArraySetCountingElement { i + 8 } });
+
+    // The first compact erase acquires hash-table headroom; measure the warmed path.
+    set.erase(0);
+    set.insert(std::array { RawArraySetCountingElement { 16 }, RawArraySetCountingElement { 17 } });
+    RawArraySetCountingElement::hash_calls = 0;
+    set.erase(0);
+    EXPECT_EQ(RawArraySetCountingElement::hash_calls, 4);  // Removed and moved rows, once each.
+    const auto moved = std::array { RawArraySetCountingElement { 16 }, RawArraySetCountingElement { 17 } };
+    EXPECT_EQ(set.find(moved), 0);
+}
+
 TEST(YggdrasilTests, CommonRawArraySetMoveKeepsHashFunctorsBoundToStorage)
 {
     const auto value = std::array<int, 2> { 1, 2 };
