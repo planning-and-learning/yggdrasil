@@ -233,6 +233,10 @@ template<typename Set, typename Element, typename IndexType>
 void expect_concurrent_complete_miss_canonicalizes(Set& set, const Element& element, IndexType expected)
 {
     const auto hash = Set::hash(element);
+    set.clear();
+    set.clear();
+    EXPECT_TRUE(set.empty());
+    EXPECT_FALSE(set.find_with_hash(element, hash));
     auto created = std::atomic_size_t { 0 };
     auto errors = std::atomic_size_t { 0 };
 
@@ -259,6 +263,16 @@ void expect_concurrent_complete_miss_canonicalizes(Set& set, const Element& elem
     EXPECT_EQ(*unsafe_found, expected);
     EXPECT_THROW(set.insert_new_with_hash(hash, element), std::logic_error);
     EXPECT_EQ(set.size(), 1);
+
+    const auto retained = set.memory_usage();
+    set.clear();
+    set.clear();
+    EXPECT_TRUE(set.empty());
+    EXPECT_FALSE(set.find_with_hash(element, hash));
+    const auto [reused, inserted] = set.complete_miss_with_hash(hash, element);
+    EXPECT_TRUE(inserted);
+    EXPECT_EQ(reused, expected);
+    EXPECT_EQ(set.memory_usage(), retained);
 }
 
 TEST(YggdrasilTests, ConcurrentSetCompletesObservedMisses)
@@ -267,6 +281,11 @@ TEST(YggdrasilTests, ConcurrentSetCompletesObservedMisses)
         using Set = IndexedHashSet<ConcurrentElement, Hash<Data<ConcurrentElement>>, EqualTo<Data<ConcurrentElement>>, 32, true>;
         auto set = Set {};
         const auto element = Data<ConcurrentElement> { Index<ConcurrentElement>(0), 7 };
+        EXPECT_THROW(set.complete_miss_with_hash(Set::hash(element),
+                                                 element,
+                                                 [](Index<ConcurrentElement>) -> Data<ConcurrentElement> { throw std::runtime_error("factory failed"); }),
+                     std::runtime_error);
+        EXPECT_TRUE(set.empty());
         expect_concurrent_complete_miss_canonicalizes(set, element, Index<ConcurrentElement>(0));
     }
 
@@ -279,6 +298,12 @@ TEST(YggdrasilTests, ConcurrentSetCompletesObservedMisses)
         auto element = Data<ConcurrentSerializedElement> {};
         element.index = Index<ConcurrentSerializedElement>(0);
         element.values.push_back(Index<ConcurrentElement>(7));
+        EXPECT_THROW(set.complete_miss_with_hash(Set::hash(element),
+                                                 element,
+                                                 [](Index<ConcurrentSerializedElement>) -> Data<ConcurrentSerializedElement>
+                                                 { throw std::runtime_error("factory failed"); }),
+                     std::runtime_error);
+        EXPECT_TRUE(set.empty());
         expect_concurrent_complete_miss_canonicalizes(set, element, Index<ConcurrentSerializedElement>(0));
     }
 
@@ -652,6 +677,8 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     auto invalid = Data<Binding<ObjectTag>>(relation, 4, std::move(invalid_objects));
     EXPECT_THROW(repository.insert(invalid), std::out_of_range);
     EXPECT_EQ(repository.size(relation), 0);
+    repository.clear();
+    repository.clear();
 
     auto valid_objects = IndexList<Object> {};
     for (uint_t value = 0; value < 4; ++value)

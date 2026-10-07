@@ -197,7 +197,8 @@ public:
 
     void clear() noexcept
     {
-        m_set.clear();
+        if (!m_pool->empty())
+            m_set.clear();
         m_pool->clear();
     }
 

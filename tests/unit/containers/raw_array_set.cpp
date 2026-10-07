@@ -313,6 +313,7 @@ void check_decoded_raw_array_ranges()
     EXPECT_THROW(set.find(BlockView(values.data(), 2)), std::invalid_argument);
     EXPECT_EQ(set.size(), 1);
     set.clear();
+    set.clear();
     EXPECT_EQ(set.insert(packed), 0);
     EXPECT_EQ(set.memory_usage(), memory);
 
@@ -353,6 +354,10 @@ void test_raw_array_set_failed_range()
         const auto retained = set.memory_usage();
         reads = 0;
         EXPECT_THROW(set.insert(row), std::runtime_error);
+        EXPECT_EQ(set.memory_usage(), retained);
+        set.clear();
+        set.clear();
+        EXPECT_TRUE(set.empty());
         EXPECT_EQ(set.memory_usage(), retained);
 
         throw_at = std::numeric_limits<size_t>::max();
