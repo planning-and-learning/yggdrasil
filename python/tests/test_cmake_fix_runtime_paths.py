@@ -87,7 +87,18 @@ def test_fix_runtime_paths_sets_origin_rpath(tmp_path: Path) -> None:
     assert rpath == "$ORIGIN/../sibling"
 
 
-def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "install_name",
+    [
+        "absolute",
+        "@rpath/libgtest.dylib",
+        "@loader_path/libgtest.dylib",
+        "@rpath/libgtest.1.18.0.dylib",
+    ],
+)
+def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(
+    tmp_path: Path, install_name: str
+) -> None:
     if sys.platform != "darwin":
         pytest.skip("Mach-O dependency rewriting is only available on macOS")
 
@@ -112,21 +123,25 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(tmp_path: Path) -> 
         encoding="utf-8",
     )
 
-    dependency = lib_dir / "libdependency.dylib"
-    leaked_dependency = tmp_path / "dependencies-install" / "lib" / dependency.name
+    dependency = lib_dir / "libgtest.1.18.0.dylib"
+    dependency_alias = lib_dir / "libgtest.dylib"
+    if install_name == "absolute":
+        install_name = str(tmp_path / "dependencies-install" / "lib" / dependency_alias.name)
+    canonical_install_name = f"@rpath/{dependency.name}"
     consumer = lib_dir / "libconsumer.dylib"
     subprocess.run(
         [
             cxx,
             "-dynamiclib",
             "-Wl,-headerpad_max_install_names",
-            f"-Wl,-install_name,{leaked_dependency}",
+            f"-Wl,-install_name,{install_name}",
             "-o",
             str(dependency),
             str(dependency_source),
         ],
         check=True,
     )
+    dependency_alias.symlink_to(dependency.name)
     subprocess.run(
         [
             cxx,
@@ -135,7 +150,7 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(tmp_path: Path) -> 
             "-o",
             str(consumer),
             str(consumer_source),
-            str(dependency),
+            str(dependency_alias),
         ],
         check=True,
     )
@@ -143,7 +158,7 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(tmp_path: Path) -> 
     before = subprocess.run(
         [otool, "-L", str(consumer)], check=True, capture_output=True, text=True
     ).stdout
-    assert str(leaked_dependency) in before
+    assert install_name in before
     system_dependencies = [
         line.strip().split(" (", 1)[0]
         for line in before.splitlines()
@@ -167,17 +182,29 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(tmp_path: Path) -> 
     )
     subprocess.run([cmake, "-P", str(script)], check=True)
 
-    after = subprocess.run(
-        [otool, "-L", str(consumer)], check=True, capture_output=True, text=True
-    ).stdout
-    assert "@rpath/libdependency.dylib" in after
-    assert str(leaked_dependency) not in after
-    assert all(system_dependency in after for system_dependency in system_dependencies)
+    assert dependency_alias.is_symlink()
+    # Wheel archives turn the symlink into a separate copy of the same library.
+    wheel_lib_dir = shutil.copytree(lib_dir, tmp_path / "wheel-lib", symlinks=False)
+    assert not (wheel_lib_dir / dependency_alias.name).is_symlink()
+    for runtime_dir in (lib_dir, wheel_lib_dir):
+        after = subprocess.run(
+            [otool, "-L", str(runtime_dir / consumer.name)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert f"{canonical_install_name} (" in after
+        assert f"/{dependency_alias.name} (" not in after
+        assert all(system_dependency in after for system_dependency in system_dependencies)
 
-    dependency_id = subprocess.run(
-        [otool, "-D", str(dependency)], check=True, capture_output=True, text=True
-    ).stdout
-    assert "@rpath/libdependency.dylib" in dependency_id
+        for library_name in (dependency.name, dependency_alias.name):
+            dependency_id = subprocess.run(
+                [otool, "-D", str(runtime_dir / library_name)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.splitlines()
+            assert [line.strip() for line in dependency_id[1:]] == [canonical_install_name]
 
     load_commands = subprocess.run(
         [otool, "-l", str(consumer)], check=True, capture_output=True, text=True

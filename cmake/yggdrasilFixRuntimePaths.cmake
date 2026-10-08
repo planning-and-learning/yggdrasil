@@ -10,9 +10,10 @@
 #                               # install_name_tool (default @loader_path)
 #   )
 #
-# On macOS the install name of every library and absolute references to other
-# bundled libraries are also rewritten to @rpath/<name>. Missing tools degrade
-# to a warning, matching the historical per-repo scripts. Honors $ENV{DESTDIR}.
+# On macOS library install names and bundled dependency references are rewritten
+# to @rpath/<canonical-name>, preserving versioned names behind symlink aliases.
+# Missing tools degrade to a warning, matching the historical per-repo scripts.
+# Honors $ENV{DESTDIR}.
 
 function(yggdrasil_fix_runtime_paths)
     cmake_parse_arguments(PARSE_ARGV 0 ARG "" "LIB_DIR_GLOB;RPATH" "RPATHS")
@@ -54,22 +55,25 @@ function(yggdrasil_fix_runtime_paths)
         endif()
 
         set(native_libraries)
+        set(native_library_names)
+        set(native_library_real_names)
         foreach(native_lib_dir IN LISTS existing_lib_dirs)
             file(GLOB_RECURSE native_dir_libraries
                 LIST_DIRECTORIES false
                 "${native_lib_dir}/*.dylib"
                 "${native_lib_dir}/*.dylib.*"
             )
-            list(APPEND native_libraries ${native_dir_libraries})
+            foreach(native_library IN LISTS native_dir_libraries)
+                get_filename_component(native_library_name "${native_library}" NAME)
+                file(REAL_PATH "${native_library}" native_library_real_path)
+                get_filename_component(native_library_real_name "${native_library_real_path}" NAME)
+                list(APPEND native_library_names "${native_library_name}")
+                list(APPEND native_library_real_names "${native_library_real_name}")
+                list(APPEND native_libraries "${native_library_real_path}")
+            endforeach()
         endforeach()
+        # Mutating a symlink would overwrite its target's canonical install name.
         list(REMOVE_DUPLICATES native_libraries)
-
-        set(native_library_names)
-        foreach(native_library IN LISTS native_libraries)
-            get_filename_component(native_library_name "${native_library}" NAME)
-            list(APPEND native_library_names "${native_library_name}")
-        endforeach()
-        list(REMOVE_DUPLICATES native_library_names)
 
         foreach(native_library IN LISTS native_libraries)
             get_filename_component(native_library_name "${native_library}" NAME)
@@ -94,7 +98,7 @@ function(yggdrasil_fix_runtime_paths)
                     string(REPLACE "\n" ";" otool_lines "${otool_output}")
                     set(native_dependencies)
                     foreach(otool_line IN LISTS otool_lines)
-                        if(otool_line MATCHES "^[ \t]*(/.*) \\([^)]*\\)$")
+                        if(otool_line MATCHES "^[ \t]*((/|@rpath/|@loader_path/).*) \\([^)]*\\)$")
                             list(APPEND native_dependencies "${CMAKE_MATCH_1}")
                         endif()
                     endforeach()
@@ -102,13 +106,18 @@ function(yggdrasil_fix_runtime_paths)
 
                     foreach(native_dependency IN LISTS native_dependencies)
                         get_filename_component(native_dependency_name "${native_dependency}" NAME)
-                        if(native_dependency_name IN_LIST native_library_names)
+                        list(FIND native_library_names "${native_dependency_name}" native_dependency_index)
+                        if(NOT native_dependency_index EQUAL -1)
+                            list(GET native_library_real_names ${native_dependency_index} native_dependency_real_name)
+                            if(native_dependency STREQUAL "@rpath/${native_dependency_real_name}")
+                                continue()
+                            endif()
                             execute_process(
                                 COMMAND
                                     "${INSTALL_NAME_TOOL_EXECUTABLE}"
                                     -change
                                     "${native_dependency}"
-                                    "@rpath/${native_dependency_name}"
+                                    "@rpath/${native_dependency_real_name}"
                                     "${native_library}"
                                 RESULT_VARIABLE dependency_result
                                 ERROR_VARIABLE dependency_error

@@ -18,6 +18,7 @@ function(add_yggdrasil_gtest test_name source_file)
     target_compile_definitions(${test_name} PRIVATE ROOT_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${test_name} PRIVATE GTest::gtest Boost::json fmt::fmt TBB::tbb)
     add_test(NAME ${test_name} COMMAND ${test_name})
+    set_tests_properties(${test_name} PROPERTIES FAIL_REGULAR_EXPRESSION "does NOT link in any test case;Running 0 tests")
 endfunction()
 
 # Test sources mirror include/yggdrasil; target names use <dir>_<file>.
