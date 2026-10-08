@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "2"
+  YGGDRASIL_JOBS: "2"
+
 jobs:
   build_sdist:
     runs-on: ubuntu-latest

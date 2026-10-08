@@ -6,6 +6,10 @@ on:
       - test-pypi
   pull_request:
 
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "2"
+  YGGDRASIL_JOBS: "2"
+
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}

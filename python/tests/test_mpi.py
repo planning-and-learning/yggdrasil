@@ -177,7 +177,7 @@ def _run_smoke_test(root: Path) -> None:
         ],
         check=True,
     )
-    subprocess.run([cmake, "--build", str(build_dir)], check=True)
+    subprocess.run([cmake, "--build", str(build_dir), "--parallel", "2"], check=True)
     subprocess.run(
         [mpiexec, "-n", "2", build_dir / "mpi_smoke"],
         check=True,
