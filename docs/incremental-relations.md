@@ -91,8 +91,9 @@ points into contiguous value slots; erased values are destroyed and their slots
 are linked into a free list for later insertions. Only affected entries are
 changed; indexes are not rebuilt per batch. Erasing or updating a row position
 searches its hash group, so large groups or hash collisions increase that work.
-Removing the last value for a key acquires hash-table headroom for subsequent
-churn; GTL may occasionally clean tombstones by scanning the table in place.
+Removing the last value for a key does not grow storage. Subsequent insertions
+may grow the key table to obtain tombstone headroom, even when the live key count
+stays constant; with enough headroom, GTL cleans tombstones in place.
 Reusable capacities grow as needed;
 allocation-free operation is a warmed-capacity property, not an unconditional
 promise for arbitrarily growing relations.

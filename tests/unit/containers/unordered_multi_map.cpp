@@ -282,27 +282,25 @@ TEST(YggdrasilTests, UnorderedMultiMapErasureDoesNotGrowStorage)
 TEST(YggdrasilTests, UnorderedMultiMapReusesSlotsAcrossNovelKeys)
 {
     auto map = UnorderedMultiMap<int, int>();
-    map.reserve(64);
-    for (int value = 0; value < 64; ++value)
+    constexpr int count = 64;
+    // GTL needs headroom to clean tombstones without growing the key table.
+    // A fixed warmup does not guarantee this across portable and SSE2 probing.
+    map.reserve(2 * count);
+    for (int value = 0; value < count; ++value)
         map.insert(value, value);
-    for (int value = 0; value < 64; ++value)
-    {
-        ASSERT_TRUE(map.erase(value, value));
-        map.insert(value + 64, value + 64);
-    }
     const auto retained = map.memory_usage();
-    for (int value = 64; value < 4160; ++value)
+    for (int value = 0; value < 64 * count; ++value)
     {
         ASSERT_TRUE(map.erase(value, value));
-        map.insert(value + 64, value + 64);
-        EXPECT_EQ(map.size(), 64);
+        map.insert(value + count, value + count);
+        EXPECT_EQ(map.size(), count);
     }
     EXPECT_EQ(map.memory_usage(), retained);
     map.clear();
     map.reserve(0);
     map.reserve(1);
     EXPECT_EQ(map.memory_usage(), retained);
-    for (int value = 0; value < 64; ++value)
+    for (int value = 0; value < count; ++value)
         map.insert(value, value);
     EXPECT_EQ(map.memory_usage(), retained);
 }
