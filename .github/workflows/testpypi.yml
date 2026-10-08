@@ -37,6 +37,7 @@ jobs:
       - name: Build Linux wheel
         run: cibuildwheel --output-dir wheelhouse
         env:
+          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2"
           CIBW_PLATFORM: linux
           CIBW_BUILD: "cp311-*"
           CIBW_SKIP: "*-musllinux_*"
@@ -75,6 +76,7 @@ jobs:
       - name: Build macOS wheel
         run: cibuildwheel --output-dir wheelhouse
         env:
+          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2"
           CIBW_PLATFORM: macos
           CIBW_BUILD: "cp311-*"
           CIBW_ARCHS: arm64

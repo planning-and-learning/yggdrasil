@@ -60,7 +60,7 @@ jobs:
                 -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/yggdrasil-source-prefix" \
                 -DCMAKE_INSTALL_LIBDIR=lib \
                 -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
-          cmake --build source-build --target corresponding-source-downloads --parallel
+          cmake --build source-build --target corresponding-source-downloads --parallel 2
 
       - name: Build corresponding-source bundle
         run: |
@@ -107,6 +107,7 @@ jobs:
       - name: Build Linux wheels
         run: cibuildwheel --output-dir wheelhouse
         env:
+          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2"
           CIBW_PLATFORM: linux
           CIBW_BUILD: "${{ matrix.python-version }}-*"
           CIBW_SKIP: "*-musllinux_*"
@@ -143,6 +144,7 @@ jobs:
       - name: Build macOS wheels
         run: cibuildwheel --output-dir wheelhouse
         env:
+          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2"
           CIBW_PLATFORM: macos
           CIBW_BUILD: "${{ matrix.python-version }}-*"
           CIBW_ARCHS: arm64

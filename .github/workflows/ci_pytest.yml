@@ -9,6 +9,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
+    env:
+      YGGDRASIL_JOBS: "2"
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
     strategy:
       fail-fast: false
       matrix:
