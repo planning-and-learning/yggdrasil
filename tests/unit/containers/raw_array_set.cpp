@@ -238,7 +238,9 @@ TEST(YggdrasilTests, CommonRawArraySetEraseReusesStorageDuringChurn)
             set.erase(index);
             EXPECT_FALSE(set.contains(removed));
             if (index != 31)
+            {
                 EXPECT_EQ(set.find(moved), index);
+            }
             const auto inserted = std::array { value, value + 1 };
             EXPECT_EQ(set.insert(inserted), 31);
             EXPECT_EQ(set.find(inserted), 31);

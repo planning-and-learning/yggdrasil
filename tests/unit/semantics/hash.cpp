@@ -59,7 +59,9 @@ TEST(YggdrasilTests, CommonHashValuesMatchDefinedAlgorithms)
     EXPECT_EQ(ygg::Hash<int> {}(0), 0x0000000000000000ULL);
     EXPECT_EQ(ygg::Hash<int> {}(-1), 0xffffffffffffffffULL);
     if constexpr (sizeof(size_t) == sizeof(uint64_t))
+    {
         EXPECT_EQ(ygg::Hash<double> {}(1.5), 0x3ff8000000000000ULL);
+    }
     EXPECT_EQ(ygg::Hash<float> {}(1.5F), 0x000000003fc00000ULL);
     EXPECT_EQ(ygg::Hash<double> {}(-0.0), ygg::Hash<double> {}(0.0));
     EXPECT_EQ(ygg::Hash<std::string> {}(std::string("yggdrasil")), 0x79adda5dd5464cb6ULL);

@@ -353,7 +353,9 @@ void test_raw_array_pool_failed_fill()
         EXPECT_EQ(pool.memory_usage(), retained);
         EXPECT_TRUE(std::ranges::equal(pool[initial_size], values));
         if (first)
+        {
             EXPECT_EQ(pool[0].data(), first);
+        }
     }
 }
 
@@ -446,7 +448,7 @@ void test_raw_array_pool_throwing_operations()
     const auto failures = std::array { std::pair { PoolRangeOperation::Begin, size_t { 0 } },     std::pair { PoolRangeOperation::End, size_t { 0 } },
                                        std::pair { PoolRangeOperation::Size, size_t { 0 } },      std::pair { PoolRangeOperation::Dereference, size_t { 1 } },
                                        std::pair { PoolRangeOperation::Increment, size_t { 2 } }, std::pair { PoolRangeOperation::Compare, size_t { 3 } } };
-    for (const auto [operation, skip] : failures)
+    for (const auto& [operation, skip] : failures)
     {
         auto pool = RawArrayPool<int, 1, ThreadSafe>(values.size());
         ASSERT_EQ(pool.insert(values), 0);
