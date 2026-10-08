@@ -28,6 +28,7 @@ template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe>
 struct EqualTo<SegmentedVector<T, FirstSegmentSize, ThreadSafe>>
 {
     bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& lhs, const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& rhs) const
+        requires EqualityComparableByEqualTo<T>
     {
         return equal_range(lhs, rhs);
     }

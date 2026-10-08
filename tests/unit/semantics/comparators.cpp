@@ -35,7 +35,9 @@
 #include <ranges>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <tuple>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -447,6 +449,78 @@ TEST(YggdrasilTests, CommonCistaLessAdaptersOrderPairAndNestedArrayViews)
     EXPECT_FALSE(ygg::Less<Pair> {}(rhs[1], lhs[1]));
     EXPECT_TRUE(ygg::Less<PairView> {}(PairView(lhs[1], context), PairView(rhs[1], context)));
     EXPECT_TRUE(ygg::Less<ArrayView> {}(ArrayView(lhs, context), ArrayView(rhs, context)));
+}
+
+struct UnsupportedLessValue
+{
+};
+
+TEST(YggdrasilTests, CommonLessCapabilitiesRejectUnsupportedNestedValues)
+{
+    using Value = UnsupportedLessValue;
+    static_assert(!ygg::OrderedByLess<std::array<Value, 1>>);
+    static_assert(!ygg::OrderedByLess<std::vector<Value>>);
+    static_assert(!ygg::OrderedByLess<std::pair<int, Value>>);
+    static_assert(!ygg::OrderedByLess<std::tuple<int, Value>>);
+    static_assert(!ygg::OrderedByLess<std::optional<Value>>);
+    static_assert(!ygg::OrderedByLess<std::variant<int, Value>>);
+    static_assert(!ygg::OrderedByLess<std::span<const Value>>);
+    static_assert(!ygg::OrderedByLess<std::reference_wrapper<Value>>);
+    static_assert(!ygg::OrderedByLess<::cista::offset::vector<Value>>);
+    static_assert(!ygg::OrderedByLess<::cista::pair<int, Value>>);
+    static_assert(!ygg::OrderedByLess<::cista::optional<Value>>);
+    static_assert(!ygg::OrderedByLess<::cista::offset::variant<int, Value>>);
+    static_assert(!ygg::OrderedByLess<ygg::ObserverPtr<const Value>>);
+    static_assert(!ygg::OrderedByLess<ygg::SegmentedVector<Value, 2>>);
+    static_assert(!ygg::OrderedByLess<ygg::View<::cista::offset::vector<Value>, ComparatorContext>>);
+    static_assert(!ygg::OrderedByLess<ygg::View<::cista::pair<int, Value>, ComparatorContext>>);
+    static_assert(!ygg::OrderedByLess<ygg::View<::cista::optional<Value>, ComparatorContext>>);
+    static_assert(!ygg::OrderedByLess<ygg::View<::cista::offset::variant<int, Value>, ComparatorContext>>);
+}
+
+TEST(YggdrasilTests, CommonLessRangeUsesValuesRatherThanProxyReferenceTypes)
+{
+    auto low = std::vector<bool> { false };
+    auto high = std::vector<bool> { true };
+    const auto plain_low = std::array { false };
+    const auto plain_high = std::array { true };
+    EXPECT_TRUE(ygg::less_range(low, plain_high));
+    EXPECT_TRUE(ygg::less_range(plain_low, high));
+    EXPECT_TRUE(ygg::less_range(std::as_const(low), high));
+    EXPECT_FALSE(ygg::less_range(high, plain_low));
+    EXPECT_FALSE(ygg::less_range(plain_high, low));
+    EXPECT_FALSE(ygg::less_range(low, plain_low));
+    EXPECT_FALSE(ygg::less_range(plain_low, low));
+    EXPECT_TRUE(ygg::less_range(low, std::array { false, true }));
+}
+
+struct ThrowingComparisonValue
+{
+    friend bool operator<(const ThrowingComparisonValue&, const ThrowingComparisonValue&) { throw std::runtime_error("comparison"); }
+};
+
+TEST(YggdrasilTests, CommonOrderingPropagatesUserOperationFailures)
+{
+    const auto value = ThrowingComparisonValue {};
+    static_assert(!noexcept(ygg::Less<ThrowingComparisonValue> {}(value, value)));
+    static_assert(!noexcept(ygg::Less<void> {}(value, value)));
+    static_assert(noexcept(ygg::Less<double> {}(1, 2)));
+    EXPECT_THROW((ygg::Less<ThrowingComparisonValue> {}(value, value)), std::runtime_error);
+    EXPECT_THROW((ygg::Less<void> {}(value, value)), std::runtime_error);
+    EXPECT_THROW((ygg::Less<std::pair<int, ThrowingComparisonValue>> {}({ 0, value }, { 0, value })), std::runtime_error);
+    EXPECT_THROW((ygg::Less<std::tuple<ThrowingComparisonValue>> {}({ value }, { value })), std::runtime_error);
+    EXPECT_THROW((ygg::ThreeWayCompare<ThrowingComparisonValue> {}(value, value)), std::runtime_error);
+    const auto vector = std::vector { value };
+    EXPECT_THROW((ygg::Less<std::vector<ThrowingComparisonValue>> {}(vector, vector)), std::runtime_error);
+    const auto reference = std::cref(value);
+    EXPECT_THROW((ygg::Less<std::reference_wrapper<const ThrowingComparisonValue>> {}(reference, reference)), std::runtime_error);
+    const auto observer = ygg::make_observer(value);
+    EXPECT_THROW((ygg::Less<std::remove_cvref_t<decltype(observer)>> {}(observer, observer)), std::runtime_error);
+
+    auto values = std::array { 1 };
+    auto throwing = values | std::views::transform([](int) -> int { throw std::runtime_error("dereference"); });
+    static_assert(!noexcept(ygg::less_range(throwing, values)));
+    EXPECT_THROW(ygg::less_range(throwing, values), std::runtime_error);
 }
 
 }  // namespace ygg::tests

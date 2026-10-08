@@ -27,6 +27,7 @@
 #include <compare>
 #include <gtest/gtest.h>
 #include <limits>
+#include <stdexcept>
 #include <tuple>
 
 namespace ygg
@@ -154,6 +155,18 @@ TEST(YggdrasilTests, CommonFloatingPointComparisonPreservesRuntimeNaNSemantics)
             EXPECT_EQ(ygg::Less<double> {}(lhs, rhs), expected_less);
         }
     }
+}
+
+struct ThrowingIdentifiableComparison : ygg::comparison::Mixin<ThrowingIdentifiableComparison>
+{
+    auto identifying_members() const -> std::tuple<int> { throw std::runtime_error("identity"); }
+};
+
+TEST(YggdrasilTests, CommonComparisonMixinPropagatesIdentityFailures)
+{
+    const auto value = ThrowingIdentifiableComparison {};
+    static_assert(!noexcept(value <=> value));
+    EXPECT_THROW((value <=> value), std::runtime_error);
 }
 
 }  // namespace ygg::tests

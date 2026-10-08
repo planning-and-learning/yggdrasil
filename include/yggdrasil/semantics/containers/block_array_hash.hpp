@@ -29,7 +29,11 @@ struct Hash<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
 
-    hash_t operator()(const Type& value) const { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const
+        requires Hashable<std::ranges::range_value_t<const Type>>
+    {
+        return ygg::hash_range(value);
+    }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
@@ -37,7 +41,11 @@ struct Hash<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
 
-    hash_t operator()(const Type& value) const { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const
+        requires Hashable<std::ranges::range_value_t<const Type>>
+    {
+        return ygg::hash_range(value);
+    }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
@@ -45,7 +53,11 @@ struct Hash<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
 
-    hash_t operator()(const Type& value) const { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const
+        requires Hashable<std::ranges::range_value_t<const Type>>
+    {
+        return ygg::hash_range(value);
+    }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
@@ -53,7 +65,11 @@ struct Hash<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;
 
-    hash_t operator()(const Type& value) const { return ygg::hash_range(value); }
+    hash_t operator()(const Type& value) const
+        requires Hashable<std::ranges::range_value_t<const Type>>
+    {
+        return ygg::hash_range(value);
+    }
 };
 
 }

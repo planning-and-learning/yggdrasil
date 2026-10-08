@@ -41,7 +41,11 @@ struct Less<View<::cista::array<T, N>, C>>
 {
     using Type = View<::cista::array<T, N>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires OrderedByLess<std::ranges::range_value_t<const Type>>
+    {
+        return less_range(lhs, rhs);
+    }
 };
 
 template<typename T1, typename T2>
@@ -49,7 +53,8 @@ struct Less<::cista::pair<T1, T2>>
 {
     using Type = ::cista::pair<T1, T2>;
 
-    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const
+        requires OrderedByLess<T1> && OrderedByLess<T2>
     {
         if (Less<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first))
             return true;
@@ -64,7 +69,11 @@ struct Less<View<::cista::pair<T1, T2>, C>>
 {
     using Type = View<::cista::pair<T1, T2>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires requires {
+            { lhs.get_first() } -> OrderedByLess;
+            { lhs.get_second() } -> OrderedByLess;
+        }
     {
         using First = std::remove_cvref_t<decltype(lhs.get_first())>;
         if (Less<First> {}(lhs.get_first(), rhs.get_first()))
@@ -88,7 +97,11 @@ struct Less<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Alloc
 {
     using Type = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires OrderedByLess<T>
+    {
+        return less_range(lhs, rhs);
+    }
 };
 
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
@@ -96,7 +109,11 @@ struct Less<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, 
 {
     using Type = View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires OrderedByLess<std::ranges::range_value_t<const Type>>
+    {
+        return less_range(lhs, rhs);
+    }
 };
 
 template<typename T>
@@ -104,7 +121,8 @@ struct Less<::cista::optional<T>>
 {
     using Type = ::cista::optional<T>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires OrderedByLess<T>
     {
         if (lhs.has_value() != rhs.has_value())
             return !lhs.has_value();
@@ -118,7 +136,10 @@ struct Less<View<::cista::optional<T>, C>>
 {
     using Type = View<::cista::optional<T>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires requires {
+            { lhs.value() } -> OrderedByLess;
+        }
     {
         if (lhs.has_value() != rhs.has_value())
             return !lhs.has_value();
@@ -132,7 +153,8 @@ struct Less<::cista::offset::variant<Ts...>>
 {
     using Type = ::cista::offset::variant<Ts...>;
 
-    constexpr bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    constexpr bool operator()(const Type& lhs, const Type& rhs) const
+        requires(OrderedByLess<Ts> && ...)
     {
         if (lhs.valid() != rhs.valid())
             return !lhs.valid();
@@ -162,7 +184,8 @@ struct Less<View<::cista::offset::variant<Ts...>, C>>
 {
     using Type = View<::cista::offset::variant<Ts...>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires(OrderedByLess<std::conditional_t<ViewConcept<Ts, C>, View<Ts, C>, Ts>> && ...)
     {
         if (lhs.valid() != rhs.valid())
             return !lhs.valid();

@@ -19,7 +19,6 @@
 #define YGG_SEMANTICS_HASH_HPP_
 
 #include "yggdrasil/core/concepts.hpp"
-#include "yggdrasil/core/dependent_false.hpp"
 
 #include <array>
 #include <boost/container_hash/hash.hpp>
@@ -67,24 +66,25 @@ concept ByteHashable = (std::integral<T> || Enumeration<T>) && !std::same_as<T, 
                       && requires { requires Hash<T>::is_identity; };
 
 template<typename Range>
-concept ByteHashableRange = std::ranges::input_range<Range> && std::ranges::sized_range<Range> && ByteHashable<std::ranges::range_value_t<Range>>;
-
+concept ByteHashableRange = std::ranges::input_range<Range> && Hashable<std::ranges::range_value_t<Range>> && std::ranges::sized_range<Range>
+                            && ByteHashable<std::ranges::range_value_t<Range>>;
 }
 
 /**
  * Forward declarations
  */
 
-template<typename T>
+template<Hashable T>
 inline void hash_combine(hash_t& seed, const T& value);
 
-template<typename T, typename... Rest>
+template<typename T, Hashable... Rest>
 inline void hash_combine(hash_t& seed, const Rest&... rest);
 
-template<typename... Ts>
+template<Hashable... Ts>
 inline hash_t hash_combine(const Ts&... rest);
 
 template<std::ranges::input_range Range>
+    requires Hashable<std::ranges::range_value_t<Range>>
 inline hash_t hash_range(Range&& range);
 
 template<hashing::ByteHashableRange Range>
@@ -119,7 +119,11 @@ struct Hash<T>
 {
     static constexpr bool is_identity = requires { requires Hash<std::underlying_type_t<T>>::is_identity; };
 
-    hash_t operator()(const T& el) const { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
+    hash_t operator()(const T& el) const
+        requires Hashable<std::underlying_type_t<T>>
+    {
+        return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el));
+    }
 };
 
 template<>
@@ -127,42 +131,17 @@ struct Hash<void>
 {
     using is_transparent = void;
 
-    template<typename T>
+    template<Hashable T>
     hash_t operator()(const T& el) const
     {
         return Hash<std::remove_cvref_t<T>> {}(el);
     }
 };
 
-template<typename T>
-struct Hash<T*>
-{
-    static_assert(dependent_false<T>::value, "ygg::Hash does not support raw pointers; hash a stable index instead.");
-};
-
-template<typename T>
-struct Hash<std::shared_ptr<T>>
-{
-    static_assert(dependent_false<T>::value, "ygg::Hash does not support shared_ptr; hash a stable index instead.");
-};
-
-template<typename T, typename Deleter>
-struct Hash<std::unique_ptr<T, Deleter>>
-{
-    static_assert(dependent_false<T>::value, "ygg::Hash does not support unique_ptr; hash a stable index instead.");
-};
-
-template<typename T>
-struct Hash<std::weak_ptr<T>>
-{
-    static_assert(dependent_false<T>::value, "ygg::Hash does not support weak_ptr; hash a stable index instead.");
-};
-
 template<std::floating_point T>
+    requires std::same_as<T, float> || std::same_as<T, double>
 struct Hash<T>
 {
-    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "ygg::Hash: long double has no portable bit representation.");
-
     hash_t operator()(const T& el) const noexcept
     {
         // EqualTo treats all NaNs as equal; Boost already normalizes signed zero.
@@ -185,55 +164,88 @@ struct Hash<std::string>
 template<typename T, size_t N>
 struct Hash<std::array<T, N>>
 {
-    hash_t operator()(const std::array<T, N>& arr) const { return ygg::hash_range(arr); }
+    hash_t operator()(const std::array<T, N>& arr) const
+        requires Hashable<T>
+    {
+        return ygg::hash_range(arr);
+    }
 };
 
 template<typename T>
 struct Hash<std::reference_wrapper<T>>
 {
-    hash_t operator()(const std::reference_wrapper<T>& ref) const { return Hash<std::remove_cvref_t<T>> {}(ref.get()); }
+    hash_t operator()(const std::reference_wrapper<T>& ref) const
+        requires Hashable<T>
+    {
+        return Hash<std::remove_cvref_t<T>> {}(ref.get());
+    }
 };
 
 template<typename Key, typename Compare, typename Allocator>
 struct Hash<std::set<Key, Compare, Allocator>>
 {
-    hash_t operator()(const std::set<Key, Compare, Allocator>& set) const { return ygg::hash_range(set); }
+    hash_t operator()(const std::set<Key, Compare, Allocator>& set) const
+        requires Hashable<Key>
+    {
+        return ygg::hash_range(set);
+    }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
 struct Hash<std::map<Key, T, Compare, Allocator>>
 {
-    hash_t operator()(const std::map<Key, T, Compare, Allocator>& map) const { return ygg::hash_range(map); }
+    hash_t operator()(const std::map<Key, T, Compare, Allocator>& map) const
+        requires Hashable<Key> && Hashable<T>
+    {
+        return ygg::hash_range(map);
+    }
 };
 
 template<typename Key, typename Compare, typename Allocator>
 struct Hash<gtl::btree_set<Key, Compare, Allocator>>
 {
-    hash_t operator()(const gtl::btree_set<Key, Compare, Allocator>& set) const { return ygg::hash_range(set); }
+    hash_t operator()(const gtl::btree_set<Key, Compare, Allocator>& set) const
+        requires Hashable<Key>
+    {
+        return ygg::hash_range(set);
+    }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
 struct Hash<gtl::btree_map<Key, T, Compare, Allocator>>
 {
-    hash_t operator()(const gtl::btree_map<Key, T, Compare, Allocator>& map) const { return ygg::hash_range(map); }
+    hash_t operator()(const gtl::btree_map<Key, T, Compare, Allocator>& map) const
+        requires Hashable<Key> && Hashable<T>
+    {
+        return ygg::hash_range(map);
+    }
 };
 
 template<typename T, typename Allocator>
 struct Hash<std::vector<T, Allocator>>
 {
-    hash_t operator()(const std::vector<T, Allocator>& vec) const { return ygg::hash_range(vec); }
+    hash_t operator()(const std::vector<T, Allocator>& vec) const
+        requires Hashable<T>
+    {
+        return ygg::hash_range(vec);
+    }
 };
 
 template<typename T1, typename T2>
 struct Hash<std::pair<T1, T2>>
 {
-    hash_t operator()(const std::pair<T1, T2>& pair) const { return ygg::hash_combine(pair.first, pair.second); }
+    hash_t operator()(const std::pair<T1, T2>& pair) const
+        requires Hashable<T1> && Hashable<T2>
+    {
+        return ygg::hash_combine(pair.first, pair.second);
+    }
 };
 
 template<typename... Ts>
 struct Hash<std::tuple<Ts...>>
 {
     hash_t operator()(const std::tuple<Ts...>& tuple) const
+        requires(Hashable<Ts> && ...)
     {
         hash_t aggregated_hash = sizeof...(Ts);
         std::apply([&aggregated_hash](const Ts&... args) { (ygg::hash_combine(aggregated_hash, args), ...); }, tuple);
@@ -245,6 +257,7 @@ template<typename... Ts>
 struct Hash<std::variant<Ts...>>
 {
     hash_t operator()(const std::variant<Ts...>& variant) const
+        requires(Hashable<Ts> && ...)
     {
         hash_t seed = variant.index();
         std::visit([&seed](const auto& arg) { ygg::hash_combine(seed, arg); }, variant);
@@ -256,6 +269,7 @@ template<typename T>
 struct Hash<std::optional<T>>
 {
     hash_t operator()(const std::optional<T>& optional) const
+        requires Hashable<T>
     {
         hash_t seed = optional.has_value() ? 1 : 0;
         if (optional.has_value())
@@ -267,7 +281,11 @@ struct Hash<std::optional<T>>
 template<typename T, std::size_t Extent>
 struct Hash<std::span<T, Extent>>
 {
-    hash_t operator()(const std::span<T, Extent>& span) const { return ygg::hash_range(span); }
+    hash_t operator()(const std::span<T, Extent>& span) const
+        requires Hashable<T>
+    {
+        return ygg::hash_range(span);
+    }
 };
 
 template<Identifiable T>
@@ -275,9 +293,13 @@ struct Hash<T>
 {
     using is_transparent = void;
 
-    hash_t operator()(const T& element) const { return ygg::hash_combine(element.identifying_members()); }
+    hash_t operator()(const T& element) const
+        requires Hashable<decltype(element.identifying_members())>
+    {
+        return ygg::hash_combine(element.identifying_members());
+    }
 
-    template<typename... Args>
+    template<Hashable... Args>
     hash_t operator()(const std::tuple<Args...>& view) const
     {
         return ygg::hash_combine(view);
@@ -289,6 +311,7 @@ struct Hash<T>
  */
 
 template<std::ranges::input_range Range>
+    requires Hashable<std::ranges::range_value_t<Range>>
 inline hash_t hash_range(Range&& range)
 {
     hash_t seed = 0;
@@ -318,7 +341,7 @@ inline hash_t hash_range(Range&& range) noexcept(noexcept(std::ranges::data(rang
     return hashing::hash_bytes(std::ranges::data(range), std::ranges::size(range) * sizeof(std::ranges::range_value_t<Range>));
 }
 
-template<typename T>
+template<Hashable T>
 inline void hash_combine(hash_t& seed, const T& value)
 {
     auto combined = static_cast<size_t>(seed);
@@ -326,13 +349,13 @@ inline void hash_combine(hash_t& seed, const T& value)
     seed = combined;
 }
 
-template<typename T, typename... Rest>
+template<typename T, Hashable... Rest>
 inline void hash_combine(hash_t& seed, const Rest&... rest)
 {
     (ygg::hash_combine(seed, rest), ...);
 }
 
-template<typename... Ts>
+template<Hashable... Ts>
 inline hash_t hash_combine(const Ts&... rest)
 {
     hash_t seed = 0;

@@ -22,6 +22,39 @@
 #include <compare>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <iterator>
+#include <ranges>
+#include <stdexcept>
+
+namespace ygg::tests
+{
+struct VectorViewElement
+{
+    int value;
+};
+struct VectorViewContext
+{
+    bool fail;
+};
+}
+
+namespace ygg
+{
+template<>
+struct View<tests::VectorViewElement, tests::VectorViewContext>
+{
+    const tests::VectorViewElement& element;
+    const tests::VectorViewContext& context;
+    View(const tests::VectorViewElement& element, const tests::VectorViewContext& context) : element(element), context(context)
+    {
+        if (context.fail)
+            throw std::runtime_error("view construction");
+    }
+    const auto& get_data() const { return element; }
+    const auto& get_handle() const { return element; }
+    const auto& get_context() const { return context; }
+};
+}
 
 namespace ygg::tests
 {
@@ -38,6 +71,10 @@ TEST(YggdrasilTests, CommonCistaVectorViewExposesBackAndRandomAccessIterators)
     const auto view = ygg::View<Vector, int>(vector, context);
 
     static_assert(std::same_as<decltype(view.get_handle()), const Vector&>);
+    static_assert(std::random_access_iterator<decltype(view.begin())>);
+    static_assert(std::ranges::random_access_range<decltype(view)>);
+    static_assert(std::same_as<decltype(view.begin()[0]), const int&>);
+    EXPECT_EQ(&view.begin()[1], &*std::next(view.begin()));
     static_assert(std::same_as<decltype(view.begin() <=> view.end()), std::strong_ordering>);
     EXPECT_EQ(view.get_handle().size(), 3);
     EXPECT_EQ(view.front(), 1);
@@ -118,6 +155,26 @@ TEST(YggdrasilTests, CommonVector)
     EXPECT_EQ(const_mdspan(0, 2).data(), &const_mdspan(0, 2, 0));
     EXPECT_EQ(const_mdspan.at(0, 2).data(), &const_mdspan(0, 2, 0));
     EXPECT_THROW(const_mdspan.at(2), std::out_of_range);
+}
+
+TEST(YggdrasilTests, CommonCistaVectorViewPreservesContextualIteratorAndExceptionContracts)
+{
+    static_assert(ygg::ViewConcept<VectorViewElement, VectorViewContext>);
+    auto values = ::cista::offset::vector<VectorViewElement> {};
+    values.emplace_back(VectorViewElement { 7 });
+    auto context = VectorViewContext { false };
+    const auto view = ygg::make_view(values, context);
+    static_assert(std::random_access_iterator<decltype(view.begin())>);
+    static_assert(std::same_as<decltype(view.begin()[0]), decltype(*view.begin())>);
+    EXPECT_EQ(view.begin()[0].get_data().value, 7);
+    context.fail = true;
+    static_assert(!noexcept(view[0]));
+    static_assert(!noexcept(*view.begin()));
+    EXPECT_THROW(view[0], std::runtime_error);
+    EXPECT_THROW(view.front(), std::runtime_error);
+    EXPECT_THROW(view.back(), std::runtime_error);
+    EXPECT_THROW(*view.begin(), std::runtime_error);
+    EXPECT_THROW(view.begin()[0], std::runtime_error);
 }
 
 }  // namespace ygg::tests

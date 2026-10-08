@@ -33,7 +33,7 @@ public:
 
     View(const Pair& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
-    decltype(auto) get_first() const noexcept
+    decltype(auto) get_first() const
     {
         if constexpr (ViewConcept<T1, C>)
             return make_view(get_data().first, get_context());
@@ -41,7 +41,7 @@ public:
             return (get_data().first);
     }
 
-    decltype(auto) get_second() const noexcept
+    decltype(auto) get_second() const
     {
         if constexpr (ViewConcept<T2, C>)
             return make_view(get_data().second, get_context());

@@ -49,7 +49,7 @@ public:
     }
 
     template<typename U>
-    decltype(auto) get() const noexcept
+    decltype(auto) get() const
     {
         if constexpr (ViewConcept<U, C>)
             return make_view(cista::get<U>(index_variant()), get_context());

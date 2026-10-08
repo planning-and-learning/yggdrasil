@@ -568,4 +568,31 @@ TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
     EXPECT_THROW(ygg::Hash<> {}(record), std::runtime_error);
 }
 
+struct UnsupportedHashValue
+{
+};
+
+TEST(YggdrasilTests, CommonHashCapabilitiesRejectUnsupportedNestedValues)
+{
+    using Value = UnsupportedHashValue;
+    static_assert(!ygg::Hashable<std::array<Value, 1>>);
+    static_assert(!ygg::Hashable<std::vector<Value>>);
+    static_assert(!ygg::Hashable<std::pair<int, Value>>);
+    static_assert(!ygg::Hashable<std::tuple<int, Value>>);
+    static_assert(!ygg::Hashable<std::optional<Value>>);
+    static_assert(!ygg::Hashable<std::variant<int, Value>>);
+    static_assert(!ygg::Hashable<std::span<const Value>>);
+    static_assert(!ygg::Hashable<std::reference_wrapper<Value>>);
+    static_assert(!ygg::Hashable<::cista::offset::vector<Value>>);
+    static_assert(!ygg::Hashable<::cista::pair<int, Value>>);
+    static_assert(!ygg::Hashable<::cista::optional<Value>>);
+    static_assert(!ygg::Hashable<::cista::offset::variant<int, Value>>);
+    static_assert(!ygg::Hashable<ygg::ObserverPtr<const Value>>);
+    static_assert(!ygg::Hashable<ygg::SegmentedVector<Value, 2>>);
+    static_assert(!ygg::Hashable<ygg::View<::cista::offset::vector<Value>, HashContext>>);
+    static_assert(!ygg::Hashable<ygg::View<::cista::pair<int, Value>, HashContext>>);
+    static_assert(!ygg::Hashable<ygg::View<::cista::optional<Value>, HashContext>>);
+    static_assert(!ygg::Hashable<ygg::View<::cista::offset::variant<int, Value>, HashContext>>);
+}
+
 }  // namespace ygg::tests

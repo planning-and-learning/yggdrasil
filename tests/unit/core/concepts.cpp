@@ -23,9 +23,11 @@
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <cstddef>
-#include <iterator>
 #include <gtest/gtest.h>
+#include <iterator>
+#include <memory>
 #include <span>
+#include <tuple>
 #include <vector>
 
 namespace ygg::tests
@@ -244,4 +246,31 @@ TEST(YggdrasilTests, CommonConceptsHeaderExposesReusableConcepts)
     SUCCEED();
 }
 
+struct UnsupportedSemanticValue
+{
+};
+struct UnsupportedIdentifiableValue
+{
+    UnsupportedSemanticValue value;
+    auto identifying_members() const { return std::tie(value); }
+};
+
+static_assert(!Hashable<UnsupportedSemanticValue>);
+static_assert(!EqualityComparableByEqualTo<UnsupportedSemanticValue>);
+static_assert(!OrderedByLess<UnsupportedSemanticValue>);
+static_assert(!Hashable<UnsupportedIdentifiableValue>);
+static_assert(!EqualityComparableByEqualTo<UnsupportedIdentifiableValue>);
+static_assert(!OrderedByLess<UnsupportedIdentifiableValue>);
+static_assert(!HashFor<Hash<void>, UnsupportedSemanticValue>);
+static_assert(!EqualToFor<EqualTo<void>, UnsupportedSemanticValue>);
+static_assert(!LessFor<Less<void>, UnsupportedSemanticValue>);
+static_assert(!LessFor<LessEqual<UnsupportedSemanticValue>, UnsupportedSemanticValue>);
+static_assert(!LessFor<Greater<UnsupportedSemanticValue>, UnsupportedSemanticValue>);
+static_assert(!LessFor<GreaterEqual<UnsupportedSemanticValue>, UnsupportedSemanticValue>);
+static_assert(!Hashable<int*>);
+static_assert(!Hashable<std::shared_ptr<int>>);
+static_assert(!Hashable<std::unique_ptr<int>>);
+static_assert(!Hashable<std::weak_ptr<int>>);
+static_assert(!Hashable<long double>);
+static_assert(Hashable<float> && Hashable<double>);
 }

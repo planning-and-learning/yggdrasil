@@ -44,7 +44,7 @@ public:
     size_t size() const noexcept { return get_data().size(); }
     bool empty() const noexcept { return get_data().empty(); }
 
-    decltype(auto) operator[](size_t i) const noexcept
+    decltype(auto) operator[](size_t i) const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data()[i], get_context());
@@ -60,7 +60,7 @@ public:
             return get_data().at(i);
     }
 
-    decltype(auto) front() const noexcept
+    decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().front(), get_context());
@@ -68,7 +68,7 @@ public:
             return get_data().front();
     }
 
-    decltype(auto) back() const noexcept
+    decltype(auto) back() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().back(), get_context());
@@ -89,7 +89,7 @@ public:
         const_iterator() noexcept : ctx(nullptr), ptr(nullptr) {}
         const_iterator(const T* ptr, const C& ctx) noexcept : ctx(&ctx), ptr(ptr) {}
 
-        decltype(auto) operator*() const noexcept
+        decltype(auto) operator*() const
         {
             if constexpr (ViewConcept<T, C>)
                 return make_view(*ptr, *ctx);
@@ -158,13 +158,7 @@ public:
         friend difference_type operator-(const_iterator lhs, const_iterator rhs) noexcept { return lhs.ptr - rhs.ptr; }
 
         // []
-        auto operator[](difference_type n) const noexcept
-        {
-            if constexpr (ViewConcept<T, C>)
-                return make_view(*(ptr + n), *ctx);
-            else
-                return *(ptr + n);
-        }
+        decltype(auto) operator[](difference_type n) const { return *(*this + n); }
 
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr == rhs.ptr; }
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr <=> rhs.ptr; }

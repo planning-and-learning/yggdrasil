@@ -411,4 +411,31 @@ TEST(YggdrasilTests, CommonEqualToAdaptersPropagateNestedConversionErrors)
     EXPECT_THROW(ygg::operator==(record, record), std::runtime_error);
 }
 
+struct UnsupportedEqualToValue
+{
+};
+
+TEST(YggdrasilTests, CommonEqualToCapabilitiesRejectUnsupportedNestedValues)
+{
+    using Value = UnsupportedEqualToValue;
+    static_assert(!ygg::EqualityComparableByEqualTo<std::array<Value, 1>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::vector<Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::pair<int, Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::tuple<int, Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::optional<Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::variant<int, Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::span<const Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<std::reference_wrapper<Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<::cista::offset::vector<Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<::cista::pair<int, Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<::cista::optional<Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<::cista::offset::variant<int, Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<ygg::ObserverPtr<const Value>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<ygg::SegmentedVector<Value, 2>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<ygg::View<::cista::offset::vector<Value>, EqualToContext>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<ygg::View<::cista::pair<int, Value>, EqualToContext>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<ygg::View<::cista::optional<Value>, EqualToContext>>);
+    static_assert(!ygg::EqualityComparableByEqualTo<ygg::View<::cista::offset::variant<int, Value>, EqualToContext>>);
+}
+
 }  // namespace ygg::tests

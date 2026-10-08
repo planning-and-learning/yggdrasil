@@ -29,7 +29,11 @@ namespace ygg
 template<typename T>
 struct Hash<ObserverPtr<T>>
 {
-    hash_t operator()(ObserverPtr<T> ptr) const { return Hash<std::remove_cvref_t<T>> {}(*ptr); }
+    hash_t operator()(ObserverPtr<T> ptr) const
+        requires Hashable<T>
+    {
+        return Hash<std::remove_cvref_t<T>> {}(*ptr);
+    }
 };
 
 }  // namespace ygg

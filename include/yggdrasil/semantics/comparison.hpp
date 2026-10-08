@@ -34,7 +34,7 @@ constexpr bool operator==(const T& lhs, const T& rhs)
 }
 
 template<Identifiable T>
-constexpr std::strong_ordering operator<=>(const T& lhs, const T& rhs) noexcept
+constexpr std::strong_ordering operator<=>(const T& lhs, const T& rhs) noexcept(noexcept(ThreeWayCompare<T> {}(lhs, rhs)))
 {
     return ThreeWayCompare<T> {}(lhs, rhs);
 }
@@ -51,7 +51,7 @@ struct Mixin
         return ygg::operator==(lhs, rhs);
     }
 
-    friend constexpr std::strong_ordering operator<=>(const Derived& lhs, const Derived& rhs) noexcept
+    friend constexpr std::strong_ordering operator<=>(const Derived& lhs, const Derived& rhs) noexcept(noexcept(ygg::operator<=>(lhs, rhs)))
         requires Identifiable<Derived>
     {
         return ygg::operator<=>(lhs, rhs);

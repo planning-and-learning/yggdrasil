@@ -29,7 +29,11 @@ struct EqualTo<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
     using Type = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    {
+        return equal_range(lhs, rhs);
+    }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
@@ -37,7 +41,11 @@ struct EqualTo<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
     using Type = View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    {
+        return equal_range(lhs, rhs);
+    }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
@@ -45,7 +53,11 @@ struct EqualTo<BasicBlockArrayView<Block, Coder>>
 {
     using Type = BasicBlockArrayView<Block, Coder>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    {
+        return equal_range(lhs, rhs);
+    }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
@@ -53,7 +65,11 @@ struct EqualTo<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     using Type = View<BasicBlockArrayView<Block, Coder>, C>;
 
-    bool operator()(const Type& lhs, const Type& rhs) const { return equal_range(lhs, rhs); }
+    bool operator()(const Type& lhs, const Type& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    {
+        return equal_range(lhs, rhs);
+    }
 };
 
 }

@@ -221,10 +221,12 @@ TEST(YggdrasilTests, CommonRawArraySetEraseReusesStorageDuringChurn)
 {
     for (const auto erase_last : { false, true })
     {
+        SCOPED_TRACE(erase_last);
         auto set = RawArraySet<int, 1>(2);
         for (int value = 0; value < 32; ++value)
             set.insert(std::array { value, value + 1 });
-        set.erase(erase_last ? 31 : 0);
+        // Warm compaction headroom for both patterns; tail-only erasure does not reserve it.
+        set.erase(0);
         set.insert(std::array { 32, 33 });
         const auto retained = set.memory_usage();
 
