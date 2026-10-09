@@ -24,6 +24,7 @@
 #include "yggdrasil/core/closed_interval.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/core/counting_memory_resource.hpp"
 #include "yggdrasil/core/dependent_false.hpp"
 #include "yggdrasil/core/itertools.hpp"
 #include "yggdrasil/core/memory.hpp"

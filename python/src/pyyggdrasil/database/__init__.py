@@ -1,7 +1,11 @@
 from .._pyyggdrasil.database import (
+    BorrowedRelation,
     ColumnIndices,
     ColumnType,
+    DistanceEvaluator,
+    DistancePlan,
     Relation,
+    RelationDelta,
     RelationIndex,
     RelationPool,
     RelationPtr,
@@ -11,13 +15,18 @@ from .._pyyggdrasil.database import (
     RelationView,
     assign,
     copy,
+    distance,
     insert,
 )
 
 __all__ = [
+    "BorrowedRelation",
     "ColumnIndices",
     "ColumnType",
+    "DistanceEvaluator",
+    "DistancePlan",
     "Relation",
+    "RelationDelta",
     "RelationIndex",
     "RelationPool",
     "RelationPtr",
@@ -27,5 +36,6 @@ __all__ = [
     "RelationView",
     "assign",
     "copy",
+    "distance",
     "insert",
 ]

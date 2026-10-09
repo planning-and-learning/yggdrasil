@@ -29,7 +29,7 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DBUILD_SHARED_LIBS=ON
         -DBUILD_TESTING=OFF
-        -DBOOST_INCLUDE_LIBRARIES=container|hash2|iostreams|json|locale|mpi|numeric/interval|serialization
+        -DBOOST_INCLUDE_LIBRARIES=container|hash2|heap|iostreams|json|locale|mpi|numeric/interval|serialization
         -DBOOST_ENABLE_MPI=ON
         -DBOOST_ENABLE_PYTHON=OFF
         -DBOOST_IOSTREAMS_ENABLE_ZSTD=OFF

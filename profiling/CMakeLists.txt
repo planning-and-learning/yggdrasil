@@ -1,5 +1,7 @@
 yggdrasil_source(YGGDRASIL_BENCHMARK_VERSION benchmark version)
 find_package(benchmark ${YGGDRASIL_BENCHMARK_VERSION} REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+yggdrasil_source(YGGDRASIL_BOOST_VERSION boost version)
+find_package(boost_heap ${YGGDRASIL_BOOST_VERSION} EXACT CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(Threads REQUIRED)
 
@@ -32,3 +34,13 @@ target_include_directories(
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(database_incremental_benchmark PRIVATE benchmark::benchmark_main Threads::Threads)
+
+add_executable(database_distance_benchmark "database/distance.cpp")
+target_compile_features(database_distance_benchmark PRIVATE cxx_std_20)
+target_include_directories(
+    database_distance_benchmark
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+        "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
+target_link_libraries(database_distance_benchmark PRIVATE benchmark::benchmark_main Boost::heap Threads::Threads)

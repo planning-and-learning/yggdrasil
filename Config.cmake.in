@@ -34,6 +34,8 @@ find_library(ICU_UC_LIBRARY_RELEASE NAMES icuuc PATHS "${_yggdrasil_prefix}/lib"
 find_library(ICU_I18N_LIBRARY_RELEASE NAMES icui18n PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
 find_library(ICU_DATA_LIBRARY_RELEASE NAMES icudata PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
 
+# Resolve Heap directly: BoostConfig does not propagate NO_DEFAULT_PATH to components.
+find_dependency(boost_heap @YGGDRASIL_BOOST_VERSION@ EXACT CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(Boost CONFIG COMPONENTS headers json locale PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
 find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
@@ -47,7 +49,7 @@ if(NOT TARGET yggdrasil::yggdrasil)
     set_target_properties(yggdrasil::yggdrasil PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${_yggdrasil_prefix}/include"
         INTERFACE_COMPILE_FEATURES "cxx_std_20"
-        INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
+        INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::heap;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
 endif()
 
 set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")

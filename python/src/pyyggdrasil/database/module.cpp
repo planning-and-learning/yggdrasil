@@ -1,4 +1,5 @@
 #include "module.hpp"
+#include "distance.hpp"
 
 #include "yggdrasil/database/operations.hpp"
 #include "yggdrasil/database/relation_pool.hpp"
@@ -261,6 +262,7 @@ void bind_database_module_definitions(nb::module_& m)
         },
         nb::arg("destination"),
         nb::arg("source"));
+    bind_database_distance(m);
 }
 
 }  // namespace yggdrasil

@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/database/distance.hpp"
+#include "yggdrasil/database/incremental/distance.hpp"
 #include "yggdrasil/database/incremental/join.hpp"
 #include "yggdrasil/database/incremental/projection.hpp"
 #include "yggdrasil/database/operations.hpp"
@@ -1023,6 +1025,181 @@ TEST(YggdrasilTests, DatabaseWarmedMixedWidthTuplesAndOperationsRetainStorage)
     EXPECT_TRUE(valid);
     EXPECT_EQ(counts.allocated, 0);
     EXPECT_EQ(counts.deallocated, 0);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedDistanceFullEvaluationRetainsStorage)
+{
+    Builder<Relation<Values>> sources { ColumnIndex(10) }, edges { ColumnIndex(1), ColumnIndex(2) }, targets { ColumnIndex(20) };
+    constexpr uint_t vertices = 16;
+    sources.insert(cells(0));
+    for (uint_t vertex = 0; vertex < vertices; ++vertex)
+    {
+        edges.insert(cells(vertex, (vertex + 1) % vertices));
+        targets.insert(cells(vertex));
+    }
+    const DistancePlan<Values> plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
+    DistanceWorkspace<Values> workspace(plan);
+    Builder<Relation<Values>> output(plan.output_columns().span());
+    const auto cycle = [&]
+    {
+        distance(sources, edges, targets, plan, output, workspace);
+        return output.size() == vertices && output.contains(cells(0, 15, 15));
+    };
+    for (size_t i = 0; i < 32; ++i)
+        ASSERT_TRUE(cycle());
+    bool valid = true;
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 100; ++i)
+        valid &= cycle();
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedDistanceSourceChurnReusesFiniteUniverseStorage)
+{
+    Builder<Relation<Values>> sources { ColumnIndex(10) }, edges { ColumnIndex(1), ColumnIndex(2) }, targets { ColumnIndex(20) };
+    constexpr uint_t vertices = 16;
+    sources.insert(cells(0));
+    for (uint_t vertex = 0; vertex < vertices; ++vertex)
+    {
+        edges.insert(cells(vertex, (vertex + 1) % vertices));
+        targets.insert(cells(vertex));
+    }
+    const DistancePlan<Values> plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
+    incremental::DistanceEvaluator<Values> evaluator(plan);
+    evaluator.initialize(sources, edges, targets);
+    std::vector<incremental::Delta<Values>> changes;
+    changes.reserve(vertices);
+    for (uint_t vertex = 0; vertex < vertices; ++vertex)
+    {
+        changes.emplace_back(sources.columns().span());
+        changes.back().removed.insert(cells(vertex));
+        changes.back().added.insert(cells((vertex + 1) % vertices));
+    }
+    Builder<Relation<Values>> no_edges(edges.columns().span()), no_targets(targets.columns().span());
+    const auto cycle = [&]
+    {
+        bool valid = true;
+        for (uint_t vertex = 0; vertex < vertices; ++vertex)
+        {
+            evaluator.update(changes[vertex].added, changes[vertex].removed, no_edges, no_edges, no_targets, no_targets);
+            const auto source = (vertex + 1) % vertices;
+            valid &= evaluator.get_result().size() == vertices;
+            valid &= evaluator.get_result().contains(cells(source, 0, (vertices - source) % vertices));
+            valid &= evaluator.get_delta().added.size() == vertices && evaluator.get_delta().removed.size() == vertices;
+        }
+        return valid;
+    };
+    for (size_t i = 0; i < 32; ++i)
+        ASSERT_TRUE(cycle());
+    const auto retained = evaluator.memory_usage();
+    bool valid = true;
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 100; ++i)
+        valid &= cycle();
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(evaluator.memory_usage(), retained);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedDistanceEdgeRepairAndUndoRetainStorage)
+{
+    Builder<Relation<Values>> sources { ColumnIndex(10) }, edges { ColumnIndex(1), ColumnIndex(2) }, targets { ColumnIndex(20) };
+    constexpr uint_t vertices = 16;
+    sources.insert(cells(0));
+    sources.insert(cells(4));
+    for (uint_t vertex = 0; vertex < vertices; ++vertex)
+    {
+        edges.insert(cells(vertex, (vertex + 1) % vertices));
+        targets.insert(cells(vertex));
+    }
+    const DistancePlan<Values> plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
+    incremental::DistanceEvaluator<Values> evaluator(plan);
+    evaluator.initialize(sources, edges, targets);
+    incremental::Delta<Values> change(edges.columns().span());
+    change.added.insert(cells(0, 8));
+    Builder<Relation<Values>> no_sources(sources.columns().span()), no_targets(targets.columns().span());
+    const auto cycle = [&]
+    {
+        evaluator.update(no_sources, no_sources, change.added, change.removed, no_targets, no_targets);
+        bool valid = evaluator.get_result().size() == 2 * vertices;
+        valid &= evaluator.get_result().contains(cells(0, 8, 1));
+        valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
+        evaluator.update(no_sources, no_sources, change.removed, change.added, no_targets, no_targets);
+        valid &= evaluator.get_result().size() == 2 * vertices;
+        valid &= evaluator.get_result().contains(cells(0, 8, 8));
+        valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
+        return valid;
+    };
+    for (size_t i = 0; i < 32; ++i)
+        ASSERT_TRUE(cycle());
+    bool valid = true;
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 100; ++i)
+        valid &= cycle();
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+}
+
+TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
+{
+    Builder<Relation<Values>> sources { ColumnIndex(10) }, edges { ColumnIndex(1), ColumnIndex(2) }, targets { ColumnIndex(20) };
+    constexpr uint_t width = 8, first_parent = 7, first_child = first_parent + width;
+    sources.insert(cells(0));
+    sources.insert(cells(3));
+    for (uint_t vertex = 0; vertex < first_parent - 1; ++vertex)
+        edges.insert(cells(vertex, vertex + 1));
+    for (uint_t parent = first_parent; parent < first_child; ++parent)
+    {
+        edges.insert(cells(first_parent - 1, parent));
+        targets.insert(cells(parent));
+        for (uint_t child = first_child; child < first_child + width; ++child)
+            edges.insert(cells(parent, child));
+    }
+    for (uint_t child = first_child; child < first_child + width; ++child)
+        targets.insert(cells(child));
+    const DistancePlan<Values> plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
+    incremental::DistanceEvaluator<Values> evaluator(plan);
+    evaluator.initialize(sources, edges, targets);
+    incremental::Delta<Values> change(edges.columns().span());
+    for (uint_t parent = first_parent; parent < first_child; ++parent)
+    {
+        change.added.insert(cells(0, parent));
+        change.added.insert(cells(3, parent));
+    }
+    Builder<Relation<Values>> no_sources(sources.columns().span()), no_targets(targets.columns().span());
+    const auto cycle = [&]
+    {
+        evaluator.update(no_sources, no_sources, change.added, change.removed, no_targets, no_targets);
+        bool valid = evaluator.get_result().size() == 4 * width;
+        valid &= evaluator.get_result().contains(cells(0, first_parent, 1));
+        valid &= evaluator.get_result().contains(cells(3, first_child, 2));
+        valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
+        evaluator.update(no_sources, no_sources, change.removed, change.added, no_targets, no_targets);
+        valid &= evaluator.get_result().size() == 4 * width;
+        valid &= evaluator.get_result().contains(cells(0, first_parent, first_parent));
+        valid &= evaluator.get_result().contains(cells(3, first_child, first_parent - 2));
+        valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
+        return valid;
+    };
+    for (size_t i = 0; i < 32; ++i)
+        ASSERT_TRUE(cycle());
+    const auto retained = evaluator.memory_usage();
+    bool valid = true;
+    allocation_tracking::Scope measured;
+    for (size_t i = 0; i < 100; ++i)
+        valid &= cycle();
+    const auto counts = measured.finish();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(counts.allocated, 0);
+    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(evaluator.memory_usage(), retained);
 }
 
 }  // namespace ygg::tests
