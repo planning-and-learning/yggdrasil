@@ -9,38 +9,139 @@
 #include "yggdrasil/database/columns_view.hpp"
 
 #include <algorithm>
+#include <array>
+#include <limits>
 #include <stdexcept>
 
 namespace ygg::database
 {
-inline void validate_columns(std::span<const Index<Column>> columns)
+namespace detail
 {
-    // ponytail: quadratic in arity; use a temporary set if wide schemas make validation costly.
+inline void validate_column_labels(std::span<const Index<Column>> columns)
+{
+    // Schemas are small; validating labels needs no temporary allocation.
     for (auto it = columns.begin(); it != columns.end(); ++it)
         if (std::find(columns.begin(), it, *it) != it)
             throw std::invalid_argument("Columns: duplicate column label.");
 }
 
-inline size_t column_index(std::span<const Index<Column>> columns, Index<Column> column)
+inline std::span<const std::byte> column_bytes(std::span<const std::byte> bytes, const ColumnLayout& column)
 {
-    const auto it = std::ranges::find(columns, column);
+    if (column.offset > bytes.size() || column.size > bytes.size() - column.offset)
+        throw std::invalid_argument("Columns: row is too short for the requested field.");
+    return bytes.subspan(column.offset, column.size);
+}
+
+template<ColumnTypes Values, ColumnValueFor<Values> T>
+T read_column(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns, size_t position)
+{
+    if (position >= columns.size())
+        throw std::out_of_range("Columns: column position is out of range.");
+    const auto& column = columns[position];
+    if (column.type != column_type<Values, T>)
+        throw std::invalid_argument("Columns: requested value type does not match the column.");
+    return ColumnCodec<T>::decode(column_bytes(bytes, column));
+}
+
+template<ColumnTypes Values, ColumnValueFor<Values> T>
+void write_column(std::span<std::byte> bytes, std::span<const ColumnLayout> columns, size_t position, T value)
+{
+    if (position >= columns.size())
+        throw std::out_of_range("Columns: column position is out of range.");
+    const auto& column = columns[position];
+    if (column.type != column_type<Values, T>)
+        throw std::invalid_argument("Columns: supplied value type does not match the column.");
+    if (column.offset > bytes.size() || column.size > bytes.size() - column.offset)
+        throw std::invalid_argument("Columns: row is too short for the requested field.");
+    ColumnCodec<T>::encode(value, bytes.subspan(column.offset, column.size));
+}
+}  // namespace detail
+
+template<ColumnTypes Values>
+void validate_columns(std::span<const ColumnLayout> columns)
+{
+    size_t offset = 0;
+    for (auto it = columns.begin(); it != columns.end(); ++it)
+    {
+        const auto size = column_size<Values>(it->type);
+        if (it->offset != offset || it->size != size)
+            throw std::invalid_argument("Columns: layout does not match its registered types.");
+        if (size > std::numeric_limits<size_t>::max() - offset)
+            throw std::length_error("Columns: row byte width exceeds addressable memory.");
+        offset += size;
+        if (std::find_if(columns.begin(), it, [&](const auto& previous) { return previous.label == it->label; }) != it)
+            throw std::invalid_argument("Columns: duplicate column label.");
+    }
+}
+
+inline size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column)
+{
+    const auto it = std::ranges::find(columns, column, &ColumnLayout::label);
     if (it == columns.end())
         throw std::out_of_range("Columns: unknown column label.");
     return static_cast<size_t>(it - columns.begin());
+}
+
+inline size_t row_size(std::span<const ColumnLayout> columns) noexcept { return columns.empty() ? 0 : columns.back().offset + columns.back().size; }
+
+template<ColumnTypes Values>
+void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns)
+{
+    if (bytes.size() != row_size(columns))
+        throw std::invalid_argument("Relation: row byte width does not match its schema.");
+    for (const auto& column : columns)
+        visit_column_type<Values>(column.type,
+                                  [&]<typename T>(std::type_identity<T>)
+                                  {
+                                      const auto source = detail::column_bytes(bytes, column);
+                                      std::array<std::byte, ColumnCodec<T>::size> canonical;
+                                      ColumnCodec<T>::encode(ColumnCodec<T>::decode(source), canonical);
+                                      if (!std::ranges::equal(source, canonical))
+                                          throw std::invalid_argument("Relation: row contains a noncanonical value encoding.");
+                                  });
 }
 }  // namespace ygg::database
 
 namespace ygg
 {
-inline Builder<database::Columns>::Builder(std::span<const Index<database::Column>> columns) { assign(columns); }
-inline Builder<database::Columns>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns))
+template<database::ColumnTypes Values>
+Builder<database::Columns<Values>>::Builder(std::span<const database::ColumnLayout> columns)
+{
+    assign(columns);
+}
+template<database::ColumnTypes Values>
+Builder<database::Columns<Values>>::Builder(std::initializer_list<database::ColumnLayout> columns) : Builder(std::span<const database::ColumnLayout>(columns))
 {
 }
-inline size_t Builder<database::Columns>::column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
-
-inline void Builder<database::Columns>::assign(std::span<const Index<database::Column>> columns)
+template<database::ColumnTypes Values>
+Builder<database::Columns<Values>>::Builder(std::span<const Index<database::Column>> columns)
 {
-    database::validate_columns(columns);
+    assign(columns);
+}
+template<database::ColumnTypes Values>
+Builder<database::Columns<Values>>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns))
+{
+}
+
+template<database::ColumnTypes Values>
+template<database::ColumnValueFor<Values> T>
+void Builder<database::Columns<Values>>::push_back(Index<database::Column> column)
+{
+    for (const auto& existing : span())
+        if (existing.label == column)
+            throw std::invalid_argument("Columns: duplicate column label.");
+    const auto offset = row_size();
+    constexpr auto size = database::ColumnCodec<T>::size;
+    if (size > std::numeric_limits<size_t>::max() - offset)
+        throw std::length_error("Columns: row byte width exceeds addressable memory.");
+    m_data.values.push_back(database::ColumnLayout { column, database::column_type<Values, T>, offset, size });
+    ygg::clear(m_data.index);
+}
+
+template<database::ColumnTypes Values>
+void Builder<database::Columns<Values>>::assign(std::span<const database::ColumnLayout> columns)
+{
+    database::validate_columns<Values>(columns);
     auto& values = m_data.values;
     if (columns.size() <= values.size())
     {
@@ -54,21 +155,50 @@ inline void Builder<database::Columns>::assign(std::span<const Index<database::C
     ygg::clear(m_data.index);
 }
 
-inline void Builder<database::Columns>::assign(std::initializer_list<Index<database::Column>> columns)
+template<database::ColumnTypes Values>
+void Builder<database::Columns<Values>>::assign(std::initializer_list<database::ColumnLayout> columns)
+{
+    assign(std::span<const database::ColumnLayout>(columns));
+}
+
+template<database::ColumnTypes Values>
+void Builder<database::Columns<Values>>::assign(std::span<const Index<database::Column>> columns)
+{
+    database::detail::validate_column_labels(columns);
+    const auto width = database::column_size<Values>(0);
+    if (columns.size() > std::numeric_limits<size_t>::max() / width)
+        throw std::length_error("Columns: row byte width exceeds addressable memory.");
+    m_data.values.resize(columns.size());
+    for (size_t i = 0; i < columns.size(); ++i)
+        m_data.values[i] = database::ColumnLayout { columns[i], 0, i * width, width };
+    ygg::clear(m_data.index);
+}
+
+template<database::ColumnTypes Values>
+void Builder<database::Columns<Values>>::assign(std::initializer_list<Index<database::Column>> columns)
 {
     assign(std::span<const Index<database::Column>>(columns));
 }
-inline void Builder<database::Columns>::initialize(std::span<const Index<database::Column>> columns) { assign(columns); }
-inline void Builder<database::Columns>::initialize(std::initializer_list<Index<database::Column>> columns) { assign(columns); }
+
+template<database::ColumnTypes Values>
+void Builder<database::Columns<Values>>::rename(std::span<const Index<database::Column>> columns)
+{
+    if (columns.size() != size())
+        throw std::invalid_argument("Columns: renaming must preserve arity.");
+    database::detail::validate_column_labels(columns);
+    for (size_t i = 0; i < columns.size(); ++i)
+        m_data.values[i].label = columns[i];
+    ygg::clear(m_data.index);
+}
 }  // namespace ygg
 
 namespace ygg::database
 {
-template<ColumnsViewConcept V>
-Data<Columns>& assign(Data<Columns>& data, const V& source)
+template<ColumnTypes Values, ColumnsViewConcept<Values> V>
+Data<Columns<Values>>& assign(Data<Columns<Values>>& data, const V& source)
 {
     const auto columns = source.span();
-    validate_columns(columns);
+    validate_columns<Values>(columns);
     if (columns.size() <= data.values.size())
     {
         if (columns.data() != data.values.data())
@@ -81,8 +211,8 @@ Data<Columns>& assign(Data<Columns>& data, const V& source)
     return data;
 }
 
-template<ColumnsViewConcept V>
-Builder<Columns>& assign(Builder<Columns>& builder, const V& source)
+template<ColumnTypes Values, ColumnsViewConcept<Values> V>
+Builder<Columns<Values>>& assign(Builder<Columns<Values>>& builder, const V& source)
 {
     builder.assign(source.span());
     return builder;

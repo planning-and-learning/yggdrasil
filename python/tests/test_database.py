@@ -286,3 +286,31 @@ def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
     gc.collect()
     assert [tuple(row) for row in target] == [(4, 5)]
     assert not hasattr(database, "intern_relation")
+
+
+def test_mixed_column_types_and_float_canonicalization() -> None:
+    import math
+
+    types = [database.ColumnType.BOOL, database.ColumnType.FLOAT64, database.ColumnType.INT32]
+    relation = database.Relation([10, 20, 30], types)
+    assert [relation.columns().type(i) for i in range(3)] == types
+    first = relation.insert([True, -0.0, -7])
+    assert relation.insert([True, 0.0, -7]) == first
+    row = relation[first]
+    assert tuple(row) == (True, 0.0, -7)
+    assert [type(value) for value in row] == [bool, float, int]
+    nan = relation.insert([False, float("nan"), 9])
+    assert relation.insert([False, -float("nan"), 9]) == nan
+    assert math.isnan(relation[nan][1])
+    repository = database.RelationRepositoryFactory().create()
+    interned, _ = database.insert(repository, relation)
+    renamed = repository.rename(interned, [1, 2, 3])
+    assert [renamed.columns().type(i) for i in range(3)] == types
+    output = database.Relation()
+    database.assign(output, renamed)
+    assert tuple(output[0]) == (True, 0.0, -7)
+    with pytest.raises(ValueError):
+        database.Relation([1, 2], [database.ColumnType.BOOL])
+    del relation, interned, renamed, repository
+    gc.collect()
+    assert tuple(row) == (True, 0.0, -7)

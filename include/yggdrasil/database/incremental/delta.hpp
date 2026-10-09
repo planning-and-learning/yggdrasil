@@ -18,12 +18,13 @@ namespace ygg::database::incremental
 /// Actual set changes with one ordered schema. Added and removed rows are
 /// disjoint. The caller guarantees additions were absent and removals present.
 /// Exchanging the two inputs to update() reverses the change.
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 struct Delta
 {
-    Builder<Relation<T>> added;
-    Builder<Relation<T>> removed;
+    Builder<Relation<Values>> added;
+    Builder<Relation<Values>> removed;
 
+    explicit Delta(std::span<const ColumnLayout> columns) : added(columns), removed(columns) {}
     explicit Delta(std::span<const Index<Column>> columns) : added(columns), removed(columns) {}
     Delta(std::initializer_list<Index<Column>> columns) : Delta(std::span<const Index<Column>>(columns.begin(), columns.size())) {}
 
@@ -37,13 +38,13 @@ struct Delta
 
 namespace detail
 {
-template<TriviallyCopyable T, RelationViewConcept<T> A, RelationViewConcept<T> R>
-void require_delta(const A& added, const R& removed, std::span<const Index<Column>> columns)
+template<ColumnTypes Values, RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+void require_delta(const A& added, const R& removed, std::span<const ColumnLayout> columns)
 {
     database::detail::require_plan_columns(added.columns().span(), columns);
     database::detail::require_plan_columns(removed.columns().span(), columns);
     for (size_t i = 0; i < added.size(); ++i)
-        if (removed.contains(added.row(i)))
+        if (removed.contains(Row<Values>(added.row(i), added.columns().span())))
             throw std::invalid_argument("Incremental evaluation: added and removed rows overlap.");
 }
 }  // namespace detail

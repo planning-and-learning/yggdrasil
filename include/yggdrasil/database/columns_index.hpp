@@ -18,10 +18,10 @@ struct Index<database::Column> : IndexMixin<Index<database::Column>>
     using Base::Base;
 };
 
-template<>
-struct Index<database::Columns> : IndexMixin<Index<database::Columns>>
+template<database::ColumnTypes Values>
+struct Index<database::Columns<Values>> : IndexMixin<Index<database::Columns<Values>>>
 {
-    using Base = IndexMixin<Index<database::Columns>>;
+    using Base = IndexMixin<Index<database::Columns<Values>>>;
     using Base::Base;
 };
 }  // namespace ygg

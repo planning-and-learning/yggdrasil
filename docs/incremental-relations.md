@@ -2,8 +2,8 @@
 
 The C++ interfaces in `yggdrasil/database/incremental/` maintain projection and
 natural join, including joins where both inputs change. Full `project` and `join`
-remain available with their existing interfaces and behavior. All results use the
-existing `Builder<Relation<T>>` and contextual `View` interfaces; publishing them
+use the same typed schemas and packed rows. All results use the
+existing `Builder<Relation<Values>>` and contextual `View` interfaces (`Values` is the registered type list); publishing them
 in a repository is optional.
 
 ## Projection
@@ -12,17 +12,17 @@ in a repository is optional.
 using namespace ygg;
 using namespace ygg::database;
 
-Builder<Relation<uint_t>> input({ Index<Column>(0), Index<Column>(1) });
-input.insert({ 7, 10 });
-input.insert({ 7, 11 });
+Builder<Relation<>> input({ Index<Column>(0), Index<Column>(1) });
+input.insert(std::tuple { uint_t(7), uint_t(10) });
+input.insert(std::tuple { uint_t(7), uint_t(11) });
 
-Workspace<uint_t> workspace;
-incremental::ProjectionEvaluator<uint_t> projection(
-    ProjectionPlan(input.columns().span(), { Index<Column>(0) }));
+Workspace<> workspace;
+incremental::ProjectionEvaluator<> projection(
+    ProjectionPlan<>(input.columns().span(), { Index<Column>(0) }));
 projection.initialize(input, workspace);
 
-incremental::Delta<uint_t> change(input.columns().span());
-change.removed.insert({ 7, 10 });
+incremental::Delta<> change(input.columns().span());
+change.removed.insert(std::tuple { uint_t(7), uint_t(10) });
 projection.update(change.added, change.removed, workspace);
 // (7) still has one witness, so get_delta() is empty and get_result() contains it.
 
@@ -30,7 +30,7 @@ projection.update(change.removed, change.added, workspace); // undo
 ```
 
 Each evaluator owns its maintained result, last output delta, and persistent
-bookkeeping. A caller supplies reusable `Workspace<T>` scratch for each call;
+bookkeeping. A caller supplies reusable `Workspace<Values>` scratch for each call;
 multiple evaluators can share it sequentially. Projection stores a support count
 for each distinct result row. Updates report the net change of the entire batch,
 including cancellation when a removed last witness is replaced by another.
@@ -49,11 +49,11 @@ Witness-only replacement avoids this growth and avoids result erasure entirely.
 
 ## Natural join
 
-Include `incremental/join.hpp` and construct `JoinEvaluator<T>(plan)`. The
+Include `incremental/join.hpp` and construct `JoinEvaluator<Values>(plan)`. The
 interface accepts existing relation builders or views:
 
 ```cpp
-incremental::JoinEvaluator<uint_t> joined(JoinPlan(lhs.columns(), rhs.columns()));
+incremental::JoinEvaluator<> joined(JoinPlan<>(lhs.columns(), rhs.columns()));
 joined.initialize(lhs, rhs, workspace);
 joined.update(lhs_change.added, lhs_change.removed,
               rhs_change.added, rhs_change.removed, workspace);
@@ -70,7 +70,7 @@ input views need to stay alive between calls, and no repository is needed.
 For example, when only the left input changes:
 
 ```cpp
-Builder<Relation<uint_t>> unchanged(rhs.columns().span());
+Builder<Relation<>> unchanged(rhs.columns().span());
 joined.update(lhs_change.added, lhs_change.removed, unchanged, unchanged, workspace);
 ```
 
@@ -100,7 +100,7 @@ promise for arbitrarily growing relations.
 
 ## Delta and lifetime contract
 
-- `Delta<T>` owns reusable `added` and `removed` relation builders with identical
+- `Delta<Values>` owns reusable `added` and `removed` relation builders with identical
   ordered schemas. `clear()` retains their buffers.
 - Input deltas must be actual set changes: added rows were absent, removed rows
   were present, and the sets are disjoint. Schema and overlap errors are checked

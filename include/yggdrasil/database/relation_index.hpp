@@ -12,24 +12,24 @@
 
 namespace ygg
 {
-template<TriviallyCopyable T>
-struct Index<database::Relation<T>> : IndexMixin<Index<database::Relation<T>>>
+template<database::ColumnTypes Values>
+struct Index<database::Relation<Values>> : IndexMixin<Index<database::Relation<Values>>>
 {
-    using Base = IndexMixin<Index<database::Relation<T>>>;
+    using Base = IndexMixin<Index<database::Relation<Values>>>;
     using Base::Base;
 };
 
-template<TriviallyCopyable T>
-struct Index<database::RelationRow<T>> : IndexMixin<Index<database::RelationRow<T>>>
+template<database::ColumnTypes Values>
+struct Index<database::RelationRow<Values>> : IndexMixin<Index<database::RelationRow<Values>>>
 {
-    using Base = IndexMixin<Index<database::RelationRow<T>>>;
+    using Base = IndexMixin<Index<database::RelationRow<Values>>>;
     using Base::Base;
 };
 
-template<TriviallyCopyable T>
-struct Index<database::RelationRowSet<T>> : IndexMixin<Index<database::RelationRowSet<T>>>
+template<database::ColumnTypes Values>
+struct Index<database::RelationRowSet<Values>> : IndexMixin<Index<database::RelationRowSet<Values>>>
 {
-    using Base = IndexMixin<Index<database::RelationRowSet<T>>>;
+    using Base = IndexMixin<Index<database::RelationRowSet<Values>>>;
     using Base::Base;
 };
 }  // namespace ygg

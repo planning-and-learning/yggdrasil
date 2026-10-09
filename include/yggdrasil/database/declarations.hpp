@@ -6,8 +6,8 @@
 #ifndef YGG_DATABASE_DECLARATIONS_HPP_
 #define YGG_DATABASE_DECLARATIONS_HPP_
 
-#include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/types.hpp"
+#include "yggdrasil/database/column_codec.hpp"
 
 namespace ygg::database
 {
@@ -15,31 +15,35 @@ namespace ygg::database
 struct Column
 {
 };
+struct ColumnLayout;
+template<ColumnTypes Values = DefaultColumnTypes>
 struct Columns
 {
 };
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 struct Relation
 {
 };
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 struct RelationRow
 {
 };
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 struct RelationRowSet
 {
 };
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
+class Row;
+template<ColumnTypes Values = DefaultColumnTypes>
 class RelationPool;
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 class RelationPoolFactory;
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 class RelationRepository;
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 class RelationRepositoryFactory;
-template<TriviallyCopyable T = uint_t>
-using RelationView = ygg::View<ygg::Index<Relation<T>>, RelationRepository<T>>;
+template<ColumnTypes Values = DefaultColumnTypes>
+using RelationView = ygg::View<ygg::Index<Relation<Values>>, RelationRepository<Values>>;
 }  // namespace ygg::database
 
 #endif

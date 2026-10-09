@@ -20,6 +20,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -29,9 +30,8 @@ namespace
 {
 using ColumnIndex = Index<database::Column>;
 
-// This case intentionally uses only the old append/clear interface. Compile this
-// file with YGG_DATABASE_APPEND_ONLY_PROFILE against either revision to compare
-// the cost of supporting erasure, without requiring incremental headers there.
+// Define YGG_DATABASE_APPEND_ONLY_PROFILE to isolate the append/clear workload
+// without pulling in the incremental evaluators.
 void append_only(benchmark::State& state)
 {
     const auto rows = static_cast<size_t>(state.range(0));
@@ -41,7 +41,7 @@ void append_only(benchmark::State& state)
     {
         relation.clear();
         for (size_t i = 0; i < rows; ++i)
-            relation.insert({ static_cast<uint_t>(i / repetitions), static_cast<uint_t>(i / repetitions + rows) });
+            relation.insert(std::tuple { static_cast<uint_t>(i / repetitions), static_cast<uint_t>(i / repetitions + rows) });
     };
     refill();
     for (auto _ : state)
@@ -59,7 +59,7 @@ void append_only(benchmark::State& state)
 
 struct Transition
 {
-    database::incremental::Delta<uint_t> delta { ColumnIndex(1), ColumnIndex(2) };
+    database::incremental::Delta<> delta { ColumnIndex(1), ColumnIndex(2) };
     Builder<database::Relation<>> snapshot { ColumnIndex(1), ColumnIndex(2) };
 };
 
@@ -73,14 +73,17 @@ struct Trace
     const bool changing_keys;
 
     Trace(size_t rows, size_t changed_rows, size_t witnesses, bool changing_keys) :
-        rows(rows), changed_rows(changed_rows), witnesses(witnesses), changing_keys(changing_keys)
+        rows(rows),
+        changed_rows(changed_rows),
+        witnesses(witnesses),
+        changing_keys(changing_keys)
     {
         if (rows == 0 || witnesses == 0 || changed_rows > rows / 3)
             throw std::invalid_argument("Benchmark trace requires positive rows/witnesses and three disjoint change blocks.");
         if (rows > std::numeric_limits<uint_t>::max() / 4)
             throw std::overflow_error("Benchmark trace row count exceeds the tuple value range.");
         for (size_t i = 0; i < rows; ++i)
-            initial.insert({ static_cast<uint_t>(i / witnesses), static_cast<uint_t>(i) });
+            initial.insert(std::tuple { static_cast<uint_t>(i / witnesses), static_cast<uint_t>(i) });
         refresh(0);
     }
 
@@ -103,12 +106,12 @@ struct Trace
             const auto offset = phase == 0 ? uint_t { 0 } : static_cast<uint_t>((generation + phase) * rows);
             for (size_t i = begin; i < begin + changed_rows; ++i)
             {
-                step.delta.removed.insert(current[i]);
+                step.delta.removed.insert(std::tuple { current[i][0], current[i][1] });
                 current[i] = { static_cast<uint_t>(i / witnesses + (changing_keys ? offset : 0)), static_cast<uint_t>(i + offset) };
-                step.delta.added.insert(current[i]);
+                step.delta.added.insert(std::tuple { current[i][0], current[i][1] });
             }
             for (const auto& row : current)
-                step.snapshot.insert(row);
+                step.snapshot.insert(std::tuple { row[0], row[1] });
         };
         // A -> B -> C -> B -> A -> D -> A: two levels, undo, then a sibling.
         replace(0, 1);
@@ -128,7 +131,9 @@ struct JoinTrace
     const std::array<size_t, 6> transitions { 0, 1, 2, 3, 4, 5 };
 
     JoinTrace(size_t rows, size_t changed_rows, size_t witnesses) :
-        lhs(rows, changed_rows, witnesses, true), rhs(rows, changed_rows, witnesses, true), rows(rows)
+        lhs(rows, changed_rows, witnesses, true),
+        rhs(rows, changed_rows, witnesses, true),
+        rows(rows)
     {
         const std::array columns { ColumnIndex(1), ColumnIndex(3) };
         rhs.initial.rename(columns);
@@ -167,9 +172,7 @@ size_t changed_rows(const Builder<database::Relation<>>& before, const Builder<d
     return result;
 }
 
-bool equal_delta(const database::incremental::Delta<uint_t>& delta,
-                 const Builder<database::Relation<>>& before,
-                 const Builder<database::Relation<>>& after)
+bool equal_delta(const database::incremental::Delta<>& delta, const Builder<database::Relation<>>& before, const Builder<database::Relation<>>& after)
 {
     size_t added = 0;
     size_t removed = 0;
@@ -241,8 +244,8 @@ void measure(benchmark::State& state, TraceType& trace, Update update, Result re
     state.counters["retained_bytes"] = static_cast<double>(memory());
     state.counters["output_rows"] = static_cast<double>(result().size());
     state.counters["input_delta_rows"] = static_cast<double>(2 * state.range(1));
-    state.counters["seconds_per_update"] = benchmark::Counter(static_cast<double>(trace.transitions.size()),
-                                                             benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+    state.counters["seconds_per_update"] =
+        benchmark::Counter(static_cast<double>(trace.transitions.size()), benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
     if constexpr (Latency)
         state.counters["max_update_ns"] = std::chrono::duration<double, std::nano>(maximum).count();
 }
@@ -252,12 +255,12 @@ void projection(benchmark::State& state)
 {
     // Witness replacements change payloads while preserving projected keys.
     Trace trace(static_cast<size_t>(state.range(0)), static_cast<size_t>(state.range(1)), static_cast<size_t>(state.range(2)), !ReplaceWitnesses);
-    const database::ProjectionPlan plan(trace.initial.columns().span(), { ColumnIndex(1) });
+    const database::ProjectionPlan<> plan(trace.initial.columns().span(), { ColumnIndex(1) });
     database::Workspace<> workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::ProjectionEvaluator<uint_t>(plan);
+            return database::incremental::ProjectionEvaluator<>(plan);
         else
             return Builder<database::Relation<>>(plan.output_columns().span());
     }();
@@ -302,7 +305,7 @@ void projection(benchmark::State& state)
         std::swap(previous, reference);
     }
     state.counters["mean_output_delta_rows"] = static_cast<double>(output_delta_rows) / trace.transitions.size();
-    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity() * sizeof(uint_t); });
+    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity(); });
 }
 
 template<bool Incremental, bool Latency>
@@ -315,14 +318,14 @@ void fixed_input_join(benchmark::State& state)
     auto fixed = pool.get_or_allocate({ ColumnIndex(1), ColumnIndex(3) });
     for (size_t key = 0; key < rows; ++key)
         for (size_t match = 0; match < fanout; ++match)
-            fixed->insert({ static_cast<uint_t>(key), static_cast<uint_t>(match) });
-    const database::JoinPlan plan(trace.initial.columns().span(), fixed->columns().span());
+            fixed->insert(std::tuple { static_cast<uint_t>(key), static_cast<uint_t>(match) });
+    const database::JoinPlan<> plan(trace.initial.columns().span(), fixed->columns().span());
     const Builder<database::Relation<>> unchanged(fixed->columns().span());
     database::Workspace<> workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::JoinEvaluator<uint_t>(plan);
+            return database::incremental::JoinEvaluator<>(plan);
         else
             return Builder<database::Relation<>>(plan.output_columns().span());
     }();
@@ -368,25 +371,29 @@ void fixed_input_join(benchmark::State& state)
         std::swap(previous, reference);
     }
     state.counters["mean_output_delta_rows"] = static_cast<double>(output_delta_rows) / trace.transitions.size();
-    measure<Latency>(state, trace, update, result, [&]
-    {
-        auto bytes = evaluation.memory_usage() + workspace.row.capacity() * sizeof(uint_t);
-        if constexpr (!Incremental)
-            bytes += index.index().memory_usage();
-        return bytes;
-    });
+    measure<Latency>(state,
+                     trace,
+                     update,
+                     result,
+                     [&]
+                     {
+                         auto bytes = evaluation.memory_usage() + workspace.row.capacity();
+                         if constexpr (!Incremental)
+                             bytes += index.index().memory_usage();
+                         return bytes;
+                     });
 }
 
 template<bool Incremental, bool Latency>
 void changing_join(benchmark::State& state)
 {
     JoinTrace trace(static_cast<size_t>(state.range(0)), static_cast<size_t>(state.range(1)), static_cast<size_t>(state.range(2)));
-    const database::JoinPlan plan(trace.lhs.initial.columns().span(), trace.rhs.initial.columns().span());
+    const database::JoinPlan<> plan(trace.lhs.initial.columns().span(), trace.rhs.initial.columns().span());
     database::Workspace<> workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::JoinEvaluator<uint_t>(plan);
+            return database::incremental::JoinEvaluator<>(plan);
         else
             return Builder<database::Relation<>>(plan.output_columns().span());
     }();
@@ -434,8 +441,7 @@ void changing_join(benchmark::State& state)
         std::swap(previous, reference);
     }
     state.counters["mean_output_delta_rows"] = static_cast<double>(output_delta_rows) / trace.transitions.size();
-    measure<Latency>(state, trace, update, result, [&]
-    { return evaluation.memory_usage() + workspace.row.capacity() * sizeof(uint_t) + workspace.join_index.memory_usage(); });
+    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity() + workspace.join_index.memory_usage(); });
     // Each side removes and adds range(1) rows in the same overlapping key groups.
     state.counters["input_delta_rows"] = static_cast<double>(4 * state.range(1));
 }

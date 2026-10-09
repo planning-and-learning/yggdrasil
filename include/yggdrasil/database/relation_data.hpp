@@ -14,12 +14,12 @@
 
 namespace ygg
 {
-template<TriviallyCopyable T>
-struct Data<database::Relation<T>>
+template<database::ColumnTypes Values>
+struct Data<database::Relation<Values>>
 {
-    Index<database::Relation<T>> index;
-    Index<database::Columns> columns_index;
-    Index<database::RelationRowSet<T>> row_set_index;
+    Index<database::Relation<Values>> index;
+    Index<database::Columns<Values>> columns_index;
+    Index<database::RelationRowSet<Values>> row_set_index;
     size_t schema_namespace = 0;
 
     void clear() noexcept

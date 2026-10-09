@@ -10,6 +10,8 @@
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <algorithm>
+#include <boost/hash2/xxhash.hpp>
+#include <limits>
 #include <ranges>
 #include <stdexcept>
 
@@ -18,57 +20,72 @@ namespace ygg::database
 
 namespace detail
 {
-template<TriviallyCopyable T>
-auto join_key_values(std::span<const T> tuple, std::span<const size_t> positions)
+/// Hash canonical field bytes in logical key order, without materializing a key.
+inline hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice> keys) noexcept
 {
-    return positions | std::views::transform([tuple](size_t position) -> const T& { return tuple[position]; });
+    auto hash = boost::hash2::xxhash_64 {};
+    for (const auto key : keys)
+        hash.update(row.data() + key.offset, key.size);
+    return hash.result();
 }
 
-template<TriviallyCopyable T, RelationViewConcept<T> V>
-void build_join_index(const V& build, std::span<const size_t> keys, UnorderedMultiMap<hash_t, size_t>& index)
+inline bool join_keys_equal(std::span<const std::byte> lhs,
+                            std::span<const ColumnSlice> lhs_keys,
+                            std::span<const std::byte> rhs,
+                            std::span<const ColumnSlice> rhs_keys) noexcept
+{
+    for (size_t i = 0; i < lhs_keys.size(); ++i)
+        if (!std::ranges::equal(lhs.subspan(lhs_keys[i].offset, lhs_keys[i].size), rhs.subspan(rhs_keys[i].offset, rhs_keys[i].size)))
+            return false;
+    return true;
+}
+
+inline void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys)
+{
+    for (const auto key : keys)
+        if (std::ranges::none_of(columns, [&](const auto& column) { return column_slice(column) == key; }))
+            throw std::out_of_range("JoinIndex: key does not identify a field in the relation schema.");
+}
+
+template<ColumnTypes Values, RelationViewConcept<Values> V>
+void build_join_index(const V& build, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, size_t>& index)
 {
     index.clear();
     index.reserve(build.size());
     for (size_t i = 0; i < build.size(); ++i)
-        index.insert(ygg::hash_range(join_key_values(build.row(i), keys)), i);
+        index.insert(join_key_hash(build.row(i), keys), i);
 }
 }  // namespace detail
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> V>
-JoinIndex<T>::JoinIndex(const V& build, std::span<const size_t> key_positions) :
-    m_relation_index(build.get_storage_index()),
-    m_keys(key_positions.begin(), key_positions.end())
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> V>
+JoinIndex<Values>::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_relation_index(build.get_storage_index()), m_keys(keys.begin(), keys.end())
 {
     if (m_relation_index == std::numeric_limits<size_t>::max())
         throw std::invalid_argument("JoinIndex: use a RelationPool to create indexed inputs.");
-    for (const auto position : key_positions)
-        if (position >= build.arity())
-            throw std::out_of_range("JoinIndex: key position is outside the relation schema.");
-    if (!key_positions.empty())
-        detail::build_join_index<T>(build, key_positions, m_index);
+    detail::require_key_slices(build.columns().span(), keys);
+    if (!keys.empty())
+        detail::build_join_index<Values>(build, keys, m_index);
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> V>
-bool JoinIndex<T>::matches(const V& relation, std::span<const size_t> key_positions) const noexcept
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> V>
+bool JoinIndex<Values>::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
 {
-    return ygg::EqualTo<JoinIndex<T>> {}(*this, std::make_tuple(relation.get_storage_index(), key_positions));
+    return ygg::EqualTo<JoinIndex<Values>> {}(*this, std::make_tuple(relation.get_storage_index(), keys));
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> V>
-const JoinIndex<T>& JoinIndexCache<T>::get_or_create(const V& relation, std::span<const size_t> key_positions)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> V>
+const JoinIndex<Values>& JoinIndexCache<Values>::get_or_create(const V& relation, std::span<const ColumnSlice> keys)
 {
     // Canonical empty row sets can be shared across different schema arities.
     // Validate the current schema even when the row-storage key is cached.
-    for (const auto position : key_positions)
-        if (position >= relation.arity())
-            throw std::out_of_range("JoinIndex: key position is outside the relation schema.");
-    const auto found = m_indexes.find(std::make_tuple(relation.get_storage_index(), key_positions));
+    detail::require_key_slices(relation.columns().span(), keys);
+    const auto found = m_indexes.find(std::make_tuple(relation.get_storage_index(), keys));
     if (found != m_indexes.end())
         return *found;
-    return *m_indexes.emplace(relation, key_positions).first;
+    return *m_indexes.emplace(relation, keys).first;
 }
 
 }  // namespace ygg::database

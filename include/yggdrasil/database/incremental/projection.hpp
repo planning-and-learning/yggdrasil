@@ -26,55 +26,55 @@ namespace ygg::database::incremental
 /// until the next mutation. Rejected schema/overlap checks preserve the previous
 /// evaluation. A failure during mutation leaves partial contents; call initialize()
 /// before using them.
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 class ProjectionEvaluator
 {
-    ProjectionPlan m_plan;
-    Builder<Relation<T>> m_result;
+    ProjectionPlan<Values> m_plan;
+    Builder<Relation<Values>> m_result;
     std::vector<size_t> m_supports;
-    Delta<T> m_delta;
+    Delta<Values> m_delta;
     std::vector<uint_t> m_pending_removals;
     bool m_initialized = false;
 
-    std::span<const T> project_row(std::span<const T> input, Workspace<T>& workspace) const;
-    bool add(std::span<const T> row);
-    void remove(std::span<const T> row);
+    std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace<Values>& workspace) const;
+    bool add(std::span<const std::byte> row);
+    void remove(std::span<const std::byte> row);
 
 public:
-    explicit ProjectionEvaluator(ProjectionPlan plan);
+    explicit ProjectionEvaluator(ProjectionPlan<Values> plan);
 
     /// Replace the baseline, retaining buffers, and clear the last output delta.
-    template<RelationViewConcept<T> V>
-    void initialize(const V& input, Workspace<T>& workspace);
+    template<RelationViewConcept<Values> V>
+    void initialize(const V& input, Workspace<Values>& workspace);
 
     /// The two inputs must describe actual changes to the initialized input set.
     /// Schema and overlap errors are rejected before changing the result.
-    template<RelationViewConcept<T> A, RelationViewConcept<T> R>
-    void update(const A& added, const R& removed, Workspace<T>& workspace);
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    void update(const A& added, const R& removed, Workspace<Values>& workspace);
 
-    const Builder<Relation<T>>& get_result() const& noexcept;
-    const Builder<Relation<T>>& get_result() const&& = delete;
-    const Delta<T>& get_delta() const& noexcept;
-    const Delta<T>& get_delta() const&& = delete;
+    const Builder<Relation<Values>>& get_result() const& noexcept;
+    const Builder<Relation<Values>>& get_result() const&& = delete;
+    const Delta<Values>& get_delta() const& noexcept;
+    const Delta<Values>& get_delta() const&& = delete;
 
     /// Retained working storage; excludes the immutable plan and caller workspace.
     size_t memory_usage() const noexcept;
 };
 
-template<TriviallyCopyable T>
-std::span<const T> ProjectionEvaluator<T>::project_row(std::span<const T> input, Workspace<T>& workspace) const
+template<ColumnTypes Values>
+std::span<const std::byte> ProjectionEvaluator<Values>::project_row(std::span<const std::byte> input, Workspace<Values>& workspace) const
 {
     auto& row = workspace.row;
     row.clear();
-    for (const auto position : m_plan.positions())
-        row.push_back(input[position]);
+    row.reserve(m_plan.output_columns().row_size());
+    database::detail::append_fields(row, input, m_plan.positions());
     return row;
 }
 
-template<TriviallyCopyable T>
-bool ProjectionEvaluator<T>::add(std::span<const T> row)
+template<ColumnTypes Values>
+bool ProjectionEvaluator<Values>::add(std::span<const std::byte> row)
 {
-    const auto index = m_result.insert(row);
+    const auto index = m_result.insert(Row<Values>(row, m_plan.output_columns().span()));
     if (index == m_supports.size())
     {
         m_supports.push_back(1);
@@ -87,27 +87,27 @@ bool ProjectionEvaluator<T>::add(std::span<const T> row)
     return false;
 }
 
-template<TriviallyCopyable T>
-void ProjectionEvaluator<T>::remove(std::span<const T> row)
+template<ColumnTypes Values>
+void ProjectionEvaluator<Values>::remove(std::span<const std::byte> row)
 {
-    const auto index = m_result.find(row);
+    const auto index = m_result.find(Row<Values>(row, m_plan.output_columns().span()));
     if (!index || m_supports[*index] == 0)
         throw std::invalid_argument("Incremental projection: removal has no supporting row.");
     if (--m_supports[*index] == 0)
         m_pending_removals.push_back(*index);
 }
 
-template<TriviallyCopyable T>
-ProjectionEvaluator<T>::ProjectionEvaluator(ProjectionPlan plan) :
+template<ColumnTypes Values>
+ProjectionEvaluator<Values>::ProjectionEvaluator(ProjectionPlan<Values> plan) :
     m_plan(std::move(plan)),
     m_result(m_plan.output_columns().span()),
     m_delta(m_plan.output_columns().span())
 {
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> V>
-void ProjectionEvaluator<T>::initialize(const V& input, Workspace<T>& workspace)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> V>
+void ProjectionEvaluator<Values>::initialize(const V& input, Workspace<Values>& workspace)
 {
     database::detail::require_plan_columns(input.columns().span(), m_plan.input_columns().span());
     m_initialized = false;
@@ -120,13 +120,13 @@ void ProjectionEvaluator<T>::initialize(const V& input, Workspace<T>& workspace)
     m_initialized = true;
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> A, RelationViewConcept<T> R>
-void ProjectionEvaluator<T>::update(const A& added, const R& removed, Workspace<T>& workspace)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+void ProjectionEvaluator<Values>::update(const A& added, const R& removed, Workspace<Values>& workspace)
 {
     if (!m_initialized)
         throw std::logic_error("Incremental projection: initialize before updating.");
-    detail::require_delta<T>(added, removed, m_plan.input_columns().span());
+    detail::require_delta<Values>(added, removed, m_plan.input_columns().span());
     m_initialized = false;
     m_delta.clear();
     m_pending_removals.clear();
@@ -136,7 +136,7 @@ void ProjectionEvaluator<T>::update(const A& added, const R& removed, Workspace<
     {
         const auto row = project_row(added.row(i), workspace);
         if (add(row))
-            m_delta.added.insert(row);
+            m_delta.added.insert(Row<Values>(row, m_plan.output_columns().span()));
     }
     // Inspect final support counts only (DBSP, Proposition 4.7). A replaced
     // witness revives its existing row without an erase/insert cycle.
@@ -145,7 +145,7 @@ void ProjectionEvaluator<T>::update(const A& added, const R& removed, Workspace<
     for (const auto position : m_pending_removals)
         if (m_supports[position] == 0)
         {
-            m_delta.removed.insert(m_result.row(position));
+            m_delta.removed.insert(Row<Values>(m_result.row(position), m_plan.output_columns().span()));
             m_result.erase(position);
             m_supports[position] = m_supports.back();
             m_supports.pop_back();
@@ -153,23 +153,22 @@ void ProjectionEvaluator<T>::update(const A& added, const R& removed, Workspace<
     m_initialized = true;
 }
 
-template<TriviallyCopyable T>
-const Builder<Relation<T>>& ProjectionEvaluator<T>::get_result() const& noexcept
+template<ColumnTypes Values>
+const Builder<Relation<Values>>& ProjectionEvaluator<Values>::get_result() const& noexcept
 {
     return m_result;
 }
 
-template<TriviallyCopyable T>
-const Delta<T>& ProjectionEvaluator<T>::get_delta() const& noexcept
+template<ColumnTypes Values>
+const Delta<Values>& ProjectionEvaluator<Values>::get_delta() const& noexcept
 {
     return m_delta;
 }
 
-template<TriviallyCopyable T>
-size_t ProjectionEvaluator<T>::memory_usage() const noexcept
+template<ColumnTypes Values>
+size_t ProjectionEvaluator<Values>::memory_usage() const noexcept
 {
-    return m_result.memory_usage() + m_delta.memory_usage() + m_supports.capacity() * sizeof(size_t)
-           + m_pending_removals.capacity() * sizeof(uint_t);
+    return m_result.memory_usage() + m_delta.memory_usage() + m_supports.capacity() * sizeof(size_t) + m_pending_removals.capacity() * sizeof(uint_t);
 }
 
 }  // namespace ygg::database::incremental

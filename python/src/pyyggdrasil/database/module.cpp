@@ -7,6 +7,7 @@
 #include "yggdrasil/python/owner.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/vector.h>
 #include <optional>
@@ -15,6 +16,33 @@
 
 namespace yggdrasil
 {
+
+namespace
+{
+using Values = ygg::database::DefaultColumnTypes;
+enum class ColumnType : size_t
+{
+    UINT32 = ygg::database::column_type<Values, std::uint32_t>,
+    INT32 = ygg::database::column_type<Values, std::int32_t>,
+    UINT64 = ygg::database::column_type<Values, std::uint64_t>,
+    INT64 = ygg::database::column_type<Values, std::int64_t>,
+    FLOAT32 = ygg::database::column_type<Values, float>,
+    FLOAT64 = ygg::database::column_type<Values, double>,
+    BOOL = ygg::database::column_type<Values, bool>,
+};
+
+ygg::Builder<ygg::database::Columns<>> make_columns(const std::vector<ygg::uint_t>& labels, const std::vector<ColumnType>& types)
+{
+    if (!types.empty() && types.size() != labels.size())
+        throw std::invalid_argument("Relation: one type is required for each column.");
+    auto columns = ygg::Builder<ygg::database::Columns<>>();
+    for (size_t i = 0; i < labels.size(); ++i)
+        ygg::database::visit_column_type<Values>(static_cast<size_t>(types.empty() ? ColumnType::UINT32 : types[i]),
+                                                 [&]<typename T>(std::type_identity<T>)
+                                                 { columns.template push_back<T>(ygg::Index<ygg::database::Column>(labels[i])); });
+    return columns;
+}
+}  // namespace
 
 void bind_database_module_definitions(nb::module_& m)
 {
@@ -25,8 +53,8 @@ void bind_database_module_definitions(nb::module_& m)
     using RelationPool = ygg::database::RelationPool<>;
     using RelationRepository = ygg::database::RelationRepository<>;
     using RelationRepositoryFactory = ygg::database::RelationRepositoryFactory<>;
-    using Row = std::span<const ygg::uint_t>;
-    using ColumnIndices = std::span<const ygg::Index<ygg::database::Column>>;
+    using Row = ygg::database::Row<>;
+    using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
     const auto column_indices = [](const std::vector<ygg::uint_t>& columns)
     {
         std::vector<ygg::Index<ygg::database::Column>> result;
@@ -35,6 +63,15 @@ void bind_database_module_definitions(nb::module_& m)
             result.emplace_back(column);
         return result;
     };
+
+    nb::enum_<ColumnType>(m, "ColumnType")
+        .value("UINT32", ColumnType::UINT32)
+        .value("INT32", ColumnType::INT32)
+        .value("UINT64", ColumnType::UINT64)
+        .value("INT64", ColumnType::INT64)
+        .value("FLOAT32", ColumnType::FLOAT32)
+        .value("FLOAT64", ColumnType::FLOAT64)
+        .value("BOOL", ColumnType::BOOL);
 
     nb::class_<Row>(m,
                     "RelationRow",
@@ -48,7 +85,7 @@ void bind_database_module_definitions(nb::module_& m)
                      index += static_cast<std::ptrdiff_t>(row.size());
                  if (index < 0 || static_cast<std::size_t>(index) >= row.size())
                      throw nb::index_error();
-                 return row[index];
+                 return row.visit(static_cast<size_t>(index), [](auto value) -> nb::object { return nb::cast(value); });
              });
 
     nb::class_<ColumnIndices>(m,
@@ -63,12 +100,20 @@ void bind_database_module_definitions(nb::module_& m)
                      index += static_cast<std::ptrdiff_t>(columns.size());
                  if (index < 0 || static_cast<std::size_t>(index) >= columns.size())
                      throw nb::index_error();
-                 return columns[index].get_value();
+                 return columns[index].label.get_value();
+             })
+        .def("type",
+             [](ColumnIndices columns, size_t index)
+             {
+                 if (index >= columns.size())
+                     throw nb::index_error();
+                 return static_cast<ColumnType>(columns[index].type);
              });
 
     nb::class_<Relation>(m, "Relation", "Mutable builder of fixed-arity tuples with unique column labels.")
-        .def(nb::new_([column_indices](const std::vector<ygg::uint_t>& columns) { return new Relation(column_indices(columns)); }),
-             nb::arg("columns") = std::vector<ygg::uint_t> {})
+        .def(nb::new_([](const std::vector<ygg::uint_t>& columns, const std::vector<ColumnType>& types) { return new Relation(make_columns(columns, types)); }),
+             nb::arg("columns") = std::vector<ygg::uint_t> {},
+             nb::arg("types") = std::vector<ColumnType> {})
         .def("__len__", &Relation::size)
         .def(
             "__getitem__",
@@ -78,7 +123,7 @@ void bind_database_module_definitions(nb::module_& m)
                     index += static_cast<std::ptrdiff_t>(relation.size());
                 if (index < 0 || static_cast<std::size_t>(index) >= relation.size())
                     throw nb::index_error();
-                return relation.row(index);
+                return Row(relation.row(index), relation.columns().span());
             },
             nb::keep_alive<0, 1>())
         .def("arity", &Relation::arity)
@@ -89,7 +134,21 @@ void bind_database_module_definitions(nb::module_& m)
             [](const Relation& relation) { return relation.columns().span(); },
             nb::keep_alive<0, 1>())
         .def("clear", &Relation::clear)
-        .def("insert", [](Relation& relation, const std::vector<ygg::uint_t>& row) { return relation.insert(row); }, nb::arg("row"));
+        .def(
+            "insert",
+            [](Relation& relation, nb::sequence row)
+            {
+                if (nb::len(row) != relation.arity())
+                    throw std::invalid_argument("Relation: row arity does not match schema.");
+                auto bytes = std::vector<std::byte>(relation.columns().row_size());
+                const auto columns = relation.columns().span();
+                for (size_t i = 0; i < columns.size(); ++i)
+                    ygg::database::visit_column_type<Values>(columns[i].type,
+                                                             [&]<typename T>(std::type_identity<T>)
+                                                             { relation.columns().template set<T>(bytes, columns[i].label, nb::cast<T>(row[i])); });
+                return relation.insert(Row(bytes, columns));
+            },
+            nb::arg("row"));
 
     nb::class_<RelationPtr>(m, "RelationPtr", "Owns a pooled relation until the handle and its borrowed rows are released.")
         .def("get", &RelationPtr::get, nb::rv_policy::reference_internal);
@@ -98,8 +157,13 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<>())
         .def(
             "get_or_allocate",
-            [column_indices](RelationPool& pool, const std::vector<ygg::uint_t>& columns) { return pool.get_or_allocate(column_indices(columns)); },
+            [](RelationPool& pool, const std::vector<ygg::uint_t>& labels, const std::vector<ColumnType>& types)
+            {
+                const auto columns = make_columns(labels, types);
+                return pool.get_or_allocate(columns.span());
+            },
             nb::arg("columns"),
+            nb::arg("types") = std::vector<ColumnType> {},
             nb::keep_alive<0, 1>());
 
     ygg::bind_index<ygg::Index<RelationTag>>(m, "RelationIndex");
@@ -118,7 +182,7 @@ void bind_database_module_definitions(nb::module_& m)
                                     index += static_cast<std::ptrdiff_t>(relation.size());
                                 if (index < 0 || static_cast<std::size_t>(index) >= relation.size())
                                     throw nb::index_error();
-                                return relation.row(index);
+                                return Row(relation.row(index), relation.columns().span());
                             },
                             nb::keep_alive<0, 1>())
                         .def("arity", &RelationView::arity)
@@ -129,7 +193,7 @@ void bind_database_module_definitions(nb::module_& m)
                             {
                                 if (index >= relation.size())
                                     throw nb::index_error();
-                                return relation.row(index);
+                                return Row(relation.row(index), relation.columns().span());
                             },
                             nb::arg("index"),
                             nb::keep_alive<0, 1>())

@@ -1,5 +1,6 @@
 from .._pyyggdrasil.database import (
     ColumnIndices,
+    ColumnType,
     Relation,
     RelationIndex,
     RelationPool,
@@ -15,6 +16,7 @@ from .._pyyggdrasil.database import (
 
 __all__ = [
     "ColumnIndices",
+    "ColumnType",
     "Relation",
     "RelationIndex",
     "RelationPool",

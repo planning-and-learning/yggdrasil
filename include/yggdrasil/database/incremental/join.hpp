@@ -26,52 +26,55 @@ namespace ygg::database::incremental
 /// Rejected schema/overlap checks preserve the previous evaluation. A failure
 /// during mutation leaves partial contents; call initialize() before using them.
 /// No repository publication is required.
-template<TriviallyCopyable T = uint_t>
+template<ColumnTypes Values = DefaultColumnTypes>
 class JoinEvaluator
 {
-    JoinPlan m_plan;
-    Builder<Relation<T>> m_lhs;
-    Builder<Relation<T>> m_rhs;
+    JoinPlan<Values> m_plan;
+    Builder<Relation<Values>> m_lhs;
+    Builder<Relation<Values>> m_rhs;
     UnorderedMultiMap<hash_t, uint_t> m_lhs_index;
     UnorderedMultiMap<hash_t, uint_t> m_rhs_index;
-    Builder<Relation<T>> m_result;
-    Delta<T> m_delta;
+    Builder<Relation<Values>> m_result;
+    Delta<Values> m_delta;
     bool m_initialized = false;
 
-    template<RelationViewConcept<T> V>
-    static void insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index);
+    template<RelationViewConcept<Values> V>
+    static void insert_rows(const V& input, Builder<Relation<Values>>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index);
 
-    template<RelationViewConcept<T> V>
-    static void erase_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index);
+    template<RelationViewConcept<Values> V>
+    static void erase_rows(const V& input, Builder<Relation<Values>>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index);
 
-    template<RelationViewConcept<T> L, RelationViewConcept<T> R>
-    void join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<T>>& output, Workspace<T>& workspace) const;
+    template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+    void join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<Values>>& output, Workspace<Values>& workspace) const;
 
 public:
-    explicit JoinEvaluator(JoinPlan plan);
+    explicit JoinEvaluator(JoinPlan<Values> plan);
 
     /// Replace the baseline, retaining buffers, and clear the last output delta.
-    template<RelationViewConcept<T> L, RelationViewConcept<T> R>
-    void initialize(const L& lhs, const R& rhs, Workspace<T>& workspace);
+    template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+    void initialize(const L& lhs, const R& rhs, Workspace<Values>& workspace);
 
     /// Each pair describes actual set changes in that input's original column
     /// order. Pass empty changes for an unchanged side; swap added/removed on
     /// both sides to undo. Reports the exact net change of the complete batch.
-    template<RelationViewConcept<T> LA, RelationViewConcept<T> LR, RelationViewConcept<T> RA, RelationViewConcept<T> RR>
-    void update(const LA& lhs_added, const LR& lhs_removed, const RA& rhs_added, const RR& rhs_removed, Workspace<T>& workspace);
+    template<RelationViewConcept<Values> LA, RelationViewConcept<Values> LR, RelationViewConcept<Values> RA, RelationViewConcept<Values> RR>
+    void update(const LA& lhs_added, const LR& lhs_removed, const RA& rhs_added, const RR& rhs_removed, Workspace<Values>& workspace);
 
-    const Builder<Relation<T>>& get_result() const& noexcept;
-    const Builder<Relation<T>>& get_result() const&& = delete;
-    const Delta<T>& get_delta() const& noexcept;
-    const Delta<T>& get_delta() const&& = delete;
+    const Builder<Relation<Values>>& get_result() const& noexcept;
+    const Builder<Relation<Values>>& get_result() const&& = delete;
+    const Delta<Values>& get_delta() const& noexcept;
+    const Delta<Values>& get_delta() const&& = delete;
 
     /// Retained inputs, result, delta and indexes; excludes plan and caller workspace.
     size_t memory_usage() const noexcept;
 };
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> V>
-void JoinEvaluator<T>::insert_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> V>
+void JoinEvaluator<Values>::insert_rows(const V& input,
+                                        Builder<Relation<Values>>& rows,
+                                        std::span<const ColumnSlice> keys,
+                                        UnorderedMultiMap<hash_t, uint_t>& index)
 {
     if (!keys.empty())
         index.reserve_values(rows.size() + input.size());
@@ -79,21 +82,24 @@ void JoinEvaluator<T>::insert_rows(const V& input, Builder<Relation<T>>& rows, s
     {
         const auto row = input.row(i);
         const auto previous_size = rows.size();
-        const auto position = rows.insert(row);
+        const auto position = rows.insert(Row<Values>(row, input.columns().span()));
         if (position != previous_size)
             throw std::invalid_argument("Incremental join: added row is already present in the input.");
         if (!keys.empty())
-            index.insert(ygg::hash_range(database::detail::join_key_values(row, keys)), position);
+            index.insert(database::detail::join_key_hash(row, keys), position);
     }
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> V>
-void JoinEvaluator<T>::erase_rows(const V& input, Builder<Relation<T>>& rows, std::span<const size_t> keys, UnorderedMultiMap<hash_t, uint_t>& index)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> V>
+void JoinEvaluator<Values>::erase_rows(const V& input,
+                                       Builder<Relation<Values>>& rows,
+                                       std::span<const ColumnSlice> keys,
+                                       UnorderedMultiMap<hash_t, uint_t>& index)
 {
     for (size_t i = 0; i < input.size(); ++i)
     {
-        const auto position = rows.find(input.row(i));
+        const auto position = rows.find(Row<Values>(input.row(i), input.columns().span()));
         if (!position)
             throw std::invalid_argument("Incremental join: removed row is absent from the input.");
         const auto last = ygg::to_uint_t(rows.size() - 1);
@@ -102,37 +108,37 @@ void JoinEvaluator<T>::erase_rows(const V& input, Builder<Relation<T>>& rows, st
             rows.erase(*position);
             continue;
         }
-        const auto removed_key = ygg::hash_range(database::detail::join_key_values(rows.row(*position), keys));
+        const auto removed_key = database::detail::join_key_hash(rows.row(*position), keys);
         rows.erase(*position);
         [[maybe_unused]] const auto erased = index.erase(removed_key, *position);
         assert(erased);
         if (*position != last)
         {
-            const auto moved_key = ygg::hash_range(database::detail::join_key_values(rows.row(*position), keys));
+            const auto moved_key = database::detail::join_key_hash(rows.row(*position), keys);
             [[maybe_unused]] const auto replaced = index.replace(moved_key, last, *position);
             assert(replaced);
         }
     }
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> L, RelationViewConcept<T> R>
-void JoinEvaluator<T>::join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<T>>& output, Workspace<T>& workspace) const
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void JoinEvaluator<Values>::join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<Values>>& output, Workspace<Values>& workspace) const
 {
-    database::detail::join_rows<T>(lhs,
-                                   rhs,
-                                   m_plan.output_columns().span(),
-                                   m_plan.lhs_keys(),
-                                   m_plan.rhs_keys(),
-                                   m_plan.rhs_payload(),
-                                   build_left,
-                                   build_left ? m_lhs_index : m_rhs_index,
-                                   output,
-                                   workspace);
+    database::detail::join_rows<Values>(lhs,
+                                        rhs,
+                                        m_plan.output_columns().span(),
+                                        m_plan.lhs_keys(),
+                                        m_plan.rhs_keys(),
+                                        m_plan.rhs_payload(),
+                                        build_left,
+                                        build_left ? m_lhs_index : m_rhs_index,
+                                        output,
+                                        workspace);
 }
 
-template<TriviallyCopyable T>
-JoinEvaluator<T>::JoinEvaluator(JoinPlan plan) :
+template<ColumnTypes Values>
+JoinEvaluator<Values>::JoinEvaluator(JoinPlan<Values> plan) :
     m_plan(std::move(plan)),
     m_lhs(m_plan.lhs_columns().span()),
     m_rhs(m_plan.rhs_columns().span()),
@@ -141,9 +147,9 @@ JoinEvaluator<T>::JoinEvaluator(JoinPlan plan) :
 {
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> L, RelationViewConcept<T> R>
-void JoinEvaluator<T>::initialize(const L& lhs, const R& rhs, Workspace<T>& workspace)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void JoinEvaluator<Values>::initialize(const L& lhs, const R& rhs, Workspace<Values>& workspace)
 {
     database::detail::require_plan_columns(lhs.columns().span(), m_plan.lhs_columns().span());
     database::detail::require_plan_columns(rhs.columns().span(), m_plan.rhs_columns().span());
@@ -161,14 +167,14 @@ void JoinEvaluator<T>::initialize(const L& lhs, const R& rhs, Workspace<T>& work
     m_initialized = true;
 }
 
-template<TriviallyCopyable T>
-template<RelationViewConcept<T> LA, RelationViewConcept<T> LR, RelationViewConcept<T> RA, RelationViewConcept<T> RR>
-void JoinEvaluator<T>::update(const LA& lhs_added, const LR& lhs_removed, const RA& rhs_added, const RR& rhs_removed, Workspace<T>& workspace)
+template<ColumnTypes Values>
+template<RelationViewConcept<Values> LA, RelationViewConcept<Values> LR, RelationViewConcept<Values> RA, RelationViewConcept<Values> RR>
+void JoinEvaluator<Values>::update(const LA& lhs_added, const LR& lhs_removed, const RA& rhs_added, const RR& rhs_removed, Workspace<Values>& workspace)
 {
     if (!m_initialized)
         throw std::logic_error("Incremental join: initialize before updating.");
-    detail::require_delta<T>(lhs_added, lhs_removed, m_plan.lhs_columns().span());
-    detail::require_delta<T>(rhs_added, rhs_removed, m_plan.rhs_columns().span());
+    detail::require_delta<Values>(lhs_added, lhs_removed, m_plan.lhs_columns().span());
+    detail::require_delta<Values>(rhs_added, rhs_removed, m_plan.rhs_columns().span());
     m_initialized = false;
     m_delta.clear();
 
@@ -185,29 +191,29 @@ void JoinEvaluator<T>::update(const LA& lhs_added, const LR& lhs_removed, const 
 
     for (size_t i = 0; i < m_delta.removed.size(); ++i)
     {
-        const auto position = m_result.find(m_delta.removed.row(i));
+        const auto position = m_result.find(Row<Values>(m_delta.removed.row(i), m_plan.output_columns().span()));
         assert(position);
         m_result.erase(*position);
     }
     for (size_t i = 0; i < m_delta.added.size(); ++i)
-        m_result.insert(m_delta.added.row(i));
+        m_result.insert(Row<Values>(m_delta.added.row(i), m_plan.output_columns().span()));
     m_initialized = true;
 }
 
-template<TriviallyCopyable T>
-const Builder<Relation<T>>& JoinEvaluator<T>::get_result() const& noexcept
+template<ColumnTypes Values>
+const Builder<Relation<Values>>& JoinEvaluator<Values>::get_result() const& noexcept
 {
     return m_result;
 }
 
-template<TriviallyCopyable T>
-const Delta<T>& JoinEvaluator<T>::get_delta() const& noexcept
+template<ColumnTypes Values>
+const Delta<Values>& JoinEvaluator<Values>::get_delta() const& noexcept
 {
     return m_delta;
 }
 
-template<TriviallyCopyable T>
-size_t JoinEvaluator<T>::memory_usage() const noexcept
+template<ColumnTypes Values>
+size_t JoinEvaluator<Values>::memory_usage() const noexcept
 {
     return m_lhs.memory_usage() + m_rhs.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + m_lhs_index.memory_usage()
            + m_rhs_index.memory_usage();

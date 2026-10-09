@@ -3,6 +3,7 @@
 
 #include "yggdrasil/containers/detail/geometric_byte_storage.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/core/bytes.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 
@@ -82,8 +83,7 @@ public:
             [&](size_t)
             {
                 std::byte* slot = m_storage.allocate(needed_bytes);
-                const auto stored_size = static_cast<Size>(size);
-                std::memcpy(slot, &stored_size, sizeof(stored_size));
+                store_unaligned({ slot, sizeof(Size) }, static_cast<Size>(size));
                 if (size > 0)
                     std::memcpy(slot + payload_offset, data, size * sizeof(T));
                 return slot;
@@ -95,8 +95,7 @@ public:
     {
         assert(index < m_index.size());
         const auto* slot = m_index[index];
-        auto size = Size {};
-        std::memcpy(&size, slot, sizeof(size));
+        const auto size = load_unaligned<Size>({ slot, sizeof(Size) });
         if (size == 0)
             return {};
         return { std::launder(reinterpret_cast<const T*>(slot + payload_offset)), static_cast<size_t>(size) };

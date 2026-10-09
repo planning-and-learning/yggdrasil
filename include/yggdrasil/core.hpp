@@ -19,6 +19,7 @@
 #define YGG_CORE_HPP_
 
 #include "yggdrasil/core/bit.hpp"
+#include "yggdrasil/core/bytes.hpp"
 #include "yggdrasil/core/chrono.hpp"
 #include "yggdrasil/core/closed_interval.hpp"
 #include "yggdrasil/core/concepts.hpp"

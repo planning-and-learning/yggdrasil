@@ -10,15 +10,35 @@
 #include "yggdrasil/database/columns_index.hpp"
 
 #include <cista/containers/vector.h>
+#include <compare>
+#include <cstddef>
 #include <tuple>
+
+namespace ygg::database
+{
+/// Offsets and widths are derived from the ordered schema and validated before use.
+struct ColumnLayout
+{
+    Index<Column> label;
+    size_t type;
+    size_t offset;
+    size_t size;
+
+    auto cista_members() noexcept { return std::tie(label, type, offset, size); }
+    auto cista_members() const noexcept { return std::tie(label, type, offset, size); }
+    auto identifying_members() const noexcept { return std::tie(label, type); }
+    friend bool operator==(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.identifying_members() == rhs.identifying_members(); }
+    friend auto operator<=>(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.identifying_members() <=> rhs.identifying_members(); }
+};
+}  // namespace ygg::database
 
 namespace ygg
 {
-template<>
-struct Data<database::Columns>
+template<database::ColumnTypes Values>
+struct Data<database::Columns<Values>>
 {
-    Index<database::Columns> index;
-    IndexList<database::Column> values;
+    Index<database::Columns<Values>> index;
+    ::cista::offset::vector<database::ColumnLayout> values;
 
     void clear() noexcept
     {
