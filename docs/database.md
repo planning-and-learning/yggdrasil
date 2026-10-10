@@ -1,6 +1,6 @@
 # Relational algebra
 
-`<yggdrasil/database/operations.hpp>` provides header-only set operations in
+`<yggdrasil/database/semantics/operations.hpp>` provides header-only set operations in
 `ygg::database`. Relations have a runtime schema and packed, fixed-width rows.
 Different columns can hold different types without a tag or variant in every cell.
 Nullary relations and runtime arities remain supported.
@@ -13,7 +13,7 @@ cell type. `DefaultColumnTypes` contains `uint32_t`, `int32_t`, `uint64_t`,
 consistently for relations, schemas, plans, workspaces, and repositories.
 
 ```cpp
-#include <yggdrasil/database/operations.hpp>
+#include <yggdrasil/database/semantics/operations.hpp>
 
 using namespace ygg::database;
 using Values = ygg::TypeList<std::uint32_t, double>;
@@ -203,7 +203,7 @@ mixed-type behavior are covered in `python/tests/test_database.py`.
 
 ## Tuple distances
 
-`<yggdrasil/database/distance.hpp>` computes directed, unweighted shortest-path
+`<yggdrasil/database/semantics/distance.hpp>` computes directed, unweighted shortest-path
 distances between tuple-valued vertices. Sources and targets have `k` columns;
 an edge has `2k`, with its source tuple first and target tuple second. All four
 vertex positions must have matching field types in the same order. Their column
@@ -255,7 +255,7 @@ internally for infinity; attempting to exceed the supported vertex count throws.
 
 ### Incremental distance
 
-Include `<yggdrasil/database/incremental/distance.hpp>` and retain one evaluator:
+Include `<yggdrasil/database/semantics/incremental/distance.hpp>` and retain one evaluator:
 
 ```cpp
 incremental::DistanceEvaluator<> evaluator(plan);
@@ -397,7 +397,7 @@ takes the six added/removed relations in the same order as the C++ interface.
 
 ## Query graphs and optimization
 
-`<yggdrasil/database/query_repository.hpp>` adds an interned relational query graph without
+`<yggdrasil/database/syntax/query_repository.hpp>` adds an interned relational query graph without
 capturing input rows. A `QueryRepository<Values>` only stores and interns query
 records; create repositories with a `QueryRepositoryFactory<Values>`, whose
 repositories have distinct identities. Queries are built like other interned
@@ -442,13 +442,13 @@ after its source repository is destroyed. `node_count()`, `root_count()`, and
 `roots()` expose its shape; indexing by a root query index returns an ordinary
 `QueryView`. Row enumeration order is not a query guarantee.
 
-Include `<yggdrasil/database/formatter.hpp>` to format a plan with
+Include `<yggdrasil/database/syntax/formatter.hpp>` to format a plan with
 `fmt::format("{}", plan)`, `ygg::to_string(plan)`, or `explain(plan)`.
 Python's `plan.explain()` uses the same rendering. The `fmt::formatter`
 specialization follows `YGG_ENABLE_FMT_FORMATTERS`; `explain()` remains available
 when public formatters are disabled.
 
-`<yggdrasil/database/optimization.hpp>` selects the optimizer at the roots:
+`<yggdrasil/database/optimization/optimization.hpp>` selects the optimizer at the roots:
 
 ```cpp
 using namespace ygg::database;
@@ -578,9 +578,9 @@ global optimality.
 
 ### Full and incremental evaluation
 
-`<yggdrasil/database/query_evaluation.hpp>` provides `QueryEvaluator<Values>`.
+`<yggdrasil/database/semantics/query_evaluation.hpp>` provides `QueryEvaluator<Values>`.
 `evaluate(bindings)` computes all roots, reusing retained output and scratch
-storage. `<yggdrasil/database/incremental/query.hpp>` provides
+storage. `<yggdrasil/database/semantics/incremental/query.hpp>` provides
 `incremental::QueryEvaluator<Values>`. Initialize it once with input bindings,
 then call `update(changes)` with one `(added, removed)` pair of relation views per
 input slot. Each pair contains actual set additions and removals in that input's ordered typed schema.

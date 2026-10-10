@@ -1,9 +1,9 @@
 #include "distance.hpp"
 
 #include "query_inputs.hpp"
-#include "yggdrasil/database/distance.hpp"
-#include "yggdrasil/database/incremental/distance.hpp"
-#include "yggdrasil/database/relation.hpp"
+#include "yggdrasil/database/semantics/distance.hpp"
+#include "yggdrasil/database/semantics/incremental/distance.hpp"
+#include "yggdrasil/database/semantics/relation.hpp"
 
 #include <cstddef>
 #include <span>

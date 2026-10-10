@@ -5,10 +5,10 @@
 #include <memory>
 #include <random>
 #include <vector>
-#include <yggdrasil/database/incremental/query.hpp>
-#include <yggdrasil/database/query_evaluation.hpp>
-#include <yggdrasil/database/query_repository.hpp>
-#include <yggdrasil/database/relation_repository.hpp>
+#include <yggdrasil/database/semantics/incremental/query.hpp>
+#include <yggdrasil/database/semantics/query_evaluation.hpp>
+#include <yggdrasil/database/syntax/query_repository.hpp>
+#include <yggdrasil/database/semantics/relation_repository.hpp>
 #include "query_helpers.hpp"
 
 namespace qb = ygg::tests::qb;

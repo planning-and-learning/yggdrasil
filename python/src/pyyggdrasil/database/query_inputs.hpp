@@ -1,7 +1,7 @@
 #ifndef PYYGGDRASIL_DATABASE_QUERY_INPUTS_HPP_
 #define PYYGGDRASIL_DATABASE_QUERY_INPUTS_HPP_
 
-#include "yggdrasil/database/relation.hpp"
+#include "yggdrasil/database/semantics/relation.hpp"
 
 #include <cstddef>
 #include <nanobind/nanobind.h>

@@ -2,11 +2,11 @@
  * Copyright (C) 2026 Dominik Drexler
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#include "yggdrasil/database/incremental/query.hpp"
+#include "yggdrasil/database/semantics/incremental/query.hpp"
 
-#include "yggdrasil/database/generic_join.hpp"
-#include "yggdrasil/database/optimization.hpp"
-#include "yggdrasil/database/query_evaluation.hpp"
+#include "yggdrasil/database/semantics/generic_join.hpp"
+#include "yggdrasil/database/optimization/optimization.hpp"
+#include "yggdrasil/database/semantics/query_evaluation.hpp"
 
 #include <array>
 #include <benchmark/benchmark.h>

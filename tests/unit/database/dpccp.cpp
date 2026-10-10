@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/details/dpccp.hpp"
+#include "yggdrasil/database/optimization/details/dpccp.hpp"
 
 #include <array>
 #include <gtest/gtest.h>

@@ -18,7 +18,7 @@
 #include "yggdrasil/containers/block_array_set.hpp"
 
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/database/columns_index.hpp"
+#include "yggdrasil/database/syntax/columns_index.hpp"
 #include "yggdrasil/ids/index_coder.hpp"
 
 #include <array>

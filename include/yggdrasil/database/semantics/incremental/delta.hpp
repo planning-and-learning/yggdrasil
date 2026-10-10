@@ -1,0 +1,64 @@
+/*
+ * Copyright (C) 2026 Dominik Drexler
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_DELTA_HPP_
+#define YGG_DATABASE_SEMANTICS_INCREMENTAL_DELTA_HPP_
+
+#include "yggdrasil/database/semantics/operations.hpp"
+
+#include <initializer_list>
+#include <ranges>
+#include <tuple>
+#include <span>
+#include <stdexcept>
+
+namespace ygg::database::incremental
+{
+
+/// Actual set changes with one ordered schema. Added and removed rows are
+/// disjoint. The caller guarantees additions were absent and removals present.
+/// Exchanging the two inputs to update() reverses the change.
+template<ColumnTypes Values = DefaultColumnTypes>
+struct Delta
+{
+    Builder<Relation<Values>> added;
+    Builder<Relation<Values>> removed;
+
+    explicit Delta(std::span<const ColumnLayout> columns) : added(columns), removed(columns) {}
+    explicit Delta(std::span<const Index<Column>> columns) : added(columns), removed(columns) {}
+    Delta(std::initializer_list<Index<Column>> columns) : Delta(std::span<const Index<Column>>(columns.begin(), columns.size())) {}
+
+    void clear() noexcept
+    {
+        added.clear();
+        removed.clear();
+    }
+    size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
+};
+
+/// Sized random-access (added, removed) pairs of actual set changes, one per input.
+template<typename R, typename Values>
+concept RelationDeltaRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
+                             && requires(std::ranges::range_reference_t<const R> change) {
+                                    requires RelationViewConcept<decltype(std::get<0>(change)), Values>;
+                                    requires RelationViewConcept<decltype(std::get<1>(change)), Values>;
+                                };
+
+namespace detail
+{
+template<ColumnTypes Values, RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+void require_delta(const A& added, const R& removed, std::span<const ColumnLayout> columns)
+{
+    database::detail::require_plan_columns(added.columns().span(), columns);
+    database::detail::require_plan_columns(removed.columns().span(), columns);
+    for (size_t i = 0; i < added.size(); ++i)
+        if (removed.contains(Row<Values>(added.row(i), added.columns().span())))
+            throw std::invalid_argument("Incremental evaluation: added and removed rows overlap.");
+}
+}  // namespace detail
+
+}  // namespace ygg::database::incremental
+
+#endif

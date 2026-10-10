@@ -2,9 +2,9 @@
 #include "distance.hpp"
 #include "query.hpp"
 
-#include "yggdrasil/database/operations.hpp"
-#include "yggdrasil/database/relation_pool.hpp"
-#include "yggdrasil/database/relation_repository.hpp"
+#include "yggdrasil/database/semantics/operations.hpp"
+#include "yggdrasil/database/semantics/relation_pool.hpp"
+#include "yggdrasil/database/semantics/relation_repository.hpp"
 #include "yggdrasil/python/bindings.hpp"
 #include "yggdrasil/python/owner.hpp"
 

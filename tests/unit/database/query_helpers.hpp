@@ -5,7 +5,7 @@
 #include <initializer_list>
 #include <span>
 #include <stdexcept>
-#include <yggdrasil/database/query.hpp>
+#include <yggdrasil/database/syntax/query.hpp>
 
 /// Test-only query construction on top of checkout + insert_query.
 namespace ygg::tests::qb

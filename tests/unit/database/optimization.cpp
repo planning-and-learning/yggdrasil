@@ -5,11 +5,11 @@
 #include <limits>
 #include <random>
 #include <type_traits>
-#include <yggdrasil/database/formatter.hpp>
-#include <yggdrasil/database/incremental/query.hpp>
-#include <yggdrasil/database/optimization.hpp>
-#include <yggdrasil/database/query_evaluation.hpp>
-#include <yggdrasil/database/relation_repository.hpp>
+#include <yggdrasil/database/syntax/formatter.hpp>
+#include <yggdrasil/database/semantics/incremental/query.hpp>
+#include <yggdrasil/database/optimization/optimization.hpp>
+#include <yggdrasil/database/semantics/query_evaluation.hpp>
+#include <yggdrasil/database/semantics/relation_repository.hpp>
 #include "query_helpers.hpp"
 
 namespace qb = ygg::tests::qb;

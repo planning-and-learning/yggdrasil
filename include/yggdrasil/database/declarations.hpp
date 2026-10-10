@@ -7,7 +7,7 @@
 #define YGG_DATABASE_DECLARATIONS_HPP_
 
 #include "yggdrasil/core/types.hpp"
-#include "yggdrasil/database/column_codec.hpp"
+#include "yggdrasil/database/syntax/column_codec.hpp"
 
 namespace ygg::database
 {

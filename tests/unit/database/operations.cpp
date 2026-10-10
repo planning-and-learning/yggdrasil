@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/operations.hpp"
+#include "yggdrasil/database/semantics/operations.hpp"
 
-#include "yggdrasil/database/relation_pool.hpp"
-#include "yggdrasil/database/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_pool.hpp"
+#include "yggdrasil/database/semantics/relation_repository.hpp"
 
 #include <array>
 #include <cista/serialization.h>

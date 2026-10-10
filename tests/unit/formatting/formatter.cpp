@@ -18,7 +18,7 @@
 #include "yggdrasil/formatting/formatter.hpp"
 
 #include "yggdrasil/containers/associative_containers.hpp"
-#include "yggdrasil/database/formatter.hpp"
+#include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/formatting/associative_container_formatters.hpp"
 #include "yggdrasil/formatting/cista_formatters.hpp"
 #include "yggdrasil/formatting/dynamic_bitset_formatters.hpp"

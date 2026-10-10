@@ -1,7 +1,7 @@
 #include <array>
 #include <gtest/gtest.h>
 #include <set>
-#include <yggdrasil/database/optimization.hpp>
+#include <yggdrasil/database/optimization/optimization.hpp>
 #include "query_helpers.hpp"
 
 namespace qb = ygg::tests::qb;

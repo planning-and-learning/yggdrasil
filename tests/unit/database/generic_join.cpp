@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/incremental/generic_join.hpp"
+#include "yggdrasil/database/semantics/incremental/generic_join.hpp"
 
-#include "yggdrasil/database/incremental/projection.hpp"
-#include "yggdrasil/database/relation_repository.hpp"
+#include "yggdrasil/database/semantics/incremental/projection.hpp"
+#include "yggdrasil/database/semantics/relation_repository.hpp"
 
 #include <array>
 #include <bit>
