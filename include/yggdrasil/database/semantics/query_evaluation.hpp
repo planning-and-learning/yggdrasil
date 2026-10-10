@@ -130,13 +130,12 @@ public:
                         database::project(child(operation.get_arg()), operation.get_plan(), out, m_workspace);
                     else if constexpr (std::same_as<Concrete, QueryView<Values, QueryRenameTag>>)
                     {
-                        out.clear();
-                        const auto& input = child(operation.get_arg());
-                        for (size_t j = 0; j < input.size(); ++j)
-                            out.insert(Row<Values>(input.row(j), operation.columns()));
+                        assign(out, child(operation.get_arg()));
+                        out.rename(operation.columns());
                     }
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectEqualTag>>
-                                       || std::same_as<Concrete, QueryView<Values, QuerySelectValueTag>>)
+                    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectEqualTag>>)
+                        select_equal_columns(child(operation.get_arg()), operation.get_lhs_column(), operation.get_rhs_column(), out);
+                    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectValueTag>>)
                         select(child(operation.get_arg()), [&](Row<Values> row) { return detail::query_accepts(operation, row.bytes()); }, out);
                     else if constexpr (std::same_as<Concrete, QueryView<Values, QueryUnionTag>>)
                         database::union_(child(operation.get_lhs()), child(operation.get_rhs()), out);

@@ -8,7 +8,10 @@
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
 
+#include <fmt/ranges.h>
 #include <iterator>
+#include <ranges>
+#include <vector>
 
 namespace ygg::database
 {
@@ -48,41 +51,25 @@ namespace detail
 template<typename OutputIt, ColumnTypes Values>
 OutputIt format_query_plan(OutputIt out, const QueryPlan<Values>& plan)
 {
+    // Plain values, so explanations do not depend on the optional public formatters.
+    const auto value = [](auto index) { return index.get_value(); };
     for (size_t id = 0; id < plan.node_count(); ++id)
         ygg::visit(
             [&]<typename Concrete>(Concrete operation)
             {
-                out = fmt::format_to(out, "{}: {}(", id, query_operation_name(operation));
-                bool first = true;
-                for_each_child(operation,
-                               [&](QueryView<Values> child)
-                               {
-                                   out = fmt::format_to(out, "{}{}", first ? "" : ",", child.get_index().get_value());
-                                   first = false;
-                               });
-                out = fmt::format_to(out, ") columns=[");
-                const auto columns = operation.columns();
-                for (size_t i = 0; i < columns.size(); ++i)
-                    out = fmt::format_to(out, "{}{}:{}", i ? "," : "", columns[i].label.get_value(), columns[i].type);
-                out = fmt::format_to(out, "]");
+                std::vector<uint_t> children;
+                for_each_child(operation, [&](QueryView<Values> child) { children.push_back(child.get_index().get_value()); });
+                const auto columns = operation.columns()
+                                     | std::views::transform([](const ColumnLayout& column) { return fmt::format("{}:{}", column.label.get_value(), column.type); });
+                out = fmt::format_to(out, "{}: {}({}) columns=[{}]", id, query_operation_name(operation), fmt::join(children, ","), fmt::join(columns, ","));
                 if constexpr (std::same_as<Concrete, QueryView<Values, QueryInputTag>>)
                     out = fmt::format_to(out, " slot={}", operation.get_input_slot());
                 if constexpr (std::same_as<Concrete, QueryView<Values, QueryGenericJoinTag>>)
-                {
-                    out = fmt::format_to(out, " variables=[");
-                    const auto variables = operation.get_variable_order();
-                    for (size_t i = 0; i < variables.size(); ++i)
-                        out = fmt::format_to(out, "{}{}", i ? "," : "", variables[i].get_value());
-                    out = fmt::format_to(out, "]");
-                }
+                    out = fmt::format_to(out, " variables=[{}]", fmt::join(operation.get_variable_order() | std::views::transform(value), ","));
                 out = fmt::format_to(out, "\n");
             },
             plan[Index<Query<Values>>(to_uint_t(id))].get_variant());
-    out = fmt::format_to(out, "roots=[");
-    const auto roots = plan.roots();
-    for (size_t i = 0; i < roots.size(); ++i)
-        out = fmt::format_to(out, "{}{}", i ? "," : "", roots[i].get_value());
-    return fmt::format_to(out, "]\n");
+    return fmt::format_to(out, "roots=[{}]\n", fmt::join(plan.roots() | std::views::transform(value), ","));
 }
 }  // namespace detail
 

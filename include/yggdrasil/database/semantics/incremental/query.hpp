@@ -103,11 +103,12 @@ class QueryEvaluator
             assign(value.result, inputs[operation.get_input_slot()]);
         else if constexpr (std::same_as<Concrete, QueryView<Values, QueryRenameTag>>)
         {
-            const auto& input = result(operation.get_arg());
-            for (size_t i = 0; i < input.size(); ++i)
-                value.result.insert(Row<Values>(input.row(i), operation.columns()));
+            assign(value.result, result(operation.get_arg()));
+            value.result.rename(operation.columns());
         }
-        else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectEqualTag>> || std::same_as<Concrete, QueryView<Values, QuerySelectValueTag>>)
+        else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectEqualTag>>)
+            select_equal_columns(result(operation.get_arg()), operation.get_lhs_column(), operation.get_rhs_column(), value.result);
+        else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectValueTag>>)
             select(result(operation.get_arg()), [&](Row<Values> row) { return database::detail::query_accepts(operation, row.bytes()); }, value.result);
         else if constexpr (std::same_as<Concrete, QueryView<Values, QueryUnionTag>>)
             database::union_(result(operation.get_lhs()), result(operation.get_rhs()), value.result);

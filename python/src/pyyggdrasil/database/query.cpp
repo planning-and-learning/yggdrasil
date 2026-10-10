@@ -7,10 +7,9 @@
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/python/bindings.hpp"
+#include "yggdrasil/python/type_casters/unordered_map.hpp"
 
 #include <array>
-#include <map>
-#include <nanobind/stl/map.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
@@ -223,37 +222,37 @@ void bind_database_query(nb::module_& m)
         .def("explain", [](const Plan& plan) { return db::explain(plan); });
 
     // Python keys distinct counts by plain column labels.
-    const auto to_columns = [](const std::map<ygg::uint_t, double>& labels)
+    const auto to_columns = [](const ygg::UnorderedMap<ygg::uint_t, double>& labels)
     {
-        std::map<Column, double> result;
+        ygg::UnorderedMap<Column, double> result;
         for (const auto& [label, count] : labels)
             result.emplace(Column(label), count);
         return result;
     };
     nb::class_<db::RelationStatistics>(m, "RelationStatistics")
-        .def(nb::new_([to_columns](double rows, const std::map<ygg::uint_t, double>& distinct)
+        .def(nb::new_([to_columns](double rows, const ygg::UnorderedMap<ygg::uint_t, double>& distinct)
                       { return new db::RelationStatistics { rows, to_columns(distinct) }; }),
              nb::arg("rows") = 0,
-             nb::arg("distinct") = std::map<ygg::uint_t, double> {})
+             nb::arg("distinct") = ygg::UnorderedMap<ygg::uint_t, double> {})
         .def_rw("rows", &db::RelationStatistics::rows)
         .def_prop_rw(
             "distinct",
             [](const db::RelationStatistics& statistics)
             {
-                std::map<ygg::uint_t, double> result;
+                ygg::UnorderedMap<ygg::uint_t, double> result;
                 for (const auto& [column, count] : statistics.distinct)
                     result.emplace(column.get_value(), count);
                 return result;
             },
-            [to_columns](db::RelationStatistics& statistics, const std::map<ygg::uint_t, double>& distinct) { statistics.distinct = to_columns(distinct); });
+            [to_columns](db::RelationStatistics& statistics, const ygg::UnorderedMap<ygg::uint_t, double>& distinct) { statistics.distinct = to_columns(distinct); });
     using QueryIndex = ygg::Index<db::Query<Values>>;
     nb::class_<db::Statistics<Values>>(m, "Statistics", "What is known about the data; everything is optional.")
         .def(nb::new_(
-                 [](std::optional<size_t> objects, std::map<size_t, db::RelationStatistics> inputs, std::map<QueryIndex, db::RelationStatistics> expressions)
+                 [](std::optional<size_t> objects, ygg::UnorderedMap<size_t, db::RelationStatistics> inputs, ygg::UnorderedMap<QueryIndex, db::RelationStatistics> expressions)
                  { return new db::Statistics<Values> { objects, std::move(inputs), std::move(expressions) }; }),
              nb::arg("objects") = nb::none(),
-             nb::arg("inputs") = std::map<size_t, db::RelationStatistics> {},
-             nb::arg("expressions") = std::map<QueryIndex, db::RelationStatistics> {})
+             nb::arg("inputs") = ygg::UnorderedMap<size_t, db::RelationStatistics> {},
+             nb::arg("expressions") = ygg::UnorderedMap<QueryIndex, db::RelationStatistics> {})
         .def_rw("objects", &db::Statistics<Values>::objects)
         .def_rw("inputs", &db::Statistics<Values>::inputs)
         .def_rw("expressions", &db::Statistics<Values>::expressions);

@@ -89,7 +89,7 @@ QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std
         if (parent[atom])
             relations[atom] = build.semijoin(relations[atom], relations[*parent[atom]]);
 
-    const auto required = sorted(detail::query_labels(block.output));
+    const auto required = sorted(detail::query_labels(block.output.span()));
     std::vector<std::optional<QueryView<Values>>> results(count);
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
     {

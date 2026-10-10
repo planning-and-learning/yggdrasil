@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <nanobind/nanobind.h>
 #include <span>
+#include <variant>
 
 namespace yggdrasil::database_python
 {
@@ -22,30 +23,27 @@ struct BorrowedRelation
 // Dispatch individual reads so mixed Python inputs share one algorithm instantiation.
 class RelationInput
 {
-    const Relation* m_builder = nullptr;
-    const RelationView* m_view = nullptr;
+    std::variant<const Relation*, const RelationView*> m_relation;
 
+    static std::variant<const Relation*, const RelationView*> borrow(nb::handle object)
+    {
+        if (nb::isinstance<Relation>(object))
+            return &nb::cast<const Relation&>(object);
+        if (nb::isinstance<RelationView>(object))
+            return &nb::cast<const RelationView&>(object);
+        if (nb::isinstance<BorrowedRelation>(object))
+            return nb::cast<const BorrowedRelation&>(object).value;
+        throw nb::type_error("Expected Relation, RelationView, or BorrowedRelation.");
+    }
     template<typename F>
     decltype(auto) visit(F&& function) const
     {
-        if (m_builder)
-            return function(*m_builder);
-        return function(*m_view);
+        return std::visit([&](const auto* relation) -> decltype(auto) { return function(*relation); }, m_relation);
     }
 
 public:
-    explicit RelationInput(const Relation& relation) : m_builder(&relation) {}
-    explicit RelationInput(nb::handle object)
-    {
-        if (nb::isinstance<Relation>(object))
-            m_builder = &nb::cast<const Relation&>(object);
-        else if (nb::isinstance<RelationView>(object))
-            m_view = &nb::cast<const RelationView&>(object);
-        else if (nb::isinstance<BorrowedRelation>(object))
-            m_builder = nb::cast<const BorrowedRelation&>(object).value;
-        else
-            throw nb::type_error("Expected Relation, RelationView, or BorrowedRelation.");
-    }
+    explicit RelationInput(const Relation& relation) : m_relation(&relation) {}
+    explicit RelationInput(nb::handle object) : m_relation(borrow(object)) {}
 
     auto columns() const
     {

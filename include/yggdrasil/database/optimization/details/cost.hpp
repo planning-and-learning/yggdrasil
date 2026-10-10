@@ -5,6 +5,7 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_COST_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_COST_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/optimization/details/dpccp.hpp"
 #include "yggdrasil/database/optimization/details/estimation.hpp"
@@ -14,7 +15,6 @@
 #include <bit>
 #include <concepts>
 #include <cstdint>
-#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -37,9 +37,9 @@ class CostBasedPlanner
     OperatorBuilder<Values>* m_build;
     std::vector<std::vector<Index<Column>>> m_variables;
     std::vector<Index<Column>> m_required;
-    std::map<std::uint64_t, Estimate> m_estimates;
+    UnorderedMap<std::uint64_t, Estimate> m_estimates;
     /// C_out of each subset's best plan and its left part; leaves cost nothing.
-    std::map<std::uint64_t, Split> m_best;
+    UnorderedMap<std::uint64_t, Split> m_best;
 
     std::vector<size_t> atoms(std::uint64_t subset) const
     {
@@ -48,24 +48,28 @@ class CostBasedPlanner
             result.push_back(static_cast<size_t>(std::countr_zero(rest)));
         return result;
     }
-    std::vector<ColumnLayout> columns(std::uint64_t subset) const
+    std::vector<Index<Column>> labels(std::uint64_t subset) const
     {
-        std::vector<ColumnLayout> result;
+        std::vector<Index<Column>> result;
         for (const auto atom : atoms(subset))
-            for (const auto& column : m_block->atoms[atom].columns())
-                if (!contains_column(result, column.label))
-                    result.push_back(column);
-        return result;
+            result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end());
+        return sorted(std::move(result));
     }
-    const Estimate& estimate(std::uint64_t subset)
+    /// The subset's estimate; returned by value since recursion grows the memo.
+    Estimate estimate(std::uint64_t subset)
     {
         if (const auto it = m_estimates.find(subset); it != m_estimates.end())
             return it->second;
         const auto lowest = subset & -subset;
-        auto combined = combine(estimate(lowest), estimate(subset ^ lowest));
-        return m_estimates.emplace(subset, conjunction(std::move(combined), columns(subset))).first->second;
+        auto result = conjunction(combine(estimate(lowest), estimate(subset ^ lowest)), labels(subset));
+        m_estimates.emplace(subset, result);
+        return result;
     }
-    double rows(std::uint64_t subset) { return estimate(subset).rows; }
+    double rows(std::uint64_t subset)
+    {
+        const auto it = m_estimates.find(subset);
+        return it != m_estimates.end() ? it->second.rows : estimate(subset).rows;
+    }
     /// Variables of the subset still needed outside it: output and join variables.
     std::vector<Index<Column>> needed(std::uint64_t subset) const
     {
@@ -156,7 +160,7 @@ public:
     CostBasedPlanner(const JoinBlock<Values>& block, OperatorBuilder<Values>& build, GetEstimate&& estimate_of) :
         m_block(&block),
         m_build(&build),
-        m_required(sorted(detail::query_labels(block.output)))
+        m_required(sorted(detail::query_labels(block.output.span())))
     {
         for (size_t atom = 0; atom < block.atoms.size(); ++atom)
         {

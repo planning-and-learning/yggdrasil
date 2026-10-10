@@ -119,6 +119,16 @@ bool is_canonical(const ::cista::optional<T>&)
     return true;
 }
 
+template<bool Deduplicate = true, typename T, typename Allocator>
+void canonicalize(std::vector<T, Allocator>& list)
+{
+    if (!std::is_sorted(list.begin(), list.end()))
+        std::sort(list.begin(), list.end());
+
+    if constexpr (Deduplicate)
+        list.erase(std::unique(list.begin(), list.end()), list.end());
+}
+
 template<bool Deduplicate = true, typename T>
 void canonicalize(IndexList<T>& list)
 {

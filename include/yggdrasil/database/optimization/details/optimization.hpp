@@ -11,6 +11,8 @@
 #include "yggdrasil/database/optimization/details/normalization.hpp"
 #include "yggdrasil/database/optimization/details/structural.hpp"
 
+#include "yggdrasil/containers/associative_containers.hpp"
+
 #include <cassert>
 #include <concepts>
 #include <utility>
@@ -84,23 +86,23 @@ class Planner
     }
 
     /// The planned operands of the joins below a normalized join, each once.
-    void collect(QueryView<Values> normalized, std::vector<QueryView<Values>>& atoms)
+    void collect(QueryView<Values> normalized, std::vector<QueryView<Values>>& atoms, UnorderedSet<QueryIndex>& seen)
     {
         if (!joins(normalized))
         {
-            const auto atom = plan(normalized);
-            if (std::ranges::none_of(atoms, [&](QueryView<Values> other) { return other.get_index() == atom.get_index(); }))
+            if (const auto atom = plan(normalized); seen.insert(atom.get_index()).second)
                 atoms.push_back(atom);
             return;
         }
-        for_each_child(normalized, [&](QueryView<Values> child) { collect(child, atoms); });
+        for_each_child(normalized, [&](QueryView<Values> child) { collect(child, atoms, seen); });
     }
     /// Plans π_output(⋈ atoms): cost-based when every atom is known, otherwise from structure.
     QueryView<Values> plan_block(QueryView<Values> join, std::span<const ColumnLayout> output)
     {
         JoinBlock<Values> block;
-        collect(join, block.atoms);
-        block.output.assign(output.begin(), output.end());
+        UnorderedSet<QueryIndex> seen;
+        collect(join, block.atoms, seen);
+        block.output.assign(output);
         if (block.atoms.empty())  // The empty join is the nullary relation with one row.
             return m_build.generic_join(block.atoms, {});
         const bool measured = block.atoms.size() <= max_cost_based_atoms && std::ranges::all_of(block.atoms, [&](auto atom) { return known(atom); });

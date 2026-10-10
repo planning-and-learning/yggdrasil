@@ -5,12 +5,12 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
-#include <map>
 #include <optional>
-#include <set>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -20,7 +20,7 @@ namespace ygg::database
 struct RelationStatistics
 {
     double rows = 0;
-    std::map<Index<Column>, double> distinct;
+    UnorderedMap<Index<Column>, double> distinct;
 };
 
 /// What is known about the data. Everything is optional; nothing known means unbounded.
@@ -30,9 +30,9 @@ struct Statistics
     /// Domain size; empty means an unbounded domain.
     std::optional<size_t> objects;
     /// Measured inputs, keyed by input slot.
-    std::map<size_t, RelationStatistics> inputs;
+    UnorderedMap<size_t, RelationStatistics> inputs;
     /// Observed results of queries in the roots' repository; they override estimates.
-    std::map<Index<Query<Values>>, RelationStatistics> expressions;
+    UnorderedMap<Index<Query<Values>>, RelationStatistics> expressions;
 };
 
 /// Measures row and per-column distinct counts of the relations bound to each input slot.
@@ -46,15 +46,7 @@ Statistics<Values> collect_statistics(const R& inputs)
         auto& stats = result.inputs[slot];
         stats.rows = static_cast<double>(input.size());
         for (const auto& column : input.columns().span())
-        {
-            std::set<std::vector<std::byte>> keys;
-            for (size_t row = 0; row < input.size(); ++row)
-            {
-                const auto bytes = detail::column_bytes(input.row(row), column);
-                keys.emplace(bytes.begin(), bytes.end());
-            }
-            stats.distinct[column.label] = static_cast<double>(keys.size());
-        }
+            stats.distinct[column.label] = static_cast<double>(project<Values>(input, { column.label }).size());
     }
     return result;
 }

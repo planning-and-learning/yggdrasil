@@ -5,6 +5,7 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_ESTIMATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_ESTIMATION_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -12,9 +13,7 @@
 #include <compare>
 #include <concepts>
 #include <limits>
-#include <map>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <tuple>
 #include <variant>
@@ -49,10 +48,10 @@ struct Factor
 struct Estimate
 {
     double rows = 0;
-    std::map<Index<Column>, double> distinct;
+    UnorderedMap<Index<Column>, double> distinct;
     std::vector<Factor> factors;
-    std::set<std::pair<uint_t, uint_t>> equalities;
-    std::set<std::pair<uint_t, std::vector<std::byte>>> constants;
+    Set<std::pair<uint_t, uint_t>> equalities;
+    Set<std::pair<uint_t, std::vector<std::byte>>> constants;
 };
 
 /// Estimates saturate here instead of overflowing to infinity.
@@ -82,9 +81,9 @@ inline Estimate factor(const RelationStatistics& stats, std::span<const ColumnLa
 /// The conjunction's rows: the product of distinct factors divided, per column class,
 /// by all but the smallest distinct count (one factor of a constant class), as in
 /// System R's |R ⋈ S| = |R|·|S| / max(V(R,A), V(S,A)).
-inline Estimate conjunction(Estimate result, std::span<const ColumnLayout> columns)
+inline Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
 {
-    std::map<uint_t, uint_t> parent;
+    UnorderedMap<uint_t, uint_t> parent;
     for (const auto& single : result.factors)
         for (const auto& [slot, column, ndv] : single.attributes)
             parent[column] = column;
@@ -99,7 +98,7 @@ inline Estimate conjunction(Estimate result, std::span<const ColumnLayout> colum
         const auto left = find(lhs), right = find(rhs);
         parent[std::max(left, right)] = std::min(left, right);
     }
-    std::map<uint_t, std::vector<std::byte>> bound;
+    UnorderedMap<uint_t, std::vector<std::byte>> bound;
     bool zero = false;
     for (const auto& [column, value] : result.constants)
     {
@@ -107,8 +106,8 @@ inline Estimate conjunction(Estimate result, std::span<const ColumnLayout> colum
         if (!inserted && it->second != value)
             zero = true;
     }
-    std::map<uint_t, std::vector<double>> domains;
-    std::set<std::pair<FactorIdentity, std::vector<std::pair<size_t, uint_t>>>> unique;
+    UnorderedMap<uint_t, std::vector<double>> domains;
+    Set<std::pair<FactorIdentity, std::vector<std::pair<size_t, uint_t>>>> unique;
     double logarithm = 0;
     for (const auto& single : result.factors)
     {
@@ -133,11 +132,11 @@ inline Estimate conjunction(Estimate result, std::span<const ColumnLayout> colum
     }
     result.rows = zero ? 0 : std::exp(std::clamp(logarithm, -max_log_estimate, max_log_estimate));
     result.distinct.clear();
-    for (const auto& column : columns)
+    for (const auto label : labels)
     {
-        const auto representative = find(column.label.get_value());
+        const auto representative = find(label.get_value());
         const auto& counts = domains.at(representative);
-        result.distinct[column.label] = std::min(result.rows, bound.contains(representative) ? 1.0 : *std::ranges::min_element(counts));
+        result.distinct[label] = std::min(result.rows, bound.contains(representative) ? 1.0 : *std::ranges::min_element(counts));
     }
     return result;
 }
@@ -188,7 +187,7 @@ Estimate estimate_operation(QueryView<Values, QueryEmptyTag> query, FactorIdenti
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryJoinTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
 {
-    return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), query.columns());
+    return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), detail::query_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryGenericJoinTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics<Values>&)
@@ -199,7 +198,7 @@ Estimate estimate_operation(QueryView<Values, QueryGenericJoinTag> query, Factor
     auto result = child(QueryView<Values>(inputs.front(), query.get_repository()));
     for (const auto input : inputs.subspan(1))
         result = combine(std::move(result), child(QueryView<Values>(input, query.get_repository())));
-    return conjunction(std::move(result), query.columns());
+    return conjunction(std::move(result), detail::query_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QuerySelectEqualTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
@@ -207,7 +206,7 @@ Estimate estimate_operation(QueryView<Values, QuerySelectEqualTag> query, Factor
     auto result = child(query.get_arg());
     const auto lhs = query.get_lhs_column().get_value(), rhs = query.get_rhs_column().get_value();
     result.equalities.emplace(std::min(lhs, rhs), std::max(lhs, rhs));
-    return conjunction(std::move(result), query.columns());
+    return conjunction(std::move(result), detail::query_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QuerySelectValueTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
@@ -215,13 +214,13 @@ Estimate estimate_operation(QueryView<Values, QuerySelectValueTag> query, Factor
     auto result = child(query.get_arg());
     const auto constant = query.get_constant();
     result.constants.emplace(query.get_column().get_value(), std::vector<std::byte>(constant.begin(), constant.end()));
-    return conjunction(std::move(result), query.columns());
+    return conjunction(std::move(result), detail::query_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryRenameTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
 {
     auto result = child(query.get_arg());
-    std::map<uint_t, uint_t> renamed;
+    UnorderedMap<uint_t, uint_t> renamed;
     const auto before = query.get_arg().columns(), after = query.columns();
     for (size_t i = 0; i < before.size(); ++i)
         renamed[before[i].label.get_value()] = after[i].label.get_value();
@@ -236,7 +235,7 @@ Estimate estimate_operation(QueryView<Values, QueryRenameTag> query, FactorIdent
         constants.emplace(renamed.at(column), value);
     result.equalities = std::move(equalities);
     result.constants = std::move(constants);
-    return conjunction(std::move(result), after);
+    return conjunction(std::move(result), detail::query_labels(after));
 }
 /// Operators beyond System R follow the textbook estimates of Garcia-Molina, Ullman,
 /// and Widom (Database Systems: The Complete Book, 2nd ed., 2008, §16.4), with distinct

@@ -6,6 +6,7 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_JOIN_BLOCK_HPP_
 
 #include "yggdrasil/database/syntax/query.hpp"
+#include "yggdrasil/semantics/canonicalization.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -20,14 +21,14 @@ template<ColumnTypes Values>
 struct JoinBlock
 {
     std::vector<QueryView<Values>> atoms;
-    std::vector<ColumnLayout> output;
+    Builder<Columns<Values>> output;
 };
 
 template<ColumnTypes Values>
 std::vector<Index<Column>> variables(QueryView<Values> query)
 {
     auto result = detail::query_labels(query.columns());
-    std::ranges::sort(result);
+    ygg::canonicalize(result);
     return result;
 }
 
@@ -127,8 +128,7 @@ public:
 /// The labels as a sorted set.
 inline std::vector<Index<Column>> sorted(std::vector<Index<Column>> labels)
 {
-    std::ranges::sort(labels);
-    labels.erase(std::unique(labels.begin(), labels.end()), labels.end());
+    ygg::canonicalize(labels);
     return labels;
 }
 
@@ -141,8 +141,7 @@ std::vector<Index<Column>> variable_order(std::span<const QueryView<Values>> ato
         for (const auto label : variables(atom))
             if (std::ranges::find(first, label) == first.end())
                 rest.push_back(label);
-    std::ranges::sort(rest);
-    rest.erase(std::unique(rest.begin(), rest.end()), rest.end());
+    ygg::canonicalize(rest);
     std::vector<Index<Column>> result(first.begin(), first.end());
     result.insert(result.end(), rest.begin(), rest.end());
     return result;

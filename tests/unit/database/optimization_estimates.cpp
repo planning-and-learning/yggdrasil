@@ -165,8 +165,9 @@ TEST(DatabaseOptimizationEstimates, FactorIdentitySeparatesInputsAndQueries)
     const db::RelationStatistics statistics { 10, { { x, 2 } } };
     const auto input = opt::factor(statistics, columns.span(), opt::InputFactorIdentity { 7 });
     const auto query = opt::factor(statistics, columns.span(), opt::QueryFactorIdentity { 7 });
-    EXPECT_NEAR(opt::conjunction(opt::combine(input, input), columns.span()).rows, 10, 1e-9);
-    const auto combined = opt::conjunction(opt::combine(input, query), columns.span());
+    const std::array labels { x };
+    EXPECT_NEAR(opt::conjunction(opt::combine(input, input), labels).rows, 10, 1e-9);
+    const auto combined = opt::conjunction(opt::combine(input, query), labels);
     EXPECT_EQ(combined.factors.size(), 2);
     EXPECT_NEAR(combined.rows, 50, 1e-9);
 }
