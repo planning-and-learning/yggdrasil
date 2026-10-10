@@ -18,7 +18,7 @@
 namespace ygg::database
 {
 template<ColumnTypes Values = DefaultColumnTypes>
-using QueryBuilder = ApplyTypeListT<formalism::BuilderStorage, typename QueryRepository<Values>::SymbolTypes>;
+using QueryBuilder = ApplyTypeListT<formalism::BuilderStorage, QuerySymbolTypes<Values>>;
 
 using formalism::checkout;
 using formalism::insert;

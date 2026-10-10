@@ -61,12 +61,12 @@ public:
     }
 
     template<typename Visitor>
-    decltype(auto) visit(size_t position, Visitor&& visitor) const
+    auto visit(size_t position, Visitor&& visitor) const
     {
         if (position >= size())
             throw std::out_of_range("Row: column position is out of range.");
         return visit_column_type<Values>(m_columns[position].type,
-                                         [&]<typename T>(std::type_identity<T>) -> decltype(auto)
+                                         [&]<typename T>(std::type_identity<T>)
                                          { return std::invoke(std::forward<Visitor>(visitor), get<T>(position)); });
     }
 };
@@ -151,10 +151,10 @@ public:
     }
 
     template<typename Visitor>
-    decltype(auto) visit(size_t position, Visitor&& visitor) const
+    auto visit(size_t position, Visitor&& visitor) const
     {
         return m_handle.visit(position,
-                              [&](auto value) -> decltype(auto)
+                              [&](auto value)
                               { return std::invoke(std::forward<Visitor>(visitor), database::detail::resolve_column(value, *m_context)); });
     }
 };

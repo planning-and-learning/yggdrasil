@@ -205,7 +205,7 @@ struct GenericJoinTrie
 
     size_t memory_usage() const noexcept
     {
-        size_t result = children.capacity() * (sizeof(decltype(children)::value_type) + sizeof(gtl::priv::ctrl_t));
+        size_t result = children.capacity() * (sizeof(std::pair<const GenericJoinKey, std::unique_ptr<GenericJoinTrie>>) + sizeof(gtl::priv::ctrl_t));
         for (const auto& [key, child] : children)
             result += key.bytes.capacity() + sizeof(GenericJoinTrie) + child->memory_usage();
         return result;

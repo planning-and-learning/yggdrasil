@@ -51,6 +51,16 @@ concept RelationViewRange = std::ranges::random_access_range<const R> && std::ra
 
 namespace ygg::database::detail
 {
+/// Reads row i of a relation view, so the iterator can name the row type it yields.
+struct RowAt
+{
+    template<typename V>
+    auto operator()(const V& view, size_t index) const
+    {
+        return view[index];
+    }
+};
+
 /// Keeps the lightweight relation view alive, independently of the range expression.
 /// Comparing or subtracting iterators requires that they belong to the same sequence.
 template<ColumnTypes Values, RelationViewConcept<Values> V>
@@ -62,7 +72,7 @@ class RelationIterator
 
 public:
     using difference_type = std::ptrdiff_t;
-    using value_type = std::remove_cvref_t<decltype(std::declval<const V&>()[size_t {}])>;
+    using value_type = std::invoke_result_t<RowAt, const V&, size_t>;
     using reference = value_type;
     using pointer = void;
     using iterator_category = std::random_access_iterator_tag;

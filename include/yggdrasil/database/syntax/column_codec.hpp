@@ -173,7 +173,7 @@ size_t column_size(size_t type)
 /// Dispatches a schema type, not a stored variant. Visitors return a common result type.
 template<ColumnTypes Values, typename Visitor>
     requires requires(Visitor&& visitor) { detail::ColumnTypeInfo<Values>::visit(size_t {}, std::forward<Visitor>(visitor)); }
-decltype(auto) visit_column_type(size_t type, Visitor&& visitor)
+auto visit_column_type(size_t type, Visitor&& visitor)
 {
     return detail::ColumnTypeInfo<Values>::visit(type, std::forward<Visitor>(visitor));
 }

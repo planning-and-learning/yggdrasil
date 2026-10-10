@@ -235,10 +235,10 @@ Estimate estimate_operation(QueryView<Values, QueryRenameTag> query, FactorIdent
     for (auto& single : result.factors)
         for (auto& attribute : single.attributes)
             attribute.column = renamed.at(attribute.column);
-    decltype(result.equalities) equalities;
+    Set<std::pair<Index<Column>, Index<Column>>> equalities;
     for (const auto& [lhs, rhs] : result.equalities)
         equalities.emplace(std::min(renamed.at(lhs), renamed.at(rhs)), std::max(renamed.at(lhs), renamed.at(rhs)));
-    decltype(result.constants) constants;
+    Set<std::pair<Index<Column>, std::vector<std::byte>>> constants;
     for (const auto& [column, value] : result.constants)
         constants.emplace(renamed.at(column), value);
     result.equalities = std::move(equalities);

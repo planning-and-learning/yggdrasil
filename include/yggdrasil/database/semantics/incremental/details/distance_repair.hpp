@@ -47,11 +47,9 @@ inline void count_distance_work([[maybe_unused]] size_t DistanceWork::*member) n
 /// Shared across source trees: every heap is empty between completed repairs.
 class DistanceRepairWorkspace
 {
-public:
     using Entry = std::pair<uint_t, uint_t>;  // Distance, then vertex (or predecessor in a local heap).
     using Heap = FibonacciHeap<Entry, std::greater<Entry>>;
 
-private:
     // Resources outlive their heaps; the evaluator owns this workspace at a stable address.
     CountingMemoryResource m_memory;
     std::pmr::unsynchronized_pool_resource m_pool { &m_memory };

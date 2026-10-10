@@ -135,16 +135,15 @@ template<ColumnTypes Values>
 struct NodeRules<Values, QueryProjectTag>
 {
     using State = ProjectionEvaluator<Values>;
-    using Operation = QueryView<Values, QueryProjectTag>;
 
-    static State make(Operation operation) { return State(operation.get_plan()); }
+    static State make(QueryView<Values, QueryProjectTag> operation) { return State(operation.get_plan()); }
     template<typename Graph, typename R>
-    static void initialize(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    static void initialize(State& state, QueryView<Values, QueryProjectTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
     {
         state.initialize(graph.result(operation.get_arg()), workspace);
     }
     template<typename Graph, typename R>
-    static void update(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    static void update(State& state, QueryView<Values, QueryProjectTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
     {
         state.apply(graph.delta(operation.get_arg()).change(), workspace);
     }
@@ -154,16 +153,15 @@ template<ColumnTypes Values>
 struct NodeRules<Values, QueryJoinTag>
 {
     using State = JoinEvaluator<Values>;
-    using Operation = QueryView<Values, QueryJoinTag>;
 
-    static State make(Operation operation) { return State(operation.get_plan()); }
+    static State make(QueryView<Values, QueryJoinTag> operation) { return State(operation.get_plan()); }
     template<typename Graph, typename R>
-    static void initialize(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    static void initialize(State& state, QueryView<Values, QueryJoinTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
     {
         state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()), workspace);
     }
     template<typename Graph, typename R>
-    static void update(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    static void update(State& state, QueryView<Values, QueryJoinTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
     {
         state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change(), workspace);
     }
@@ -173,16 +171,15 @@ template<ColumnTypes Values>
 struct NodeRules<Values, QueryGenericJoinTag>
 {
     using State = GenericJoinEvaluator<Values>;
-    using Operation = QueryView<Values, QueryGenericJoinTag>;
 
-    static State make(Operation operation) { return State(operation.get_plan()); }
+    static State make(QueryView<Values, QueryGenericJoinTag> operation) { return State(operation.get_plan()); }
     template<typename Graph, typename R>
-    static void initialize(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>&)
+    static void initialize(State& state, QueryView<Values, QueryGenericJoinTag> operation, const Graph& graph, const R&, Workspace<Values>&)
     {
         state.initialize(operation.get_inputs() | std::views::transform([&](Index<Query<Values>> input) -> const auto& { return graph.result(input); }));
     }
     template<typename Graph, typename R>
-    static void update(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>&)
+    static void update(State& state, QueryView<Values, QueryGenericJoinTag> operation, const Graph& graph, const R&, Workspace<Values>&)
     {
         state.apply(operation.get_inputs() | std::views::transform([&](Index<Query<Values>> input) { return graph.delta(input).change(); }));
     }
@@ -192,17 +189,16 @@ template<ColumnTypes Values>
 struct NodeRules<Values, QueryDistanceTag>
 {
     using State = QueryDistance<Values>;
-    using Operation = QueryView<Values, QueryDistanceTag>;
 
-    static State make(Operation operation) { return State(operation.get_plan()); }
+    static State make(QueryView<Values, QueryDistanceTag> operation) { return State(operation.get_plan()); }
     template<typename Graph, typename R>
-    static void initialize(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>&)
+    static void initialize(State& state, QueryView<Values, QueryDistanceTag> operation, const Graph& graph, const R&, Workspace<Values>&)
     {
         if constexpr (ColumnValueFor<uint_t, Values>)
             state.initialize(graph.result(operation.get_sources()), graph.result(operation.get_edges()), graph.result(operation.get_targets()));
     }
     template<typename Graph, typename R>
-    static void update(State& state, Operation operation, const Graph& graph, const R&, Workspace<Values>&)
+    static void update(State& state, QueryView<Values, QueryDistanceTag> operation, const Graph& graph, const R&, Workspace<Values>&)
     {
         if constexpr (ColumnValueFor<uint_t, Values>)
             state.apply(graph.delta(operation.get_sources()).change(), graph.delta(operation.get_edges()).change(), graph.delta(operation.get_targets()).change());

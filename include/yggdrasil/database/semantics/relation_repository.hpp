@@ -55,17 +55,13 @@ class RelationRepository
     friend class RelationRepositoryFactory<Values>;
 
 public:
-    using SymbolRepository = formalism::SymbolRepository<Columns<Values>, Relation<Values>>;
-
-    using SymbolTypes = typename SymbolRepository::SymbolTypes;
-    using RowRepository = RawVectorSet<uint_t, std::byte>;
-    using RowSetRepository = RawVectorSet<uint_t, Index<RelationRow<Values>>>;
+    using SymbolTypes = TypeList<Columns<Values>, Relation<Values>>;
 
 private:
-    SymbolRepository m_symbols;
+    formalism::SymbolRepository<Columns<Values>, Relation<Values>> m_symbols;
     Data<Columns<Values>> m_columns_data;
-    RowRepository m_rows;
-    RowSetRepository m_row_sets;
+    RawVectorSet<uint_t, std::byte> m_rows;
+    RawVectorSet<uint_t, Index<RelationRow<Values>>> m_row_sets;
     std::vector<Index<RelationRow<Values>>> m_row_indices;
     std::vector<size_t> m_storage_indices;
     RelationRepositoryFactory<Values> m_factory;

@@ -5,6 +5,7 @@
 #ifndef YGG_DATABASE_SYNTAX_QUERY_DATA_HPP_
 #define YGG_DATABASE_SYNTAX_QUERY_DATA_HPP_
 
+#include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
@@ -29,9 +30,7 @@ namespace ygg
 template<database::ColumnTypes Values>
 struct Data<database::Query<Values>>
 {
-    template<typename Tag>
-    using AlternativeIndex = Index<database::Query<Values, Tag>>;
-    using Variant = ApplyTypeListT<cista::offset::variant, MapTypeListT<AlternativeIndex, database::QueryConstructorTags>>;
+    using Variant = IndexVariant<MapTypeListSecondT<database::Query, Values, database::QueryConstructorTags>>;
 
     Index<database::Query<Values>> index;
     Variant variant;

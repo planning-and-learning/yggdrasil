@@ -38,20 +38,21 @@ public:
 };
 
 /// Interns typed query records. Records are prepared by prepare_for_insert
+/// The erased query record followed by one concrete record per constructor tag.
+template<ColumnTypes Values>
+using QuerySymbolTypes = ConcatTypeListsT<TypeList<Query<Values>>, MapTypeListSecondT<Query, Values, QueryConstructorTags>>;
+
 /// (query_construction.hpp) before insertion; children precede their parents.
 template<ColumnTypes Values>
 class QueryRepository
 {
     friend class QueryRepositoryFactory<Values>;
-    template<typename Tag>
-    using ConcreteQuery = Query<Values, Tag>;
 
 public:
-    using SymbolTypes = ConcatTypeListsT<TypeList<Query<Values>>, MapTypeListT<ConcreteQuery, QueryConstructorTags>>;
-    using SymbolRepository = ApplyTypeListT<formalism::SymbolRepository, SymbolTypes>;
+    using SymbolTypes = QuerySymbolTypes<Values>;
 
 private:
-    SymbolRepository m_symbols;
+    ApplyTypeListT<formalism::SymbolRepository, QuerySymbolTypes<Values>> m_symbols;
     QueryRepositoryFactory<Values> m_factory;
     size_t m_index;
 

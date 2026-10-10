@@ -50,8 +50,8 @@ struct Delta
 /// An actual set change of one input: disjoint (added, removed) relations, read with std::get.
 template<typename C, typename Values>
 concept RelationChange = requires(const C& change) {
-    requires RelationViewConcept<decltype(std::get<0>(change)), Values>;
-    requires RelationViewConcept<decltype(std::get<1>(change)), Values>;
+    { std::get<0>(change) } -> RelationViewConcept<Values>;
+    { std::get<1>(change) } -> RelationViewConcept<Values>;
 };
 
 /// Sized random-access changes, one per input.
