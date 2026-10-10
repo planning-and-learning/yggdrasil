@@ -58,7 +58,7 @@ class GenericJoinEvaluator
         m_initialized = true;
     }
 
-    friend class QueryEvaluator<Values>;
+    friend struct detail::NodeRules<Values, QueryGenericJoinTag>;
 
 public:
     explicit GenericJoinEvaluator(GenericJoinPlan<Values> plan) :

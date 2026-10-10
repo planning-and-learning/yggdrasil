@@ -43,7 +43,7 @@ class ProjectionEvaluator
     template<RelationChange<Values> C>
     void apply(const C& change, Workspace<Values>& workspace);
 
-    friend class QueryEvaluator<Values>;
+    friend struct detail::NodeRules<Values, QueryProjectTag>;
 
 public:
     explicit ProjectionEvaluator(ProjectionPlan<Values> plan);

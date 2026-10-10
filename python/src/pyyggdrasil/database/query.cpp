@@ -94,18 +94,6 @@ Relation snapshot(const V& relation)
     return result;
 }
 
-db::QueryRepositoryFactory<Values>& factory()
-{
-    static db::QueryRepositoryFactory<Values> instance;
-    return instance;
-}
-
-db::QueryBuilder<Values>& builder()
-{
-    static db::QueryBuilder<Values> instance;
-    return instance;
-}
-
 ygg::Index<db::Query<Values>> require(const Repository& repository, Query query)
 {
     if (&query.get_repository() != &repository)
@@ -115,54 +103,60 @@ ygg::Index<db::Query<Values>> require(const Repository& repository, Query query)
 
 Query input(Repository& repository, size_t slot, ColumnIndices schema)
 {
-    auto data = db::checkout<db::Query<Values, db::QueryInputTag>>(builder());
+    db::QueryBuilder<Values> builder;
+    auto data = db::checkout<db::Query<Values, db::QueryInputTag>>(builder);
     data->input_slot = slot;
     data->columns.set(schema.begin(), schema.end());
-    return db::insert_query(repository, builder(), *data);
+    return db::insert_query(repository, builder, *data);
 }
 
 Query empty(Repository& repository, ColumnIndices schema)
 {
-    auto data = db::checkout<db::Query<Values, db::QueryEmptyTag>>(builder());
+    db::QueryBuilder<Values> builder;
+    auto data = db::checkout<db::Query<Values, db::QueryEmptyTag>>(builder);
     data->columns.set(schema.begin(), schema.end());
-    return db::insert_query(repository, builder(), *data);
+    return db::insert_query(repository, builder, *data);
 }
 
 template<typename Tag>
 Query binary(Repository& repository, Query lhs, Query rhs)
 {
-    auto data = db::checkout<db::Query<Values, Tag>>(builder());
+    db::QueryBuilder<Values> builder;
+    auto data = db::checkout<db::Query<Values, Tag>>(builder);
     data->lhs = require(repository, lhs);
     data->rhs = require(repository, rhs);
-    return db::insert_query(repository, builder(), *data);
+    return db::insert_query(repository, builder, *data);
 }
 
 template<typename Tag>
 Query relabel(Repository& repository, Query query, const std::vector<Column>& labels)
 {
-    auto data = db::checkout<db::Query<Values, Tag>>(builder());
+    db::QueryBuilder<Values> builder;
+    auto data = db::checkout<db::Query<Values, Tag>>(builder);
     data->arg = require(repository, query);
     data->labels.set(labels.begin(), labels.end());
-    return db::insert_query(repository, builder(), *data);
+    return db::insert_query(repository, builder, *data);
 }
 
 Query select_equal(Repository& repository, Query query, Column left, Column right)
 {
-    auto data = db::checkout<db::Query<Values, db::QuerySelectEqualTag>>(builder());
+    db::QueryBuilder<Values> builder;
+    auto data = db::checkout<db::Query<Values, db::QuerySelectEqualTag>>(builder);
     data->arg = require(repository, query);
     data->lhs_column = left;
     data->rhs_column = right;
-    return db::insert_query(repository, builder(), *data);
+    return db::insert_query(repository, builder, *data);
 }
 
 Query distance(Repository& repository, Query sources, Query edges, Query targets, Column distance_column)
 {
-    auto data = db::checkout<db::Query<Values, db::QueryDistanceTag>>(builder());
+    db::QueryBuilder<Values> builder;
+    auto data = db::checkout<db::Query<Values, db::QueryDistanceTag>>(builder);
     data->sources = require(repository, sources);
     data->edges = require(repository, edges);
     data->targets = require(repository, targets);
     data->distance_column = distance_column;
-    return db::insert_query(repository, builder(), *data);
+    return db::insert_query(repository, builder, *data);
 }
 
 Query select_value(Repository& repository, Query query, Column label, nb::handle value)
@@ -177,11 +171,12 @@ Query select_value(Repository& repository, Query query, Column label, nb::handle
                                                          throw nb::type_error("Query selection: value does not match the column type.");
                                                      std::array<std::byte, db::ColumnCodec<T>::size> bytes;
                                                      db::ColumnCodec<T>::encode(converted, bytes);
-                                                     auto data = db::checkout<db::Query<Values, db::QuerySelectValueTag>>(builder());
+                                                     db::QueryBuilder<Values> builder;
+                                                     auto data = db::checkout<db::Query<Values, db::QuerySelectValueTag>>(builder);
                                                      data->arg = require(repository, query);
                                                      data->column = label;
                                                      data->constant.set(bytes.begin(), bytes.end());
-                                                     return db::insert_query(repository, builder(), *data);
+                                                     return db::insert_query(repository, builder, *data);
                                                  });
     throw std::out_of_range("Query selection: unknown column.");
 }
@@ -196,8 +191,11 @@ void bind_database_query(nb::module_& m)
     ygg::add_comparison(query);
     ygg::add_hash(query);
 
+    nb::class_<db::QueryRepositoryFactory<Values>>(m, "QueryRepositoryFactory", "Creates query repositories with distinct identities within this factory.")
+        .def(nb::init<>())
+        .def("create", [](db::QueryRepositoryFactory<Values>& factory) { return new Repository(factory.create()); }, nb::rv_policy::take_ownership);
+
     nb::class_<Repository>(m, "QueryRepository", "Interns validated relational expressions without reading data.")
-        .def(nb::new_([] { return new Repository(factory().create()); }))
         .def("__len__", [](const Repository& repository) { return repository.size(); })
         .def("input", &input, nb::arg("slot"), nb::arg("columns"), nb::keep_alive<0, 1>())
         .def(

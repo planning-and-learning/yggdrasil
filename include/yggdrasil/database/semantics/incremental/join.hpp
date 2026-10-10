@@ -51,7 +51,7 @@ class JoinEvaluator
     template<RelationChange<Values> L, RelationChange<Values> R>
     void apply(const L& lhs, const R& rhs, Workspace<Values>& workspace);
 
-    friend class QueryEvaluator<Values>;
+    friend struct detail::NodeRules<Values, QueryJoinTag>;
 
 public:
     explicit JoinEvaluator(JoinPlan<Values> plan);

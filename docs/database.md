@@ -600,7 +600,7 @@ left.insert((1, 2))
 right = db.Relation([y, z])
 right.insert((2, 3))
 
-repository = db.QueryRepository()
+repository = db.QueryRepositoryFactory().create()
 a = repository.input(0, left.columns())
 b = repository.input(1, right.columns())
 query = repository.project(repository.join(a, b), [z, x])
@@ -612,6 +612,8 @@ independent = db.snapshot(evaluator.get_result())
 print(optimized.explain())
 ```
 
+Query repositories come from a `QueryRepositoryFactory`; repositories of one factory
+have distinct identities, so queries compare across them.
 `optimize(roots, statistics=None)` and `repository.compile` accept either one
 query or a list of roots; `optimize` returns a `QueryPlan`.
 `repository.union(a, b)`, `difference`, `rename`, `select_equal`, `select_value`,

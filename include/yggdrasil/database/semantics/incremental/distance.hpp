@@ -102,7 +102,7 @@ class DistanceEvaluator
     template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
     void apply(const S& sources, const E& edges, const T& targets);
 
-    friend class QueryEvaluator<Values>;
+    friend struct detail::NodeRules<Values, QueryDistanceTag>;
 
 public:
     explicit DistanceEvaluator(DistancePlan<Values> plan);

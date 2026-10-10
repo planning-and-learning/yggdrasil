@@ -18,8 +18,11 @@
 
 namespace ygg::database::incremental
 {
-template<ColumnTypes Values>
-class QueryEvaluator;
+namespace detail
+{
+template<ColumnTypes Values, typename Tag>
+struct NodeRules;
+}
 
 /// Actual set changes with one ordered schema. Added and removed rows are
 /// disjoint. The caller guarantees additions were absent and removals present.

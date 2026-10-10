@@ -5,6 +5,10 @@ import pytest
 from pyyggdrasil import database as db
 
 
+# Repositories from one factory have distinct identities.
+FACTORY = db.QueryRepositoryFactory()
+
+
 def columns(*labels):
     return [db.ColumnIndex(label) for label in labels]
 
@@ -29,7 +33,7 @@ def test_optimizer_preserves_typed_shared_roots_and_output_order(measured):
     types = [db.ColumnType.INT32, db.ColumnType.FLOAT64]
     left = relation([0, 1], [(1, 2.5), (2, 3.5), (3, 2.5)], types)
     right = relation([1, 2], [(2.5, 7), (3.5, 8)], types[::-1])
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     a, b = repo.input(0, left.columns()), repo.input(1, right.columns())
     shared = repo.join(a, b)
     projected = repo.project(shared, columns(2, 0))
@@ -54,7 +58,7 @@ def test_optimizer_preserves_typed_shared_roots_and_output_order(measured):
 def test_difference_projection_barrier_and_nullary_support():
     source = relation([0, 1], [(1, 7), (1, 8)])
     removed = relation([0, 1], [(1, 7)])
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     source_query, removed_query = repo.input(0, source.columns()), repo.input(1, removed.columns())
     surviving = repo.project(repo.difference(source_query, removed_query), columns(0))
     root_queries = [surviving, repo.project(surviving, columns())]
@@ -69,7 +73,7 @@ def test_incremental_batch_changes_projection_union_and_difference():
     schemas = [[0, 1], [1, 2], [0, 2]]
     current = [{(1, 7), (1, 8), (2, 8)}, {(7, 9), (8, 9)}, {(2, 9)}]
     inputs = [relation(schema, values) for schema, values in zip(schemas, current)]
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     a, b, blocked = [repo.input(i, value.columns()) for i, value in enumerate(inputs)]
     projected = repo.project(repo.join(a, b), columns(0, 2))
     visible = repo.difference(projected, blocked)
@@ -109,7 +113,7 @@ def test_triangle_and_self_join():
     inputs = [relation([0, 1], [(1, 2), (2, 3), (3, 1)]),
               relation([1, 2], [(2, 3), (3, 1), (1, 2)]),
               relation([2, 0], [(3, 1), (1, 2), (2, 3)])]
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     a, b, c = [repo.input(i, value.columns()) for i, value in enumerate(inputs)]
     triangle = repo.join(repo.join(a, b), c)
     roots = [triangle, repo.join(a, a)]
@@ -124,7 +128,7 @@ def test_borrowed_inputs_statistics_snapshot_and_owners():
     original = relation([0], [(1,), (2,)])
     store = db.RelationRepositoryFactory().create()
     interned = db.insert(store, original)[0]
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     root = repo.input(0, original.columns())
     evaluator = db.QueryEvaluator(repo.compile(root))
     evaluator.evaluate([interned])
@@ -145,9 +149,9 @@ def test_borrowed_inputs_statistics_snapshot_and_owners():
 
 def test_query_handle_retains_repository_and_compiled_plan_is_independent():
     source = relation([4], [(9,)])
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     query = repo.input(0, columns(4))
-    other = db.QueryRepository().input(0, columns(4))
+    other = FACTORY.create().input(0, columns(4))
     assert query != other
     assert len({query, other}) == 2
     plan = repo.compile(query)
@@ -167,7 +171,7 @@ def test_distance_boundary_and_sparse_input_slots(incremental):
     source = relation([10], [(0,)])
     edges = relation([20, 21], [(0, 1), (1, 2)])
     target = relation([30], [(2,)])
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     s, e, t = [repo.input(i, value.columns()) for i, value in zip([1, 3, 4], [source, edges, target])]
     query = repo.distance(s, e, t, db.ColumnIndex(99))
     optimized = db.optimize(query)
@@ -188,7 +192,7 @@ def test_distance_boundary_and_sparse_input_slots(incremental):
 
 def test_statistics_and_input_validation():
     value = relation([0], [(1,)])
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     query = repo.input(0, value.columns())
     assert db.optimize(query).root_count == 1
     assert db.optimize(query, db.Statistics(objects=4, inputs={0: db.RelationStatistics(1, {db.ColumnIndex(0): 1})})).root_count == 1
@@ -210,7 +214,7 @@ def test_statistics_and_input_validation():
 @pytest.mark.parametrize("measured", (True, False))
 def test_planning_is_deterministic(measured):
     inputs = [relation([i, i + 1], [(1, 1), (2, 2)]) for i in range(4)]
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     queries = [repo.input(i, value.columns()) for i, value in enumerate(inputs)]
     query = queries[0]
     for other in queries[1:]:
@@ -226,7 +230,7 @@ def test_planning_is_deterministic(measured):
 
 def test_selection_constants_follow_column_types_and_equality():
     source = relation([0, 1], [(-3, -3), (-3, 7), (7, 7)], [db.ColumnType.INT32] * 2)
-    repo = db.QueryRepository()
+    repo = FACTORY.create()
     query = repo.input(0, source.columns())
     selected = repo.select_value(repo.select_equal(query, db.ColumnIndex(0), db.ColumnIndex(1)), db.ColumnIndex(0), -3)
     evaluator = db.QueryEvaluator(db.optimize(selected))
