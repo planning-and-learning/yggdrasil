@@ -67,7 +67,7 @@ inline std::optional<std::vector<std::optional<size_t>>> join_tree(std::vector<s
 /// the join tree keep only output variables and variables shared with the parent.
 /// The result has the block's output variables in schema order.
 template<ColumnTypes Values>
-QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std::optional<size_t>> parent, BlockBuilder<Values>& build)
+QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std::optional<size_t>> parent, OperatorBuilder<Values>& build)
 {
     const auto count = block.atoms.size();
     std::vector<std::vector<size_t>> children(count);
@@ -113,7 +113,7 @@ QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std
 /// running time is bounded by the AGM bound of the full join (A. Atserias, M. Grohe,
 /// D. Marx, FOCS 2008) for every variable order; variables are ordered by label.
 template<ColumnTypes Values>
-QueryView<Values> structural_plan(const JoinBlock<Values>& block, BlockBuilder<Values>& build)
+QueryView<Values> structural_plan(const JoinBlock<Values>& block, OperatorBuilder<Values>& build)
 {
     std::vector<std::vector<Index<Column>>> edges;
     for (const auto atom : block.atoms)

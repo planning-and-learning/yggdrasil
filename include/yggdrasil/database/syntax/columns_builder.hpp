@@ -19,6 +19,7 @@ namespace ygg::database
 template<ColumnTypes Values>
 void validate_columns(std::span<const ColumnLayout> columns);
 size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column);
+bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept;
 size_t row_size(std::span<const ColumnLayout> columns) noexcept;
 /// The schema is already validated; validate the width and canonical field encodings.
 template<ColumnTypes Values>

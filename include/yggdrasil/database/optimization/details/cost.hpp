@@ -34,7 +34,7 @@ class CostBasedPlanner
         std::uint64_t lhs;
     };
     const JoinBlock<Values>* m_block;
-    BlockBuilder<Values>* m_build;
+    OperatorBuilder<Values>* m_build;
     std::vector<std::vector<Index<Column>>> m_variables;
     std::vector<Index<Column>> m_required;
     std::map<std::uint64_t, Estimate> m_estimates;
@@ -53,7 +53,7 @@ class CostBasedPlanner
         std::vector<ColumnLayout> result;
         for (const auto atom : atoms(subset))
             for (const auto& column : m_block->atoms[atom].columns())
-                if (!has(result, column.label))
+                if (!contains_column(result, column.label))
                     result.push_back(column);
         return result;
     }
@@ -153,7 +153,7 @@ class CostBasedPlanner
 
 public:
     template<std::invocable<QueryView<Values>> GetEstimate>
-    CostBasedPlanner(const JoinBlock<Values>& block, BlockBuilder<Values>& build, GetEstimate&& estimate_of) :
+    CostBasedPlanner(const JoinBlock<Values>& block, OperatorBuilder<Values>& build, GetEstimate&& estimate_of) :
         m_block(&block),
         m_build(&build),
         m_required(sorted(detail::query_labels(block.output)))

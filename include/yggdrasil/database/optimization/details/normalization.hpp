@@ -5,6 +5,7 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_NORMALIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_NORMALIZATION_HPP_
 
+#include "yggdrasil/database/optimization/details/join_block.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -30,43 +31,15 @@ class Normalizer
 
     QueryRepository<Values>* m_repository;
     QueryBuilder<Values>* m_builder;
+    OperatorBuilder<Values> m_build;
     std::vector<std::optional<QueryView<Values>>> m_normalized;
 
-    template<class Tag>
-    QueryView<Values> insert(Operation<Tag>& data)
-    {
-        return insert_query(*m_repository, *m_builder, data);
-    }
-    template<class Tag>
-    static bool is(QueryView<Values> query)
-    {
-        return query.get_variant().template is<Index<Query<Values, Tag>>>();
-    }
-    template<class Tag>
-    static QueryView<Values, Tag> as(QueryView<Values> query)
-    {
-        return query.get_variant().template get<Index<Query<Values, Tag>>>();
-    }
     static std::vector<Index<Column>> labels(std::span<const ColumnLayout> columns) { return detail::query_labels(columns); }
 
-    QueryView<Values> empty(std::span<const ColumnLayout> columns)
-    {
-        auto data = checkout<Query<Values, QueryEmptyTag>>(*m_builder);
-        data->columns.set(columns.begin(), columns.end());
-        return insert(*data);
-    }
-    template<class Tag>
-    QueryView<Values> binary(QueryView<Values> lhs, QueryView<Values> rhs)
-    {
-        auto data = checkout<Query<Values, Tag>>(*m_builder);
-        data->lhs = lhs.get_index();
-        data->rhs = rhs.get_index();
-        return insert(*data);
-    }
     QueryView<Values> join(QueryView<Values> lhs, QueryView<Values> rhs)
     {
-        const auto result = binary<QueryJoinTag>(lhs, rhs);
-        return is<QueryEmptyTag>(lhs) || is<QueryEmptyTag>(rhs) ? empty(result.columns()) : result;
+        const auto result = m_build.join(lhs, rhs);
+        return is<QueryEmptyTag>(lhs) || is<QueryEmptyTag>(rhs) ? m_build.empty(result.columns()) : result;
     }
     QueryView<Values> union_(QueryView<Values> lhs, QueryView<Values> rhs)
     {
@@ -74,21 +47,13 @@ class Normalizer
             return rhs;
         if (is<QueryEmptyTag>(rhs))
             return lhs;
-        return binary<QueryUnionTag>(lhs, rhs);
+        return m_build.template binary<QueryUnionTag>(lhs, rhs);
     }
     QueryView<Values> difference(QueryView<Values> lhs, QueryView<Values> rhs)
     {
         if (is<QueryEmptyTag>(lhs) || is<QueryEmptyTag>(rhs))
             return lhs;
-        return binary<QueryDifferenceTag>(lhs, rhs);
-    }
-    template<class Tag>
-    QueryView<Values> relabel(QueryView<Values> arg, std::span<const Index<Column>> columns)
-    {
-        auto data = checkout<Query<Values, Tag>>(*m_builder);
-        data->arg = arg.get_index();
-        data->labels.set(columns.begin(), columns.end());
-        return insert(*data);
+        return m_build.template binary<QueryDifferenceTag>(lhs, rhs);
     }
     /// Labels of the renamed query's argument for the given renamed labels.
     static std::vector<Index<Column>> inverse(QueryView<Values, QueryRenameTag> rename, std::span<const Index<Column>> renamed)
@@ -103,8 +68,8 @@ class Normalizer
     {
         if (std::ranges::equal(labels(arg.columns()), columns))
             return arg;
-        const auto result = relabel<QueryRenameTag>(arg, columns);
-        return is<QueryEmptyTag>(arg) ? empty(result.columns()) : result;
+        const auto result = m_build.template relabel<QueryRenameTag>(arg, columns);
+        return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
     }
     QueryView<Values> project(QueryView<Values> arg, std::span<const Index<Column>> columns)
     {
@@ -123,8 +88,8 @@ class Normalizer
             const auto inner = inverse(operation, columns);
             return rename(project(operation.get_arg(), inner), columns);
         }
-        const auto result = relabel<QueryProjectTag>(arg, columns);
-        return is<QueryEmptyTag>(arg) ? empty(result.columns()) : result;
+        const auto result = m_build.template relabel<QueryProjectTag>(arg, columns);
+        return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
     }
 
     static std::vector<Index<Column>> tested(const Operation<QuerySelectEqualTag>& data) { return { data.lhs_column, data.rhs_column }; }
@@ -146,7 +111,7 @@ class Normalizer
     {
         const auto columns = tested(data);
         const auto within = [&](QueryView<Values> query)
-        { return std::ranges::all_of(columns, [&](Index<Column> label) { return has_column(query.columns(), label); }); };
+        { return std::ranges::all_of(columns, [&](Index<Column> label) { return contains_column(query.columns(), label); }); };
         if (is<QueryEmptyTag>(arg))
             return arg;
         if (is<QueryJoinTag>(arg))
@@ -179,14 +144,12 @@ class Normalizer
             const auto operation = as<QueryDifferenceTag>(arg);
             return difference(select(data, operation.get_lhs()), select(data, operation.get_rhs()));
         }
-        auto filtered = checkout<Query<Values, Tag>>(*m_builder);
-        *filtered = data;
-        filtered->arg = arg.get_index();
-        return insert(*filtered);
-    }
-    static bool has_column(std::span<const ColumnLayout> columns, Index<Column> label)
-    {
-        return std::ranges::any_of(columns, [&](const auto& column) { return column.label == label; });
+        return m_build.template make<Tag>(
+            [&](auto& filtered)
+            {
+                filtered = data;
+                filtered.arg = arg.get_index();
+            });
     }
 
     /// Rebuilds a query whose children are already normalized.
@@ -219,7 +182,7 @@ class Normalizer
             const auto result = detail::clone_query(source, std::span<const QueryView<Values>>(children), *m_repository, *m_builder);
             if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                 if (absent)
-                    return empty(result.columns());
+                    return m_build.empty(result.columns());
             return result;
         }
     }
@@ -228,6 +191,7 @@ public:
     Normalizer(QueryRepository<Values>& repository, QueryBuilder<Values>& builder, size_t source_size) :
         m_repository(&repository),
         m_builder(&builder),
+        m_build(repository, builder),
         m_normalized(source_size)
     {
     }

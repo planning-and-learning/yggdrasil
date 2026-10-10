@@ -82,6 +82,11 @@ inline size_t column_index(std::span<const ColumnLayout> columns, Index<Column> 
     return static_cast<size_t>(it - columns.begin());
 }
 
+inline bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept
+{
+    return std::ranges::find(columns, column, &ColumnLayout::label) != columns.end();
+}
+
 inline size_t row_size(std::span<const ColumnLayout> columns) noexcept { return columns.empty() ? 0 : columns.back().offset + columns.back().size; }
 
 template<ColumnTypes Values>

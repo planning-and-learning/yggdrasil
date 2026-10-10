@@ -61,10 +61,6 @@ constexpr double max_estimate = 1e300;
 constexpr double max_log_estimate = 690;
 inline double bounded(double value) { return std::clamp(value, 0.0, max_estimate); }
 inline double multiply(double a, double b) { return a == 0 || b == 0 ? 0 : bounded(a * b); }
-inline bool has(std::span<const ColumnLayout> columns, Index<Column> label)
-{
-    return std::ranges::any_of(columns, [&](const auto& column) { return column.label == label; });
-}
 
 inline Estimate factor(const RelationStatistics& stats, std::span<const ColumnLayout> columns, FactorIdentity identity)
 {
@@ -162,7 +158,7 @@ inline void validate_statistics(const RelationStatistics& stats, std::span<const
     if (!std::isfinite(stats.rows) || stats.rows < 0 || (columns.empty() && stats.rows > 1))
         throw std::invalid_argument("Optimizer: invalid row count.");
     for (const auto& [label, count] : stats.distinct)
-        if (!has(columns, label) || !std::isfinite(count) || count < 0 || count > stats.rows || (stats.rows > 0 && count < 1))
+        if (!contains_column(columns, label) || !std::isfinite(count) || count < 0 || count > stats.rows || (stats.rows > 0 && count < 1))
             throw std::invalid_argument("Optimizer: invalid distinct count or column.");
 }
 
