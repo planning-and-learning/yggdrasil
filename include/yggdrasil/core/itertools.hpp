@@ -21,10 +21,31 @@
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
+#include <ranges>
 #include <vector>
 
 namespace ygg::itertools
 {
+
+/// Whether two sorted ranges have a common element; linear, without allocation.
+template<std::ranges::input_range R1, std::ranges::input_range R2>
+bool intersects(R1&& lhs, R2&& rhs)
+{
+    auto first1 = std::ranges::begin(lhs);
+    auto first2 = std::ranges::begin(rhs);
+    const auto last1 = std::ranges::end(lhs);
+    const auto last2 = std::ranges::end(rhs);
+    while (first1 != last1 && first2 != last2)
+    {
+        if (*first1 < *first2)
+            ++first1;
+        else if (*first2 < *first1)
+            ++first2;
+        else
+            return true;
+    }
+    return false;
+}
 
 namespace cartesian_set
 {

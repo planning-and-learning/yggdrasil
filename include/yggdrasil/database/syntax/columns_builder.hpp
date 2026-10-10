@@ -12,6 +12,7 @@
 #include <initializer_list>
 #include <span>
 #include <tuple>
+#include <vector>
 
 namespace ygg::database
 {
@@ -20,6 +21,8 @@ template<ColumnTypes Values>
 void validate_columns(std::span<const ColumnLayout> columns);
 size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column);
 bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept;
+/// The labels in schema order.
+std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns);
 size_t row_size(std::span<const ColumnLayout> columns) noexcept;
 /// The schema is already validated; validate the width and canonical field encodings.
 template<ColumnTypes Values>

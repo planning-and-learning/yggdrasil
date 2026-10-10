@@ -27,25 +27,7 @@ struct JoinBlock
 template<ColumnTypes Values>
 std::vector<Index<Column>> variables(QueryView<Values> query)
 {
-    auto result = detail::query_labels(query.columns());
-    ygg::canonicalize(result);
-    return result;
-}
-
-inline bool shares(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs)
-{
-    return std::ranges::any_of(lhs, [&](Index<Column> label) { return std::ranges::binary_search(rhs, label); });
-}
-
-template<class Tag, ColumnTypes Values>
-bool is(QueryView<Values> query)
-{
-    return query.get_variant().template is<Index<Query<Values, Tag>>>();
-}
-template<class Tag, ColumnTypes Values>
-QueryView<Values, Tag> as(QueryView<Values> query)
-{
-    return query.get_variant().template get<Index<Query<Values, Tag>>>();
+    return ygg::canonicalized(column_labels(query.columns()));
 }
 
 /// Constructs the optimizer's queries in a repository: checkout, fill, insert_query.
@@ -93,7 +75,7 @@ public:
     /// Keeps the query's columns with the given labels, in that order.
     QueryView<Values> project(QueryView<Values> query, std::span<const Index<Column>> labels)
     {
-        if (std::ranges::equal(detail::query_labels(query.columns()), labels))
+        if (std::ranges::equal(column_labels(query.columns()), labels))
             return query;
         return relabel<QueryProjectTag>(query, labels);
     }
@@ -124,13 +106,6 @@ public:
             });
     }
 };
-
-/// The labels as a sorted set.
-inline std::vector<Index<Column>> sorted(std::vector<Index<Column>> labels)
-{
-    ygg::canonicalize(labels);
-    return labels;
-}
 
 /// A variable order with the given variables first (in order), then the rest by label.
 template<ColumnTypes Values>

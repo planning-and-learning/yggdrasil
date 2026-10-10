@@ -109,7 +109,7 @@ class Planner
         const auto result = block.atoms.size() == 1 ? block.atoms.front() :
                             measured ? CostBasedPlanner<Values>(block, m_build, [&](QueryView<Values> atom) { return estimate(atom); }).plan() :
                                        structural_plan(block, m_build);
-        return m_build.project(result, detail::query_labels(output));
+        return m_build.project(result, column_labels(output));
     }
 
 public:

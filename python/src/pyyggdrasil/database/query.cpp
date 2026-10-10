@@ -36,15 +36,7 @@ using ColumnIndices = std::span<const db::ColumnLayout>;
 using database_python::BorrowedRelation;
 using database_python::Relation;
 using database_python::RelationInput;
-
-std::vector<Column> columns(const std::vector<ygg::uint_t>& labels)
-{
-    std::vector<Column> result;
-    result.reserve(labels.size());
-    for (const auto label : labels)
-        result.emplace_back(label);
-    return result;
-}
+using database_python::column_labels;
 
 std::vector<Query> roots(nb::handle value)
 {
@@ -117,7 +109,7 @@ Query relabel(Repository& repository, Query query, const std::vector<ygg::uint_t
 {
     auto data = db::checkout<db::Query<Values, Tag>>(builder());
     data->arg = require(repository, query);
-    const auto indices = columns(labels);
+    const auto indices = column_labels(labels);
     data->labels.set(indices.begin(), indices.end());
     return db::insert_query(repository, builder(), *data);
 }
@@ -181,7 +173,7 @@ void bind_database_query(nb::module_& m)
             "input",
             [](Repository& repository, size_t slot, const std::vector<ygg::uint_t>& labels)
             {
-                const ygg::Builder<db::Columns<Values>> schema(columns(labels));
+                const ygg::Builder<db::Columns<Values>> schema(column_labels(labels));
                 return input(repository, slot, schema.span());
             },
             nb::arg("slot"),
@@ -192,7 +184,7 @@ void bind_database_query(nb::module_& m)
             "empty",
             [](Repository& repository, const std::vector<ygg::uint_t>& labels)
             {
-                const ygg::Builder<db::Columns<Values>> schema(columns(labels));
+                const ygg::Builder<db::Columns<Values>> schema(column_labels(labels));
                 return empty(repository, schema.span());
             },
             nb::arg("columns"),

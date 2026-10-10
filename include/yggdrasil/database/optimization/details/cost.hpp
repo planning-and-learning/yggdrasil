@@ -6,7 +6,9 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_COST_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/core/itertools.hpp"
 #include "yggdrasil/database/optimization/details/dpccp.hpp"
 #include "yggdrasil/database/optimization/details/estimation.hpp"
 #include "yggdrasil/database/optimization/details/join_block.hpp"
@@ -41,19 +43,11 @@ class CostBasedPlanner
     /// C_out of each subset's best plan and its left part; leaves cost nothing.
     UnorderedMap<std::uint64_t, Split> m_best;
 
-    std::vector<size_t> atoms(std::uint64_t subset) const
-    {
-        std::vector<size_t> result;
-        for (auto rest = subset; rest; rest &= rest - 1)
-            result.push_back(static_cast<size_t>(std::countr_zero(rest)));
-        return result;
-    }
     std::vector<Index<Column>> labels(std::uint64_t subset) const
     {
         std::vector<Index<Column>> result;
-        for (const auto atom : atoms(subset))
-            result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end());
-        return sorted(std::move(result));
+        bit::for_each_set_bit(subset, [&](size_t atom) { result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end()); });
+        return ygg::canonicalized(std::move(result));
     }
     /// The subset's estimate; returned by value since recursion grows the memo.
     Estimate estimate(std::uint64_t subset)
@@ -77,7 +71,7 @@ class CostBasedPlanner
         for (size_t atom = 0; atom < m_variables.size(); ++atom)
             if (!(subset >> atom & 1))
                 result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end());
-        return sorted(std::move(result));
+        return ygg::canonicalized(std::move(result));
     }
     /// A node of the chosen operator tree; leaves are single operands.
     struct Node
@@ -160,7 +154,7 @@ public:
     CostBasedPlanner(const JoinBlock<Values>& block, OperatorBuilder<Values>& build, GetEstimate&& estimate_of) :
         m_block(&block),
         m_build(&build),
-        m_required(sorted(detail::query_labels(block.output.span())))
+        m_required(ygg::canonicalized(column_labels(block.output.span())))
     {
         for (size_t atom = 0; atom < block.atoms.size(); ++atom)
         {
@@ -180,7 +174,7 @@ public:
         std::vector<std::uint64_t> graph(count);
         for (size_t lhs = 0; lhs < count; ++lhs)
             for (size_t rhs = lhs + 1; rhs < count; ++rhs)
-                if (shares(m_variables[lhs], m_variables[rhs]))
+                if (itertools::intersects(m_variables[lhs], m_variables[rhs]))
                 {
                     graph[lhs] |= std::uint64_t { 1 } << rhs;
                     graph[rhs] |= std::uint64_t { 1 } << lhs;
@@ -195,14 +189,13 @@ public:
                                               return true;
                                           });
         std::vector<std::uint64_t> components;
-        for (auto unseen = (std::uint64_t { 1 } << count) - 1; unseen;)
+        for (auto unseen = bit::lo_set<std::uint64_t>[count]; unseen;)
         {
             auto component = unseen & -unseen;
             for (std::uint64_t previous = 0; component != previous;)
             {
                 previous = component;
-                for (const auto atom : atoms(component))
-                    component |= graph[atom];
+                bit::for_each_set_bit(previous, [&](size_t atom) { component |= graph[atom]; });
             }
             components.push_back(component);
             unseen &= ~component;

@@ -129,6 +129,14 @@ void canonicalize(std::vector<T, Allocator>& list)
         list.erase(std::unique(list.begin(), list.end()), list.end());
 }
 
+/// The list, canonicalized.
+template<bool Deduplicate = true, typename T, typename Allocator>
+std::vector<T, Allocator> canonicalized(std::vector<T, Allocator> list)
+{
+    canonicalize<Deduplicate>(list);
+    return list;
+}
+
 template<bool Deduplicate = true, typename T>
 void canonicalize(IndexList<T>& list)
 {

@@ -49,10 +49,7 @@ struct QueryValue
 template<ColumnTypes Values, bool Enabled = ColumnValueFor<uint_t, Values>>
 struct QueryDistance : QueryValue<Values>
 {
-    explicit QueryDistance(QueryView<Values, QueryDistanceTag> operation) : QueryValue<Values>(operation.columns())
-    {
-        throw std::invalid_argument("Query: distance requires uint_t columns.");
-    }
+    explicit QueryDistance(QueryView<Values, QueryDistanceTag> operation) : QueryValue<Values>(operation.columns()) { database::detail::unsupported_distance(); }
 };
 template<ColumnTypes Values>
 struct QueryDistance<Values, true> : DistanceEvaluator<Values>
@@ -196,19 +193,9 @@ public:
     template<RelationViewRange<Values> R>
     void initialize(const R& bindings)
     {
-        for (size_t i = 0; i < m_plan.node_count(); ++i)
-            ygg::visit(
-                [&]<typename Concrete>(Concrete operation)
-                {
-                    if constexpr (std::same_as<Concrete, QueryView<Values, QueryInputTag>>)
-                    {
-                        if (operation.get_input_slot() >= std::ranges::size(bindings))
-                            throw std::invalid_argument("Incremental query: missing input binding.");
-                        database::detail::require_plan_columns(bindings[operation.get_input_slot()].columns().span(), operation.columns());
-                        require_external(bindings[operation.get_input_slot()]);
-                    }
-                },
-                m_plan[NodeId(to_uint_t(i))].get_variant());
+        database::detail::validate_bindings(m_plan,
+                                            bindings,
+                                            [&](const void* address) { return std::ranges::find(m_storage_addresses, address) != m_storage_addresses.end(); });
         m_ready = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
             ygg::visit(

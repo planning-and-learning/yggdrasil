@@ -34,7 +34,6 @@ class Normalizer
     OperatorBuilder<Values> m_build;
     std::vector<std::optional<QueryView<Values>>> m_normalized;
 
-    static std::vector<Index<Column>> labels(std::span<const ColumnLayout> columns) { return detail::query_labels(columns); }
 
     QueryView<Values> join(QueryView<Values> lhs, QueryView<Values> rhs)
     {
@@ -66,14 +65,14 @@ class Normalizer
     }
     QueryView<Values> rename(QueryView<Values> arg, std::span<const Index<Column>> columns)
     {
-        if (std::ranges::equal(labels(arg.columns()), columns))
+        if (std::ranges::equal(column_labels(arg.columns()), columns))
             return arg;
         const auto result = m_build.template relabel<QueryRenameTag>(arg, columns);
         return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
     }
     QueryView<Values> project(QueryView<Values> arg, std::span<const Index<Column>> columns)
     {
-        if (std::ranges::equal(labels(arg.columns()), columns))
+        if (std::ranges::equal(column_labels(arg.columns()), columns))
             return arg;
         if (is<QueryProjectTag>(arg))
             return project(as<QueryProjectTag>(arg).get_arg(), columns);

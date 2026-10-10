@@ -7,6 +7,7 @@
 #include <nanobind/nanobind.h>
 #include <span>
 #include <variant>
+#include <vector>
 
 namespace yggdrasil::database_python
 {
@@ -14,6 +15,15 @@ namespace nb = nanobind;
 using Relation = ygg::Builder<ygg::database::Relation<>>;
 using RelationView = ygg::database::RelationView<>;
 using Row = ygg::database::Row<>;
+
+inline std::vector<ygg::Index<ygg::database::Column>> column_labels(const std::vector<ygg::uint_t>& labels)
+{
+    std::vector<ygg::Index<ygg::database::Column>> result;
+    result.reserve(labels.size());
+    for (const auto label : labels)
+        result.emplace_back(label);
+    return result;
+}
 
 struct BorrowedRelation
 {

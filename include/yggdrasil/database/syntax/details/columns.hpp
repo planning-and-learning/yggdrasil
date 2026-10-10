@@ -12,6 +12,7 @@
 #include <array>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace ygg::database
 {
@@ -85,6 +86,15 @@ inline size_t column_index(std::span<const ColumnLayout> columns, Index<Column> 
 inline bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept
 {
     return std::ranges::find(columns, column, &ColumnLayout::label) != columns.end();
+}
+
+inline std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns)
+{
+    std::vector<Index<Column>> result;
+    result.reserve(columns.size());
+    for (const auto& column : columns)
+        result.push_back(column.label);
+    return result;
 }
 
 inline size_t row_size(std::span<const ColumnLayout> columns) noexcept { return columns.empty() ? 0 : columns.back().offset + columns.back().size; }

@@ -1,6 +1,7 @@
 #include "module.hpp"
 #include "distance.hpp"
 #include "query.hpp"
+#include "query_inputs.hpp"
 
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_pool.hpp"
@@ -57,14 +58,6 @@ void bind_database_module_definitions(nb::module_& m)
     using RelationRepositoryFactory = ygg::database::RelationRepositoryFactory<>;
     using Row = ygg::database::Row<>;
     using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
-    const auto column_indices = [](const std::vector<ygg::uint_t>& columns)
-    {
-        std::vector<ygg::Index<ygg::database::Column>> result;
-        result.reserve(columns.size());
-        for (const auto column : columns)
-            result.emplace_back(column);
-        return result;
-    };
 
     nb::enum_<ColumnType>(m, "ColumnType")
         .value("UINT32", ColumnType::UINT32)
@@ -208,12 +201,12 @@ void bind_database_module_definitions(nb::module_& m)
         .def("clear", &RelationRepository::clear)
         .def(
             "rename",
-            [column_indices](RelationRepository& repository,
+            [](RelationRepository& repository,
                              RelationView relation,
                              const std::vector<ygg::uint_t>& columns,
                              std::optional<std::size_t> schema_namespace)
             {
-                const auto labels = column_indices(columns);
+                const auto labels = database_python::column_labels(columns);
                 return schema_namespace ? repository.rename(relation, labels, *schema_namespace) : repository.rename(relation, labels);
             },
             nb::arg("relation"),

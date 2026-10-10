@@ -7,6 +7,8 @@
 
 #include "yggdrasil/database/syntax/query.hpp"
 
+#include <algorithm>
+#include <concepts>
 #include <ranges>
 #include <variant>
 
@@ -27,10 +29,31 @@ bool query_accepts(QueryView<Values, QuerySelectValueTag> selection, std::span<c
     return std::ranges::equal(column_bytes(row, selection.columns()[selection.get_position()]), selection.get_constant());
 }
 
+/// Distances are evaluated only with uint_t columns.
+[[noreturn]] inline void unsupported_distance() { throw std::invalid_argument("Query: distance requires uint_t columns."); }
+
+/// Validates each input binding of the plan; inputs must not alias the evaluator's storage.
+template<ColumnTypes Values, RelationViewRange<Values> R, std::predicate<const void*> IsInternal>
+void validate_bindings(const QueryPlan<Values>& plan, const R& bindings, IsInternal&& is_internal)
+{
+    for (size_t i = 0; i < plan.node_count(); ++i)
+    {
+        const auto query = plan[Index<Query<Values>>(to_uint_t(i))];
+        if (!is<QueryInputTag>(query))
+            continue;
+        const auto slot = as<QueryInputTag>(query).get_input_slot();
+        if (slot >= std::ranges::size(bindings))
+            throw std::invalid_argument("Query: missing input binding.");
+        require_plan_columns(bindings[slot].columns().span(), query.columns());
+        if (is_internal(bindings[slot].get_storage_address()))
+            throw std::invalid_argument("Query: input aliases evaluator storage.");
+    }
+}
+
 template<ColumnTypes Values, bool Enabled = ColumnValueFor<uint_t, Values>>
 struct QueryDistanceWorkspace
 {
-    explicit QueryDistanceWorkspace(const DistancePlan<Values>&) { throw std::invalid_argument("Query: distance requires uint_t columns."); }
+    explicit QueryDistanceWorkspace(const DistancePlan<Values>&) { unsupported_distance(); }
     size_t memory_usage() const noexcept { return 0; }
 };
 
@@ -95,22 +118,10 @@ public:
     template<RelationViewRange<Values> R>
     void evaluate(const R& bindings)
     {
-        for (size_t i = 0; i < m_plan.node_count(); ++i)
-            ygg::visit(
-                [&]<typename Concrete>(Concrete operation)
-                {
-                    if constexpr (std::same_as<Concrete, QueryView<Values, QueryInputTag>>)
-                    {
-                        if (operation.get_input_slot() >= std::ranges::size(bindings))
-                            throw std::invalid_argument("Query: missing input binding.");
-                        const auto& input = bindings[operation.get_input_slot()];
-                        detail::require_plan_columns(input.columns().span(), operation.columns());
-                        for (const auto& state : m_nodes)
-                            if (input.get_storage_address() == state.result.get_storage_address())
-                                throw std::invalid_argument("Query: input aliases an evaluator result.");
-                    }
-                },
-                m_plan[NodeId(to_uint_t(i))].get_variant());
+        detail::validate_bindings(m_plan,
+                                  bindings,
+                                  [&](const void* address)
+                                  { return std::ranges::any_of(m_nodes, [&](const Node& node) { return node.result.get_storage_address() == address; }); });
         m_ready = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
         {

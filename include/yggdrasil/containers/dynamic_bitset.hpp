@@ -18,6 +18,7 @@
 #ifndef YGG_CONTAINERS_DYNAMIC_BITSET_HPP_
 #define YGG_CONTAINERS_DYNAMIC_BITSET_HPP_
 
+#include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/concepts.hpp"
 
 #include <bit>
@@ -761,12 +762,7 @@ void for_each_bit(Callback&& callback, BlockCombiner&& combiner, const BitsetSpa
         if (block + 1 == n)
             w &= last;
 
-        while (w)
-        {
-            const unsigned tz = std::countr_zero(w);
-            callback(offset + tz);
-            w &= (w - 1);
-        }
+        bit::for_each_set_bit(w, [&](size_t position) { callback(offset + position); });
 
         offset += BitsetSpan<const U>::Digits;
     }

@@ -17,17 +17,21 @@
 
 namespace ygg::database
 {
-namespace detail
+/// Whether the query's operation has the tag.
+template<class Tag, ColumnTypes Values>
+bool is(QueryView<Values> query)
 {
-inline std::vector<Index<Column>> query_labels(std::span<const ColumnLayout> columns)
+    return query.get_variant().template is<Index<Query<Values, Tag>>>();
+}
+/// The query's operation; requires is<Tag>(query).
+template<class Tag, ColumnTypes Values>
+QueryView<Values, Tag> as(QueryView<Values> query)
 {
-    std::vector<Index<Column>> result;
-    result.reserve(columns.size());
-    for (const auto& column : columns)
-        result.push_back(column.label);
-    return result;
+    return query.get_variant().template get<Index<Query<Values, Tag>>>();
 }
 
+namespace detail
+{
 /// Rebinds a query's operation to schema-identical children in the destination.
 template<ColumnTypes Values>
 QueryView<Values>

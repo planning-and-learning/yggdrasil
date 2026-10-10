@@ -81,6 +81,14 @@ consteval auto make_lo_set()
 template<std::unsigned_integral Block>
 constexpr auto lo_set = make_lo_set<Block>();
 
+/// Calls callback(i) for each set bit i of the word, in ascending order.
+template<std::unsigned_integral Block, typename Callback>
+constexpr void for_each_set_bit(Block word, Callback&& callback)
+{
+    for (; word; word &= word - 1)
+        callback(static_cast<std::size_t>(std::countr_zero(word)));
+}
+
 /// @brief Write a packed unsigned integer of width len starting at bit offset
 /// in word[0].
 /// @tparam Block is the unsigned integral block type.

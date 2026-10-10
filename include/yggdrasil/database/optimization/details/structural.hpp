@@ -89,7 +89,7 @@ QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std
         if (parent[atom])
             relations[atom] = build.semijoin(relations[atom], relations[*parent[atom]]);
 
-    const auto required = sorted(detail::query_labels(block.output.span()));
+    const auto required = ygg::canonicalized(column_labels(block.output.span()));
     std::vector<std::optional<QueryView<Values>>> results(count);
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
     {
@@ -101,7 +101,7 @@ QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std
         {
             const auto shared = variables(block.atoms[*parent[*atom]]);
             keep.insert(keep.end(), shared.begin(), shared.end());
-            keep = sorted(std::move(keep));
+            keep = ygg::canonicalized(std::move(keep));
         }
         results[*atom] = build.restrict(joined, keep);
     }

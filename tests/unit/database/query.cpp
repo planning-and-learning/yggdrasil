@@ -73,12 +73,6 @@ static_assert(!std::copy_constructible<db::QueryRepository<>>);
 static_assert(
     !std::convertible_to<ygg::Index<db::Query<db::DefaultColumnTypes, db::QueryInputTag>>, ygg::Index<db::Query<db::DefaultColumnTypes, db::QueryJoinTag>>>);
 
-template<typename Tag>
-auto concrete(db::QueryView<> query)
-{
-    return query.get_variant().template get<ygg::Index<db::Query<db::DefaultColumnTypes, Tag>>>();
-}
-
 TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
 {
     auto repository = qb::repository<>();
@@ -95,30 +89,30 @@ TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
     const auto targets = qb::project(repository, b, { z });
     const auto distance = qb::distance(repository, projected, a, targets, d);
     const auto roots = std::array { a, empty, joined, projected, renamed, equal, selected, united, difference, distance };
-    EXPECT_EQ(concrete<db::QueryInputTag>(a).get_input_slot(), 0);
-    EXPECT_TRUE(std::ranges::equal(concrete<db::QueryEmptyTag>(empty).columns(), a.columns()));
-    EXPECT_EQ(concrete<db::QueryJoinTag>(joined).get_lhs().get_index(), a.get_index());
-    EXPECT_EQ(concrete<db::QueryJoinTag>(joined).get_rhs().get_index(), b.get_index());
-    EXPECT_EQ(concrete<db::QueryProjectTag>(projected).get_arg().get_index(), a.get_index());
-    EXPECT_EQ(concrete<db::QueryProjectTag>(projected).get_labels().front(), x);
-    EXPECT_EQ(concrete<db::QueryRenameTag>(renamed).get_labels().front(), y);
-    EXPECT_EQ(concrete<db::QuerySelectEqualTag>(equal).get_lhs_column(), x);
-    EXPECT_EQ(concrete<db::QuerySelectEqualTag>(equal).get_rhs_column(), y);
-    EXPECT_EQ(concrete<db::QuerySelectValueTag>(selected).get_column(), x);
-    EXPECT_EQ(db::ColumnCodec<ygg::uint_t>::decode(concrete<db::QuerySelectValueTag>(selected).get_constant()), 7);
-    EXPECT_EQ(concrete<db::QueryUnionTag>(united).get_rhs().get_index(), empty.get_index());
-    EXPECT_EQ(concrete<db::QueryDifferenceTag>(difference).get_lhs().get_index(), a.get_index());
-    EXPECT_EQ(concrete<db::QueryDistanceTag>(distance).get_sources().get_index(), projected.get_index());
-    EXPECT_EQ(concrete<db::QueryDistanceTag>(distance).get_edges().get_index(), a.get_index());
-    EXPECT_EQ(concrete<db::QueryDistanceTag>(distance).get_targets().get_index(), targets.get_index());
-    EXPECT_EQ(concrete<db::QueryDistanceTag>(distance).get_distance_column(), d);
+    EXPECT_EQ(db::as<db::QueryInputTag>(a).get_input_slot(), 0);
+    EXPECT_TRUE(std::ranges::equal(db::as<db::QueryEmptyTag>(empty).columns(), a.columns()));
+    EXPECT_EQ(db::as<db::QueryJoinTag>(joined).get_lhs().get_index(), a.get_index());
+    EXPECT_EQ(db::as<db::QueryJoinTag>(joined).get_rhs().get_index(), b.get_index());
+    EXPECT_EQ(db::as<db::QueryProjectTag>(projected).get_arg().get_index(), a.get_index());
+    EXPECT_EQ(db::as<db::QueryProjectTag>(projected).get_labels().front(), x);
+    EXPECT_EQ(db::as<db::QueryRenameTag>(renamed).get_labels().front(), y);
+    EXPECT_EQ(db::as<db::QuerySelectEqualTag>(equal).get_lhs_column(), x);
+    EXPECT_EQ(db::as<db::QuerySelectEqualTag>(equal).get_rhs_column(), y);
+    EXPECT_EQ(db::as<db::QuerySelectValueTag>(selected).get_column(), x);
+    EXPECT_EQ(db::ColumnCodec<ygg::uint_t>::decode(db::as<db::QuerySelectValueTag>(selected).get_constant()), 7);
+    EXPECT_EQ(db::as<db::QueryUnionTag>(united).get_rhs().get_index(), empty.get_index());
+    EXPECT_EQ(db::as<db::QueryDifferenceTag>(difference).get_lhs().get_index(), a.get_index());
+    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_sources().get_index(), projected.get_index());
+    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_edges().get_index(), a.get_index());
+    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_targets().get_index(), targets.get_index());
+    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_distance_column(), d);
     const auto count = repository.size();
     EXPECT_EQ(count, 12);
     const auto duplicate = qb::join(repository, a, b);
     EXPECT_EQ(duplicate.get_index(), joined.get_index());
-    EXPECT_EQ(concrete<db::QueryJoinTag>(duplicate).get_index(), concrete<db::QueryJoinTag>(joined).get_index());
+    EXPECT_EQ(db::as<db::QueryJoinTag>(duplicate).get_index(), db::as<db::QueryJoinTag>(joined).get_index());
     EXPECT_EQ(repository.size(), count);
-    EXPECT_EQ(concrete<db::QueryInputTag>(a).get_index().get_value(), concrete<db::QueryJoinTag>(joined).get_index().get_value());
+    EXPECT_EQ(db::as<db::QueryInputTag>(a).get_index().get_value(), db::as<db::QueryJoinTag>(joined).get_index().get_value());
     EXPECT_NE(a.get_index(), joined.get_index());
     const auto plan = ygg::database::compile(roots);
     for (size_t i = 0; i < roots.size(); ++i)
@@ -481,7 +475,7 @@ TEST(DatabaseQuery, CachedPlansSurviveRepositoryGrowthAndCistaRelocation)
     const auto projected = qb::project(repository, joined, { z, x });
     const auto generic = qb::generic_join(repository, { a, b }, { z, y, x }, { x, z, y });
     const auto distance = qb::distance(repository, qb::project(repository, a, { x }), a, qb::project(repository, b, { z }), d);
-    const auto view = concrete<db::QueryJoinTag>(joined);
+    const auto view = db::as<db::QueryJoinTag>(joined);
     const auto* original = &view.get_data();
     for (size_t slot = 2; slot < 260; ++slot)
         qb::join(repository, qb::input(repository, slot, { x, y }), b);
@@ -511,9 +505,9 @@ TEST(DatabaseQuery, CachedPlansSurviveRepositoryGrowthAndCistaRelocation)
         }
     };
     round_trip(view);
-    round_trip(concrete<db::QueryProjectTag>(projected));
-    round_trip(concrete<db::QueryGenericJoinTag>(generic));
-    round_trip(concrete<db::QueryDistanceTag>(distance));
+    round_trip(db::as<db::QueryProjectTag>(projected));
+    round_trip(db::as<db::QueryGenericJoinTag>(generic));
+    round_trip(db::as<db::QueryDistanceTag>(distance));
 }
 
 TEST(DatabaseQuery, FactoriesRejectMalformedQueriesBeforePublishingPlans)
@@ -538,7 +532,7 @@ TEST(DatabaseQuery, FactoriesRejectMalformedQueriesBeforePublishingPlans)
     EXPECT_THROW(qb::input(repository, 0, malformed), std::invalid_argument);
     const auto plan = ygg::database::compile({ input });
     EXPECT_THROW(plan[ygg::Index<db::Query<>>(99)], std::out_of_range);
-    const auto typed = concrete<db::QueryInputTag>(plan[plan.roots().front()]);
+    const auto typed = db::as<db::QueryInputTag>(plan[plan.roots().front()]);
     static_assert(std::is_const_v<std::remove_reference_t<decltype(typed.get_data())>>);
     EXPECT_EQ(repository.size(), 1);
 }

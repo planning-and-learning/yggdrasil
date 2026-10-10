@@ -53,7 +53,7 @@ size_t count(const db::QueryPlan<>& plan)
 {
     size_t result = 0;
     for (size_t position = 0; position < plan.node_count(); ++position)
-        result += plan[PlanId(ygg::to_uint_t(position))].get_variant().template is<ygg::Index<db::Query<db::DefaultColumnTypes, Tag>>>();
+        result += db::is<Tag>(plan[PlanId(ygg::to_uint_t(position))]);
     return result;
 }
 std::vector<Column> labels(std::initializer_list<Column> values)

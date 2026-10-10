@@ -83,6 +83,7 @@ inline Estimate factor(const RelationStatistics& stats, std::span<const ColumnLa
 /// System R's |R ⋈ S| = |R|·|S| / max(V(R,A), V(S,A)).
 inline Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
 {
+    // ponytail: hand-rolled union-find over a few columns; boost::disjoint_sets needs property maps for no gain here.
     UnorderedMap<uint_t, uint_t> parent;
     for (const auto& single : result.factors)
         for (const auto& [slot, column, ndv] : single.attributes)
@@ -187,7 +188,7 @@ Estimate estimate_operation(QueryView<Values, QueryEmptyTag> query, FactorIdenti
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryJoinTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
 {
-    return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), detail::query_labels(query.columns()));
+    return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), column_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryGenericJoinTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics<Values>&)
@@ -198,7 +199,7 @@ Estimate estimate_operation(QueryView<Values, QueryGenericJoinTag> query, Factor
     auto result = child(QueryView<Values>(inputs.front(), query.get_repository()));
     for (const auto input : inputs.subspan(1))
         result = combine(std::move(result), child(QueryView<Values>(input, query.get_repository())));
-    return conjunction(std::move(result), detail::query_labels(query.columns()));
+    return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QuerySelectEqualTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
@@ -206,7 +207,7 @@ Estimate estimate_operation(QueryView<Values, QuerySelectEqualTag> query, Factor
     auto result = child(query.get_arg());
     const auto lhs = query.get_lhs_column().get_value(), rhs = query.get_rhs_column().get_value();
     result.equalities.emplace(std::min(lhs, rhs), std::max(lhs, rhs));
-    return conjunction(std::move(result), detail::query_labels(query.columns()));
+    return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QuerySelectValueTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
@@ -214,7 +215,7 @@ Estimate estimate_operation(QueryView<Values, QuerySelectValueTag> query, Factor
     auto result = child(query.get_arg());
     const auto constant = query.get_constant();
     result.constants.emplace(query.get_column().get_value(), std::vector<std::byte>(constant.begin(), constant.end()));
-    return conjunction(std::move(result), detail::query_labels(query.columns()));
+    return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryRenameTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
@@ -235,7 +236,7 @@ Estimate estimate_operation(QueryView<Values, QueryRenameTag> query, FactorIdent
         constants.emplace(renamed.at(column), value);
     result.equalities = std::move(equalities);
     result.constants = std::move(constants);
-    return conjunction(std::move(result), detail::query_labels(after));
+    return conjunction(std::move(result), column_labels(after));
 }
 /// Operators beyond System R follow the textbook estimates of Garcia-Molina, Ullman,
 /// and Widom (Database Systems: The Complete Book, 2nd ed., 2008, §16.4), with distinct

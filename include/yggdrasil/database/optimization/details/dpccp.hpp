@@ -6,6 +6,8 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_DPCCP_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_DPCCP_HPP_
 
+#include "yggdrasil/core/bit.hpp"
+
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -25,12 +27,11 @@ class DpccpEnumerator
     std::uint64_t neighbors(std::uint64_t vertices) const
     {
         std::uint64_t result = 0;
-        for (auto rest = vertices; rest; rest &= rest - 1)
-            result |= m_adjacency[std::countr_zero(rest)];
+        bit::for_each_set_bit(vertices, [&](size_t vertex) { result |= m_adjacency[vertex]; });
         return result & ~vertices;
     }
 
-    static std::uint64_t through(size_t vertex) { return (std::uint64_t { 1 } << (vertex + 1)) - 1; }
+    static std::uint64_t through(size_t vertex) { return bit::lo_set<std::uint64_t>[vertex + 1]; }
 
     bool expand_complement(std::uint64_t left, std::uint64_t right, std::uint64_t excluded)
     {
@@ -100,15 +101,18 @@ bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callbac
 {
     if (adjacency.size() > 63)
         throw std::invalid_argument("DPccp: at most 63 vertices are supported.");
-    const auto all = (std::uint64_t { 1 } << adjacency.size()) - 1;
+    const auto all = bit::lo_set<std::uint64_t>[adjacency.size()];
     for (size_t vertex = 0; vertex < adjacency.size(); ++vertex)
     {
         const auto singleton = std::uint64_t { 1 } << vertex;
         if ((adjacency[vertex] & ~all) || (adjacency[vertex] & singleton))
             throw std::invalid_argument("DPccp: adjacency contains an invalid vertex or self edge.");
-        for (auto rest = adjacency[vertex]; rest; rest &= rest - 1)
-            if (!(adjacency[std::countr_zero(rest)] & singleton))
-                throw std::invalid_argument("DPccp: adjacency must be symmetric.");
+        bit::for_each_set_bit(adjacency[vertex],
+                              [&](size_t neighbor)
+                              {
+                                  if (!(adjacency[neighbor] & singleton))
+                                      throw std::invalid_argument("DPccp: adjacency must be symmetric.");
+                              });
     }
     return DpccpEnumerator(adjacency, emit).run();
 }
