@@ -44,3 +44,11 @@ target_include_directories(
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(database_distance_benchmark PRIVATE benchmark::benchmark_main Boost::heap Threads::Threads)
+
+add_executable(database_query_benchmark "database/query.cpp")
+target_compile_features(database_query_benchmark PRIVATE cxx_std_20)
+target_include_directories(database_query_benchmark PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
+target_link_libraries(database_query_benchmark PRIVATE benchmark::benchmark_main Boost::heap Threads::Threads)

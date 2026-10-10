@@ -24,6 +24,65 @@ template<ColumnTypes Values = DefaultColumnTypes>
 struct Relation
 {
 };
+struct QueryInputTag
+{
+};
+struct QueryEmptyTag
+{
+};
+struct QueryJoinTag
+{
+};
+struct QueryProjectTag
+{
+};
+struct QueryRenameTag
+{
+};
+struct QuerySelectEqualTag
+{
+};
+struct QuerySelectValueTag
+{
+};
+struct QueryUnionTag
+{
+};
+struct QueryDifferenceTag
+{
+};
+struct QueryDistanceTag
+{
+};
+struct QueryGenericJoinTag
+{
+};
+
+using QueryConstructorTags = TypeList<QueryInputTag,
+                                      QueryEmptyTag,
+                                      QueryJoinTag,
+                                      QueryProjectTag,
+                                      QueryRenameTag,
+                                      QuerySelectEqualTag,
+                                      QuerySelectValueTag,
+                                      QueryUnionTag,
+                                      QueryDifferenceTag,
+                                      QueryDistanceTag,
+                                      QueryGenericJoinTag>;
+
+template<ColumnTypes Values = DefaultColumnTypes, typename Tag = void>
+struct Query
+{
+};
+template<ColumnTypes Values = DefaultColumnTypes>
+class QueryPlan;
+template<ColumnTypes Values = DefaultColumnTypes>
+class QueryRepository;
+template<ColumnTypes Values = DefaultColumnTypes>
+class QueryRepositoryFactory;
+template<ColumnTypes Values = DefaultColumnTypes, typename Tag = void>
+using QueryView = ygg::View<ygg::Index<Query<Values, Tag>>, QueryRepository<Values>>;
+
 template<ColumnTypes Values = DefaultColumnTypes>
 struct RelationRow
 {
@@ -44,6 +103,8 @@ template<ColumnTypes Values = DefaultColumnTypes>
 class RelationRepositoryFactory;
 template<ColumnTypes Values = DefaultColumnTypes>
 using RelationView = ygg::View<ygg::Index<Relation<Values>>, RelationRepository<Values>>;
+template<ColumnTypes Values = DefaultColumnTypes>
+using BorrowedRelationView = ygg::View<ygg::Builder<Relation<Values>>, RelationRepository<Values>>;
 }  // namespace ygg::database
 
 #endif

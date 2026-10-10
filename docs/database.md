@@ -394,3 +394,251 @@ returns a read-only `BorrowedRelation`, and `get_delta()` returns a read-only
 keep the evaluator alive; they expose no mutating relation methods. Rows must
 not be retained across an evaluator `initialize` or `update`. The `update` method
 takes the six added/removed relations in the same order as the C++ interface.
+
+## Query graphs and optimization
+
+`<yggdrasil/database/query_repository.hpp>` adds an interned relational query graph without
+capturing input rows. A `QueryRepository<Values>` only stores and interns query
+records; create repositories with a `QueryRepositoryFactory<Values>`, whose
+repositories have distinct identities. Queries are built like other interned
+data: check out a `Data<Query<Values, Tag>>` from a `QueryBuilder<Values>`, fill
+its operands and parameters, and intern it with `insert_query(repository,
+builder, data)` from `query_construction.hpp`. That inserts the concrete record
+and its heterogeneous root. `prepare_for_insert` validates operands, schemas,
+constants, and execution orders and derives the prepared metadata. Query handles
+borrow the repository. Input-slot numbers identify bindings at evaluation time;
+repeated references to a slot use the same input relation.
+
+The index, data, view, and repository definitions are separated into
+`query_index.hpp`, `query_data.hpp`, `query_view.hpp`, and `query_repository.hpp`.
+`Query<Values, Tag>` identifies a concrete operation; `Query<Values>` is the
+heterogeneous root whose data stores a variant of concrete query indices. Each
+concrete data type stores only its own operands and parameters. For example,
+`QueryJoinTag` has `lhs` and `rhs` query indices, while `QuerySelectValueTag` has
+`arg`, `column`, and an encoded `constant`. Derived output columns are cached
+but do not participate in operator identity. Input and empty schemas, and the
+ordered labels requested by projection or rename, do participate in identity.
+
+`insert_query` returns `QueryView<Values>`. Its `get_variant()` exposes
+concrete views with operation-specific getters such as `get_lhs()`, `get_arg()`,
+and `get_constant()`. All query views expose `columns()`; every view borrows its
+repository. `size()` counts heterogeneous root queries, not the separate
+concrete operator records.
+
+Queries use the same typed representation during optimization and evaluation.
+Join, projection, distance, and Generic Join records retain their prepared
+execution plans. Selection records retain resolved column positions. These
+caches are derived during validated construction and excluded from interning
+identity. Their output schemas are read directly from the prepared plans.
+Generic Join is a query constructor with input queries, a variable order, and
+an independent output order. An empty output order is canonicalized to the
+natural union of the input columns.
+
+`compile(roots)` produces a copyable, read-only `QueryPlan<Values>`
+that owns a const query repository. Only reachable queries are copied, with
+children preceding their parents; shared queries and repeated roots stay shared.
+The plan preserves root order and ordered, typed output schemas and remains valid
+after its source repository is destroyed. `node_count()`, `root_count()`, and
+`roots()` expose its shape; indexing by a root query index returns an ordinary
+`QueryView`. Row enumeration order is not a query guarantee.
+
+Include `<yggdrasil/database/formatter.hpp>` to format a plan with
+`fmt::format("{}", plan)`, `ygg::to_string(plan)`, or `explain(plan)`.
+Python's `plan.explain()` uses the same rendering. The `fmt::formatter`
+specialization follows `YGG_ENABLE_FMT_FORMATTERS`; `explain()` remains available
+when public formatters are disabled.
+
+`<yggdrasil/database/optimization.hpp>` selects the optimizer at the roots:
+
+```cpp
+using namespace ygg::database;
+QueryRepositoryFactory<> factory;
+auto repository = factory.create();
+QueryBuilder<> builder;
+const auto input = [&](size_t slot, const auto& relation)
+{
+    auto data = checkout<Query<DefaultColumnTypes, QueryInputTag>>(builder);
+    data->input_slot = slot;
+    data->columns.set(relation.columns().begin(), relation.columns().end());
+    return insert_query(repository, builder, *data);
+};
+auto join = checkout<Query<DefaultColumnTypes, QueryJoinTag>>(builder);
+join->lhs = input(0, left_relation).get_index();
+join->rhs = input(1, right_relation).get_index();
+const auto query = insert_query(repository, builder, *join);
+
+// Any range of relation views: interned RelationView or BorrowedRelationView over builders.
+const std::array bindings { left_view, right_view };
+OptimizationContext<> context;
+context.statistics = collect_statistics<DefaultColumnTypes>(bindings);
+const auto cost_based = optimize(query, context);
+QueryEvaluator<> evaluator(cost_based.plan);
+evaluator.evaluate(bindings);
+const auto& result = evaluator.get_result();
+```
+
+`CostBasedTag`, the default, is a port of the optimizer in
+`learning-module-programs-verdog/experiments/optimize_queries.py`. An e-graph
+style memo applies verdog's rewrite rules in rounds: join and union
+commutativity and associativity, absorption, projection and selection pushdown
+with schema and scope guards, distribution and factoring of joins over unions,
+and empty-relation simplification. Difference and distance keep their operator
+semantics, and a projection is not pushed through difference.
+
+Each equivalence group then gets one frozen estimate, taken from its witness
+with the fewest nodes, so repeated filters cannot shrink an estimate through a
+cycle. Physical extraction keeps a bounded frontier of candidates per group and
+prices each candidate once by the distinct operators of its plan DAG, so shared
+subplans count once. The original query is the incumbent; a candidate replaces
+it only with a lower score. Bounded rewriting and frontiers do not guarantee
+the globally cheapest plan.
+
+The native extension point is `Optimizer<AlgorithmTag, Values>::run(request)`.
+A custom tag is selected through the same `optimize<AlgorithmTag>` entry point. The root entry point validates the resulting plan and its output
+schemas. For example, a policy preserving the original order needs no central
+C++ enum changes:
+
+```cpp
+struct PreserveOrderTag {};
+namespace ygg::database
+{
+template<ColumnTypes Values>
+struct Optimizer<PreserveOrderTag, Values>
+{
+    static OptimizationResult<Values> run(std::span<const QueryView<Values>> roots, const OptimizationContext<Values>&)
+    {
+        return {compile(roots), {}};
+    }
+};
+}
+
+const auto preserved = ygg::database::optimize<PreserveOrderTag>(query);
+```
+
+Policies construct new alternatives in their own repository with the same
+checkout and `insert_query` steps, then return `compile({root})`.
+
+`prepare_for_insert` checks schemas, constants, and execution orders before
+publishing immutable query data. Query records hold plain indices, so callers
+keep operands in the repository they insert into. `run` borrows the caller's
+roots, which belong to one repository. The root optimizer
+also checks that returned plans preserve root counts and ordered schemas and do
+not introduce unknown input bindings. Custom optimizers return owned plans and
+must preserve the original query's set semantics.
+
+The memo stores finite witnesses in an ordinary query repository. Equivalence
+groups retain a separate index type and can become cyclic without making query
+edges cyclic. Canonical matching compares operator identity with children
+resolved through their current groups. Original statistics observations are
+retained separately when witnesses or groups merge.
+
+Optimizer state lives outside the query data, in vectors indexed by query index:
+memo expressions record their group, source query, estimate, and baseline;
+physical candidates record their source query and price. The optimizer visits
+ordinary `QueryView`s, and the state is discarded with the optimizer. Returned
+plans contain no optimizer state. Evaluators reuse the prepared plans in query
+data and keep mutable execution workspaces separate.
+
+Python exposes the cost-based optimizer. A custom C++ policy needs an
+additional Python binding if Python callers should select it.
+
+### Statistics, costs, and limits
+
+`RelationStatistics` contains `rows`, distinct counts keyed by `Index<Column>`,
+and optional `work`. `Statistics<Values>.inputs` is keyed by input slot;
+`Statistics<Values>.expressions` holds optional observations keyed by the root
+query index (`query.get_index()`) in the optimized roots' repository. Python
+keys distinct counts by plain column labels and expressions by `QueryIndex`.
+An input without statistics has `CostModel::domain_size` rows (default `1000`;
+one row for a nullary input), and a missing distinct count defaults to
+`min(rows, domain_size)`, as in verdog. A known empty input stays empty. Conjunction estimates normalize repeated
+factors and predicates so changing join association does not itself change the
+estimated output size. Projection introduces a fresh scope for hidden columns.
+`collect_statistics(bindings)` scans supplied relations to collect row and
+per-column distinct counts. These observations guide planning and never justify
+replacing a dynamic input by a constant or an empty relation.
+
+Each operator is priced as in verdog, with width counting columns and rows taken
+from the frozen estimates: an input scans `rows * width` (or its measured
+`work`), a projection writes `input rows * width`, a selection reads its input
+and writes its output, a union or difference reads both sides, and a hash join
+costs `(lhs + rhs) * keys + rows * (keys + width)`, or `lhs * rhs * width`
+without common columns. Renames alias their input. Every materialized operator
+retains `rows * (width + 2)` cells. The score is the work plus the retained cells
+weighted by `CostModel::memory_weight` (default `1`). It is an optimization
+proxy, not a measured duration. `OptimizationReport` exposes the baseline and
+selected scores, work and retained estimates, explored counts, and whether
+search was pruned or exhausted a budget.
+
+`SearchLimits` defaults to 10,000 memo expressions, 64 saturation rounds, 20,000
+candidate evaluations, and a frontier of 16 candidates per group. Limits count deterministic work rather than
+wall-clock time. A truncated search returns a valid complete plan. An estimated
+improvement and an exhausted-search flag do not establish an actual speedup or
+global optimality.
+
+### Full and incremental evaluation
+
+`<yggdrasil/database/query_evaluation.hpp>` provides `QueryEvaluator<Values>`.
+`evaluate(bindings)` computes all roots, reusing retained output and scratch
+storage. `<yggdrasil/database/incremental/query.hpp>` provides
+`incremental::QueryEvaluator<Values>`. Initialize it once with input bindings,
+then call `update(changes)` with one `(added, removed)` pair of relation views per
+input slot. Each pair contains actual set additions and removals in that input's ordered typed schema.
+An empty change uses an empty relation with the correct schema. Swap additions
+and removals to undo a transition.
+
+`get_result(root_index)` borrows a root's current relation;
+`get_delta(root_index)` borrows exact net added/removed rows after an incremental
+update. Initialization clears output deltas. A subsequent evaluation or update
+can invalidate borrowed rows. Input adapters and their underlying storage need
+only remain alive during the call. Results belong to the evaluator, and may not
+be fed back as aliased inputs to that same evaluator. `memory_usage()` reports
+retained evaluator storage; it is distinct from the optimizer's estimate.
+
+### Python query API
+
+```python
+from pyyggdrasil import database as db
+
+left = db.Relation([0, 1])
+left.insert((1, 2))
+right = db.Relation([1, 2])
+right.insert((2, 3))
+
+repository = db.QueryRepository()
+a = repository.input(0, left.columns())
+b = repository.input(1, right.columns())
+query = repository.project(repository.join(a, b), [2, 0])
+context = db.OptimizationContext(statistics=db.collect_statistics([left, right]))
+optimized = db.optimize(query, context)
+evaluator = db.QueryEvaluator(optimized.plan)
+evaluator.evaluate([left, right])
+assert {tuple(row) for row in evaluator.get_result()} == {(3, 1)}
+independent = db.snapshot(evaluator.get_result())
+print(optimized.plan.explain())
+```
+
+`optimize` and `repository.compile` accept either one query or a list of roots.
+`repository.union(a, b)`, `difference`, `rename`, `select_equal`, `select_value`,
+`empty`, and `distance` expose the other operators. Typed schemas are supplied
+through a relation's `columns()` view, preserving its field types. `input` and
+`empty` also accept a list of column labels, using `UINT32` for each field.
+
+`IncrementalQueryEvaluator(plan)` exposes `initialize(inputs)` and
+`update(added_inputs, removed_inputs)`. Its result and `RelationDelta` views are
+read-only and keep the evaluator alive. `snapshot(relation)` copies a builder,
+interned relation, or borrowed result into an independent `Relation`. Query
+handles keep their repository alive; compiled plans and evaluators are independent
+of it. For sparse slot numbering, an unused list position may contain `None`.
+Dictionary-valued statistics fields are converted by value; construct them with
+keyword dictionaries or replace the field to change entries.
+
+### Query benchmarks
+
+`database_query_benchmark` separates optimizer time from execution. It compares
+full and incremental evaluation of the original and the cost-based plan, validates
+forward/undo results and net deltas before timing, and reports retained bytes.
+The cold/warm Generic Join cases include full trie construction; warm means
+reusing the evaluator's allocated workspace, not skipping input indexing. The
+initial triangle fixture is a reproducible correctness and performance smoke
+workload, not a broad claim about optimizer quality.

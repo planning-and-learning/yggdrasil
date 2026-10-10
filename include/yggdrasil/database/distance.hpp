@@ -20,7 +20,6 @@ namespace ygg::database
 /// vertices. Positional field types must agree, independently of column labels.
 /// Output columns are the edge columns followed by a fresh uint_t distance column.
 template<ColumnTypes Values = DefaultColumnTypes>
-    requires ColumnValueFor<uint_t, Values>
 class DistancePlan
 {
     Builder<Columns<Values>> m_sources;
@@ -29,6 +28,7 @@ class DistancePlan
     Builder<Columns<Values>> m_output;
 
 public:
+    DistancePlan() = default;
     DistancePlan(std::span<const ColumnLayout> sources,
                  std::span<const ColumnLayout> edges,
                  std::span<const ColumnLayout> targets,
@@ -44,6 +44,8 @@ public:
     auto output_columns() const&& = delete;
     size_t tuple_size() const noexcept { return m_sources.row_size(); }
     size_t arity() const noexcept { return m_sources.size(); }
+    auto cista_members() noexcept { return std::tie(m_sources, m_edges, m_targets, m_output); }
+    auto cista_members() const noexcept { return std::tie(m_sources, m_edges, m_targets, m_output); }
 };
 
 namespace detail

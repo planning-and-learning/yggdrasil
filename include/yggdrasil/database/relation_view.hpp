@@ -42,6 +42,11 @@ concept RelationViewConcept =
            { view.contains(typed_row) } -> std::same_as<bool>;
        };
 
+/// Sized random-access inputs whose elements, possibly references, are relation views.
+template<typename R, typename Values>
+concept RelationViewRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
+                            && RelationViewConcept<std::ranges::range_reference_t<const R>, Values>;
+
 }  // namespace ygg::database
 
 namespace ygg::database::detail

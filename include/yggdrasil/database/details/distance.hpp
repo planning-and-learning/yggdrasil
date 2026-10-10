@@ -84,7 +84,6 @@ Row<Values> make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to
 }  // namespace detail
 
 template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
 DistancePlan<Values>::DistancePlan(std::span<const ColumnLayout> sources,
                                    std::span<const ColumnLayout> edges,
                                    std::span<const ColumnLayout> targets,
@@ -100,7 +99,10 @@ DistancePlan<Values>::DistancePlan(std::span<const ColumnLayout> sources,
     for (size_t i = 0; i < k; ++i)
         if (m_sources[i].type != m_targets[i].type || m_sources[i].type != m_edges[i].type || m_sources[i].type != m_edges[k + i].type)
             throw std::invalid_argument("Distance: vertex field types must agree by position.");
-    m_output.template push_back<uint_t>(distance_column);
+    if constexpr (ColumnValueFor<uint_t, Values>)
+        m_output.template push_back<uint_t>(distance_column);
+    else
+        throw std::invalid_argument("Distance: uint_t must be a registered column type.");
 }
 
 template<ColumnTypes Values>

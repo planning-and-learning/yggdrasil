@@ -27,6 +27,7 @@ nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/database/module.cpp
     src/pyyggdrasil/database/distance.cpp
+    src/pyyggdrasil/database/query.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
     src/pyyggdrasil/serialization/module.cpp

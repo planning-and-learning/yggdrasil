@@ -9,6 +9,8 @@
 #include "yggdrasil/database/operations.hpp"
 
 #include <initializer_list>
+#include <ranges>
+#include <tuple>
 #include <span>
 #include <stdexcept>
 
@@ -35,6 +37,14 @@ struct Delta
     }
     size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
 };
+
+/// Sized random-access (added, removed) pairs of actual set changes, one per input.
+template<typename R, typename Values>
+concept RelationDeltaRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
+                             && requires(std::ranges::range_reference_t<const R> change) {
+                                    requires RelationViewConcept<decltype(std::get<0>(change)), Values>;
+                                    requires RelationViewConcept<decltype(std::get<1>(change)), Values>;
+                                };
 
 namespace detail
 {
