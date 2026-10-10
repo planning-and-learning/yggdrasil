@@ -11,7 +11,10 @@ def columns(*labels):
 
 
 def relation(labels, rows=(), types=()):
-    result = database.Relation(list(columns(*labels)), types)
+    schema = database.Columns()
+    for index, label in enumerate(labels):
+        schema.push_back(database.ColumnIndex(label), types[index] if types else database.ColumnType.UINT32)
+    result = database.Relation(schema)
     for row in rows:
         result.insert(row)
     return result
@@ -39,7 +42,7 @@ def test_distance_mixed_inputs_and_independent_output(interned_mask):
     inputs = [source, edges, target]
     for index, value in enumerate(inputs):
         if interned_mask & (1 << index):
-            inputs[index] = database.insert(repository, value)[0]
+            inputs[index] = repository.insert(value)[0]
     if 0 < interned_mask < 7:  # Interned inputs are accepted without copying only when all are interned.
         inputs = [database.assign(database.Relation(), value) if isinstance(value, database.RelationView) else value for value in inputs]
     result = database.distance(*inputs, plan)
@@ -84,7 +87,7 @@ def test_incremental_distance_exact_deltas(intern_added):
     plan = plan_for(source, edges, target)
     evaluator = database.DistanceEvaluator(plan)
     repository = database.RelationRepositoryFactory().create()
-    evaluator.initialize(source, database.assign(database.Relation(), database.insert(repository, edges)[0]), target)
+    evaluator.initialize(source, database.assign(database.Relation(), repository.insert(edges)[0]), target)
     expected = {(0, 0, 0), (0, 2, 2), (0, 3, 1), (2, 2, 0), (2, 3, 1)}
     assert rows(evaluator.get_result()) == expected
     assert evaluator.get_delta().added.empty()
@@ -102,7 +105,7 @@ def test_incremental_distance_exact_deltas(intern_added):
         ]
         for index in range(6):
             if (index % 2 == 0) == intern_added:
-                changes[index] = database.assign(database.Relation(), database.insert(repository, changes[index])[0])
+                changes[index] = database.assign(database.Relation(), repository.insert(changes[index])[0])
         evaluator.update((changes[0], changes[1]), (changes[2], changes[3]), (changes[4], changes[5]))
 
     before = expected

@@ -122,6 +122,38 @@ TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
     }
 }
 
+TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
+{
+    using Values = db::DefaultColumnTypes;
+    auto repository = qb::repository<>();
+    const auto a = qb::input(repository, 0, { x, y });
+    const auto b = qb::input(repository, 1, { y, z });
+    const auto insert = [&]<typename Tag>(ygg::Data<db::Query<Values, Tag>> data)
+    {
+        const auto concrete = db::insert(repository, data).first;
+        auto erased = ygg::Data<db::Query<Values>>(concrete);
+        return db::insert(repository, erased).first;
+    };
+
+    const ygg::Data<db::Query<Values, db::QueryJoinTag>> by_view(a, b);
+    const ygg::Data<db::Query<Values, db::QueryJoinTag>> by_index(a.get_index(), b.get_index());
+    EXPECT_EQ(by_view.lhs, a.get_index());
+    EXPECT_EQ(by_view.rhs, b.get_index());
+    EXPECT_EQ(by_view.identifying_members(), by_index.identifying_members());
+    EXPECT_EQ(insert(by_view).get_index(), qb::join(repository, a, b).get_index());
+
+    const std::array labels { x };
+    EXPECT_EQ(insert(ygg::Data<db::Query<Values, db::QueryProjectTag>>(a, labels)).get_index(), qb::project(repository, a, { x }).get_index());
+    EXPECT_EQ(insert(ygg::Data<db::Query<Values, db::QuerySelectValueTag>>(a, x, ygg::uint_t(7))).get_index(),
+              qb::select_value(repository, a, x, ygg::uint_t(7)).get_index());
+    const auto generic = insert(ygg::Data<db::Query<Values, db::QueryGenericJoinTag>>(std::array { a, b }, std::array { y, x, z }));
+    EXPECT_TRUE(std::ranges::equal(db::column_labels(generic.columns()), std::array { x, y, z }));
+
+    auto mismatched = ygg::Data<db::Query<Values, db::QuerySelectValueTag>>(a, x, std::int32_t(7));
+    EXPECT_EQ(mismatched.constant_type, (db::column_type<Values, std::int32_t>));
+    EXPECT_THROW(db::insert(repository, mismatched), std::invalid_argument);
+}
+
 TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)
 {
     db::QueryPlan<> plan;

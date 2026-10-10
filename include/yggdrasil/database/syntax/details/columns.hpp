@@ -12,6 +12,7 @@
 #include <array>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 namespace ygg::database
@@ -192,6 +193,12 @@ void Builder<database::Columns<Values>>::push_back(Index<database::Column> colum
         throw std::length_error("Columns: row byte width exceeds addressable memory.");
     m_data.values.push_back(database::ColumnLayout { column, database::column_type<Values, T>, offset, size });
     ygg::clear(m_data.index);
+}
+
+template<database::ColumnTypes Values>
+void Builder<database::Columns<Values>>::push_back(Index<database::Column> column, size_t type)
+{
+    database::visit_column_type<Values>(type, [&]<typename T>(std::type_identity<T>) { push_back<T>(column); });
 }
 
 template<database::ColumnTypes Values>

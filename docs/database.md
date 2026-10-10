@@ -183,19 +183,29 @@ unchanged.
 ```python
 from pyyggdrasil import database as db
 
-relation = db.Relation([db.ColumnIndex(0), db.ColumnIndex(1), db.ColumnIndex(2)],
-                       [db.ColumnType.UINT32, db.ColumnType.UINT32,
-                        db.ColumnType.FLOAT64])
+columns = db.Columns()
+columns.push_back(db.ColumnIndex(0), db.ColumnType.UINT32)
+columns.push_back(db.ColumnIndex(1), db.ColumnType.UINT32)
+columns.push_back(db.ColumnIndex(2), db.ColumnType.FLOAT64)
+relation = db.Relation(columns)
 relation.insert([3, 8, 2.5])
+
+repository = db.RelationRepositoryFactory().create()
+interned, created = repository.insert(relation)
+assert created and tuple(interned[0]) == (3, 8, 2.5)
 assert tuple(relation[0]) == (3, 8, 2.5)
 assert relation.columns().type(2) == db.ColumnType.FLOAT64
 ```
 
-Labels-only construction defaults to `UINT32`. `ColumnType` also exposes `INT32`,
-`UINT64`, `INT64`, `FLOAT32`, and `BOOL`. Rows yield Python values of the column's
-type; no packed bytes leak through the Python API. Pool checkout accepts the
-same label/type arguments. Labels are `ColumnIndex` values; `.columns()` remains a
-borrowed `ColumnIndex` sequence with
+The bindings expose the library types directly. A typed schema is a `Columns`
+builder; `Relation(labels)` (a list of `ColumnIndex`) defaults every column to
+`UINT32`, and `Relation(columns)` also accepts another relation's `columns()`.
+`ColumnType` also exposes `INT32`, `UINT64`, `INT64`, `FLOAT32`, and `BOOL`. Rows
+yield Python values of the column's type; no packed bytes leak through the Python
+API. `RelationPool.get_or_allocate(columns)` takes a schema view, such as
+`Columns.columns()`. `RelationRepository.insert(relation, schema_namespace=0)`,
+`copy(view)`, and `rename(view, labels)` intern relations. Labels are `ColumnIndex`
+values; `.columns()` remains a borrowed `ColumnIndex` sequence with
 `type(position)` for schema inspection. Rows, views, and schemas keep their
 Python owners alive; explicitly clearing an owner still invalidates them.
 
@@ -401,8 +411,8 @@ assert evaluator.get_delta().added.empty()
 returns a read-only `BorrowedRelation` (the library's `BorrowedRelationView`), and
 `get_delta()` returns a `RelationDelta` whose `added` and `removed` relations are
 borrowed the same way. They and their borrowed rows keep the evaluator alive; rows
-must not be retained across an evaluator `initialize` or `update`; `db.snapshot`
-copies a result. Like the C++ interface, `update(sources, edges, targets)` takes
+must not be retained across an evaluator `initialize` or `update`;
+`db.assign(db.Relation(), result)` copies a result. Like the C++ interface, `update(sources, edges, targets)` takes
 one `(added, removed)` tuple per input.
 
 ## Query graphs and optimization
@@ -601,32 +611,41 @@ right = db.Relation([y, z])
 right.insert((2, 3))
 
 repository = db.QueryRepositoryFactory().create()
-a = repository.input(0, left.columns())
-b = repository.input(1, right.columns())
-query = repository.project(repository.join(a, b), [z, x])
-optimized = db.optimize(query, db.collect_statistics([left, right]))
+
+def insert(data):
+    concrete, _ = repository.insert(data)  # e.g. a QueryJoin view
+    return repository.insert(db.QueryData(concrete))[0]  # the type-erased Query
+
+a = insert(db.QueryInputData(0, left.columns()))
+b = insert(db.QueryInputData(1, right.columns()))
+query = insert(db.QueryProjectData(insert(db.QueryJoinData(a, b)), [z, x]))
+optimized = db.optimize([query], db.collect_statistics([left, right]))
 evaluator = db.QueryEvaluator(optimized)
 evaluator.evaluate([left, right])
 assert {tuple(row) for row in evaluator.get_result()} == {(3, 1)}
-independent = db.snapshot(evaluator.get_result())
+independent = db.assign(db.Relation(), evaluator.get_result())
 print(optimized.explain())
 ```
 
+Like the C++ library, every operator has an index (`QueryJoinIndex`), a record
+(`QueryJoinData`), and a view (`QueryJoin`) with its getters; `repository.insert(data)`
+returns `(view, created)`. `QueryData(view)` makes the type-erased `Query` that
+operators take as operands. The records are `QueryInputData(slot, columns)`,
+`QueryEmptyData(columns)`, `QueryJoinData`/`QueryUnionData`/`QueryDifferenceData(lhs, rhs)`,
+`QueryProjectData`/`QueryRenameData(arg, labels)`, `QuerySelectEqualData(arg, lhs, rhs)`,
+`QuerySelectValueData(arg, column, type, value)`, `QueryDistanceData(sources, edges,
+targets, distance_column)`, and `QueryGenericJoinData(inputs, variable_order,
+output_order=[])`. A select constant must have the selected column's type.
 Query repositories come from a `QueryRepositoryFactory`; repositories of one factory
-have distinct identities, so queries compare across them.
-`optimize(roots, statistics=None)` and `repository.compile` accept either one
-query or a list of roots; `optimize` returns a `QueryPlan`.
-`repository.union(a, b)`, `difference`, `rename`, `select_equal`, `select_value`,
-`empty`, and `distance` expose the other operators. Typed schemas are supplied
-through a relation's `columns()` view, preserving its field types. `input` and
-`empty` also accept a list of `ColumnIndex` labels, using `UINT32` for each field.
+have distinct identities, so queries compare across them. `compile(roots)` and
+`optimize(roots, statistics=Statistics())` take a list of roots and return a `QueryPlan`.
 
 `IncrementalQueryEvaluator(plan)` exposes `initialize(inputs)` and
-`update(added_inputs, removed_inputs)`. Its result and `RelationDelta` relations are
-read-only `BorrowedRelation` views that keep the evaluator alive. `snapshot(relation)` copies a
-relation, e.g. a borrowed result, into an independent `Relation`. Query
+`update(changes)` with one `(added, removed)` pair per input slot. Its result and
+`RelationDelta` relations are read-only `BorrowedRelation` views that keep the
+evaluator alive; `db.assign(db.Relation(), relation)` copies one. Query
 handles keep their repository alive; compiled plans and evaluators are independent
-of it. For sparse slot numbering, an unused list position may contain `None`.
+of it. For sparse slot numbering, an unused slot takes an empty `Relation()`.
 Dictionary-valued statistics fields are converted by value; construct them with
 keyword dictionaries or replace the field to change entries.
 

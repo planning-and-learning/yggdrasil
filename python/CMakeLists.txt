@@ -27,7 +27,20 @@ nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/database/module.cpp
     src/pyyggdrasil/database/distance.cpp
-    src/pyyggdrasil/database/query.cpp
+    src/pyyggdrasil/database/evaluation.cpp
+    src/pyyggdrasil/database/optimization.cpp
+    src/pyyggdrasil/database/query/query.cpp
+    src/pyyggdrasil/database/query/input.cpp
+    src/pyyggdrasil/database/query/empty.cpp
+    src/pyyggdrasil/database/query/join.cpp
+    src/pyyggdrasil/database/query/project.cpp
+    src/pyyggdrasil/database/query/rename.cpp
+    src/pyyggdrasil/database/query/select_equal.cpp
+    src/pyyggdrasil/database/query/select_value.cpp
+    src/pyyggdrasil/database/query/union.cpp
+    src/pyyggdrasil/database/query/difference.cpp
+    src/pyyggdrasil/database/query/distance.cpp
+    src/pyyggdrasil/database/query/generic_join.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
     src/pyyggdrasil/serialization/module.cpp

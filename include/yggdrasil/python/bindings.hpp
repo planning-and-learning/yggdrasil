@@ -19,7 +19,9 @@
 #define YGG_PYTHON_BINDINGS_HPP_
 
 #include "yggdrasil/core/types.hpp"
+#include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
+#include "yggdrasil/python/owner.hpp"
 #include "yggdrasil/semantics/comparison.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
@@ -59,6 +61,27 @@ template<typename V>
 nb::class_<V>& add_hash(nb::class_<V>& cls)
 {
     return cls.def("__hash__", [](const V& self) { return Hash<V> {}(self); });
+}
+
+/// Binds a record type; records compare by their identifying members.
+template<typename V>
+nb::class_<V> bind_data(nb::module_& m, const char* name)
+{
+    auto cls = nb::class_<V>(m, name);
+    add_comparison(cls);
+    return cls;
+}
+
+/// Binds repository.insert(data) -> (view, created); the view keeps the repository alive.
+template<typename T, typename Repository>
+void bind_insert(nb::class_<Repository>& repository)
+{
+    const auto retainer = python::make_owner_retainer();
+    repository.def(
+        "insert",
+        [retainer](nb::typed<nb::handle, Repository> owner, Data<T> data) -> nb::typed<nb::tuple, View<Index<T>, Repository>, bool>
+        { return nb::borrow<nb::typed<nb::tuple, View<Index<T>, Repository>, bool>>(python::cast_with_owner(formalism::insert(nb::cast<Repository&>(owner), data), owner, retainer)); },
+        nb::arg("data"));
 }
 
 template<typename T>

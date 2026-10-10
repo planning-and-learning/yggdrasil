@@ -85,6 +85,8 @@ void prepare(Data<Query<Values, QuerySelectValueTag>>& data, const QueryReposito
 {
     const auto schema = child_columns(data.arg, repository);
     data.column_position = column_index(schema, data.column);
+    if (schema[data.column_position].type != data.constant_type)
+        throw std::invalid_argument("Query: constant type does not match the selected column.");
     auto field = schema[data.column_position];
     field.offset = 0;
     validate_row<Values>({ data.constant.data(), data.constant.size() }, std::span<const ColumnLayout>(&field, 1));

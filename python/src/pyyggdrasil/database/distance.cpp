@@ -1,4 +1,3 @@
-#include "distance.hpp"
 #include "module.hpp"
 
 #include "yggdrasil/database/semantics/distance.hpp"
@@ -11,36 +10,45 @@
 
 namespace yggdrasil
 {
-namespace nb = nanobind;
+namespace db = ygg::database;
 
 namespace
 {
-using Relation = ygg::Builder<ygg::database::Relation<>>;
-using Borrowed = ygg::database::BorrowedRelationView<>;
-using Interned = ygg::database::RelationView<>;
-using Column = ygg::Index<ygg::database::Column>;
-using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
-using Plan = ygg::database::DistancePlan<>;
-using Evaluator = ygg::database::incremental::DistanceEvaluator<>;
-using Delta = ygg::database::incremental::Delta<>;
-Borrowed borrow(const Relation& relation) { return Borrowed(relation, borrowed_relation_context()); }
+using Values = DatabaseValues;
+using Relation = ygg::Builder<db::Relation<Values>>;
+using Column = ygg::Index<db::Column>;
+using ColumnIndices = std::span<const db::ColumnLayout>;
+using Plan = db::DistancePlan<Values>;
+using Evaluator = db::incremental::DistanceEvaluator<Values>;
+using Delta = db::incremental::Delta<Values>;
 
+/// Binds distance and the evaluator members for one input relation type.
 template<typename Input>
-Relation distance(const Input& sources, const Input& edges, const Input& targets, const Plan& plan)
+void bind_inputs(nb::class_<Evaluator>& evaluator, nb::module_& m)
 {
-    return ygg::database::distance<>(sources, edges, targets, plan);
-}
-
-/// Each argument is an (added, removed) pair of actual set changes.
-template<typename Input>
-void update(Evaluator& evaluator, const std::pair<Input, Input>& sources, const std::pair<Input, Input>& edges, const std::pair<Input, Input>& targets)
-{
-    evaluator.update(sources, edges, targets);
+    using Change = std::pair<Input, Input>;
+    m.def("distance",
+          static_cast<Relation (*)(const Input&, const Input&, const Input&, const Plan&)>(&db::distance<Values, Input, Input, Input>),
+          nb::arg("sources"),
+          nb::arg("edges"),
+          nb::arg("targets"),
+          nb::arg("plan"),
+          "Return an independent relation of reachable source/target tuples and their shortest distance, including zero-length paths.");
+    evaluator.def("initialize", &Evaluator::template initialize<Input, Input, Input>, nb::arg("sources"), nb::arg("edges"), nb::arg("targets"))
+        .def("update",
+             &Evaluator::template update<Change, Change, Change>,
+             nb::arg("sources"),
+             nb::arg("edges"),
+             nb::arg("targets"),
+             "Each argument is an (added, removed) pair of actual set changes.");
 }
 }  // namespace
 
 void bind_database_distance(nb::module_& m)
 {
+    using Borrowed = db::BorrowedRelationView<Values>;
+    const auto borrow = [](const Relation& relation) { return Borrowed(relation, borrowed_relation_context()); };
+
     nb::class_<Plan>(m, "DistancePlan", "Validated schemas for directed, unweighted distances between endpoint tuples.")
         .def(nb::init<ColumnIndices, ColumnIndices, ColumnIndices, Column>(),
              nb::arg("source_columns"),
@@ -51,30 +59,23 @@ void bind_database_distance(nb::module_& m)
         .def("output_columns", [](const Plan& plan) { return plan.output_columns().span(); }, nb::keep_alive<0, 1>());
 
     nb::class_<Delta>(m, "RelationDelta", "Read-only added and removed rows from the last evaluator update. The next update replaces them.")
-        .def_prop_ro("added", [](const Delta& delta) { return borrow(delta.added); }, nb::keep_alive<0, 1>())
-        .def_prop_ro("removed", [](const Delta& delta) { return borrow(delta.removed); }, nb::keep_alive<0, 1>());
+        .def_prop_ro("added", [borrow](const Delta& delta) { return borrow(delta.added); }, nb::keep_alive<0, 1>())
+        .def_prop_ro("removed", [borrow](const Delta& delta) { return borrow(delta.removed); }, nb::keep_alive<0, 1>());
 
-    constexpr auto distance_doc =
-        "Return an independent relation of reachable source/target tuples and their shortest distance, including zero-length paths.";
-    m.def("distance", &distance<Borrowed>, nb::arg("source"), nb::arg("edges"), nb::arg("target"), nb::arg("plan"), distance_doc);
-    m.def("distance", &distance<Interned>, nb::arg("source"), nb::arg("edges"), nb::arg("target"), nb::arg("plan"), distance_doc);
-
-    nb::class_<Evaluator>(m, "DistanceEvaluator", "Maintains distances and exact output deltas. Input relations are borrowed only during each call.")
-        .def(nb::init<Plan>(), nb::arg("plan"))
-        .def("initialize", &Evaluator::initialize<Borrowed, Borrowed, Borrowed>, nb::arg("source"), nb::arg("edges"), nb::arg("target"))
-        .def("initialize", &Evaluator::initialize<Interned, Interned, Interned>, nb::arg("source"), nb::arg("edges"), nb::arg("target"))
-        .def("update", &update<Borrowed>, nb::arg("sources"), nb::arg("edges"), nb::arg("targets"))
-        .def("update", &update<Interned>, nb::arg("sources"), nb::arg("edges"), nb::arg("targets"))
+    auto evaluator = nb::class_<Evaluator>(m, "DistanceEvaluator", "Maintains distances and exact output deltas. Input relations are borrowed only during each call.");
+    evaluator.def(nb::init<Plan>(), nb::arg("plan"))
         .def(
             "get_result",
-            [](const Evaluator& evaluator) { return borrow(evaluator.get_result()); },
+            [borrow](const Evaluator& self) { return borrow(self.get_result()); },
             nb::keep_alive<0, 1>(),
             "Borrowed result; the next initialize or update invalidates it.")
         .def(
             "get_delta",
-            [](const Evaluator& evaluator) -> const Delta& { return evaluator.get_delta(); },
+            [](const Evaluator& self) -> const Delta& { return self.get_delta(); },
             nb::rv_policy::reference_internal)
         .def("memory_usage", &Evaluator::memory_usage);
-}
 
+    bind_inputs<Borrowed>(evaluator, m);
+    bind_inputs<db::RelationView<Values>>(evaluator, m);
+}
 }  // namespace yggdrasil

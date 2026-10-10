@@ -74,6 +74,8 @@ public:
 
     template<database::ColumnValueFor<Values> T>
     void push_back(Index<database::Column> column);
+    /// Appends a column of the registered type ordinal.
+    void push_back(Index<database::Column> column, size_t type);
     void assign(std::span<const database::ColumnLayout> columns);
     void assign(std::initializer_list<database::ColumnLayout> columns);
     void assign(std::span<const Index<database::Column>> columns);

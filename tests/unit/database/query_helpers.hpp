@@ -142,6 +142,7 @@ db::QueryView<Values> select_encoded(db::QueryRepository<Values>& repository, db
     data->arg = require(repository, arg);
     data->column = column;
     data->constant.set(value.begin(), value.end());
+    data->constant_type = arg.columns()[db::column_index(arg.columns(), column)].type;
     return db::insert_query(repository, builder<Values>(), *data);
 }
 template<db::ColumnTypes Values, db::ColumnValueFor<Values> T>

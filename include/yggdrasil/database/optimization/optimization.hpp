@@ -11,6 +11,8 @@
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
+#include <concepts>
+#include <ranges>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -95,6 +97,13 @@ template<ColumnTypes Values>
 QueryPlan<Values> optimize(QueryView<Values> root, const std::type_identity_t<Statistics<Values>>& statistics = {})
 {
     return optimize(std::span<const QueryView<Values>>(&root, 1), statistics);
+}
+
+template<ColumnTypes Values, std::ranges::contiguous_range R>
+    requires std::same_as<std::ranges::range_value_t<R>, QueryView<Values>>
+QueryPlan<Values> optimize(const R& roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
+{
+    return optimize(std::span<const QueryView<Values>>(roots), statistics);
 }
 }  // namespace ygg::database
 #endif
