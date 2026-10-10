@@ -7,9 +7,11 @@
 
 #include "yggdrasil/database/semantics/relation_repository.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <limits>
 #include <random>
 #include <set>
 #include <span>
@@ -588,6 +590,61 @@ TEST(YggdrasilTests, DatabaseDistanceRandomBatchesAndUndoMatchIndependentPairwis
                 target_set = old_targets;
             }
         }
+    }
+}
+
+TEST(YggdrasilTests, DatabaseMinDistanceAggregatesTheDistanceColumnFullAndIncrementally)
+{
+    constexpr auto infinity = std::numeric_limits<uint_t>::max();
+    const auto expected_min = [](const Results& results)
+    {
+        auto best = infinity;
+        for (const auto& row : results)
+            best = std::min(best, row[2]);
+        return best;
+    };
+
+    RelationBuilder sources { ColumnIndex(10) }, edges { ColumnIndex(1), ColumnIndex(2) }, targets { ColumnIndex(20) };
+    const DistancePlan<Values> plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
+    DistanceWorkspace<Values> workspace(plan);
+    RelationBuilder result(plan.output_columns().span());
+    incremental::MinDistanceEvaluator<Values> evaluator(plan);
+    incremental::Delta<Values> ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+
+    // Each state changes sources, edges, or targets; the minimum moves up, down, to zero and to infinity.
+    const std::vector<std::tuple<Vertices, Edges, Vertices>> states {
+        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },           // 3
+        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 0, 3 } }, { 3 } }, // shortcut: 1
+        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },           // deleting the minimum reveals 3
+        { { 0, 2 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },        // a closer source: 1
+        { { 0, 2 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3, 2 } },     // a target equal to a source: 0
+        { { 0 }, { { 1, 2 }, { 2, 3 } }, { 3 } },                     // unreachable: infinity
+        { {}, { { 1, 2 } }, { 2 } },                                  // no sources: infinity
+    };
+
+    Vertices before_sources, before_targets;
+    Edges before_edges;
+    for (size_t step = 0; step < states.size(); ++step)
+    {
+        const auto& [s, e, t] = states[step];
+        const auto expected = expected_min(reference(s, e, t, 5));
+        fill(sources, s);
+        fill(edges, e);
+        fill(targets, t);
+        EXPECT_EQ(min_distance(sources, edges, targets, plan, result, workspace), expected) << "full, step " << step;
+        if (step == 0)
+            evaluator.initialize(sources, edges, targets);
+        else
+        {
+            changes(ds, before_sources, s);
+            changes(de, before_edges, e);
+            changes(dt, before_targets, t);
+            evaluator.update(ds.change(), de.change(), dt.change());
+        }
+        EXPECT_EQ(evaluator.get_result(), expected) << "incremental, step " << step;
+        before_sources = s;
+        before_edges = e;
+        before_targets = t;
     }
 }
 

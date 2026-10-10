@@ -376,6 +376,26 @@ cases check scaling when updates cancel or most neighboring distances stay fixed
 family measures one baseline initialization per iteration after capacity warmup.
 Prepared snapshots and correctness checks are outside the timed loops.
 
+### Minimum distance
+
+When only the smallest distance between any source and any target is needed, use the
+aggregates over the same plans. They reuse `distance` and `incremental::DistanceEvaluator`
+unchanged and read the distance column:
+
+```cpp
+Builder<Relation<>> result(plan.output_columns().span());
+const uint_t full = min_distance(sources, edges, targets, plan, result, workspace);
+
+incremental::MinDistanceEvaluator<> minimum(plan);
+minimum.initialize(sources, edges, targets);
+minimum.update(source_delta.change(), edge_delta.change(), target_delta.change());
+const uint_t current = minimum.get_result();
+```
+
+Both return `uint_t`'s maximum when no target is reachable, and 0 when a source equals a target.
+The incremental form counts result rows per distance value, so deleting the current minimum
+reveals the next one. Memory follows the wrapped evaluator, plus one counter per distance value.
+
 ### Distance from Python
 
 Column labels are `ColumnIndex` values. Python evaluators and `distance` take

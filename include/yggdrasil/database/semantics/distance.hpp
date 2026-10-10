@@ -107,6 +107,17 @@ template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<
     requires ColumnValueFor<uint_t, Values>
 Builder<Relation<Values>> distance(const S& sources, const E& edges, const T& targets, const DistancePlan<Values>& plan);
 
+/// The smallest distance between any source and target, from distance() into result.
+/// uint_t's maximum if no target is reachable.
+template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+    requires ColumnValueFor<uint_t, Values>
+uint_t min_distance(const S& sources,
+                    const E& edges,
+                    const T& targets,
+                    const DistancePlan<Values>& plan,
+                    Builder<Relation<Values>>& result,
+                    DistanceWorkspace<Values>& workspace);
+
 }  // namespace ygg::database
 
 #include "yggdrasil/database/semantics/details/distance.hpp"

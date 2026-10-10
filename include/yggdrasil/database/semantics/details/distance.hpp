@@ -194,6 +194,24 @@ Builder<Relation<Values>> distance(const S& sources, const E& edges, const T& ta
     return out;
 }
 
+template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+    requires ColumnValueFor<uint_t, Values>
+uint_t min_distance(const S& sources,
+                    const E& edges,
+                    const T& targets,
+                    const DistancePlan<Values>& plan,
+                    Builder<Relation<Values>>& result,
+                    DistanceWorkspace<Values>& workspace)
+{
+    distance(sources, edges, targets, plan, result, workspace);
+    const auto columns = result.columns().span();
+    const auto position = columns.size() - 1;  // The distance column follows the edge columns.
+    auto best = std::numeric_limits<uint_t>::max();
+    for (size_t i = 0; i < result.size(); ++i)
+        best = std::min(best, Row<Values>(result.row(i), columns).template get<uint_t>(position));
+    return best;
+}
+
 }  // namespace ygg::database
 
 #endif

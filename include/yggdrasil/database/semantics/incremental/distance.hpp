@@ -573,6 +573,61 @@ size_t DistanceEvaluator<Values>::memory_usage() const noexcept
     return bytes;
 }
 
+/// Maintains the smallest distance between any source and target. Wraps DistanceEvaluator
+/// and counts its result rows per distance value, so deleting the minimum reveals the next one.
+template<ColumnTypes Values = DefaultColumnTypes>
+    requires ColumnValueFor<uint_t, Values>
+class MinDistanceEvaluator
+{
+    size_t m_position;  ///< The distance column follows the edge columns.
+    DistanceEvaluator<Values> m_evaluator;
+    std::vector<size_t> m_counts;
+
+    void count(const Builder<Relation<Values>>& rows, bool add)
+    {
+        const auto columns = rows.columns().span();
+        for (size_t i = 0; i < rows.size(); ++i)
+        {
+            const auto distance = Row<Values>(rows.row(i), columns).template get<uint_t>(m_position);
+            if (distance >= m_counts.size())
+                m_counts.resize(distance + 1, 0);
+            assert(add || m_counts[distance] > 0);
+            m_counts[distance] = add ? m_counts[distance] + 1 : m_counts[distance] - 1;
+        }
+    }
+
+public:
+    explicit MinDistanceEvaluator(DistancePlan<Values> plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}
+
+    /// Replace all inputs, retaining buffers.
+    template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+    void initialize(const S& sources, const E& edges, const T& targets)
+    {
+        m_evaluator.initialize(sources, edges, targets);
+        m_counts.clear();
+        count(m_evaluator.get_result(), true);
+    }
+
+    /// Apply one complete batch of input changes, as DistanceEvaluator::update.
+    template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
+    void update(const S& sources, const E& edges, const T& targets)
+    {
+        m_evaluator.update(sources, edges, targets);
+        const auto& delta = m_evaluator.get_delta();
+        count(delta.removed, false);
+        count(delta.added, true);
+    }
+
+    /// uint_t's maximum if no target is reachable.
+    uint_t get_result() const noexcept
+    {
+        const auto it = std::ranges::find_if(m_counts, [](size_t count) { return count > 0; });
+        return it == m_counts.end() ? std::numeric_limits<uint_t>::max() : static_cast<uint_t>(it - m_counts.begin());
+    }
+
+    size_t memory_usage() const noexcept { return m_evaluator.memory_usage() + m_counts.capacity() * sizeof(size_t); }
+};
+
 }  // namespace ygg::database::incremental
 
 #endif
