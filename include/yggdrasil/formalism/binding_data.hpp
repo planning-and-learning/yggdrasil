@@ -25,6 +25,7 @@
 #include "yggdrasil/formalism/object_index.hpp"
 
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -57,14 +58,13 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
 
-    void clear() noexcept
-    {
-        ygg::clear(relation);
-        ygg::clear(objects);
-    }
-
+    auto cista_members() noexcept { return std::tie(relation, objects); }
     auto cista_members() const noexcept { return std::tie(relation, objects); }
     auto identifying_members() const noexcept { return std::tie(relation, objects); }
+    void clear() noexcept
+    {
+        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+    }
 };
 
 }  // namespace ygg

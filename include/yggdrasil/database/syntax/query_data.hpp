@@ -22,6 +22,7 @@
 #include <type_traits>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ygg
 {
@@ -36,6 +37,7 @@ struct Data<database::Query<Values>>
     Variant variant;
 
     Data() = default;
+    explicit Data(Variant variant_) : index(), variant(std::move(variant_)) {}
     /// The erased record of an interned concrete query.
     template<typename Tag, typename C>
     explicit Data(View<Index<database::Query<Values, Tag>>, C> concrete) : variant(concrete.get_index())
@@ -45,7 +47,7 @@ struct Data<database::Query<Values>>
     auto identifying_members() const noexcept { return std::tie(variant); }
     auto cista_members() noexcept { return std::tie(index, variant); }
     auto cista_members() const noexcept { return std::tie(index, variant); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -64,7 +66,7 @@ struct Data<database::Query<Values, database::QueryInputTag>>
     auto identifying_members() const noexcept { return std::tie(input_slot, columns); }
     auto cista_members() noexcept { return std::tie(index, input_slot, columns); }
     auto cista_members() const noexcept { return std::tie(index, input_slot, columns); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -82,7 +84,7 @@ struct Data<database::Query<Values, database::QueryEmptyTag>>
     auto identifying_members() const noexcept { return std::tie(columns); }
     auto cista_members() noexcept { return std::tie(index, columns); }
     auto cista_members() const noexcept { return std::tie(index, columns); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -107,7 +109,7 @@ struct Data<database::Query<Values, database::QueryJoinTag>>
     auto identifying_members() const noexcept { return std::tie(lhs, rhs); }
     auto cista_members() noexcept { return std::tie(index, lhs, rhs, plan); }
     auto cista_members() const noexcept { return std::tie(index, lhs, rhs, plan); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -132,7 +134,7 @@ struct Data<database::Query<Values, Tag>>
     auto identifying_members() const noexcept { return std::tie(lhs, rhs); }
     auto cista_members() noexcept { return std::tie(index, lhs, rhs, columns); }
     auto cista_members() const noexcept { return std::tie(index, lhs, rhs, columns); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -156,7 +158,7 @@ struct Data<database::Query<Values, database::QueryProjectTag>>
     auto identifying_members() const noexcept { return std::tie(arg, labels); }
     auto cista_members() noexcept { return std::tie(index, arg, labels, plan); }
     auto cista_members() const noexcept { return std::tie(index, arg, labels, plan); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -180,7 +182,7 @@ struct Data<database::Query<Values, database::QueryRenameTag>>
     auto identifying_members() const noexcept { return std::tie(arg, labels); }
     auto cista_members() noexcept { return std::tie(index, arg, labels, columns); }
     auto cista_members() const noexcept { return std::tie(index, arg, labels, columns); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -213,7 +215,7 @@ struct Data<database::Query<Values, database::QuerySelectEqualTag>>
     auto identifying_members() const noexcept { return std::tie(arg, lhs_column, rhs_column); }
     auto cista_members() noexcept { return std::tie(index, arg, lhs_column, rhs_column, columns, lhs_position, rhs_position); }
     auto cista_members() const noexcept { return std::tie(index, arg, lhs_column, rhs_column, columns, lhs_position, rhs_position); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -251,7 +253,7 @@ struct Data<database::Query<Values, database::QuerySelectValueTag>>
     auto identifying_members() const noexcept { return std::tie(arg, column, constant); }
     auto cista_members() noexcept { return std::tie(index, arg, column, constant, constant_type, columns, column_position); }
     auto cista_members() const noexcept { return std::tie(index, arg, column, constant, constant_type, columns, column_position); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -290,7 +292,7 @@ struct Data<database::Query<Values, database::QueryDistanceTag>>
     auto identifying_members() const noexcept { return std::tie(sources, edges, targets, distance_column); }
     auto cista_members() noexcept { return std::tie(index, sources, edges, targets, distance_column, plan); }
     auto cista_members() const noexcept { return std::tie(index, sources, edges, targets, distance_column, plan); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }
@@ -306,15 +308,23 @@ struct Data<database::Query<Values, database::QueryGenericJoinTag>>
     database::GenericJoinPlan<Values> plan;
 
     Data() = default;
-    /// The inputs are query indices or views; an empty output order is canonicalized on insertion.
-    template<std::ranges::input_range R>
-    Data(const R& inputs_, std::span<const Index<database::Column>> variable_order_, std::span<const Index<database::Column>> output_order_ = {})
+    /// An empty output order is canonicalized on insertion.
+    Data(std::span<const Index<database::Query<Values>>> inputs_,
+         std::span<const Index<database::Column>> variable_order_,
+         std::span<const Index<database::Column>> output_order_ = {}) :
+        index()
     {
-        for (const auto& input : inputs_)
-            if constexpr (std::same_as<std::remove_cvref_t<decltype(input)>, Index<database::Query<Values>>>)
-                inputs.push_back(input);
-            else
-                inputs.push_back(input.get_index());
+        inputs.set(inputs_.begin(), inputs_.end());
+        variable_order.set(variable_order_.begin(), variable_order_.end());
+        output_order.set(output_order_.begin(), output_order_.end());
+    }
+    template<typename C>
+    Data(const std::vector<::ygg::View<Index<database::Query<Values>>, C>>& inputs_,
+         std::span<const Index<database::Column>> variable_order_,
+         std::span<const Index<database::Column>> output_order_ = {}) :
+        index()
+    {
+        set(inputs_, inputs);
         variable_order.set(variable_order_.begin(), variable_order_.end());
         output_order.set(output_order_.begin(), output_order_.end());
     }
@@ -322,7 +332,7 @@ struct Data<database::Query<Values, database::QueryGenericJoinTag>>
     auto identifying_members() const noexcept { return std::tie(inputs, variable_order, output_order); }
     auto cista_members() noexcept { return std::tie(index, inputs, variable_order, output_order, plan); }
     auto cista_members() const noexcept { return std::tie(index, inputs, variable_order, output_order, plan); }
-    void clear()
+    void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
     }

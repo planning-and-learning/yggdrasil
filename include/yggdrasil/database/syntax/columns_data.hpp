@@ -12,7 +12,9 @@
 #include <cista/containers/vector.h>
 #include <compare>
 #include <cstddef>
+#include <span>
 #include <tuple>
+#include <utility>
 
 namespace ygg::database
 {
@@ -40,15 +42,16 @@ struct Data<database::Columns<Values>>
     Index<database::Columns<Values>> index;
     ::cista::offset::vector<database::ColumnLayout> values;
 
-    void clear() noexcept
-    {
-        ygg::clear(index);
-        values.clear();
-    }
+    Data() = default;
+    explicit Data(std::span<const database::ColumnLayout> values_) : index() { values.set(values_.begin(), values_.end()); }
 
     auto cista_members() noexcept { return std::tie(index, values); }
     auto cista_members() const noexcept { return std::tie(index, values); }
     auto identifying_members() const noexcept { return std::tie(values); }
+    void clear() noexcept
+    {
+        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+    }
 };
 }  // namespace ygg
 

@@ -19,6 +19,7 @@
 #define YGG_CONTAINERS_TREE_VECTOR_SET_HPP_
 
 #include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/core/types_utils.hpp"
 
 #include <bit>
 #include <cassert>
@@ -28,6 +29,7 @@
 #include <span>
 #include <stdexcept>
 #include <tuple>
+#include <utility>
 
 namespace ygg::detail
 {
@@ -48,7 +50,16 @@ struct Data<detail::TreeVectorLeaf<T>>
 {
     T value;
 
+    Data() = default;
+    Data(T value_) : value(std::move(value_)) {}
+
+    auto cista_members() noexcept { return std::tie(value); }
+    auto cista_members() const noexcept { return std::tie(value); }
     auto identifying_members() const noexcept { return std::tie(value); }
+    void clear() noexcept
+    {
+        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+    }
 };
 
 template<typename T>
@@ -64,7 +75,16 @@ struct Data<detail::TreeVectorNode<T>>
     uint_t left;
     uint_t right;
 
+    Data() = default;
+    Data(uint_t left_, uint_t right_) : left(left_), right(right_) {}
+
+    auto cista_members() noexcept { return std::tie(left, right); }
+    auto cista_members() const noexcept { return std::tie(left, right); }
     auto identifying_members() const noexcept { return std::tie(left, right); }
+    void clear() noexcept
+    {
+        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+    }
 };
 
 template<typename T>

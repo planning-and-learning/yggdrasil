@@ -146,7 +146,7 @@ TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
     EXPECT_EQ(insert(ygg::Data<db::Query<Values, db::QueryProjectTag>>(a, labels)).get_index(), qb::project(repository, a, { x }).get_index());
     EXPECT_EQ(insert(ygg::Data<db::Query<Values, db::QuerySelectValueTag>>(a, x, ygg::uint_t(7))).get_index(),
               qb::select_value(repository, a, x, ygg::uint_t(7)).get_index());
-    const auto generic = insert(ygg::Data<db::Query<Values, db::QueryGenericJoinTag>>(std::array { a, b }, std::array { y, x, z }));
+    const auto generic = insert(ygg::Data<db::Query<Values, db::QueryGenericJoinTag>>(std::vector { a, b }, std::array { y, x, z }));
     EXPECT_TRUE(std::ranges::equal(db::column_labels(generic.columns()), std::array { x, y, z }));
 
     auto mismatched = ygg::Data<db::Query<Values, db::QuerySelectValueTag>>(a, x, std::int32_t(7));

@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <tuple>
+#include <utility>
 
 namespace ygg
 {
@@ -22,16 +23,31 @@ struct Data<database::Relation<Values>>
     Index<database::RelationRowSet<Values>> row_set_index;
     size_t schema_namespace = 0;
 
-    void clear() noexcept
+    Data() = default;
+    Data(Index<database::Columns<Values>> columns_index_, Index<database::RelationRowSet<Values>> row_set_index_, size_t schema_namespace_) :
+        index(),
+        columns_index(columns_index_),
+        row_set_index(row_set_index_),
+        schema_namespace(schema_namespace_)
     {
-        ygg::clear(index);
-        ygg::clear(columns_index);
-        ygg::clear(row_set_index);
-        schema_namespace = 0;
+    }
+    template<typename C>
+    Data(::ygg::View<Index<database::Columns<Values>>, C> columns_, Index<database::RelationRowSet<Values>> row_set_index_, size_t schema_namespace_) :
+        index(),
+        columns_index(),
+        row_set_index(row_set_index_),
+        schema_namespace(schema_namespace_)
+    {
+        set(columns_, columns_index);
     }
 
+    auto cista_members() noexcept { return std::tie(index, columns_index, row_set_index, schema_namespace); }
     auto cista_members() const noexcept { return std::tie(index, columns_index, row_set_index, schema_namespace); }
     auto identifying_members() const noexcept { return std::tie(columns_index, row_set_index, schema_namespace); }
+    void clear() noexcept
+    {
+        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+    }
 };
 }  // namespace ygg
 
