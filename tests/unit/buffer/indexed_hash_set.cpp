@@ -16,7 +16,7 @@
  */
 
 #include "yggdrasil/buffer/buffer.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/canonicalization.hpp"
 
 #include <gtest/gtest.h>
@@ -31,12 +31,6 @@ struct BufferIndexedHashSetTag;
 
 namespace ygg
 {
-template<>
-struct Index<tests::BufferIndexedHashSetTag> : IndexMixin<Index<tests::BufferIndexedHashSetTag>>
-{
-    using Base = IndexMixin<Index<tests::BufferIndexedHashSetTag>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::BufferIndexedHashSetTag>

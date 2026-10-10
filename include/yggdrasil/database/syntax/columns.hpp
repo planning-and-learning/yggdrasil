@@ -8,7 +8,7 @@
 
 #include "yggdrasil/database/syntax/columns_builder.hpp"
 #include "yggdrasil/database/syntax/columns_data.hpp"
-#include "yggdrasil/database/syntax/columns_index.hpp"
+#include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/syntax/columns_view.hpp"
 
 #endif

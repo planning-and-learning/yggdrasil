@@ -59,12 +59,12 @@ private:
         IndexableHash() noexcept = default;
         explicit IndexableHash(const pool_type& pool_) noexcept : pool(&pool_) {}
 
-        size_t operator()(index_type index) const noexcept { return ygg::Hash<std::span<const value_type>> {}((*pool)[index]); }
-        size_t operator()(std::span<const value_type> value) const noexcept { return ygg::Hash<std::span<const value_type>> {}(value); }
+        size_t operator()(index_type index) const noexcept { return hash_range((*pool)[index]); }
+        size_t operator()(std::span<const value_type> value) const noexcept { return hash_range(value); }
         template<SizedForwardRangeOf<value_type> R>
         size_t operator()(const R& value) const
         {
-            return ygg::hash_range(value);
+            return hash_range(value);
         }
     };
 

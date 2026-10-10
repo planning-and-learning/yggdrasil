@@ -8,7 +8,7 @@
 
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 #include "yggdrasil/database/semantics/relation_data.hpp"
-#include "yggdrasil/database/semantics/relation_index.hpp"
+#include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/semantics/relation_repository.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 

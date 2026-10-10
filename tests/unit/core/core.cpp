@@ -18,7 +18,7 @@
 #include "yggdrasil/core.hpp"
 
 #include "yggdrasil/core/atomic_bit.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/core/types.hpp"
 
 #include <array>
 #include <chrono>
@@ -107,12 +107,6 @@ struct Data<tests::CoreTypeUtilsTag> : tests::CoreTypeUtilsData
     using CoreTypeUtilsData::CoreTypeUtilsData;
 };
 
-template<>
-struct Index<tests::CoreTypeUtilsTag> : IndexMixin<Index<tests::CoreTypeUtilsTag>>
-{
-    using Base = IndexMixin<Index<tests::CoreTypeUtilsTag>>;
-    using Base::Base;
-};
 }  // namespace ygg
 
 namespace ygg::tests

@@ -15,7 +15,7 @@
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_view.hpp"
 #include "yggdrasil/formalism/repository.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/core/types.hpp"
 
 #include "gtest/gtest.h"
 #include <algorithm>
@@ -44,12 +44,6 @@ struct ConcurrentPackedObjectTag;
 
 namespace ygg
 {
-template<>
-struct Index<tests::ConcurrentElement> : IndexMixin<Index<tests::ConcurrentElement>>
-{
-    using Base = IndexMixin<Index<tests::ConcurrentElement>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::ConcurrentElement>
@@ -60,12 +54,6 @@ struct Data<tests::ConcurrentElement>
     auto identifying_members() const noexcept { return std::tie(value); }
 };
 
-template<>
-struct Index<tests::ConcurrentSerializedElement> : IndexMixin<Index<tests::ConcurrentSerializedElement>>
-{
-    using Base = IndexMixin<Index<tests::ConcurrentSerializedElement>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::ConcurrentSerializedElement>
@@ -83,12 +71,6 @@ struct Data<tests::ConcurrentSerializedElement>
     auto identifying_members() const noexcept { return std::tie(values); }
 };
 
-template<>
-struct Index<tests::ConcurrentRelation> : IndexMixin<Index<tests::ConcurrentRelation>>
-{
-    using Base = IndexMixin<Index<tests::ConcurrentRelation>>;
-    using Base::Base;
-};
 }
 
 namespace ygg::formalism
@@ -155,14 +137,8 @@ static_assert(!SequentialRepository::thread_safe);
 static_assert(!MixedRepository::thread_safe);
 static_assert(alignof(ConcurrentRepository<ConcurrentObjectTag>) < 256);
 
-struct ChildRepositoryContext
-{
-};
-
 class PublishedRepository : public formalism::SymbolRepositoryBase<PublishedRepository, TypeList<ConcurrentElement, ConcurrentSerializedElement>>
 {
-    ChildRepositoryContext m_child;
-
 public:
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
@@ -178,15 +154,15 @@ public:
         return *this;
     }
 
-    // A published context may resolve child symbols through a different repository.
-    friend const ChildRepositoryContext& get_repository(const PublishedRepository& repository) noexcept { return repository.m_child; }
+    size_t get_index() const noexcept { return 0; }
+    friend const PublishedRepository& get_repository(const PublishedRepository& repository) noexcept { return repository; }
 };
 
 static_assert(formalism::SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
 static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation>);
 static_assert(!std::is_move_constructible_v<PublishedRepository>);
 static_assert(!std::is_copy_constructible_v<PublishedRepository>);
-static_assert(std::same_as<decltype(get_repository(std::declval<const PublishedRepository&>())), const ChildRepositoryContext&>);
+static_assert(std::same_as<decltype(get_repository(std::declval<const PublishedRepository&>())), const PublishedRepository&>);
 static_assert(noexcept(std::declval<const PublishedRepository&>()[std::declval<Index<ConcurrentElement>>()]));
 static_assert(noexcept(make_view(std::declval<Index<ConcurrentElement>>(), std::declval<const PublishedRepository&>())));
 

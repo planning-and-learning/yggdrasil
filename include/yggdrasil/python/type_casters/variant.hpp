@@ -13,12 +13,55 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <variant>
 
 NAMESPACE_BEGIN(NB_NAMESPACE)
 NAMESPACE_BEGIN(detail)
+
+/// ygg::ViewVariant converts like the std::variant it derives from.
+template<typename Variant, typename C>
+struct type_caster<::ygg::ViewVariant<Variant, C>>
+{
+    using Value = ::ygg::ViewVariant<Variant, C>;
+    using Base = typename Value::base_type;
+    using BaseCaster = make_caster<Base>;
+
+    static constexpr auto Name = BaseCaster::Name;
+    template<typename T>
+    using Cast = movable_cast_t<T>;
+    template<typename T>
+    static constexpr bool can_cast()
+    {
+        return true;
+    }
+
+    // Views are not default-constructible, so the value is stored only once converted.
+    std::optional<Value> value;
+    explicit operator Value*() { return &*value; }
+    explicit operator Value&() { return *value; }
+    explicit operator Value&&() { return std::move(*value); }
+
+    bool from_python(handle src, uint32_t flags, cleanup_list* cleanup) noexcept
+    {
+        BaseCaster caster;
+        if (!caster.from_python(src, flags, cleanup) || !caster.template can_cast<Base>())
+            return false;
+        value.emplace(caster.operator cast_t<Base>());
+        return true;
+    }
+
+    static handle from_cpp(const Value* src, rv_policy policy, cleanup_list* cleanup) noexcept
+    {
+        return src ? from_cpp(*src, policy, cleanup) : none().release();
+    }
+    static handle from_cpp(const Value& src, rv_policy policy, cleanup_list* cleanup) noexcept
+    {
+        return BaseCaster::from_cpp(static_cast<const Base&>(src), policy, cleanup);
+    }
+};
 
 // Adapted from nanobind/stl/variant.h
 template<typename C, typename... Ts>

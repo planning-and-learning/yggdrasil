@@ -15,25 +15,16 @@
 namespace ygg
 {
 template<database::ColumnTypes Values, typename Tag>
-class View<Index<database::Query<Values, Tag>>, database::QueryRepository<Values>>
+class View<Index<database::Query<Values, Tag>>, database::QueryRepository<Values>> :
+    public IndexViewBase<database::Query<Values, Tag>, database::QueryRepository<Values>>
 {
-    Index<database::Query<Values, Tag>> m_index;
-    const database::QueryRepository<Values>* m_repository;
-
 public:
-    using tag_type = Tag;
-
-    View(Index<database::Query<Values, Tag>> index, const database::QueryRepository<Values>& repository) : m_index(index), m_repository(&repository) {}
-    auto get_index() const noexcept { return m_index; }
-    const auto& get_handle() const noexcept { return m_index; }
-    const auto& get_context() const noexcept { return *m_repository; }
-    const auto& get_repository() const noexcept { return *m_repository; }
-    const auto& get_data() const { return (*m_repository)[m_index]; }
+    using IndexViewBase<database::Query<Values, Tag>, database::QueryRepository<Values>>::IndexViewBase;
 
     auto get_variant() const
         requires std::same_as<Tag, void>
     {
-        return make_view(get_data().variant, *m_repository);
+        return make_view(this->get_data().variant, this->get_context());
     }
     std::span<const database::ColumnLayout> columns() const
     {
@@ -43,111 +34,110 @@ public:
                            || std::same_as<Tag, database::QueryDistanceTag> || std::same_as<Tag, database::QueryGenericJoinTag>)
             return get_plan().output_columns().span();
         else
-            return { get_data().columns.data(), get_data().columns.size() };
+            return { this->get_data().columns.data(), this->get_data().columns.size() };
     }
     auto get_arg() const
         requires(std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryRenameTag> || std::same_as<Tag, database::QuerySelectEqualTag>
                  || std::same_as<Tag, database::QuerySelectValueTag>)
     {
-        return make_view(get_data().arg, *m_repository);
+        return make_view(this->get_data().arg, this->get_context());
     }
     auto get_lhs() const
         requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>)
     {
-        return make_view(get_data().lhs, *m_repository);
+        return make_view(this->get_data().lhs, this->get_context());
     }
     auto get_rhs() const
         requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>)
     {
-        return make_view(get_data().rhs, *m_repository);
+        return make_view(this->get_data().rhs, this->get_context());
     }
     auto get_sources() const
         requires std::same_as<Tag, database::QueryDistanceTag>
     {
-        return make_view(get_data().sources, *m_repository);
+        return make_view(this->get_data().sources, this->get_context());
     }
     auto get_edges() const
         requires std::same_as<Tag, database::QueryDistanceTag>
     {
-        return make_view(get_data().edges, *m_repository);
+        return make_view(this->get_data().edges, this->get_context());
     }
     auto get_targets() const
         requires std::same_as<Tag, database::QueryDistanceTag>
     {
-        return make_view(get_data().targets, *m_repository);
+        return make_view(this->get_data().targets, this->get_context());
     }
     auto get_input_slot() const
         requires std::same_as<Tag, database::QueryInputTag>
     {
-        return get_data().input_slot;
+        return this->get_data().input_slot;
     }
     auto get_labels() const
         requires(std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryRenameTag>)
     {
-        return std::span<const Index<database::Column>>(get_data().labels.data(), get_data().labels.size());
+        return std::span<const Index<database::Column>>(this->get_data().labels.data(), this->get_data().labels.size());
     }
     auto get_lhs_column() const
         requires std::same_as<Tag, database::QuerySelectEqualTag>
     {
-        return get_data().lhs_column;
+        return this->get_data().lhs_column;
     }
     auto get_rhs_column() const
         requires std::same_as<Tag, database::QuerySelectEqualTag>
     {
-        return get_data().rhs_column;
+        return this->get_data().rhs_column;
     }
     auto get_column() const
         requires std::same_as<Tag, database::QuerySelectValueTag>
     {
-        return get_data().column;
+        return this->get_data().column;
     }
     auto get_constant() const
         requires std::same_as<Tag, database::QuerySelectValueTag>
     {
-        return std::span<const std::byte>(get_data().constant.data(), get_data().constant.size());
+        return std::span<const std::byte>(this->get_data().constant.data(), this->get_data().constant.size());
     }
     auto get_distance_column() const
         requires std::same_as<Tag, database::QueryDistanceTag>
     {
-        return get_data().distance_column;
+        return this->get_data().distance_column;
     }
     const auto& get_plan() const
         requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryDistanceTag>
                  || std::same_as<Tag, database::QueryGenericJoinTag>)
     {
-        return get_data().plan;
+        return this->get_data().plan;
     }
     size_t get_lhs_position() const
         requires std::same_as<Tag, database::QuerySelectEqualTag>
     {
-        return get_data().lhs_position;
+        return this->get_data().lhs_position;
     }
     size_t get_rhs_position() const
         requires std::same_as<Tag, database::QuerySelectEqualTag>
     {
-        return get_data().rhs_position;
+        return this->get_data().rhs_position;
     }
     size_t get_position() const
         requires std::same_as<Tag, database::QuerySelectValueTag>
     {
-        return get_data().column_position;
+        return this->get_data().column_position;
     }
     auto get_inputs() const
         requires std::same_as<Tag, database::QueryGenericJoinTag>
     {
-        return std::span<const Index<database::Query<Values>>>(get_data().inputs.data(), get_data().inputs.size());
+        return std::span<const Index<database::Query<Values>>>(this->get_data().inputs.data(), this->get_data().inputs.size());
     }
     auto get_variable_order() const
         requires std::same_as<Tag, database::QueryGenericJoinTag>
     {
-        return std::span<const Index<database::Column>>(get_data().variable_order.data(), get_data().variable_order.size());
+        return std::span<const Index<database::Column>>(this->get_data().variable_order.data(), this->get_data().variable_order.size());
     }
     auto get_output_order() const
         requires std::same_as<Tag, database::QueryGenericJoinTag>
     {
-        return std::span<const Index<database::Column>>(get_data().output_order.data(), get_data().output_order.size());
+        return std::span<const Index<database::Column>>(this->get_data().output_order.data(), this->get_data().output_order.size());
     }
-    auto identifying_members() const noexcept { return std::make_tuple(m_index, m_repository->get_index()); }
 };
 }  // namespace ygg
 

@@ -167,7 +167,6 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
             #include <yggdrasil/containers/indexed_hash_set.hpp>
             #include <yggdrasil/containers/unordered_set.hpp>
             #include <yggdrasil/core/types.hpp>
-            #include <yggdrasil/ids/index_mixins.hpp>
 
             #include <tuple>
 
@@ -184,13 +183,6 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
             struct Data<Item> : ItemData
             {
                 using ItemData::ItemData;
-            };
-
-            template<>
-            struct Index<Item> : IndexMixin<Index<Item>>
-            {
-                using Base = IndexMixin<Index<Item>>;
-                using Base::Base;
             };
             }
 

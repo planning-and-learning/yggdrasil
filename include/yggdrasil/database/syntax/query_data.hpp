@@ -10,7 +10,7 @@
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/generic_join.hpp"
 #include "yggdrasil/database/syntax/column_codec.hpp"
-#include "yggdrasil/database/syntax/query_index.hpp"
+#include "yggdrasil/database/declarations.hpp"
 
 #include <array>
 #include <cista/containers/variant.h>

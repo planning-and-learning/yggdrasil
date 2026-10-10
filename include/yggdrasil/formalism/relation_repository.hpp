@@ -23,7 +23,6 @@
 #include "yggdrasil/formalism/basic_relation_repository.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/membership.hpp"
-#include "yggdrasil/formalism/object_index.hpp"
 
 #include <cassert>
 #include <optional>

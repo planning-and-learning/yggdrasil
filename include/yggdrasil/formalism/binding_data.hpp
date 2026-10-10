@@ -22,7 +22,6 @@
 #include "yggdrasil/core/types_utils.hpp"
 #include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/formalism/object_index.hpp"
 
 #include <stdexcept>
 #include <tuple>

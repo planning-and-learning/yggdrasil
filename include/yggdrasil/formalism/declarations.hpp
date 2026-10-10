@@ -88,4 +88,7 @@ concept RelationContextFor = requires(const std::remove_reference_t<C>& context)
 
 }  // namespace ygg::formalism
 
+// RelationBinding's index is the only non-integer Index; keep it visible wherever the tag is.
+#include "yggdrasil/formalism/binding_index.hpp"
+
 #endif

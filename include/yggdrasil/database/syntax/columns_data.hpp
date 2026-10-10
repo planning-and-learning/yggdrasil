@@ -7,7 +7,7 @@
 #define YGG_DATABASE_SYNTAX_COLUMNS_DATA_HPP_
 
 #include "yggdrasil/core/types_utils.hpp"
-#include "yggdrasil/database/syntax/columns_index.hpp"
+#include "yggdrasil/database/declarations.hpp"
 
 #include <cista/containers/vector.h>
 #include <compare>

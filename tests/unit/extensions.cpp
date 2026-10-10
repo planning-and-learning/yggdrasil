@@ -30,12 +30,6 @@ struct AdaptersIndexTag;
 
 namespace ygg
 {
-template<>
-struct Index<tests::AdaptersIndexTag> : IndexMixin<Index<tests::AdaptersIndexTag>>
-{
-    using Base = IndexMixin<Index<tests::AdaptersIndexTag>>;
-    using Base::Base;
-};
 }  // namespace ygg
 
 namespace ygg::tests

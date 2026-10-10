@@ -11,7 +11,6 @@
 
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
 
 #include <benchmark/benchmark.h>
 #include <cstdint>
@@ -32,12 +31,6 @@ struct PackedObjectTag;
 
 namespace ygg
 {
-template<>
-struct Index<profiling::TrivialSymbol> : IndexMixin<Index<profiling::TrivialSymbol>>
-{
-    using Base = IndexMixin<Index<profiling::TrivialSymbol>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<profiling::TrivialSymbol>
@@ -48,12 +41,6 @@ struct Data<profiling::TrivialSymbol>
     auto identifying_members() const noexcept { return std::tie(value); }
 };
 
-template<>
-struct Index<profiling::SerializedSymbol> : IndexMixin<Index<profiling::SerializedSymbol>>
-{
-    using Base = IndexMixin<Index<profiling::SerializedSymbol>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<profiling::SerializedSymbol>
@@ -71,12 +58,6 @@ struct Data<profiling::SerializedSymbol>
     auto identifying_members() const noexcept { return std::tie(values); }
 };
 
-template<>
-struct Index<profiling::Relation> : IndexMixin<Index<profiling::Relation>>
-{
-    using Base = IndexMixin<Index<profiling::Relation>>;
-    using Base::Base;
-};
 }
 
 namespace ygg::formalism

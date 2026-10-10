@@ -12,10 +12,12 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ygg::database
 {
@@ -43,6 +45,15 @@ public:
     {
         return detail::read_column<Values, T>(m_bytes, m_columns, position);
     }
+    /// Decodes every column as T into the reusable buffer, which the result borrows.
+    template<ColumnValueFor<Values> T>
+    std::span<const T> get_all(std::vector<T>& buffer) const
+    {
+        buffer.clear();
+        for (size_t position = 0; position < size(); ++position)
+            buffer.push_back(get<T>(position));
+        return buffer;
+    }
     template<ColumnValueFor<Values> T>
     T get(Index<Column> column) const
     {
@@ -59,6 +70,21 @@ public:
                                          { return std::invoke(std::forward<Visitor>(visitor), get<T>(position)); });
     }
 };
+
+/// Encode a row whose columns all hold T into the reusable buffer, which the result borrows.
+template<ColumnTypes Values, ColumnValueFor<Values> T, std::ranges::sized_range R>
+    requires std::convertible_to<std::ranges::range_reference_t<const R&>, T>
+std::span<const std::byte> encode_row(const R& values, std::vector<std::byte>& buffer)
+{
+    buffer.resize(std::ranges::size(values) * ColumnCodec<T>::size);
+    auto field = std::span<std::byte>(buffer);
+    for (const auto& value : values)
+    {
+        ColumnCodec<T>::encode(T(value), field.first(ColumnCodec<T>::size));
+        field = field.subspan(ColumnCodec<T>::size);
+    }
+    return buffer;
+}
 
 /// Encode a complete typed row using an already validated schema. The fixed-size
 /// result lives on the stack; its arity and each value type must match the schema.

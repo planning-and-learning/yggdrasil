@@ -23,7 +23,6 @@
 #include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/core/types.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
 #include "yggdrasil/semantics/canonicalization.hpp"
 
 #endif

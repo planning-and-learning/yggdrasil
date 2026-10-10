@@ -10,7 +10,6 @@
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/ids/index_coder.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
 
 #include <algorithm>
 #include <array>
@@ -81,7 +80,7 @@ struct ColumnCodec<bool>
 };
 
 template<typename Tag>
-    requires std::derived_from<Index<Tag>, IndexMixin<Index<Tag>>>
+    requires requires(Index<Tag> index) { { index.get_value() } -> std::same_as<uint_t>; }
 struct ColumnCodec<Index<Tag>>
 {
     static constexpr size_t size = ColumnCodec<uint_t>::size;

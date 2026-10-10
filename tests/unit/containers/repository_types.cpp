@@ -21,14 +21,13 @@
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_view.hpp"
 #include "yggdrasil/formalism/builder.hpp"
-#include "yggdrasil/formalism/detail/view.hpp"
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/formalism/repository_factory.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
@@ -68,12 +67,6 @@ struct RepositoryTypesContext
 namespace ygg
 {
 
-template<>
-struct Index<tests::RepositoryTypesElement> : IndexMixin<Index<tests::RepositoryTypesElement>>
-{
-    using Base = IndexMixin<Index<tests::RepositoryTypesElement>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::RepositoryTypesElement>
@@ -84,12 +77,6 @@ struct Data<tests::RepositoryTypesElement>
     auto identifying_members() const noexcept { return std::tie(value); }
 };
 
-template<>
-struct Index<tests::RepositoryTypesSerializedElement> : IndexMixin<Index<tests::RepositoryTypesSerializedElement>>
-{
-    using Base = IndexMixin<Index<tests::RepositoryTypesSerializedElement>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::RepositoryTypesSerializedElement>
@@ -107,12 +94,6 @@ struct Data<tests::RepositoryTypesSerializedElement>
     auto identifying_members() const noexcept { return std::tie(values); }
 };
 
-template<>
-struct Index<tests::RepositoryTypesRelation> : IndexMixin<Index<tests::RepositoryTypesRelation>>
-{
-    using Base = IndexMixin<Index<tests::RepositoryTypesRelation>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::RepositoryTypesRelation>
@@ -130,12 +111,6 @@ struct Data<formalism::Object<tests::RepositoryTypesObjectTag>>
     auto identifying_members() const noexcept { return std::tie(value); }
 };
 
-template<>
-struct Index<tests::RepositoryTypesBuilderOther> : IndexMixin<Index<tests::RepositoryTypesBuilderOther>>
-{
-    using Base = IndexMixin<Index<tests::RepositoryTypesBuilderOther>>;
-    using Base::Base;
-};
 
 template<>
 struct Data<tests::RepositoryTypesBuilderOther>
@@ -187,6 +162,7 @@ struct RepositoryTypesRepository
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
 
     std::vector<ygg::Index<Object>> operator[](ygg::Index<Binding>) const { return {}; }
+    size_t get_index() const noexcept { return 0; }
 };
 
 inline const RepositoryTypesRepository& get_repository(const RepositoryTypesContext&) noexcept
@@ -356,6 +332,7 @@ struct AdlViewContext
     const Data<RepositoryTypesElement>& data;
     const AdlViewContext* owner = nullptr;
     const Data<RepositoryTypesElement>& operator[](Index<RepositoryTypesElement>) const noexcept { return data; }
+    friend const AdlViewContext& get_repository(const AdlViewContext& context) noexcept { return context; }
 };
 
 const AdlViewContext& get_canonical_context(Index<RepositoryTypesElement>, const AdlViewContext& context) noexcept
@@ -392,7 +369,7 @@ TEST(YggdrasilTests, CommonIndexedViewPreservesLookupHandleAndOwner)
     Data<RepositoryTypesElement> data;
     data.value = 31;
     const auto published = repository.insert(data).first;
-    formalism::detail::View<Index<RepositoryTypesElement>, ContractRepository> view(published.get_index(), repository);
+    IndexViewBase<RepositoryTypesElement, ContractRepository> view(published.get_index(), repository);
     EXPECT_EQ(view.get_index(), published.get_index());
     EXPECT_EQ(view.get_handle(), published.get_handle());
     EXPECT_EQ(&view.get_context(), &repository);
@@ -491,6 +468,7 @@ struct PreparedRepository
         return { View<Index<RepositoryTypesElement>, PreparedRepository>(index, *this), created };
     }
     const auto& operator[](Index<RepositoryTypesElement> index) const { return symbols[index]; }
+    friend const PreparedRepository& get_repository(const PreparedRepository& repository) noexcept { return repository; }
 };
 
 void prepare_for_insert(PreparedRepository& repository, Data<RepositoryTypesElement>& data)

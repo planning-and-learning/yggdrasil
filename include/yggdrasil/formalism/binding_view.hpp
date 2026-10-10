@@ -24,7 +24,6 @@
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/formalism/object_index.hpp"
 #include "yggdrasil/semantics/containers/block_array_ordering.hpp"
 
 #include <iterator>
@@ -150,54 +149,31 @@ namespace ygg
 {
 
 template<typename RelationTag, typename ObjectTag, typename C>
-class View<Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>, C>
+class View<Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public IndexViewBase<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, C>
 {
-private:
-    const C* m_context;
-    Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>> m_handle;
-
 public:
-    View(Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    using IndexViewBase<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, C>::IndexViewBase;
 
-    // This will return an ArrayView already
-    auto get_data() const noexcept
-        requires formalism::RelationContextFor<C, RelationTag, ObjectTag>
-    {
-        return get_repository(*m_context)[m_handle];
-    }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-    auto get_index() const noexcept { return m_handle; }
-    auto get_relation() const noexcept { return ygg::make_view(m_handle.relation, *m_context); }
-    auto get_objects() const noexcept { return ygg::make_view(get_data(), *m_context); }
+    auto get_relation() const noexcept { return ygg::make_view(this->get_handle().relation, this->get_context()); }
+    auto get_objects() const noexcept { return ygg::make_view(this->get_data(), this->get_context()); }
     // Use the relation index rather than its view: view identity includes the repository,
     // while this key represents the logical binding across repositories.
-    auto get_key() const noexcept { return std::make_pair(m_handle.relation, get_data()); }
-
-    auto identifying_members() const noexcept { return std::make_tuple(m_handle, m_context->get_index()); }
+    auto get_key() const noexcept { return std::make_pair(this->get_handle().relation, this->get_data()); }
 };
 
 /// Borrows a complete binding without publishing a row identity. Data and context
 /// must outlive the view and all object ranges; keep the data unchanged while used.
 template<typename RelationTag, typename ObjectTag, typename C>
-class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C>
+class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>
 {
-    using BindingData = Data<formalism::RelationBinding<RelationTag, ObjectTag>>;
-    const BindingData* m_handle;
-    const C* m_context;
-
-    auto objects() const noexcept { return std::span<const Index<formalism::Object<ObjectTag>>>(m_handle->objects.data(), m_handle->objects.size()); }
+    auto objects() const noexcept { return std::span<const Index<formalism::Object<ObjectTag>>>(this->get_data().objects.data(), this->get_data().objects.size()); }
 
 public:
-    View(const BindingData& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
+    using DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>::DataViewBase;
 
-    const BindingData& get_data() const noexcept { return *m_handle; }
-    const BindingData& get_handle() const noexcept { return *m_handle; }
-    const C& get_context() const noexcept { return *m_context; }
-    auto get_relation() const noexcept { return make_view(m_handle->relation, *m_context); }
-    auto get_objects() const noexcept { return make_view(objects(), *m_context); }
-    auto get_key() const noexcept { return std::make_pair(m_handle->relation, objects()); }
+    auto get_relation() const noexcept { return make_view(this->get_data().relation, this->get_context()); }
+    auto get_objects() const noexcept { return make_view(objects(), this->get_context()); }
+    auto get_key() const noexcept { return std::make_pair(this->get_data().relation, objects()); }
 };
 
 template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>

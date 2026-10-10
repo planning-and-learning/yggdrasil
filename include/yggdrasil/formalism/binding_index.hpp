@@ -21,7 +21,6 @@
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
 
 #include <concepts>
 #include <ranges>
@@ -30,13 +29,6 @@
 
 namespace ygg
 {
-template<>
-struct Index<ygg::formalism::Row> : IndexMixin<Index<ygg::formalism::Row>>
-{
-    // Inherit constructors
-    using Base = IndexMixin<Index<ygg::formalism::Row>>;
-    using Base::Base;
-};
 
 template<typename RelationTag, typename ObjectTag>
 struct Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>

@@ -18,6 +18,8 @@
 #ifndef YGG_CONTAINERS_VARIANT_HPP_
 #define YGG_CONTAINERS_VARIANT_HPP_
 
+#include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 
 #include <cista/containers/variant.h>
@@ -94,4 +96,56 @@ constexpr auto visit(Visitor&& vis, const View<::cista::offset::variant<T...>, C
     return v.apply(vis);
 }
 }  // namespace ygg
+namespace ygg
+{
+
+namespace detail
+{
+
+template<typename T, typename C>
+struct ViewAlternative
+{
+    using type = T;
+};
+
+template<typename T, typename C>
+struct ViewAlternative<Index<T>, C>
+{
+    using type = View<Index<T>, C>;
+};
+
+template<typename T, typename C>
+struct ViewAlternative<Data<T>, C>
+{
+    using type = View<Data<T>, C>;
+};
+
+template<typename Variant, typename C>
+struct ViewVariantBase;
+
+template<typename... Ts, typename C>
+struct ViewVariantBase<::cista::offset::variant<Ts...>, C>
+{
+    using type = std::variant<typename ViewAlternative<Ts, C>::type...>;
+};
+
+}  // namespace detail
+
+/// The cista variant member holding one Index<T> per type T in the list.
+template<typename List>
+using IndexVariant = ApplyTypeListT<::cista::offset::variant, MapTypeListT<Index, List>>;
+
+/// The std::variant that view-based Data constructors accept for a cista variant member:
+/// every Index<T> or Data<T> alternative becomes its view in C, other alternatives are kept as is.
+/// A class rather than an alias, so constructors taking ViewVariant<Variant, C> deduce C.
+template<typename Variant, typename C>
+struct ViewVariant : detail::ViewVariantBase<Variant, C>::type
+{
+    using base_type = typename detail::ViewVariantBase<Variant, C>::type;
+    using base_type::base_type;
+    ViewVariant(base_type variant) noexcept(std::is_nothrow_move_constructible_v<base_type>) : base_type(std::move(variant)) {}
+};
+
+}  // namespace ygg
+
 #endif

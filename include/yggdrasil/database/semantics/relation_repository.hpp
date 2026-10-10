@@ -174,7 +174,7 @@ public:
     template<typename C>
     View<Index<Relation<Values>>, C> rename(View<Index<Relation<Values>>, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
     {
-        if (&get_relation_repository(source.get_context()) != this)
+        if (&get_repository(source.get_context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
         detail::validate_relabel<Values>(source.columns().span(), columns);
         auto data = source.get_data();
@@ -239,18 +239,6 @@ const RelationRepository<Values>& get_repository(const RelationRepository<Values
     return repository;
 }
 
-template<ColumnTypes Values>
-const RelationRepository<Values>& get_relation_repository(const RelationRepository<Values>& repository) noexcept
-{
-    return repository;
-}
-
-template<ColumnTypes Values>
-const RelationRepository<Values>& get_columns_repository(const RelationRepository<Values>& repository) noexcept
-{
-    return repository;
-}
-
 // Validation stays in the raw repository members for both direct and prepared
 // calls.
 template<ColumnTypes Values>
@@ -299,7 +287,7 @@ auto copy(View<Data<Relation<Values>>, C> source, RelationRepository<Values>& re
 template<ColumnTypes Values, typename C>
 auto copy(View<Index<Relation<Values>>, C> source, RelationRepository<Values>& repository)
 {
-    if (&get_relation_repository(source.get_context()) == &repository)
+    if (&get_repository(source.get_context()) == &repository)
         return std::pair { make_view(source.get_index(), repository), false };
     return copy(make_view(source.get_data(), source.get_context()), repository);
 }

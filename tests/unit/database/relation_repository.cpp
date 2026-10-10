@@ -72,6 +72,10 @@ auto packed(std::span<const T> values)
 }
 
 using RelationTag = Relation<Values>;
+// Each storage kind of a view satisfies the view contract.
+static_assert(ygg::ViewConcept<Index<RelationTag>, RelationRepository<Values>>);
+static_assert(ygg::ViewConcept<Data<RelationTag>, RelationRepository<Values>>);
+static_assert(ygg::ViewConcept<Builder<RelationTag>, RelationRepository<Values>>);
 using RelationBuilder = Builder<RelationTag>;
 using Repository = RelationRepository<Values>;
 using BuilderView = View<RelationBuilder, Repository>;
@@ -87,7 +91,6 @@ using ColumnsIndexView = View<ColumnsIndex, Repository>;
 struct RelationContext
 {
     const Repository& repository;
-    friend const Repository& get_relation_repository(const RelationContext& context) noexcept { return context.repository; }
     friend const Repository& get_repository(const RelationContext& context) noexcept { return context.repository; }
 };
 
@@ -142,6 +145,7 @@ static_assert(!std::ranges::contiguous_range<IndexView>);
 static_assert(ViewConcept<RelationBuilder, Repository>);
 static_assert(ViewConcept<Data<RelationTag>, Repository>);
 static_assert(ViewConcept<Index<RelationTag>, Repository>);
+static_assert(ViewConcept<Index<RelationTag>, std::shared_ptr<Repository>>);
 static_assert(ViewConcept<Builder<Columns<Values>>, Repository>);
 static_assert(ViewConcept<Data<Columns<Values>>, Repository>);
 static_assert(ViewConcept<Index<Columns<Values>>, Repository>);
@@ -393,7 +397,9 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
     const auto left_builder_view = make_view(left, repository);
     const auto right_data_view = make_view(right_data, repository);
     const auto right_index_view = make_view(right_view.get_index(), repository);
-    EXPECT_EQ(&right_data_view.get_handle(), &right_data);
+    // Trivially copyable records are held by value; others are borrowed.
+    static_assert(ygg::stores_view_by_value_v<RelationTag>);
+    EXPECT_EQ(right_data_view.get_handle().identifying_members(), right_data.identifying_members());
     EXPECT_EQ(&left_builder_view.get_handle(), &left);
     EXPECT_EQ(&right_index_view.get_context(), &repository);
     const auto check_access = [](const auto& view)
@@ -768,48 +774,66 @@ TEST(YggdrasilTests, DatabaseRelationIteratorsSupportRandomAccessThroughTemporar
     check_unit(make_view(unit.get_index(), repository));
 }
 
-namespace
+TEST(YggdrasilTests, SharedContextViewsRetainTheirRepositoryAndKeepIdentity)
 {
-// The row's entity owner is separate from the relation's physical storage.
-struct TypedRelationContext
-{
-    const RelationRepository<TypeList<ColumnsIndex>>& rows;
-    const Repository& entities;
-    friend const auto& get_relation_repository(const TypedRelationContext& context) noexcept { return context.rows; }
-    friend const auto& get_repository(const TypedRelationContext& context) noexcept { return context.entities; }
-};
+    auto repository = RelationRepositoryFactory<Values>().create_shared();
+    const auto borrowed = repository->insert(std::array { ColumnIndex(5) }).first;
+    const auto shared = make_view(borrowed.get_index(), repository);
+    static_assert(ViewConcept<ColumnsIndex, std::shared_ptr<Repository>>);
+    const auto identity = borrowed.identifying_members();
+    EXPECT_EQ(shared.identifying_members(), identity);
+    repository.reset();
+    // The view retains the repository after the last outside owner is gone.
+    EXPECT_EQ(shared.get_context().use_count(), 1);
+    ASSERT_EQ(shared.size(), 1);
+    EXPECT_EQ(shared.span()[0].label, ColumnIndex(5));
+    EXPECT_EQ(shared.identifying_members(), identity);
 }
 
-TEST(YggdrasilTests, TypedRelationsResolveRowsThroughTheirElementRepository)
+namespace
+{
+/// Rows of interned relations leave values of other repositories raw; resolve them explicitly.
+template<typename Value, typename Repository>
+auto resolve_in(Value value, const Repository& repository)
+{
+    if constexpr (std::same_as<Value, ColumnsIndex>)
+        return make_view(value, repository);
+    else
+        return value;
+}
+}
+
+TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
 {
     auto entities = RelationRepositoryFactory<Values>().create();
     const auto first = entities.insert(std::array { ColumnIndex(7) }).first;
     const auto second = entities.insert(std::array { ColumnIndex(9) }).first;
     auto rows = RelationRepositoryFactory<TypeList<ColumnsIndex>>().create();
-    const auto context = TypedRelationContext { rows, entities };
     auto builder = Builder<Relation<TypeList<ColumnsIndex>>>({ ColumnIndex(1), ColumnIndex(2) });
     builder.insert(std::tuple { first.get_index(), second.get_index() });
     const auto published = database::insert(rows, builder, 42).first;
-    const auto index_view = make_view(published.get_index(), context);
-    const auto data_view = make_view(published.get_data(), context);
-    const auto builder_view = make_view(builder, context);
+    const auto index_view = make_view(published.get_index(), rows);
+    const auto data_view = make_view(published.get_data(), rows);
+    // A builder borrows no owner, so its context is the repository that resolves its values.
+    const auto builder_view = make_view(builder, entities);
     static_assert(RelationViewConcept<decltype(index_view), TypeList<ColumnsIndex>>);
     static_assert(std::ranges::forward_range<decltype(index_view)>);
     static_assert(std::ranges::borrowed_range<decltype(index_view)>);
-    static_assert(std::same_as<decltype(index_view[0].get<ColumnsIndex>(size_t { 0 })), ColumnsIndexView>);
+    static_assert(std::same_as<decltype(index_view[0].get<ColumnsIndex>(size_t { 0 })), ColumnsIndex>);
+    static_assert(std::same_as<decltype(builder_view[0].get<ColumnsIndex>(size_t { 0 })), ColumnsIndexView>);
     const auto check = [&](const auto& view)
     {
         ASSERT_EQ(view.size(), 1);
         EXPECT_EQ((Row<TypeList<ColumnsIndex>>(view.row(0), view.columns().span()).get<ColumnsIndex>(size_t { 0 })), first.get_index());
-        EXPECT_EQ(view[0].template get<ColumnsIndex>(size_t { 0 }), first);
-        EXPECT_EQ(view.at(0).template get<ColumnsIndex>(size_t { 1 }), second);
+        // Rows of interned relations name values owned elsewhere; callers resolve them explicitly.
+        EXPECT_EQ(resolve_in(view[0].template get<ColumnsIndex>(size_t { 0 }), entities), first);
+        EXPECT_EQ(resolve_in(view.at(0).template get<ColumnsIndex>(size_t { 1 }), entities), second);
         EXPECT_THROW(view.at(1), std::out_of_range);
         size_t count = 0;
         for (auto objects : view)
         {
-            EXPECT_EQ(objects.template get<ColumnsIndex>(size_t { 0 }), first);
-            EXPECT_EQ(objects.template get<ColumnsIndex>(size_t { 1 }), second);
-            EXPECT_EQ(&objects.get_context(), &entities);
+            EXPECT_EQ(resolve_in(objects.template get<ColumnsIndex>(size_t { 0 }), entities), first);
+            EXPECT_EQ(resolve_in(objects.template get<ColumnsIndex>(size_t { 1 }), entities), second);
             ++count;
         }
         EXPECT_EQ(count, 1);
@@ -817,23 +841,24 @@ TEST(YggdrasilTests, TypedRelationsResolveRowsThroughTheirElementRepository)
     check(index_view);
     check(data_view);
     check(builder_view);
-    const auto iterator = make_view(published.get_index(), context).begin();
-    EXPECT_EQ((*iterator).get<ColumnsIndex>(size_t { 1 }), second);
-    const auto resolved = make_view(published.get_index(), context)[0].visit(size_t { 0 }, [](auto value) { return value; });
-    EXPECT_EQ(resolved, first);
+    EXPECT_EQ(&builder_view[0].get_context(), &entities);
+    const auto iterator = index_view.begin();
+    EXPECT_EQ((*iterator).get<ColumnsIndex>(size_t { 1 }), second.get_index());
+    const auto resolved = index_view[0].visit(size_t { 0 }, [](auto value) { return value; });
+    EXPECT_EQ(resolved, first.get_index());
 
     const auto renamed = rows.rename(index_view, std::array { ColumnIndex(3), ColumnIndex(4) });
     static_assert(std::same_as<decltype(renamed), decltype(index_view)>);
-    EXPECT_EQ(&renamed.get_context(), &context);
+    EXPECT_EQ(&renamed.get_context(), &rows);
     EXPECT_EQ(renamed.get_data().schema_namespace, 42);
     EXPECT_EQ(renamed.get_storage_address(), index_view.get_storage_address());
-    EXPECT_EQ(renamed[0].get<ColumnsIndex>(size_t { 0 }), first);
+    EXPECT_EQ(renamed[0].get<ColumnsIndex>(size_t { 0 }), first.get_index());
     auto other_rows = RelationRepositoryFactory<TypeList<ColumnsIndex>>().create();
     EXPECT_THROW(other_rows.rename(index_view, std::array { ColumnIndex(3), ColumnIndex(4) }), std::invalid_argument);
 
     auto probe = Builder<Relation<TypeList<ColumnsIndex>>>({ ColumnIndex(2) });
     probe.insert(std::tuple { second.get_index() });
-    auto joined = join<TypeList<ColumnsIndex>>(data_view, make_view(probe, context));
+    auto joined = join<TypeList<ColumnsIndex>>(data_view, make_view(probe, entities));
     EXPECT_TRUE(joined.contains(std::tuple { first.get_index(), second.get_index() }));
     auto projected = project<TypeList<ColumnsIndex>>(index_view, { ColumnIndex(2) });
     EXPECT_TRUE(projected.contains(std::tuple { second.get_index() }));
@@ -845,7 +870,7 @@ TEST(YggdrasilTests, TypedRelationsResolveRowsThroughTheirElementRepository)
 
     auto truth = Builder<Relation<TypeList<ColumnsIndex>>>();
     truth.insert(cells<ColumnsIndex>());
-    const auto truth_view = make_view(truth, context);
+    const auto truth_view = make_view(truth, entities);
     EXPECT_TRUE((*truth_view.begin()).empty());
     EXPECT_EQ(std::ranges::distance(truth_view), 1);
     truth.clear();
@@ -855,14 +880,6 @@ TEST(YggdrasilTests, TypedRelationsResolveRowsThroughTheirElementRepository)
 namespace
 {
 using MixedValues = TypeList<uint_t, double, bool, ColumnsIndex>;
-
-struct MixedRelationContext
-{
-    const RelationRepository<MixedValues>& rows;
-    const Repository& entities;
-    friend const auto& get_relation_repository(const MixedRelationContext& context) noexcept { return context.rows; }
-    friend const auto& get_repository(const MixedRelationContext& context) noexcept { return context.entities; }
-};
 
 template<typename Destination, typename Source>
 concept CanAssignColumns = requires(Destination& destination, const Source& source) { database::assign(destination, source); };
@@ -921,7 +938,6 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
     EXPECT_EQ(columns[3].size, ColumnCodec<ColumnsIndex>::size);
 
     auto rows = RelationRepositoryFactory<MixedValues>().create();
-    const auto context = MixedRelationContext { rows, entities };
     Builder<Relation<MixedValues>> builder(columns);
     const auto tuple = std::tuple { uint_t { 42 }, 1.25, true, entity.get_index() };
     builder.insert(tuple);
@@ -932,7 +948,7 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
         EXPECT_EQ(row.template get<uint_t>(ColumnIndex(4)), 42);
         EXPECT_DOUBLE_EQ(row.template get<double>(ColumnIndex(9)), 1.25);
         EXPECT_TRUE(row.template get<bool>(ColumnIndex(2)));
-        EXPECT_EQ(row.template get<ColumnsIndex>(ColumnIndex(7)), entity);
+        EXPECT_EQ(resolve_in(row.template get<ColumnsIndex>(ColumnIndex(7)), entities), entity);
         EXPECT_THROW(row.template get<double>(ColumnIndex(4)), std::invalid_argument);
         EXPECT_THROW(row.template get<uint_t>(ColumnIndex(99)), std::out_of_range);
         EXPECT_THROW(row.template get<uint_t>(size_t { 4 }), std::out_of_range);
@@ -941,13 +957,15 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
                               {
                                   if constexpr (std::same_as<decltype(value), ColumnsIndexView>)
                                       return value == entity;
+                                  else if constexpr (std::same_as<decltype(value), ColumnsIndex>)
+                                      return value == entity.get_index();
                                   else
                                       return false;
                               }));
     };
-    verify(make_view(builder, context));
-    verify(make_view(stored.get_data(), context));
-    verify(make_view(stored.get_index(), context));
+    verify(make_view(builder, entities));
+    verify(make_view(stored.get_data(), rows));
+    verify(make_view(stored.get_index(), rows));
     EXPECT_EQ(builder[0].get<ColumnsIndex>(ColumnIndex(7)), entity.get_index());
     EXPECT_TRUE(stored.contains(tuple));
 
@@ -1065,6 +1083,28 @@ TEST(YggdrasilTests, DatabaseBuiltinCodecsPreserveSignedAndWideValues)
     EXPECT_TRUE(row.get<bool>(size_t { 6 }));
     EXPECT_EQ(relation.insert(row), 0);
     EXPECT_TRUE(relation.contains(values));
+}
+
+TEST(YggdrasilTests, HomogeneousRowsRoundTripThroughReusableBuffers)
+{
+    using IndexValues = TypeList<ColumnsIndex>;
+    Builder<Columns<IndexValues>> columns;
+    columns.push_back<ColumnsIndex>(ColumnIndex(1));
+    columns.push_back<ColumnsIndex>(ColumnIndex(2));
+    auto bytes = std::vector<std::byte> {};
+    const auto values = std::vector { ColumnsIndex(4), ColumnsIndex(9) };
+    const auto encoded = encode_row<IndexValues, ColumnsIndex>(values, bytes);
+    EXPECT_EQ(encoded.data(), bytes.data());
+    EXPECT_EQ(encoded.size(), columns.row_size());
+
+    auto decoded = std::vector<ColumnsIndex> {};
+    const auto row = Row<IndexValues>(encoded, columns.span());
+    EXPECT_TRUE(std::ranges::equal(row.get_all(decoded), values));
+    EXPECT_EQ(row.get_all(decoded).data(), decoded.data());
+
+    auto relation = Builder<Relation<IndexValues>>(columns);
+    relation.insert(std::tuple { ColumnsIndex(4), ColumnsIndex(9) });
+    EXPECT_TRUE(relation.contains(encoded));
 }
 
 }  // namespace ygg::tests

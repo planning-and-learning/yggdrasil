@@ -17,7 +17,7 @@
 
 #include "yggdrasil/semantics/canonicalization.hpp"
 
-#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/core/types.hpp"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -35,6 +35,7 @@ struct CanonicalizationContext
     std::vector<std::string> labels;
 
     const ygg::Data<CanonicalizationTestTag>& operator[](ygg::Index<CanonicalizationTestTag> index) const;
+    friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context) noexcept { return context; }
 };
 }  // namespace ygg::tests
 
@@ -48,12 +49,6 @@ struct Data<ygg::tests::CanonicalizationTestTag>
     auto identifying_members() const noexcept { return std::tie(value); }
 };
 
-template<>
-struct Index<ygg::tests::CanonicalizationTestTag> : IndexMixin<Index<ygg::tests::CanonicalizationTestTag>>
-{
-    using Base = IndexMixin<Index<ygg::tests::CanonicalizationTestTag>>;
-    using Base::Base;
-};
 }  // namespace ygg
 
 namespace fmt

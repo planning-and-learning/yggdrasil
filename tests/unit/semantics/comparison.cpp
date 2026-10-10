@@ -17,7 +17,7 @@
 
 #include "yggdrasil/semantics/comparison.hpp"
 
-#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/ids/uint_mixins.hpp"
 #include "yggdrasil/serialization/cista_equal_to.hpp"
 #include "yggdrasil/serialization/cista_ordering.hpp"
@@ -72,10 +72,8 @@ struct ComparisonOwnedValue
 namespace ygg::tests
 {
 
-struct ComparisonIndex : ygg::IndexMixin<ComparisonIndex>
-{
-    using IndexMixin::IndexMixin;
-};
+struct ComparisonTag;
+using ComparisonIndex = ygg::Index<ComparisonTag>;
 
 struct ComparisonUint : ygg::FixedUintMixin<ComparisonUint>
 {

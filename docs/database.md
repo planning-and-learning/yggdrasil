@@ -45,7 +45,7 @@ uses the first type in `Values` for every column.
 and `decode(const_byte_span)`. Equal values must have identical encodings;
 decoding must preserve their semantic value. Explicit codecs prevent padding
 or uninitialized object bytes from becoming part of a key. Scalar `Index<T>`
-types derived from `IndexMixin` use the existing `IndexCoder`. Composite indices
+types (the generic `Index<T>` in `core/types.hpp`) use the existing `IndexCoder`. Composite indices
 need an explicit codec.
 
 `ColumnValueFor<T, Values>` additionally requires `T` to be registered in the
@@ -429,8 +429,8 @@ constants, and execution orders and derives the prepared metadata. Query handles
 borrow the repository. Input-slot numbers identify bindings at evaluation time;
 repeated references to a slot use the same input relation.
 
-The index, data, view, and repository definitions are separated into
-`query_index.hpp`, `query_data.hpp`, `query_view.hpp`, and `query_repository.hpp`.
+The data, view, and repository definitions are separated into
+`query_data.hpp`, `query_view.hpp`, and `query_repository.hpp`; the index is the generic `Index<T>`.
 `Query<Values, Tag>` identifies a concrete operation; `Query<Values>` is the
 heterogeneous root whose data stores a variant of concrete query indices. Each
 concrete data type stores only its own operands and parameters. For example,

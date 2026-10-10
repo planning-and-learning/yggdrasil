@@ -7,7 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_RELATION_DATA_HPP_
 
 #include "yggdrasil/core/types_utils.hpp"
-#include "yggdrasil/database/semantics/relation_index.hpp"
+#include "yggdrasil/database/declarations.hpp"
 
 #include <cstddef>
 #include <tuple>

@@ -49,55 +49,35 @@ public:
     using ConstArrayView = typename pool_type::ConstArrayView;
 
 private:
-    struct Hash
-    {
-        template<InputRangeOf<value_type> Range>
-        hash_t operator()(const Range& element) const noexcept
-        {
-            return ygg::hash_range(element);
-        }
-    };
-
-    struct EqualTo
-    {
-        template<InputRangeOf<value_type> Range1, InputRangeOf<value_type> Range2>
-        bool operator()(const Range1& lhs, const Range2& rhs) const noexcept
-        {
-            return equal_range(lhs, rhs);
-        }
-    };
-
     class IndexableHash
     {
     private:
         const pool_type* m_pool = nullptr;
-        Hash m_hash;
 
     public:
         using is_transparent = void;
 
         IndexableHash() noexcept = default;
-        explicit IndexableHash(const pool_type& pool) noexcept : m_pool(&pool), m_hash() {}
+        explicit IndexableHash(const pool_type& pool) noexcept : m_pool(&pool) {}
 
-        size_t operator()(index_type index) const noexcept { return m_hash((*m_pool)[index]); }
-        size_t operator()(std::span<const value_type> values) const noexcept { return m_hash(values); }
+        size_t operator()(index_type index) const noexcept { return hash_range((*m_pool)[index]); }
+        size_t operator()(std::span<const value_type> values) const noexcept { return hash_range(values); }
     };
 
     class IndexableEqualTo
     {
     private:
         const pool_type* m_pool = nullptr;
-        EqualTo m_equal_to;
 
     public:
         using is_transparent = void;
 
         IndexableEqualTo() noexcept = default;
-        explicit IndexableEqualTo(const pool_type& pool) noexcept : m_pool(&pool), m_equal_to() {}
+        explicit IndexableEqualTo(const pool_type& pool) noexcept : m_pool(&pool) {}
 
-        bool operator()(index_type lhs, index_type rhs) const noexcept { return m_equal_to((*m_pool)[lhs], (*m_pool)[rhs]); }
-        bool operator()(std::span<const value_type> lhs, index_type rhs) const noexcept { return m_equal_to(lhs, (*m_pool)[rhs]); }
-        bool operator()(index_type lhs, std::span<const value_type> rhs) const noexcept { return m_equal_to((*m_pool)[lhs], rhs); }
+        bool operator()(index_type lhs, index_type rhs) const noexcept { return equal_range((*m_pool)[lhs], (*m_pool)[rhs]); }
+        bool operator()(std::span<const value_type> lhs, index_type rhs) const noexcept { return equal_range(lhs, (*m_pool)[rhs]); }
+        bool operator()(index_type lhs, std::span<const value_type> rhs) const noexcept { return equal_range((*m_pool)[lhs], rhs); }
     };
 
     using SetType = HashSetType<index_type, IndexableHash, IndexableEqualTo, ThreadSafe>;
@@ -144,7 +124,7 @@ public:
         m_pool->clear();
     }
 
-    static size_t hash(std::span<const value_type> element) noexcept { return gtl::phmap_mix<sizeof(size_t)>()(Hash {}(element)); }
+    static size_t hash(std::span<const value_type> element) noexcept { return gtl::phmap_mix<sizeof(size_t)>()(hash_range(element)); }
 
     std::optional<index_type> find_with_hash(std::span<const value_type> element, size_t h) const
     {

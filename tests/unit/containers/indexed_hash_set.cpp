@@ -57,12 +57,6 @@ inline bool is_canonical(const Data<ygg::tests::IndexedHashSetTestTag>&) { retur
 
 inline void canonicalize(Data<ygg::tests::IndexedHashSetTestTag>&) {}
 
-template<>
-struct Index<ygg::tests::IndexedHashSetTestTag> : IndexMixin<Index<ygg::tests::IndexedHashSetTestTag>>
-{
-    using Base = IndexMixin<Index<ygg::tests::IndexedHashSetTestTag>>;
-    using Base::Base;
-};
 
 }  // namespace ygg
 

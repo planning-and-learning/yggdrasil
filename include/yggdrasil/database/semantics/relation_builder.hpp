@@ -9,7 +9,7 @@
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 #include "yggdrasil/database/syntax/columns.hpp"
-#include "yggdrasil/database/semantics/relation_index.hpp"
+#include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/syntax/row.hpp"
 
 #include <cassert>

@@ -15,6 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/core/concepts.hpp"
 
 #include "yggdrasil/core/types.hpp"
@@ -168,6 +169,7 @@ struct ViewContractContext
 {
     Data<ViewContractValue> value;
     const Data<ViewContractValue>& operator[](Index<ViewContractValue>) const { return value; }
+    friend const ViewContractContext& get_repository(const ViewContractContext& context) noexcept { return context; }
 };
 
 static_assert(ViewConcept<Data<ViewContractValue>, ViewContractContext>);
@@ -274,3 +276,33 @@ static_assert(!Hashable<std::weak_ptr<int>>);
 static_assert(!Hashable<long double>);
 static_assert(Hashable<float> && Hashable<double>);
 }
+
+namespace ygg::tests::view_variant
+{
+struct A;
+struct B;
+struct Ctx;
+}  // namespace ygg::tests::view_variant
+
+template<>
+struct ygg::Data<ygg::tests::view_variant::B>
+{
+    int value = 0;
+};
+
+namespace ygg::tests::view_variant
+{
+using Var = ::cista::offset::variant<double, Index<A>, Data<B>>;
+using VV = ViewVariant<Var, Ctx>;
+using Expected = std::variant<double, View<Index<A>, Ctx>, View<Data<B>, Ctx>>;
+static_assert(std::is_same_v<VV::base_type, Expected> && std::derived_from<VV, Expected>);
+static_assert(std::is_constructible_v<VV, Expected>);
+struct OtherCtx;
+// One context for all alternatives: a record stores bare indices of a single repository.
+static_assert(!std::is_constructible_v<VV, std::variant<double, View<Index<A>, Ctx>, View<Data<B>, OtherCtx>>>);
+// Constructors taking ViewVariant<Variant, C> deduce the context.
+template<typename C>
+C* deduce_context(const ViewVariant<Var, C>&);
+static_assert(std::is_same_v<decltype(deduce_context(std::declval<const VV&>())), Ctx*>);
+static_assert(std::is_same_v<IndexVariant<TypeList<A, B>>, ::cista::offset::variant<Index<A>, Index<B>>>);
+}  // namespace ygg::tests::view_variant

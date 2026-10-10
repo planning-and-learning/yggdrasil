@@ -62,12 +62,6 @@ struct Data<detail::TreeVectorLeaf<T>>
     }
 };
 
-template<typename T>
-struct Index<detail::TreeVectorLeaf<T>> : IndexMixin<Index<detail::TreeVectorLeaf<T>>>
-{
-    using Base = IndexMixin<Index<detail::TreeVectorLeaf<T>>>;
-    using Base::Base;
-};
 
 template<typename T>
 struct Data<detail::TreeVectorNode<T>>
@@ -87,12 +81,6 @@ struct Data<detail::TreeVectorNode<T>>
     }
 };
 
-template<typename T>
-struct Index<detail::TreeVectorNode<T>> : IndexMixin<Index<detail::TreeVectorNode<T>>>
-{
-    using Base = IndexMixin<Index<detail::TreeVectorNode<T>>>;
-    using Base::Base;
-};
 
 template<typename T>
 struct TreeVectorIndex

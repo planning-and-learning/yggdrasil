@@ -18,10 +18,14 @@
 #ifndef YGG_CORE_TYPES_HPP_
 #define YGG_CORE_TYPES_HPP_
 
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/dependent_false.hpp"
+#include "yggdrasil/semantics/comparison.hpp"
 
 #include <cista/containers/vector.h>
 #include <concepts>
+#include <limits>
+#include <tuple>
 #include <type_traits>
 
 namespace ygg
@@ -39,8 +43,31 @@ using DataMatrix = ::cista::offset::vector<DataList<T>>;
 template<typename T>
 struct Builder;
 
+/// The index of a record of type T in its owning repository. Specialize it only for
+/// indices that are not a single integer, e.g. formalism::RelationBinding.
 template<typename T>
-struct Index;
+struct Index
+{
+    using value_type = uint_t;
+
+    value_type value {};
+
+    static constexpr value_type MAX = std::numeric_limits<value_type>::max();
+
+    constexpr Index() noexcept : value(MAX) {}
+    constexpr explicit Index(value_type value) noexcept : value(value) {}
+
+    static constexpr Index max() noexcept { return Index(MAX); }
+
+    constexpr bool is_max() const noexcept { return value == MAX; }
+
+    explicit constexpr operator value_type() const noexcept { return value; }
+
+    constexpr value_type get_value() const noexcept { return value; }
+
+    auto cista_members() const noexcept { return std::tie(value); }
+    constexpr auto identifying_members() const noexcept { return std::tie(value); }
+};
 
 template<typename T>
 using IndexList = ::cista::offset::vector<Index<T>>;
@@ -54,39 +81,11 @@ struct View
 };
 
 template<typename T, typename C>
-struct View<Data<T>, C>
-{
-private:
-    const Data<T>* m_handle;
-    const C* m_context;
-
-public:
-    View(const Data<T>& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
-
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return *m_handle; }
-};
-
+class IndexViewBase;
 template<typename T, typename C>
-struct View<Index<T>, C>
-{
-private:
-    Index<T> m_handle;
-    const C* m_context;
-
-public:
-    View(Index<T> handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
-
-    decltype(auto) get_data() const
-        requires requires(const C& context, Index<T> index) { context[index]; }
-    {
-        return (*m_context)[m_handle];
-    }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-    auto get_index() const noexcept { return m_handle; }
-};
+class DataViewBase;
+template<typename T, typename C>
+class BuilderViewBase;
 
 /// Whether a context exposes a canonical owner for a handle.
 template<typename C, typename T>
@@ -118,6 +117,13 @@ View<T, C> make_view(const T& handle, const C& context) noexcept(noexcept(get_ca
     return View<T, C>(handle, get_canonical_context(handle, context));
 }
 
+/// True if V is a view of handle H in any context.
+template<typename V, typename H>
+inline constexpr bool is_view_of_v = false;
+
+template<typename H, typename C>
+inline constexpr bool is_view_of_v<View<H, C>, H> = true;
+
 template<typename T, typename C>
 concept ViewConcept = requires(const T& type, const C& context, const View<T, C>& view) {
     // Constructor
@@ -136,6 +142,13 @@ concept ViewConcept = requires(const T& type, const C& context, const View<T, C>
 // values.
 template<typename T>
 inline constexpr bool uses_trivial_storage_v = std::is_trivially_copyable_v<Data<T>> && std::is_default_constructible_v<Data<T>>;
+
+/// Whether views of a record hold it by value rather than borrowing it. Defaults to
+/// trivially copyable records; small records built on the fly may opt in by specialization.
+template<typename T>
+inline constexpr bool stores_view_by_value_v = uses_trivial_storage_v<T>;
 }  // namespace ygg
+
+#include "yggdrasil/core/details/types.hpp"
 
 #endif

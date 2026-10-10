@@ -22,7 +22,7 @@
 #include "yggdrasil/containers/containers.hpp"
 #include "yggdrasil/core.hpp"
 #include "yggdrasil/extensions.hpp"
-#include "yggdrasil/ids/index_mixins.hpp"
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/ids/uint_mixins.hpp"
 #include "yggdrasil/io/iostream.hpp"
 #include "yggdrasil/io/project_adapters.hpp"
