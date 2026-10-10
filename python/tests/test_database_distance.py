@@ -6,8 +6,12 @@ import pytest
 from pyyggdrasil import database
 
 
-def relation(columns, rows=(), types=()):
-    result = database.Relation(columns, types)
+def columns(*labels):
+    return tuple(database.ColumnIndex(label) for label in labels)
+
+
+def relation(labels, rows=(), types=()):
+    result = database.Relation(list(columns(*labels)), types)
     for row in rows:
         result.insert(row)
     return result
@@ -18,7 +22,7 @@ def rows(value):
 
 
 def plan_for(source, edges, target):
-    return database.DistancePlan(source.columns(), edges.columns(), target.columns(), 99)
+    return database.DistancePlan(source.columns(), edges.columns(), target.columns(), database.ColumnIndex(99))
 
 
 @pytest.mark.parametrize("interned_mask", range(8))
@@ -30,17 +34,19 @@ def test_distance_mixed_inputs_and_independent_output(interned_mask):
     target = relation([30, 31], [a, c, d], types)
     plan = plan_for(source, edges, target)
     assert plan.arity() == 2
-    assert tuple(plan.output_columns()) == (20, 21, 22, 23, 99)
+    assert tuple(plan.output_columns()) == columns(20, 21, 22, 23, 99)
     repository = database.RelationRepositoryFactory().create()
     inputs = [source, edges, target]
     for index, value in enumerate(inputs):
         if interned_mask & (1 << index):
             inputs[index] = database.insert(repository, value)[0]
+    if 0 < interned_mask < 7:  # Interned inputs are accepted without copying only when all are interned.
+        inputs = [database.assign(database.Relation(), value) if isinstance(value, database.RelationView) else value for value in inputs]
     result = database.distance(*inputs, plan)
     assert isinstance(result, database.Relation)
     expected = {a + a + (0,), a + c + (2,), c + c + (0,)}
     assert rows(result) == expected
-    assert tuple(result.columns()) == (20, 21, 22, 23, 99)
+    assert tuple(result.columns()) == columns(20, 21, 22, 23, 99)
     assert [result.columns().type(i) for i in range(5)] == types * 2 + [database.ColumnType.UINT32]
 
     other = database.distance(*inputs, plan)
@@ -78,7 +84,7 @@ def test_incremental_distance_exact_deltas(intern_added):
     plan = plan_for(source, edges, target)
     evaluator = database.DistanceEvaluator(plan)
     repository = database.RelationRepositoryFactory().create()
-    evaluator.initialize(source, database.insert(repository, edges)[0], target)
+    evaluator.initialize(source, database.assign(database.Relation(), database.insert(repository, edges)[0]), target)
     expected = {(0, 0, 0), (0, 2, 2), (0, 3, 1), (2, 2, 0), (2, 3, 1)}
     assert rows(evaluator.get_result()) == expected
     assert evaluator.get_delta().added.empty()
@@ -96,8 +102,8 @@ def test_incremental_distance_exact_deltas(intern_added):
         ]
         for index in range(6):
             if (index % 2 == 0) == intern_added:
-                changes[index] = database.insert(repository, changes[index])[0]
-        evaluator.update(*changes)
+                changes[index] = database.assign(database.Relation(), database.insert(repository, changes[index])[0])
+        evaluator.update((changes[0], changes[1]), (changes[2], changes[3]), (changes[4], changes[5]))
 
     before = expected
     update(edges_added=[(0, 2)], edges_removed=[(0, 3)])
@@ -129,7 +135,7 @@ def test_evaluator_borrowed_results_are_read_only_and_retain_owners(leaf):
     plan = plan_for(source, edges, target)
     evaluator = database.DistanceEvaluator(plan)
     evaluator.initialize(source, edges, target)
-    evaluator.update(relation([10]), relation([10]), relation([20, 21], [(0, 2)]), relation([20, 21]), relation([30]), relation([30]))
+    evaluator.update((relation([10]), relation([10])), (relation([20, 21], [(0, 2)]), relation([20, 21])), (relation([30]), relation([30])))
     result = evaluator.get_result()
     delta = evaluator.get_delta()
     assert isinstance(result, database.BorrowedRelation)
@@ -139,7 +145,7 @@ def test_evaluator_borrowed_results_are_read_only_and_retain_owners(leaf):
         assert not hasattr(value, "clear")
         assert not hasattr(value, "erase")
         assert value.arity() == 3
-        assert tuple(value.columns()) == (20, 21, 99)
+        assert tuple(value.columns()) == columns(20, 21, 99)
         with pytest.raises(IndexError):
             value.at(len(value))
         for index in (-len(value) - 1, len(value)):
@@ -166,7 +172,7 @@ def test_evaluator_borrowed_results_are_read_only_and_retain_owners(leaf):
     del evaluator, delta, result, plan, source, edges, target, value
     gc.collect()
     if leaf.endswith("columns"):
-        assert tuple(retained) == (20, 21, 99)
+        assert tuple(retained) == columns(20, 21, 99)
     elif leaf.endswith("row"):
         assert tuple(retained) == (0, 2, 2 if leaf == "removed_row" else 1)
     elif leaf == "delta":
@@ -185,7 +191,7 @@ def test_borrowed_relations_can_feed_another_distance_evaluation():
     borrowed = evaluator.get_result()
     next_edges = relation([40, 41, 42, 43, 44, 45])
     next_target = relation([50, 51, 52], [(0, 1, 1)])
-    plan = database.DistancePlan(borrowed.columns(), next_edges.columns(), next_target.columns(), 100)
+    plan = database.DistancePlan(borrowed.columns(), next_edges.columns(), next_target.columns(), database.ColumnIndex(100))
     assert rows(database.distance(borrowed, next_edges, next_target, plan)) == {(0, 1, 1, 0, 1, 1, 0)}
 
 
@@ -201,7 +207,7 @@ def test_distance_rejects_invalid_schema_and_input_types():
     with pytest.raises(ValueError):
         plan_for(source, relation([20, 21], types=[database.ColumnType.INT32] * 2), target)
     with pytest.raises(ValueError):
-        database.DistancePlan(source.columns(), edges.columns(), target.columns(), 20)
+        database.DistancePlan(source.columns(), edges.columns(), target.columns(), database.ColumnIndex(20))
     with pytest.raises(ValueError):
         database.distance(relation([11]), edges, target, plan)
     with pytest.raises(ValueError):
@@ -210,9 +216,9 @@ def test_distance_rejects_invalid_schema_and_input_types():
         database.distance([], edges, target, plan)
     evaluator = database.DistanceEvaluator(plan)
     with pytest.raises(RuntimeError):
-        evaluator.update(source, relation([10]), edges, relation([20, 21]), target, relation([30]))
+        evaluator.update((source, relation([10])), (edges, relation([20, 21])), (target, relation([30])))
     evaluator.initialize(source, edges, target)
     before = rows(evaluator.get_result())
     with pytest.raises(ValueError):
-        evaluator.update(relation([11]), relation([10]), relation([20, 21]), relation([20, 21]), relation([30]), relation([30]))
+        evaluator.update((relation([11]), relation([10])), (relation([20, 21]), relation([20, 21])), (relation([30]), relation([30])))
     assert rows(evaluator.get_result()) == before

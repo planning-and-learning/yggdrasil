@@ -13,15 +13,16 @@
 #include <span>
 #include <vector>
 
-namespace ygg::database::optimization_detail
+namespace ygg::database::detail
 {
-/// A natural join of atoms projected to an ordered output: π_output(atom_1 ⋈ … ⋈ atom_n).
+/// A natural join of atoms whose output keeps the required variables: atom_1 ⋈ … ⋈ atom_n.
 /// Atoms are planned operands; columns with equal labels are join variables.
 template<ColumnTypes Values>
 struct JoinBlock
 {
     std::vector<QueryView<Values>> atoms;
-    Builder<Columns<Values>> output;
+    /// The output variables as a sorted set.
+    std::vector<Index<Column>> required;
 };
 
 template<ColumnTypes Values>
@@ -72,6 +73,11 @@ public:
             });
     }
     QueryView<Values> join(QueryView<Values> lhs, QueryView<Values> rhs) { return binary<QueryJoinTag>(lhs, rhs); }
+    /// The source's operation over schema-identical children of this repository.
+    QueryView<Values> clone(QueryView<Values> source, std::span<const QueryView<Values>> children)
+    {
+        return detail::clone_query(source, children, *m_repository, *m_builder);
+    }
     /// Keeps the query's columns with the given labels, in that order.
     QueryView<Values> project(QueryView<Values> query, std::span<const Index<Column>> labels)
     {
@@ -107,20 +113,17 @@ public:
     }
 };
 
-/// A variable order with the given variables first (in order), then the rest by label.
+/// The atoms' variables ordered by label.
 template<ColumnTypes Values>
-std::vector<Index<Column>> variable_order(std::span<const QueryView<Values>> atoms, std::span<const Index<Column>> first)
+std::vector<Index<Column>> variable_order(std::span<const QueryView<Values>> atoms)
 {
-    std::vector<Index<Column>> rest;
+    std::vector<Index<Column>> result;
     for (const auto atom : atoms)
         for (const auto label : variables(atom))
-            if (std::ranges::find(first, label) == first.end())
-                rest.push_back(label);
-    ygg::canonicalize(rest);
-    std::vector<Index<Column>> result(first.begin(), first.end());
-    result.insert(result.end(), rest.begin(), rest.end());
+            result.push_back(label);
+    ygg::canonicalize(result);
     return result;
 }
-}  // namespace ygg::database::optimization_detail
+}  // namespace ygg::database::detail
 
 #endif

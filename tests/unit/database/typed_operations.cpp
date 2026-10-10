@@ -76,7 +76,7 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     changes.removed.insert(std::tuple { uint_t(2), 1.5, true });
     changes.added.insert(std::tuple { uint_t(4), 1.5, true });
     changes.added.insert(std::tuple { uint_t(5), 3.5, false });
-    evaluator.update(changes.added, changes.removed, workspace);
+    evaluator.update(changes.change(), workspace);
     apply_changes(input, changes);
     RelationBuilder updated(plan.output_columns().span());
     project(input, plan, updated, workspace);
@@ -86,7 +86,7 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     ASSERT_EQ(evaluator.get_delta().added.size(), 1);
     EXPECT_TRUE(evaluator.get_delta().added.contains(std::tuple { false, 3.5 }));
 
-    evaluator.update(changes.removed, changes.added, workspace);
+    evaluator.update(std::tie(changes.removed, changes.added), workspace);
     apply_changes(input, changes, true);
     expect_same_rows(evaluator.get_result(), initial);
     expect_delta(evaluator.get_delta(), updated, initial);
@@ -127,7 +127,7 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
     right_changes.removed.insert(std::tuple { false, uint_t(2), 20.0 });
     right_changes.added.insert(std::tuple { false, uint_t(2), 22.0 });
     right_changes.added.insert(std::tuple { false, uint_t(4), 40.0 });
-    evaluator.update(left_changes.added, left_changes.removed, right_changes.added, right_changes.removed, workspace);
+    evaluator.update(left_changes.change(), right_changes.change(), workspace);
     apply_changes(left, left_changes);
     apply_changes(right, right_changes);
     RelationBuilder updated(plan.output_columns().span());
@@ -141,7 +141,7 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
     EXPECT_EQ(evaluator.get_delta().added.size(), 3);
     EXPECT_EQ(evaluator.get_delta().removed.size(), 2);
 
-    evaluator.update(left_changes.removed, left_changes.added, right_changes.removed, right_changes.added, workspace);
+    evaluator.update(std::tie(left_changes.removed, left_changes.added), std::tie(right_changes.removed, right_changes.added), workspace);
     apply_changes(left, left_changes, true);
     apply_changes(right, right_changes, true);
     expect_same_rows(evaluator.get_result(), initial);
@@ -197,12 +197,12 @@ TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResu
     incremental::ProjectionEvaluator<> evaluator(plan);
     evaluator.initialize(input, workspace);
     RelationBuilder empty_wrong(incompatible.span());
-    EXPECT_THROW(evaluator.update(wrong, empty_wrong, workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(wrong, empty_wrong), workspace), std::invalid_argument);
     EXPECT_TRUE(evaluator.get_result().contains(std::tuple { uint_t(1) }));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     RelationBuilder empty(columns.span());
-    EXPECT_NO_THROW(evaluator.update(empty, empty, workspace));
+    EXPECT_NO_THROW(evaluator.update(std::tie(empty, empty), workspace));
 }
 
 TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)

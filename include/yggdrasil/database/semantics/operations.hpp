@@ -39,6 +39,13 @@ struct Workspace
     std::vector<ColumnSlice> rhs_payload;
     std::vector<std::byte> row;
     UnorderedMultiMap<hash_t, size_t> join_index;
+
+    /// Retained scratch storage.
+    size_t memory_usage() const noexcept
+    {
+        return columns.capacity() * sizeof(ColumnLayout) + (lhs_keys.capacity() + rhs_keys.capacity() + rhs_payload.capacity()) * sizeof(ColumnSlice)
+               + row.capacity() + join_index.memory_usage();
+    }
 };
 
 /// Marks inputs whose row storage remains immutable for the cache lifetime.

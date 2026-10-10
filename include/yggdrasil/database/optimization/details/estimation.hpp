@@ -6,6 +6,7 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_ESTIMATION_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -15,7 +16,6 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
-#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -24,7 +24,7 @@
 /// and uniform, join columns satisfy containment, and columns equated by joins or
 /// selections form one class whose distinct count is the class minimum. Other
 /// operators follow Garcia-Molina, Ullman, and Widom (see below).
-namespace ygg::database::optimization_detail
+namespace ygg::database::detail
 {
 struct InputFactorIdentity
 {
@@ -38,11 +38,19 @@ struct QueryFactorIdentity
 };
 /// Identical factors with identical column bindings count once, so A ⋈ A estimates as A.
 using FactorIdentity = std::variant<InputFactorIdentity, QueryFactorIdentity>;
+/// A column of a factor: its position in the factor and its current label.
+struct Attribute
+{
+    size_t position;
+    Index<Column> column;
+    double distinct;
+    auto operator<=>(const Attribute&) const = default;
+};
 struct Factor
 {
     FactorIdentity identity;
     double rows;
-    std::vector<std::tuple<size_t, uint_t, double>> attributes;
+    std::vector<Attribute> attributes;
 };
 /// A conjunction of factors, equalities, and constants, independent of join order.
 struct Estimate
@@ -50,8 +58,8 @@ struct Estimate
     double rows = 0;
     UnorderedMap<Index<Column>, double> distinct;
     std::vector<Factor> factors;
-    Set<std::pair<uint_t, uint_t>> equalities;
-    Set<std::pair<uint_t, std::vector<std::byte>>> constants;
+    Set<std::pair<Index<Column>, Index<Column>>> equalities;
+    Set<std::pair<Index<Column>, std::vector<std::byte>>> constants;
 };
 
 /// Estimates saturate here instead of overflowing to infinity.
@@ -72,7 +80,7 @@ inline Estimate factor(const RelationStatistics& stats, std::span<const ColumnLa
         const auto found = stats.distinct.find(label);
         const auto ndv = std::min(stats.rows, found == stats.distinct.end() ? stats.rows : found->second);
         result.distinct[label] = ndv;
-        single.attributes.emplace_back(i, label.get_value(), ndv);
+        single.attributes.push_back({ i, label, ndv });
     }
     result.factors.push_back(std::move(single));
     return result;
@@ -84,11 +92,11 @@ inline Estimate factor(const RelationStatistics& stats, std::span<const ColumnLa
 inline Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
 {
     // ponytail: hand-rolled union-find over a few columns; boost::disjoint_sets needs property maps for no gain here.
-    UnorderedMap<uint_t, uint_t> parent;
+    UnorderedMap<Index<Column>, Index<Column>> parent;
     for (const auto& single : result.factors)
-        for (const auto& [slot, column, ndv] : single.attributes)
-            parent[column] = column;
-    const auto find = [&](uint_t column)
+        for (const auto& attribute : single.attributes)
+            parent[attribute.column] = attribute.column;
+    const auto find = [&](Index<Column> column)
     {
         while (parent.at(column) != column)
             column = parent.at(column);
@@ -99,7 +107,7 @@ inline Estimate conjunction(Estimate result, std::span<const Index<Column>> labe
         const auto left = find(lhs), right = find(rhs);
         parent[std::max(left, right)] = std::min(left, right);
     }
-    UnorderedMap<uint_t, std::vector<std::byte>> bound;
+    UnorderedMap<Index<Column>, std::vector<std::byte>> bound;
     bool zero = false;
     for (const auto& [column, value] : result.constants)
     {
@@ -107,22 +115,22 @@ inline Estimate conjunction(Estimate result, std::span<const Index<Column>> labe
         if (!inserted && it->second != value)
             zero = true;
     }
-    UnorderedMap<uint_t, std::vector<double>> domains;
-    Set<std::pair<FactorIdentity, std::vector<std::pair<size_t, uint_t>>>> unique;
+    UnorderedMap<Index<Column>, std::vector<double>> domains;
+    Set<std::pair<FactorIdentity, std::vector<std::pair<size_t, Index<Column>>>>> unique;
     double logarithm = 0;
     for (const auto& single : result.factors)
     {
-        std::vector<std::pair<size_t, uint_t>> bindings;
-        for (const auto& [slot, column, ndv] : single.attributes)
-            bindings.emplace_back(slot, find(column));
+        std::vector<std::pair<size_t, Index<Column>>> bindings;
+        for (const auto& attribute : single.attributes)
+            bindings.emplace_back(attribute.position, find(attribute.column));
         if (!unique.emplace(single.identity, std::move(bindings)).second)
             continue;
         if (single.rows == 0)
             zero = true;
         else
             logarithm += std::log(single.rows);
-        for (const auto& [slot, column, ndv] : single.attributes)
-            domains[find(column)].push_back(std::max(1.0, ndv));
+        for (const auto& attribute : single.attributes)
+            domains[find(attribute.column)].push_back(std::max(1.0, attribute.distinct));
     }
     for (const auto& [column, counts] : domains)
     {
@@ -135,7 +143,7 @@ inline Estimate conjunction(Estimate result, std::span<const Index<Column>> labe
     result.distinct.clear();
     for (const auto label : labels)
     {
-        const auto representative = find(label.get_value());
+        const auto representative = find(label);
         const auto& counts = domains.at(representative);
         result.distinct[label] = std::min(result.rows, bound.contains(representative) ? 1.0 : *std::ranges::min_element(counts));
     }
@@ -163,10 +171,9 @@ inline void validate_statistics(const RelationStatistics& stats, std::span<const
 }
 
 /// A missing distinct count is the row count, capped by a bounded domain.
-template<ColumnTypes Values>
-RelationStatistics with_default_distinct(RelationStatistics stats, std::span<const ColumnLayout> columns, const Statistics<Values>& statistics)
+inline RelationStatistics with_default_distinct(RelationStatistics stats, std::span<const ColumnLayout> columns, std::optional<size_t> objects)
 {
-    const auto domain = statistics.objects ? static_cast<double>(*statistics.objects) : max_estimate;
+    const auto domain = objects ? static_cast<double>(*objects) : max_estimate;
     for (const auto& column : columns)
         stats.distinct.try_emplace(column.label, std::min(stats.rows, domain));
     return stats;
@@ -178,7 +185,7 @@ Estimate estimate_operation(QueryView<Values, QueryInputTag> query, FactorIdenti
     const auto it = statistics.inputs.find(query.get_input_slot());
     if (it == statistics.inputs.end())
         throw std::logic_error("Optimizer: estimates require the input's row count.");
-    return factor(with_default_distinct(it->second, query.columns(), statistics), query.columns(), InputFactorIdentity { query.get_input_slot() });
+    return factor(with_default_distinct(it->second, query.columns(), statistics.objects), query.columns(), InputFactorIdentity { query.get_input_slot() });
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryEmptyTag> query, FactorIdentity identity, GetEstimate&&, const Statistics<Values>&)
@@ -205,7 +212,7 @@ template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QuerySelectEqualTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
 {
     auto result = child(query.get_arg());
-    const auto lhs = query.get_lhs_column().get_value(), rhs = query.get_rhs_column().get_value();
+    const auto lhs = query.get_lhs_column(), rhs = query.get_rhs_column();
     result.equalities.emplace(std::min(lhs, rhs), std::max(lhs, rhs));
     return conjunction(std::move(result), column_labels(query.columns()));
 }
@@ -214,20 +221,20 @@ Estimate estimate_operation(QueryView<Values, QuerySelectValueTag> query, Factor
 {
     auto result = child(query.get_arg());
     const auto constant = query.get_constant();
-    result.constants.emplace(query.get_column().get_value(), std::vector<std::byte>(constant.begin(), constant.end()));
+    result.constants.emplace(query.get_column(), std::vector<std::byte>(constant.begin(), constant.end()));
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryRenameTag> query, FactorIdentity, GetEstimate&& child, const Statistics<Values>&)
 {
     auto result = child(query.get_arg());
-    UnorderedMap<uint_t, uint_t> renamed;
+    UnorderedMap<Index<Column>, Index<Column>> renamed;
     const auto before = query.get_arg().columns(), after = query.columns();
     for (size_t i = 0; i < before.size(); ++i)
-        renamed[before[i].label.get_value()] = after[i].label.get_value();
+        renamed[before[i].label] = after[i].label;
     for (auto& single : result.factors)
-        for (auto& [slot, column, ndv] : single.attributes)
-            column = renamed.at(column);
+        for (auto& attribute : single.attributes)
+            attribute.column = renamed.at(attribute.column);
     decltype(result.equalities) equalities;
     for (const auto& [lhs, rhs] : result.equalities)
         equalities.emplace(std::min(renamed.at(lhs), renamed.at(rhs)), std::max(renamed.at(lhs), renamed.at(rhs)));
@@ -252,7 +259,7 @@ inline RelationStatistics capped(RelationStatistics stats)
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryProjectTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics<Values>&)
 {
-    const auto argument = child(query.get_arg());
+    auto argument = child(query.get_arg());
     if (query.columns().size() == query.get_arg().columns().size())
         return argument;
     RelationStatistics result { 0, {} };
@@ -300,9 +307,9 @@ Estimate estimate(QueryView<Values> query,
     const FactorIdentity identity = QueryFactorIdentity { query.get_index().get_value() };
     if (source)
         if (const auto it = statistics.expressions.find(*source); it != statistics.expressions.end())
-            return factor(with_default_distinct(it->second, query.columns(), statistics), query.columns(), identity);
+            return factor(with_default_distinct(it->second, query.columns(), statistics.objects), query.columns(), identity);
     return ygg::visit([&]<typename Child>(Child operation) { return estimate_operation(operation, identity, child, statistics); }, query.get_variant());
 }
-}  // namespace ygg::database::optimization_detail
+}  // namespace ygg::database::detail
 
 #endif

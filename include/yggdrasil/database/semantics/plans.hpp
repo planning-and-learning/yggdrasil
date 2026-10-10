@@ -40,6 +40,8 @@ class ProjectionPlan
     Builder<Columns<Values>> m_output;
     cista::offset::vector<ColumnSlice> m_positions;
 
+    void compile(std::span<const Index<Column>> columns);
+
 public:
     ProjectionPlan() = default;
     ProjectionPlan(std::span<const ColumnLayout> input, std::span<const Index<Column>> columns);
@@ -69,6 +71,8 @@ class JoinPlan
     cista::offset::vector<ColumnSlice> m_lhs_keys;
     cista::offset::vector<ColumnSlice> m_rhs_keys;
     cista::offset::vector<ColumnSlice> m_rhs_payload;
+
+    void compile();
 
 public:
     JoinPlan() = default;

@@ -335,6 +335,14 @@ void join(const L& lhs,
 }
 
 template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void join(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+{
+    detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
+    detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
+    detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), out, workspace);
+}
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
 void join(const L& lhs,
           const R& rhs,
           const JoinPlan<Values>& plan,
@@ -343,39 +351,22 @@ void join(const L& lhs,
           Builder<Relation<Values>>& out,
           Workspace<Values>& workspace)
 {
+    if (!reuse.lhs && !reuse.rhs)
+        return join(lhs, rhs, plan, out, workspace);
     detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
-    bool build_left = lhs.size() <= rhs.size();
-    if (reuse.lhs || reuse.rhs)
-        build_left = reuse.lhs && (!reuse.rhs || build_left);
-    if (!lhs.empty() && !rhs.empty() && !plan.lhs_keys().empty() && (reuse.lhs || reuse.rhs)
+    // Build on a reused input, the smaller one if both are reused.
+    const bool build_left = reuse.lhs && (!reuse.rhs || lhs.size() <= rhs.size());
+    if (!lhs.empty() && !rhs.empty() && !plan.lhs_keys().empty()
         && (build_left ? lhs.get_storage_index() : rhs.get_storage_index()) == std::numeric_limits<size_t>::max())
         throw std::invalid_argument("Relational operation: cached joins require factory-created inputs.");
     detail::prepare_output(out, plan.output_columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     if (lhs.empty() || rhs.empty())
         return;
-
     const auto* index = &workspace.join_index;
     if (!plan.lhs_keys().empty())
-    {
-        if (reuse.lhs || reuse.rhs)
-        {
-            index = &(build_left ? cache.get_or_create(lhs, plan.lhs_keys()) : cache.get_or_create(rhs, plan.rhs_keys())).index();
-        }
-        else if (build_left)
-            detail::build_join_index<Values>(lhs, plan.lhs_keys(), workspace.join_index);
-        else
-            detail::build_join_index<Values>(rhs, plan.rhs_keys(), workspace.join_index);
-    }
+        index = &(build_left ? cache.get_or_create(lhs, plan.lhs_keys()) : cache.get_or_create(rhs, plan.rhs_keys())).index();
     detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, *index, out, workspace);
-}
-
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
-{
-    detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
-    detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
-    detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), out, workspace);
 }
 
 template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>

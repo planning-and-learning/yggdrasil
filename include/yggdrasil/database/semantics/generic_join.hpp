@@ -83,7 +83,6 @@ public:
     }
 
     size_t input_count() const noexcept { return m_inputs.size(); }
-    std::span<const cista::offset::vector<ColumnLayout>> input_schemas() const noexcept { return { m_inputs.data(), m_inputs.size() }; }
     std::span<const ColumnLayout> input_columns(size_t input) const
     {
         const auto& columns = m_inputs.at(input);
@@ -214,6 +213,12 @@ struct GenericJoinTrie
 };
 }  // namespace detail
 
+namespace incremental
+{
+template<ColumnTypes Values = DefaultColumnTypes>
+class GenericJoinEvaluator;
+}
+
 /// Sequential scratch and hash tries for one prepared plan. Owns indexed bytes;
 /// sources need only remain valid during the call. Moving preserves usability.
 template<ColumnTypes Values = DefaultColumnTypes>
@@ -262,6 +267,32 @@ class GenericJoinWorkspace
         }
     }
 
+    /// Appends the full assignments over the tries returned by root(input).
+    template<std::invocable<size_t> Root>
+    void append(Builder<Relation<Values>>& out, Root&& root)
+    {
+        for (size_t input = 0; input < m_tries.size(); ++input)
+        {
+            const detail::GenericJoinTrie& trie = root(input);
+            if (trie.rows == 0)
+                return;
+            m_cursors[input] = &trie;
+        }
+        enumerate(0, out);
+    }
+    void append(Builder<Relation<Values>>& out)
+    {
+        append(out, [&](size_t input) -> const auto& { return m_tries[input]; });
+    }
+    /// Appends the assignments that read the replacement trie for the replaced input.
+    void append(Builder<Relation<Values>>& out, size_t replaced, const detail::GenericJoinTrie& replacement)
+    {
+        append(out, [&](size_t input) -> const auto& { return input == replaced ? replacement : m_tries[input]; });
+    }
+    detail::GenericJoinTrie& trie(size_t input) { return m_tries.at(input); }
+
+    friend class incremental::GenericJoinEvaluator<Values>;
+
 public:
     explicit GenericJoinWorkspace(const GenericJoinPlan<Values>& plan) :
         m_plan(plan),
@@ -272,20 +303,19 @@ public:
     }
 
     bool matches(const GenericJoinPlan<Values>& plan) const { return m_plan.matches(plan); }
-    detail::GenericJoinTrie& trie(size_t input) { return m_tries.at(input); }
-    const detail::GenericJoinTrie& trie(size_t input) const { return m_tries.at(input); }
 
-    /// Append full assignments; optionally replace one occurrence by a delta trie.
-    void append(Builder<Relation<Values>>& out, size_t replaced = std::numeric_limits<size_t>::max(), const detail::GenericJoinTrie* replacement = nullptr)
+    /// Indexes the inputs, which match the plan, and appends their join to out.
+    template<RelationViewRange<Values> R>
+    void append_join(const R& inputs, Builder<Relation<Values>>& out)
     {
-        for (size_t input = 0; input < m_tries.size(); ++input)
+        for (size_t input = 0; input < m_plan.input_count(); ++input)
         {
-            const auto* root = input == replaced ? replacement : &m_tries[input];
-            if (!root || root->rows == 0)
-                return;
-            m_cursors[input] = root;
+            auto& trie = m_tries[input];
+            trie.clear();
+            for (size_t row = 0; row < inputs[input].size(); ++row)
+                trie.insert(inputs[input].row(row), m_plan.input_keys(input));
         }
-        enumerate(0, out);
+        append(out);
     }
 
     size_t memory_usage() const noexcept
@@ -317,14 +347,7 @@ void generic_join(const R& inputs,
             throw std::invalid_argument("Generic join: output aliases an input.");
     }
     out.clear();
-    for (size_t input = 0; input < plan.input_count(); ++input)
-    {
-        auto& trie = workspace.trie(input);
-        trie.clear();
-        for (size_t row = 0; row < inputs[input].size(); ++row)
-            trie.insert(inputs[input].row(row), plan.input_keys(input));
-    }
-    workspace.append(out);
+    workspace.append_join(inputs, out);
 }
 }  // namespace ygg::database
 

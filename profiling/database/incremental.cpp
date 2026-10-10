@@ -269,7 +269,7 @@ void projection(benchmark::State& state)
     const auto update = [&](const Transition& transition)
     {
         if constexpr (Incremental)
-            evaluation.update(transition.delta.added, transition.delta.removed, workspace);
+            evaluation.update(transition.delta.change(), workspace);
         else
             database::project(transition.snapshot, plan, evaluation, workspace);
     };
@@ -336,7 +336,7 @@ void fixed_input_join(benchmark::State& state)
     const auto update = [&](const Transition& transition)
     {
         if constexpr (Incremental)
-            evaluation.update(transition.delta.added, transition.delta.removed, unchanged, unchanged, workspace);
+            evaluation.update(transition.delta.change(), std::tie(unchanged, unchanged), workspace);
         else
             database::join(transition.snapshot, *fixed, plan, index, evaluation, workspace);
     };
@@ -404,7 +404,7 @@ void changing_join(benchmark::State& state)
         const auto& left = trace.lhs.transitions[position];
         const auto& right = trace.rhs.transitions[position];
         if constexpr (Incremental)
-            evaluation.update(left.delta.added, left.delta.removed, right.delta.added, right.delta.removed, workspace);
+            evaluation.update(left.delta.change(), right.delta.change(), workspace);
         else
             // Both inputs change, so full recomputation rebuilds its transient
             // hash index in retained storage using the already prepared plan.

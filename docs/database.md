@@ -171,16 +171,19 @@ object domain needs no special-case representation.
 current results and maintain added/removed row sets. Deltas use the same typed
 schemas and packed rows. Projection tracks witnesses; a change that replaces a
 witness without changing membership produces no output delta. Join supports
-updates to either or both operands. Prepared byte operations are shared with
-full recomputation. Existing reset, apply, undo, and storage ownership rules
-remain unchanged.
+updates to either or both operands. Every incremental evaluator's `update` takes
+one change per input: an `(added, removed)` pair read with `std::get`, such as
+`Delta::change()` or `std::tie(added, removed)`; `incremental::RelationChange`
+states the requirement. Prepared byte operations are shared with full
+recomputation. Existing reset, apply, undo, and storage ownership rules remain
+unchanged.
 
 ## Python
 
 ```python
 from pyyggdrasil import database as db
 
-relation = db.Relation([0, 1, 2],
+relation = db.Relation([db.ColumnIndex(0), db.ColumnIndex(1), db.ColumnIndex(2)],
                        [db.ColumnType.UINT32, db.ColumnType.UINT32,
                         db.ColumnType.FLOAT64])
 relation.insert([3, 8, 2.5])
@@ -191,7 +194,8 @@ assert relation.columns().type(2) == db.ColumnType.FLOAT64
 Labels-only construction defaults to `UINT32`. `ColumnType` also exposes `INT32`,
 `UINT64`, `INT64`, `FLOAT32`, and `BOOL`. Rows yield Python values of the column's
 type; no packed bytes leak through the Python API. Pool checkout accepts the
-same label/type arguments. `.columns()` remains a borrowed label sequence with
+same label/type arguments. Labels are `ColumnIndex` values; `.columns()` remains a
+borrowed `ColumnIndex` sequence with
 `type(position)` for schema inspection. Rows, views, and schemas keep their
 Python owners alive; explicitly clearing an owner still invalidates them.
 
@@ -264,9 +268,7 @@ incremental::Delta<> source_change(sources.columns().span());
 incremental::Delta<> edge_change(edges.columns().span());
 incremental::Delta<> target_change(targets.columns().span());
 edge_change.removed.insert(std::tuple{uint_t(7), uint_t(9)});
-evaluator.update(source_change.added, source_change.removed,
-                 edge_change.added, edge_change.removed,
-                 target_change.added, target_change.removed);
+evaluator.update(source_change.change(), edge_change.change(), target_change.change());
 assert(evaluator.get_result().empty());
 assert(evaluator.get_delta().removed.contains(
     std::tuple{uint_t(4), uint_t(9), uint_t(2)}));
@@ -342,8 +344,9 @@ allocation-free.
 
 Results and deltas are borrowed until the next mutation. Inputs must not alias
 the evaluator's owned buffers, and calls must be sequential and nonreentrant.
-Schema/overlap rejections preserve the previous evaluation. An exception during
-mutation requires reinitialization; result/delta access and further updates then
+Schema, overlap, aliasing, and membership rejections (adding a present or
+removing an absent row) precede mutation and preserve the previous evaluation.
+An exception during mutation requires reinitialization; result/delta access and further updates then
 throw `std::logic_error` instead of exposing partial state.
 
 The `database_distance` tests compare full and incremental evaluation with an
@@ -365,19 +368,25 @@ Prepared snapshots and correctness checks are outside the timed loops.
 
 ### Distance from Python
 
-The Python API accepts mutable `Relation`, interned `RelationView`, and read-only
-`BorrowedRelation` inputs. For vertices consisting of two integers:
+Column labels are `ColumnIndex` values. Python evaluators and `distance` take
+`Relation` or `BorrowedRelation` inputs, or interned `RelationView` inputs when
+every input of the call is interned; to mix them, copy a view with
+`db.assign(db.Relation(), view)`. For vertices consisting of
+two integers:
 
 ```python
 from pyyggdrasil import database as db
 
-sources = db.Relation([0, 1])
+def columns(*labels):
+    return [db.ColumnIndex(label) for label in labels]
+
+sources = db.Relation(columns(0, 1))
 sources.insert([10, 20])
-edges = db.Relation([0, 1, 2, 3])
+edges = db.Relation(columns(0, 1, 2, 3))
 edges.insert([10, 20, 10, 21])
-targets = db.Relation([2, 3])
+targets = db.Relation(columns(2, 3))
 targets.insert([10, 21])
-plan = db.DistancePlan(sources.columns(), edges.columns(), targets.columns(), 4)
+plan = db.DistancePlan(sources.columns(), edges.columns(), targets.columns(), db.ColumnIndex(4))
 
 result = db.distance(sources, edges, targets, plan)
 assert tuple(result[0]) == (10, 20, 10, 21, 1)
@@ -389,11 +398,12 @@ assert evaluator.get_delta().added.empty()
 ```
 
 `distance` returns an independent owning `Relation`. Incremental `get_result()`
-returns a read-only `BorrowedRelation`, and `get_delta()` returns a read-only
-`RelationDelta` with `added` and `removed` relations. They and their borrowed rows
-keep the evaluator alive; they expose no mutating relation methods. Rows must
-not be retained across an evaluator `initialize` or `update`. The `update` method
-takes the six added/removed relations in the same order as the C++ interface.
+returns a read-only `BorrowedRelation` (the library's `BorrowedRelationView`), and
+`get_delta()` returns a `RelationDelta` whose `added` and `removed` relations are
+borrowed the same way. They and their borrowed rows keep the evaluator alive; rows
+must not be retained across an evaluator `initialize` or `update`; `db.snapshot`
+copies a result. Like the C++ interface, `update(sources, edges, targets)` takes
+one `(added, removed)` tuple per input.
 
 ## Query graphs and optimization
 
@@ -584,15 +594,16 @@ retained evaluator storage; it is distinct from the optimizer's estimate.
 ```python
 from pyyggdrasil import database as db
 
-left = db.Relation([0, 1])
+x, y, z = db.ColumnIndex(0), db.ColumnIndex(1), db.ColumnIndex(2)
+left = db.Relation([x, y])
 left.insert((1, 2))
-right = db.Relation([1, 2])
+right = db.Relation([y, z])
 right.insert((2, 3))
 
 repository = db.QueryRepository()
 a = repository.input(0, left.columns())
 b = repository.input(1, right.columns())
-query = repository.project(repository.join(a, b), [2, 0])
+query = repository.project(repository.join(a, b), [z, x])
 optimized = db.optimize(query, db.collect_statistics([left, right]))
 evaluator = db.QueryEvaluator(optimized)
 evaluator.evaluate([left, right])
@@ -606,12 +617,12 @@ query or a list of roots; `optimize` returns a `QueryPlan`.
 `repository.union(a, b)`, `difference`, `rename`, `select_equal`, `select_value`,
 `empty`, and `distance` expose the other operators. Typed schemas are supplied
 through a relation's `columns()` view, preserving its field types. `input` and
-`empty` also accept a list of column labels, using `UINT32` for each field.
+`empty` also accept a list of `ColumnIndex` labels, using `UINT32` for each field.
 
 `IncrementalQueryEvaluator(plan)` exposes `initialize(inputs)` and
-`update(added_inputs, removed_inputs)`. Its result and `RelationDelta` views are
-read-only and keep the evaluator alive. `snapshot(relation)` copies a builder,
-interned relation, or borrowed result into an independent `Relation`. Query
+`update(added_inputs, removed_inputs)`. Its result and `RelationDelta` relations are
+read-only `BorrowedRelation` views that keep the evaluator alive. `snapshot(relation)` copies a
+relation, e.g. a borrowed result, into an independent `Relation`. Query
 handles keep their repository alive; compiled plans and evaluators are independent
 of it. For sparse slot numbering, an unused list position may contain `None`.
 Dictionary-valued statistics fields are converted by value; construct them with

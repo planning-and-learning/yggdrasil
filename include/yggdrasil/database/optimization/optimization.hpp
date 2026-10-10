@@ -5,57 +5,35 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
-#include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/database/optimization/details/optimization.hpp"
+#include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
-#include <optional>
 #include <span>
 #include <type_traits>
 #include <vector>
 
 namespace ygg::database
 {
-struct RelationStatistics
-{
-    double rows = 0;
-    UnorderedMap<Index<Column>, double> distinct;
-};
-
-/// What is known about the data. Everything is optional; nothing known means unbounded.
-template<ColumnTypes Values = DefaultColumnTypes>
-struct Statistics
-{
-    /// Domain size; empty means an unbounded domain.
-    std::optional<size_t> objects;
-    /// Measured inputs, keyed by input slot.
-    UnorderedMap<size_t, RelationStatistics> inputs;
-    /// Observed results of queries in the roots' repository; they override estimates.
-    UnorderedMap<Index<Query<Values>>, RelationStatistics> expressions;
-};
-
 /// Measures row and per-column distinct counts of the relations bound to each input slot.
 template<ColumnTypes Values, RelationViewRange<Values> R>
 Statistics<Values> collect_statistics(const R& inputs)
 {
     Statistics<Values> result;
-    for (size_t slot = 0; slot < std::ranges::size(inputs); ++slot)
+    size_t slot = 0;
+    for (const auto& input : inputs)
     {
-        const auto& input = inputs[slot];
-        auto& stats = result.inputs[slot];
+        auto& stats = result.inputs[slot++];
         stats.rows = static_cast<double>(input.size());
-        for (const auto& column : input.columns().span())
+        const auto columns = input.columns();
+        for (const auto& column : columns.span())
             stats.distinct[column.label] = static_cast<double>(project<Values>(input, { column.label }).size());
     }
     return result;
 }
-}  // namespace ygg::database
 
-#include "yggdrasil/database/optimization/details/optimization.hpp"
-
-namespace ygg::database
-{
 /// Plans the roots by applying established query optimization methods:
 ///
 /// 1. The query is normalized by the textbook algebraic rewrites [GMUW08]: selections
@@ -110,7 +88,7 @@ namespace ygg::database
 template<ColumnTypes Values>
 QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
 {
-    return optimization_detail::optimize(roots, statistics);
+    return detail::optimize(roots, statistics);
 }
 
 template<ColumnTypes Values>

@@ -122,11 +122,11 @@ namespace ygg
 template<database::ColumnTypes Values, typename C>
 class View<Builder<database::Relation<Values>>, C>
 {
-    const C* m_context;
     const Builder<database::Relation<Values>>* m_handle;
+    const C* m_context;
 
 public:
-    View(const Builder<database::Relation<Values>>& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
+    View(const Builder<database::Relation<Values>>& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
     const auto& get_handle() const noexcept { return *m_handle; }
     const auto& get_data() const noexcept { return *m_handle; }
     const auto& get_context() const noexcept { return *m_context; }
@@ -135,7 +135,6 @@ public:
     size_t arity() const noexcept { return m_handle->arity(); }
     size_t size() const noexcept { return m_handle->size(); }
     bool empty() const noexcept { return m_handle->empty(); }
-    const auto& storage() const noexcept { return m_handle->storage(); }
     const void* get_storage_address() const noexcept { return m_handle->get_storage_address(); }
     size_t get_storage_index() const noexcept { return m_handle->get_storage_index(); }
     size_t column_index(Index<database::Column> column) const { return m_handle->column_index(column); }
@@ -161,146 +160,106 @@ public:
     }
 };
 
-template<database::ColumnTypes Values, typename C>
-class View<Data<database::Relation<Values>>, C>
-{
-    const C* m_context;
-    const Data<database::Relation<Values>>* m_handle;
+}  // namespace ygg
 
-    const auto& repository() const noexcept { return get_relation_repository(*m_context); }
+namespace ygg::database::detail
+{
+/// Read access to an interned relation; Derived provides get_data() and get_context().
+template<typename Derived, ColumnTypes Values>
+class InternedRelationViewMixin
+{
+    const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
+    const auto& repository() const noexcept { return get_relation_repository(self().get_context()); }
+    bool contains_canonical(std::span<const std::byte> row) const
+    {
+        const auto index = repository().get_row_repository().find(row);
+        return index && std::ranges::binary_search(row_indices(), Index<RelationRow<Values>>(*index));
+    }
 
 public:
-    View(const Data<database::Relation<Values>>& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
+    auto columns() const noexcept { return repository().get_columns(self().get_data().columns_index); }
+    size_t arity() const noexcept { return columns().size(); }
+    size_t size() const noexcept { return row_indices().size(); }
+    bool empty() const noexcept { return row_indices().empty(); }
+    std::span<const Index<RelationRow<Values>>> row_indices() const noexcept
+    {
+        return repository().get_row_set_repository()[self().get_data().row_set_index.get_value()];
+    }
+    const void* get_storage_address() const noexcept { return row_indices().data(); }
+    size_t get_storage_index() const noexcept { return repository().get_storage_index(self().get_data().row_set_index); }
+    size_t column_index(Index<Column> column) const { return columns().column_index(column); }
+
+    std::span<const std::byte> row(size_t index) const noexcept
+    {
+        assert(index < size());
+        return repository().get_row_repository()[row_indices()[index].get_value()];
+    }
+
+    auto operator[](size_t index) const noexcept { return make_view(Row<Values>(row(index), columns().span()), get_repository(self().get_context())); }
+
+    auto at(size_t index) const
+    {
+        if (index >= size())
+            throw std::out_of_range("Relation: row index out of range.");
+        return (*this)[index];
+    }
+
+    auto begin() const noexcept { return RelationIterator<Values, Derived>(self(), 0); }
+    auto end() const noexcept { return RelationIterator<Values, Derived>(self(), size()); }
+    auto cbegin() const noexcept { return begin(); }
+    auto cend() const noexcept { return end(); }
+
+    bool contains(std::span<const std::byte> row) const
+    {
+        validate_row<Values>(row, columns().span());
+        return contains_canonical(row);
+    }
+
+    bool contains(Row<Values> row) const
+    {
+        if (!std::ranges::equal(row.columns(), columns().span()))
+            throw std::invalid_argument("Relation: row schema does not match.");
+        return contains_canonical(row.bytes());
+    }
+
+    template<ColumnValueFor<Values>... Ts>
+    bool contains(const std::tuple<Ts...>& values) const
+    {
+        return contains_canonical(encode_row<Values>(values, columns().span()));
+    }
+};
+}  // namespace ygg::database::detail
+
+namespace ygg
+{
+template<database::ColumnTypes Values, typename C>
+class View<Data<database::Relation<Values>>, C> : public database::detail::InternedRelationViewMixin<View<Data<database::Relation<Values>>, C>, Values>
+{
+    const Data<database::Relation<Values>>* m_handle;
+    const C* m_context;
+
+public:
+    View(const Data<database::Relation<Values>>& handle, const C& context) noexcept : m_handle(&handle), m_context(&context) {}
     const auto& get_handle() const noexcept { return *m_handle; }
     const auto& get_data() const noexcept { return *m_handle; }
     const auto& get_context() const noexcept { return *m_context; }
     auto get_index() const noexcept { return get_data().index; }
-    auto columns() const noexcept { return repository().get_columns(get_data().columns_index); }
-    size_t arity() const noexcept { return columns().size(); }
-    size_t size() const noexcept { return row_indices().size(); }
-    bool empty() const noexcept { return row_indices().empty(); }
-    std::span<const Index<database::RelationRow<Values>>> row_indices() const noexcept
-    {
-        return repository().get_row_set_repository()[get_data().row_set_index.get_value()];
-    }
-    const void* get_storage_address() const noexcept { return row_indices().data(); }
-    size_t get_storage_index() const noexcept { return repository().get_storage_index(get_data().row_set_index); }
-    size_t column_index(Index<database::Column> column) const { return columns().column_index(column); }
-
-    std::span<const std::byte> row(size_t index) const noexcept
-    {
-        assert(index < size());
-        return repository().get_row_repository()[row_indices()[index].get_value()];
-    }
-
-    auto operator[](size_t index) const noexcept { return make_view(database::Row<Values>(row(index), columns().span()), get_repository(*m_context)); }
-
-    auto at(size_t index) const
-    {
-        if (index >= size())
-            throw std::out_of_range("Relation: row index out of range.");
-        return (*this)[index];
-    }
-
-    auto begin() const noexcept { return database::detail::RelationIterator<Values, View>(*this, 0); }
-    auto end() const noexcept { return database::detail::RelationIterator<Values, View>(*this, size()); }
-    auto cbegin() const noexcept { return begin(); }
-    auto cend() const noexcept { return end(); }
-
-    bool contains(std::span<const std::byte> row) const
-    {
-        database::validate_row<Values>(row, columns().span());
-        const auto index = repository().get_row_repository().find(row);
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
-    }
-
-    bool contains(database::Row<Values> row) const
-    {
-        if (!std::ranges::equal(row.columns(), columns().span()))
-            throw std::invalid_argument("Relation: row schema does not match.");
-        const auto index = repository().get_row_repository().find(row.bytes());
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
-    }
-
-    template<database::ColumnValueFor<Values>... Ts>
-    bool contains(const std::tuple<Ts...>& values) const
-    {
-        const auto bytes = database::encode_row<Values>(values, columns().span());
-        const auto index = repository().get_row_repository().find(bytes);
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
-    }
 };
 
 template<database::ColumnTypes Values, typename C>
-class View<Index<database::Relation<Values>>, C>
+class View<Index<database::Relation<Values>>, C> : public database::detail::InternedRelationViewMixin<View<Index<database::Relation<Values>>, C>, Values>
 {
-    const C* m_context;
     Index<database::Relation<Values>> m_handle;
-
-    const auto& repository() const noexcept { return get_relation_repository(*m_context); }
+    const C* m_context;
 
 public:
-    View(Index<database::Relation<Values>> handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    View(Index<database::Relation<Values>> handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
     const auto& get_handle() const noexcept { return m_handle; }
-    const auto& get_data() const noexcept { return repository()[m_handle]; }
+    const auto& get_data() const noexcept { return get_relation_repository(*m_context)[m_handle]; }
     const auto& get_context() const noexcept { return *m_context; }
     auto get_index() const noexcept { return m_handle; }
-    auto columns() const noexcept { return repository().get_columns(get_data().columns_index); }
-    size_t arity() const noexcept { return columns().size(); }
-    size_t size() const noexcept { return row_indices().size(); }
-    bool empty() const noexcept { return row_indices().empty(); }
-    std::span<const Index<database::RelationRow<Values>>> row_indices() const noexcept
-    {
-        return repository().get_row_set_repository()[get_data().row_set_index.get_value()];
-    }
-    const void* get_storage_address() const noexcept { return row_indices().data(); }
-    size_t get_storage_index() const noexcept { return repository().get_storage_index(get_data().row_set_index); }
-    size_t column_index(Index<database::Column> column) const { return columns().column_index(column); }
 
-    std::span<const std::byte> row(size_t index) const noexcept
-    {
-        assert(index < size());
-        return repository().get_row_repository()[row_indices()[index].get_value()];
-    }
-
-    auto operator[](size_t index) const noexcept { return make_view(database::Row<Values>(row(index), columns().span()), get_repository(*m_context)); }
-
-    auto at(size_t index) const
-    {
-        if (index >= size())
-            throw std::out_of_range("Relation: row index out of range.");
-        return (*this)[index];
-    }
-
-    auto begin() const noexcept { return database::detail::RelationIterator<Values, View>(*this, 0); }
-    auto end() const noexcept { return database::detail::RelationIterator<Values, View>(*this, size()); }
-    auto cbegin() const noexcept { return begin(); }
-    auto cend() const noexcept { return end(); }
-
-    bool contains(std::span<const std::byte> row) const
-    {
-        database::validate_row<Values>(row, columns().span());
-        const auto index = repository().get_row_repository().find(row);
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
-    }
-
-    bool contains(database::Row<Values> row) const
-    {
-        if (!std::ranges::equal(row.columns(), columns().span()))
-            throw std::invalid_argument("Relation: row schema does not match.");
-        const auto index = repository().get_row_repository().find(row.bytes());
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
-    }
-
-    template<database::ColumnValueFor<Values>... Ts>
-    bool contains(const std::tuple<Ts...>& values) const
-    {
-        const auto bytes = database::encode_row<Values>(values, columns().span());
-        const auto index = repository().get_row_repository().find(bytes);
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
-    }
-
-    auto identifying_members() const noexcept { return std::make_tuple(m_handle, repository().get_index()); }
+    auto identifying_members() const noexcept { return std::make_tuple(m_handle, get_relation_repository(*m_context).get_index()); }
 };
 }  // namespace ygg
 

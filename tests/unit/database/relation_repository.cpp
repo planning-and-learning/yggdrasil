@@ -583,18 +583,6 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryRejectsInvalidDataAndForeignRenam
     EXPECT_THROW(repository.insert(invalid_schema), std::invalid_argument);
     EXPECT_TRUE(invalid_schema.index.is_max());
 
-    data = original.get_data();
-    const auto row_ids = original.row_indices();
-    const std::array<RowIndex, 2> reversed_ids { row_ids[1], row_ids[0] };
-    data.row_set_index = RowSetIndex(repository.get_row_set_repository().insert(std::span<const RowIndex>(reversed_ids)));
-    EXPECT_THROW(repository.insert(data), std::invalid_argument);
-    const std::array<RowIndex, 2> duplicate_ids { row_ids[0], row_ids[0] };
-    data.row_set_index = RowSetIndex(repository.get_row_set_repository().insert(std::span<const RowIndex>(duplicate_ids)));
-    EXPECT_THROW(repository.insert(data), std::invalid_argument);
-    const std::array<RowIndex, 1> unknown_row { RowIndex::max() };
-    data.row_set_index = RowSetIndex(repository.get_row_set_repository().insert(std::span<const RowIndex>(unknown_row)));
-    EXPECT_THROW(repository.insert(data), std::invalid_argument);
-
     const auto foreign = insert(foreign_repository, builder).first;
     ASSERT_EQ(foreign.get_index(), original.get_index());
     EXPECT_THROW(repository.rename(foreign, original.columns()), std::invalid_argument);

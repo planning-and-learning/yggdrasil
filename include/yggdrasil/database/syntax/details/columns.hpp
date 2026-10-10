@@ -26,6 +26,17 @@ inline void validate_column_labels(std::span<const Index<Column>> columns)
             throw std::invalid_argument("Columns: duplicate column label.");
 }
 
+/// Validates an untyped schema, whose columns take the first registered type, and returns its row width.
+template<ColumnTypes Values>
+size_t label_row_size(std::span<const Index<Column>> labels)
+{
+    validate_column_labels(labels);
+    const auto width = column_size<Values>(0);
+    if (labels.size() > std::numeric_limits<size_t>::max() / width)
+        throw std::length_error("Columns: row byte width exceeds addressable memory.");
+    return labels.size() * width;
+}
+
 inline std::span<const std::byte> column_bytes(std::span<const std::byte> bytes, const ColumnLayout& column)
 {
     if (column.offset > bytes.size() || column.size > bytes.size() - column.offset)
@@ -74,6 +85,36 @@ void validate_columns(std::span<const ColumnLayout> columns)
             throw std::invalid_argument("Columns: duplicate column label.");
     }
 }
+
+namespace detail
+{
+/// A relabeled schema keeps the arity and the column types.
+template<ColumnTypes Values>
+void validate_relabel(std::span<const ColumnLayout> previous, std::span<const ColumnLayout> next)
+{
+    validate_columns<Values>(next);
+    if (!std::ranges::equal(previous, next, {}, &ColumnLayout::type, &ColumnLayout::type))
+        throw std::invalid_argument("Columns: relabeling must keep the arity and column types.");
+}
+
+/// Replaces the schema, retaining capacity; the columns may be a slice of the replaced schema.
+template<ColumnTypes Values>
+void assign_columns(Data<Columns<Values>>& data, std::span<const ColumnLayout> columns)
+{
+    validate_columns<Values>(columns);
+    auto& values = data.values;
+    if (columns.size() <= values.size())
+    {
+        // Copy before shrinking: columns may refer to a slice of this schema.
+        if (columns.data() != values.data())
+            std::copy(columns.begin(), columns.end(), values.begin());
+        values.resize(columns.size());
+    }
+    else
+        values.set(columns.begin(), columns.end());
+    ygg::clear(data.index);
+}
+}  // namespace detail
 
 inline size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column)
 {
@@ -156,18 +197,7 @@ void Builder<database::Columns<Values>>::push_back(Index<database::Column> colum
 template<database::ColumnTypes Values>
 void Builder<database::Columns<Values>>::assign(std::span<const database::ColumnLayout> columns)
 {
-    database::validate_columns<Values>(columns);
-    auto& values = m_data.values;
-    if (columns.size() <= values.size())
-    {
-        // Copy before shrinking: columns may refer to a slice of this schema.
-        if (columns.data() != values.data())
-            std::copy(columns.begin(), columns.end(), values.begin());
-        values.resize(columns.size());
-    }
-    else
-        values.set(columns.begin(), columns.end());
-    ygg::clear(m_data.index);
+    database::detail::assign_columns<Values>(m_data, columns);
 }
 
 template<database::ColumnTypes Values>
@@ -179,10 +209,8 @@ void Builder<database::Columns<Values>>::assign(std::initializer_list<database::
 template<database::ColumnTypes Values>
 void Builder<database::Columns<Values>>::assign(std::span<const Index<database::Column>> columns)
 {
-    database::detail::validate_column_labels(columns);
+    database::detail::label_row_size<Values>(columns);
     const auto width = database::column_size<Values>(0);
-    if (columns.size() > std::numeric_limits<size_t>::max() / width)
-        throw std::length_error("Columns: row byte width exceeds addressable memory.");
     m_data.values.resize(columns.size());
     for (size_t i = 0; i < columns.size(); ++i)
         m_data.values[i] = database::ColumnLayout { columns[i], 0, i * width, width };
@@ -212,17 +240,7 @@ namespace ygg::database
 template<ColumnTypes Values, ColumnsViewConcept<Values> V>
 Data<Columns<Values>>& assign(Data<Columns<Values>>& data, const V& source)
 {
-    const auto columns = source.span();
-    validate_columns<Values>(columns);
-    if (columns.size() <= data.values.size())
-    {
-        if (columns.data() != data.values.data())
-            std::copy(columns.begin(), columns.end(), data.values.begin());
-        data.values.resize(columns.size());
-    }
-    else
-        data.values.set(columns.begin(), columns.end());
-    ygg::clear(data.index);
+    detail::assign_columns<Values>(data, source.span());
     return data;
 }
 

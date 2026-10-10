@@ -162,7 +162,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
     {
         const auto before = rows<uint_t>(reference);
         apply_batch(input, added, removed);
-        evaluator.update(added, removed, workspace);
+        evaluator.update(std::tie(added, removed), workspace);
         project(input, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
@@ -229,7 +229,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     {
         const auto before = rows<uint_t>(reference);
         apply_batch(input, added, removed);
-        evaluator.update(added, removed, workspace);
+        evaluator.update(std::tie(added, removed), workspace);
         project(input, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
@@ -264,18 +264,18 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWit
     invalid.removed.insert(cells(7, 11));  // Only one existing witness is available.
     invalid.added.insert(cells(7, 12));
     invalid.added.insert(cells(7, 13));  // Net support change is zero, but removal is invalid.
-    EXPECT_THROW(evaluator.update(invalid.added, invalid.removed, workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(invalid.change(), workspace), std::invalid_argument);
     Builder<Relation<Values>> empty(input.columns());
-    EXPECT_THROW(evaluator.update(empty, empty, workspace), std::logic_error);
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, workspace);
     Delta<Values> valid(input.columns());
     valid.removed.insert(cells(7, 10));
     valid.added.insert(cells(7, 12));
-    evaluator.update(valid.added, valid.removed, workspace);
+    evaluator.update(valid.change(), workspace);
     EXPECT_TRUE(evaluator.get_result().contains(cells(7)));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    evaluator.update(empty, valid.added, workspace);
+    evaluator.update(std::tie(empty, valid.added), workspace);
     EXPECT_TRUE(evaluator.get_result().empty());
     EXPECT_TRUE(evaluator.get_delta().removed.contains(cells(7)));
 }
@@ -296,7 +296,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
     {
         const auto before = rows<uint_t>(reference);
         apply_batch(input, delta.added, delta.removed);
-        evaluator.update(delta.added, delta.removed, workspace);
+        evaluator.update(delta.change(), workspace);
         project(input, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
@@ -320,10 +320,10 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
     ProjectionEvaluator<Values> identity(ProjectionPlan<Values>({}, {}));
     identity.initialize(nullary, workspace);
     nullary_delta.added.insert(cells());
-    identity.update(nullary_delta.added, nullary_delta.removed, workspace);
+    identity.update(nullary_delta.change(), workspace);
     EXPECT_TRUE(identity.get_result().contains(cells()));
     EXPECT_TRUE(identity.get_delta().added.contains(cells()));
-    identity.update(nullary_delta.removed, nullary_delta.added, workspace);
+    identity.update(std::tie(nullary_delta.removed, nullary_delta.added), workspace);
     EXPECT_TRUE(identity.get_result().empty());
     EXPECT_TRUE(identity.get_delta().removed.contains(cells()));
 }
@@ -364,9 +364,9 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
             const auto before = rows<uint_t>(reference);
             apply_batch(dynamic, added, removed);
             if (change_left)
-                evaluator.update(added, removed, unchanged, unchanged, workspace);
+                evaluator.update(std::tie(added, removed), std::tie(unchanged, unchanged), workspace);
             else
-                evaluator.update(unchanged, unchanged, added, removed, workspace);
+                evaluator.update(std::tie(unchanged, unchanged), std::tie(added, removed), workspace);
             join(lhs, rhs, plan, reference, workspace);
             expect_update(evaluator, before, reference);
         };
@@ -402,7 +402,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinAcceptsInternedCustomCodecInputs)
     delta.added.insert(std::tuple { Value { 3 }, Value { 40 } });
     const auto before = rows<Value>(reference);
     apply_batch(dynamic, delta.added, delta.removed);
-    evaluator.update(delta.added, delta.removed, unchanged, unchanged, workspace);
+    evaluator.update(delta.change(), std::tie(unchanged, unchanged), workspace);
     join(dynamic, immutable, plan, reference, workspace);
     expect_update(evaluator, before, reference);
 }
@@ -417,15 +417,15 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
     overlap.insert(cells(1));
     ProjectionEvaluator<Values> evaluator(ProjectionPlan<Values>(input.columns(), { ColumnIndex(1) }));
     Workspace<Values> workspace;
-    EXPECT_THROW(evaluator.update(empty, empty, workspace), std::logic_error);
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, workspace);
     const auto before = rows<uint_t>(evaluator.get_result());
     EXPECT_THROW(evaluator.initialize(wrong, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(wrong, empty, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(empty, wrong, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(overlap, overlap, workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(wrong, empty), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(empty, wrong), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(overlap, overlap), workspace), std::invalid_argument);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
-    evaluator.update(empty, empty, workspace);
+    evaluator.update(std::tie(empty, empty), workspace);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
@@ -474,12 +474,10 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
         const auto projection_before = rows<uint_t>(reference_projection);
         apply_batch(lhs, lhs_added, lhs_removed);
         apply_batch(rhs, rhs_added, rhs_removed);
-        evaluator.update(make_view(lhs_added, repository),
-                         make_view(lhs_removed, repository),
-                         make_view(rhs_added, repository),
-                         make_view(rhs_removed, repository),
+        evaluator.update(std::pair(make_view(lhs_added, repository), make_view(lhs_removed, repository)),
+                         std::pair(make_view(rhs_added, repository), make_view(rhs_removed, repository)),
                          workspace);
-        projected.update(evaluator.get_delta().added, evaluator.get_delta().removed, workspace);
+        projected.update(evaluator.get_delta().change(), workspace);
         join(lhs, rhs, plan, reference, workspace);
         project(reference, projection_plan, reference_projection, workspace);
         expect_update(evaluator, before, reference);
@@ -561,7 +559,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsCustomCodecIndexesAcrossRow
         const auto before = rows<Value>(reference);
         apply_batch(lhs, lhs_delta.added, lhs_delta.removed);
         apply_batch(rhs, rhs_delta.added, rhs_delta.removed);
-        evaluator.update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed, workspace);
+        evaluator.update(lhs_delta.change(), rhs_delta.change(), workspace);
         join(lhs, rhs, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     }
@@ -604,7 +602,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
             const auto before = rows<uint_t>(reference);
             apply_batch(lhs, lhs_added, lhs_removed);
             apply_batch(rhs, rhs_added, rhs_removed);
-            evaluator.update(lhs_added, lhs_removed, rhs_added, rhs_removed, workspace);
+            evaluator.update(std::tie(lhs_added, lhs_removed), std::tie(rhs_added, rhs_removed), workspace);
             join(lhs, rhs, plan, reference, workspace);
             expect_update(evaluator, before, reference);
         };
@@ -642,23 +640,23 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinValidatesAllInputsBeforeMutation)
     Builder<Relation<Values>> wrong({ ColumnIndex(2) });
     JoinEvaluator<Values> evaluator(JoinPlan<Values>(input.columns(), input.columns()));
     Workspace<Values> workspace;
-    EXPECT_THROW(evaluator.update(empty, empty, empty, empty, workspace), std::logic_error);
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, input, workspace);
-    evaluator.update(addition, empty, addition, empty, workspace);
+    evaluator.update(std::tie(addition, empty), std::tie(addition, empty), workspace);
     EXPECT_TRUE(evaluator.get_delta().added.contains(cells(2)));
     const auto before = rows<uint_t>(evaluator.get_result());
     const auto added_before = rows<uint_t>(evaluator.get_delta().added);
     EXPECT_THROW(evaluator.initialize(wrong, input, workspace), std::invalid_argument);
     EXPECT_THROW(evaluator.initialize(input, wrong, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(wrong, empty, empty, empty, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(empty, wrong, empty, empty, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(empty, empty, wrong, empty, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(empty, empty, empty, wrong, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(addition, addition, empty, empty, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(empty, empty, addition, addition, workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(wrong, empty), std::tie(empty, empty), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(empty, wrong), std::tie(empty, empty), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(wrong, empty), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, wrong), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(addition, addition), std::tie(empty, empty), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(addition, addition), workspace), std::invalid_argument);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_EQ(rows<uint_t>(evaluator.get_delta().added), added_before);
-    evaluator.update(empty, empty, empty, empty, workspace);
+    evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
@@ -680,21 +678,47 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinRequiresReinitializationAfterMutatio
         evaluator.initialize(input, input, workspace);
         // Mutate the left input successfully before the right input fails.
         if (invalid_removal)
-            EXPECT_THROW(evaluator.update(empty, input, empty, absent, workspace), std::invalid_argument);
+            EXPECT_THROW(evaluator.update(std::tie(empty, input), std::tie(empty, absent), workspace), std::invalid_argument);
         else
-            EXPECT_THROW(evaluator.update(addition, empty, input, empty, workspace), std::invalid_argument);
-        EXPECT_THROW(evaluator.update(empty, empty, empty, empty, workspace), std::logic_error);
+            EXPECT_THROW(evaluator.update(std::tie(addition, empty), std::tie(input, empty), workspace), std::invalid_argument);
+        EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace), std::logic_error);
         evaluator.initialize(input, input, workspace);
         EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(input));
         EXPECT_TRUE(evaluator.get_delta().added.empty());
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
-        evaluator.update(addition, empty, addition, empty, workspace);
+        evaluator.update(std::tie(addition, empty), std::tie(addition, empty), workspace);
         EXPECT_EQ(evaluator.get_result().size(), 2);
         EXPECT_TRUE(evaluator.get_result().contains(cells(1)));
         EXPECT_TRUE(evaluator.get_result().contains(cells(2)));
         EXPECT_EQ(rows<uint_t>(evaluator.get_delta().added), rows<uint_t>(addition));
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
     }
+}
+
+TEST(YggdrasilTests, DatabaseIncrementalEvaluatorsShareAccessAndAliasingContracts)
+{
+    // Equal schemas make the evaluators' own (empty) deltas valid changes, so only aliasing is rejected.
+    Builder<Relation<Values>> lhs({ ColumnIndex(0), ColumnIndex(1) });
+    Builder<Relation<Values>> rhs({ ColumnIndex(0), ColumnIndex(1) });
+    const Builder<Relation<Values>> none({ ColumnIndex(0), ColumnIndex(1) });
+    lhs.insert(cells(1, 2));
+    rhs.insert(cells(1, 2));
+    Workspace<Values> workspace;
+
+    JoinEvaluator<Values> join_evaluator(JoinPlan<Values>(lhs.columns(), rhs.columns()));
+    EXPECT_THROW(static_cast<void>(join_evaluator.get_result()), std::logic_error);
+    EXPECT_THROW(static_cast<void>(join_evaluator.get_delta()), std::logic_error);
+    join_evaluator.initialize(lhs, rhs, workspace);
+    EXPECT_THROW(join_evaluator.update(std::tie(join_evaluator.get_delta().added, none), std::tie(none, none), workspace), std::invalid_argument);
+    join_evaluator.update(std::tie(none, none), std::tie(none, none), workspace);
+    EXPECT_EQ(rows<uint_t>(join_evaluator.get_result()), (std::set<std::vector<uint_t>> { { 1, 2 } }));
+
+    ProjectionEvaluator<Values> projection(ProjectionPlan<Values>(lhs.columns(), { ColumnIndex(0), ColumnIndex(1) }));
+    EXPECT_THROW(static_cast<void>(projection.get_result()), std::logic_error);
+    projection.initialize(lhs, workspace);
+    EXPECT_THROW(projection.update(std::tie(projection.get_delta().added, none), workspace), std::invalid_argument);
+    projection.update(std::tie(none, none), workspace);
+    EXPECT_EQ(rows<uint_t>(projection.get_result()), (std::set<std::vector<uint_t>> { { 1, 2 } }));
 }
 
 }  // namespace ygg::tests

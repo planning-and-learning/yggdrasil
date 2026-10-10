@@ -12,7 +12,7 @@
 #include <vector>
 
 /// Data-independent planning of a join block from its hypergraph alone.
-namespace ygg::database::optimization_detail
+namespace ygg::database::detail
 {
 /// GYO reduction (M. H. Graham, "On the Universal Relation", 1979; C. T. Yu and
 /// M. Z. Özsoyoğlu, "An Algorithm for Tree-Query Membership of a Distributed Query",
@@ -89,14 +89,13 @@ QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std
         if (parent[atom])
             relations[atom] = build.semijoin(relations[atom], relations[*parent[atom]]);
 
-    const auto required = ygg::canonicalized(column_labels(block.output.span()));
     std::vector<std::optional<QueryView<Values>>> results(count);
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
     {
         auto joined = relations[*atom];
         for (const auto child : children[*atom])
             joined = build.join(joined, *results[child]);
-        auto keep = required;
+        auto keep = block.required;
         if (parent[*atom])
         {
             const auto shared = variables(block.atoms[*parent[*atom]]);
@@ -120,8 +119,8 @@ QueryView<Values> structural_plan(const JoinBlock<Values>& block, OperatorBuilde
         edges.push_back(variables(atom));
     if (const auto parent = join_tree(std::move(edges)))
         return yannakakis(block, *parent, build);
-    return build.generic_join(block.atoms, variable_order<Values>(block.atoms, {}));
+    return build.generic_join(block.atoms, variable_order<Values>(block.atoms));
 }
-}  // namespace ygg::database::optimization_detail
+}  // namespace ygg::database::detail
 
 #endif

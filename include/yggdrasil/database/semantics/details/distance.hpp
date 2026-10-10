@@ -34,6 +34,12 @@ inline uint_t DistanceGraph::insert_vertex(std::span<const std::byte> tuple)
     return vertices.insert(tuple);
 }
 
+inline std::pair<uint_t, uint_t> DistanceGraph::insert_endpoints(std::span<const std::byte> edge)
+{
+    const auto from = insert_vertex(edge.first(vertices.array_size()));
+    return { from, insert_vertex(edge.subspan(vertices.array_size())) };
+}
+
 inline bool DistanceGraph::contains_edge(uint_t from, uint_t to) const
 {
     for (const auto target : outgoing.values(from))
@@ -107,15 +113,57 @@ DistancePlan<Values>::DistancePlan(std::span<const ColumnLayout> sources,
 
 template<ColumnTypes Values>
     requires ColumnValueFor<uint_t, Values>
-DistanceWorkspace<Values>::DistanceWorkspace(const DistancePlan<Values>& plan) : graph(plan.tuple_size())
+DistanceWorkspace<Values>::DistanceWorkspace(const DistancePlan<Values>& plan) : m_graph(plan.tuple_size())
 {
+}
+
+template<ColumnTypes Values>
+    requires ColumnValueFor<uint_t, Values>
+bool DistanceWorkspace<Values>::matches(const DistancePlan<Values>& plan) const noexcept
+{
+    return m_graph.vertices.array_size() == plan.tuple_size();
+}
+
+template<ColumnTypes Values>
+    requires ColumnValueFor<uint_t, Values>
+template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+void DistanceWorkspace<Values>::append_distances(const S& sources,
+                                                 const E& edges,
+                                                 const T& targets,
+                                                 const DistancePlan<Values>& plan,
+                                                 Builder<Relation<Values>>& out)
+{
+    m_graph.clear();
+    m_targets.clear();
+    if (sources.empty() || targets.empty())
+        return;
+    m_graph.outgoing.reserve(edges.size());
+    for (size_t i = 0; i < edges.size(); ++i)
+    {
+        const auto [from, to] = m_graph.insert_endpoints(edges.row(i));
+        m_graph.outgoing.insert(from, to);
+    }
+    for (size_t i = 0; i < sources.size(); ++i)
+        m_graph.insert_vertex(sources.row(i));
+    m_targets.reserve(targets.size());
+    for (size_t i = 0; i < targets.size(); ++i)
+        m_targets.push_back(m_graph.insert_vertex(targets.row(i)));
+
+    for (size_t i = 0; i < sources.size(); ++i)
+    {
+        const auto from = *m_graph.vertices.find(sources.row(i));
+        detail::breadth_first_search(m_graph, from, m_distances, m_queue);
+        for (const auto to : m_targets)
+            if (m_distances[to] != detail::distance_infinity)
+                out.insert(detail::make_distance_row(m_graph, from, to, m_distances[to], plan, m_row));
+    }
 }
 
 template<ColumnTypes Values>
     requires ColumnValueFor<uint_t, Values>
 size_t DistanceWorkspace<Values>::memory_usage() const noexcept
 {
-    return graph.memory_usage() + (distances.capacity() + queue.capacity() + targets.capacity()) * sizeof(uint_t) + row.capacity();
+    return m_graph.memory_usage() + (m_distances.capacity() + m_queue.capacity() + m_targets.capacity()) * sizeof(uint_t) + m_row.capacity();
 }
 
 template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
@@ -130,38 +178,10 @@ void distance(const S& sources,
     detail::require_plan_columns(sources.columns().span(), plan.source_columns().span());
     detail::require_plan_columns(edges.columns().span(), plan.edge_columns().span());
     detail::require_plan_columns(targets.columns().span(), plan.target_columns().span());
-    if (workspace.graph.vertices.array_size() != plan.tuple_size())
+    if (!workspace.matches(plan))
         throw std::invalid_argument("Distance: workspace vertex byte width does not match the plan.");
     detail::prepare_output(out, plan.output_columns().span(), { sources.get_storage_address(), edges.get_storage_address(), targets.get_storage_address() });
-
-    auto& graph = workspace.graph;
-    graph.clear();
-    workspace.targets.clear();
-    if (sources.empty() || targets.empty())
-        return;
-    const auto tuple_size = plan.tuple_size();
-    graph.outgoing.reserve(edges.size());
-    for (size_t i = 0; i < edges.size(); ++i)
-    {
-        const auto edge = edges.row(i);
-        const auto from = graph.insert_vertex(edge.first(tuple_size));
-        const auto to = graph.insert_vertex(edge.subspan(tuple_size));
-        graph.outgoing.insert(from, to);
-    }
-    for (size_t i = 0; i < sources.size(); ++i)
-        graph.insert_vertex(sources.row(i));
-    workspace.targets.reserve(targets.size());
-    for (size_t i = 0; i < targets.size(); ++i)
-        workspace.targets.push_back(graph.insert_vertex(targets.row(i)));
-
-    for (size_t i = 0; i < sources.size(); ++i)
-    {
-        const auto from = *graph.vertices.find(sources.row(i));
-        detail::breadth_first_search(graph, from, workspace.distances, workspace.queue);
-        for (const auto to : workspace.targets)
-            if (workspace.distances[to] != detail::distance_infinity)
-                out.insert(detail::make_distance_row(graph, from, to, workspace.distances[to], plan, workspace.row));
-    }
+    workspace.append_distances(sources, edges, targets, plan, out);
 }
 
 template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>

@@ -83,11 +83,17 @@ void join_positions(std::span<const ColumnLayout> lhs,
 }  // namespace detail
 
 template<ColumnTypes Values>
-ProjectionPlan<Values>::ProjectionPlan(std::span<const ColumnLayout> input, std::span<const Index<Column>> columns) : m_input(input)
+void ProjectionPlan<Values>::compile(std::span<const Index<Column>> columns)
 {
     auto output = std::vector<ColumnLayout>();
     detail::projection_positions(m_input.span(), columns, output, m_positions);
     m_output.assign(output);
+}
+
+template<ColumnTypes Values>
+ProjectionPlan<Values>::ProjectionPlan(std::span<const ColumnLayout> input, std::span<const Index<Column>> columns) : m_input(input)
+{
+    compile(columns);
 }
 
 template<ColumnTypes Values>
@@ -97,7 +103,7 @@ ProjectionPlan<Values>::ProjectionPlan(std::span<const ColumnLayout> input, std:
 }
 
 template<ColumnTypes Values>
-JoinPlan<Values>::JoinPlan(std::span<const ColumnLayout> lhs, std::span<const ColumnLayout> rhs) : m_lhs(lhs), m_rhs(rhs)
+void JoinPlan<Values>::compile()
 {
     auto columns = std::vector<ColumnLayout>();
     detail::join_positions(m_lhs.span(), m_rhs.span(), columns, m_lhs_keys, m_rhs_keys, m_rhs_payload);
@@ -105,11 +111,15 @@ JoinPlan<Values>::JoinPlan(std::span<const ColumnLayout> lhs, std::span<const Co
 }
 
 template<ColumnTypes Values>
+JoinPlan<Values>::JoinPlan(std::span<const ColumnLayout> lhs, std::span<const ColumnLayout> rhs) : m_lhs(lhs), m_rhs(rhs)
+{
+    compile();
+}
+
+template<ColumnTypes Values>
 ProjectionPlan<Values>::ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns) : m_input(input)
 {
-    auto output = std::vector<ColumnLayout>();
-    detail::projection_positions(m_input.span(), columns, output, m_positions);
-    m_output.assign(output);
+    compile(columns);
 }
 
 template<ColumnTypes Values>
@@ -121,9 +131,7 @@ ProjectionPlan<Values>::ProjectionPlan(std::initializer_list<Index<Column>> inpu
 template<ColumnTypes Values>
 JoinPlan<Values>::JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs) : m_lhs(lhs), m_rhs(rhs)
 {
-    auto columns = std::vector<ColumnLayout>();
-    detail::join_positions(m_lhs.span(), m_rhs.span(), columns, m_lhs_keys, m_rhs_keys, m_rhs_payload);
-    m_output.assign(columns);
+    compile();
 }
 
 template<ColumnTypes Values>

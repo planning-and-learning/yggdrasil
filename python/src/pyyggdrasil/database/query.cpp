@@ -1,6 +1,6 @@
 #include "query.hpp"
+#include "module.hpp"
 
-#include "query_inputs.hpp"
 #include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/database/semantics/incremental/query.hpp"
 #include "yggdrasil/database/optimization/optimization.hpp"
@@ -14,6 +14,8 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <optional>
+#include <ranges>
+#include <tuple>
 #include <span>
 #include <utility>
 #include <vector>
@@ -33,33 +35,64 @@ using FullEvaluator = db::QueryEvaluator<Values>;
 using IncrementalEvaluator = db::incremental::QueryEvaluator<Values>;
 using Column = ygg::Index<db::Column>;
 using ColumnIndices = std::span<const db::ColumnLayout>;
-using database_python::BorrowedRelation;
-using database_python::Relation;
-using database_python::RelationInput;
-using database_python::column_labels;
+using Relation = ygg::Builder<db::Relation<Values>>;
+using Borrowed = db::BorrowedRelationView<Values>;
+using Interned = db::RelationView<Values>;
+using Statistics = db::Statistics<Values>;
 
-std::vector<Query> roots(nb::handle value)
+/// The relations bound to input slots; None is allowed only for slots the plan does not read.
+auto relations(const std::vector<std::optional<Borrowed>>& values)
 {
-    if (nb::isinstance<Query>(value))
-        return { nb::cast<Query>(value) };
-    return nb::cast<std::vector<Query>>(value);
+    static const Relation empty;
+    static const Borrowed absent(empty, borrowed_relation_context());
+    return values | std::views::transform([](const std::optional<Borrowed>& value) -> const Borrowed& { return value ? *value : absent; });
 }
 
-// Unbound (None) slots borrow the empty relation, so Inputs must not move.
-struct Inputs
-{
-    Relation absent;
-    std::vector<RelationInput> relations;
+/// Interned inputs are bound as they are; lists are homogeneous.
+const std::vector<Interned>& relations(const std::vector<Interned>& values) { return values; }
 
-    explicit Inputs(nb::sequence values)
-    {
-        relations.reserve(nb::len(values));
-        for (nb::handle value : values)
-            relations.push_back(value.is_none() ? RelationInput(absent) : RelationInput(value));
-    }
-    Inputs(const Inputs&) = delete;
-    Inputs& operator=(const Inputs&) = delete;
-};
+Borrowed borrow(const Relation& relation) { return Borrowed(relation, borrowed_relation_context()); }
+
+template<typename Input>
+void evaluate(FullEvaluator& evaluator, const std::vector<Input>& inputs)
+{
+    evaluator.evaluate(relations(inputs));
+}
+
+template<typename Input>
+void initialize(IncrementalEvaluator& evaluator, const std::vector<Input>& inputs)
+{
+    evaluator.initialize(relations(inputs));
+}
+
+template<typename Input>
+void update(IncrementalEvaluator& evaluator, const std::vector<Input>& added, const std::vector<Input>& removed)
+{
+    if (added.size() != removed.size())
+        throw std::invalid_argument("Query update: added and removed must have equal input-slot counts.");
+    const auto& additions = relations(added);
+    const auto& removals = relations(removed);
+    using View = std::ranges::range_reference_t<decltype(additions)>;
+    std::vector<std::tuple<View, View>> changes;
+    changes.reserve(added.size());
+    for (size_t i = 0; i < added.size(); ++i)
+        changes.emplace_back(additions[i], removals[i]);
+    evaluator.update(changes);
+}
+
+template<typename Input>
+Statistics collect_statistics(const std::vector<Input>& inputs)
+{
+    return db::collect_statistics<Values>(relations(inputs));
+}
+
+template<db::RelationViewConcept<Values> V>
+Relation snapshot(const V& relation)
+{
+    Relation result(relation.columns().span());
+    db::assign(result, relation);
+    return result;
+}
 
 db::QueryRepositoryFactory<Values>& factory()
 {
@@ -105,39 +138,37 @@ Query binary(Repository& repository, Query lhs, Query rhs)
 }
 
 template<typename Tag>
-Query relabel(Repository& repository, Query query, const std::vector<ygg::uint_t>& labels)
+Query relabel(Repository& repository, Query query, const std::vector<Column>& labels)
 {
     auto data = db::checkout<db::Query<Values, Tag>>(builder());
     data->arg = require(repository, query);
-    const auto indices = column_labels(labels);
-    data->labels.set(indices.begin(), indices.end());
+    data->labels.set(labels.begin(), labels.end());
     return db::insert_query(repository, builder(), *data);
 }
 
-Query select_equal(Repository& repository, Query query, ygg::uint_t left, ygg::uint_t right)
+Query select_equal(Repository& repository, Query query, Column left, Column right)
 {
     auto data = db::checkout<db::Query<Values, db::QuerySelectEqualTag>>(builder());
     data->arg = require(repository, query);
-    data->lhs_column = Column(left);
-    data->rhs_column = Column(right);
+    data->lhs_column = left;
+    data->rhs_column = right;
     return db::insert_query(repository, builder(), *data);
 }
 
-Query distance(Repository& repository, Query sources, Query edges, Query targets, ygg::uint_t distance_column)
+Query distance(Repository& repository, Query sources, Query edges, Query targets, Column distance_column)
 {
     auto data = db::checkout<db::Query<Values, db::QueryDistanceTag>>(builder());
     data->sources = require(repository, sources);
     data->edges = require(repository, edges);
     data->targets = require(repository, targets);
-    data->distance_column = Column(distance_column);
+    data->distance_column = distance_column;
     return db::insert_query(repository, builder(), *data);
 }
 
-Query select_value(Repository& repository, Query query, ygg::uint_t label, nb::handle value)
+Query select_value(Repository& repository, Query query, Column label, nb::handle value)
 {
-    const auto schema = query.columns();
-    for (const auto& column : schema)
-        if (column.label == Column(label))
+    for (const auto& column : query.columns())
+        if (column.label == label)
             return db::visit_column_type<Values>(column.type,
                                                  [&]<typename T>(std::type_identity<T>)
                                                  {
@@ -148,7 +179,7 @@ Query select_value(Repository& repository, Query query, ygg::uint_t label, nb::h
                                                      db::ColumnCodec<T>::encode(converted, bytes);
                                                      auto data = db::checkout<db::Query<Values, db::QuerySelectValueTag>>(builder());
                                                      data->arg = require(repository, query);
-                                                     data->column = Column(label);
+                                                     data->column = label;
                                                      data->constant.set(bytes.begin(), bytes.end());
                                                      return db::insert_query(repository, builder(), *data);
                                                  });
@@ -171,9 +202,9 @@ void bind_database_query(nb::module_& m)
         .def("input", &input, nb::arg("slot"), nb::arg("columns"), nb::keep_alive<0, 1>())
         .def(
             "input",
-            [](Repository& repository, size_t slot, const std::vector<ygg::uint_t>& labels)
+            [](Repository& repository, size_t slot, const std::vector<Column>& labels)
             {
-                const ygg::Builder<db::Columns<Values>> schema(column_labels(labels));
+                const ygg::Builder<db::Columns<Values>> schema(labels);
                 return input(repository, slot, schema.span());
             },
             nb::arg("slot"),
@@ -182,9 +213,9 @@ void bind_database_query(nb::module_& m)
         .def("empty", &empty, nb::arg("columns"), nb::keep_alive<0, 1>())
         .def(
             "empty",
-            [](Repository& repository, const std::vector<ygg::uint_t>& labels)
+            [](Repository& repository, const std::vector<Column>& labels)
             {
-                const ygg::Builder<db::Columns<Values>> schema(column_labels(labels));
+                const ygg::Builder<db::Columns<Values>> schema(labels);
                 return empty(repository, schema.span());
             },
             nb::arg("columns"),
@@ -199,12 +230,19 @@ void bind_database_query(nb::module_& m)
         .def("distance", &distance, nb::arg("source"), nb::arg("edges"), nb::arg("target"), nb::arg("distance_column"), nb::keep_alive<0, 1>())
         .def(
             "compile",
-            [](const Repository& repository, nb::handle root_queries)
+            [](const Repository& repository, Query root)
             {
-                const auto input = roots(root_queries);
-                for (const auto root : input)
+                require(repository, root);
+                return db::compile(std::span<const Query>(&root, 1));
+            },
+            nb::arg("root"))
+        .def(
+            "compile",
+            [](const Repository& repository, const std::vector<Query>& roots)
+            {
+                for (const auto root : roots)
                     require(repository, root);
-                return db::compile(std::span<const Query>(input));
+                return db::compile(std::span<const Query>(roots));
             },
             nb::arg("roots"));
 
@@ -213,118 +251,69 @@ void bind_database_query(nb::module_& m)
         .def_prop_ro("root_count", [](const Plan& plan) { return plan.root_count(); })
         .def("explain", [](const Plan& plan) { return db::explain(plan); });
 
-    // Python keys distinct counts by plain column labels.
-    const auto to_columns = [](const ygg::UnorderedMap<ygg::uint_t, double>& labels)
-    {
-        ygg::UnorderedMap<Column, double> result;
-        for (const auto& [label, count] : labels)
-            result.emplace(Column(label), count);
-        return result;
-    };
+    using Distinct = ygg::UnorderedMap<Column, double>;
     nb::class_<db::RelationStatistics>(m, "RelationStatistics")
-        .def(nb::new_([to_columns](double rows, const ygg::UnorderedMap<ygg::uint_t, double>& distinct)
-                      { return new db::RelationStatistics { rows, to_columns(distinct) }; }),
+        .def(nb::new_([](double rows, Distinct distinct) { return new db::RelationStatistics { rows, std::move(distinct) }; }),
              nb::arg("rows") = 0,
-             nb::arg("distinct") = ygg::UnorderedMap<ygg::uint_t, double> {})
+             nb::arg("distinct") = Distinct {})
         .def_rw("rows", &db::RelationStatistics::rows)
-        .def_prop_rw(
-            "distinct",
-            [](const db::RelationStatistics& statistics)
-            {
-                ygg::UnorderedMap<ygg::uint_t, double> result;
-                for (const auto& [column, count] : statistics.distinct)
-                    result.emplace(column.get_value(), count);
-                return result;
-            },
-            [to_columns](db::RelationStatistics& statistics, const ygg::UnorderedMap<ygg::uint_t, double>& distinct) { statistics.distinct = to_columns(distinct); });
+        .def_rw("distinct", &db::RelationStatistics::distinct);
     using QueryIndex = ygg::Index<db::Query<Values>>;
-    nb::class_<db::Statistics<Values>>(m, "Statistics", "What is known about the data; everything is optional.")
-        .def(nb::new_(
-                 [](std::optional<size_t> objects, ygg::UnorderedMap<size_t, db::RelationStatistics> inputs, ygg::UnorderedMap<QueryIndex, db::RelationStatistics> expressions)
-                 { return new db::Statistics<Values> { objects, std::move(inputs), std::move(expressions) }; }),
+    using InputStatistics = ygg::UnorderedMap<size_t, db::RelationStatistics>;
+    using ExpressionStatistics = ygg::UnorderedMap<QueryIndex, db::RelationStatistics>;
+    nb::class_<Statistics>(m, "Statistics", "What is known about the data; everything is optional.")
+        .def(nb::new_([](std::optional<size_t> objects, InputStatistics inputs, ExpressionStatistics expressions)
+                      { return new Statistics { objects, std::move(inputs), std::move(expressions) }; }),
              nb::arg("objects") = nb::none(),
-             nb::arg("inputs") = ygg::UnorderedMap<size_t, db::RelationStatistics> {},
-             nb::arg("expressions") = ygg::UnorderedMap<QueryIndex, db::RelationStatistics> {})
-        .def_rw("objects", &db::Statistics<Values>::objects)
-        .def_rw("inputs", &db::Statistics<Values>::inputs)
-        .def_rw("expressions", &db::Statistics<Values>::expressions);
+             nb::arg("inputs") = InputStatistics {},
+             nb::arg("expressions") = ExpressionStatistics {})
+        .def_rw("objects", &Statistics::objects)
+        .def_rw("inputs", &Statistics::inputs)
+        .def_rw("expressions", &Statistics::expressions);
 
+    constexpr auto optimize_doc = "Plan from structure, and from statistics for join blocks whose inputs are all measured.";
     m.def(
         "optimize",
-        [](nb::handle queries, const std::optional<db::Statistics<Values>>& statistics)
-        {
-            const auto values = roots(queries);
-            return db::optimize(std::span<const Query>(values), statistics.value_or(db::Statistics<Values> {}));
-        },
+        [](Query root, const std::optional<Statistics>& statistics) { return db::optimize(root, statistics.value_or(Statistics {})); },
+        nb::arg("root"),
+        nb::arg("statistics") = nb::none(),
+        optimize_doc);
+    m.def(
+        "optimize",
+        [](const std::vector<Query>& roots, const std::optional<Statistics>& statistics)
+        { return db::optimize(std::span<const Query>(roots), statistics.value_or(Statistics {})); },
         nb::arg("roots"),
         nb::arg("statistics") = nb::none(),
-        "Plan from structure, and from statistics for join blocks whose inputs are all measured.");
-    m.def(
-        "collect_statistics",
-        [](nb::sequence values)
-        {
-            const Inputs input(values);
-            return db::collect_statistics<Values>(input.relations);
-        },
-        nb::arg("inputs"));
-    m.def(
-        "snapshot",
-        [](nb::handle value)
-        {
-            const RelationInput input(value);
-            Relation result(input.columns().span());
-            db::assign(result, input);
-            return result;
-        },
-        nb::arg("relation"),
-        "Copy a relation or borrowed evaluator result into independent mutable storage.");
+        optimize_doc);
+    m.def("collect_statistics", &collect_statistics<std::optional<Borrowed>>, nb::arg("inputs"));
+    m.def("collect_statistics", &collect_statistics<Interned>, nb::arg("inputs"));
+    constexpr auto snapshot_doc = "Copy a relation, e.g. a borrowed evaluator result, into independent mutable storage.";
+    m.def("snapshot", &snapshot<Borrowed>, nb::arg("relation"), snapshot_doc);
+    m.def("snapshot", &snapshot<Interned>, nb::arg("relation"), snapshot_doc);
 
     nb::class_<FullEvaluator>(m, "QueryEvaluator", "Evaluate a compiled query DAG. Input relations are borrowed only during each call.")
         .def(nb::init<Plan>(), nb::arg("plan"))
-        .def(
-            "evaluate",
-            [](FullEvaluator& evaluator, nb::sequence values)
-            {
-                const Inputs input(values);
-                evaluator.evaluate(input.relations);
-            },
-            nb::arg("inputs"))
+        .def("evaluate", &evaluate<std::optional<Borrowed>>, nb::arg("inputs"))
+        .def("evaluate", &evaluate<Interned>, nb::arg("inputs"))
         .def(
             "get_result",
-            [](const FullEvaluator& evaluator, size_t root) { return BorrowedRelation { &evaluator.get_result(root) }; },
+            [](const FullEvaluator& evaluator, size_t root) { return borrow(evaluator.get_result(root)); },
             nb::arg("root") = 0,
-            nb::keep_alive<0, 1>())
+            nb::keep_alive<0, 1>(),
+            "Borrowed result; the next evaluate invalidates it.")
         .def("memory_usage", &FullEvaluator::memory_usage);
     nb::class_<IncrementalEvaluator>(m, "IncrementalQueryEvaluator", "Maintain a compiled query DAG and exact net root deltas.")
         .def(nb::init<Plan>(), nb::arg("plan"))
-        .def(
-            "initialize",
-            [](IncrementalEvaluator& evaluator, nb::sequence values)
-            {
-                const Inputs input(values);
-                evaluator.initialize(input.relations);
-            },
-            nb::arg("inputs"))
-        .def(
-            "update",
-            [](IncrementalEvaluator& evaluator, nb::sequence added, nb::sequence removed)
-            {
-                if (nb::len(added) != nb::len(removed))
-                    throw std::invalid_argument("Query update: added and removed must have equal input-slot counts.");
-                const Inputs additions(added), removals(removed);
-                std::vector<std::pair<RelationInput, RelationInput>> deltas;
-                deltas.reserve(additions.relations.size());
-                for (size_t i = 0; i < additions.relations.size(); ++i)
-                    deltas.emplace_back(additions.relations[i], removals.relations[i]);
-                evaluator.update(deltas);
-            },
-            nb::arg("added"),
-            nb::arg("removed"))
+        .def("initialize", &initialize<std::optional<Borrowed>>, nb::arg("inputs"))
+        .def("initialize", &initialize<Interned>, nb::arg("inputs"))
+        .def("update", &update<std::optional<Borrowed>>, nb::arg("added"), nb::arg("removed"))
+        .def("update", &update<Interned>, nb::arg("added"), nb::arg("removed"))
         .def(
             "get_result",
-            [](const IncrementalEvaluator& evaluator, size_t root) { return BorrowedRelation { &evaluator.get_result(root) }; },
+            [](const IncrementalEvaluator& evaluator, size_t root) { return borrow(evaluator.get_result(root)); },
             nb::arg("root") = 0,
-            nb::keep_alive<0, 1>())
+            nb::keep_alive<0, 1>(),
+            "Borrowed result; the next initialize or update invalidates it.")
         .def(
             "get_delta",
             [](const IncrementalEvaluator& evaluator, size_t root) -> const db::incremental::Delta<Values>& { return evaluator.get_delta(root); },

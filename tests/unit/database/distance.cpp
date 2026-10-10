@@ -158,7 +158,7 @@ TEST(YggdrasilTests, DatabaseDistanceAcceptsInternedViewsWithoutRetainingInputOw
     sources.clear();
     edges.clear();
     targets.clear();
-    evaluator.update(sources, sources, edges, edges, targets, targets);
+    evaluator.update(std::tie(sources, sources), std::tie(edges, edges), std::tie(targets, targets));
     EXPECT_EQ(rows(evaluator.get_result()), rows(result));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
@@ -191,18 +191,18 @@ TEST(YggdrasilTests, DatabaseDistanceValidatesSchemasBeforeClearingOutput)
     incremental::Delta<Values> source_delta(sources.columns().span()), edge_delta(edges.columns().span()), target_delta(targets.columns().span());
     EXPECT_THROW((void) evaluator.get_result(), std::logic_error);
     EXPECT_THROW((void) evaluator.get_delta(), std::logic_error);
-    EXPECT_THROW(evaluator.update(source_delta.added, source_delta.removed, edge_delta.added, edge_delta.removed, target_delta.added, target_delta.removed),
+    EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()),
                  std::logic_error);
     evaluator.initialize(sources, edges, targets);
-    EXPECT_THROW(evaluator.update(wrong, source_delta.removed, edge_delta.added, edge_delta.removed, target_delta.added, target_delta.removed),
+    EXPECT_THROW(evaluator.update(std::tie(wrong, source_delta.removed), edge_delta.change(), target_delta.change()),
                  std::invalid_argument);
     source_delta.added.insert(std::tuple { uint_t(2) });
     source_delta.removed.insert(std::tuple { uint_t(2) });
-    EXPECT_THROW(evaluator.update(source_delta.added, source_delta.removed, edge_delta.added, edge_delta.removed, target_delta.added, target_delta.removed),
+    EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()),
                  std::invalid_argument);
     EXPECT_EQ(rows(evaluator.get_result()), rows(output));
     source_delta.clear();
-    evaluator.update(source_delta.added, source_delta.removed, edge_delta.added, edge_delta.removed, target_delta.added, target_delta.removed);
+    evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change());
     EXPECT_EQ(rows(evaluator.get_result()), rows(output));
 }
 
@@ -228,9 +228,10 @@ TEST(YggdrasilTests, DatabaseDistanceRejectsChangesThatAreNotActualSetChanges)
                 (removing ? de.removed : de.added).insert(std::tuple { uint_t(1), uint_t(removing ? 7 : 2) });
             else
                 (removing ? dt.removed : dt.added).insert(std::tuple { uint_t(removing ? 7 : 2) });
-            EXPECT_THROW(evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed), std::invalid_argument);
-            EXPECT_THROW((void) evaluator.get_result(), std::logic_error);
-            EXPECT_THROW((void) evaluator.get_delta(), std::logic_error);
+            // Invalid changes are rejected before mutation, so the previous evaluation remains.
+            EXPECT_THROW(evaluator.update(ds.change(), de.change(), dt.change()), std::invalid_argument);
+            EXPECT_EQ(rows(evaluator.get_result()), (Results { { 1, 2, 1 } }));
+            EXPECT_TRUE(evaluator.get_delta().added.empty() && evaluator.get_delta().removed.empty());
         }
     evaluator.initialize(sources, edges, targets);
     EXPECT_EQ(rows(evaluator.get_result()), (Results { { 1, 2, 1 } }));
@@ -249,21 +250,21 @@ TEST(YggdrasilTests, DatabaseDistanceRepairsAlternateShortestPathsAndDisconnects
     const Results initial { { 0, 3, 2 }, { 0, 4, 3 } };
     EXPECT_EQ(rows(evaluator.get_result()), initial);
     de.removed.insert(std::tuple { uint_t(0), uint_t(1) });
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, initial, initial);
     de.clear();
     de.removed.insert(std::tuple { uint_t(0), uint_t(2) });
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, initial, {});
     de.clear();
     de.added.insert(std::tuple { uint_t(0), uint_t(4) });
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     const Results repaired { { 0, 3, 3 }, { 0, 4, 1 } };
     expect_delta(evaluator, {}, repaired);
     de.clear();
     de.removed.insert(std::tuple { uint_t(0), uint_t(4) });
     de.added.insert(std::tuple { uint_t(0), uint_t(2) });
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, repaired, initial);
 }
 
@@ -288,7 +289,7 @@ TEST(YggdrasilTests, DatabaseDistanceMixedReplacementLeavesAnUnchangedChainUnpro
     {
         SCOPED_TRACE(undo);
         incremental::detail::distance_work = {};
-        evaluator.update(ds.added, ds.removed, undo ? de.removed : de.added, undo ? de.added : de.removed, dt.added, dt.removed);
+        evaluator.update(ds.change(), std::tie(undo ? de.removed : de.added, undo ? de.added : de.removed), dt.change());
         const auto work = incremental::detail::distance_work;
         expect_delta(evaluator, expected, expected);
         EXPECT_EQ(work.processed_vertices, 0);
@@ -327,7 +328,7 @@ TEST(YggdrasilTests, DatabaseDistanceEqualSupportsDoNotRescanDenseUnchangedNeigh
     {
         SCOPED_TRACE(undo);
         incremental::detail::distance_work = {};
-        evaluator.update(ds.added, ds.removed, undo ? de.removed : de.added, undo ? de.added : de.removed, dt.added, dt.removed);
+        evaluator.update(ds.change(), std::tie(undo ? de.removed : de.added, undo ? de.added : de.removed), dt.change());
         const auto work = incremental::detail::distance_work;
         expect_delta(evaluator, undo ? after : before, undo ? before : after);
         EXPECT_EQ(work.processed_vertices, undo ? 2 : 1);
@@ -365,7 +366,7 @@ TEST(YggdrasilTests, DatabaseDistanceRepairsUnreachableCyclesSelfLoopsAndEdgesIn
         edge_set.insert(added.begin(), added.end());
         fill(de.added, added);
         fill(de.removed, removed);
-        evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+        evaluator.update(ds.change(), de.change(), dt.change());
         expect_delta(evaluator, before, reference(source_set, edge_set, target_set, 7));
         EXPECT_TRUE(evaluator.get_result().contains(std::tuple { uint_t(0), uint_t(0), uint_t(0) }));
     }
@@ -401,12 +402,12 @@ TEST(YggdrasilTests, DatabaseDistanceMixedTupleTypesShareCanonicalVertices)
     evaluator.initialize(sources, edges, targets);
     incremental::Delta<Mixed> ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     de.removed.insert(edges[0]);
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     EXPECT_EQ(evaluator.get_result().size(), 1);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     ASSERT_EQ(evaluator.get_delta().removed.size(), 1);
     EXPECT_TRUE(evaluator.get_delta().removed.contains(std::tuple { uint_t(7), 0.0, true, uint_t(8), 1.5, false, uint_t(1) }));
-    evaluator.update(ds.removed, ds.added, de.removed, de.added, dt.removed, dt.added);
+    evaluator.update(std::tie(ds.removed, ds.added), std::tie(de.removed, de.added), std::tie(dt.removed, dt.added));
     EXPECT_EQ(evaluator.get_result().size(), 2);
     for (size_t i = 0; i < result.size(); ++i)
         EXPECT_TRUE(evaluator.get_result().contains(result[i]));
@@ -425,13 +426,13 @@ TEST(YggdrasilTests, DatabaseDistanceNullaryTuplesUseTheSingleEmptyVertex)
     evaluator.initialize(sources, edges, targets);
     RelationBuilder empty, truth;
     truth.insert(std::tuple {});
-    evaluator.update(truth, empty, empty, empty, empty, empty);
+    evaluator.update(std::tie(truth, empty), std::tie(empty, empty), std::tie(empty, empty));
     ASSERT_EQ(evaluator.get_result().size(), 1);
     EXPECT_TRUE(evaluator.get_result().contains(std::tuple { uint_t(0) }));
-    evaluator.update(empty, empty, truth, empty, empty, empty);
+    evaluator.update(std::tie(empty, empty), std::tie(truth, empty), std::tie(empty, empty));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    evaluator.update(empty, truth, empty, truth, empty, empty);
+    evaluator.update(std::tie(empty, truth), std::tie(empty, truth), std::tie(empty, empty));
     EXPECT_TRUE(evaluator.get_result().empty());
     EXPECT_TRUE(evaluator.get_delta().removed.contains(std::tuple { uint_t(0) }));
     sources.insert(std::tuple {});
@@ -458,11 +459,11 @@ TEST(YggdrasilTests, DatabaseDistanceGrowsTheSharedDictionaryAndResetsToASmaller
         expanded_edges.emplace(vertex, vertex + 1);
     expanded_edges.emplace(80, 97);
     fill(de.added, expanded_edges);
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     const auto expanded = reference(Vertices { 1, 33, 65 }, expanded_edges, Vertices { 1, 80, 97 }, 98);
     ASSERT_EQ(expanded.size(), 7);
     expect_delta(evaluator, initial, expanded);
-    evaluator.update(ds.removed, ds.added, de.removed, de.added, dt.removed, dt.added);
+    evaluator.update(std::tie(ds.removed, ds.added), std::tie(de.removed, de.added), std::tie(dt.removed, dt.added));
     expect_delta(evaluator, expanded, initial);
 
     fill(sources, Vertices { 2 });
@@ -479,7 +480,7 @@ TEST(YggdrasilTests, DatabaseDistanceGrowsTheSharedDictionaryAndResetsToASmaller
     ds.added.insert(std::tuple { uint_t(3) });
     de.added.insert(std::tuple { uint_t(3), uint_t(2) });
     dt.added.insert(std::tuple { uint_t(2) });
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, smaller, Results { { 2, 2, 0 }, { 2, 3, 1 }, { 3, 2, 1 }, { 3, 3, 0 } });
 }
 
@@ -495,19 +496,19 @@ TEST(YggdrasilTests, DatabaseDistanceMovesRetainedRepairStorageAndResetsAfterwar
     incremental::Delta<Values> ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     fill(de.added, Edges { { 0, 3 } });
     const Results initial { { 0, 3, 3 }, { 0, 4, 4 } }, shortcut { { 0, 3, 1 }, { 0, 4, 2 } };
-    evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    evaluator.update(ds.change(), de.change(), dt.change());
 
     incremental::DistanceEvaluator<Values> moved(std::move(evaluator));
     expect_delta(moved, initial, shortcut);
-    moved.update(ds.added, ds.removed, de.removed, de.added, dt.added, dt.removed);
+    moved.update(ds.change(), std::tie(de.removed, de.added), dt.change());
     expect_delta(moved, shortcut, initial);
 
     incremental::DistanceEvaluator<Values> assigned(plan);
     assigned.initialize(sources, edges, targets);
-    assigned.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    assigned.update(ds.change(), de.change(), dt.change());
     assigned = std::move(moved);
     expect_delta(assigned, shortcut, initial);
-    assigned.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    assigned.update(ds.change(), de.change(), dt.change());
     expect_delta(assigned, initial, shortcut);
 
     fill(sources, Vertices { 20 });
@@ -519,7 +520,7 @@ TEST(YggdrasilTests, DatabaseDistanceMovesRetainedRepairStorageAndResetsAfterwar
     EXPECT_TRUE(assigned.get_delta().added.empty());
     EXPECT_TRUE(assigned.get_delta().removed.empty());
     fill(de.added, Edges { { 21, 22 } });
-    assigned.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+    assigned.update(ds.change(), de.change(), dt.change());
     expect_delta(assigned, reset, Results { { 20, 20, 0 }, { 20, 21, 1 }, { 20, 22, 2 } });
 }
 
@@ -570,7 +571,7 @@ TEST(YggdrasilTests, DatabaseDistanceRandomBatchesAndUndoMatchIndependentPairwis
             changes(ds, old_sources, source_set);
             changes(de, old_edges, edge_set);
             changes(dt, old_targets, target_set);
-            evaluator.update(ds.added, ds.removed, de.added, de.removed, dt.added, dt.removed);
+            evaluator.update(ds.change(), de.change(), dt.change());
             const auto after = reference(source_set, edge_set, target_set, universe);
             expect_delta(evaluator, before, after);
             fill(sources, source_set);
@@ -580,7 +581,7 @@ TEST(YggdrasilTests, DatabaseDistanceRandomBatchesAndUndoMatchIndependentPairwis
             EXPECT_EQ(rows(full), after);
             if (step % 5 == 0)
             {
-                evaluator.update(ds.removed, ds.added, de.removed, de.added, dt.removed, dt.added);
+                evaluator.update(std::tie(ds.removed, ds.added), std::tie(de.removed, de.added), std::tie(dt.removed, dt.added));
                 expect_delta(evaluator, after, before);
                 source_set = old_sources;
                 edge_set = old_edges;

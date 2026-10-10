@@ -18,6 +18,9 @@
 
 namespace ygg::database::detail
 {
+/// The most vertices the 64-bit vertex sets represent.
+constexpr size_t max_dpccp_vertices = 63;
+
 template<typename Callback>
 class DpccpEnumerator
 {
@@ -99,7 +102,7 @@ public:
 template<typename Callback>
 bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callback&& emit)
 {
-    if (adjacency.size() > 63)
+    if (adjacency.size() > max_dpccp_vertices)
         throw std::invalid_argument("DPccp: at most 63 vertices are supported.");
     const auto all = bit::lo_set<std::uint64_t>[adjacency.size()];
     for (size_t vertex = 0; vertex < adjacency.size(); ++vertex)

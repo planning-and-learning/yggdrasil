@@ -1,5 +1,6 @@
 from .._pyyggdrasil.database import (
     BorrowedRelation,
+    ColumnIndex,
     ColumnIndices,
     ColumnType,
     DistanceEvaluator,
@@ -32,6 +33,7 @@ from .._pyyggdrasil.database import (
 
 __all__ = [
     "BorrowedRelation",
+    "ColumnIndex",
     "ColumnIndices",
     "ColumnType",
     "DistanceEvaluator",

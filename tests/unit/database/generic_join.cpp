@@ -11,6 +11,7 @@
 #include <array>
 #include <bit>
 #include <gtest/gtest.h>
+#include <tuple>
 #include <random>
 
 namespace ygg::tests
@@ -375,7 +376,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalProjectionPreservesReplacedWi
     a.added.insert(std::tuple { uint_t(2), uint_t(10) });
     const std::array changes { std::pair { borrow(a.added), borrow(a.removed) }, std::pair { borrow(b.added), borrow(b.removed) } };
     evaluator.update(changes);
-    projected.update(evaluator.get_delta().added, evaluator.get_delta().removed, workspace);
+    projected.update(evaluator.get_delta().change(), workspace);
     EXPECT_EQ(projected.get_result().size(), 1);
     EXPECT_TRUE(projected.get_delta().added.empty());
     EXPECT_TRUE(projected.get_delta().removed.empty());

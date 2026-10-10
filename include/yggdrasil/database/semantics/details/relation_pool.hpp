@@ -18,10 +18,9 @@ RelationPool<Values> RelationPoolFactory<Values>::create_pool()
 }
 
 template<ColumnTypes Values>
-UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::get_or_allocate(std::span<const ColumnLayout> columns)
+template<typename Schema>
+UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::allocate(size_t width, Schema columns)
 {
-    validate_columns<Values>(columns);
-    const auto width = row_size(columns);
     auto relation = m_pools[width].get_or_allocate(columns);
     if (relation->m_storage_index == std::numeric_limits<size_t>::max())
         relation->m_storage_index = m_factory.next_index();
@@ -29,17 +28,16 @@ UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::get_or
 }
 
 template<ColumnTypes Values>
+UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::get_or_allocate(std::span<const ColumnLayout> columns)
+{
+    validate_columns<Values>(columns);
+    return allocate(row_size(columns), columns);
+}
+
+template<ColumnTypes Values>
 UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::get_or_allocate(std::span<const Index<Column>> columns)
 {
-    detail::validate_column_labels(columns);
-    const auto field_width = column_size<Values>(0);
-    if (columns.size() > std::numeric_limits<size_t>::max() / field_width)
-        throw std::length_error("Columns: row byte width exceeds addressable memory.");
-    const auto width = columns.size() * field_width;
-    auto relation = m_pools[width].get_or_allocate(columns);
-    if (relation->m_storage_index == std::numeric_limits<size_t>::max())
-        relation->m_storage_index = m_factory.next_index();
-    return relation;
+    return allocate(detail::label_row_size<Values>(columns), columns);
 }
 
 template<ColumnTypes Values>

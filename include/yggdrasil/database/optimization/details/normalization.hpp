@@ -21,7 +21,7 @@
 /// selections down through join, projection, rename, union, and difference; push
 /// projections through rename and union, never through difference; collapse nested
 /// projections; propagate empty relations. One deterministic bottom-up pass.
-namespace ygg::database::optimization_detail
+namespace ygg::database::detail
 {
 template<ColumnTypes Values>
 class Normalizer
@@ -29,11 +29,8 @@ class Normalizer
     template<class Tag>
     using Operation = Data<Query<Values, Tag>>;
 
-    QueryRepository<Values>* m_repository;
-    QueryBuilder<Values>* m_builder;
     OperatorBuilder<Values> m_build;
     std::vector<std::optional<QueryView<Values>>> m_normalized;
-
 
     QueryView<Values> join(QueryView<Values> lhs, QueryView<Values> rhs)
     {
@@ -106,7 +103,7 @@ class Normalizer
         data.column = inverse(rename, renamed)[0];
     }
     template<class Tag>
-    QueryView<Values> select(Operation<Tag> data, QueryView<Values> arg)
+    QueryView<Values> select(const Operation<Tag>& data, QueryView<Values> arg)
     {
         const auto columns = tested(data);
         const auto within = [&](QueryView<Values> query)
@@ -155,7 +152,7 @@ class Normalizer
     template<class Tag>
     QueryView<Values> normalize(QueryView<Values> source, QueryView<Values, Tag> query)
     {
-        const auto child = [&](QueryView<Values> source) { return (*this)(source); };
+        const auto child = [&](QueryView<Values> operand) { return (*this)(operand); };
         if constexpr (std::same_as<Tag, QueryJoinTag>)
             return join(child(query.get_lhs()), child(query.get_rhs()));
         else if constexpr (std::same_as<Tag, QueryUnionTag>)
@@ -173,12 +170,12 @@ class Normalizer
             std::vector<QueryView<Values>> children;
             bool absent = false;
             for_each_child(query,
-                           [&](QueryView<Values> source)
+                           [&](QueryView<Values> operand)
                            {
-                               children.push_back(child(source));
+                               children.push_back(child(operand));
                                absent |= is<QueryEmptyTag>(children.back());
                            });
-            const auto result = detail::clone_query(source, std::span<const QueryView<Values>>(children), *m_repository, *m_builder);
+            const auto result = m_build.clone(source, children);
             if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                 if (absent)
                     return m_build.empty(result.columns());
@@ -188,8 +185,6 @@ class Normalizer
 
 public:
     Normalizer(QueryRepository<Values>& repository, QueryBuilder<Values>& builder, size_t source_size) :
-        m_repository(&repository),
-        m_builder(&builder),
         m_build(repository, builder),
         m_normalized(source_size)
     {
@@ -204,6 +199,6 @@ public:
         return *normalized;
     }
 };
-}  // namespace ygg::database::optimization_detail
+}  // namespace ygg::database::detail
 
 #endif

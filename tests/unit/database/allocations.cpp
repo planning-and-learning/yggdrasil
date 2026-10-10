@@ -776,9 +776,9 @@ struct IncrementalEvaluation
                 values[i] = static_cast<uint_t>(i + (phase == 0 ? 0 : (generation * 3 + phase) * rows));
                 delta.added.insert(cells(key, values[i]));
             }
-            joining.update(delta.added, delta.removed, unchanged, unchanged, workspace);
+            joining.update(delta.change(), std::tie(unchanged, unchanged), workspace);
             const auto& joined_delta = joining.get_delta();
-            projecting.update(joined_delta.added, joined_delta.removed, workspace);
+            projecting.update(joined_delta.change(), workspace);
             valid &= joining.get_result().size() == rows * fanout;
             valid &= projecting.get_result().size() == rows;
             valid &= joined_delta.added.size() == changed_rows * fanout;
@@ -877,7 +877,7 @@ struct ChangingJoinEvaluation
             }
             // Overlapping changes exercise old/old, old/new, and new/new join
             // matches without double-reporting the tuples affected on both sides.
-            joining.update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed, workspace);
+            joining.update(lhs_delta.change(), rhs_delta.change(), workspace);
             size_t expected = 0;
             for (const auto& lhs : values)
                 for (const auto& rhs : values)
@@ -1084,7 +1084,7 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceSourceChurnReusesFiniteUniverseStorag
         bool valid = true;
         for (uint_t vertex = 0; vertex < vertices; ++vertex)
         {
-            evaluator.update(changes[vertex].added, changes[vertex].removed, no_edges, no_edges, no_targets, no_targets);
+            evaluator.update(changes[vertex].change(), std::tie(no_edges, no_edges), std::tie(no_targets, no_targets));
             const auto source = (vertex + 1) % vertices;
             valid &= evaluator.get_result().size() == vertices;
             valid &= evaluator.get_result().contains(cells(source, 0, (vertices - source) % vertices));
@@ -1125,11 +1125,11 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceEdgeRepairAndUndoRetainStorage)
     Builder<Relation<Values>> no_sources(sources.columns().span()), no_targets(targets.columns().span());
     const auto cycle = [&]
     {
-        evaluator.update(no_sources, no_sources, change.added, change.removed, no_targets, no_targets);
+        evaluator.update(std::tie(no_sources, no_sources), change.change(), std::tie(no_targets, no_targets));
         bool valid = evaluator.get_result().size() == 2 * vertices;
         valid &= evaluator.get_result().contains(cells(0, 8, 1));
         valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
-        evaluator.update(no_sources, no_sources, change.removed, change.added, no_targets, no_targets);
+        evaluator.update(std::tie(no_sources, no_sources), std::tie(change.removed, change.added), std::tie(no_targets, no_targets));
         valid &= evaluator.get_result().size() == 2 * vertices;
         valid &= evaluator.get_result().contains(cells(0, 8, 8));
         valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
@@ -1176,12 +1176,12 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
     Builder<Relation<Values>> no_sources(sources.columns().span()), no_targets(targets.columns().span());
     const auto cycle = [&]
     {
-        evaluator.update(no_sources, no_sources, change.added, change.removed, no_targets, no_targets);
+        evaluator.update(std::tie(no_sources, no_sources), change.change(), std::tie(no_targets, no_targets));
         bool valid = evaluator.get_result().size() == 4 * width;
         valid &= evaluator.get_result().contains(cells(0, first_parent, 1));
         valid &= evaluator.get_result().contains(cells(3, first_child, 2));
         valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
-        evaluator.update(no_sources, no_sources, change.removed, change.added, no_targets, no_targets);
+        evaluator.update(std::tie(no_sources, no_sources), std::tie(change.removed, change.added), std::tie(no_targets, no_targets));
         valid &= evaluator.get_result().size() == 4 * width;
         valid &= evaluator.get_result().contains(cells(0, first_parent, first_parent));
         valid &= evaluator.get_result().contains(cells(3, first_child, first_parent - 2));

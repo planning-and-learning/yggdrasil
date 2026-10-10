@@ -6,17 +6,21 @@ import pyyggdrasil
 from pyyggdrasil import database
 
 
+def columns(*labels):
+    return [database.ColumnIndex(label) for label in labels]
+
+
 def test_relation_rows_and_validation() -> None:
     assert database is pyyggdrasil.database
     assert all(hasattr(database, name) for name in database.__all__)
-    relation = database.Relation([10, 20])
+    relation = database.Relation(columns(10, 20))
     labels = relation.columns()
     assert isinstance(labels, database.ColumnIndices)
     assert len(labels) == 2
-    assert tuple(labels) == (10, 20)
-    assert all(type(label) is int for label in labels)
-    assert labels[-1] == 20
-    assert labels[-2] == 10
+    assert tuple(labels) == tuple(columns(10, 20))
+    assert all(type(label) is database.ColumnIndex for label in labels)
+    assert labels[-1] == database.ColumnIndex(20)
+    assert labels[-2] == database.ColumnIndex(10)
     for index in (-3, 2):
         with pytest.raises(IndexError):
             _ = labels[index]
@@ -46,7 +50,7 @@ def test_relation_rows_and_validation() -> None:
     with pytest.raises(ValueError):
         relation.insert([1])
     with pytest.raises(ValueError):
-        database.Relation([1, 1])
+        database.Relation(columns(1, 1))
 
     for value in range(5000):
         relation.insert([value, 0])
@@ -55,7 +59,7 @@ def test_relation_rows_and_validation() -> None:
     assert tuple(row) == (3, 4)
     del row
     gc.collect()
-    assert tuple(labels) == (10, 20)
+    assert tuple(labels) == tuple(columns(10, 20))
 
 
 def test_nullary_relation() -> None:
@@ -78,7 +82,7 @@ def test_nullary_relation() -> None:
 
 def test_pooled_rows_keep_their_owners_alive() -> None:
     pool = database.RelationPool()
-    handle = pool.get_or_allocate([0, 1])
+    handle = pool.get_or_allocate(columns(0, 1))
     assert isinstance(handle, database.RelationPtr)
     relation = handle.get()
     assert handle.get() is relation
@@ -89,27 +93,27 @@ def test_pooled_rows_keep_their_owners_alive() -> None:
     del relation, handle
     gc.collect()
 
-    other = pool.get_or_allocate([10, 20])
+    other = pool.get_or_allocate(columns(10, 20))
     assert other.get().empty()
     other.get().insert([5, 6])
     assert tuple(row) == (3, 4)
     del other
     gc.collect()
     with pytest.raises(ValueError):
-        pool.get_or_allocate([10, 10])
-    reused = pool.get_or_allocate([30, 40])
+        pool.get_or_allocate(columns(10, 10))
+    reused = pool.get_or_allocate(columns(30, 40))
     assert reused.get().empty()
     reused.get().insert([7, 8])
     assert tuple(row) == (3, 4)
     del reused, pool
     gc.collect()
     assert tuple(row) == (3, 4)
-    assert tuple(labels) == (0, 1)
+    assert tuple(labels) == tuple(columns(0, 1))
 
 
 def test_iterators_keep_pooled_rows_alive() -> None:
     pool = database.RelationPool()
-    handle = pool.get_or_allocate([0, 1])
+    handle = pool.get_or_allocate(columns(0, 1))
     handle.get().insert([3, 4])
     handle.get().insert([5, 6])
     rows = iter(handle.get())
@@ -138,7 +142,7 @@ def test_iterators_keep_pooled_rows_alive() -> None:
 def test_interned_relations_use_typed_identity_and_independent_storage() -> None:
     factory = database.RelationRepositoryFactory()
     repository = factory.create()
-    builder = database.Relation([10, 20])
+    builder = database.Relation(columns(10, 20))
     builder.insert([3, 4])
     builder.insert([5, 6])
     result = database.insert(repository, builder)
@@ -162,10 +166,10 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     namespaced = database.insert(repository, builder, schema_namespace=1)[0]
     assert namespaced != relation
     assert len(repository) == 2
-    assert repository.rename(namespaced, [10, 20]) == namespaced
-    assert repository.rename(namespaced, [10, 20], schema_namespace=0) == relation
+    assert repository.rename(namespaced, columns(10, 20)) == namespaced
+    assert repository.rename(namespaced, columns(10, 20), schema_namespace=0) == relation
     with pytest.raises(ValueError):
-        other_repository.rename(relation, [30, 40])
+        other_repository.rename(relation, columns(30, 40))
 
     builder.clear()
     builder.insert([8, 9])
@@ -180,33 +184,33 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     with pytest.raises(IndexError):
         relation.at(2)
 
-    renamed = repository.rename(relation, [30, 40])
-    assert tuple(renamed.columns()) == (30, 40)
+    renamed = repository.rename(relation, columns(30, 40))
+    assert tuple(renamed.columns()) == tuple(columns(30, 40))
     assert [tuple(row) for row in renamed] == [(3, 4), (5, 6)]
     assert renamed != relation
-    assert repository.rename(renamed, [10, 20]) == relation
+    assert repository.rename(renamed, columns(10, 20)) == relation
     with pytest.raises(ValueError):
-        repository.rename(relation, [30])
+        repository.rename(relation, columns(30))
     with pytest.raises(ValueError):
-        repository.rename(relation, [30, 30])
+        repository.rename(relation, columns(30, 30))
 
     # Every borrowed layer must keep the repository alive, without keeping the
     # mutable builder alive or depending on its buffers.
     row = relation.at(0)
     labels = renamed.columns()
     assert isinstance(labels, database.ColumnIndices)
-    assert all(type(label) is int for label in labels)
+    assert all(type(label) is database.ColumnIndex for label in labels)
     rows = iter(renamed)
     indexed_row = relation[1]
     del relation, duplicate, namespaced, renamed, repository, other_repository, factory, builder
     gc.collect()
     assert tuple(row) == (3, 4)
-    assert tuple(labels) == (30, 40)
+    assert tuple(labels) == tuple(columns(30, 40))
     assert [tuple(other) for other in rows] == [(3, 4), (5, 6)]
     assert tuple(indexed_row) == (5, 6)
     del row, indexed_row, rows
     gc.collect()
-    assert tuple(labels) == (30, 40)
+    assert tuple(labels) == tuple(columns(30, 40))
 
 
 def test_interned_nullary_relations_and_repository_reset() -> None:
@@ -229,11 +233,11 @@ def test_interned_nullary_relations_and_repository_reset() -> None:
 
 def test_interning_ignores_row_insertion_order() -> None:
     repository = database.RelationRepositoryFactory().create()
-    seed = database.Relation([10, 20])
+    seed = database.Relation(columns(10, 20))
     seed.insert([9, 8])
     database.insert(repository, seed)[0]
 
-    builder = database.Relation([10, 20])
+    builder = database.Relation(columns(10, 20))
     builder.insert([3, 4])
     builder.insert([9, 8])
     forward = database.insert(repository, builder)[0]
@@ -258,7 +262,7 @@ def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
     target_factory = database.RelationRepositoryFactory()
     source_repository = source_factory.create()
     target_repository = target_factory.create()
-    builder = database.Relation([7, 3])
+    builder = database.Relation(columns(7, 3))
     builder.insert([4, 5])
     source, created = database.insert(source_repository, builder, schema_namespace=9)
     assert created is True
@@ -267,19 +271,19 @@ def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
     assert copied is True
     assert database.copy(source, target_repository) == (target, False)
     assert database.copy(target, target_repository) == (target, False)
-    assert tuple(target.columns()) == (7, 3)
-    output = database.Relation([3, 7])
+    assert tuple(target.columns()) == tuple(columns(7, 3))
+    output = database.Relation(columns(3, 7))
     output.insert([99, 88])
     assert database.assign(output, target) is output
-    assert tuple(output.columns()) == (7, 3)
+    assert tuple(output.columns()) == tuple(columns(7, 3))
     assert [tuple(row) for row in output] == [(4, 5)]
     assert database.assign(output, output) is output
-    assert tuple(output.columns()) == (7, 3)
+    assert tuple(output.columns()) == tuple(columns(7, 3))
     assert [tuple(row) for row in output] == [(4, 5)]
-    unary = database.Relation([99])
+    unary = database.Relation(columns(99))
     unary.insert([77])
     assert database.assign(unary, output) is unary
-    assert tuple(unary.columns()) == (7, 3)
+    assert tuple(unary.columns()) == tuple(columns(7, 3))
     assert [tuple(row) for row in unary] == [(4, 5)]
     del target_result, source, source_repository, target_repository
     del source_factory, target_factory, builder, output, unary
@@ -292,7 +296,7 @@ def test_mixed_column_types_and_float_canonicalization() -> None:
     import math
 
     types = [database.ColumnType.BOOL, database.ColumnType.FLOAT64, database.ColumnType.INT32]
-    relation = database.Relation([10, 20, 30], types)
+    relation = database.Relation(columns(10, 20, 30), types)
     assert [relation.columns().type(i) for i in range(3)] == types
     first = relation.insert([True, -0.0, -7])
     assert relation.insert([True, 0.0, -7]) == first
@@ -304,13 +308,13 @@ def test_mixed_column_types_and_float_canonicalization() -> None:
     assert math.isnan(relation[nan][1])
     repository = database.RelationRepositoryFactory().create()
     interned, _ = database.insert(repository, relation)
-    renamed = repository.rename(interned, [1, 2, 3])
+    renamed = repository.rename(interned, columns(1, 2, 3))
     assert [renamed.columns().type(i) for i in range(3)] == types
     output = database.Relation()
     database.assign(output, renamed)
     assert tuple(output[0]) == (True, 0.0, -7)
     with pytest.raises(ValueError):
-        database.Relation([1, 2], [database.ColumnType.BOOL])
+        database.Relation(columns(1, 2), [database.ColumnType.BOOL])
     del relation, interned, renamed, repository
     gc.collect()
     assert tuple(row) == (True, 0.0, -7)

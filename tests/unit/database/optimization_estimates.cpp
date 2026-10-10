@@ -18,9 +18,9 @@ const Column x(0), y(1), z(2);
 // must have one estimate whatever its join and filter association.
 auto estimate(db::QueryView<> root, const db::Statistics<>& statistics)
 {
-    std::map<PlanId, db::optimization_detail::Estimate> estimates;
+    std::map<PlanId, db::detail::Estimate> estimates;
     for (const auto query : db::reachable(std::span<const db::QueryView<>>(&root, 1)))
-        estimates[query.get_index()] = db::optimization_detail::estimate(
+        estimates[query.get_index()] = db::detail::estimate(
             query,
             query.get_index(),
             [&](db::QueryView<> child) { return estimates.at(child.get_index()); },
@@ -159,7 +159,7 @@ TEST(DatabaseOptimizationEstimates, BoundedDomainsCapDistinctCounts)
 
 TEST(DatabaseOptimizationEstimates, FactorIdentitySeparatesInputsAndQueries)
 {
-    namespace opt = db::optimization_detail;
+    namespace opt = db::detail;
     ygg::Builder<db::Columns<>> columns;
     columns.push_back<ygg::uint_t>(x);
     const db::RelationStatistics statistics { 10, { { x, 2 } } };

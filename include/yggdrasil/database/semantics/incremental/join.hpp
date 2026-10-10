@@ -23,8 +23,8 @@ namespace ygg::database::incremental
 /// input sets and their mutable indexes; supplied views are borrowed only during
 /// calls. Inputs must not alias this evaluator's result/delta or the sequential
 /// caller workspace. Results and deltas are borrowed until the next mutation.
-/// Rejected schema/overlap checks preserve the previous evaluation. A failure
-/// during mutation leaves partial contents; call initialize() before using them.
+/// Rejected schema/overlap checks preserve the previous evaluation. After a failure
+/// during mutation, results and deltas are unavailable until initialize().
 /// No repository publication is required.
 template<ColumnTypes Values = DefaultColumnTypes>
 class JoinEvaluator
@@ -47,6 +47,12 @@ class JoinEvaluator
     template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
     void join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<Values>>& output, Workspace<Values>& workspace) const;
 
+    /// Applies changes that are known to be valid.
+    template<RelationChange<Values> L, RelationChange<Values> R>
+    void apply(const L& lhs, const R& rhs, Workspace<Values>& workspace);
+
+    friend class QueryEvaluator<Values>;
+
 public:
     explicit JoinEvaluator(JoinPlan<Values> plan);
 
@@ -54,15 +60,15 @@ public:
     template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
     void initialize(const L& lhs, const R& rhs, Workspace<Values>& workspace);
 
-    /// Each pair describes actual set changes in that input's original column
+    /// Each change describes actual set changes in that input's original column
     /// order. Pass empty changes for an unchanged side; swap added/removed on
     /// both sides to undo. Reports the exact net change of the complete batch.
-    template<RelationViewConcept<Values> LA, RelationViewConcept<Values> LR, RelationViewConcept<Values> RA, RelationViewConcept<Values> RR>
-    void update(const LA& lhs_added, const LR& lhs_removed, const RA& rhs_added, const RR& rhs_removed, Workspace<Values>& workspace);
+    template<RelationChange<Values> L, RelationChange<Values> R>
+    void update(const L& lhs, const R& rhs, Workspace<Values>& workspace);
 
-    const Builder<Relation<Values>>& get_result() const& noexcept;
+    const Builder<Relation<Values>>& get_result() const&;
     const Builder<Relation<Values>>& get_result() const&& = delete;
-    const Delta<Values>& get_delta() const& noexcept;
+    const Delta<Values>& get_delta() const&;
     const Delta<Values>& get_delta() const&& = delete;
 
     /// Retained inputs, result, delta and indexes; excludes plan and caller workspace.
@@ -153,6 +159,8 @@ void JoinEvaluator<Values>::initialize(const L& lhs, const R& rhs, Workspace<Val
 {
     database::detail::require_plan_columns(lhs.columns().span(), m_plan.lhs_columns().span());
     database::detail::require_plan_columns(rhs.columns().span(), m_plan.rhs_columns().span());
+    detail::require_unaliased(lhs, m_result, m_delta);
+    detail::require_unaliased(rhs, m_result, m_delta);
     m_initialized = false;
     m_lhs.clear();
     m_rhs.clear();
@@ -168,13 +176,21 @@ void JoinEvaluator<Values>::initialize(const L& lhs, const R& rhs, Workspace<Val
 }
 
 template<ColumnTypes Values>
-template<RelationViewConcept<Values> LA, RelationViewConcept<Values> LR, RelationViewConcept<Values> RA, RelationViewConcept<Values> RR>
-void JoinEvaluator<Values>::update(const LA& lhs_added, const LR& lhs_removed, const RA& rhs_added, const RR& rhs_removed, Workspace<Values>& workspace)
+template<RelationChange<Values> L, RelationChange<Values> R>
+void JoinEvaluator<Values>::update(const L& lhs, const R& rhs, Workspace<Values>& workspace)
 {
-    if (!m_initialized)
-        throw std::logic_error("Incremental join: initialize before updating.");
-    detail::require_delta<Values>(lhs_added, lhs_removed, m_plan.lhs_columns().span());
-    detail::require_delta<Values>(rhs_added, rhs_removed, m_plan.rhs_columns().span());
+    detail::require_initialized(m_initialized);
+    detail::require_change(lhs, m_plan.lhs_columns().span(), m_result, m_delta);
+    detail::require_change(rhs, m_plan.rhs_columns().span(), m_result, m_delta);
+    apply(lhs, rhs, workspace);
+}
+
+template<ColumnTypes Values>
+template<RelationChange<Values> L, RelationChange<Values> R>
+void JoinEvaluator<Values>::apply(const L& lhs, const R& rhs, Workspace<Values>& workspace)
+{
+    const auto& [lhs_added, lhs_removed] = lhs;
+    const auto& [rhs_added, rhs_removed] = rhs;
     m_initialized = false;
     m_delta.clear();
 
@@ -189,26 +205,21 @@ void JoinEvaluator<Values>::update(const LA& lhs_added, const LR& lhs_removed, c
     join(m_lhs, rhs_added, true, m_delta.added, workspace);
     insert_rows(rhs_added, m_rhs, m_plan.rhs_keys(), m_rhs_index);
 
-    for (size_t i = 0; i < m_delta.removed.size(); ++i)
-    {
-        const auto position = m_result.find(Row<Values>(m_delta.removed.row(i), m_plan.output_columns().span()));
-        assert(position);
-        m_result.erase(*position);
-    }
-    for (size_t i = 0; i < m_delta.added.size(); ++i)
-        m_result.insert(Row<Values>(m_delta.added.row(i), m_plan.output_columns().span()));
+    detail::apply_delta(m_delta, m_result);
     m_initialized = true;
 }
 
 template<ColumnTypes Values>
-const Builder<Relation<Values>>& JoinEvaluator<Values>::get_result() const& noexcept
+const Builder<Relation<Values>>& JoinEvaluator<Values>::get_result() const&
 {
+    detail::require_initialized(m_initialized);
     return m_result;
 }
 
 template<ColumnTypes Values>
-const Delta<Values>& JoinEvaluator<Values>::get_delta() const& noexcept
+const Delta<Values>& JoinEvaluator<Values>::get_delta() const&
 {
+    detail::require_initialized(m_initialized);
     return m_delta;
 }
 

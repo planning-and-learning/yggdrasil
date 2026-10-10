@@ -5,9 +5,12 @@ import pytest
 from pyyggdrasil import database as db
 
 
+def columns(*labels):
+    return [db.ColumnIndex(label) for label in labels]
 
-def relation(columns, values=(), types=()):
-    result = db.Relation(columns, types)
+
+def relation(labels, values=(), types=()):
+    result = db.Relation(columns(*labels), types)
     for value in values:
         result.insert(value)
     return result
@@ -29,8 +32,8 @@ def test_optimizer_preserves_typed_shared_roots_and_output_order(measured):
     repo = db.QueryRepository()
     a, b = repo.input(0, left.columns()), repo.input(1, right.columns())
     shared = repo.join(a, b)
-    projected = repo.project(shared, [2, 0])
-    root_queries = [projected, repo.select_value(shared, 0, 1), repo.rename(projected, [8, 9])]
+    projected = repo.project(shared, columns(2, 0))
+    root_queries = [projected, repo.select_value(shared, db.ColumnIndex(0), 1), repo.rename(projected, columns(8, 9))]
     assert repo.join(a, b) == shared
     assert hash(repo.join(a, b)) == hash(shared)
     original = repo.compile(root_queries)
@@ -53,8 +56,8 @@ def test_difference_projection_barrier_and_nullary_support():
     removed = relation([0, 1], [(1, 7)])
     repo = db.QueryRepository()
     source_query, removed_query = repo.input(0, source.columns()), repo.input(1, removed.columns())
-    surviving = repo.project(repo.difference(source_query, removed_query), [0])
-    root_queries = [surviving, repo.project(surviving, [])]
+    surviving = repo.project(repo.difference(source_query, removed_query), columns(0))
+    root_queries = [surviving, repo.project(surviving, columns())]
     optimized = db.optimize(root_queries, statistics([source, removed]))
     evaluation = db.QueryEvaluator(optimized)
     evaluation.evaluate([source, removed])
@@ -68,10 +71,10 @@ def test_incremental_batch_changes_projection_union_and_difference():
     inputs = [relation(schema, values) for schema, values in zip(schemas, current)]
     repo = db.QueryRepository()
     a, b, blocked = [repo.input(i, value.columns()) for i, value in enumerate(inputs)]
-    projected = repo.project(repo.join(a, b), [0, 2])
+    projected = repo.project(repo.join(a, b), columns(0, 2))
     visible = repo.difference(projected, blocked)
     combined = repo.union(visible, repo.empty(inputs[2].columns()))
-    root_queries = [combined, repo.project(visible, [])]
+    root_queries = [combined, repo.project(visible, columns())]
     original = repo.compile(root_queries)
     optimized = db.optimize(root_queries, statistics(inputs))
     full, maintained = db.QueryEvaluator(original), db.IncrementalQueryEvaluator(optimized)
@@ -117,7 +120,7 @@ def test_triangle_and_self_join():
     assert rows(evaluator.get_result(1)) == rows(inputs[0])
 
 
-def test_mixed_borrowed_inputs_statistics_snapshot_and_owners():
+def test_borrowed_inputs_statistics_snapshot_and_owners():
     original = relation([0], [(1,), (2,)])
     store = db.RelationRepositoryFactory().create()
     interned = db.insert(store, original)[0]
@@ -129,7 +132,7 @@ def test_mixed_borrowed_inputs_statistics_snapshot_and_owners():
     independent = db.snapshot(borrowed)
     statistics = db.collect_statistics([borrowed])
     assert statistics.inputs[0].rows == 2
-    assert statistics.inputs[0].distinct == {0: 2}
+    assert statistics.inputs[0].distinct == {db.ColumnIndex(0): 2}
     second = db.QueryEvaluator(repo.compile(root))
     second.evaluate([borrowed])
     row = second.get_result()[0]
@@ -143,14 +146,14 @@ def test_mixed_borrowed_inputs_statistics_snapshot_and_owners():
 def test_query_handle_retains_repository_and_compiled_plan_is_independent():
     source = relation([4], [(9,)])
     repo = db.QueryRepository()
-    query = repo.input(0, [4])
-    other = db.QueryRepository().input(0, [4])
+    query = repo.input(0, columns(4))
+    other = db.QueryRepository().input(0, columns(4))
     assert query != other
     assert len({query, other}) == 2
     plan = repo.compile(query)
     del repo
     gc.collect()
-    assert tuple(query.columns()) == (4,)
+    assert tuple(query.columns()) == tuple(columns(4))
     del query
     gc.collect()
     evaluator = db.QueryEvaluator(plan)
@@ -166,7 +169,7 @@ def test_distance_boundary_and_sparse_input_slots(incremental):
     target = relation([30], [(2,)])
     repo = db.QueryRepository()
     s, e, t = [repo.input(i, value.columns()) for i, value in zip([1, 3, 4], [source, edges, target])]
-    query = repo.distance(s, e, t, 99)
+    query = repo.distance(s, e, t, db.ColumnIndex(99))
     optimized = db.optimize(query)
     if not incremental:
         evaluator = db.QueryEvaluator(optimized)
@@ -188,16 +191,16 @@ def test_statistics_and_input_validation():
     repo = db.QueryRepository()
     query = repo.input(0, value.columns())
     assert db.optimize(query).root_count == 1
-    assert db.optimize(query, db.Statistics(objects=4, inputs={0: db.RelationStatistics(1, {0: 1})})).root_count == 1
+    assert db.optimize(query, db.Statistics(objects=4, inputs={0: db.RelationStatistics(1, {db.ColumnIndex(0): 1})})).root_count == 1
     with pytest.raises(ValueError):
-        db.optimize(query, db.Statistics(inputs={0: db.RelationStatistics(-1, {0: 1})}))
+        db.optimize(query, db.Statistics(inputs={0: db.RelationStatistics(-1, {db.ColumnIndex(0): 1})}))
     evaluator = db.QueryEvaluator(repo.compile(query))
     with pytest.raises(ValueError):
         evaluator.evaluate([relation([1])])
     with pytest.raises(TypeError):
         evaluator.evaluate([object()])
     with pytest.raises(IndexError):
-        repo.project(query, [5])
+        repo.project(query, columns(5))
     incremental = db.IncrementalQueryEvaluator(repo.compile(query))
     incremental.initialize([value])
     with pytest.raises(ValueError):
@@ -225,9 +228,9 @@ def test_selection_constants_follow_column_types_and_equality():
     source = relation([0, 1], [(-3, -3), (-3, 7), (7, 7)], [db.ColumnType.INT32] * 2)
     repo = db.QueryRepository()
     query = repo.input(0, source.columns())
-    selected = repo.select_value(repo.select_equal(query, 0, 1), 0, -3)
+    selected = repo.select_value(repo.select_equal(query, db.ColumnIndex(0), db.ColumnIndex(1)), db.ColumnIndex(0), -3)
     evaluator = db.QueryEvaluator(db.optimize(selected))
     evaluator.evaluate([source])
     assert rows(evaluator.get_result()) == {(-3, -3)}
     with pytest.raises(TypeError):
-        repo.select_value(query, 0, "invalid")
+        repo.select_value(query, db.ColumnIndex(0), "invalid")

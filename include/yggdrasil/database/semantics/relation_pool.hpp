@@ -51,6 +51,9 @@ private:
     // Node storage keeps each nonmovable object pool at a stable address.
     std::map<size_t, UniqueObjectPool<ygg::Builder<Relation<Values>>>> m_pools;
 
+    template<typename Schema>
+    UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> allocate(size_t width, Schema columns);
+
 public:
     RelationPool() = default;
     explicit RelationPool(RelationPoolFactory<Values> factory) : m_factory(std::move(factory)) {}

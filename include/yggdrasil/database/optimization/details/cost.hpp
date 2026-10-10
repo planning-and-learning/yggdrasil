@@ -22,10 +22,10 @@
 #include <vector>
 
 /// Data-driven planning of a join block whose atoms all have estimates.
-namespace ygg::database::optimization_detail
+namespace ygg::database::detail
 {
 /// The most atoms DPccp's bitsets represent.
-constexpr size_t max_cost_based_atoms = 63;
+constexpr size_t max_cost_based_atoms = max_dpccp_vertices;
 
 template<ColumnTypes Values>
 class CostBasedPlanner
@@ -116,12 +116,12 @@ class CostBasedPlanner
         {
             const auto& left = refine(*lhs);
             const auto& right = refine(*rhs);
-            const auto inputs = std::max(rows(m_tree[*lhs].subset), rows(m_tree[*rhs].subset));
-            const bool growing = rows(subset) - inputs > FloatTolerance<float_t>::tolerance(rows(subset), inputs);
+            const auto largest_input = std::max(rows(m_tree[*lhs].subset), rows(m_tree[*rhs].subset));
+            const bool growing = rows(subset) - largest_input > FloatTolerance<float_t>::tolerance(rows(subset), largest_input);
             if (growing || left.multiway || right.multiway)
             {
                 std::vector<size_t> inputs;
-                for (const auto [child, refined] : { std::pair(*lhs, &left), std::pair(*rhs, &right) })
+                for (const auto& [child, refined] : { std::pair(*lhs, &left), std::pair(*rhs, &right) })
                     if (refined->multiway)
                         inputs.insert(inputs.end(), refined->inputs.begin(), refined->inputs.end());
                     else
@@ -140,13 +140,13 @@ class CostBasedPlanner
         if (!lhs)
             return m_build->restrict(m_block->atoms[std::countr_zero(subset)], keep);
         // Multi-way joins with only two inputs are built as binary joins (Freitag et al.).
-        const auto refined = refine(node);
+        const auto& refined = refine(node);
         if (!refined.multiway || refined.inputs.size() == 2)
             return m_build->restrict(m_build->join(build(*lhs), build(*rhs)), keep);
         std::vector<QueryView<Values>> inputs;
         for (const auto input : refined.inputs)
             inputs.push_back(build(input));
-        return m_build->restrict(m_build->generic_join(inputs, variable_order<Values>(inputs, {})), keep);
+        return m_build->restrict(m_build->generic_join(inputs, variable_order<Values>(inputs)), keep);
     }
 
 public:
@@ -154,7 +154,7 @@ public:
     CostBasedPlanner(const JoinBlock<Values>& block, OperatorBuilder<Values>& build, GetEstimate&& estimate_of) :
         m_block(&block),
         m_build(&build),
-        m_required(ygg::canonicalized(column_labels(block.output.span())))
+        m_required(block.required)
     {
         for (size_t atom = 0; atom < block.atoms.size(); ++atom)
         {
@@ -168,7 +168,8 @@ public:
     /// result sizes (S. Cluet, G. Moerkotte, ICDT 1995; V. Leis et al., PVLDB 2015), with
     /// System R estimates; connected components are joined last by cross products in
     /// ascending estimated size; then the tree is refined by Algorithm 4 of Freitag et al.
-    QueryView<Values> plan()
+    /// Plans the block; the planner is consumed.
+    QueryView<Values> plan() &&
     {
         const auto count = m_block->atoms.size();
         std::vector<std::uint64_t> graph(count);
@@ -179,7 +180,7 @@ public:
                     graph[lhs] |= std::uint64_t { 1 } << rhs;
                     graph[rhs] |= std::uint64_t { 1 } << lhs;
                 }
-        detail::enumerate_connected_pairs(graph,
+        enumerate_connected_pairs(graph,
                                           [&](std::uint64_t lhs, std::uint64_t rhs)
                                           {
                                               const auto subset = lhs | rhs;
@@ -213,6 +214,6 @@ public:
         return build(root);
     }
 };
-}  // namespace ygg::database::optimization_detail
+}  // namespace ygg::database::detail
 
 #endif

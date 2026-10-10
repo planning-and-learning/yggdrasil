@@ -20,7 +20,7 @@
 #include <span>
 #include <vector>
 
-namespace ygg::database::optimization_detail
+namespace ygg::database::detail
 {
 /// Plans normalized queries block by block into a plan repository.
 template<ColumnTypes Values>
@@ -30,8 +30,6 @@ class Planner
 
     const Statistics<Values>* m_statistics;
     std::span<const std::optional<QueryIndex>> m_normalized_sources;
-    QueryRepository<Values>* m_plans;
-    QueryBuilder<Values>* m_builder;
     OperatorBuilder<Values> m_build;
     // Memos indexed by query index; computed values are stored after recursing,
     // because recursion may grow the vectors.
@@ -80,7 +78,7 @@ class Planner
     {
         if (const auto& cached = slot(m_estimates, plan))
             return *cached;
-        auto result = optimization_detail::estimate(plan, source(plan), [&](QueryView<Values> child) { return estimate(child); }, *m_statistics);
+        auto result = detail::estimate(plan, source(plan), [&](QueryView<Values> child) { return estimate(child); }, *m_statistics);
         slot(m_estimates, plan) = result;
         return result;
     }
@@ -99,10 +97,9 @@ class Planner
     /// Plans π_output(⋈ atoms): cost-based when every atom is known, otherwise from structure.
     QueryView<Values> plan_block(QueryView<Values> join, std::span<const ColumnLayout> output)
     {
-        JoinBlock<Values> block;
+        JoinBlock<Values> block { {}, ygg::canonicalized(column_labels(output)) };
         UnorderedSet<QueryIndex> seen;
         collect(join, block.atoms, seen);
-        block.output.assign(output);
         if (block.atoms.empty())  // The empty join is the nullary relation with one row.
             return m_build.generic_join(block.atoms, {});
         const bool measured = block.atoms.size() <= max_cost_based_atoms && std::ranges::all_of(block.atoms, [&](auto atom) { return known(atom); });
@@ -120,8 +117,6 @@ public:
             QueryBuilder<Values>& builder) :
         m_statistics(&statistics),
         m_normalized_sources(normalized_sources),
-        m_plans(&plans),
-        m_builder(&builder),
         m_build(plans, builder),
         m_planned(normalized_size)
     {
@@ -143,7 +138,7 @@ public:
             }
             std::vector<QueryView<Values>> children;
             for_each_child(normalized, [&](QueryView<Values> child) { children.push_back(plan(child)); });
-            return detail::clone_query(normalized, std::span<const QueryView<Values>>(children), *m_plans, *m_builder);
+            return m_build.clone(normalized, children);
         }();
         if (const auto caller = m_normalized_sources[normalized.get_index().get_value()]; caller && !source(result))
             slot(m_sources, result) = caller;
@@ -157,14 +152,9 @@ void validate(std::span<const QueryView<Values>> roots, const Statistics<Values>
 {
     for (const auto query : reachable(roots))
     {
-        ygg::visit(
-            [&]<typename Child>(Child child)
-            {
-                if constexpr (std::same_as<Child, QueryView<Values, QueryInputTag>>)
-                    if (const auto it = statistics.inputs.find(child.get_input_slot()); it != statistics.inputs.end())
-                        validate_statistics(it->second, child.columns());
-            },
-            query.get_variant());
+        if (is<QueryInputTag>(query))
+            if (const auto it = statistics.inputs.find(as<QueryInputTag>(query).get_input_slot()); it != statistics.inputs.end())
+                validate_statistics(it->second, query.columns());
         if (const auto it = statistics.expressions.find(query.get_index()); it != statistics.expressions.end())
             validate_statistics(it->second, query.columns());
     }
@@ -199,6 +189,6 @@ QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const Stati
     }
     return compile(std::span<const QueryView<Values>>(outputs));
 }
-}  // namespace ygg::database::optimization_detail
+}  // namespace ygg::database::detail
 
 #endif

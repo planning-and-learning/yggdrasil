@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ygg::database
@@ -58,6 +59,8 @@ struct DistanceGraph
 
     explicit DistanceGraph(size_t tuple_bytes);
     uint_t insert_vertex(std::span<const std::byte> tuple);
+    /// Inserts both endpoint tuples of an edge row; returns their IDs.
+    std::pair<uint_t, uint_t> insert_endpoints(std::span<const std::byte> edge);
     bool contains_edge(uint_t from, uint_t to) const;
     void clear();
     size_t memory_usage() const noexcept;
@@ -68,15 +71,22 @@ struct DistanceGraph
 /// its graph; sequential calls retain capacity. Do not share across concurrent calls.
 template<ColumnTypes Values = DefaultColumnTypes>
     requires ColumnValueFor<uint_t, Values>
-struct DistanceWorkspace
+class DistanceWorkspace
 {
-    detail::DistanceGraph graph;
-    std::vector<uint_t> distances;
-    std::vector<uint_t> queue;
-    std::vector<uint_t> targets;
-    std::vector<std::byte> row;
+    detail::DistanceGraph m_graph;
+    std::vector<uint_t> m_distances;
+    std::vector<uint_t> m_queue;
+    std::vector<uint_t> m_targets;
+    std::vector<std::byte> m_row;
 
+public:
     explicit DistanceWorkspace(const DistancePlan<Values>& plan);
+
+    /// Whether the workspace serves the plan's vertex byte width.
+    bool matches(const DistancePlan<Values>& plan) const noexcept;
+    /// Appends the distances of the inputs, which match the plan, to out.
+    template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+    void append_distances(const S& sources, const E& edges, const T& targets, const DistancePlan<Values>& plan, Builder<Relation<Values>>& out);
     size_t memory_usage() const noexcept;
 };
 

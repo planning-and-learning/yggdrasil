@@ -65,12 +65,33 @@ struct QueryDistanceWorkspace<Values, true>
     size_t memory_usage() const noexcept { return workspace.memory_usage(); }
 };
 
-template<ColumnTypes Values>
-size_t query_workspace_memory(const Workspace<Values>& workspace) noexcept
+/// Operators whose result is a function of the operands' results alone.
+template<class Tag>
+concept StatelessQueryTag = std::same_as<Tag, QueryInputTag> || std::same_as<Tag, QueryEmptyTag> || std::same_as<Tag, QueryRenameTag>
+                            || std::same_as<Tag, QuerySelectEqualTag> || std::same_as<Tag, QuerySelectValueTag> || std::same_as<Tag, QueryUnionTag>
+                            || std::same_as<Tag, QueryDifferenceTag>;
+
+/// Evaluates a stateless operator from the bound inputs and the operands' results.
+template<ColumnTypes Values, StatelessQueryTag Tag, RelationViewRange<Values> R, std::invocable<QueryView<Values>> GetResult>
+void evaluate_stateless(QueryView<Values, Tag> operation, const R& bindings, GetResult&& result, Builder<Relation<Values>>& out)
 {
-    return workspace.columns.capacity() * sizeof(ColumnLayout)
-           + (workspace.lhs_keys.capacity() + workspace.rhs_keys.capacity() + workspace.rhs_payload.capacity()) * sizeof(ColumnSlice) + workspace.row.capacity()
-           + workspace.join_index.memory_usage();
+    if constexpr (std::same_as<Tag, QueryInputTag>)
+        database::assign(out, bindings[operation.get_input_slot()]);
+    else if constexpr (std::same_as<Tag, QueryEmptyTag>)
+        out.clear();
+    else if constexpr (std::same_as<Tag, QueryRenameTag>)
+    {
+        database::assign(out, result(operation.get_arg()));
+        out.rename(operation.columns());
+    }
+    else if constexpr (std::same_as<Tag, QuerySelectEqualTag>)
+        database::select_equal_columns(result(operation.get_arg()), operation.get_lhs_column(), operation.get_rhs_column(), out);
+    else if constexpr (std::same_as<Tag, QuerySelectValueTag>)
+        database::select(result(operation.get_arg()), [&](Row<Values> row) { return query_accepts(operation, row.bytes()); }, out);
+    else if constexpr (std::same_as<Tag, QueryUnionTag>)
+        database::union_(result(operation.get_lhs()), result(operation.get_rhs()), out);
+    else
+        database::difference(result(operation.get_lhs()), result(operation.get_rhs()), out);
 }
 }  // namespace detail
 
@@ -90,11 +111,11 @@ class QueryEvaluator
         explicit Node(QueryView<Values> query) :
             result(query.columns()),
             state(ygg::visit(
-                []<typename Concrete>(Concrete operation) -> State
+                []<typename Tag>(QueryView<Values, Tag> operation) -> State
                 {
-                    if constexpr (std::same_as<Concrete, QueryView<Values, QueryGenericJoinTag>>)
+                    if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                         return GenericJoinWorkspace<Values>(operation.get_plan());
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryDistanceTag>>)
+                    else if constexpr (std::same_as<Tag, QueryDistanceTag>)
                         return DistanceState(operation.get_plan());
                     else
                         return std::monostate {};
@@ -129,37 +150,23 @@ public:
             auto& out = state.result;
             const auto child = [&](QueryView<Values> query) -> const auto& { return m_nodes[query.get_index().get_value()].result; };
             ygg::visit(
-                [&]<typename Concrete>(Concrete operation)
+                [&]<typename Tag>(QueryView<Values, Tag> operation)
                 {
-                    if constexpr (std::same_as<Concrete, QueryView<Values, QueryInputTag>>)
-                        assign(out, bindings[operation.get_input_slot()]);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryEmptyTag>>)
-                        out.clear();
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryJoinTag>>)
+                    if constexpr (detail::StatelessQueryTag<Tag>)
+                        detail::evaluate_stateless(operation, bindings, child, out);
+                    else if constexpr (std::same_as<Tag, QueryJoinTag>)
                         database::join(child(operation.get_lhs()), child(operation.get_rhs()), operation.get_plan(), out, m_workspace);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryProjectTag>>)
+                    else if constexpr (std::same_as<Tag, QueryProjectTag>)
                         database::project(child(operation.get_arg()), operation.get_plan(), out, m_workspace);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryRenameTag>>)
-                    {
-                        assign(out, child(operation.get_arg()));
-                        out.rename(operation.columns());
-                    }
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectEqualTag>>)
-                        select_equal_columns(child(operation.get_arg()), operation.get_lhs_column(), operation.get_rhs_column(), out);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectValueTag>>)
-                        select(child(operation.get_arg()), [&](Row<Values> row) { return detail::query_accepts(operation, row.bytes()); }, out);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryUnionTag>>)
-                        database::union_(child(operation.get_lhs()), child(operation.get_rhs()), out);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryDifferenceTag>>)
-                        database::difference(child(operation.get_lhs()), child(operation.get_rhs()), out);
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryGenericJoinTag>>)
+                    else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                     {
                         const auto inputs = operation.get_inputs()
                                             | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.get_value()].result; });
                         generic_join<Values>(inputs, operation.get_plan(), out, std::get<GenericJoinWorkspace<Values>>(state.state));
                     }
-                    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryDistanceTag>>)
+                    else
                     {
+                        static_assert(std::same_as<Tag, QueryDistanceTag>);
                         if constexpr (ColumnValueFor<uint_t, Values>)
                             database::distance(child(operation.get_sources()),
                                                child(operation.get_edges()),
@@ -185,7 +192,7 @@ public:
     /// Retained runtime storage; excludes the immutable query plan.
     size_t memory_usage() const noexcept
     {
-        size_t result = detail::query_workspace_memory(m_workspace);
+        size_t result = m_workspace.memory_usage();
         for (const auto& node : m_nodes)
         {
             result += node.result.memory_usage();

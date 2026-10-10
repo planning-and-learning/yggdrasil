@@ -30,6 +30,8 @@ class RelationRepositoryFactory
     std::shared_ptr<size_t> m_next_index = std::make_shared<size_t>(0);
     RelationPoolFactory<Values> m_rows;
 
+    friend class RelationRepository<Values>;
+
     size_t next_index()
     {
         if (*m_next_index == std::numeric_limits<size_t>::max())
@@ -66,16 +68,10 @@ private:
     RowSetRepository m_row_sets;
     std::vector<Index<RelationRow<Values>>> m_row_indices;
     std::vector<size_t> m_storage_indices;
-    RelationPoolFactory<Values> m_row_factory;
     RelationRepositoryFactory<Values> m_factory;
     size_t m_index;
 
-    RelationRepository(size_t index, RelationRepositoryFactory<Values> factory, RelationPoolFactory<Values> rows) :
-        m_row_factory(std::move(rows)),
-        m_factory(std::move(factory)),
-        m_index(index)
-    {
-    }
+    RelationRepository(size_t index, RelationRepositoryFactory<Values> factory) : m_factory(std::move(factory)), m_index(index) {}
 
 public:
     RelationRepository(const RelationRepository&) = delete;
@@ -85,11 +81,10 @@ public:
 
     size_t get_index() const noexcept { return m_index; }
     auto get_factory() const noexcept { return m_factory; }
-    auto& get_row_repository() noexcept { return m_rows; }
     const auto& get_row_repository() const noexcept { return m_rows; }
-    auto& get_row_set_repository() noexcept { return m_row_sets; }
     const auto& get_row_set_repository() const noexcept { return m_row_sets; }
 
+    /// Interns the view's rows as a sorted row set.
     template<RelationViewConcept<Values> V>
     Index<RelationRowSet<Values>> insert_rows(const V& builder)
     {
@@ -181,13 +176,7 @@ public:
     {
         if (&get_relation_repository(source.get_context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
-        validate_columns<Values>(columns);
-        if (columns.size() != source.arity())
-            throw std::invalid_argument("RelationRepository: rename requires matching arity.");
-        const auto previous = source.columns().span();
-        for (size_t i = 0; i < columns.size(); ++i)
-            if (columns[i].type != previous[i].type)
-                throw std::invalid_argument("RelationRepository: rename cannot change column types.");
+        detail::validate_relabel<Values>(source.columns().span(), columns);
         auto data = source.get_data();
         ygg::clear(data.index);
         data.columns_index = insert(columns).first.get_index();
@@ -228,20 +217,20 @@ private:
     void ensure_storage_index(Index<RelationRowSet<Values>> index)
     {
         while (m_storage_indices.size() <= index.get_value())
-            m_storage_indices.push_back(m_row_factory.next_index());
+            m_storage_indices.push_back(m_factory.m_rows.next_index());
     }
 };
 
 template<ColumnTypes Values>
 RelationRepository<Values> RelationRepositoryFactory<Values>::create()
 {
-    return RelationRepository<Values>(next_index(), *this, m_rows);
+    return RelationRepository<Values>(next_index(), *this);
 }
 
 template<ColumnTypes Values>
 std::shared_ptr<RelationRepository<Values>> RelationRepositoryFactory<Values>::create_shared()
 {
-    return std::shared_ptr<RelationRepository<Values>>(new RelationRepository<Values>(next_index(), *this, m_rows));
+    return std::shared_ptr<RelationRepository<Values>>(new RelationRepository<Values>(next_index(), *this));
 }
 
 template<ColumnTypes Values>

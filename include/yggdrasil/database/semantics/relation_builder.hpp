@@ -35,6 +35,9 @@ private:
     Builder<database::Columns<Values>> m_columns;
     RawArraySet<std::byte, 64> m_rows;
 
+    template<typename Schema>
+    void reinitialize(size_t width, Schema columns);
+
 public:
     explicit Builder(Builder<database::Columns<Values>> columns);
     explicit Builder(std::span<const database::ColumnLayout> columns);
@@ -201,49 +204,37 @@ void Builder<database::Relation<Values>>::rename(std::span<const Index<database:
 template<database::ColumnTypes Values>
 void Builder<database::Relation<Values>>::rename(std::span<const database::ColumnLayout> columns)
 {
-    database::validate_columns<Values>(columns);
-    if (columns.size() != arity())
-        throw std::invalid_argument("Relation: rename requires matching arity.");
-    for (size_t i = 0; i < columns.size(); ++i)
-        if (columns[i].type != m_columns.span()[i].type)
-            throw std::invalid_argument("Relation: rename cannot change column types.");
+    database::detail::validate_relabel<Values>(m_columns.span(), columns);
     m_columns.assign(columns);
     ygg::clear(m_index);
+}
+
+template<database::ColumnTypes Values>
+template<typename Schema>
+void Builder<database::Relation<Values>>::reinitialize(size_t width, Schema columns)
+{
+    if (width != m_rows.array_size())
+    {
+        auto replacement = Builder(columns);
+        replacement.m_storage_index = m_storage_index;
+        *this = std::move(replacement);
+        return;
+    }
+    m_columns.assign(columns);
+    clear();
 }
 
 template<database::ColumnTypes Values>
 void Builder<database::Relation<Values>>::initialize(std::span<const database::ColumnLayout> columns)
 {
     database::validate_columns<Values>(columns);
-    const auto width = database::row_size(columns);
-    if (width != m_rows.array_size())
-    {
-        auto replacement = Builder(columns);
-        replacement.m_storage_index = m_storage_index;
-        *this = std::move(replacement);
-        return;
-    }
-    m_columns.assign(columns);
-    clear();
+    reinitialize(database::row_size(columns), columns);
 }
 
 template<database::ColumnTypes Values>
 void Builder<database::Relation<Values>>::initialize(std::span<const Index<database::Column>> columns)
 {
-    database::detail::validate_column_labels(columns);
-    const auto field_width = database::column_size<Values>(0);
-    if (columns.size() > std::numeric_limits<size_t>::max() / field_width)
-        throw std::length_error("Columns: row byte width exceeds addressable memory.");
-    const auto width = columns.size() * field_width;
-    if (width != m_rows.array_size())
-    {
-        auto replacement = Builder(columns);
-        replacement.m_storage_index = m_storage_index;
-        *this = std::move(replacement);
-        return;
-    }
-    m_columns.assign(columns);
-    clear();
+    reinitialize(database::detail::label_row_size<Values>(columns), columns);
 }
 
 template<database::ColumnTypes Values>

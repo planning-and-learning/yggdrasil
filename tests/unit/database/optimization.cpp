@@ -103,7 +103,7 @@ TEST(DatabaseOptimization, RejectsInvalidStatistics)
 
 TEST(DatabaseOptimization, GyoRecognizesAcyclicAndCyclicHypergraphs)
 {
-    using db::optimization_detail::join_tree;
+    using db::detail::join_tree;
     const auto path = join_tree({ labels({ x, y }), labels({ y, z }), labels({ z, w }) });
     ASSERT_TRUE(path);
     EXPECT_EQ(std::ranges::count_if(*path, [](const auto& parent) { return !parent; }), 1);

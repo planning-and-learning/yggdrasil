@@ -24,8 +24,8 @@ namespace ygg::database::incremental
 /// Inputs are borrowed only for each call and must not alias this evaluator's
 /// result/delta or the sequential caller workspace. Results and deltas are borrowed
 /// until the next mutation. Rejected schema/overlap checks preserve the previous
-/// evaluation. A failure during mutation leaves partial contents; call initialize()
-/// before using them.
+/// evaluation. After a failure during mutation, results and deltas are unavailable
+/// until initialize().
 template<ColumnTypes Values = DefaultColumnTypes>
 class ProjectionEvaluator
 {
@@ -39,6 +39,11 @@ class ProjectionEvaluator
     std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace<Values>& workspace) const;
     bool add(std::span<const std::byte> row);
     void remove(std::span<const std::byte> row);
+    /// Applies a change that is known to be valid.
+    template<RelationChange<Values> C>
+    void apply(const C& change, Workspace<Values>& workspace);
+
+    friend class QueryEvaluator<Values>;
 
 public:
     explicit ProjectionEvaluator(ProjectionPlan<Values> plan);
@@ -47,14 +52,14 @@ public:
     template<RelationViewConcept<Values> V>
     void initialize(const V& input, Workspace<Values>& workspace);
 
-    /// The two inputs must describe actual changes to the initialized input set.
-    /// Schema and overlap errors are rejected before changing the result.
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
-    void update(const A& added, const R& removed, Workspace<Values>& workspace);
+    /// The change must describe an actual change to the initialized input set.
+    /// Schema, overlap, and aliasing errors are rejected before changing the result.
+    template<RelationChange<Values> C>
+    void update(const C& change, Workspace<Values>& workspace);
 
-    const Builder<Relation<Values>>& get_result() const& noexcept;
+    const Builder<Relation<Values>>& get_result() const&;
     const Builder<Relation<Values>>& get_result() const&& = delete;
-    const Delta<Values>& get_delta() const& noexcept;
+    const Delta<Values>& get_delta() const&;
     const Delta<Values>& get_delta() const&& = delete;
 
     /// Retained working storage; excludes the immutable plan and caller workspace.
@@ -110,6 +115,7 @@ template<RelationViewConcept<Values> V>
 void ProjectionEvaluator<Values>::initialize(const V& input, Workspace<Values>& workspace)
 {
     database::detail::require_plan_columns(input.columns().span(), m_plan.input_columns().span());
+    detail::require_unaliased(input, m_result, m_delta);
     m_initialized = false;
     m_result.clear();
     m_supports.clear();
@@ -121,12 +127,19 @@ void ProjectionEvaluator<Values>::initialize(const V& input, Workspace<Values>& 
 }
 
 template<ColumnTypes Values>
-template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
-void ProjectionEvaluator<Values>::update(const A& added, const R& removed, Workspace<Values>& workspace)
+template<RelationChange<Values> C>
+void ProjectionEvaluator<Values>::update(const C& change, Workspace<Values>& workspace)
 {
-    if (!m_initialized)
-        throw std::logic_error("Incremental projection: initialize before updating.");
-    detail::require_delta<Values>(added, removed, m_plan.input_columns().span());
+    detail::require_initialized(m_initialized);
+    detail::require_change(change, m_plan.input_columns().span(), m_result, m_delta);
+    apply(change, workspace);
+}
+
+template<ColumnTypes Values>
+template<RelationChange<Values> C>
+void ProjectionEvaluator<Values>::apply(const C& change, Workspace<Values>& workspace)
+{
+    const auto& [added, removed] = change;
     m_initialized = false;
     m_delta.clear();
     m_pending_removals.clear();
@@ -154,14 +167,16 @@ void ProjectionEvaluator<Values>::update(const A& added, const R& removed, Works
 }
 
 template<ColumnTypes Values>
-const Builder<Relation<Values>>& ProjectionEvaluator<Values>::get_result() const& noexcept
+const Builder<Relation<Values>>& ProjectionEvaluator<Values>::get_result() const&
 {
+    detail::require_initialized(m_initialized);
     return m_result;
 }
 
 template<ColumnTypes Values>
-const Delta<Values>& ProjectionEvaluator<Values>::get_delta() const& noexcept
+const Delta<Values>& ProjectionEvaluator<Values>::get_delta() const&
 {
+    detail::require_initialized(m_initialized);
     return m_delta;
 }
 
