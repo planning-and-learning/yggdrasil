@@ -74,12 +74,7 @@ struct Triangle
         return std::array { Change { a[0], r[0] }, Change { a[1], r[1] }, Change { a[2], r[2] } };
     }
 
-    db::OptimizationContext<> context() const
-    {
-        db::OptimizationContext<> result;
-        result.statistics = db::collect_statistics<db::DefaultColumnTypes>(initial);
-        return result;
-    }
+    db::Statistics<> statistics() const { return db::collect_statistics<db::DefaultColumnTypes>(initial); }
 };
 
 bool equal(const Relation& left, const Relation& right)
@@ -112,26 +107,42 @@ bool exact_delta(const db::incremental::Delta<>& delta, const Relation& before, 
     return added == delta.added.size() && removed == delta.removed.size();
 }
 
+enum class Planning
+{
+    original,
+    structural,
+    measured
+};
+
+db::QueryPlan<> plan(const Triangle& trace, Planning planning, const db::Statistics<>& statistics)
+{
+    switch (planning)
+    {
+        case Planning::original:
+            return db::compile({ trace.root });
+        case Planning::structural:
+            return db::optimize(trace.root);
+        case Planning::measured:
+            return db::optimize(trace.root, statistics);
+    }
+    return {};
+}
+
+template<Planning Mode>
 void optimize_query(benchmark::State& state)
 {
     Triangle trace(static_cast<uint_t>(state.range(0)));
-    const auto context = trace.context();
-    size_t candidates = 0;
+    const auto statistics = trace.statistics();
     for (auto _ : state)
-    {
-        auto result = db::optimize(trace.root, context);
-        candidates = result.report.candidate_evaluations;
-        benchmark::DoNotOptimize(result.plan.node_count());
-    }
-    state.counters["candidates"] = static_cast<double>(candidates);
+        benchmark::DoNotOptimize(plan(trace, Mode, statistics).node_count());
     state.counters["input_rows"] = static_cast<double>(trace.initial[0].size() * 3);
 }
 
-template<bool Incremental, bool Original = false>
+template<bool Incremental, Planning Mode>
 void query_updates(benchmark::State& state)
 {
     Triangle trace(static_cast<uint_t>(state.range(0)));
-    const auto plan = Original ? db::compile({ trace.root }) : db::optimize(trace.root, trace.context()).plan;
+    const auto plan = ::ygg::profiling::plan(trace, Mode, trace.statistics());
     const auto& initial = trace.initial;
     const auto& changed = trace.changed;
     const auto forward = trace.deltas(true), backward = trace.deltas(false);
@@ -240,11 +251,14 @@ void generic_join_full(benchmark::State& state)
 [[maybe_unused]] const auto registered = []
 {
     const auto configure = [](benchmark::Benchmark* bench) { bench->ArgName("rows")->Arg(64)->Arg(1024)->Unit(benchmark::kMicrosecond); };
-    configure(benchmark::RegisterBenchmark("database/query/optimize/cost", optimize_query));
-    configure(benchmark::RegisterBenchmark("database/query/full/original", query_updates<false, true>));
-    configure(benchmark::RegisterBenchmark("database/query/incremental/original", query_updates<true, true>));
-    configure(benchmark::RegisterBenchmark("database/query/full/cost", query_updates<false>));
-    configure(benchmark::RegisterBenchmark("database/query/incremental/cost", query_updates<true>));
+    configure(benchmark::RegisterBenchmark("database/query/optimize/structural", optimize_query<Planning::structural>));
+    configure(benchmark::RegisterBenchmark("database/query/optimize/measured", optimize_query<Planning::measured>));
+    configure(benchmark::RegisterBenchmark("database/query/full/original", query_updates<false, Planning::original>));
+    configure(benchmark::RegisterBenchmark("database/query/full/structural", query_updates<false, Planning::structural>));
+    configure(benchmark::RegisterBenchmark("database/query/full/measured", query_updates<false, Planning::measured>));
+    configure(benchmark::RegisterBenchmark("database/query/incremental/original", query_updates<true, Planning::original>));
+    configure(benchmark::RegisterBenchmark("database/query/incremental/structural", query_updates<true, Planning::structural>));
+    configure(benchmark::RegisterBenchmark("database/query/incremental/measured", query_updates<true, Planning::measured>));
     configure(benchmark::RegisterBenchmark("database/query/generic_join/cold", generic_join_full<true>));
     configure(benchmark::RegisterBenchmark("database/query/generic_join/warm", generic_join_full<false>));
     return true;

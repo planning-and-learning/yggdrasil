@@ -5,75 +5,37 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
-#include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
+#include "yggdrasil/database/syntax/query.hpp"
 
-#include <cmath>
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <type_traits>
+#include <vector>
 
 namespace ygg::database
 {
-/// Cost-based plan choice over equivalent rewrites (the port of verdog's optimizer).
-struct CostBasedTag
-{
-};
-
 struct RelationStatistics
 {
     double rows = 0;
     std::map<Index<Column>, double> distinct;
-    std::optional<double> work;
 };
+
+/// What is known about the data. Everything is optional; nothing known means unbounded.
 template<ColumnTypes Values = DefaultColumnTypes>
 struct Statistics
 {
-    /// Keyed by input slot.
+    /// Domain size; empty means an unbounded domain.
+    std::optional<size_t> objects;
+    /// Measured inputs, keyed by input slot.
     std::map<size_t, RelationStatistics> inputs;
-    /// Observations of queries in the optimized roots' repository.
+    /// Observed results of queries in the roots' repository; they override estimates.
     std::map<Index<Query<Values>>, RelationStatistics> expressions;
 };
-struct SearchLimits
-{
-    size_t memo_expressions = 10000;
-    size_t saturation_rounds = 64;
-    size_t candidate_evaluations = 20000;
-    size_t frontier_size = 16;
-};
-struct CostModel
-{
-    /// Rows of an input without statistics, and the cap on distinct counts.
-    double domain_size = 1000;
-    /// Weight of retained cells relative to work in a plan's score.
-    double memory_weight = 1;
-};
-template<ColumnTypes Values = DefaultColumnTypes>
-struct OptimizationContext
-{
-    Statistics<Values> statistics;
-    SearchLimits limits;
-    CostModel cost;
-};
-struct OptimizationReport
-{
-    size_t memo_expressions = 0, candidate_evaluations = 0;
-    bool budget_exhausted = false, pruned = false;
-    double estimated_work = 0, retained = 0, estimated_score = 0, baseline_score = 0;
-};
-template<ColumnTypes Values = DefaultColumnTypes>
-struct OptimizationResult
-{
-    QueryPlan<Values> plan;
-    OptimizationReport report;
-};
-/// Extension point: specialize Optimizer<MyTag, Values>::run(roots, context).
-/// The roots belong to one repository. The returned plan must preserve every
-/// root's ordered, typed set semantics.
-template<class AlgorithmTag, ColumnTypes Values>
-struct Optimizer;
 
+/// Measures row and per-column distinct counts of the relations bound to each input slot.
 template<ColumnTypes Values, RelationViewRange<Values> R>
 Statistics<Values> collect_statistics(const R& inputs)
 {
@@ -83,8 +45,7 @@ Statistics<Values> collect_statistics(const R& inputs)
         const auto& input = inputs[slot];
         auto& stats = result.inputs[slot];
         stats.rows = static_cast<double>(input.size());
-        const auto columns = input.columns();
-        for (const auto& column : columns.span())
+        for (const auto& column : input.columns().span())
         {
             std::set<std::vector<std::byte>> keys;
             for (size_t row = 0; row < input.size(); ++row)
@@ -97,59 +58,73 @@ Statistics<Values> collect_statistics(const R& inputs)
     }
     return result;
 }
-
 }  // namespace ygg::database
 
 #include "yggdrasil/database/optimization/details/optimization.hpp"
 
 namespace ygg::database
 {
+/// Plans the roots by applying established query optimization methods:
+///
+/// 1. The query is normalized by the textbook algebraic rewrites [GMUW08]: selections
+///    are pushed down through joins, projections, renames, unions, and differences,
+///    projections through renames and unions, and empty relations are propagated.
+/// 2. Each maximal tree of joins forms a join block, planned as a whole. Unions,
+///    differences, distances, and selections spanning several join operands bound
+///    the blocks.
+/// 3. A block whose operands all have known cardinalities is planned cost-based:
+///    DPccp [MN06] finds the bushy join order of least C_out [CM95, Leis15] under
+///    System R cardinality estimates [Selinger79] (the textbook estimates of [GMUW08]
+///    for projection, union, and difference), with observed cardinalities replacing
+///    estimates [LEO01]; disconnected components are joined last by cross products.
+///    The join tree is then refined by Algorithm 4 of [Freitag20]: growing joins and
+///    their ancestors become one worst-case-optimal join.
+/// 4. Any other block is planned from its structure: if the GYO reduction
+///    [Graham79, YO79] shows it acyclic, by Yannakakis' algorithm [Yannakakis81];
+///    otherwise by Generic Join [NRR13], whose running time is bounded by the AGM
+///    bound [AGM08].
+///
+/// Generic Join's variable order is fixed by column label: any order attains the
+/// worst-case bound, but [Freitag20] additionally optimizes it with the Tributary Join
+/// cost model, which is not implemented. Distances have no estimate in the literature
+/// and are only known when observed. Not modeled: distributing joins over unions,
+/// sharing-aware choices across roots, and costs of incremental maintenance.
+///
+/// The roots belong to one repository; the plan preserves every root's ordered, typed
+/// schema and set semantics.
+///
+/// [Selinger79] P. G. Selinger et al., Access Path Selection in a Relational Database
+///     Management System, SIGMOD 1979.
+/// [GMUW08] H. Garcia-Molina, J. D. Ullman, J. Widom, Database Systems: The Complete
+///     Book, 2nd ed., 2008, ch. 16.
+/// [Graham79] M. H. Graham, On the Universal Relation, University of Toronto, 1979.
+/// [YO79] C. T. Yu, M. Z. Özsoyoğlu, An Algorithm for Tree-Query Membership of a
+///     Distributed Query, COMPSAC 1979.
+/// [Yannakakis81] M. Yannakakis, Algorithms for Acyclic Database Schemes, VLDB 1981.
+/// [AGM08] A. Atserias, M. Grohe, D. Marx, Size Bounds and Query Plans for Relational
+///     Joins, FOCS 2008.
+/// [NRR13] H. Q. Ngo, C. Ré, A. Rudra, Skew Strikes Back: New Developments in the
+///     Theory of Join Algorithms, SIGMOD Record 2013.
+/// [MN06] G. Moerkotte, T. Neumann, Analysis of Two Existing and One New Dynamic
+///     Programming Algorithm for the Generation of Optimal Bushy Join Trees without
+///     Cross Products, VLDB 2006.
+/// [CM95] S. Cluet, G. Moerkotte, On the Complexity of Generating Optimal Left-Deep
+///     Processing Trees with Cross Products, ICDT 1995.
+/// [Leis15] V. Leis et al., How Good Are Query Optimizers, Really?, PVLDB 9(3), 2015.
+/// [Freitag20] M. Freitag, M. Bandle, T. Schmidt, A. Kemper, T. Neumann, Adopting
+///     Worst-Case Optimal Joins in Relational Database Systems, PVLDB 13(11), 2020.
+/// [LEO01] M. Stillger, G. Lohman, V. Markl, M. Kandil, LEO – DB2's LEarning Optimizer,
+///     VLDB 2001.
 template<ColumnTypes Values>
-struct Optimizer<CostBasedTag, Values>
+QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
 {
-    static OptimizationResult<Values> run(std::span<const QueryView<Values>> roots, const OptimizationContext<Values>& context)
-    {
-        return optimization_detail::optimize(roots, context);
-    }
-};
-
-template<class AlgorithmTag = CostBasedTag, ColumnTypes Values>
-OptimizationResult<Values> optimize(std::span<const QueryView<Values>> roots, const std::type_identity_t<OptimizationContext<Values>>& context = {})
-{
-    const auto original = reachable(roots);
-    auto result = Optimizer<AlgorithmTag, Values>::run(roots, context);
-    if (result.plan.root_count() != roots.size())
-        throw std::invalid_argument("Optimizer: the result must preserve the number of roots.");
-    std::map<size_t, std::vector<ColumnLayout>> inputs;
-    for (const auto query : original)
-        ygg::visit(
-            [&]<typename Child>(Child child)
-            {
-                if constexpr (std::same_as<Child, QueryView<Values, QueryInputTag>>)
-                    inputs.emplace(child.get_input_slot(), optimization_detail::own_columns(child.columns()));
-            },
-            query.get_variant());
-    for (size_t value = 0; value < result.plan.node_count(); ++value)
-        ygg::visit(
-            [&]<typename Child>(Child child)
-            {
-                if constexpr (std::same_as<Child, QueryView<Values, QueryInputTag>>)
-                {
-                    const auto binding = inputs.find(child.get_input_slot());
-                    if (binding == inputs.end() || !std::ranges::equal(binding->second, child.columns()))
-                        throw std::invalid_argument("Optimizer: result introduces an unknown input binding.");
-                }
-            },
-            result.plan[Index<Query<Values>>(to_uint_t(value))].get_variant());
-    for (size_t i = 0; i < roots.size(); ++i)
-        if (!std::ranges::equal(result.plan[result.plan.roots()[i]].columns(), roots[i].columns()))
-            throw std::invalid_argument("Optimizer: result must preserve each root's ordered schema.");
-    return result;
+    return optimization_detail::optimize(roots, statistics);
 }
-template<class AlgorithmTag = CostBasedTag, ColumnTypes Values>
-OptimizationResult<Values> optimize(QueryView<Values> root, const std::type_identity_t<OptimizationContext<Values>>& context = {})
+
+template<ColumnTypes Values>
+QueryPlan<Values> optimize(QueryView<Values> root, const std::type_identity_t<Statistics<Values>>& statistics = {})
 {
-    return optimize<AlgorithmTag>(std::span<const QueryView<Values>>(&root, 1), context);
+    return optimize(std::span<const QueryView<Values>>(&root, 1), statistics);
 }
 }  // namespace ygg::database
 #endif

@@ -17,8 +17,8 @@ def rows(value):
     return {tuple(row) for row in value}
 
 
-def context(inputs):
-    return db.OptimizationContext(statistics=db.collect_statistics(inputs))
+def statistics(inputs):
+    return db.collect_statistics(inputs)
 
 
 @pytest.mark.parametrize("measured", (True, False))
@@ -34,21 +34,18 @@ def test_optimizer_preserves_typed_shared_roots_and_output_order(measured):
     assert repo.join(a, b) == shared
     assert hash(repo.join(a, b)) == hash(shared)
     original = repo.compile(root_queries)
-    optimized = db.optimize(root_queries, context([left, right]) if measured else db.OptimizationContext())
-    baseline, actual = db.QueryEvaluator(original), db.QueryEvaluator(optimized.plan)
+    optimized = db.optimize(root_queries, statistics([left, right]) if measured else None)
+    baseline, actual = db.QueryEvaluator(original), db.QueryEvaluator(optimized)
     baseline.evaluate([left, right])
     actual.evaluate([left, right])
-    assert optimized.plan.root_count == 3
-    assert optimized.plan.node_count > 0
-    assert optimized.report.memo_expressions < 100
-    assert not optimized.report.budget_exhausted
-    assert optimized.plan.explain()
+    assert optimized.root_count == 3
+    assert optimized.node_count > 0
+    assert optimized.explain()
     for index in range(3):
         assert tuple(actual.get_result(index).columns()) == tuple(baseline.get_result(index).columns())
         assert rows(actual.get_result(index)) == rows(baseline.get_result(index))
     assert rows(actual.get_result()) == {(7, 1), (8, 2), (7, 3)}
     assert actual.memory_usage() > 0
-    assert optimized.report.estimated_score <= optimized.report.baseline_score
 
 
 def test_difference_projection_barrier_and_nullary_support():
@@ -58,8 +55,8 @@ def test_difference_projection_barrier_and_nullary_support():
     source_query, removed_query = repo.input(0, source.columns()), repo.input(1, removed.columns())
     surviving = repo.project(repo.difference(source_query, removed_query), [0])
     root_queries = [surviving, repo.project(surviving, [])]
-    optimized = db.optimize(root_queries, context([source, removed]))
-    evaluation = db.QueryEvaluator(optimized.plan)
+    optimized = db.optimize(root_queries, statistics([source, removed]))
+    evaluation = db.QueryEvaluator(optimized)
     evaluation.evaluate([source, removed])
     assert rows(evaluation.get_result()) == {(1,)}
     assert rows(evaluation.get_result(1)) == {()}
@@ -76,8 +73,8 @@ def test_incremental_batch_changes_projection_union_and_difference():
     combined = repo.union(visible, repo.empty(inputs[2].columns()))
     root_queries = [combined, repo.project(visible, [])]
     original = repo.compile(root_queries)
-    optimized = db.optimize(root_queries, context(inputs))
-    full, maintained = db.QueryEvaluator(original), db.IncrementalQueryEvaluator(optimized.plan)
+    optimized = db.optimize(root_queries, statistics(inputs))
+    full, maintained = db.QueryEvaluator(original), db.IncrementalQueryEvaluator(optimized)
     full.evaluate(inputs)
     maintained.initialize(inputs)
     for index in range(2):
@@ -113,8 +110,8 @@ def test_triangle_and_self_join():
     a, b, c = [repo.input(i, value.columns()) for i, value in enumerate(inputs)]
     triangle = repo.join(repo.join(a, b), c)
     roots = [triangle, repo.join(a, a)]
-    optimized = db.optimize(roots, context(inputs))
-    evaluator = db.QueryEvaluator(optimized.plan)
+    optimized = db.optimize(roots, statistics(inputs))
+    evaluator = db.QueryEvaluator(optimized)
     evaluator.evaluate(inputs)
     assert rows(evaluator.get_result()) == {(1, 2, 3), (2, 3, 1), (3, 1, 2)}
     assert rows(evaluator.get_result(1)) == rows(inputs[0])
@@ -172,10 +169,10 @@ def test_distance_boundary_and_sparse_input_slots(incremental):
     query = repo.distance(s, e, t, 99)
     optimized = db.optimize(query)
     if not incremental:
-        evaluator = db.QueryEvaluator(optimized.plan)
+        evaluator = db.QueryEvaluator(optimized)
         evaluator.evaluate([None, source, None, edges, target])
     else:
-        evaluator = db.IncrementalQueryEvaluator(optimized.plan)
+        evaluator = db.IncrementalQueryEvaluator(optimized)
         evaluator.initialize([None, source, None, edges, target])
     assert rows(evaluator.get_result()) == {(0, 2, 2)}
     if incremental:
@@ -190,11 +187,10 @@ def test_statistics_and_input_validation():
     value = relation([0], [(1,)])
     repo = db.QueryRepository()
     query = repo.input(0, value.columns())
-    assert db.optimize(query).plan.root_count == 1
+    assert db.optimize(query).root_count == 1
+    assert db.optimize(query, db.Statistics(objects=4, inputs={0: db.RelationStatistics(1, {0: 1})})).root_count == 1
     with pytest.raises(ValueError):
-        db.optimize(query, db.OptimizationContext(statistics=db.Statistics({0: db.RelationStatistics(-1, {0: 1})})))
-    with pytest.raises(ValueError):
-        db.optimize(query, db.OptimizationContext(cost=db.CostModel(domain_size=0)))
+        db.optimize(query, db.Statistics(inputs={0: db.RelationStatistics(-1, {0: 1})}))
     evaluator = db.QueryEvaluator(repo.compile(query))
     with pytest.raises(ValueError):
         evaluator.evaluate([relation([1])])
@@ -208,21 +204,19 @@ def test_statistics_and_input_validation():
         incremental.update([relation([0])], [])
 
 
-def test_search_limits_report_deterministic_truncation():
+@pytest.mark.parametrize("measured", (True, False))
+def test_planning_is_deterministic(measured):
     inputs = [relation([i, i + 1], [(1, 1), (2, 2)]) for i in range(4)]
     repo = db.QueryRepository()
     queries = [repo.input(i, value.columns()) for i, value in enumerate(inputs)]
     query = queries[0]
     for other in queries[1:]:
         query = repo.join(query, other)
-    ctx = db.OptimizationContext(statistics=db.collect_statistics(inputs),
-                                 limits=db.SearchLimits(memo_expressions=10, candidate_evaluations=2, frontier_size=1))
-    first = db.optimize(query, ctx)
-    second = db.optimize(query, ctx)
-    assert first.report.budget_exhausted or first.report.pruned
-    assert first.plan.explain() == second.plan.explain()
-    assert first.report.candidate_evaluations == second.report.candidate_evaluations
-    evaluator = db.QueryEvaluator(first.plan)
+    known = statistics(inputs) if measured else None
+    first = db.optimize(query, known)
+    second = db.optimize(query, known)
+    assert first.explain() == second.explain()
+    evaluator = db.QueryEvaluator(first)
     evaluator.evaluate(inputs)
     assert rows(evaluator.get_result()) == {(1, 1, 1, 1, 1), (2, 2, 2, 2, 2)}
 
@@ -232,7 +226,7 @@ def test_selection_constants_follow_column_types_and_equality():
     repo = db.QueryRepository()
     query = repo.input(0, source.columns())
     selected = repo.select_value(repo.select_equal(query, 0, 1), 0, -3)
-    evaluator = db.QueryEvaluator(db.optimize(selected).plan)
+    evaluator = db.QueryEvaluator(db.optimize(selected))
     evaluator.evaluate([source])
     assert rows(evaluator.get_result()) == {(-3, -3)}
     with pytest.raises(TypeError):

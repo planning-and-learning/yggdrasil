@@ -448,7 +448,7 @@ Python's `plan.explain()` uses the same rendering. The `fmt::formatter`
 specialization follows `YGG_ENABLE_FMT_FORMATTERS`; `explain()` remains available
 when public formatters are disabled.
 
-`<yggdrasil/database/optimization/optimization.hpp>` selects the optimizer at the roots:
+`<yggdrasil/database/optimization/optimization.hpp>` plans the roots from what is known about the data:
 
 ```cpp
 using namespace ygg::database;
@@ -469,112 +469,96 @@ const auto query = insert_query(repository, builder, *join);
 
 // Any range of relation views: interned RelationView or BorrowedRelationView over builders.
 const std::array bindings { left_view, right_view };
-OptimizationContext<> context;
-context.statistics = collect_statistics<DefaultColumnTypes>(bindings);
-const auto cost_based = optimize(query, context);
-QueryEvaluator<> evaluator(cost_based.plan);
+const auto structural = optimize(query);                                   // structure only
+const auto measured = optimize(query, collect_statistics<DefaultColumnTypes>(bindings));
+QueryEvaluator<> evaluator(measured);
 evaluator.evaluate(bindings);
 const auto& result = evaluator.get_result();
 ```
 
-`CostBasedTag`, the default, is a port of the optimizer in
-`learning-module-programs-verdog/experiments/optimize_queries.py`. An e-graph
-style memo applies verdog's rewrite rules in rounds: join and union
-commutativity and associativity, absorption, projection and selection pushdown
-with schema and scope guards, distribution and factoring of joins over unions,
-and empty-relation simplification. Difference and distance keep their operator
-semantics, and a projection is not pushed through difference.
+`optimize(roots, statistics = {})` returns a `QueryPlan` with every root's ordered
+schema. It implements established algorithms as published:
 
-Each equivalence group then gets one frozen estimate, taken from its witness
-with the fewest nodes, so repeated filters cannot shrink an estimate through a
-cycle. Physical extraction keeps a bounded frontier of candidates per group and
-prices each candidate once by the distinct operators of its plan DAG, so shared
-subplans count once. The original query is the incumbent; a candidate replaces
-it only with a lower score. Bounded rewriting and frontiers do not guarantee
-the globally cheapest plan.
+1. **Normalization.** The textbook algebraic rewrites [GMUW08]: selections are
+   pushed down through joins, projections, renames, unions, and differences,
+   projections through renames and unions, and empty relations are propagated.
+2. **Join blocks.** Each maximal tree of joins is planned as a whole. Unions,
+   differences, distances, and selections spanning several join operands bound
+   the blocks.
+3. **Planning each block.** A block whose operands all have known cardinalities
+   (measured inputs, observed queries, or queries over them) is planned
+   cost-based, any other block from structure:
+   - *Cost-based:* DPccp [MN06] finds the bushy join order of least C_out
+     [CM95, Leis15] under System R estimates [Selinger79], with the textbook
+     estimates of [GMUW08] for projection, union, and difference and observed
+     cardinalities replacing estimates [LEO01]; disconnected components are
+     joined last by cross products. The join tree is then refined by Algorithm 4
+     of [Freitag20]: growing joins and their ancestors become one
+     worst-case-optimal join.
+   - *Structure:* if the GYO reduction [Graham79, YO79] shows the block acyclic,
+     Yannakakis' algorithm [Yannakakis81]; otherwise Generic Join [NRR13], whose
+     running time is bounded by the AGM bound [AGM08].
 
-The native extension point is `Optimizer<AlgorithmTag, Values>::run(request)`.
-A custom tag is selected through the same `optimize<AlgorithmTag>` entry point. The root entry point validates the resulting plan and its output
-schemas. For example, a policy preserving the original order needs no central
-C++ enum changes:
+   Generic Join's variable order is fixed by column label: any order attains the
+   worst-case bound, but [Freitag20] additionally optimizes it with the Tributary
+   Join cost model, which is not implemented. Distances have no estimate in the
+   literature and are only known when observed.
+4. **Compilation** of the planned roots into an owning `QueryPlan`.
 
-```cpp
-struct PreserveOrderTag {};
-namespace ygg::database
-{
-template<ColumnTypes Values>
-struct Optimizer<PreserveOrderTag, Values>
-{
-    static OptimizationResult<Values> run(std::span<const QueryView<Values>> roots, const OptimizationContext<Values>&)
-    {
-        return {compile(roots), {}};
-    }
-};
-}
+Union and difference bound join blocks, so joins are not distributed over unions,
+and blocks of different roots are planned independently (shared subplans are
+still interned once). Planning for incremental maintenance is not modeled.
 
-const auto preserved = ygg::database::optimize<PreserveOrderTag>(query);
-```
-
-Policies construct new alternatives in their own repository with the same
-checkout and `insert_query` steps, then return `compile({root})`.
+References:
+[Selinger79] P. G. Selinger et al., *Access Path Selection in a Relational
+Database Management System*, SIGMOD 1979.
+[GMUW08] H. Garcia-Molina, J. D. Ullman, J. Widom, *Database Systems: The
+Complete Book*, 2nd ed., 2008, ch. 16.
+[Graham79] M. H. Graham, *On the Universal Relation*, University of Toronto, 1979.
+[YO79] C. T. Yu, M. Z. Özsoyoğlu, *An Algorithm for Tree-Query Membership of a
+Distributed Query*, COMPSAC 1979.
+[Yannakakis81] M. Yannakakis, *Algorithms for Acyclic Database Schemes*, VLDB 1981.
+[AGM08] A. Atserias, M. Grohe, D. Marx, *Size Bounds and Query Plans for
+Relational Joins*, FOCS 2008.
+[NRR13] H. Q. Ngo, C. Ré, A. Rudra, *Skew Strikes Back: New Developments in the
+Theory of Join Algorithms*, SIGMOD Record 2013.
+[MN06] G. Moerkotte, T. Neumann, *Analysis of Two Existing and One New Dynamic
+Programming Algorithm for the Generation of Optimal Bushy Join Trees without
+Cross Products*, VLDB 2006; corrected exclusion set from PVLDB 11 (2018), p. 1069.
+[CM95] S. Cluet, G. Moerkotte, *On the Complexity of Generating Optimal Left-Deep
+Processing Trees with Cross Products*, ICDT 1995.
+[Leis15] V. Leis et al., *How Good Are Query Optimizers, Really?*, PVLDB 9(3), 2015.
+[Freitag20] M. Freitag, M. Bandle, T. Schmidt, A. Kemper, T. Neumann, *Adopting
+Worst-Case Optimal Joins in Relational Database Systems*, PVLDB 13(11), 2020.
+[LEO01] M. Stillger, G. Lohman, V. Markl, M. Kandil, *LEO – DB2's LEarning
+Optimizer*, VLDB 2001.
 
 `prepare_for_insert` checks schemas, constants, and execution orders before
 publishing immutable query data. Query records hold plain indices, so callers
-keep operands in the repository they insert into. `run` borrows the caller's
-roots, which belong to one repository. The root optimizer
-also checks that returned plans preserve root counts and ordered schemas and do
-not introduce unknown input bindings. Custom optimizers return owned plans and
-must preserve the original query's set semantics.
+keep operands in the repository they insert into. The roots passed to `optimize`
+belong to one repository.
 
-The memo stores finite witnesses in an ordinary query repository. Equivalence
-groups retain a separate index type and can become cyclic without making query
-edges cyclic. Canonical matching compares operator identity with children
-resolved through their current groups. Original statistics observations are
-retained separately when witnesses or groups merge.
+### Statistics
 
-Optimizer state lives outside the query data, in vectors indexed by query index:
-memo expressions record their group, source query, estimate, and baseline;
-physical candidates record their source query and price. The optimizer visits
-ordinary `QueryView`s, and the state is discarded with the optimizer. Returned
-plans contain no optimizer state. Evaluators reuse the prepared plans in query
-data and keep mutable execution workspaces separate.
+`Statistics<Values>` describes what is known; everything is optional and nothing
+known means an unbounded domain:
 
-Python exposes the cost-based optimizer. A custom C++ policy needs an
-additional Python binding if Python callers should select it.
+- `objects`: the domain size. It caps distinct counts; without it the domain is
+  unbounded.
+- `inputs`: per input slot, a `RelationStatistics` with `rows` and distinct counts
+  keyed by `Index<Column>`. A missing distinct count is the row count, capped by
+  `objects`.
+- `expressions`: observed results of queries in the roots' repository, keyed by
+  `query.get_index()`. They replace the derived estimate of the equivalent planned
+  query [LEO01].
 
-### Statistics, costs, and limits
-
-`RelationStatistics` contains `rows`, distinct counts keyed by `Index<Column>`,
-and optional `work`. `Statistics<Values>.inputs` is keyed by input slot;
-`Statistics<Values>.expressions` holds optional observations keyed by the root
-query index (`query.get_index()`) in the optimized roots' repository. Python
-keys distinct counts by plain column labels and expressions by `QueryIndex`.
-An input without statistics has `CostModel::domain_size` rows (default `1000`;
-one row for a nullary input), and a missing distinct count defaults to
-`min(rows, domain_size)`, as in verdog. A known empty input stays empty. Conjunction estimates normalize repeated
-factors and predicates so changing join association does not itself change the
-estimated output size. Projection introduces a fresh scope for hidden columns.
-`collect_statistics(bindings)` scans supplied relations to collect row and
-per-column distinct counts. These observations guide planning and never justify
-replacing a dynamic input by a constant or an empty relation.
-
-Each operator is priced as in verdog, with width counting columns and rows taken
-from the frozen estimates: an input scans `rows * width` (or its measured
-`work`), a projection writes `input rows * width`, a selection reads its input
-and writes its output, a union or difference reads both sides, and a hash join
-costs `(lhs + rhs) * keys + rows * (keys + width)`, or `lhs * rhs * width`
-without common columns. Renames alias their input. Every materialized operator
-retains `rows * (width + 2)` cells. The score is the work plus the retained cells
-weighted by `CostModel::memory_weight` (default `1`). It is an optimization
-proxy, not a measured duration. `OptimizationReport` exposes the baseline and
-selected scores, work and retained estimates, explored counts, and whether
-search was pruned or exhausted a budget.
-
-`SearchLimits` defaults to 10,000 memo expressions, 64 saturation rounds, 20,000
-candidate evaluations, and a frontier of 16 candidates per group. Limits count deterministic work rather than
-wall-clock time. A truncated search returns a valid complete plan. An estimated
-improvement and an exhausted-search flag do not establish an actual speedup or
-global optimality.
+Python keys distinct counts by plain column labels and expressions by
+`QueryIndex`. `collect_statistics(bindings)` scans relations to fill `inputs`.
+Estimates assume independent, uniform columns and containment of join columns
+[Selinger79]; conjunctions are normalized so join association never changes the
+estimate, and projection starts a new scope for its hidden columns. Statistics
+guide planning only; they never justify replacing an input by a constant or an
+empty relation.
 
 ### Full and incremental evaluation
 
@@ -609,16 +593,16 @@ repository = db.QueryRepository()
 a = repository.input(0, left.columns())
 b = repository.input(1, right.columns())
 query = repository.project(repository.join(a, b), [2, 0])
-context = db.OptimizationContext(statistics=db.collect_statistics([left, right]))
-optimized = db.optimize(query, context)
-evaluator = db.QueryEvaluator(optimized.plan)
+optimized = db.optimize(query, db.collect_statistics([left, right]))
+evaluator = db.QueryEvaluator(optimized)
 evaluator.evaluate([left, right])
 assert {tuple(row) for row in evaluator.get_result()} == {(3, 1)}
 independent = db.snapshot(evaluator.get_result())
-print(optimized.plan.explain())
+print(optimized.explain())
 ```
 
-`optimize` and `repository.compile` accept either one query or a list of roots.
+`optimize(roots, statistics=None)` and `repository.compile` accept either one
+query or a list of roots; `optimize` returns a `QueryPlan`.
 `repository.union(a, b)`, `difference`, `rename`, `select_equal`, `select_value`,
 `empty`, and `distance` expose the other operators. Typed schemas are supplied
 through a relation's `columns()` view, preserving its field types. `input` and
@@ -636,7 +620,8 @@ keyword dictionaries or replace the field to change entries.
 ### Query benchmarks
 
 `database_query_benchmark` separates optimizer time from execution. It compares
-full and incremental evaluation of the original and the cost-based plan, validates
+full and incremental evaluation of the original plan and the plans from structure
+and from statistics, validates
 forward/undo results and net deltas before timing, and reports retained bytes.
 The cold/warm Generic Join cases include full trie construction; warm means
 reusing the evaluator's allocated workspace, not skipping input indexing. The

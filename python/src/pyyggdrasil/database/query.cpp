@@ -231,11 +231,10 @@ void bind_database_query(nb::module_& m)
         return result;
     };
     nb::class_<db::RelationStatistics>(m, "RelationStatistics")
-        .def(nb::new_([to_columns](double rows, const std::map<ygg::uint_t, double>& distinct, std::optional<double> work)
-                      { return new db::RelationStatistics { rows, to_columns(distinct), work }; }),
+        .def(nb::new_([to_columns](double rows, const std::map<ygg::uint_t, double>& distinct)
+                      { return new db::RelationStatistics { rows, to_columns(distinct) }; }),
              nb::arg("rows") = 0,
-             nb::arg("distinct") = std::map<ygg::uint_t, double> {},
-             nb::arg("work") = nb::none())
+             nb::arg("distinct") = std::map<ygg::uint_t, double> {})
         .def_rw("rows", &db::RelationStatistics::rows)
         .def_prop_rw(
             "distinct",
@@ -246,64 +245,29 @@ void bind_database_query(nb::module_& m)
                     result.emplace(column.get_value(), count);
                 return result;
             },
-            [to_columns](db::RelationStatistics& statistics, const std::map<ygg::uint_t, double>& distinct) { statistics.distinct = to_columns(distinct); })
-        .def_rw("work", &db::RelationStatistics::work);
+            [to_columns](db::RelationStatistics& statistics, const std::map<ygg::uint_t, double>& distinct) { statistics.distinct = to_columns(distinct); });
     using QueryIndex = ygg::Index<db::Query<Values>>;
-    nb::class_<db::Statistics<Values>>(m, "Statistics")
-        .def(nb::new_([](std::map<size_t, db::RelationStatistics> inputs, std::map<QueryIndex, db::RelationStatistics> expressions)
-                      { return new db::Statistics<Values> { std::move(inputs), std::move(expressions) }; }),
+    nb::class_<db::Statistics<Values>>(m, "Statistics", "What is known about the data; everything is optional.")
+        .def(nb::new_(
+                 [](std::optional<size_t> objects, std::map<size_t, db::RelationStatistics> inputs, std::map<QueryIndex, db::RelationStatistics> expressions)
+                 { return new db::Statistics<Values> { objects, std::move(inputs), std::move(expressions) }; }),
+             nb::arg("objects") = nb::none(),
              nb::arg("inputs") = std::map<size_t, db::RelationStatistics> {},
              nb::arg("expressions") = std::map<QueryIndex, db::RelationStatistics> {})
+        .def_rw("objects", &db::Statistics<Values>::objects)
         .def_rw("inputs", &db::Statistics<Values>::inputs)
         .def_rw("expressions", &db::Statistics<Values>::expressions);
-    nb::class_<db::SearchLimits>(m, "SearchLimits")
-        .def(nb::new_([](size_t memo_expressions, size_t saturation_rounds, size_t candidate_evaluations, size_t frontier_size)
-                      { return new db::SearchLimits { memo_expressions, saturation_rounds, candidate_evaluations, frontier_size }; }),
-             nb::arg("memo_expressions") = 10000,
-             nb::arg("saturation_rounds") = 64,
-             nb::arg("candidate_evaluations") = 20000,
-             nb::arg("frontier_size") = 16)
-        .def_rw("memo_expressions", &db::SearchLimits::memo_expressions)
-        .def_rw("saturation_rounds", &db::SearchLimits::saturation_rounds)
-        .def_rw("candidate_evaluations", &db::SearchLimits::candidate_evaluations)
-        .def_rw("frontier_size", &db::SearchLimits::frontier_size);
-    nb::class_<db::CostModel>(m, "CostModel")
-        .def(nb::new_([](double domain_size, double memory_weight) { return new db::CostModel { domain_size, memory_weight }; }),
-             nb::arg("domain_size") = 1000,
-             nb::arg("memory_weight") = 1)
-        .def_rw("domain_size", &db::CostModel::domain_size)
-        .def_rw("memory_weight", &db::CostModel::memory_weight);
-    nb::class_<db::OptimizationContext<Values>>(m, "OptimizationContext")
-        .def(nb::new_([](db::Statistics<Values> statistics, db::SearchLimits limits, db::CostModel cost)
-                      { return new db::OptimizationContext<Values> { std::move(statistics), limits, cost }; }),
-             nb::arg("statistics") = db::Statistics<Values> {},
-             nb::arg("limits") = db::SearchLimits {},
-             nb::arg("cost") = db::CostModel {})
-        .def_rw("statistics", &db::OptimizationContext<Values>::statistics)
-        .def_rw("limits", &db::OptimizationContext<Values>::limits)
-        .def_rw("cost", &db::OptimizationContext<Values>::cost);
-    nb::class_<db::OptimizationReport>(m, "OptimizationReport")
-        .def_ro("memo_expressions", &db::OptimizationReport::memo_expressions)
-        .def_ro("candidate_evaluations", &db::OptimizationReport::candidate_evaluations)
-        .def_ro("budget_exhausted", &db::OptimizationReport::budget_exhausted)
-        .def_ro("pruned", &db::OptimizationReport::pruned)
-        .def_ro("estimated_work", &db::OptimizationReport::estimated_work)
-        .def_ro("retained", &db::OptimizationReport::retained)
-        .def_ro("estimated_score", &db::OptimizationReport::estimated_score)
-        .def_ro("baseline_score", &db::OptimizationReport::baseline_score);
-    nb::class_<db::OptimizationResult<Values>>(m, "OptimizationResult")
-        .def_ro("plan", &db::OptimizationResult<Values>::plan)
-        .def_ro("report", &db::OptimizationResult<Values>::report);
 
     m.def(
         "optimize",
-        [](nb::handle queries, const db::OptimizationContext<Values>& context)
+        [](nb::handle queries, const std::optional<db::Statistics<Values>>& statistics)
         {
             const auto values = roots(queries);
-            return db::optimize(std::span<const Query>(values), context);
+            return db::optimize(std::span<const Query>(values), statistics.value_or(db::Statistics<Values> {}));
         },
         nb::arg("roots"),
-        nb::arg("context") = db::OptimizationContext<Values> {});
+        nb::arg("statistics") = nb::none(),
+        "Plan from structure, and from statistics for join blocks whose inputs are all measured.");
     m.def(
         "collect_statistics",
         [](nb::sequence values)

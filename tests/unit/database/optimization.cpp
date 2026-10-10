@@ -1,109 +1,26 @@
+#include "query_helpers.hpp"
+
 #include <array>
-#include <utility>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <limits>
 #include <random>
+#include <set>
 #include <type_traits>
-#include <yggdrasil/database/syntax/formatter.hpp>
-#include <yggdrasil/database/semantics/incremental/query.hpp>
+#include <utility>
 #include <yggdrasil/database/optimization/optimization.hpp>
+#include <yggdrasil/database/semantics/incremental/query.hpp>
 #include <yggdrasil/database/semantics/query_evaluation.hpp>
 #include <yggdrasil/database/semantics/relation_repository.hpp>
-#include "query_helpers.hpp"
+#include <yggdrasil/database/syntax/formatter.hpp>
 
 namespace qb = ygg::tests::qb;
 
 namespace
 {
-struct IdentityOptimizerTag
-{
-};
-struct WrongSchemaOptimizerTag
-{
-};
-struct ForwardReferenceOptimizerTag
-{
-};
-struct ForeignInputOptimizerTag
-{
-};
-struct MissingRootOptimizerTag
-{
-};
-struct InvalidRootOptimizerTag
-{
-};
-bool custom_called = false;
-}
-namespace ygg::database
-{
-template<>
-struct Optimizer<IdentityOptimizerTag, DefaultColumnTypes>
-{
-    static OptimizationResult<> run(std::span<const QueryView<>> roots, const OptimizationContext<>&)
-    {
-        custom_called = true;
-        return { compile(roots), {} };
-    }
-};
-template<>
-struct Optimizer<WrongSchemaOptimizerTag, DefaultColumnTypes>
-{
-    static OptimizationResult<> run(std::span<const QueryView<>> roots, const OptimizationContext<>&)
-    {
-        auto repository = qb::repository<>();
-        const auto schema = roots[0].columns();
-        const auto input = qb::input(repository, 0, schema);
-        auto labels = detail::query_labels(schema);
-        labels[0] = Index<Column>(99);
-        return { ygg::database::compile({ qb::rename(repository, input, labels) }), {} };
-    }
-};
-template<>
-struct Optimizer<ForwardReferenceOptimizerTag, DefaultColumnTypes>
-{
-    static OptimizationResult<> run(std::span<const QueryView<>> roots, const OptimizationContext<>&)
-    {
-        auto repository = qb::repository<>();
-        const auto schema = roots[0].columns();
-        qb::input(repository, 0, schema);
-        const auto future = QueryView<>(Index<Query<>>(to_uint_t(repository.size())), repository);
-        const auto root = qb::project(repository, future, detail::query_labels(schema));
-        return { ygg::database::compile({ root }), {} };
-    }
-};
-template<>
-struct Optimizer<ForeignInputOptimizerTag, DefaultColumnTypes>
-{
-    static OptimizationResult<> run(std::span<const QueryView<>> roots, const OptimizationContext<>&)
-    {
-        auto repository = qb::repository<>();
-        const auto input = qb::input(repository, 99, roots[0].columns());
-        return { ygg::database::compile({ input }), {} };
-    }
-};
-template<>
-struct Optimizer<MissingRootOptimizerTag, DefaultColumnTypes>
-{
-    static OptimizationResult<> run(std::span<const QueryView<>>, const OptimizationContext<>&) { return { QueryPlan<> {}, {} }; }
-};
-template<>
-struct Optimizer<InvalidRootOptimizerTag, DefaultColumnTypes>
-{
-    static OptimizationResult<> run(std::span<const QueryView<>>, const OptimizationContext<>&)
-    {
-        auto repository = qb::repository<>();
-        const auto invalid = QueryView<>(Index<Query<>>(99), repository);
-        return { ygg::database::compile({ invalid }), {} };
-    }
-};
-
-}
-namespace
-{
 namespace db = ygg::database;
 using Column = ygg::Index<db::Column>;
+using PlanId = ygg::Index<db::Query<>>;
 using Relation = ygg::Builder<db::Relation<>>;
 using Delta = db::incremental::Delta<>;
 using Change = std::pair<db::BorrowedRelationView<>, db::BorrowedRelationView<>>;
@@ -115,7 +32,7 @@ db::BorrowedRelationView<Values> borrow(const ygg::Builder<db::Relation<Values>>
     static const auto context = db::RelationRepositoryFactory<Values> {}.create();
     return { relation, context };
 }
-const Column x(0), y(1), z(2), distance_column(3);
+const Column w(3), x(0), y(1), z(2);
 
 auto rows(const auto& relation)
 {
@@ -131,69 +48,19 @@ auto difference(const auto& lhs, const auto& rhs)
     std::ranges::set_difference(lhs, rhs, std::back_inserter(result));
     return result;
 }
-
-TEST(DatabaseOptimization, CustomTagDispatchValidatesReturnedRootsAndGraph)
+template<class Tag>
+size_t count(const db::QueryPlan<>& plan)
 {
-    auto queries = qb::repository<>();
-    const auto input = qb::input(queries, 0, { x });
-    auto result = db::optimize<IdentityOptimizerTag>(input);
-    EXPECT_TRUE(custom_called);
-    ASSERT_EQ(result.plan.root_count(), 1);
-    EXPECT_TRUE(std::ranges::equal(result.plan[result.plan.roots()[0]].columns(), input.columns()));
-    EXPECT_THROW(db::optimize<WrongSchemaOptimizerTag>(input), std::invalid_argument);
-    EXPECT_THROW(db::optimize<ForwardReferenceOptimizerTag>(input), std::invalid_argument);
-    EXPECT_THROW(db::optimize<ForeignInputOptimizerTag>(input), std::invalid_argument);
-    EXPECT_THROW(db::optimize<MissingRootOptimizerTag>(input), std::invalid_argument);
-    EXPECT_THROW(db::optimize<InvalidRootOptimizerTag>(input), std::invalid_argument);
+    size_t result = 0;
+    for (size_t position = 0; position < plan.node_count(); ++position)
+        result += plan[PlanId(ygg::to_uint_t(position))].get_variant().template is<ygg::Index<db::Query<db::DefaultColumnTypes, Tag>>>();
+    return result;
 }
-
-TEST(DatabaseOptimization, ZeroBudgetKeepsTheOriginalPlanWithoutStatistics)
+std::vector<Column> labels(std::initializer_list<Column> values)
 {
-    auto queries = qb::repository<>();
-    const auto a = qb::input(queries, 0, { x, y });
-    const auto b = qb::input(queries, 1, { y, z });
-    const auto c = qb::input(queries, 2, { z, x });
-    const auto root = qb::project(queries, qb::join(queries, qb::join(queries, a, b), c), { z, x });
-    db::OptimizationContext<> context;
-    context.limits.memo_expressions = 0;
-    context.limits.candidate_evaluations = 0;
-    const auto result = db::optimize(root, context);
-    EXPECT_TRUE(result.report.budget_exhausted);
-    // The incumbent is the original query; only its node numbering may differ.
-    EXPECT_EQ(result.plan.node_count(), ygg::database::compile({ root }).node_count());
-    EXPECT_DOUBLE_EQ(result.report.estimated_score, result.report.baseline_score);
-}
-
-TEST(DatabaseOptimization, FallsBackWithoutStatisticsAndRejectsBadMetadata)
-{
-    auto queries = qb::repository<>();
-    const auto input = qb::input(queries, 0, { x });
-    EXPECT_NO_THROW(db::optimize(input));
-    db::OptimizationContext<> context;
-    context.statistics.inputs[0].rows = 3;
-    EXPECT_NO_THROW(db::optimize(input, context));
-    const auto valid = context;
-    for (const double rows : { -1.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN() })
-    {
-        context = valid;
-        context.statistics.inputs[0].rows = rows;
-        EXPECT_THROW(db::optimize(input, context), std::invalid_argument);
-    }
-    context = valid;
-    context.statistics.inputs[0].distinct[x] = 4;
-    EXPECT_THROW(db::optimize(input, context), std::invalid_argument);
-    context = valid;
-    context.statistics.inputs[0].distinct[z] = 1;
-    EXPECT_THROW(db::optimize(input, context), std::invalid_argument);
-    context = valid;
-    context.statistics.inputs[0].work = -1;
-    EXPECT_THROW(db::optimize(input, context), std::invalid_argument);
-    context = valid;
-    context.cost.memory_weight = -1;
-    EXPECT_THROW(db::optimize(input, context), std::invalid_argument);
-    context = valid;
-    context.cost.domain_size = 0;
-    EXPECT_THROW(db::optimize(input, context), std::invalid_argument);
+    std::vector<Column> result(values);
+    std::ranges::sort(result);
+    return result;
 }
 
 TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
@@ -211,7 +78,161 @@ TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
     EXPECT_EQ(stats.inputs.at(0).distinct.at(y), 2);
 }
 
-TEST(DatabaseOptimization, ScopedRewritesPreserveDifferencesRenamesAndExistentialVariables)
+TEST(DatabaseOptimization, RejectsInvalidStatistics)
+{
+    auto queries = qb::repository<>();
+    const auto input = qb::input(queries, 0, { x });
+    EXPECT_NO_THROW(db::optimize(input));
+    db::Statistics<> statistics;
+    statistics.inputs[0].rows = 3;
+    EXPECT_NO_THROW(db::optimize(input, statistics));
+    const auto valid = statistics;
+    for (const double rows : { -1.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN() })
+    {
+        statistics = valid;
+        statistics.inputs[0].rows = rows;
+        EXPECT_THROW(db::optimize(input, statistics), std::invalid_argument);
+    }
+    statistics = valid;
+    statistics.inputs[0].distinct[x] = 4;
+    EXPECT_THROW(db::optimize(input, statistics), std::invalid_argument);
+    statistics = valid;
+    statistics.inputs[0].distinct[z] = 1;
+    EXPECT_THROW(db::optimize(input, statistics), std::invalid_argument);
+}
+
+TEST(DatabaseOptimization, GyoRecognizesAcyclicAndCyclicHypergraphs)
+{
+    using db::optimization_detail::join_tree;
+    const auto path = join_tree({ labels({ x, y }), labels({ y, z }), labels({ z, w }) });
+    ASSERT_TRUE(path);
+    EXPECT_EQ(std::ranges::count_if(*path, [](const auto& parent) { return !parent; }), 1);
+    EXPECT_TRUE(join_tree({ labels({ x, y }), labels({ x, z }), labels({ x, w }) }));
+    EXPECT_TRUE(join_tree({ labels({ x, y, z }), labels({ x, y }), labels({ y, z }), labels({ z, x }) }));
+    EXPECT_FALSE(join_tree({ labels({ x, y }), labels({ y, z }), labels({ z, x }) }));
+    EXPECT_TRUE(join_tree({ labels({ x }), labels({ y }) }));
+}
+
+TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
+{
+    auto queries = qb::repository<>();
+    const auto r = qb::input(queries, 0, { x, y });
+    const auto s = qb::input(queries, 1, { y, z });
+    const auto t = qb::input(queries, 2, { z, w });
+    const auto root = qb::project(queries, qb::join(queries, qb::join(queries, r, s), t), { x });
+    std::array<Relation, 3> inputs { Relation({ x, y }), Relation({ y, z }), Relation({ z, w }) };
+    for (ygg::uint_t i = 0; i < 10; ++i)
+    {
+        inputs[0].insert(std::tuple { i, ygg::uint_t(0) });
+        inputs[1].insert(std::tuple { ygg::uint_t(0), i });
+        inputs[2].insert(std::tuple { i, ygg::uint_t(i % 2) });
+        inputs[2].insert(std::tuple { i + 100, ygg::uint_t(0) });  // dangling
+    }
+    const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]) };
+    const auto plan = db::optimize(root);
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(plan), 0);
+    // Evaluate every operator of the plan as its own root.
+    std::vector<db::QueryView<>> nodes;
+    for (size_t position = 0; position < plan.node_count(); ++position)
+        nodes.push_back(plan[PlanId(ygg::to_uint_t(position))]);
+    db::QueryEvaluator<> evaluator(db::compile(std::span<const db::QueryView<>>(nodes)));
+    evaluator.evaluate(refs);
+    db::QueryEvaluator<> reference(db::compile({ root })), optimized(plan);
+    reference.evaluate(refs);
+    optimized.evaluate(refs);
+    EXPECT_EQ(rows(optimized.get_result()), rows(reference.get_result()));
+    // Yannakakis' bound for projected acyclic joins: O(|input| · |output|).
+    const auto bound = (inputs[0].size() + inputs[1].size() + inputs[2].size()) * reference.get_result().size();
+    for (size_t position = 0; position < nodes.size(); ++position)
+        EXPECT_LE(evaluator.get_result(position).size(), bound);
+}
+
+TEST(DatabaseOptimization, StructureChoosesGenericJoinOnlyForCyclicBlocks)
+{
+    auto queries = qb::repository<>();
+    const auto a = qb::input(queries, 0, { x, y });
+    const auto b = qb::input(queries, 1, { y, z });
+    const auto c = qb::input(queries, 2, { z, x });
+    const auto triangle = qb::join(queries, qb::join(queries, a, b), c);
+    const auto path = qb::join(queries, a, b);
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(db::optimize(triangle)), 1);
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(db::optimize(path)), 0);
+    // A measured input alone does not make the block measured.
+    db::Statistics<> partial;
+    partial.inputs[0] = { 10, {} };
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(db::optimize(triangle, partial)), 1);
+}
+
+TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
+{
+    auto queries = qb::repository<>();
+    const auto a = qb::input(queries, 0, { x, y });
+    const auto b = qb::input(queries, 1, { y, z });
+    const auto c = qb::input(queries, 2, { z });
+    const auto root = qb::join(queries, qb::join(queries, a, b), c);
+    db::Statistics<> statistics;
+    statistics.inputs[0] = { 10000, { { x, 10000 }, { y, 10000 } } };
+    statistics.inputs[1] = { 10000, { { y, 10000 }, { z, 10000 } } };
+    statistics.inputs[2] = { 1, { { z, 1 } } };
+    const auto plan = db::optimize(root, statistics);
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(plan), 0);
+    bool found = false;
+    for (size_t position = 0; position < plan.node_count(); ++position)
+        ygg::visit(
+            [&]<typename Concrete>(Concrete query)
+            {
+                if constexpr (std::same_as<Concrete, db::QueryView<db::DefaultColumnTypes, db::QueryJoinTag>>)
+                {
+                    std::set<size_t> slots;
+                    for (const auto child : { query.get_lhs(), query.get_rhs() })
+                        for (const auto node : db::reachable(std::span<const db::QueryView<>>(&child, 1)))
+                            ygg::visit(
+                                [&]<typename Leaf>(Leaf leaf)
+                                {
+                                    if constexpr (std::same_as<Leaf, db::QueryView<db::DefaultColumnTypes, db::QueryInputTag>>)
+                                        slots.insert(leaf.get_input_slot());
+                                },
+                                node.get_variant());
+                    found |= slots == std::set<size_t> { 1, 2 };
+                }
+            },
+            plan[PlanId(ygg::to_uint_t(position))].get_variant());
+    EXPECT_TRUE(found);
+}
+
+TEST(DatabaseOptimization, CostBasedPlanUsesGenericJoinWhereJoinsGrow)
+{
+    auto queries = qb::repository<>();
+    const auto a = qb::input(queries, 0, { x, y });
+    const auto b = qb::input(queries, 1, { y, z });
+    const auto c = qb::input(queries, 2, { z, x });
+    const auto root = qb::join(queries, qb::join(queries, a, b), c);
+    // Every pairwise join grows: 10^4 · 10^4 / 100 rows from inputs of 10^4 rows.
+    db::Statistics<> statistics;
+    statistics.inputs[0] = { 10000, { { x, 100 }, { y, 100 } } };
+    statistics.inputs[1] = { 10000, { { y, 100 }, { z, 100 } } };
+    statistics.inputs[2] = { 10000, { { z, 100 }, { x, 100 } } };
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(db::optimize(root, statistics)), 1);
+    // With key-like columns no join grows, and binary joins remain.
+    for (auto& [slot, input] : statistics.inputs)
+        for (auto& [column, count] : input.distinct)
+            count = 10000;
+    EXPECT_EQ(count<db::QueryGenericJoinTag>(db::optimize(root, statistics)), 0);
+}
+
+TEST(DatabaseOptimization, NullaryGenericJoinHasOneRow)
+{
+    auto queries = qb::repository<>();
+    const auto root = qb::generic_join(queries, {}, {});
+    for (const auto& plan : { db::optimize(root), db::optimize(root, db::Statistics<> { 4, {}, {} }) })
+    {
+        db::QueryEvaluator<> evaluator(plan);
+        evaluator.evaluate(std::array<db::BorrowedRelationView<>, 0> {});
+        EXPECT_EQ(evaluator.get_result().size(), 1);
+    }
+}
+
+TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVariables)
 {
     auto queries = qb::repository<>();
     const auto a = qb::input(queries, 0, { x, y });
@@ -236,11 +257,9 @@ TEST(DatabaseOptimization, ScopedRewritesPreserveDifferencesRenamesAndExistentia
     inputs[1].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     inputs[2].insert(std::tuple { ygg::uint_t(0), ygg::uint_t(2) });
     const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]) };
-    db::OptimizationContext<> context;
-    context.statistics = db::collect_statistics<db::DefaultColumnTypes>(refs);
-    context.limits = { 180, 64, 160, 4 };
+    const auto statistics = db::collect_statistics<db::DefaultColumnTypes>(refs);
     const auto unmeasured = db::optimize(std::span<const db::QueryView<>>(roots));
-    const auto measured = db::optimize(std::span<const db::QueryView<>>(roots), context);
+    const auto measured = db::optimize(std::span<const db::QueryView<>>(roots), statistics);
     db::QueryEvaluator<> reference(ygg::database::compile(roots));
     reference.evaluate(refs);
     EXPECT_EQ(reference.get_result(0).size(), 1);
@@ -248,9 +267,9 @@ TEST(DatabaseOptimization, ScopedRewritesPreserveDifferencesRenamesAndExistentia
     EXPECT_TRUE(reference.get_result(2).empty());
     for (const auto* chosen : { &unmeasured, &measured })
     {
-        EXPECT_EQ(chosen->plan.roots()[8], chosen->plan.roots()[9]);
-        db::QueryEvaluator<> full(chosen->plan);
-        db::incremental::QueryEvaluator<> incremental(chosen->plan);
+        EXPECT_EQ(chosen->roots()[8], chosen->roots()[9]);
+        db::QueryEvaluator<> full(*chosen);
+        db::incremental::QueryEvaluator<> incremental(*chosen);
         full.evaluate(refs);
         incremental.initialize(refs);
         for (size_t root = 0; root < roots.size(); ++root)
@@ -260,9 +279,7 @@ TEST(DatabaseOptimization, ScopedRewritesPreserveDifferencesRenamesAndExistentia
             EXPECT_TRUE(std::ranges::equal(full.get_result(root).columns().span(), roots[root].columns()));
         }
     }
-    EXPECT_LE(measured.report.estimated_score, measured.report.baseline_score + 1e-9);
-
-    db::incremental::QueryEvaluator<> incremental(measured.plan);
+    db::incremental::QueryEvaluator<> incremental(measured);
     incremental.initialize(refs);
     std::mt19937 random(1597);
     for (size_t iteration = 0; iteration < 35; ++iteration)
@@ -309,29 +326,7 @@ TEST(DatabaseOptimization, ScopedRewritesPreserveDifferencesRenamesAndExistentia
     }
 }
 
-TEST(DatabaseOptimization, TinyBudgetRetainsAnIncumbentNoWorseThanBaseline)
-{
-    auto queries = qb::repository<>();
-    const auto a = qb::input(queries, 0, { x, y });
-    const auto b = qb::input(queries, 1, { y, z });
-    const auto c = qb::input(queries, 2, { z, x });
-    const auto root = qb::project(queries, qb::join(queries, qb::join(queries, a, b), c), { x });
-    for (const size_t budget : { size_t(0), size_t(1), size_t(4) })
-    {
-        db::OptimizationContext<> context;
-        context.statistics.inputs[0] = { 120, { { x, 12 }, { y, 20 } }, {} };
-        context.statistics.inputs[1] = { 60, { { y, 20 }, { z, 6 } }, {} };
-        context.statistics.inputs[2] = { 24, { { z, 6 }, { x, 12 } }, {} };
-        context.limits = { budget, 64, budget, 1 };
-        const auto result = db::optimize<db::CostBasedTag>(root, context);
-        EXPECT_TRUE(result.report.budget_exhausted);
-        EXPECT_TRUE(std::isfinite(result.report.estimated_score));
-        EXPECT_LE(result.report.estimated_score, result.report.baseline_score + 1e-9);
-        EXPECT_TRUE(std::ranges::equal(result.plan[result.plan.roots()[0]].columns(), root.columns()));
-    }
-}
-
-TEST(DatabaseOptimization, DefaultSearchMatchesRandomRelationalExpressions)
+TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
 {
     auto queries = qb::repository<>();
     const auto a = qb::input(queries, 0, { x, y });
@@ -408,15 +403,14 @@ TEST(DatabaseOptimization, DefaultSearchMatchesRandomRelationalExpressions)
         const auto baseline = ygg::database::compile({ root });
         SCOPED_TRACE(expression);
         SCOPED_TRACE(db::explain(baseline));
-        db::OptimizationContext<> context;
-        context.statistics = db::collect_statistics<db::DefaultColumnTypes>(refs);
+        const auto statistics = db::collect_statistics<db::DefaultColumnTypes>(refs);
         const auto unmeasured = db::optimize(root);
-        const auto measured = db::optimize(root, context);
+        const auto measured = db::optimize(root, statistics);
         db::QueryEvaluator<> reference(baseline);
         reference.evaluate(refs);
         for (const auto* optimized : { &unmeasured, &measured })
         {
-            db::QueryEvaluator<> evaluator(optimized->plan);
+            db::QueryEvaluator<> evaluator(*optimized);
             evaluator.evaluate(refs);
             EXPECT_TRUE(std::ranges::equal(evaluator.get_result().columns().span(), root.columns()));
             EXPECT_EQ(rows(evaluator.get_result()), rows(reference.get_result()));
@@ -424,7 +418,7 @@ TEST(DatabaseOptimization, DefaultSearchMatchesRandomRelationalExpressions)
     }
 }
 
-TEST(DatabaseOptimization, DefaultSearchPreservesFactoredUnionsAndFilteredDifferences)
+TEST(DatabaseOptimization, BothModesPreserveFactoredUnionsAndFilteredDifferences)
 {
     auto queries = qb::repository<>();
     const auto a = qb::input(queries, 0, { x, y });
@@ -445,11 +439,10 @@ TEST(DatabaseOptimization, DefaultSearchPreservesFactoredUnionsAndFilteredDiffer
     cr.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(3) });
     cr.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(2) });
     const auto inputs = std::array { borrow(ar), borrow(br), borrow(cr) };
-    db::OptimizationContext<> context;
-    context.statistics = db::collect_statistics<db::DefaultColumnTypes>(inputs);
+    const auto statistics = db::collect_statistics<db::DefaultColumnTypes>(inputs);
     const auto original = ygg::database::compile(roots);
     const auto unmeasured = db::optimize(std::span<const db::QueryView<>>(roots));
-    const auto measured = db::optimize(std::span<const db::QueryView<>>(roots), context);
+    const auto measured = db::optimize(std::span<const db::QueryView<>>(roots), statistics);
     db::QueryEvaluator<> reference(original);
     reference.evaluate(inputs);
     EXPECT_EQ(rows(reference.get_result(0)), rows(reference.get_result(1)));
@@ -459,8 +452,8 @@ TEST(DatabaseOptimization, DefaultSearchPreservesFactoredUnionsAndFilteredDiffer
     EXPECT_EQ(rows(reference.get_result(5)), rows(ar));
     for (const auto* chosen : { &unmeasured, &measured })
     {
-        db::QueryEvaluator<> full(chosen->plan);
-        db::incremental::QueryEvaluator<> incremental(chosen->plan);
+        db::QueryEvaluator<> full(*chosen);
+        db::incremental::QueryEvaluator<> incremental(*chosen);
         full.evaluate(inputs);
         incremental.initialize(inputs);
         for (size_t root = 0; root < roots.size(); ++root)
