@@ -21,6 +21,8 @@
 #include <concepts>
 #include <tuple>
 
+#include <type_traits>
+
 namespace ygg
 {
 
@@ -66,6 +68,18 @@ struct MapTypeListSecond<T, Bound, TypeList<Ts...>>
 
 template<template<typename, typename> typename T, typename Bound, typename List>
 using MapTypeListSecondT = typename MapTypeListSecond<T, Bound, List>::type;
+
+template<typename T, typename List>
+struct TypeListContains;
+
+template<typename T, typename... Ts>
+struct TypeListContains<T, TypeList<Ts...>> : std::bool_constant<(std::is_same_v<T, Ts> || ...)>
+{
+};
+
+/// T is one of the types in List.
+template<typename T, typename List>
+concept InTypeList = TypeListContains<T, List>::value;
 
 template<typename... Lists>
 struct ConcatTypeLists;

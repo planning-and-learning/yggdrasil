@@ -112,6 +112,14 @@ protected:
 public:
     IndexViewBase(Index<T> handle, detail::ContextArg<C> context) noexcept : m_handle(handle), m_context(std::move(context)) {}
 
+    const C& get_context() const noexcept { return m_context.get(); }
+    /// The repository that owns the viewed records, whether the context is borrowed or shared.
+    decltype(auto) get_repository() const noexcept
+        requires detail::HasRepository<C>
+    {
+        return detail::owning_repository(m_context.deref());
+    }
+    const Index<T>& get_handle() const noexcept { return m_handle; }
     /// The record, resolved through the repository that owns it.
     decltype(auto) get_data() const
         requires requires(const IndexViewBase& view) { view.get_repository()[view.m_handle]; }
@@ -124,14 +132,6 @@ public:
     {
         return get_data();
     }
-    const C& get_context() const noexcept { return m_context.get(); }
-    /// The repository that owns the viewed records, whether the context is borrowed or shared.
-    decltype(auto) get_repository() const noexcept
-        requires detail::HasRepository<C>
-    {
-        return detail::owning_repository(m_context.deref());
-    }
-    const Index<T>& get_handle() const noexcept { return m_handle; }
     Index<T> get_index() const noexcept { return m_handle; }
     /// Records compare by index within their owning repository.
     auto identifying_members() const noexcept

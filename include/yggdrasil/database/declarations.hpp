@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_DECLARATIONS_HPP_
 #define YGG_DATABASE_DECLARATIONS_HPP_
 
+#include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/database/syntax/column_codec.hpp"
 
@@ -70,7 +71,9 @@ using QueryConstructorTags = TypeList<QueryInputTag,
                                       QueryDistanceTag,
                                       QueryGenericJoinTag>;
 
+/// Tag void is the type-erased query holding one of the concrete query records.
 template<ColumnTypes Values = DefaultColumnTypes, typename Tag = void>
+    requires(std::is_void_v<Tag> || InTypeList<Tag, QueryConstructorTags>)
 struct Query
 {
 };
