@@ -6,19 +6,34 @@
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
 #include "yggdrasil/database/optimization/details/optimization.hpp"
+#include "yggdrasil/diagnostics/warnings.hpp"
 #include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <concepts>
+#include <algorithm>
 #include <ranges>
+#include <string>
 #include <span>
 #include <type_traits>
 #include <vector>
 
 namespace ygg::database
 {
+/// Row and per-column distinct counts of one relation.
+template<ColumnTypes Values, typename Relation>
+RelationStatistics measure_relation(const Relation& relation)
+{
+    RelationStatistics stats;
+    stats.rows = static_cast<double>(relation.size());
+    const auto columns = relation.columns();
+    for (const auto& column : columns.span())
+        stats.distinct[column.label] = static_cast<double>(project<Values>(relation, { column.label }).size());
+    return stats;
+}
+
 /// Measures row and per-column distinct counts of the relations bound to each input slot.
 template<ColumnTypes Values, RelationViewRange<Values> R>
 Statistics<Values> collect_statistics(const R& inputs)
@@ -26,15 +41,56 @@ Statistics<Values> collect_statistics(const R& inputs)
     Statistics<Values> result;
     size_t slot = 0;
     for (const auto& input : inputs)
-    {
-        auto& stats = result.inputs[slot++];
-        stats.rows = static_cast<double>(input.size());
-        const auto columns = input.columns();
-        for (const auto& column : columns.span())
-            stats.distinct[column.label] = static_cast<double>(project<Values>(input, { column.label }).size());
-    }
+        result.inputs[slot++] = measure_relation<Values>(input);
     return result;
 }
+
+/// Averages relation statistics over sample states (e.g. states of training tasks) into one estimate per key.
+template<ColumnTypes Values, typename Key>
+class StatisticsAccumulator
+{
+public:
+    /// Adds one sample of key's relation.
+    template<typename Relation>
+    void add(const Key& key, const Relation& relation)
+    {
+        auto& total = m_totals[key];
+        const auto sample = measure_relation<Values>(relation);
+        ++total.samples;
+        total.statistics.rows += sample.rows;
+        for (const auto& [column, distinct] : sample.distinct)
+            total.statistics.distinct[column] += distinct;
+    }
+
+    /// Means of rows and per-column distinct counts. A nonempty mean is at least one row, so distinct counts lie in
+    /// [1, rows]. A key empty in every sample keeps 0 rows and adds a warning naming it with describe(key).
+    template<typename Describe>
+    UnorderedMap<Key, RelationStatistics> finish(diagnostics::Warnings& warnings, Describe&& describe) const
+    {
+        UnorderedMap<Key, RelationStatistics> result;
+        for (const auto& [key, total] : m_totals)
+        {
+            const auto samples = static_cast<double>(total.samples);
+            auto mean = total.statistics;
+            if (mean.rows == 0)
+                warnings.add(diagnostics::Diagnostic { "Statistics: " + std::string(describe(key)) + " was empty in all " + std::to_string(total.samples)
+                                                       + " samples; its size is estimated as 0." });
+            mean.rows = mean.rows > 0 ? std::max(mean.rows / samples, 1.0) : 0.0;
+            for (auto& [column, distinct] : mean.distinct)
+                distinct = mean.rows > 0 ? std::clamp(distinct / samples, 1.0, mean.rows) : 0.0;
+            result.emplace(key, std::move(mean));
+        }
+        return result;
+    }
+
+private:
+    struct Total
+    {
+        size_t samples = 0;
+        RelationStatistics statistics;
+    };
+    UnorderedMap<Key, Total> m_totals;
+};
 
 /// Plans the roots by applying established query optimization methods:
 ///

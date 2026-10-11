@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <gtest/gtest.h>
+#include <string>
 #include <limits>
 #include <random>
 #include <set>
@@ -73,6 +74,34 @@ TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
     EXPECT_EQ(stats.inputs.at(0).rows, 3);
     EXPECT_EQ(stats.inputs.at(0).distinct.at(x), 2);
     EXPECT_EQ(stats.inputs.at(0).distinct.at(y), 2);
+}
+
+TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmptyKeys)
+{
+    ygg::Builder<ygg::database::Columns<>> columns;
+    columns.push_back<double>(x);
+    columns.push_back<double>(y);
+    Relation two(columns.span()), four(columns.span()), empty(columns.span());
+    two.insert(std::tuple { 0.0, 0.0 });
+    two.insert(std::tuple { 0.0, 1.0 });
+    for (double i = 0; i < 4; ++i)
+        four.insert(std::tuple { i, 0.0 });
+
+    auto accumulator = ygg::database::StatisticsAccumulator<ygg::database::DefaultColumnTypes, std::string>();
+    for (const auto* sample : { &two, &four, &empty })
+    {
+        accumulator.add("sometimes", borrow(*sample));
+        accumulator.add("always", borrow(empty));
+    }
+    auto warnings = ygg::diagnostics::Warnings();
+    const auto stats = accumulator.finish(warnings, [](const std::string& key) { return key; });
+
+    EXPECT_EQ(stats.at("sometimes").rows, 2);              // (2 + 4 + 0) / 3
+    EXPECT_EQ(stats.at("sometimes").distinct.at(x), 5.0 / 3);  // (1 + 4 + 0) / 3
+    EXPECT_EQ(stats.at("sometimes").distinct.at(y), 1);    // (2 + 1 + 0) / 3, clamped into [1, rows]
+    EXPECT_EQ(stats.at("always").rows, 0);
+    ASSERT_EQ(warnings.get().size(), 1);
+    EXPECT_NE(warnings.get()[0].message.find("always was empty in all 3 samples"), std::string::npos);
 }
 
 TEST(DatabaseOptimization, RejectsInvalidStatistics)

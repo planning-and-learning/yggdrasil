@@ -11,6 +11,7 @@
 #define YGG_PYTHON_DIAGNOSTICS_HPP_
 
 #include "yggdrasil/diagnostics/diagnostic.hpp"
+#include "yggdrasil/diagnostics/warnings.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
@@ -55,6 +56,15 @@ nanobind::exception<Error> bind_diagnostic_exception(nanobind::handle scope, con
         },
         type.ptr());
     return type;
+}
+
+/// Issues each collected warning as a Python warning of category (UserWarning by default), so it can be filtered,
+/// silenced or escalated with Python's warnings module; raises if a filter turns a warning into an error.
+inline void issue_warnings(const diagnostics::Warnings& warnings, nanobind::handle category = PyExc_UserWarning)
+{
+    for (const auto& warning : warnings.get())
+        if (PyErr_WarnEx(category.ptr(), diagnostics::format_diagnostic(warning).c_str(), 1) != 0)
+            throw nanobind::python_error();
 }
 
 }  // namespace ygg
