@@ -13,15 +13,33 @@
 
 /// View-based traversal of the records a record refers to.
 ///
-/// A child is an Index<U>, an IndexList<U> element or an active Index<U> alternative of a cista variant among the
-/// record's cista members, whose U is in Types and is not the record's own type. Children are passed to callbacks as
-/// views in the record's context, so callers never handle raw indices.
+/// A child is an Index<U> whose U is in Types and is not the record's own type, found anywhere in the record's cista
+/// members: directly, in (nested) vectors, as a variant alternative, or inside a struct with cista members. Children
+/// are passed to callbacks as views in the record's context, so callers never handle raw indices.
 namespace ygg
 {
 namespace detail
 {
 template<typename Types, typename T, typename U>
 inline constexpr bool is_child_type_v = !std::same_as<U, T> && InTypeList<U, Types>;
+
+// Declared up front: the overloads recurse into each other for nested shapes.
+template<typename Types, typename T, typename C, typename F, typename U>
+void visit_child(const Index<U>& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename E>
+void visit_child(const ::cista::offset::vector<E>& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename... Us>
+void visit_child(const ::cista::offset::variant<Us...>& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename M>
+void visit_child(const M& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename U>
+void map_child(Index<U>& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename E>
+void map_child(::cista::offset::vector<E>& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename... Us>
+void map_child(::cista::offset::variant<Us...>& member, const C& context, F& f);
+template<typename Types, typename T, typename C, typename F, typename M>
+void map_child(M& member, const C& context, F& f);
 
 template<typename Types, typename T, typename C, typename F, typename U>
 void visit_child(const Index<U>& member, const C& context, F& f)
@@ -30,22 +48,25 @@ void visit_child(const Index<U>& member, const C& context, F& f)
         f(make_view(member, context));
 }
 
-template<typename Types, typename T, typename C, typename F, typename U>
-void visit_child(const ::cista::offset::vector<Index<U>>& member, const C& context, F& f)
+template<typename Types, typename T, typename C, typename F, typename E>
+void visit_child(const ::cista::offset::vector<E>& member, const C& context, F& f)
 {
     for (const auto& element : member)
         visit_child<Types, T>(element, context, f);
 }
 
 template<typename Types, typename T, typename C, typename F, typename... Us>
-void visit_child(const ::cista::offset::variant<Index<Us>...>& member, const C& context, F& f)
+void visit_child(const ::cista::offset::variant<Us...>& member, const C& context, F& f)
 {
     std::visit([&](const auto& alternative) { visit_child<Types, T>(alternative, context, f); }, member);
 }
 
+/// Structs with cista members (pairs of indices, plans, ...) are searched member by member; anything else holds no child.
 template<typename Types, typename T, typename C, typename F, typename M>
-void visit_child(const M&, const C&, F&)
+void visit_child(const M& member, const C& context, F& f)
 {
+    if constexpr (requires { member.cista_members(); })
+        std::apply([&](const auto&... nested) { (visit_child<Types, T>(nested, context, f), ...); }, member.cista_members());
 }
 
 template<typename Types, typename T, typename C, typename F, typename U>
@@ -55,15 +76,15 @@ void map_child(Index<U>& member, const C& context, F& f)
         member = f(make_view(member, context)).get_index();
 }
 
-template<typename Types, typename T, typename C, typename F, typename U>
-void map_child(::cista::offset::vector<Index<U>>& member, const C& context, F& f)
+template<typename Types, typename T, typename C, typename F, typename E>
+void map_child(::cista::offset::vector<E>& member, const C& context, F& f)
 {
     for (auto& element : member)
         map_child<Types, T>(element, context, f);
 }
 
 template<typename Types, typename T, typename C, typename F, typename... Us>
-void map_child(::cista::offset::variant<Index<Us>...>& member, const C& context, F& f)
+void map_child(::cista::offset::variant<Us...>& member, const C& context, F& f)
 {
     std::visit(
         [&](auto alternative)
@@ -76,8 +97,10 @@ void map_child(::cista::offset::variant<Index<Us>...>& member, const C& context,
 }
 
 template<typename Types, typename T, typename C, typename F, typename M>
-void map_child(M&, const C&, F&)
+void map_child(M& member, const C& context, F& f)
 {
+    if constexpr (requires { member.cista_members(); })
+        std::apply([&](auto&... nested) { (map_child<Types, T>(nested, context, f), ...); }, member.cista_members());
 }
 }  // namespace detail
 

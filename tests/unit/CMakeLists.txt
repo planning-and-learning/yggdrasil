@@ -63,6 +63,7 @@ add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concur
 target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
 add_yggdrasil_gtest(core_bytes "core/bytes.cpp")
+add_yggdrasil_gtest(core_children "core/children.cpp")
 add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
 add_yggdrasil_gtest(core_concepts "core/concepts.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
