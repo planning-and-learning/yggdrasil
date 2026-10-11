@@ -86,14 +86,8 @@ void map_child(::cista::offset::vector<E>& member, const C& context, F& f)
 template<typename Types, typename T, typename C, typename F, typename... Us>
 void map_child(::cista::offset::variant<Us...>& member, const C& context, F& f)
 {
-    std::visit(
-        [&](auto alternative)
-        {
-            map_child<Types, T>(alternative, context, f);
-            // Move-assign the active alternative in place: cista before drexlerd/cista@65a0d1e silently drops lvalue assignments of it.
-            member = std::move(alternative);
-        },
-        member);
+    // apply, unlike std::visit, hands out the active alternative mutably, so it is rewritten in place.
+    member.apply([&](auto& alternative) { map_child<Types, T>(alternative, context, f); });
 }
 
 template<typename Types, typename T, typename C, typename F, typename M>
