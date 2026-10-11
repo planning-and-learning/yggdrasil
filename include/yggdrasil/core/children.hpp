@@ -1,0 +1,103 @@
+#ifndef YGGDRASIL_CORE_CHILDREN_HPP_
+#define YGGDRASIL_CORE_CHILDREN_HPP_
+
+#include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/core/types.hpp"
+
+#include <cista/containers/variant.h>
+#include <cista/containers/vector.h>
+#include <concepts>
+#include <tuple>
+#include <utility>
+#include <variant>
+
+/// View-based traversal of the records a record refers to.
+///
+/// A child is an Index<U>, an IndexList<U> element or an active Index<U> alternative of a cista variant among the
+/// record's cista members, whose U is in Types and is not the record's own type. Children are passed to callbacks as
+/// views in the record's context, so callers never handle raw indices.
+namespace ygg
+{
+namespace detail
+{
+template<typename Types, typename T, typename U>
+inline constexpr bool is_child_type_v = !std::same_as<U, T> && InTypeList<U, Types>;
+
+template<typename Types, typename T, typename C, typename F, typename U>
+void visit_child(const Index<U>& member, const C& context, F& f)
+{
+    if constexpr (is_child_type_v<Types, T, U>)
+        f(make_view(member, context));
+}
+
+template<typename Types, typename T, typename C, typename F, typename U>
+void visit_child(const ::cista::offset::vector<Index<U>>& member, const C& context, F& f)
+{
+    for (const auto& element : member)
+        visit_child<Types, T>(element, context, f);
+}
+
+template<typename Types, typename T, typename C, typename F, typename... Us>
+void visit_child(const ::cista::offset::variant<Index<Us>...>& member, const C& context, F& f)
+{
+    std::visit([&](const auto& alternative) { visit_child<Types, T>(alternative, context, f); }, member);
+}
+
+template<typename Types, typename T, typename C, typename F, typename M>
+void visit_child(const M&, const C&, F&)
+{
+}
+
+template<typename Types, typename T, typename C, typename F, typename U>
+void map_child(Index<U>& member, const C& context, F& f)
+{
+    if constexpr (is_child_type_v<Types, T, U>)
+        member = f(make_view(member, context)).get_index();
+}
+
+template<typename Types, typename T, typename C, typename F, typename U>
+void map_child(::cista::offset::vector<Index<U>>& member, const C& context, F& f)
+{
+    for (auto& element : member)
+        map_child<Types, T>(element, context, f);
+}
+
+template<typename Types, typename T, typename C, typename F, typename... Us>
+void map_child(::cista::offset::variant<Index<Us>...>& member, const C& context, F& f)
+{
+    std::visit(
+        [&](auto alternative)
+        {
+            map_child<Types, T>(alternative, context, f);
+            // Move-assign the active alternative in place: cista before drexlerd/cista@65a0d1e silently drops lvalue assignments of it.
+            member = std::move(alternative);
+        },
+        member);
+}
+
+template<typename Types, typename T, typename C, typename F, typename M>
+void map_child(M&, const C&, F&)
+{
+}
+}  // namespace detail
+
+/// Calls f(View<Index<U>, C>) for every child of view's record, in member order.
+template<typename Types, typename T, typename C, typename F>
+void for_each_child(View<Index<T>, C> view, F&& f)
+{
+    std::apply([&](const auto&... member) { (detail::visit_child<Types, T>(member, view.get_context(), f), ...); }, view.get_data().cista_members());
+}
+
+/// A copy of view's record with every child c replaced by f(c), a view of the same record type, in member order.
+/// The copy keeps derived members as they are; inserting it recomputes them.
+template<typename Types, typename T, typename C, typename F>
+Data<T> map_children(View<Index<T>, C> view, F&& f)
+{
+    auto data = Data<T>(view.get_data());
+    std::apply([&](auto&... member) { (detail::map_child<Types, T>(member, view.get_context(), f), ...); }, data.cista_members());
+    return data;
+}
+
+}  // namespace ygg
+
+#endif

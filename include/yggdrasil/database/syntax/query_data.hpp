@@ -338,45 +338,5 @@ struct Data<database::Query<Values, database::QueryGenericJoinTag>>
 };
 }  // namespace ygg
 
-namespace ygg::database
-{
-namespace detail
-{
-template<typename Tag, typename DataType, typename F>
-void query_children(DataType& data, F&& f)
-{
-    if constexpr (std::same_as<Tag, QueryInputTag> || std::same_as<Tag, QueryEmptyTag>)
-        return;
-    else if constexpr (std::same_as<Tag, QueryJoinTag> || std::same_as<Tag, QueryUnionTag> || std::same_as<Tag, QueryDifferenceTag>)
-    {
-        f(data.lhs);
-        f(data.rhs);
-    }
-    else if constexpr (std::same_as<Tag, QueryDistanceTag>)
-    {
-        f(data.sources);
-        f(data.edges);
-        f(data.targets);
-    }
-    else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
-        for (auto& input : data.inputs)
-            f(input);
-    else
-        f(data.arg);
-}
-}
-
-template<ColumnTypes Values, typename Tag, typename F>
-void for_each_child(const Data<Query<Values, Tag>>& data, F&& f)
-{
-    detail::query_children<Tag>(data, std::forward<F>(f));
-}
-template<ColumnTypes Values, typename Tag, typename F>
-Data<Query<Values, Tag>> map_children(Data<Query<Values, Tag>> data, F&& f)
-{
-    detail::query_children<Tag>(data, [&](auto& child) { child = f(child); });
-    return data;
-}
-}  // namespace ygg::database
 
 #endif

@@ -6,6 +6,7 @@
 #define YGG_DATABASE_SYNTAX_QUERY_VIEW_HPP_
 
 #include "yggdrasil/containers/variant.hpp"
+#include "yggdrasil/core/children.hpp"
 #include "yggdrasil/database/syntax/query_data.hpp"
 
 #include <concepts>
@@ -143,13 +144,14 @@ public:
 
 namespace ygg::database
 {
+/// Calls f(QueryView<Values>) for every operand of a query, in operand order.
 template<ColumnTypes Values, typename Tag, typename F>
 void for_each_child(QueryView<Values, Tag> view, F&& f)
 {
     if constexpr (std::same_as<Tag, void>)
         ygg::visit([&](auto concrete) { for_each_child(concrete, f); }, view.get_variant());
     else
-        for_each_child(view.get_data(), [&](Index<Query<Values>> child) { f(QueryView<Values>(child, view.get_repository())); });
+        ygg::for_each_child<TypeList<Query<Values>>>(view, f);
 }
 }  // namespace ygg::database
 

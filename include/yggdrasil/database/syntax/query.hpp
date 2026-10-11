@@ -50,11 +50,9 @@ clone_query(QueryView<Values> source, std::span<const QueryView<Values>> childre
     return ygg::visit(
         [&]<typename Tag>(QueryView<Values, Tag> concrete)
         {
-            auto data = checkout<Query<Values, Tag>>(builder);
-            *data = concrete.get_data();
             size_t child = 0;
-            detail::query_children<Tag>(*data, [&](Index<Query<Values>>& index) { index = children[child++].get_index(); });
-            return insert_query(destination, builder, *data);
+            auto data = ygg::map_children<TypeList<Query<Values>>>(concrete, [&](QueryView<Values>) { return children[child++]; });
+            return insert_query(destination, builder, data);
         },
         source.get_variant());
 }
