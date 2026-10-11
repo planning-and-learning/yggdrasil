@@ -189,10 +189,10 @@ struct EqualTo<std::variant<Ts...>>
             return false;
 
         return std::visit(
-            [](const auto& l, const auto& r)
+            []<typename L, typename R>(const L& l, const R& r)
             {
-                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(l)>, std::remove_cvref_t<decltype(r)>>)
-                    return EqualTo<std::remove_cvref_t<decltype(l)>> {}(l, r);
+                if constexpr (std::is_same_v<L, R>)
+                    return EqualTo<L> {}(l, r);
                 return false;
             },
             lhs,
@@ -234,33 +234,31 @@ struct EqualTo<T>
 {
     using is_transparent = void;
 
-    using MembersTupleType = decltype(std::declval<T>().identifying_members());
-
     constexpr bool operator()(const T& lhs, const T& rhs) const
-        requires EqualityComparableByEqualTo<MembersTupleType>
+        requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
     {
-        return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(lhs.identifying_members(), rhs.identifying_members());
+        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(lhs.identifying_members(), rhs.identifying_members());
     }
 
-    template<SameAsIgnoringCvref<MembersTupleType> U>
+    template<SameAsIgnoringCvref<IdentifyingMembers<T>> U>
     constexpr bool operator()(const T& a, const U& v) const
-        requires EqualityComparableByEqualTo<MembersTupleType>
+        requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
     {
-        return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(a.identifying_members(), v);
+        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(a.identifying_members(), v);
     }
 
-    template<SameAsIgnoringCvref<MembersTupleType> U>
+    template<SameAsIgnoringCvref<IdentifyingMembers<T>> U>
     constexpr bool operator()(const U& v, const T& b) const
-        requires EqualityComparableByEqualTo<MembersTupleType>
+        requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
     {
-        return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(v, b.identifying_members());
+        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(v, b.identifying_members());
     }
 
-    template<SameAsIgnoringCvref<MembersTupleType> U, SameAsIgnoringCvref<MembersTupleType> V>
+    template<SameAsIgnoringCvref<IdentifyingMembers<T>> U, SameAsIgnoringCvref<IdentifyingMembers<T>> V>
     constexpr bool operator()(const U& u, const V& v) const
-        requires EqualityComparableByEqualTo<MembersTupleType>
+        requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
     {
-        return EqualTo<std::remove_cvref_t<MembersTupleType>> {}(u, v);
+        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(u, v);
     }
 };
 

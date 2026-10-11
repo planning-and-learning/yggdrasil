@@ -2,19 +2,18 @@
 
 namespace yggdrasil::database_python
 {
-using namespace nb::literals;
-
 void bind_query_empty(nb::module_& m, QueryRepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<db::Query<Values, db::QueryEmptyTag>>>(m, "QueryEmptyIndex");
+    using namespace nb::literals;
+    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryEmptyTag>>>(m, "QueryEmptyIndex");
 
     {
-        using V = QueryData<db::QueryEmptyTag>;
+        using V = QueryData<ygg::database::QueryEmptyTag>;
         ygg::bind_data<V>(m, "QueryEmptyData").def(nb::init<ColumnIndices>(), "columns"_a);
     }
 
     {
-        using V = ConcreteQueryView<db::QueryEmptyTag>;
+        using V = ConcreteQueryView<ygg::database::QueryEmptyTag>;
         auto cls = nb::class_<V>(m, "QueryEmpty");
         cls.def("get_index", &V::get_index)
             .def("columns", &V::columns, nb::keep_alive<0, 1>());
@@ -22,7 +21,7 @@ void bind_query_empty(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<db::Query<Values, db::QueryEmptyTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryEmptyTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

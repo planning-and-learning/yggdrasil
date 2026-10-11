@@ -49,10 +49,12 @@ private:
     template<typename U>
     struct Slot<U, true>
     {
-        ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe> container;
+        using Container = ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe>;
+
+        Container container;
         size_t parent_size = 0;
 
-        static size_t hash(const Data<U>& builder) noexcept { return decltype(container)::hash(builder); }
+        static size_t hash(const Data<U>& builder) noexcept { return Container::hash(builder); }
 
         void clear() noexcept { container.clear(); }
         size_t memory_usage() const noexcept { return container.memory_usage(); }
@@ -63,10 +65,12 @@ private:
     {
         std::unique_ptr<ygg::buffer::SegmentedBuffer> arena;
         std::unique_ptr<ygg::buffer::Buffer> buffer;
-        ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe> container;
+        using Container = ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe>;
+
+        Container container;
         size_t parent_size = 0;
 
-        static size_t hash(const Data<U>& builder) noexcept { return decltype(container)::hash(builder); }
+        static size_t hash(const Data<U>& builder) noexcept { return Container::hash(builder); }
 
         Slot() : arena(std::make_unique<ygg::buffer::SegmentedBuffer>()), buffer(std::make_unique<ygg::buffer::Buffer>()), container(*buffer, *arena) {}
 

@@ -29,9 +29,7 @@ namespace ygg
 template<typename Block, typename Allocator>
 struct EqualTo<boost::dynamic_bitset<Block, Allocator>>
 {
-    using Type = boost::dynamic_bitset<Block, Allocator>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const { return lhs == rhs; }
+    bool operator()(const boost::dynamic_bitset<Block, Allocator>& lhs, const boost::dynamic_bitset<Block, Allocator>& rhs) const { return lhs == rhs; }
 };
 
 template<std::unsigned_integral Block>

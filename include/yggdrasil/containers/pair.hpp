@@ -28,9 +28,10 @@ namespace ygg
 template<typename T1, typename T2, typename C>
 class View<::cista::pair<T1, T2>, C>
 {
-public:
+private:
     using Pair = ::cista::pair<T1, T2>;
 
+public:
     View(const Pair& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
     decltype(auto) get_first() const

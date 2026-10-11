@@ -22,10 +22,12 @@ NAMESPACE_BEGIN(detail)
 template<typename C, typename T>
 struct type_caster<::ygg::View<::cista::optional<T>, C>>
 {
+private:
     using ViewT = ::ygg::View<::cista::optional<T>, C>;
-    using Entry = std::conditional_t<::ygg::ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+    using Entry = ::ygg::ViewOrValue<T, C>;
     using Caster = make_caster<Entry>;
 
+public:
     NB_TYPE_CASTER(ViewT, optional_name(Caster::Name))
 
     // Views are not constructible from Python

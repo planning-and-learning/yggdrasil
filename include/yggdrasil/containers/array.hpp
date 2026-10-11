@@ -33,12 +33,17 @@
 namespace ygg
 {
 
+/// The read-only iterator of a container.
+template<typename Container>
+using ContainerConstIterator = typename Container::const_iterator;
+
 template<typename T, size_t N, typename C>
 class View<std::array<T, N>, C>
 {
-public:
+private:
     using Container = std::array<T, N>;
 
+public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
     size_t size() const noexcept { return get_data().size(); }
@@ -78,18 +83,16 @@ public:
 
     struct const_iterator
     {
-        using It = typename Container::const_iterator;
-
         const C* ctx;
-        It it;
+        ContainerConstIterator<Container> it;
 
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using value_type = ViewOrValue<T, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(It it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
 
         decltype(auto) operator*() const
         {
@@ -186,10 +189,11 @@ private:
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
 class View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>
 {
-public:
+private:
     using Container = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
-    using T = typename Coder::value_type;
+    using T = bit::CoderValue<Coder>;
 
+public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     size_t size() const noexcept { return get_data().size(); }
@@ -229,18 +233,16 @@ public:
 
     struct const_iterator
     {
-        using It = typename Container::const_iterator;
-
         const C* ctx;
-        It it;
+        ContainerConstIterator<Container> it;
 
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using value_type = ViewOrValue<T, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(It it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
 
         decltype(auto) operator*() const
         {
@@ -337,10 +339,11 @@ private:
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
 class View<BasicBlockArrayView<Block, Coder>, C>
 {
-public:
+private:
     using Container = BasicBlockArrayView<Block, Coder>;
-    using T = typename Coder::value_type;
+    using T = bit::CoderValue<Coder>;
 
+public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     size_t size() const noexcept { return get_data().size(); }
@@ -380,18 +383,16 @@ public:
 
     struct const_iterator
     {
-        using It = typename Container::const_iterator;
-
         const C* ctx;
-        It it;
+        ContainerConstIterator<Container> it;
 
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using value_type = ViewOrValue<T, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(It it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
 
         decltype(auto) operator*() const
         {

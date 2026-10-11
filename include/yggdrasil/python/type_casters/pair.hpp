@@ -35,12 +35,14 @@ struct type_caster<::cista::pair<T1, T2>> : type_caster<std::pair<T1, T2>>
 template<typename C, typename T1, typename T2>
 struct type_caster<::ygg::View<::cista::pair<T1, T2>, C>>
 {
+private:
     using ViewT = ::ygg::View<::cista::pair<T1, T2>, C>;
-    using First = std::conditional_t<::ygg::ViewConcept<T1, C>, ::ygg::View<T1, C>, T1>;
-    using Second = std::conditional_t<::ygg::ViewConcept<T2, C>, ::ygg::View<T2, C>, T2>;
+    using First = ::ygg::ViewOrValue<T1, C>;
+    using Second = ::ygg::ViewOrValue<T2, C>;
     using Caster1 = make_caster<First>;
     using Caster2 = make_caster<Second>;
 
+public:
     NB_TYPE_CASTER(ViewT, const_name("tuple[") + concat(Caster1::Name, Caster2::Name) + const_name("]"))
 
     // Views are not constructible from Python.
@@ -49,13 +51,11 @@ struct type_caster<::ygg::View<::cista::pair<T1, T2>, C>>
     template<typename T>
     static handle from_cpp(T&& value, rv_policy policy, cleanup_list* cleanup) noexcept
     {
-        decltype(auto) first = value.get_first();
-        object o1 = steal(Caster1::from_cpp(std::forward<decltype(first)>(first), policy, cleanup));
+        object o1 = steal(Caster1::from_cpp(value.get_first(), policy, cleanup));
         if (!o1.is_valid())
             return {};
 
-        decltype(auto) second = value.get_second();
-        object o2 = steal(Caster2::from_cpp(std::forward<decltype(second)>(second), policy, cleanup));
+        object o2 = steal(Caster2::from_cpp(value.get_second(), policy, cleanup));
         if (!o2.is_valid())
             return {};
 

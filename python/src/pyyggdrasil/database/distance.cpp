@@ -10,17 +10,16 @@
 
 namespace yggdrasil
 {
-namespace db = ygg::database;
 
 namespace
 {
 using Values = DatabaseValues;
-using Relation = ygg::Builder<db::Relation<Values>>;
-using Column = ygg::Index<db::Column>;
-using ColumnIndices = std::span<const db::ColumnLayout>;
-using Plan = db::DistancePlan<Values>;
-using Evaluator = db::incremental::DistanceEvaluator<Values>;
-using Delta = db::incremental::Delta<Values>;
+using Relation = ygg::Builder<ygg::database::Relation<Values>>;
+using Column = ygg::Index<ygg::database::Column>;
+using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
+using Plan = ygg::database::DistancePlan<Values>;
+using Evaluator = ygg::database::incremental::DistanceEvaluator<Values>;
+using Delta = ygg::database::incremental::Delta<Values>;
 
 /// Binds distance and the evaluator members for one input relation type.
 template<typename Input>
@@ -28,7 +27,7 @@ void bind_inputs(nb::class_<Evaluator>& evaluator, nb::module_& m)
 {
     using Change = std::pair<Input, Input>;
     m.def("distance",
-          static_cast<Relation (*)(const Input&, const Input&, const Input&, const Plan&)>(&db::distance<Values, Input, Input, Input>),
+          static_cast<Relation (*)(const Input&, const Input&, const Input&, const Plan&)>(&ygg::database::distance<Values, Input, Input, Input>),
           nb::arg("sources"),
           nb::arg("edges"),
           nb::arg("targets"),
@@ -46,7 +45,7 @@ void bind_inputs(nb::class_<Evaluator>& evaluator, nb::module_& m)
 
 void bind_database_distance(nb::module_& m)
 {
-    using Borrowed = db::BorrowedRelationView<Values>;
+    using Borrowed = ygg::database::BorrowedRelationView<Values>;
     const auto borrow = [](const Relation& relation) { return Borrowed(relation, borrowed_relation_context()); };
 
     nb::class_<Plan>(m, "DistancePlan", "Validated schemas for directed, unweighted distances between endpoint tuples.")
@@ -76,6 +75,6 @@ void bind_database_distance(nb::module_& m)
         .def("memory_usage", &Evaluator::memory_usage);
 
     bind_inputs<Borrowed>(evaluator, m);
-    bind_inputs<db::RelationView<Values>>(evaluator, m);
+    bind_inputs<ygg::database::RelationView<Values>>(evaluator, m);
 }
 }  // namespace yggdrasil

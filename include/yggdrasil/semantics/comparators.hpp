@@ -232,10 +232,10 @@ struct Less<std::variant<Ts...>>
             return lhs.index() < rhs.index();
 
         return std::visit(
-            [](const auto& l, const auto& r)
+            []<typename L, typename R>(const L& l, const R& r)
             {
-                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(l)>, std::remove_cvref_t<decltype(r)>>)
-                    return Less<std::remove_cvref_t<decltype(l)>> {}(l, r);
+                if constexpr (std::is_same_v<L, R>)
+                    return Less<L> {}(l, r);
                 return false;
             },
             lhs,
@@ -258,33 +258,31 @@ struct Less<T>
 {
     using is_transparent = void;
 
-    using MembersTupleType = decltype(std::declval<T>().identifying_members());
-
     constexpr bool operator()(const T& lhs, const T& rhs) const
-        requires OrderedByLess<MembersTupleType>
+        requires OrderedByLess<IdentifyingMembers<T>>
     {
-        return Less<std::remove_cvref_t<MembersTupleType>> {}(lhs.identifying_members(), rhs.identifying_members());
+        return Less<std::remove_cvref_t<IdentifyingMembers<T>>> {}(lhs.identifying_members(), rhs.identifying_members());
     }
 
-    template<SameAsIgnoringCvref<MembersTupleType> U>
+    template<SameAsIgnoringCvref<IdentifyingMembers<T>> U>
     constexpr bool operator()(const T& a, const U& v) const
-        requires OrderedByLess<MembersTupleType>
+        requires OrderedByLess<IdentifyingMembers<T>>
     {
-        return Less<std::remove_cvref_t<MembersTupleType>> {}(a.identifying_members(), v);
+        return Less<std::remove_cvref_t<IdentifyingMembers<T>>> {}(a.identifying_members(), v);
     }
 
-    template<SameAsIgnoringCvref<MembersTupleType> U>
+    template<SameAsIgnoringCvref<IdentifyingMembers<T>> U>
     constexpr bool operator()(const U& v, const T& b) const
-        requires OrderedByLess<MembersTupleType>
+        requires OrderedByLess<IdentifyingMembers<T>>
     {
-        return Less<std::remove_cvref_t<MembersTupleType>> {}(v, b.identifying_members());
+        return Less<std::remove_cvref_t<IdentifyingMembers<T>>> {}(v, b.identifying_members());
     }
 
-    template<SameAsIgnoringCvref<MembersTupleType> U, SameAsIgnoringCvref<MembersTupleType> V>
+    template<SameAsIgnoringCvref<IdentifyingMembers<T>> U, SameAsIgnoringCvref<IdentifyingMembers<T>> V>
     constexpr bool operator()(const U& u, const V& v) const
-        requires OrderedByLess<MembersTupleType>
+        requires OrderedByLess<IdentifyingMembers<T>>
     {
-        return Less<std::remove_cvref_t<MembersTupleType>> {}(u, v);
+        return Less<std::remove_cvref_t<IdentifyingMembers<T>>> {}(u, v);
     }
 };
 

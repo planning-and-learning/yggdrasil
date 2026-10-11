@@ -28,9 +28,10 @@ namespace ygg
 template<typename C, typename T>
 class View<::cista::optional<T>, C>
 {
-public:
+private:
     using Optional = ::cista::optional<T>;
 
+public:
     View(const Optional& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
     const auto& get_data() const noexcept { return *m_handle; }

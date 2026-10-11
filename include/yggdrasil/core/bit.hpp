@@ -151,9 +151,13 @@ constexpr Block read_int(const Block* word, uint8_t offset, const uint8_t len)
         return w1 & lo_set<Block>[len];
 }
 
+/// The value type a block coder decodes to.
+template<typename Encoder>
+using CoderValue = typename Encoder::value_type;
+
 template<typename Encoder, typename Block>
-concept BlockCoder = std::unsigned_integral<Block> && requires(Block block, typename Encoder::value_type value) {
-    { Encoder::decode(block) } -> std::convertible_to<typename Encoder::value_type>;
+concept BlockCoder = std::unsigned_integral<Block> && requires(Block block, CoderValue<Encoder> value) {
+    { Encoder::decode(block) } -> std::convertible_to<CoderValue<Encoder>>;
     { Encoder::encode(value) } -> std::convertible_to<Block>;
 };
 
@@ -180,7 +184,7 @@ private:
     }
 
 public:
-    using value_type = typename Coder::value_type;
+    using value_type = CoderValue<Coder>;
 
     constexpr int_reference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len) {}
 
@@ -206,7 +210,7 @@ template<std::unsigned_integral Block, BlockCoder<Block> Coder = bit::Forwarding
 class block_reference
 {
 public:
-    using value_type = typename Coder::value_type;
+    using value_type = CoderValue<Coder>;
 
     constexpr explicit block_reference(Block* ptr) noexcept : m_ptr(ptr) {}
 

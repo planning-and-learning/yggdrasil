@@ -73,7 +73,7 @@ private:
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    const Repository* find_canonical_context(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const noexcept
+    const Repository* find_canonical_context(Index<RelationBinding<T, object_tag>> index) const noexcept
     {
         const auto* current = this;
         while (current != nullptr)
@@ -149,23 +149,18 @@ private:
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    std::optional<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>>
-    find_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h) const
+    std::optional<View<Index<RelationBinding<T, object_tag>>, Repository>> find_with_hash(const Data<RelationBinding<T, object_tag>>& builder, size_t h) const
     {
         const auto g = builder.relation;
 
         if (auto row_or_nullopt = m_relation_repository.find_local_with_hash(builder, h))
-            return View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
-                Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, *row_or_nullopt },
-                *this);
+            return View<Index<RelationBinding<T, object_tag>>, Repository>(Index<RelationBinding<T, object_tag>> { g, *row_or_nullopt }, *this);
 
         const Repository* current = m_parent;
         while (current != nullptr)
         {
             if (auto row_or_nullopt = current->m_relation_repository.find_local_unsafe_with_hash(builder, h))
-                return View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
-                    Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, *row_or_nullopt },
-                    *current);
+                return View<Index<RelationBinding<T, object_tag>>, Repository>(Index<RelationBinding<T, object_tag>> { g, *row_or_nullopt }, *current);
 
             current = current->m_parent;
         }
@@ -175,8 +170,7 @@ private:
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
-    insert_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
+    std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool> insert_with_hash(const Data<RelationBinding<T, object_tag>>& builder, size_t h)
     {
         if (auto found = find_with_hash(builder, h))
             return { *found, false };
@@ -188,8 +182,8 @@ private:
     /// lane before publishing.
     template<typename T>
         requires SupportsRelation<Repository, T>
-    YGG_NOINLINE std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
-    create_local_with_hash(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder, size_t h)
+    YGG_NOINLINE std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool>
+    create_local_with_hash(const Data<RelationBinding<T, object_tag>>& builder, size_t h)
     {
         const auto g = builder.relation;
 
@@ -198,10 +192,7 @@ private:
                   "branching!");
 
         const auto [row, created] = m_relation_repository.create_local_with_hash(builder, h);
-        return { View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>(
-                     Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, row },
-                     *this),
-                 created };
+        return { View<Index<RelationBinding<T, object_tag>>, Repository>(Index<RelationBinding<T, object_tag>> { g, row }, *this), created };
     }
 
 public:
@@ -287,23 +278,21 @@ public:
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    std::optional<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>>
-    find(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder) const
+    std::optional<View<Index<RelationBinding<T, object_tag>>, Repository>> find(const Data<RelationBinding<T, object_tag>>& builder) const
     {
         return find_with_hash(builder, RelationRepo::hash(builder));
     }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    std::pair<View<Index<RelationBinding<T, typename RelationRepo::object_tag>>, Repository>, bool>
-    insert(const Data<RelationBinding<T, typename RelationRepo::object_tag>>& builder)
+    std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool> insert(const Data<RelationBinding<T, object_tag>>& builder)
     {
         return insert_with_hash(builder, RelationRepo::hash(builder));
     }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    auto operator[](Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const
+    auto operator[](Index<RelationBinding<T, object_tag>> index) const
     {
         if (const auto* owner = find_canonical_context(index))
             return owner->m_relation_repository.at_local(index);
@@ -314,7 +303,7 @@ public:
         requires SupportsRelation<Repository, T>
     auto front(Index<T> g) const
     {
-        return (*this)[Index<RelationBinding<T, typename RelationRepo::object_tag>> { g, Index<Row>(0) }];
+        return (*this)[Index<RelationBinding<T, object_tag>> { g, Index<Row>(0) }];
     }
 
     template<typename T>
@@ -325,7 +314,7 @@ public:
     }
 
     template<RelationBindingConcept T>
-        requires SupportsRelation<Repository, typename T::relation_tag> && std::same_as<typename T::object_tag, typename RelationRepo::object_tag>
+        requires SupportsRelation<Repository, typename T::relation_tag> && std::same_as<typename T::object_tag, object_tag>
     size_t memory_usage() const noexcept
     {
         using Binding = std::remove_cvref_t<T>;
@@ -334,14 +323,14 @@ public:
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    bool contains(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const noexcept
+    bool contains(Index<RelationBinding<T, object_tag>> index) const noexcept
     {
         return find_canonical_context(index) != nullptr;
     }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
-    const Repository& get_canonical_context(Index<RelationBinding<T, typename RelationRepo::object_tag>> index) const
+    const Repository& get_canonical_context(Index<RelationBinding<T, object_tag>> index) const
     {
         if (const auto* owner = find_canonical_context(index))
             return *owner;

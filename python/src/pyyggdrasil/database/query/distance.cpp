@@ -2,14 +2,13 @@
 
 namespace yggdrasil::database_python
 {
-using namespace nb::literals;
-
 void bind_query_distance(nb::module_& m, QueryRepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<db::Query<Values, db::QueryDistanceTag>>>(m, "QueryDistanceIndex");
+    using namespace nb::literals;
+    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryDistanceTag>>>(m, "QueryDistanceIndex");
 
     {
-        using V = QueryData<db::QueryDistanceTag>;
+        using V = QueryData<ygg::database::QueryDistanceTag>;
         ygg::bind_data<V>(m, "QueryDistanceData")
             .def(nb::init<QueryView, QueryView, QueryView, Column>(), "sources"_a, "edges"_a, "targets"_a, "distance_column"_a)
             .def_rw("sources", &V::sources)
@@ -19,7 +18,7 @@ void bind_query_distance(nb::module_& m, QueryRepositoryBinding& repository)
     }
 
     {
-        using V = ConcreteQueryView<db::QueryDistanceTag>;
+        using V = ConcreteQueryView<ygg::database::QueryDistanceTag>;
         auto cls = nb::class_<V>(m, "QueryDistance");
         cls.def("get_index", &V::get_index)
             .def("columns", &V::columns, nb::keep_alive<0, 1>())
@@ -31,7 +30,7 @@ void bind_query_distance(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<db::Query<Values, db::QueryDistanceTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryDistanceTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

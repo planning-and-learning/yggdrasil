@@ -68,7 +68,7 @@ public:
 
     public:
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<Element, C>, ygg::View<Element, C>, Element>;
+        using value_type = ViewOrValue<Element, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 

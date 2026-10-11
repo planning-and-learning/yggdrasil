@@ -39,10 +39,8 @@ namespace ygg
 template<typename C, typename T, size_t N>
 struct Hash<View<::cista::array<T, N>, C>>
 {
-    using Type = View<::cista::array<T, N>, C>;
-
-    hash_t operator()(const Type& el) const
-        requires Hashable<std::ranges::range_value_t<const Type>>
+    hash_t operator()(const View<::cista::array<T, N>, C>& el) const
+        requires Hashable<std::ranges::range_value_t<const View<::cista::array<T, N>, C>>>
     {
         return ygg::hash_range(el);
     }
@@ -51,9 +49,7 @@ struct Hash<View<::cista::array<T, N>, C>>
 template<typename T1, typename T2>
 struct Hash<::cista::pair<T1, T2>>
 {
-    using Type = ::cista::pair<T1, T2>;
-
-    hash_t operator()(const Type& el) const
+    hash_t operator()(const ::cista::pair<T1, T2>& el) const
         requires Hashable<T1> && Hashable<T2>
     {
         return ygg::hash_combine(el.first, el.second);
@@ -63,9 +59,7 @@ struct Hash<::cista::pair<T1, T2>>
 template<typename C, typename T1, typename T2>
 struct Hash<View<::cista::pair<T1, T2>, C>>
 {
-    using Type = View<::cista::pair<T1, T2>, C>;
-
-    hash_t operator()(const Type& el) const
+    hash_t operator()(const View<::cista::pair<T1, T2>, C>& el) const
         requires requires {
             { el.get_first() } -> Hashable;
             { el.get_second() } -> Hashable;
@@ -78,18 +72,14 @@ struct Hash<View<::cista::pair<T1, T2>, C>>
 template<>
 struct Hash<::cista::offset::string>
 {
-    using Type = ::cista::offset::string;
-
     /// Same byte hash as Hash<std::string>, so equal text hashes alike across string representations.
-    hash_t operator()(const Type& el) const noexcept { return hashing::hash_bytes(el.data(), el.size()); }
+    hash_t operator()(const ::cista::offset::string& el) const noexcept { return hashing::hash_bytes(el.data(), el.size()); }
 };
 
 template<typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
 struct Hash<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>>
 {
-    using Type = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
-
-    hash_t operator()(const Type& el) const
+    hash_t operator()(const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& el) const
         requires Hashable<T>
     {
         return ygg::hash_range(el);
@@ -99,10 +89,8 @@ struct Hash<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Alloc
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
 struct Hash<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>
 {
-    using Type = View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
-
-    hash_t operator()(const Type& el) const
-        requires Hashable<std::ranges::range_value_t<const Type>>
+    hash_t operator()(const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>& el) const
+        requires Hashable<std::ranges::range_value_t<const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>>
     {
         return ygg::hash_range(el);
     }
@@ -111,9 +99,7 @@ struct Hash<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, 
 template<typename... Ts>
 struct Hash<::cista::offset::variant<Ts...>>
 {
-    using Type = ::cista::offset::variant<Ts...>;
-
-    hash_t operator()(const Type& el) const
+    hash_t operator()(const ::cista::offset::variant<Ts...>& el) const
         requires(Hashable<Ts> && ...)
     {
         hash_t seed = el.index();
@@ -126,10 +112,8 @@ struct Hash<::cista::offset::variant<Ts...>>
 template<typename C, typename... Ts>
 struct Hash<View<::cista::offset::variant<Ts...>, C>>
 {
-    using Type = View<::cista::offset::variant<Ts...>, C>;
-
-    hash_t operator()(const Type& el) const
-        requires(Hashable<std::conditional_t<ViewConcept<Ts, C>, View<Ts, C>, Ts>> && ...)
+    hash_t operator()(const View<::cista::offset::variant<Ts...>, C>& el) const
+        requires(Hashable<ViewOrValue<Ts, C>> && ...)
     {
         hash_t seed = el.index_variant().index();
         if (el.valid())
@@ -141,9 +125,7 @@ struct Hash<View<::cista::offset::variant<Ts...>, C>>
 template<typename T>
 struct Hash<::cista::optional<T>>
 {
-    using Type = ::cista::optional<T>;
-
-    hash_t operator()(const Type& el) const
+    hash_t operator()(const ::cista::optional<T>& el) const
         requires Hashable<T>
     {
         hash_t seed = el.has_value() ? 1 : 0;
@@ -156,9 +138,7 @@ struct Hash<::cista::optional<T>>
 template<typename C, typename T>
 struct Hash<View<::cista::optional<T>, C>>
 {
-    using Type = View<::cista::optional<T>, C>;
-
-    hash_t operator()(const Type& el) const
+    hash_t operator()(const View<::cista::optional<T>, C>& el) const
         requires requires {
             { el.value() } -> Hashable;
         }

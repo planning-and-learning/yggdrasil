@@ -43,11 +43,11 @@ class BasicRawSet
 private:
     using pool_type = Pool;
     static constexpr bool ThreadSafe = pool_type::thread_safe;
+    using index_type = uint_t;
+    using ConstView = typename pool_type::ConstView;
 
 public:
     using value_type = typename pool_type::value_type;
-    using index_type = uint_t;
-    using ConstView = typename pool_type::ConstView;
 
 private:
     struct IndexableHash

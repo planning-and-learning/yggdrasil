@@ -33,9 +33,11 @@ namespace ygg
 
 struct ExecutionContext
 {
+private:
     using size_type = std::size_t;
     using uint_t = size_type;
 
+public:
     explicit ExecutionContext(uint_t num_threads) : m_num_threads(num_threads), m_arena()
     {
         if (num_threads == 0)

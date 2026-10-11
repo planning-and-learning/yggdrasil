@@ -104,11 +104,11 @@ template<typename T, typename Hash, typename EqualTo, bool ThreadSafe>
 using HashSetType = typename HashSet<T, Hash, EqualTo, ThreadSafe>::type;
 
 template<bool ThreadSafe, typename Set, typename Key>
-std::optional<typename Set::value_type> find_value_with_hash(const Set& set, const Key& key, size_t hash)
+std::optional<SetValue<Set>> find_value_with_hash(const Set& set, const Key& key, size_t hash)
 {
     if constexpr (ThreadSafe)
     {
-        std::optional<typename Set::value_type> result;
+        std::optional<SetValue<Set>> result;
         set.with_submap(set.subidx(hash),
                         [&](const auto& submap)
                         {
@@ -137,7 +137,7 @@ std::optional<typename Set::value_type> find_value_with_hash(const Set& set, con
  * explicitly unsafe submap access is centralized here.
  */
 template<bool ThreadSafe, typename Set, typename Key>
-std::optional<typename Set::value_type> find_value_unsafe_with_hash(const Set& set, const Key& key, size_t hash)
+std::optional<SetValue<Set>> find_value_unsafe_with_hash(const Set& set, const Key& key, size_t hash)
 {
     if constexpr (ThreadSafe)
     {
@@ -155,9 +155,9 @@ std::optional<typename Set::value_type> find_value_unsafe_with_hash(const Set& s
 }
 
 template<typename Set, typename Key, typename Factory>
-std::pair<typename Set::value_type, bool> parallel_lazy_insert_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
+std::pair<SetValue<Set>, bool> parallel_lazy_insert_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
 {
-    auto result = std::pair<typename Set::value_type, bool> {};
+    auto result = std::pair<SetValue<Set>, bool> {};
     set.with_submap_m(set.subidx(hash),
                       [&](auto& submap)
                       {
@@ -169,7 +169,7 @@ std::pair<typename Set::value_type, bool> parallel_lazy_insert_with_hash(Set& se
 }
 
 template<bool ThreadSafe, typename Set, typename Key, typename Factory>
-std::pair<typename Set::value_type, bool> complete_miss_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
+std::pair<SetValue<Set>, bool> complete_miss_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
 {
     if constexpr (ThreadSafe)
         return parallel_lazy_insert_with_hash(set, key, hash, std::forward<Factory>(factory));
@@ -178,7 +178,7 @@ std::pair<typename Set::value_type, bool> complete_miss_value_with_hash(Set& set
 }
 
 template<bool ThreadSafe, typename Set, typename Key, typename Factory>
-std::pair<typename Set::value_type, bool> find_or_lazy_insert_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
+std::pair<SetValue<Set>, bool> find_or_lazy_insert_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
 {
     if constexpr (ThreadSafe)
     {
@@ -197,7 +197,7 @@ size_t hash_set_memory_usage(const Set& set) noexcept
 {
     // The parallel set's fixed shard objects are part of the container itself,
     // while this reports retained dynamic payload and control storage.
-    return set.capacity() * (sizeof(typename Set::value_type) + sizeof(gtl::priv::ctrl_t));
+    return set.capacity() * (sizeof(SetValue<Set>) + sizeof(gtl::priv::ctrl_t));
 }
 
 }  // namespace ygg::detail

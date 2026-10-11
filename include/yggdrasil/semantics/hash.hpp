@@ -294,7 +294,7 @@ struct Hash<T>
     using is_transparent = void;
 
     hash_t operator()(const T& element) const
-        requires Hashable<decltype(element.identifying_members())>
+        requires Hashable<IdentifyingMembers<T>>
     {
         return ygg::hash_combine(element.identifying_members());
     }

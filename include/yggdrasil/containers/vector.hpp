@@ -36,9 +36,10 @@ namespace ygg
 template<typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator, typename C>
 class View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>
 {
-public:
+private:
     using Container = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
 
+public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
     size_t size() const noexcept { return get_data().size(); }
@@ -82,7 +83,7 @@ public:
         const T* ptr;
 
         using difference_type = std::ptrdiff_t;
-        using value_type = std::conditional_t<ViewConcept<T, C>, ::ygg::View<T, C>, T>;
+        using value_type = ViewOrValue<T, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 

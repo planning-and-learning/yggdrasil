@@ -50,10 +50,12 @@ class BlockArrayPool;
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
 class BasicBlockArrayView
 {
-public:
+private:
     using block_type = std::remove_const_t<Block>;
-    using value_type = typename Coder::value_type;
-    using reference_type = typename bit::block_reference<block_type, Coder>;
+
+public:
+    using value_type = bit::CoderValue<Coder>;
+    using reference_type = bit::block_reference<block_type, Coder>;
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
 private:
@@ -141,12 +143,12 @@ public:
     {
     private:
         using view_type = View;
+        using raw_view_type = std::remove_const_t<View>;
         static constexpr bool is_const_iterator = std::is_const_v<View> || std::is_const_v<Block>;
         using block_pointer = std::conditional_t<is_const_iterator, const block_type*, block_type*>;
 
     public:
         using difference_type = std::ptrdiff_t;
-        using raw_view_type = std::remove_const_t<View>;
         using value_type = typename raw_view_type::value_type;
         using reference = std::conditional_t<is_const_iterator, value_type, typename raw_view_type::reference_type>;
         using iterator_category = std::random_access_iterator_tag;
@@ -324,12 +326,12 @@ class BlockArrayPool
 public:
     static constexpr bool thread_safe = ThreadSafe;
 
-    using block_type = std::remove_const_t<Block>;
-    using value_type = typename Coder::value_type;
+    using value_type = bit::CoderValue<Coder>;
     using ArrayView = BasicBlockArrayView<Block, Coder>;
     using ConstArrayView = BasicBlockArrayView<const Block, Coder>;
 
 private:
+    using block_type = std::remove_const_t<Block>;
     using SegmentLayout = detail::GeometricSegmentLayout<FirstSegmentSize>;
     using Segment = std::vector<block_type>;
     using Segments = std::conditional_t<ThreadSafe, SegmentedVector<Segment, 1, true>, std::vector<Segment>>;

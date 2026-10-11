@@ -93,7 +93,7 @@ template<std::unsigned_integral Block, BlockCoder<Block> Coder = ForwardingBlock
 class atomic_int_reference
 {
 public:
-    using value_type = typename Coder::value_type;
+    using value_type = CoderValue<Coder>;
 
     atomic_int_reference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len)
     {

@@ -60,7 +60,6 @@ public:
     using object_tag = ObjectTag;
     using RelationTypes = TypeList<Ts...>;
     using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type, ThreadSafe>::container_type;
-    using ConstViewType = typename container_type::ConstArrayView;
     static constexpr bool thread_safe = ThreadSafe;
 
     friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }

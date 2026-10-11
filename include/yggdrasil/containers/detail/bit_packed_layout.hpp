@@ -33,8 +33,10 @@ namespace ygg::detail
 template<std::unsigned_integral Block>
 struct BitPackedLayout
 {
+private:
     using block_type = std::remove_const_t<Block>;
 
+public:
     static constexpr size_t digits = std::numeric_limits<block_type>::digits;
     static_assert(std::has_single_bit(digits));
     static constexpr size_t block_shift = std::countr_zero(digits);

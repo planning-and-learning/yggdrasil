@@ -11,21 +11,18 @@
 #include <yggdrasil/database/semantics/relation_repository.hpp>
 #include "query_helpers.hpp"
 
-namespace qb = ygg::tests::qb;
-
 namespace
 {
-namespace db = ygg::database;
-using Column = ygg::Index<db::Column>;
-using Relation = ygg::Builder<db::Relation<>>;
-using Delta = db::incremental::Delta<>;
-using Change = std::pair<db::BorrowedRelationView<>, db::BorrowedRelationView<>>;
+using Column = ygg::Index<ygg::database::Column>;
+using Relation = ygg::Builder<ygg::database::Relation<>>;
+using Delta = ygg::database::incremental::Delta<>;
+using Change = std::pair<ygg::database::BorrowedRelationView<>, ygg::database::BorrowedRelationView<>>;
 
 // Borrowed views use a relation repository only as their context.
-template<db::ColumnTypes Values>
-db::BorrowedRelationView<Values> borrow(const ygg::Builder<db::Relation<Values>>& relation)
+template<ygg::database::ColumnTypes Values>
+ygg::database::BorrowedRelationView<Values> borrow(const ygg::Builder<ygg::database::Relation<Values>>& relation)
 {
-    static const auto context = db::RelationRepositoryFactory<Values> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory<Values> {}.create();
     return { relation, context };
 }
 const Column x(0), y(1), z(2), d(3);
@@ -62,57 +59,58 @@ concept HasOperands = requires(T view) {
 };
 template<typename T>
 concept HasSources = requires(T view) { view.get_sources(); };
-using JoinView = db::QueryView<db::DefaultColumnTypes, db::QueryJoinTag>;
-using ProjectView = db::QueryView<db::DefaultColumnTypes, db::QueryProjectTag>;
-using DistanceView = db::QueryView<db::DefaultColumnTypes, db::QueryDistanceTag>;
+using JoinView = ygg::database::QueryView<ygg::database::DefaultColumnTypes, ygg::database::QueryJoinTag>;
+using ProjectView = ygg::database::QueryView<ygg::database::DefaultColumnTypes, ygg::database::QueryProjectTag>;
+using DistanceView = ygg::database::QueryView<ygg::database::DefaultColumnTypes, ygg::database::QueryDistanceTag>;
 static_assert(HasOperands<JoinView> && !HasArgument<JoinView> && !HasSources<JoinView>);
 static_assert(HasArgument<ProjectView> && !HasOperands<ProjectView>);
 static_assert(HasSources<DistanceView> && !HasArgument<DistanceView> && !HasOperands<DistanceView>);
-static_assert(!HasArgument<db::QueryView<>> && !HasOperands<db::QueryView<>>);
-static_assert(!std::copy_constructible<db::QueryRepository<>>);
-static_assert(
-    !std::convertible_to<ygg::Index<db::Query<db::DefaultColumnTypes, db::QueryInputTag>>, ygg::Index<db::Query<db::DefaultColumnTypes, db::QueryJoinTag>>>);
+static_assert(!HasArgument<ygg::database::QueryView<>> && !HasOperands<ygg::database::QueryView<>>);
+static_assert(!std::copy_constructible<ygg::database::QueryRepository<>>);
+static_assert(!std::convertible_to<ygg::Index<ygg::database::Query<ygg::database::DefaultColumnTypes, ygg::database::QueryInputTag>>,
+                                   ygg::Index<ygg::database::Query<ygg::database::DefaultColumnTypes, ygg::database::QueryJoinTag>>>);
 
 TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
 {
-    auto repository = qb::repository<>();
-    const auto a = qb::input(repository, 0, { x, y });
-    const auto b = qb::input(repository, 1, { y, z });
-    const auto empty = qb::empty(repository, { x, y });
-    const auto joined = qb::join(repository, a, b);
-    const auto projected = qb::project(repository, a, { x });
-    const auto renamed = qb::rename(repository, a, { y, z });
-    const auto equal = qb::select_equal(repository, a, x, y);
-    const auto selected = qb::select_value(repository, a, x, ygg::uint_t(7));
-    const auto united = qb::union_(repository, a, empty);
-    const auto difference = qb::difference(repository, a, empty);
-    const auto targets = qb::project(repository, b, { z });
-    const auto distance = qb::distance(repository, projected, a, targets, d);
+    auto repository = ygg::tests::qb::repository<>();
+    const auto a = ygg::tests::qb::input(repository, 0, { x, y });
+    const auto b = ygg::tests::qb::input(repository, 1, { y, z });
+    const auto empty = ygg::tests::qb::empty(repository, { x, y });
+    const auto joined = ygg::tests::qb::join(repository, a, b);
+    const auto projected = ygg::tests::qb::project(repository, a, { x });
+    const auto renamed = ygg::tests::qb::rename(repository, a, { y, z });
+    const auto equal = ygg::tests::qb::select_equal(repository, a, x, y);
+    const auto selected = ygg::tests::qb::select_value(repository, a, x, ygg::uint_t(7));
+    const auto united = ygg::tests::qb::union_(repository, a, empty);
+    const auto difference = ygg::tests::qb::difference(repository, a, empty);
+    const auto targets = ygg::tests::qb::project(repository, b, { z });
+    const auto distance = ygg::tests::qb::distance(repository, projected, a, targets, d);
     const auto roots = std::array { a, empty, joined, projected, renamed, equal, selected, united, difference, distance };
-    EXPECT_EQ(db::as<db::QueryInputTag>(a).get_input_slot(), 0);
-    EXPECT_TRUE(std::ranges::equal(db::as<db::QueryEmptyTag>(empty).columns(), a.columns()));
-    EXPECT_EQ(db::as<db::QueryJoinTag>(joined).get_lhs().get_index(), a.get_index());
-    EXPECT_EQ(db::as<db::QueryJoinTag>(joined).get_rhs().get_index(), b.get_index());
-    EXPECT_EQ(db::as<db::QueryProjectTag>(projected).get_arg().get_index(), a.get_index());
-    EXPECT_EQ(db::as<db::QueryProjectTag>(projected).get_labels().front(), x);
-    EXPECT_EQ(db::as<db::QueryRenameTag>(renamed).get_labels().front(), y);
-    EXPECT_EQ(db::as<db::QuerySelectEqualTag>(equal).get_lhs_column(), x);
-    EXPECT_EQ(db::as<db::QuerySelectEqualTag>(equal).get_rhs_column(), y);
-    EXPECT_EQ(db::as<db::QuerySelectValueTag>(selected).get_column(), x);
-    EXPECT_EQ(db::ColumnCodec<ygg::uint_t>::decode(db::as<db::QuerySelectValueTag>(selected).get_constant()), 7);
-    EXPECT_EQ(db::as<db::QueryUnionTag>(united).get_rhs().get_index(), empty.get_index());
-    EXPECT_EQ(db::as<db::QueryDifferenceTag>(difference).get_lhs().get_index(), a.get_index());
-    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_sources().get_index(), projected.get_index());
-    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_edges().get_index(), a.get_index());
-    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_targets().get_index(), targets.get_index());
-    EXPECT_EQ(db::as<db::QueryDistanceTag>(distance).get_distance_column(), d);
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryInputTag>(a).get_input_slot(), 0);
+    EXPECT_TRUE(std::ranges::equal(ygg::database::as<ygg::database::QueryEmptyTag>(empty).columns(), a.columns()));
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryJoinTag>(joined).get_lhs().get_index(), a.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryJoinTag>(joined).get_rhs().get_index(), b.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryProjectTag>(projected).get_arg().get_index(), a.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryProjectTag>(projected).get_labels().front(), x);
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryRenameTag>(renamed).get_labels().front(), y);
+    EXPECT_EQ(ygg::database::as<ygg::database::QuerySelectEqualTag>(equal).get_lhs_column(), x);
+    EXPECT_EQ(ygg::database::as<ygg::database::QuerySelectEqualTag>(equal).get_rhs_column(), y);
+    EXPECT_EQ(ygg::database::as<ygg::database::QuerySelectValueTag>(selected).get_column(), x);
+    EXPECT_EQ(ygg::database::ColumnCodec<ygg::uint_t>::decode(ygg::database::as<ygg::database::QuerySelectValueTag>(selected).get_constant()), 7);
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryUnionTag>(united).get_rhs().get_index(), empty.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryDifferenceTag>(difference).get_lhs().get_index(), a.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryDistanceTag>(distance).get_sources().get_index(), projected.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryDistanceTag>(distance).get_edges().get_index(), a.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryDistanceTag>(distance).get_targets().get_index(), targets.get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryDistanceTag>(distance).get_distance_column(), d);
     const auto count = repository.size();
     EXPECT_EQ(count, 12);
-    const auto duplicate = qb::join(repository, a, b);
+    const auto duplicate = ygg::tests::qb::join(repository, a, b);
     EXPECT_EQ(duplicate.get_index(), joined.get_index());
-    EXPECT_EQ(db::as<db::QueryJoinTag>(duplicate).get_index(), db::as<db::QueryJoinTag>(joined).get_index());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryJoinTag>(duplicate).get_index(), ygg::database::as<ygg::database::QueryJoinTag>(joined).get_index());
     EXPECT_EQ(repository.size(), count);
-    EXPECT_EQ(db::as<db::QueryInputTag>(a).get_index().get_value(), db::as<db::QueryJoinTag>(joined).get_index().get_value());
+    EXPECT_EQ(ygg::database::as<ygg::database::QueryInputTag>(a).get_index().get_value(),
+              ygg::database::as<ygg::database::QueryJoinTag>(joined).get_index().get_value());
     EXPECT_NE(a.get_index(), joined.get_index());
     const auto plan = ygg::database::compile(roots);
     for (size_t i = 0; i < roots.size(); ++i)
@@ -124,61 +122,62 @@ TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
 
 TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
 {
-    using Values = db::DefaultColumnTypes;
-    auto repository = qb::repository<>();
-    const auto a = qb::input(repository, 0, { x, y });
-    const auto b = qb::input(repository, 1, { y, z });
-    const auto insert = [&]<typename Tag>(ygg::Data<db::Query<Values, Tag>> data)
+    using Values = ygg::database::DefaultColumnTypes;
+    auto repository = ygg::tests::qb::repository<>();
+    const auto a = ygg::tests::qb::input(repository, 0, { x, y });
+    const auto b = ygg::tests::qb::input(repository, 1, { y, z });
+    const auto insert = [&]<typename Tag>(ygg::Data<ygg::database::Query<Values, Tag>> data)
     {
-        const auto concrete = db::insert(repository, data).first;
-        auto erased = ygg::Data<db::Query<Values>>(concrete);
-        return db::insert(repository, erased).first;
+        const auto concrete = ygg::database::insert(repository, data).first;
+        auto erased = ygg::Data<ygg::database::Query<Values>>(concrete);
+        return ygg::database::insert(repository, erased).first;
     };
 
-    const ygg::Data<db::Query<Values, db::QueryJoinTag>> by_view(a, b);
-    const ygg::Data<db::Query<Values, db::QueryJoinTag>> by_index(a.get_index(), b.get_index());
+    const ygg::Data<ygg::database::Query<Values, ygg::database::QueryJoinTag>> by_view(a, b);
+    const ygg::Data<ygg::database::Query<Values, ygg::database::QueryJoinTag>> by_index(a.get_index(), b.get_index());
     EXPECT_EQ(by_view.lhs, a.get_index());
     EXPECT_EQ(by_view.rhs, b.get_index());
     EXPECT_EQ(by_view.identifying_members(), by_index.identifying_members());
-    EXPECT_EQ(insert(by_view).get_index(), qb::join(repository, a, b).get_index());
+    EXPECT_EQ(insert(by_view).get_index(), ygg::tests::qb::join(repository, a, b).get_index());
 
     const std::array labels { x };
-    EXPECT_EQ(insert(ygg::Data<db::Query<Values, db::QueryProjectTag>>(a, labels)).get_index(), qb::project(repository, a, { x }).get_index());
-    EXPECT_EQ(insert(ygg::Data<db::Query<Values, db::QuerySelectValueTag>>(a, x, ygg::uint_t(7))).get_index(),
-              qb::select_value(repository, a, x, ygg::uint_t(7)).get_index());
-    const auto generic = insert(ygg::Data<db::Query<Values, db::QueryGenericJoinTag>>(std::vector { a, b }, std::array { y, x, z }));
-    EXPECT_TRUE(std::ranges::equal(db::column_labels(generic.columns()), std::array { x, y, z }));
+    EXPECT_EQ(insert(ygg::Data<ygg::database::Query<Values, ygg::database::QueryProjectTag>>(a, labels)).get_index(),
+              ygg::tests::qb::project(repository, a, { x }).get_index());
+    EXPECT_EQ(insert(ygg::Data<ygg::database::Query<Values, ygg::database::QuerySelectValueTag>>(a, x, ygg::uint_t(7))).get_index(),
+              ygg::tests::qb::select_value(repository, a, x, ygg::uint_t(7)).get_index());
+    const auto generic = insert(ygg::Data<ygg::database::Query<Values, ygg::database::QueryGenericJoinTag>>(std::vector { a, b }, std::array { y, x, z }));
+    EXPECT_TRUE(std::ranges::equal(ygg::database::column_labels(generic.columns()), std::array { x, y, z }));
 
-    auto mismatched = ygg::Data<db::Query<Values, db::QuerySelectValueTag>>(a, x, std::int32_t(7));
-    EXPECT_EQ(mismatched.constant_type, (db::column_type<Values, std::int32_t>));
-    EXPECT_THROW(db::insert(repository, mismatched), std::invalid_argument);
+    auto mismatched = ygg::Data<ygg::database::Query<Values, ygg::database::QuerySelectValueTag>>(a, x, std::int32_t(7));
+    EXPECT_EQ(mismatched.constant_type, (ygg::database::column_type<Values, std::int32_t>) );
+    EXPECT_THROW(ygg::database::insert(repository, mismatched), std::invalid_argument);
 }
 
 TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)
 {
-    db::QueryPlan<> plan;
+    ygg::database::QueryPlan<> plan;
     {
-        auto repository = qb::repository<>();
-        auto other = qb::repository<>();
-        const auto a = qb::input(repository, 0, { x, y });
-        EXPECT_EQ(a.get_index(), qb::input(repository, 0, { x, y }).get_index());
-        const auto same = qb::input(repository, 0, { x, y });
-        const auto foreign = qb::input(other, 0, { x, y });
+        auto repository = ygg::tests::qb::repository<>();
+        auto other = ygg::tests::qb::repository<>();
+        const auto a = ygg::tests::qb::input(repository, 0, { x, y });
+        EXPECT_EQ(a.get_index(), ygg::tests::qb::input(repository, 0, { x, y }).get_index());
+        const auto same = ygg::tests::qb::input(repository, 0, { x, y });
+        const auto foreign = ygg::tests::qb::input(other, 0, { x, y });
         EXPECT_NE(repository.get_index(), other.get_index());
         EXPECT_TRUE(ygg::EqualTo<decltype(a)> {}(a, same));
         EXPECT_FALSE(ygg::EqualTo<decltype(a)> {}(a, foreign));
         EXPECT_EQ(ygg::Hash<decltype(a)> {}(a), ygg::Hash<decltype(a)> {}(same));
-        std::unordered_map<db::QueryView<>, int, ygg::Hash<db::QueryView<>>, ygg::EqualTo<db::QueryView<>>> keys;
+        std::unordered_map<ygg::database::QueryView<>, int, ygg::Hash<ygg::database::QueryView<>>, ygg::EqualTo<ygg::database::QueryView<>>> keys;
         keys.emplace(a, 1);
         keys.emplace(same, 2);
         keys.emplace(foreign, 3);
         EXPECT_EQ(keys.size(), 2);
-        EXPECT_THROW(qb::project(repository, a, { z }), std::out_of_range);
-        EXPECT_THROW(qb::rename(repository, a, { x, x }), std::invalid_argument);
-        const auto p = qb::project(repository, a, { x });
-        EXPECT_EQ(p.get_index(), qb::project(repository, a, { x }).get_index());
-        qb::input(repository, 9, { z });  // Unreachable inputs must not require bindings.
-        const auto renamed = qb::rename(repository, p, { z });
+        EXPECT_THROW(ygg::tests::qb::project(repository, a, { z }), std::out_of_range);
+        EXPECT_THROW(ygg::tests::qb::rename(repository, a, { x, x }), std::invalid_argument);
+        const auto p = ygg::tests::qb::project(repository, a, { x });
+        EXPECT_EQ(p.get_index(), ygg::tests::qb::project(repository, a, { x }).get_index());
+        ygg::tests::qb::input(repository, 9, { z });  // Unreachable inputs must not require bindings.
+        const auto renamed = ygg::tests::qb::rename(repository, p, { z });
         plan = ygg::database::compile({ p, renamed, p });
         ASSERT_EQ(plan.node_count(), 3);
         EXPECT_EQ(plan.roots()[0], plan.roots()[2]);
@@ -187,7 +186,7 @@ TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)
     Relation input({ x, y });
     input.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
     input.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(4) });
-    db::QueryEvaluator<> evaluator(plan);
+    ygg::database::QueryEvaluator<> evaluator(plan);
     EXPECT_THROW(evaluator.get_result(), std::logic_error);
     evaluator.evaluate(std::array { borrow(input) });
     EXPECT_EQ(evaluator.get_result(0).size(), 1);
@@ -200,25 +199,25 @@ TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)
 
 TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
 {
-    auto repository = qb::repository<>();
-    const auto a = qb::input(repository, 0, { x, y });
-    const auto b = qb::input(repository, 1, { x, y });
-    const auto c = qb::input(repository, 2, { y, z });
-    const auto joined = qb::join(repository, a, c);
-    const auto projection = qb::project(repository, joined, { x });
+    auto repository = ygg::tests::qb::repository<>();
+    const auto a = ygg::tests::qb::input(repository, 0, { x, y });
+    const auto b = ygg::tests::qb::input(repository, 1, { x, y });
+    const auto c = ygg::tests::qb::input(repository, 2, { y, z });
+    const auto joined = ygg::tests::qb::join(repository, a, c);
+    const auto projection = ygg::tests::qb::project(repository, joined, { x });
     const auto roots = std::array { joined,
                                     projection,
-                                    qb::rename(repository, projection, { z }),
-                                    qb::select_equal(repository, a, x, y),
-                                    qb::select_value(repository, a, x, ygg::uint_t(1)),
-                                    qb::union_(repository, a, b),
-                                    qb::difference(repository, a, b),
-                                    qb::join(repository, a, a),
-                                    qb::project(repository, joined, {}),
-                                    qb::empty(repository, { x }) };
+                                    ygg::tests::qb::rename(repository, projection, { z }),
+                                    ygg::tests::qb::select_equal(repository, a, x, y),
+                                    ygg::tests::qb::select_value(repository, a, x, ygg::uint_t(1)),
+                                    ygg::tests::qb::union_(repository, a, b),
+                                    ygg::tests::qb::difference(repository, a, b),
+                                    ygg::tests::qb::join(repository, a, a),
+                                    ygg::tests::qb::project(repository, joined, {}),
+                                    ygg::tests::qb::empty(repository, { x }) };
     const auto plan = ygg::database::compile(roots);
-    db::QueryEvaluator<> full(plan);
-    db::incremental::QueryEvaluator<> incremental(plan);
+    ygg::database::QueryEvaluator<> full(plan);
+    ygg::database::incremental::QueryEvaluator<> incremental(plan);
     Relation first({ x, y }), second({ x, y }), third({ y, z });
     first.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
     first.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(2) });
@@ -275,39 +274,39 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
 TEST(DatabaseQuery, MixedTypesConstantsAndDistanceComposition)
 {
     using Values = ygg::TypeList<std::uint32_t, double>;
-    using TypedRelation = ygg::Builder<db::Relation<Values>>;
-    ygg::Builder<db::Columns<Values>> schema;
+    using TypedRelation = ygg::Builder<ygg::database::Relation<Values>>;
+    ygg::Builder<ygg::database::Columns<Values>> schema;
     schema.push_back<std::uint32_t>(x);
     schema.push_back<double>(y);
-    auto mixed = qb::repository<Values>();
-    auto input = qb::input(mixed, 0, schema.span());
-    EXPECT_THROW(qb::select_equal(mixed, input, x, y), std::invalid_argument);
-    EXPECT_THROW(qb::select_value(mixed, input, y, std::uint32_t(1)), std::invalid_argument);
-    auto selected = qb::select_value(mixed, input, y, -0.0);
-    const auto selected_view = selected.get_variant().template get<ygg::Index<db::Query<Values, db::QuerySelectValueTag>>>();
+    auto mixed = ygg::tests::qb::repository<Values>();
+    auto input = ygg::tests::qb::input(mixed, 0, schema.span());
+    EXPECT_THROW(ygg::tests::qb::select_equal(mixed, input, x, y), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::select_value(mixed, input, y, std::uint32_t(1)), std::invalid_argument);
+    auto selected = ygg::tests::qb::select_value(mixed, input, y, -0.0);
+    const auto selected_view = selected.get_variant().template get<ygg::Index<ygg::database::Query<Values, ygg::database::QuerySelectValueTag>>>();
     EXPECT_EQ(selected_view.get_data().column_position, 1);
-    EXPECT_EQ(selected.get_index(), qb::select_value(mixed, input, y, 0.0).get_index());
+    EXPECT_EQ(selected.get_index(), ygg::tests::qb::select_value(mixed, input, y, 0.0).get_index());
     TypedRelation relation(schema.span());
     relation.insert(std::tuple { std::uint32_t(4), 0.0 });
     relation.insert(std::tuple { std::uint32_t(5), 2.0 });
-    db::QueryEvaluator<Values> evaluator(ygg::database::compile({ qb::project(mixed, selected, { y, x }) }));
+    ygg::database::QueryEvaluator<Values> evaluator(ygg::database::compile({ ygg::tests::qb::project(mixed, selected, { y, x }) }));
     evaluator.evaluate(std::array { borrow(relation) });
     EXPECT_TRUE(evaluator.get_result().contains(std::tuple { 0.0, std::uint32_t(4) }));
 
-    auto graph = qb::repository<>();
-    const auto sources = qb::input(graph, 0, { x });
-    const auto edges = qb::input(graph, 1, { x, y });
-    const auto targets = qb::input(graph, 2, { z });
-    const auto distance = qb::distance(graph, sources, edges, targets, d);
-    const auto plan = ygg::database::compile({ distance, qb::select_value(graph, distance, d, ygg::uint_t(2)) });
+    auto graph = ygg::tests::qb::repository<>();
+    const auto sources = ygg::tests::qb::input(graph, 0, { x });
+    const auto edges = ygg::tests::qb::input(graph, 1, { x, y });
+    const auto targets = ygg::tests::qb::input(graph, 2, { z });
+    const auto distance = ygg::tests::qb::distance(graph, sources, edges, targets, d);
+    const auto plan = ygg::database::compile({ distance, ygg::tests::qb::select_value(graph, distance, d, ygg::uint_t(2)) });
     Relation s({ x }), e({ x, y }), t({ z });
     s.insert(std::tuple { ygg::uint_t(1) });
     e.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     e.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
     t.insert(std::tuple { ygg::uint_t(3) });
     const auto inputs = std::array { borrow(s), borrow(e), borrow(t) };
-    db::QueryEvaluator<> full(plan);
-    db::incremental::QueryEvaluator<> incremental(plan);
+    ygg::database::QueryEvaluator<> full(plan);
+    ygg::database::incremental::QueryEvaluator<> incremental(plan);
     full.evaluate(inputs);
     incremental.initialize(inputs);
     EXPECT_EQ(rows(full.get_result()), rows(incremental.get_result()));
@@ -327,56 +326,57 @@ TEST(DatabaseQuery, MixedTypesConstantsAndDistanceComposition)
 TEST(DatabaseQuery, RejectsInvalidBatchesBeforeMutatingAndSupportsNonDistanceTypeFamilies)
 {
     using Values = ygg::TypeList<double>;
-    auto repository = qb::repository<Values>();
-    const auto input = qb::input(repository, 0, { x });
-    const auto edges = qb::input(repository, 1, { x, y });
-    EXPECT_THROW(qb::distance(repository, input, edges, input, d), std::invalid_argument);
-    ygg::Builder<db::Relation<Values>> relation({ x });
+    auto repository = ygg::tests::qb::repository<Values>();
+    const auto input = ygg::tests::qb::input(repository, 0, { x });
+    const auto edges = ygg::tests::qb::input(repository, 1, { x, y });
+    EXPECT_THROW(ygg::tests::qb::distance(repository, input, edges, input, d), std::invalid_argument);
+    ygg::Builder<ygg::database::Relation<Values>> relation({ x });
     relation.insert(std::tuple { 1.0 });
-    const auto plan = ygg::database::compile({ qb::select_value(repository, input, x, 1.0) });
-    db::QueryEvaluator<Values> full(plan);
-    db::incremental::QueryEvaluator<Values> incremental(plan);
+    const auto plan = ygg::database::compile({ ygg::tests::qb::select_value(repository, input, x, 1.0) });
+    ygg::database::QueryEvaluator<Values> full(plan);
+    ygg::database::incremental::QueryEvaluator<Values> incremental(plan);
     const auto inputs = std::array { borrow(relation) };
     full.evaluate(inputs);
     incremental.initialize(inputs);
-    db::incremental::Delta<Values> invalid(relation.columns().span());
+    ygg::database::incremental::Delta<Values> invalid(relation.columns().span());
     invalid.added.insert(std::tuple { 1.0 });
     const auto changes = std::array { std::pair { borrow(invalid.added), borrow(invalid.removed) } };
     EXPECT_THROW(incremental.update(changes), std::invalid_argument);
     EXPECT_EQ(rows(incremental.get_result()), rows(full.get_result()));
-    EXPECT_THROW(incremental.update(std::span<const std::pair<db::BorrowedRelationView<Values>, db::BorrowedRelationView<Values>>> {}), std::invalid_argument);
+    EXPECT_THROW(incremental.update(std::span<const std::pair<ygg::database::BorrowedRelationView<Values>, ygg::database::BorrowedRelationView<Values>>> {}),
+                 std::invalid_argument);
     EXPECT_EQ(incremental.get_result().size(), 1);
 }
 
 TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
 {
-    auto repository = qb::repository<>();
-    const auto a = qb::input(repository, 0, { x, y });
-    const auto b = qb::input(repository, 1, { x, y });
-    const auto edges = qb::input(repository, 2, { y, z });
-    const auto ready = qb::input(repository, 3, {});
-    const auto u = qb::union_(repository, a, b);
-    const auto difference = qb::difference(repository, a, b);
-    const auto project_union = qb::project(repository, u, { x });
-    const auto project_a = qb::project(repository, a, { x });
-    const auto project_b = qb::project(repository, b, { x });
-    const auto roots = std::array { qb::join(repository, u, edges),
-                                    qb::join(repository, difference, edges),
-                                    qb::project(repository, difference, { x }),
+    auto repository = ygg::tests::qb::repository<>();
+    const auto a = ygg::tests::qb::input(repository, 0, { x, y });
+    const auto b = ygg::tests::qb::input(repository, 1, { x, y });
+    const auto edges = ygg::tests::qb::input(repository, 2, { y, z });
+    const auto ready = ygg::tests::qb::input(repository, 3, {});
+    const auto u = ygg::tests::qb::union_(repository, a, b);
+    const auto difference = ygg::tests::qb::difference(repository, a, b);
+    const auto project_union = ygg::tests::qb::project(repository, u, { x });
+    const auto project_a = ygg::tests::qb::project(repository, a, { x });
+    const auto project_b = ygg::tests::qb::project(repository, b, { x });
+    const auto roots = std::array { ygg::tests::qb::join(repository, u, edges),
+                                    ygg::tests::qb::join(repository, difference, edges),
+                                    ygg::tests::qb::project(repository, difference, { x }),
                                     project_union,
-                                    qb::union_(repository, project_a, project_b),
-                                    qb::difference(repository, project_a, project_b),
-                                    qb::join(repository, project_a, project_b),
-                                    qb::select_equal(repository, u, x, y),
-                                    qb::select_value(repository, difference, x, ygg::uint_t(1)),
-                                    qb::project(repository, qb::join(repository, a, edges), {}),
-                                    qb::join(repository, ready, project_union),
-                                    qb::rename(repository, project_union, { z }) };
+                                    ygg::tests::qb::union_(repository, project_a, project_b),
+                                    ygg::tests::qb::difference(repository, project_a, project_b),
+                                    ygg::tests::qb::join(repository, project_a, project_b),
+                                    ygg::tests::qb::select_equal(repository, u, x, y),
+                                    ygg::tests::qb::select_value(repository, difference, x, ygg::uint_t(1)),
+                                    ygg::tests::qb::project(repository, ygg::tests::qb::join(repository, a, edges), {}),
+                                    ygg::tests::qb::join(repository, ready, project_union),
+                                    ygg::tests::qb::rename(repository, project_union, { z }) };
     const auto plan = ygg::database::compile(roots);
     std::array<Relation, 4> inputs { Relation({ x, y }), Relation({ x, y }), Relation({ y, z }), Relation(std::span<const Column> {}) };
     const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]), borrow(inputs[3]) };
-    db::QueryEvaluator<> full(plan);
-    db::incremental::QueryEvaluator<> incremental(plan);
+    ygg::database::QueryEvaluator<> full(plan);
+    ygg::database::incremental::QueryEvaluator<> incremental(plan);
     incremental.initialize(refs);
     std::mt19937 random(741);
     for (size_t iteration = 0; iteration < 120; ++iteration)
@@ -431,16 +431,16 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
 
 TEST(DatabaseQuery, GenericJoinPlanExecutesInBothModesAndPrunesAlternatives)
 {
-    auto repository = qb::repository<>();
-    const auto ai = qb::input(repository, 0, { x, y });
-    const auto bi = qb::input(repository, 1, { y, z });
-    const auto ci = qb::input(repository, 2, { z, x });
-    qb::input(repository, 8, { x, y });
-    const auto root = qb::generic_join(repository, { ai, bi, ci }, { z, x, y });
+    auto repository = ygg::tests::qb::repository<>();
+    const auto ai = ygg::tests::qb::input(repository, 0, { x, y });
+    const auto bi = ygg::tests::qb::input(repository, 1, { y, z });
+    const auto ci = ygg::tests::qb::input(repository, 2, { z, x });
+    ygg::tests::qb::input(repository, 8, { x, y });
+    const auto root = ygg::tests::qb::generic_join(repository, { ai, bi, ci }, { z, x, y });
     const auto plan = ygg::database::compile({ root });
     ASSERT_EQ(plan.node_count(), 4);
-    db::QueryEvaluator<> full(plan);
-    db::incremental::QueryEvaluator<> incremental(plan);
+    ygg::database::QueryEvaluator<> full(plan);
+    ygg::database::incremental::QueryEvaluator<> incremental(plan);
     Relation ar({ x, y }), br({ y, z }), cr({ z, x });
     ar.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     br.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
@@ -463,14 +463,14 @@ TEST(DatabaseQuery, GenericJoinPlanExecutesInBothModesAndPrunesAlternatives)
 
 TEST(DatabaseQuery, NullaryGenericJoinIsIdentityInBothModes)
 {
-    auto repository = qb::repository<>();
-    const auto root = qb::generic_join(repository, {}, {});
+    auto repository = ygg::tests::qb::repository<>();
+    const auto root = ygg::tests::qb::generic_join(repository, {}, {});
     const auto plan = ygg::database::compile({ root, root });
     ASSERT_EQ(plan.node_count(), 1);
     EXPECT_EQ(plan.roots().front(), plan.roots().back());
-    db::QueryEvaluator<> full(plan);
-    db::incremental::QueryEvaluator<> incremental(plan);
-    const std::array<db::BorrowedRelationView<>, 0> no_inputs;
+    ygg::database::QueryEvaluator<> full(plan);
+    ygg::database::incremental::QueryEvaluator<> incremental(plan);
+    const std::array<ygg::database::BorrowedRelationView<>, 0> no_inputs;
     full.evaluate(no_inputs);
     incremental.initialize(no_inputs);
     ASSERT_EQ(full.get_result().size(), 1);
@@ -484,33 +484,34 @@ TEST(DatabaseQuery, NullaryGenericJoinIsIdentityInBothModes)
 
 TEST(DatabaseQuery, InterningUsesArgumentsAndCanonicalOrders)
 {
-    auto repository = qb::repository<>();
-    const auto input = qb::input(repository, 0, { x, y });
-    EXPECT_EQ(qb::input(repository, 0, { x, y }).get_index(), input.get_index());
-    const auto project = qb::project(repository, input, { x, y });
-    EXPECT_EQ(qb::project(repository, input, { x, y }).get_index(), project.get_index());
-    EXPECT_NE(qb::project(repository, input, { y, x }).get_index(), project.get_index());
-    const auto renamed = qb::rename(repository, input, { x, y });
-    EXPECT_NE(qb::rename(repository, input, { y, x }).get_index(), renamed.get_index());
-    const auto joined = qb::generic_join(repository, { input }, { x, y });
-    EXPECT_EQ(qb::generic_join(repository, { input }, { x, y }, { x, y }).get_index(), joined.get_index());
-    EXPECT_NE(qb::generic_join(repository, { input }, { y, x }, { x, y }).get_index(), joined.get_index());
-    EXPECT_NE(qb::generic_join(repository, { input }, { x, y }, { y, x }).get_index(), joined.get_index());
+    auto repository = ygg::tests::qb::repository<>();
+    const auto input = ygg::tests::qb::input(repository, 0, { x, y });
+    EXPECT_EQ(ygg::tests::qb::input(repository, 0, { x, y }).get_index(), input.get_index());
+    const auto project = ygg::tests::qb::project(repository, input, { x, y });
+    EXPECT_EQ(ygg::tests::qb::project(repository, input, { x, y }).get_index(), project.get_index());
+    EXPECT_NE(ygg::tests::qb::project(repository, input, { y, x }).get_index(), project.get_index());
+    const auto renamed = ygg::tests::qb::rename(repository, input, { x, y });
+    EXPECT_NE(ygg::tests::qb::rename(repository, input, { y, x }).get_index(), renamed.get_index());
+    const auto joined = ygg::tests::qb::generic_join(repository, { input }, { x, y });
+    EXPECT_EQ(ygg::tests::qb::generic_join(repository, { input }, { x, y }, { x, y }).get_index(), joined.get_index());
+    EXPECT_NE(ygg::tests::qb::generic_join(repository, { input }, { y, x }, { x, y }).get_index(), joined.get_index());
+    EXPECT_NE(ygg::tests::qb::generic_join(repository, { input }, { x, y }, { y, x }).get_index(), joined.get_index());
 }
 
 TEST(DatabaseQuery, CachedPlansSurviveRepositoryGrowthAndCistaRelocation)
 {
-    auto repository = qb::repository<>();
-    const auto a = qb::input(repository, 0, { x, y });
-    const auto b = qb::input(repository, 1, { y, z });
-    const auto joined = qb::join(repository, a, b);
-    const auto projected = qb::project(repository, joined, { z, x });
-    const auto generic = qb::generic_join(repository, { a, b }, { z, y, x }, { x, z, y });
-    const auto distance = qb::distance(repository, qb::project(repository, a, { x }), a, qb::project(repository, b, { z }), d);
-    const auto view = db::as<db::QueryJoinTag>(joined);
+    auto repository = ygg::tests::qb::repository<>();
+    const auto a = ygg::tests::qb::input(repository, 0, { x, y });
+    const auto b = ygg::tests::qb::input(repository, 1, { y, z });
+    const auto joined = ygg::tests::qb::join(repository, a, b);
+    const auto projected = ygg::tests::qb::project(repository, joined, { z, x });
+    const auto generic = ygg::tests::qb::generic_join(repository, { a, b }, { z, y, x }, { x, z, y });
+    const auto distance =
+        ygg::tests::qb::distance(repository, ygg::tests::qb::project(repository, a, { x }), a, ygg::tests::qb::project(repository, b, { z }), d);
+    const auto view = ygg::database::as<ygg::database::QueryJoinTag>(joined);
     const auto* original = &view.get_data();
     for (size_t slot = 2; slot < 260; ++slot)
-        qb::join(repository, qb::input(repository, slot, { x, y }), b);
+        ygg::tests::qb::join(repository, ygg::tests::qb::input(repository, slot, { x, y }), b);
     EXPECT_EQ(&view.get_data(), original);
     EXPECT_TRUE(std::ranges::equal(view.get_data().plan.output_columns().span(), joined.columns()));
 
@@ -523,7 +524,7 @@ TEST(DatabaseQuery, CachedPlansSurviveRepositoryGrowthAndCistaRelocation)
         original_bytes.shrink_to_fit();
         const auto* restored = cista::deserialize<Record>(relocated);
         EXPECT_TRUE(std::ranges::equal(restored->plan.output_columns().span(), query.columns()));
-        if constexpr (std::same_as<Concrete, db::QueryView<db::DefaultColumnTypes, db::QueryGenericJoinTag>>)
+        if constexpr (std::same_as<Concrete, ygg::database::QueryView<ygg::database::DefaultColumnTypes, ygg::database::QueryGenericJoinTag>>)
         {
             const auto& expected = query.get_data().plan;
             EXPECT_TRUE(std::ranges::equal(restored->plan.variable_order(), expected.variable_order()));
@@ -537,34 +538,34 @@ TEST(DatabaseQuery, CachedPlansSurviveRepositoryGrowthAndCistaRelocation)
         }
     };
     round_trip(view);
-    round_trip(db::as<db::QueryProjectTag>(projected));
-    round_trip(db::as<db::QueryGenericJoinTag>(generic));
-    round_trip(db::as<db::QueryDistanceTag>(distance));
+    round_trip(ygg::database::as<ygg::database::QueryProjectTag>(projected));
+    round_trip(ygg::database::as<ygg::database::QueryGenericJoinTag>(generic));
+    round_trip(ygg::database::as<ygg::database::QueryDistanceTag>(distance));
 }
 
 TEST(DatabaseQuery, FactoriesRejectMalformedQueriesBeforePublishingPlans)
 {
-    auto repository = qb::repository<>();
-    auto other = qb::repository<>();
-    const auto input = qb::input(repository, 0, { x });
-    const auto foreign = qb::input(other, 0, { x });
+    auto repository = ygg::tests::qb::repository<>();
+    auto other = ygg::tests::qb::repository<>();
+    const auto input = ygg::tests::qb::input(repository, 0, { x });
+    const auto foreign = ygg::tests::qb::input(other, 0, { x });
     EXPECT_THROW(ygg::database::compile({ input, foreign }), std::invalid_argument);
-    EXPECT_THROW(qb::generic_join(repository, { input }, { y }), std::invalid_argument);
-    EXPECT_THROW(qb::generic_join(repository, { input }, { x, x }), std::invalid_argument);
-    EXPECT_THROW(qb::generic_join(repository, { input }, { x }, { y }), std::invalid_argument);
-    EXPECT_THROW(qb::select_encoded(repository, input, x, std::span<const std::byte> {}), std::invalid_argument);
-    const ygg::Builder<db::Columns<>> schema({ x });
-    std::vector<db::ColumnLayout> malformed(schema.begin(), schema.end());
+    EXPECT_THROW(ygg::tests::qb::generic_join(repository, { input }, { y }), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::generic_join(repository, { input }, { x, x }), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::generic_join(repository, { input }, { x }, { y }), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::select_encoded(repository, input, x, std::span<const std::byte> {}), std::invalid_argument);
+    const ygg::Builder<ygg::database::Columns<>> schema({ x });
+    std::vector<ygg::database::ColumnLayout> malformed(schema.begin(), schema.end());
     malformed[0].offset = 1;
-    EXPECT_THROW(qb::input(repository, 1, malformed), std::invalid_argument);
-    EXPECT_THROW(qb::input(repository, 0, malformed), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::input(repository, 1, malformed), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::input(repository, 0, malformed), std::invalid_argument);
     malformed.assign(schema.begin(), schema.end());
     ++malformed[0].size;
-    EXPECT_THROW(qb::input(repository, 1, malformed), std::invalid_argument);
-    EXPECT_THROW(qb::input(repository, 0, malformed), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::input(repository, 1, malformed), std::invalid_argument);
+    EXPECT_THROW(ygg::tests::qb::input(repository, 0, malformed), std::invalid_argument);
     const auto plan = ygg::database::compile({ input });
-    EXPECT_THROW(plan[ygg::Index<db::Query<>>(99)], std::out_of_range);
-    const auto typed = db::as<db::QueryInputTag>(plan[plan.roots().front()]);
+    EXPECT_THROW(plan[ygg::Index<ygg::database::Query<>>(99)], std::out_of_range);
+    const auto typed = ygg::database::as<ygg::database::QueryInputTag>(plan[plan.roots().front()]);
     static_assert(std::is_const_v<std::remove_reference_t<decltype(typed.get_data())>>);
     EXPECT_EQ(repository.size(), 1);
 }

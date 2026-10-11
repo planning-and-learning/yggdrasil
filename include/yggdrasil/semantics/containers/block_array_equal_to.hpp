@@ -27,10 +27,8 @@ namespace ygg
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe>
 struct EqualTo<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
-    using Type = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    bool operator()(const BasicBitPackedArrayView<Block, Coder, ThreadSafe>& lhs, const BasicBitPackedArrayView<Block, Coder, ThreadSafe>& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const BasicBitPackedArrayView<Block, Coder, ThreadSafe>>>
     {
         return equal_range(lhs, rhs);
     }
@@ -39,10 +37,9 @@ struct EqualTo<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
 struct EqualTo<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 {
-    using Type = View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    bool operator()(const View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>& lhs,
+                    const View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>>
     {
         return equal_range(lhs, rhs);
     }
@@ -51,10 +48,8 @@ struct EqualTo<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
 struct EqualTo<BasicBlockArrayView<Block, Coder>>
 {
-    using Type = BasicBlockArrayView<Block, Coder>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    bool operator()(const BasicBlockArrayView<Block, Coder>& lhs, const BasicBlockArrayView<Block, Coder>& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const BasicBlockArrayView<Block, Coder>>>
     {
         return equal_range(lhs, rhs);
     }
@@ -63,10 +58,8 @@ struct EqualTo<BasicBlockArrayView<Block, Coder>>
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
 struct EqualTo<View<BasicBlockArrayView<Block, Coder>, C>>
 {
-    using Type = View<BasicBlockArrayView<Block, Coder>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const Type>>
+    bool operator()(const View<BasicBlockArrayView<Block, Coder>, C>& lhs, const View<BasicBlockArrayView<Block, Coder>, C>& rhs) const
+        requires EqualityComparableByEqualTo<std::ranges::range_value_t<const View<BasicBlockArrayView<Block, Coder>, C>>>
     {
         return equal_range(lhs, rhs);
     }

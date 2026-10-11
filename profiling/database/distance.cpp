@@ -18,14 +18,13 @@ namespace ygg::profiling
 {
 namespace
 {
-using namespace database;
 using Values = TypeList<uint_t>;
-using ColumnIndex = Index<Column>;
-using RelationBuilder = Builder<Relation<Values>>;
+using ColumnIndex = Index<database::Column>;
+using RelationBuilder = Builder<database::Relation<Values>>;
 
-Builder<Columns<Values>> columns(size_t arity, uint_t first_label)
+Builder<database::Columns<Values>> columns(size_t arity, uint_t first_label)
 {
-    Builder<Columns<Values>> result;
+    Builder<database::Columns<Values>> result;
     for (size_t i = 0; i < arity; ++i)
         result.push_back<uint_t>(ColumnIndex(first_label + static_cast<uint_t>(i)));
     return result;
@@ -36,8 +35,8 @@ void append_vertex(std::vector<std::byte>& bytes, size_t arity, uint_t vertex)
     for (size_t field = 0; field < arity; ++field)
     {
         const auto offset = bytes.size();
-        bytes.resize(offset + ColumnCodec<uint_t>::size);
-        ColumnCodec<uint_t>::encode(vertex + 100000 * static_cast<uint_t>(field), std::span(bytes).subspan(offset));
+        bytes.resize(offset + database::ColumnCodec<uint_t>::size);
+        database::ColumnCodec<uint_t>::encode(vertex + 100000 * static_cast<uint_t>(field), std::span(bytes).subspan(offset));
     }
 }
 
@@ -70,7 +69,7 @@ struct Trace
     RelationBuilder edges;
     RelationBuilder changed_edges;
     RelationBuilder targets;
-    incremental::Delta<Values> edge_change;
+    database::incremental::Delta<Values> edge_change;
     RelationBuilder no_sources;
     RelationBuilder no_targets;
 
@@ -171,7 +170,7 @@ bool equal_rows(const RelationBuilder& actual, const RelationBuilder& expected)
     return true;
 }
 
-bool equal_delta(const incremental::Delta<Values>& actual, const RelationBuilder& before, const RelationBuilder& after)
+bool equal_delta(const database::incremental::Delta<Values>& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
     size_t added = 0, removed = 0;
     for (size_t i = 0; i < after.size(); ++i)
@@ -199,12 +198,12 @@ void distance_changes(benchmark::State& state)
     const auto source_count = static_cast<uint_t>(state.range(2));
     const auto changed = static_cast<uint_t>(state.range(3));
     Trace trace(arity, vertices, source_count, changed, Kind);
-    const DistancePlan<Values> plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
-    DistanceWorkspace<Values> workspace(plan);
+    const database::DistancePlan<Values> plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
+    database::DistanceWorkspace<Values> workspace(plan);
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return incremental::DistanceEvaluator<Values>(plan);
+            return database::incremental::DistanceEvaluator<Values>(plan);
         else
             return RelationBuilder(plan.output_columns().span());
     }();
@@ -215,7 +214,7 @@ void distance_changes(benchmark::State& state)
         if constexpr (Incremental)
             evaluation.update(std::tie(trace.no_sources, trace.no_sources), std::tie(forward ? trace.edge_change.added : trace.edge_change.removed, forward ? trace.edge_change.removed : trace.edge_change.added), std::tie(trace.no_targets, trace.no_targets));
         else
-            distance(trace.sources, forward ? trace.changed_edges : trace.edges, trace.targets, plan, evaluation, workspace);
+            database::distance(trace.sources, forward ? trace.changed_edges : trace.edges, trace.targets, plan, evaluation, workspace);
     };
     const auto result = [&]() -> const RelationBuilder&
     {
@@ -226,8 +225,8 @@ void distance_changes(benchmark::State& state)
     };
 
     // Preparation, exact result/delta checks, and warmup are outside the timed loop.
-    auto before = distance<Values>(trace.sources, trace.edges, trace.targets, plan);
-    auto after = distance<Values>(trace.sources, trace.changed_edges, trace.targets, plan);
+    auto before = database::distance<Values>(trace.sources, trace.edges, trace.targets, plan);
+    auto after = database::distance<Values>(trace.sources, trace.changed_edges, trace.targets, plan);
     update(true);
     if (!equal_rows(result(), after))
     {
@@ -281,12 +280,12 @@ template<bool Incremental>
 void distance_initialize_warm(benchmark::State& state)
 {
     Trace trace(static_cast<size_t>(state.range(0)), static_cast<uint_t>(state.range(1)), static_cast<uint_t>(state.range(2)), 0);
-    const DistancePlan<Values> plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
-    DistanceWorkspace<Values> workspace(plan);
+    const database::DistancePlan<Values> plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
+    database::DistanceWorkspace<Values> workspace(plan);
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return incremental::DistanceEvaluator<Values>(plan);
+            return database::incremental::DistanceEvaluator<Values>(plan);
         else
             return RelationBuilder(plan.output_columns().span());
     }();
@@ -295,7 +294,7 @@ void distance_initialize_warm(benchmark::State& state)
         if constexpr (Incremental)
             evaluation.initialize(trace.sources, trace.edges, trace.targets);
         else
-            distance(trace.sources, trace.edges, trace.targets, plan, evaluation, workspace);
+            database::distance(trace.sources, trace.edges, trace.targets, plan, evaluation, workspace);
     };
     const auto result = [&]() -> const RelationBuilder&
     {
@@ -304,7 +303,7 @@ void distance_initialize_warm(benchmark::State& state)
         else
             return evaluation;
     };
-    auto reference = distance<Values>(trace.sources, trace.edges, trace.targets, plan);
+    auto reference = database::distance<Values>(trace.sources, trace.edges, trace.targets, plan);
     for (size_t i = 0; i < 8; ++i)
         initialize();
     if (!equal_rows(result(), reference))

@@ -19,9 +19,8 @@ namespace ygg::profiling
 {
 namespace
 {
-namespace db = database;
-using Relation = Builder<db::Relation<>>;
-using Column = Index<db::Column>;
+using Relation = Builder<database::Relation<>>;
+using Column = Index<database::Column>;
 
 struct Triangle
 {
@@ -29,13 +28,13 @@ struct Triangle
     std::array<Relation, 3> changed { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
     std::array<Relation, 3> added { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
     std::array<Relation, 3> removed { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
-    db::QueryRepository<> repository = db::QueryRepositoryFactory<> {}.create();
-    db::QueryBuilder<> builder;
-    db::QueryView<> root;
+    database::QueryRepository<> repository = database::QueryRepositoryFactory<> {}.create();
+    database::QueryBuilder<> builder;
+    database::QueryView<> root;
 
     explicit Triangle(uint_t count) : root(make_query(count)) {}
 
-    db::QueryView<> make_query(uint_t count)
+    database::QueryView<> make_query(uint_t count)
     {
         for (size_t input = 0; input < 3; ++input)
         {
@@ -49,21 +48,21 @@ struct Triangle
         return join(join(input(0), input(1)), input(2));
     }
 
-    db::QueryView<> input(size_t slot)
+    database::QueryView<> input(size_t slot)
     {
-        auto data = db::checkout<db::Query<db::DefaultColumnTypes, db::QueryInputTag>>(builder);
+        auto data = database::checkout<database::Query<database::DefaultColumnTypes, database::QueryInputTag>>(builder);
         data->input_slot = slot;
         const auto columns = initial[slot].columns().span();
         data->columns.set(columns.begin(), columns.end());
-        return db::insert_query(repository, builder, *data);
+        return database::insert_query(repository, builder, *data);
     }
 
-    db::QueryView<> join(db::QueryView<> lhs, db::QueryView<> rhs)
+    database::QueryView<> join(database::QueryView<> lhs, database::QueryView<> rhs)
     {
-        auto data = db::checkout<db::Query<db::DefaultColumnTypes, db::QueryJoinTag>>(builder);
+        auto data = database::checkout<database::Query<database::DefaultColumnTypes, database::QueryJoinTag>>(builder);
         data->lhs = lhs.get_index();
         data->rhs = rhs.get_index();
-        return db::insert_query(repository, builder, *data);
+        return database::insert_query(repository, builder, *data);
     }
 
     auto deltas(bool forward) const
@@ -74,7 +73,7 @@ struct Triangle
         return std::array { Change { a[0], r[0] }, Change { a[1], r[1] }, Change { a[2], r[2] } };
     }
 
-    db::Statistics<> statistics() const { return db::collect_statistics<db::DefaultColumnTypes>(initial); }
+    database::Statistics<> statistics() const { return database::collect_statistics<database::DefaultColumnTypes>(initial); }
 };
 
 bool equal(const Relation& left, const Relation& right)
@@ -87,7 +86,7 @@ bool equal(const Relation& left, const Relation& right)
     return true;
 }
 
-bool exact_delta(const db::incremental::Delta<>& delta, const Relation& before, const Relation& after)
+bool exact_delta(const database::incremental::Delta<>& delta, const Relation& before, const Relation& after)
 {
     size_t added = 0, removed = 0;
     for (size_t i = 0; i < after.size(); ++i)
@@ -114,16 +113,16 @@ enum class Planning
     measured
 };
 
-db::QueryPlan<> plan(const Triangle& trace, Planning planning, const db::Statistics<>& statistics)
+database::QueryPlan<> plan(const Triangle& trace, Planning planning, const database::Statistics<>& statistics)
 {
     switch (planning)
     {
         case Planning::original:
-            return db::compile({ trace.root });
+            return database::compile({ trace.root });
         case Planning::structural:
-            return db::optimize(trace.root);
+            return database::optimize(trace.root);
         case Planning::measured:
-            return db::optimize(trace.root, statistics);
+            return database::optimize(trace.root, statistics);
     }
     return {};
 }
@@ -146,19 +145,19 @@ void query_updates(benchmark::State& state)
     const auto& initial = trace.initial;
     const auto& changed = trace.changed;
     const auto forward = trace.deltas(true), backward = trace.deltas(false);
-    db::QueryEvaluator<> reference(db::compile({ trace.root }));
+    database::QueryEvaluator<> reference(database::compile({ trace.root }));
     reference.evaluate(initial);
     Relation before(reference.get_result().columns().span());
-    db::assign(before, reference.get_result());
+    database::assign(before, reference.get_result());
     reference.evaluate(changed);
     Relation after(reference.get_result().columns().span());
-    db::assign(after, reference.get_result());
+    database::assign(after, reference.get_result());
     auto evaluator = [&]
     {
         if constexpr (Incremental)
-            return db::incremental::QueryEvaluator<>(plan);
+            return database::incremental::QueryEvaluator<>(plan);
         else
-            return db::QueryEvaluator<>(plan);
+            return database::QueryEvaluator<>(plan);
     }();
     if constexpr (Incremental)
         evaluator.initialize(initial);
@@ -213,15 +212,15 @@ void generic_join_full(benchmark::State& state)
 {
     Triangle trace(static_cast<uint_t>(state.range(0)));
     const auto& input = trace.initial;
-    std::vector<std::vector<db::ColumnLayout>> schemas;
+    std::vector<std::vector<database::ColumnLayout>> schemas;
     for (const auto& value : trace.initial)
         schemas.emplace_back(value.columns().span().begin(), value.columns().span().end());
     const std::array order { Column(0), Column(1), Column(2) };
-    const db::GenericJoinPlan<> plan(schemas, order, order);
-    db::GenericJoinWorkspace<> workspace(plan);
+    const database::GenericJoinPlan<> plan(schemas, order, order);
+    database::GenericJoinWorkspace<> workspace(plan);
     Relation output(plan.output_columns().span());
-    db::generic_join<db::DefaultColumnTypes>(input, plan, output, workspace);
-    db::QueryEvaluator<> reference(db::compile({ trace.root }));
+    database::generic_join<database::DefaultColumnTypes>(input, plan, output, workspace);
+    database::QueryEvaluator<> reference(database::compile({ trace.root }));
     reference.evaluate(input);
     if (!equal(output, reference.get_result()))
     {
@@ -232,14 +231,14 @@ void generic_join_full(benchmark::State& state)
     {
         if constexpr (Cold)
         {
-            db::GenericJoinWorkspace<> temporary_workspace(plan);
+            database::GenericJoinWorkspace<> temporary_workspace(plan);
             Relation temporary_output(plan.output_columns().span());
-            db::generic_join<db::DefaultColumnTypes>(input, plan, temporary_output, temporary_workspace);
+            database::generic_join<database::DefaultColumnTypes>(input, plan, temporary_output, temporary_workspace);
             benchmark::DoNotOptimize(std::addressof(temporary_output));
         }
         else
         {
-            db::generic_join<db::DefaultColumnTypes>(input, plan, output, workspace);
+            database::generic_join<database::DefaultColumnTypes>(input, plan, output, workspace);
             benchmark::DoNotOptimize(std::addressof(output));
         }
         benchmark::ClobberMemory();

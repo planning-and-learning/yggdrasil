@@ -38,8 +38,6 @@
 #include <vector>
 #include "../database/query_helpers.hpp"
 
-namespace qb = ygg::tests::qb;
-
 namespace ygg::tests
 {
 

@@ -22,9 +22,11 @@ NAMESPACE_BEGIN(detail)
 template<typename Ptr>
 struct type_caster<cista::basic_string<Ptr>>
 {
+private:
     using String = cista::basic_string<Ptr>;
     using CharT = typename String::CharT;
 
+public:
     // Minimal: only support cista strings over char
     static_assert(std::is_same_v<std::remove_cv_t<CharT>, char>, "nanobind caster: only CharT=char is supported");
 

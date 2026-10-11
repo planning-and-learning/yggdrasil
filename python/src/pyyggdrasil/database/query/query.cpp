@@ -2,25 +2,24 @@
 
 namespace yggdrasil::database_python
 {
-using namespace nb::literals;
-
 namespace
 {
 template<typename... Tags>
-void bind_query_data_constructors(nb::class_<ygg::Data<db::Query<Values>>>& cls, ygg::TypeList<Tags...>)
+void bind_query_data_constructors(nb::class_<ygg::Data<ygg::database::Query<Values>>>& cls, ygg::TypeList<Tags...>)
 {
+    using namespace nb::literals;
     (cls.def(nb::init<ConcreteQueryView<Tags>>(), "query"_a), ...);
 }
 }  // namespace
 
 void bind_query(nb::module_& m, QueryRepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<db::Query<Values>>>(m, "QueryIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<Values>>>(m, "QueryIndex");
 
     {
-        using V = ygg::Data<db::Query<Values>>;
+        using V = ygg::Data<ygg::database::Query<Values>>;
         auto cls = ygg::bind_data<V>(m, "QueryData");
-        bind_query_data_constructors(cls, db::QueryConstructorTags {});
+        bind_query_data_constructors(cls, ygg::database::QueryConstructorTags {});
         cls.def_rw("variant", &V::variant);
     }
 
@@ -34,7 +33,7 @@ void bind_query(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<db::Query<Values>>(repository);
+    ygg::bind_insert<ygg::database::Query<Values>>(repository);
 }
 
 }  // namespace yggdrasil::database_python
@@ -43,24 +42,28 @@ namespace yggdrasil
 {
 void bind_database_queries(nb::module_& m)
 {
-    using namespace database_python;
-    nb::class_<db::QueryRepositoryFactory<Values>>(m, "QueryRepositoryFactory", "Creates query repositories with distinct identities within this factory.")
+    nb::class_<ygg::database::QueryRepositoryFactory<DatabaseValues>>(m,
+                                                                      "QueryRepositoryFactory",
+                                                                      "Creates query repositories with distinct identities within this factory.")
         .def(nb::init<>())
-        .def("create", [](db::QueryRepositoryFactory<Values>& factory) { return new db::QueryRepository<Values>(factory.create()); }, nb::rv_policy::take_ownership);
+        .def(
+            "create",
+            [](ygg::database::QueryRepositoryFactory<DatabaseValues>& factory) { return new ygg::database::QueryRepository<DatabaseValues>(factory.create()); },
+            nb::rv_policy::take_ownership);
 
-    auto repository = QueryRepositoryBinding(m, "QueryRepository", "Interns validated relational expressions without reading data.");
-    repository.def("__len__", [](const db::QueryRepository<Values>& self) { return self.size(); });
-    bind_query_input(m, repository);
-    bind_query_empty(m, repository);
-    bind_query_join(m, repository);
-    bind_query_project(m, repository);
-    bind_query_rename(m, repository);
-    bind_query_select_equal(m, repository);
-    bind_query_select_value(m, repository);
-    bind_query_union(m, repository);
-    bind_query_difference(m, repository);
-    bind_query_distance(m, repository);
-    bind_query_generic_join(m, repository);
-    bind_query(m, repository);
+    auto repository = database_python::QueryRepositoryBinding(m, "QueryRepository", "Interns validated relational expressions without reading data.");
+    repository.def("__len__", [](const ygg::database::QueryRepository<DatabaseValues>& self) { return self.size(); });
+    database_python::bind_query_input(m, repository);
+    database_python::bind_query_empty(m, repository);
+    database_python::bind_query_join(m, repository);
+    database_python::bind_query_project(m, repository);
+    database_python::bind_query_rename(m, repository);
+    database_python::bind_query_select_equal(m, repository);
+    database_python::bind_query_select_value(m, repository);
+    database_python::bind_query_union(m, repository);
+    database_python::bind_query_difference(m, repository);
+    database_python::bind_query_distance(m, repository);
+    database_python::bind_query_generic_join(m, repository);
+    database_python::bind_query(m, repository);
 }
 }  // namespace yggdrasil

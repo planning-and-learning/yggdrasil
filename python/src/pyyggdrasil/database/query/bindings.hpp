@@ -13,18 +13,17 @@
 namespace yggdrasil::database_python
 {
 namespace nb = nanobind;
-namespace db = ygg::database;
 
 using Values = DatabaseValues;
-using Column = ygg::Index<db::Column>;
-using ColumnIndices = std::span<const db::ColumnLayout>;
-using QueryView = db::QueryView<Values>;
-using QueryRepositoryBinding = nb::class_<db::QueryRepository<Values>>;
+using Column = ygg::Index<ygg::database::Column>;
+using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
+using QueryView = ygg::database::QueryView<Values>;
+using QueryRepositoryBinding = nb::class_<ygg::database::QueryRepository<Values>>;
 
 template<typename Tag>
-using QueryData = ygg::Data<db::Query<Values, Tag>>;
+using QueryData = ygg::Data<ygg::database::Query<Values, Tag>>;
 template<typename Tag>
-using ConcreteQueryView = db::QueryView<Values, Tag>;
+using ConcreteQueryView = ygg::database::QueryView<Values, Tag>;
 
 void bind_query(nb::module_& m, QueryRepositoryBinding& repository);
 void bind_query_input(nb::module_& m, QueryRepositoryBinding& repository);

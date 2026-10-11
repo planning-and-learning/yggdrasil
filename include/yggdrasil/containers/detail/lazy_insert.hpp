@@ -27,10 +27,14 @@
 namespace ygg::detail
 {
 
+/// The element type a hash set stores.
+template<typename Set>
+using SetValue = typename Set::value_type;
+
 template<typename Set, typename Key, typename Factory>
 auto lazy_insert_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
 {
-    using value_type = typename Set::value_type;
+    using value_type = SetValue<Set>;
     static_assert(std::is_nothrow_default_constructible_v<value_type>);
     static_assert(std::is_nothrow_move_constructible_v<value_type>);
 
@@ -64,7 +68,7 @@ auto lazy_insert_with_hash(Set& set, const Key& key, size_t hash, Factory&& fact
 }
 
 template<typename Set, typename Key, typename Factory>
-std::pair<typename Set::value_type, bool> lazy_insert_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
+std::pair<SetValue<Set>, bool> lazy_insert_value_with_hash(Set& set, const Key& key, size_t hash, Factory&& factory)
 {
     const auto [it, inserted] = lazy_insert_with_hash(set, key, hash, std::forward<Factory>(factory));
     return { *it, inserted };

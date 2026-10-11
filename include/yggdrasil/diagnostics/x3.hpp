@@ -15,24 +15,22 @@
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/utility/error_reporting.hpp>
 #include <concepts>
+#include <functional>
 #include <iterator>
 
 namespace ygg::diagnostics
 {
 
-namespace x3 = boost::spirit::x3;
-using ErrorHandlerTag = x3::error_handler_tag;
+using ErrorHandlerTag = boost::spirit::x3::error_handler_tag;
 
 /// Input iterators and stream are borrowed during parsing; make_diagnostic() returns an owned snapshot.
 /// The input must remain unchanged and all positions/AST tags must belong to this handler.
 template<typename It>
-class ErrorHandler : public x3::error_handler<It>
+class ErrorHandler : public boost::spirit::x3::error_handler<It>
 {
     static_assert(std::forward_iterator<It> && std::same_as<std::iter_value_t<It>, char>, "ErrorHandler requires forward byte-character iterators");
 
 public:
-    using Base = x3::error_handler<It>;
-
     struct RecordedError
     {
         It position;
@@ -41,7 +39,7 @@ public:
     };
 
     ErrorHandler(It first, It last, std::ostream& output, std::string file = "", int tabs = 4) :
-        Base(first, last, output, file, tabs),
+        boost::spirit::x3::error_handler<It>(first, last, output, file, tabs),
         m_output(output),
         m_file(std::move(file)),
         m_tabs(tabs)
@@ -86,7 +84,7 @@ public:
 
     Diagnostic make_diagnostic(It position, std::string message) const { return make_diagnostic(position, position, std::move(message)); }
 
-    Diagnostic make_diagnostic(const x3::position_tagged& node, std::string message) const
+    Diagnostic make_diagnostic(const boost::spirit::x3::position_tagged& node, std::string message) const
     {
         if (node.id_first < 0 || node.id_last < 0)
             return Diagnostic { std::move(message) };
@@ -96,7 +94,10 @@ public:
 
     void operator()(It position, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(position, message)); }
     void operator()(It first, It last, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(first, last, message)); }
-    void operator()(const x3::position_tagged& node, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(node, message)); }
+    void operator()(const boost::spirit::x3::position_tagged& node, const std::string& message) const
+    {
+        m_output << format_diagnostic(make_diagnostic(node, message));
+    }
 
 private:
     std::ostream& m_output;
@@ -113,7 +114,7 @@ std::string format_error_at(const ErrorHandler<It>& source, It position, const s
 }
 
 template<typename It>
-std::string format_error_at(const ErrorHandler<It>& source, const x3::position_tagged& node, const std::string& message)
+std::string format_error_at(const ErrorHandler<It>& source, const boost::spirit::x3::position_tagged& node, const std::string& message)
 {
     if (node.id_first < 0 || node.id_last < 0)
         return message;
@@ -125,19 +126,19 @@ struct ErrorHandlerBase
     template<typename It, typename Ast, typename Context>
     void on_success(const It& first, const It& last, Ast& ast, const Context& context)
     {
-        x3::get<ErrorHandlerTag>(context).get().tag(ast, first, last);
+        boost::spirit::x3::get<ErrorHandlerTag>(context).get().tag(ast, first, last);
     }
 
     template<typename It, typename Exception, typename Context>
-    x3::error_handler_result on_error(It&, const It& last, const Exception& error, const Context& context)
+    boost::spirit::x3::error_handler_result on_error(It&, const It& last, const Exception& error, const Context& context)
     {
         auto message = "Error! Expecting: " + std::string(error.which()) + " here:";
-        auto& handler = x3::get<ErrorHandlerTag>(context).get();
+        auto& handler = boost::spirit::x3::get<ErrorHandlerTag>(context).get();
         auto position = error.where();
-        x3::skip_over(position, last, context);
+        boost::spirit::x3::skip_over(position, last, context);
         handler.record_error(position, message);
         handler.report_error();
-        return x3::error_handler_result::fail;
+        return boost::spirit::x3::error_handler_result::fail;
     }
 };
 
@@ -149,25 +150,36 @@ struct ContextDirective
     template<typename Subject>
     auto operator[](const Subject& subject) const
     {
-        return x3::as_parser(subject).on_error(*this);
+        return boost::spirit::x3::as_parser(subject).on_error(*this);
     }
 
     template<typename It, typename Exception, typename Context>
-    x3::error_handler_result operator()(It& first, const It& last, const Exception& error, const Context& parser_context) const
+    boost::spirit::x3::error_handler_result operator()(It& first, const It& last, const Exception& error, const Context& parser_context) const
     {
         auto start = first;
-        x3::skip_over(start, last, parser_context);
+        boost::spirit::x3::skip_over(start, last, parser_context);
         auto position = error.where();
-        x3::skip_over(position, last, parser_context);
-        auto& handler = x3::get<ErrorHandlerTag>(parser_context).get();
+        boost::spirit::x3::skip_over(position, last, parser_context);
+        auto& handler = boost::spirit::x3::get<ErrorHandlerTag>(parser_context).get();
         handler.record_error(position,
                              "Expected " + std::string(error.which()) + " while parsing " + name,
                              { DiagnosticNote { name + " starts here", handler.source_span(start, start) } });
-        return x3::error_handler_result::rethrow;
+        return boost::spirit::x3::error_handler_result::rethrow;
     }
 };
 
 inline auto context(std::string name) { return ContextDirective { std::move(name) }; }
+
+/// Whitespace and ';' line comments, the layout shared by PDDL and the DL and policy syntaxes.
+inline auto comment_skipper()
+{
+    return boost::spirit::x3::ascii::space | (';' >> *(boost::spirit::x3::char_ - boost::spirit::x3::eol) >> (boost::spirit::x3::eol | boost::spirit::x3::eoi));
+}
+
+/// The x3 context of rules parsed with comment_skipper() that report errors through Handler.
+template<typename Handler>
+using ParserContext =
+    boost::spirit::x3::context<ErrorHandlerTag, std::reference_wrapper<Handler>, boost::spirit::x3::phrase_parse_context<decltype(comment_skipper())>::type>;
 
 }  // namespace ygg::diagnostics
 

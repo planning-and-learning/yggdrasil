@@ -39,10 +39,8 @@ struct ColumnCodec<tests::IncrementalValue>
 
 namespace ygg::tests
 {
-using namespace database;
 using Values = TypeList<uint_t>;
-using namespace database::incremental;
-using ColumnIndex = Index<Column>;
+using ColumnIndex = Index<database::Column>;
 
 namespace
 {
@@ -55,19 +53,19 @@ auto cells(Args... values)
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * ColumnCodec<T>::size> result;
+    std::array<std::byte, N * database::ColumnCodec<T>::size> result;
     for (size_t i = 0; i < N; ++i)
-        ColumnCodec<T>::encode(values[i], std::span(result).subspan(i * ColumnCodec<T>::size, ColumnCodec<T>::size));
+        database::ColumnCodec<T>::encode(values[i], std::span(result).subspan(i * database::ColumnCodec<T>::size, database::ColumnCodec<T>::size));
     return result;
 }
 
-template<typename T, RelationViewConcept<TypeList<T>> V>
+template<typename T, database::RelationViewConcept<TypeList<T>> V>
 std::set<std::vector<T>> rows(const V& relation)
 {
     std::set<std::vector<T>> result;
     for (size_t i = 0; i < relation.size(); ++i)
     {
-        const auto row = Row<TypeList<T>>(relation.row(i), relation.columns().span());
+        const auto row = database::Row<TypeList<T>>(relation.row(i), relation.columns().span());
         std::vector<T> values;
         for (size_t column = 0; column < row.size(); ++column)
             values.push_back(row.template get<T>(column));
@@ -77,7 +75,7 @@ std::set<std::vector<T>> rows(const V& relation)
 }
 
 template<typename T, typename Evaluator>
-void expect_update(const Evaluator& evaluator, const std::set<std::vector<T>>& before, const Builder<Relation<TypeList<T>>>& reference)
+void expect_update(const Evaluator& evaluator, const std::set<std::vector<T>>& before, const Builder<database::Relation<TypeList<T>>>& reference)
 {
     const auto after = rows<T>(reference);
     EXPECT_TRUE(std::ranges::equal(evaluator.get_result().columns(), reference.columns()));
@@ -97,7 +95,9 @@ void expect_update(const Evaluator& evaluator, const std::set<std::vector<T>>& b
 }
 
 template<typename T>
-void apply_batch(Builder<Relation<TypeList<T>>>& input, const Builder<Relation<TypeList<T>>>& added, const Builder<Relation<TypeList<T>>>& removed)
+void apply_batch(Builder<database::Relation<TypeList<T>>>& input,
+                 const Builder<database::Relation<TypeList<T>>>& added,
+                 const Builder<database::Relation<TypeList<T>>>& removed)
 {
     for (size_t i = 0; i < removed.size(); ++i)
         input.erase(input.find(removed.row(i)).value());
@@ -108,7 +108,7 @@ void apply_batch(Builder<Relation<TypeList<T>>>& input, const Builder<Relation<T
 
 TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
 {
-    Builder<Relation<Values>> relation({ ColumnIndex(7), ColumnIndex(3) });
+    Builder<database::Relation<Values>> relation({ ColumnIndex(7), ColumnIndex(3) });
     const auto first = relation.insert(cells(1, 2));
     relation.insert(cells(3, 4));
     relation.insert(cells(5, 6));
@@ -118,12 +118,12 @@ TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
     EXPECT_EQ(relation.find(cells(1, 2)), first);
     EXPECT_FALSE(relation.find(cells(9, 9)));
     EXPECT_THROW((void) relation.find(cells(1)), std::invalid_argument);
-    const auto canonical = Index<Relation<Values>>(9);
+    const auto canonical = Index<database::Relation<Values>>(9);
     relation.set_index(canonical);
     EXPECT_THROW(relation.erase(relation.size()), std::out_of_range);
     EXPECT_EQ(relation.get_index(), canonical);
     relation.erase(first);
-    EXPECT_EQ(relation.get_index(), Index<Relation<Values>>());
+    EXPECT_EQ(relation.get_index(), Index<database::Relation<Values>>());
     EXPECT_FALSE(relation.contains(cells(1, 2)));
     EXPECT_TRUE(relation.contains(cells(3, 4)));
     EXPECT_TRUE(relation.contains(cells(5, 6)));
@@ -133,29 +133,29 @@ TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
 TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionAndUndo)
 {
     const auto large = ColumnIndex::max();
-    Builder<Relation<Values>> input({ large, ColumnIndex(4), ColumnIndex(11) });
+    Builder<database::Relation<Values>> input({ large, ColumnIndex(4), ColumnIndex(11) });
     input.insert(cells(1, 10, 7));
     input.insert(cells(1, 11, 7));
     input.insert(cells(2, 10, 8));
     input.insert(cells(3, 10, 9));
-    const ProjectionPlan<Values> plan(input.columns(), { ColumnIndex(11), large });
-    ProjectionEvaluator<Values> evaluator(plan);
-    Workspace<Values> workspace;
-    Builder<Relation<Values>> reference(plan.output_columns());
+    const database::ProjectionPlan<Values> plan(input.columns(), { ColumnIndex(11), large });
+    database::incremental::ProjectionEvaluator<Values> evaluator(plan);
+    database::Workspace<Values> workspace;
+    Builder<database::Relation<Values>> reference(plan.output_columns());
     evaluator.initialize(input, workspace);
-    project(input, plan, reference, workspace);
+    database::project(input, plan, reference, workspace);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
-    Delta<Values> replacement(input.columns());
+    database::incremental::Delta<Values> replacement(input.columns());
     replacement.removed.insert(cells(1, 10, 7));
     replacement.removed.insert(cells(1, 11, 7));
     replacement.added.insert(cells(1, 12, 7));
-    Delta<Values> erase_first(input.columns());
+    database::incremental::Delta<Values> erase_first(input.columns());
     erase_first.removed.insert(cells(1, 12, 7));
     erase_first.added.insert(cells(4, 1, 10));
-    Delta<Values> erase_moved(input.columns());
+    database::incremental::Delta<Values> erase_moved(input.columns());
     erase_moved.removed.insert(cells(3, 10, 9));
     erase_moved.added.insert(cells(2, 11, 8));
     const auto update = [&](const auto& added, const auto& removed)
@@ -163,7 +163,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
         const auto before = rows<uint_t>(reference);
         apply_batch(input, added, removed);
         evaluator.update(std::tie(added, removed), workspace);
-        project(input, plan, reference, workspace);
+        database::project(input, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
     const auto replaced_index = evaluator.get_result().find(cells(7, 1)).value();
@@ -177,10 +177,10 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
     EXPECT_EQ(evaluator.get_result().find(cells(9, 3)).value(), untouched_index);
     EXPECT_EQ(evaluator.get_result().row(replaced_index).data(), replaced_row.data());
     EXPECT_EQ(evaluator.get_result().row(untouched_index).data(), untouched_row.data());
-    EXPECT_EQ(ColumnCodec<uint_t>::decode(replaced_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 7);
-    EXPECT_EQ(ColumnCodec<uint_t>::decode(replaced_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 1);
-    EXPECT_EQ(ColumnCodec<uint_t>::decode(untouched_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 9);
-    EXPECT_EQ(ColumnCodec<uint_t>::decode(untouched_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 3);
+    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(replaced_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 7);
+    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(replaced_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 1);
+    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(untouched_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 9);
+    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(untouched_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 3);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     update(erase_first.added, erase_first.removed);
@@ -197,7 +197,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUndo)
 {
-    Builder<Relation<Values>> input({ ColumnIndex(1), ColumnIndex(2) });
+    Builder<database::Relation<Values>> input({ ColumnIndex(1), ColumnIndex(2) });
     input.insert(cells(1, 10));
     input.insert(cells(1, 11));
     input.insert(cells(1, 12));
@@ -207,13 +207,13 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     input.insert(cells(4, 40));
     input.insert(cells(5, 50));
     const auto initial = rows<uint_t>(input);
-    const ProjectionPlan<Values> plan(input.columns(), { ColumnIndex(1) });
-    ProjectionEvaluator<Values> evaluator(plan);
-    Workspace<Values> workspace;
-    Builder<Relation<Values>> reference(plan.output_columns());
+    const database::ProjectionPlan<Values> plan(input.columns(), { ColumnIndex(1) });
+    database::incremental::ProjectionEvaluator<Values> evaluator(plan);
+    database::Workspace<Values> workspace;
+    Builder<database::Relation<Values>> reference(plan.output_columns());
     evaluator.initialize(input, workspace);
-    project(input, plan, reference, workspace);
-    Delta<Values> delta(input.columns());
+    database::project(input, plan, reference, workspace);
+    database::incremental::Delta<Values> delta(input.columns());
     delta.removed.insert(cells(1, 10));
     delta.removed.insert(cells(1, 11));
     delta.added.insert(cells(1, 13));  // Fewer witnesses, same output.
@@ -230,7 +230,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
         const auto before = rows<uint_t>(reference);
         apply_batch(input, added, removed);
         evaluator.update(std::tie(added, removed), workspace);
-        project(input, plan, reference, workspace);
+        database::project(input, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
     update(delta.added, delta.removed);
@@ -242,8 +242,8 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     EXPECT_EQ(rows<uint_t>(input), initial);
     // Removing the restored input checks every consolidated support count,
     // including unchanged membership and rows moved by compact erasure.
-    Builder<Relation<Values>> empty(input.columns());
-    Builder<Relation<Values>> all(input.columns());
+    Builder<database::Relation<Values>> empty(input.columns());
+    Builder<database::Relation<Values>> all(input.columns());
     for (size_t i = 0; i < input.size(); ++i)
         all.insert(input.row(i));
     update(empty, all);
@@ -254,21 +254,21 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWithAdditions)
 {
-    Builder<Relation<Values>> input({ ColumnIndex(1), ColumnIndex(2) });
+    Builder<database::Relation<Values>> input({ ColumnIndex(1), ColumnIndex(2) });
     input.insert(cells(7, 10));
-    ProjectionEvaluator<Values> evaluator(ProjectionPlan<Values>(input.columns(), { ColumnIndex(1) }));
-    Workspace<Values> workspace;
+    database::incremental::ProjectionEvaluator<Values> evaluator(database::ProjectionPlan<Values>(input.columns(), { ColumnIndex(1) }));
+    database::Workspace<Values> workspace;
     evaluator.initialize(input, workspace);
-    Delta<Values> invalid(input.columns());
+    database::incremental::Delta<Values> invalid(input.columns());
     invalid.removed.insert(cells(7, 10));
     invalid.removed.insert(cells(7, 11));  // Only one existing witness is available.
     invalid.added.insert(cells(7, 12));
     invalid.added.insert(cells(7, 13));  // Net support change is zero, but removal is invalid.
     EXPECT_THROW(evaluator.update(invalid.change(), workspace), std::invalid_argument);
-    Builder<Relation<Values>> empty(input.columns());
+    Builder<database::Relation<Values>> empty(input.columns());
     EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, workspace);
-    Delta<Values> valid(input.columns());
+    database::incremental::Delta<Values> valid(input.columns());
     valid.removed.insert(cells(7, 10));
     valid.added.insert(cells(7, 12));
     evaluator.update(valid.change(), workspace);
@@ -282,14 +282,14 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWit
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelations)
 {
-    Builder<Relation<Values>> input({ ColumnIndex(4) });
-    const ProjectionPlan<Values> plan(input.columns(), {});
-    ProjectionEvaluator<Values> evaluator(plan);
-    Workspace<Values> workspace;
-    Builder<Relation<Values>> reference;
+    Builder<database::Relation<Values>> input({ ColumnIndex(4) });
+    const database::ProjectionPlan<Values> plan(input.columns(), {});
+    database::incremental::ProjectionEvaluator<Values> evaluator(plan);
+    database::Workspace<Values> workspace;
+    Builder<database::Relation<Values>> reference;
     evaluator.initialize(input, workspace);
     EXPECT_TRUE(evaluator.get_result().empty());
-    Delta<Values> delta(input.columns());
+    database::incremental::Delta<Values> delta(input.columns());
     delta.added.insert(cells(1));
     delta.added.insert(cells(2));
     const auto update = [&]
@@ -297,7 +297,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
         const auto before = rows<uint_t>(reference);
         apply_batch(input, delta.added, delta.removed);
         evaluator.update(delta.change(), workspace);
-        project(input, plan, reference, workspace);
+        database::project(input, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
     update();
@@ -315,9 +315,9 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
-    Builder<Relation<Values>> nullary;
-    Delta<Values> nullary_delta({});
-    ProjectionEvaluator<Values> identity(ProjectionPlan<Values>({}, {}));
+    Builder<database::Relation<Values>> nullary;
+    database::incremental::Delta<Values> nullary_delta({});
+    database::incremental::ProjectionEvaluator<Values> identity(database::ProjectionPlan<Values>({}, {}));
     identity.initialize(nullary, workspace);
     nullary_delta.added.insert(cells());
     identity.update(nullary_delta.change(), workspace);
@@ -330,8 +330,8 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
 {
-    Builder<Relation<Values>> lhs({ ColumnIndex(7), ColumnIndex(2), ColumnIndex(9) });
-    Builder<Relation<Values>> rhs({ ColumnIndex(9), ColumnIndex(11), ColumnIndex(2) });
+    Builder<database::Relation<Values>> lhs({ ColumnIndex(7), ColumnIndex(2), ColumnIndex(9) });
+    Builder<database::Relation<Values>> rhs({ ColumnIndex(9), ColumnIndex(11), ColumnIndex(2) });
     lhs.insert(cells(1, 2, 3));
     lhs.insert(cells(4, 2, 3));
     lhs.insert(cells(5, 8, 3));
@@ -339,21 +339,21 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
     rhs.insert(cells(3, 21, 2));
     rhs.insert(cells(3, 22, 8));
     rhs.insert(cells(9, 23, 2));
-    const JoinPlan<Values> plan(lhs.columns(), rhs.columns());
-    auto repository = RelationRepositoryFactory<Values>().create();
-    Workspace<Values> workspace;
+    const database::JoinPlan<Values> plan(lhs.columns(), rhs.columns());
+    auto repository = database::RelationRepositoryFactory<Values>().create();
+    database::Workspace<Values> workspace;
     for (const bool change_left : { false, true })
     {
         auto& dynamic = change_left ? lhs : rhs;
-        Builder<Relation<Values>> unchanged(change_left ? rhs.columns() : lhs.columns());
-        JoinEvaluator<Values> evaluator(plan);
-        Builder<Relation<Values>> reference(plan.output_columns());
+        Builder<database::Relation<Values>> unchanged(change_left ? rhs.columns() : lhs.columns());
+        database::incremental::JoinEvaluator<Values> evaluator(plan);
+        Builder<database::Relation<Values>> reference(plan.output_columns());
         evaluator.initialize(make_view(lhs, repository), make_view(rhs, repository), workspace);
-        join(lhs, rhs, plan, reference, workspace);
+        database::join(lhs, rhs, plan, reference, workspace);
         EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
         EXPECT_TRUE(evaluator.get_delta().added.empty());
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
-        Delta<Values> delta(dynamic.columns());
+        database::incremental::Delta<Values> delta(dynamic.columns());
         delta.removed.insert(dynamic.row(0));
         if (!change_left)
             delta.added.insert(cells(3, 30, 2));
@@ -367,7 +367,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
                 evaluator.update(std::tie(added, removed), std::tie(unchanged, unchanged), workspace);
             else
                 evaluator.update(std::tie(unchanged, unchanged), std::tie(added, removed), workspace);
-            join(lhs, rhs, plan, reference, workspace);
+            database::join(lhs, rhs, plan, reference, workspace);
             expect_update(evaluator, before, reference);
         };
         update(delta.added, delta.removed);
@@ -380,43 +380,43 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
 TEST(YggdrasilTests, DatabaseIncrementalJoinAcceptsInternedCustomCodecInputs)
 {
     using Value = IncrementalValue;
-    Builder<Relation<TypeList<Value>>> dynamic({ ColumnIndex(1), ColumnIndex(2) });
-    Builder<Relation<TypeList<Value>>> immutable({ ColumnIndex(2), ColumnIndex(3) });
+    Builder<database::Relation<TypeList<Value>>> dynamic({ ColumnIndex(1), ColumnIndex(2) });
+    Builder<database::Relation<TypeList<Value>>> immutable({ ColumnIndex(2), ColumnIndex(3) });
     dynamic.insert(std::tuple { Value { 1 }, Value { 10 } });
     immutable.insert(std::tuple { Value { 10 }, Value { 100 } });
     immutable.insert(std::tuple { Value { 20 }, Value { 200 } });
     immutable.insert(std::tuple { Value { 30 }, Value { 300 } });
-    auto repository = RelationRepositoryFactory<TypeList<Value>>().create();
+    auto repository = database::RelationRepositoryFactory<TypeList<Value>>().create();
     const auto view = database::insert(repository, immutable).first;
-    const JoinPlan<TypeList<Value>> plan(dynamic.columns(), immutable.columns());
-    JoinEvaluator<TypeList<Value>> evaluator(plan);
-    Builder<Relation<TypeList<Value>>> unchanged(immutable.columns());
-    Workspace<TypeList<Value>> workspace;
-    Builder<Relation<TypeList<Value>>> reference(plan.output_columns());
+    const database::JoinPlan<TypeList<Value>> plan(dynamic.columns(), immutable.columns());
+    database::incremental::JoinEvaluator<TypeList<Value>> evaluator(plan);
+    Builder<database::Relation<TypeList<Value>>> unchanged(immutable.columns());
+    database::Workspace<TypeList<Value>> workspace;
+    Builder<database::Relation<TypeList<Value>>> reference(plan.output_columns());
     evaluator.initialize(dynamic, view, workspace);
-    join(dynamic, immutable, plan, reference, workspace);
+    database::join(dynamic, immutable, plan, reference, workspace);
     EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(reference));
-    Delta<TypeList<Value>> delta(dynamic.columns());
+    database::incremental::Delta<TypeList<Value>> delta(dynamic.columns());
     delta.removed.insert(std::tuple { Value { 1 }, Value { 10 } });
     delta.added.insert(std::tuple { Value { 2 }, Value { 20 } });
     delta.added.insert(std::tuple { Value { 3 }, Value { 40 } });
     const auto before = rows<Value>(reference);
     apply_batch(dynamic, delta.added, delta.removed);
     evaluator.update(delta.change(), std::tie(unchanged, unchanged), workspace);
-    join(dynamic, immutable, plan, reference, workspace);
+    database::join(dynamic, immutable, plan, reference, workspace);
     expect_update(evaluator, before, reference);
 }
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
 {
-    Builder<Relation<Values>> input({ ColumnIndex(1) });
+    Builder<database::Relation<Values>> input({ ColumnIndex(1) });
     input.insert(cells(1));
-    Builder<Relation<Values>> empty(input.columns());
-    Builder<Relation<Values>> wrong({ ColumnIndex(2) });
-    Builder<Relation<Values>> overlap(input.columns());
+    Builder<database::Relation<Values>> empty(input.columns());
+    Builder<database::Relation<Values>> wrong({ ColumnIndex(2) });
+    Builder<database::Relation<Values>> overlap(input.columns());
     overlap.insert(cells(1));
-    ProjectionEvaluator<Values> evaluator(ProjectionPlan<Values>(input.columns(), { ColumnIndex(1) }));
-    Workspace<Values> workspace;
+    database::incremental::ProjectionEvaluator<Values> evaluator(database::ProjectionPlan<Values>(input.columns(), { ColumnIndex(1) }));
+    database::Workspace<Values> workspace;
     EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, workspace);
     const auto before = rows<uint_t>(evaluator.get_result());
@@ -429,7 +429,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    Delta<Values> delta(input.columns());
+    database::incremental::Delta<Values> delta(input.columns());
     delta.added.insert(cells(1));
     delta.removed.insert(cells(2));
     const auto memory = delta.added.memory_usage() + delta.removed.memory_usage();
@@ -441,8 +441,8 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches)
 {
-    Builder<Relation<Values>> lhs({ ColumnIndex(9), ColumnIndex(2), ColumnIndex(7) });
-    Builder<Relation<Values>> rhs({ ColumnIndex(7), ColumnIndex(11), ColumnIndex(2) });
+    Builder<database::Relation<Values>> lhs({ ColumnIndex(9), ColumnIndex(2), ColumnIndex(7) });
+    Builder<database::Relation<Values>> rhs({ ColumnIndex(7), ColumnIndex(11), ColumnIndex(2) });
     lhs.insert(cells(1, 10, 100));
     lhs.insert(cells(2, 10, 100));
     lhs.insert(cells(3, 20, 200));
@@ -453,18 +453,18 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     rhs.insert(cells(300, 9, 30));
     const auto initial_lhs = rows<uint_t>(lhs);
     const auto initial_rhs = rows<uint_t>(rhs);
-    const JoinPlan<Values> plan(lhs.columns(), rhs.columns());
-    const ProjectionPlan<Values> projection_plan(plan.output_columns(), { ColumnIndex(11) });
-    JoinEvaluator<Values> evaluator(plan);
-    ProjectionEvaluator<Values> projected(projection_plan);
-    Workspace<Values> workspace;
-    auto repository = RelationRepositoryFactory<Values>().create();
+    const database::JoinPlan<Values> plan(lhs.columns(), rhs.columns());
+    const database::ProjectionPlan<Values> projection_plan(plan.output_columns(), { ColumnIndex(11) });
+    database::incremental::JoinEvaluator<Values> evaluator(plan);
+    database::incremental::ProjectionEvaluator<Values> projected(projection_plan);
+    database::Workspace<Values> workspace;
+    auto repository = database::RelationRepositoryFactory<Values>().create();
     evaluator.initialize(make_view(lhs, repository), make_view(rhs, repository), workspace);
     projected.initialize(evaluator.get_result(), workspace);
-    Builder<Relation<Values>> reference(plan.output_columns());
-    Builder<Relation<Values>> reference_projection(projection_plan.output_columns());
-    join(lhs, rhs, plan, reference, workspace);
-    project(reference, projection_plan, reference_projection, workspace);
+    Builder<database::Relation<Values>> reference(plan.output_columns());
+    Builder<database::Relation<Values>> reference_projection(projection_plan.output_columns());
+    database::join(lhs, rhs, plan, reference, workspace);
+    database::project(reference, projection_plan, reference_projection, workspace);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
@@ -478,13 +478,13 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
                          std::pair(make_view(rhs_added, repository), make_view(rhs_removed, repository)),
                          workspace);
         projected.update(evaluator.get_delta().change(), workspace);
-        join(lhs, rhs, plan, reference, workspace);
-        project(reference, projection_plan, reference_projection, workspace);
+        database::join(lhs, rhs, plan, reference, workspace);
+        database::project(reference, projection_plan, reference_projection, workspace);
         expect_update(evaluator, before, reference);
         expect_update(projected, projection_before, reference_projection);
     };
-    Delta<Values> lhs_a(lhs.columns());
-    Delta<Values> rhs_a(rhs.columns());
+    database::incremental::Delta<Values> lhs_a(lhs.columns());
+    database::incremental::Delta<Values> rhs_a(rhs.columns());
     lhs_a.removed.insert(cells(1, 10, 100));
     lhs_a.removed.insert(cells(3, 20, 200));
     lhs_a.added.insert(cells(5, 40, 400));
@@ -498,8 +498,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     EXPECT_TRUE(evaluator.get_delta().added.contains(cells(5, 40, 400, 10)));
     EXPECT_FALSE(evaluator.get_delta().added.contains(cells(1, 10, 100, 11)));
     EXPECT_FALSE(evaluator.get_delta().added.contains(cells(6, 10, 100, 8)));
-    Delta<Values> lhs_b(lhs.columns());
-    Delta<Values> rhs_b(rhs.columns());
+    database::incremental::Delta<Values> lhs_b(lhs.columns());
+    database::incremental::Delta<Values> rhs_b(rhs.columns());
     lhs_b.removed.insert(cells(4, 30, 300));
     lhs_b.added.insert(cells(7, 40, 400));
     rhs_b.removed.insert(cells(300, 9, 30));
@@ -509,8 +509,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     update(lhs_a.removed, lhs_a.added, rhs_a.removed, rhs_a.added);
     EXPECT_EQ(rows<uint_t>(lhs), initial_lhs);
     EXPECT_EQ(rows<uint_t>(rhs), initial_rhs);
-    Delta<Values> sibling(lhs.columns());
-    Delta<Values> unchanged(rhs.columns());
+    database::incremental::Delta<Values> sibling(lhs.columns());
+    database::incremental::Delta<Values> unchanged(rhs.columns());
     sibling.removed.insert(cells(2, 10, 100));
     sibling.added.insert(cells(8, 30, 300));
     update(sibling.added, sibling.removed, unchanged.added, unchanged.removed);
@@ -526,22 +526,22 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
 TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsCustomCodecIndexesAcrossRowCompaction)
 {
     using Value = IncrementalValue;
-    Builder<Relation<TypeList<Value>>> lhs({ ColumnIndex(1), ColumnIndex(2) });
-    Builder<Relation<TypeList<Value>>> rhs({ ColumnIndex(2), ColumnIndex(3) });
+    Builder<database::Relation<TypeList<Value>>> lhs({ ColumnIndex(1), ColumnIndex(2) });
+    Builder<database::Relation<TypeList<Value>>> rhs({ ColumnIndex(2), ColumnIndex(3) });
     for (uint_t i = 0; i < 5; ++i)
     {
         lhs.insert(std::tuple { Value { i }, Value { i % 3 } });
         rhs.insert(std::tuple { Value { i % 3 }, Value { i } });
     }
-    const JoinPlan<TypeList<Value>> plan(lhs.columns(), rhs.columns());
-    JoinEvaluator<TypeList<Value>> evaluator(plan);
-    Workspace<TypeList<Value>> workspace;
-    Builder<Relation<TypeList<Value>>> reference(plan.output_columns());
+    const database::JoinPlan<TypeList<Value>> plan(lhs.columns(), rhs.columns());
+    database::incremental::JoinEvaluator<TypeList<Value>> evaluator(plan);
+    database::Workspace<TypeList<Value>> workspace;
+    Builder<database::Relation<TypeList<Value>>> reference(plan.output_columns());
     evaluator.initialize(lhs, rhs, workspace);
-    join(lhs, rhs, plan, reference, workspace);
+    database::join(lhs, rhs, plan, reference, workspace);
     EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(reference));
-    Delta<TypeList<Value>> lhs_delta(lhs.columns());
-    Delta<TypeList<Value>> rhs_delta(rhs.columns());
+    database::incremental::Delta<TypeList<Value>> lhs_delta(lhs.columns());
+    database::incremental::Delta<TypeList<Value>> rhs_delta(rhs.columns());
     for (uint_t generation = 0; generation < 24; ++generation)
     {
         lhs_delta.clear();
@@ -560,29 +560,29 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsCustomCodecIndexesAcrossRow
         apply_batch(lhs, lhs_delta.added, lhs_delta.removed);
         apply_batch(rhs, rhs_delta.added, rhs_delta.removed);
         evaluator.update(lhs_delta.change(), rhs_delta.change(), workspace);
-        join(lhs, rhs, plan, reference, workspace);
+        database::join(lhs, rhs, plan, reference, workspace);
         expect_update(evaluator, before, reference);
     }
 }
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnBothSides)
 {
-    Workspace<Values> workspace;
+    database::Workspace<Values> workspace;
     for (unsigned nullary_sides = 0; nullary_sides < 4; ++nullary_sides)
     {
-        Builder<Relation<Values>> lhs;
-        Builder<Relation<Values>> rhs;
+        Builder<database::Relation<Values>> lhs;
+        Builder<database::Relation<Values>> rhs;
         if (!(nullary_sides & 1))
             lhs.initialize({ ColumnIndex(1) });
         if (!(nullary_sides & 2))
             rhs.initialize({ ColumnIndex(2) });
-        const JoinPlan<Values> plan(lhs.columns(), rhs.columns());
-        JoinEvaluator<Values> evaluator(plan);
-        Builder<Relation<Values>> reference(plan.output_columns());
+        const database::JoinPlan<Values> plan(lhs.columns(), rhs.columns());
+        database::incremental::JoinEvaluator<Values> evaluator(plan);
+        Builder<database::Relation<Values>> reference(plan.output_columns());
         evaluator.initialize(lhs, rhs, workspace);
         EXPECT_TRUE(evaluator.get_result().empty());
-        Delta<Values> lhs_delta(lhs.columns());
-        Delta<Values> rhs_delta(rhs.columns());
+        database::incremental::Delta<Values> lhs_delta(lhs.columns());
+        database::incremental::Delta<Values> rhs_delta(rhs.columns());
         if (lhs.arity() == 0)
             lhs_delta.added.insert(cells());
         else
@@ -603,12 +603,12 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
             apply_batch(lhs, lhs_added, lhs_removed);
             apply_batch(rhs, rhs_added, rhs_removed);
             evaluator.update(std::tie(lhs_added, lhs_removed), std::tie(rhs_added, rhs_removed), workspace);
-            join(lhs, rhs, plan, reference, workspace);
+            database::join(lhs, rhs, plan, reference, workspace);
             expect_update(evaluator, before, reference);
         };
         update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed);
-        Delta<Values> lhs_remove(lhs.columns());
-        Delta<Values> rhs_remove(rhs.columns());
+        database::incremental::Delta<Values> lhs_remove(lhs.columns());
+        database::incremental::Delta<Values> rhs_remove(rhs.columns());
         lhs_remove.removed.insert(lhs.row(0));
         rhs_remove.removed.insert(rhs.row(0));
         update(lhs_remove.added, lhs_remove.removed, rhs_remove.added, rhs_remove.removed);
@@ -632,14 +632,14 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinValidatesAllInputsBeforeMutation)
 {
-    Builder<Relation<Values>> input({ ColumnIndex(1) });
+    Builder<database::Relation<Values>> input({ ColumnIndex(1) });
     input.insert(cells(1));
-    Builder<Relation<Values>> empty(input.columns());
-    Builder<Relation<Values>> addition(input.columns());
+    Builder<database::Relation<Values>> empty(input.columns());
+    Builder<database::Relation<Values>> addition(input.columns());
     addition.insert(cells(2));
-    Builder<Relation<Values>> wrong({ ColumnIndex(2) });
-    JoinEvaluator<Values> evaluator(JoinPlan<Values>(input.columns(), input.columns()));
-    Workspace<Values> workspace;
+    Builder<database::Relation<Values>> wrong({ ColumnIndex(2) });
+    database::incremental::JoinEvaluator<Values> evaluator(database::JoinPlan<Values>(input.columns(), input.columns()));
+    database::Workspace<Values> workspace;
     EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, input, workspace);
     evaluator.update(std::tie(addition, empty), std::tie(addition, empty), workspace);
@@ -664,15 +664,15 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinValidatesAllInputsBeforeMutation)
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinRequiresReinitializationAfterMutationFailure)
 {
-    Builder<Relation<Values>> input({ ColumnIndex(1) });
+    Builder<database::Relation<Values>> input({ ColumnIndex(1) });
     input.insert(cells(1));
-    Builder<Relation<Values>> empty(input.columns());
-    Builder<Relation<Values>> addition(input.columns());
+    Builder<database::Relation<Values>> empty(input.columns());
+    Builder<database::Relation<Values>> addition(input.columns());
     addition.insert(cells(2));
-    Builder<Relation<Values>> absent(input.columns());
+    Builder<database::Relation<Values>> absent(input.columns());
     absent.insert(cells(99));
-    JoinEvaluator<Values> evaluator(JoinPlan<Values>(input.columns(), input.columns()));
-    Workspace<Values> workspace;
+    database::incremental::JoinEvaluator<Values> evaluator(database::JoinPlan<Values>(input.columns(), input.columns()));
+    database::Workspace<Values> workspace;
     for (const bool invalid_removal : { true, false })
     {
         evaluator.initialize(input, input, workspace);
@@ -698,14 +698,14 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinRequiresReinitializationAfterMutatio
 TEST(YggdrasilTests, DatabaseIncrementalEvaluatorsShareAccessAndAliasingContracts)
 {
     // Equal schemas make the evaluators' own (empty) deltas valid changes, so only aliasing is rejected.
-    Builder<Relation<Values>> lhs({ ColumnIndex(0), ColumnIndex(1) });
-    Builder<Relation<Values>> rhs({ ColumnIndex(0), ColumnIndex(1) });
-    const Builder<Relation<Values>> none({ ColumnIndex(0), ColumnIndex(1) });
+    Builder<database::Relation<Values>> lhs({ ColumnIndex(0), ColumnIndex(1) });
+    Builder<database::Relation<Values>> rhs({ ColumnIndex(0), ColumnIndex(1) });
+    const Builder<database::Relation<Values>> none({ ColumnIndex(0), ColumnIndex(1) });
     lhs.insert(cells(1, 2));
     rhs.insert(cells(1, 2));
-    Workspace<Values> workspace;
+    database::Workspace<Values> workspace;
 
-    JoinEvaluator<Values> join_evaluator(JoinPlan<Values>(lhs.columns(), rhs.columns()));
+    database::incremental::JoinEvaluator<Values> join_evaluator(database::JoinPlan<Values>(lhs.columns(), rhs.columns()));
     EXPECT_THROW(static_cast<void>(join_evaluator.get_result()), std::logic_error);
     EXPECT_THROW(static_cast<void>(join_evaluator.get_delta()), std::logic_error);
     join_evaluator.initialize(lhs, rhs, workspace);
@@ -713,7 +713,7 @@ TEST(YggdrasilTests, DatabaseIncrementalEvaluatorsShareAccessAndAliasingContract
     join_evaluator.update(std::tie(none, none), std::tie(none, none), workspace);
     EXPECT_EQ(rows<uint_t>(join_evaluator.get_result()), (std::set<std::vector<uint_t>> { { 1, 2 } }));
 
-    ProjectionEvaluator<Values> projection(ProjectionPlan<Values>(lhs.columns(), { ColumnIndex(0), ColumnIndex(1) }));
+    database::incremental::ProjectionEvaluator<Values> projection(database::ProjectionPlan<Values>(lhs.columns(), { ColumnIndex(0), ColumnIndex(1) }));
     EXPECT_THROW(static_cast<void>(projection.get_result()), std::logic_error);
     projection.initialize(lhs, workspace);
     EXPECT_THROW(projection.update(std::tie(projection.get_delta().added, none), workspace), std::invalid_argument);

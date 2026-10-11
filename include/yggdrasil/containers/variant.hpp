@@ -63,9 +63,9 @@ public:
     decltype(auto) apply(F&& f) const
     {
         return std::visit(
-            [&](auto&& arg) -> decltype(auto)
+            [&]<typename Arg>(Arg&& arg) -> decltype(auto)
             {
-                using U = std::decay_t<decltype(arg)>;
+                using U = std::decay_t<Arg>;
 
                 if constexpr (ViewConcept<U, C>)
                     return std::forward<F>(f)(make_view(arg, get_context()));

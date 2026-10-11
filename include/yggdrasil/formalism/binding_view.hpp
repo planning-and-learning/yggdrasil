@@ -179,11 +179,11 @@ public:
 template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
 class View<ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>, C>
 {
-public:
+private:
     using Container = ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>;
     using T = Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>;
-    using I1 = Index<RelationTag>;
 
+public:
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     bool empty() const { return std::ranges::begin(get_data().rows) == std::ranges::end(get_data().rows); }
@@ -226,11 +226,11 @@ private:
 template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
 class View<ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>, C>
 {
-public:
+private:
     using Container = ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>;
     using T = Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>;
-    using I1 = Index<RelationTag>;
 
+public:
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     bool empty() const { return std::ranges::begin(get_data().rows) == std::ranges::end(get_data().rows); }

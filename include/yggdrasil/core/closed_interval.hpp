@@ -30,7 +30,7 @@ namespace ygg
 template<std::floating_point A>
 class ClosedInterval
 {
-public:
+private:
     using IntervalPolicies =
         boost::numeric::interval_lib::policies<boost::numeric::interval_lib::save_state<boost::numeric::interval_lib::rounded_transc_std<A>>,  // sound
                                                                                                                                                // rounding
@@ -39,6 +39,7 @@ public:
 
     using Interval = boost::numeric::interval<A, IntervalPolicies>;
 
+public:
     /**
      * Constructors
      */

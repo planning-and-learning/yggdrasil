@@ -90,11 +90,8 @@ public:
         void variant(const Variant& value)
         {
             // Visit the underlying variant directly: ygg::visit is noexcept, while serialization can throw.
-            std::visit([&](const auto& alternative)
-            {
-                using Alternative = std::remove_cvref_t<decltype(alternative)>;
-                field(detail::variant_field, value.template get<Alternative>());
-            }, value.index_variant());
+            std::visit([&]<typename Alternative>(const Alternative& alternative) { field(detail::variant_field, value.template get<Alternative>()); },
+                       value.index_variant());
         }
     };
 

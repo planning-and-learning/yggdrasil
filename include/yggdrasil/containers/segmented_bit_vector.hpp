@@ -47,9 +47,9 @@ private:
     };
 
     using Pool = BitPackedArrayPool<Block, BoolCoder, FirstSegmentSize, ThreadSafe>;
+    using block_type = typename Pool::block_type;
 
 public:
-    using block_type = typename Pool::block_type;
     using value_type = bool;
     using reference = typename Pool::reference_type;
     using const_reference = bool;

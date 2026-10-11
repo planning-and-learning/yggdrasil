@@ -30,9 +30,7 @@ namespace ygg
 template<typename Block, typename Allocator>
 struct Less<boost::dynamic_bitset<Block, Allocator>>
 {
-    using Type = boost::dynamic_bitset<Block, Allocator>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
+    bool operator()(const boost::dynamic_bitset<Block, Allocator>& lhs, const boost::dynamic_bitset<Block, Allocator>& rhs) const
     {
         if (lhs.size() != rhs.size())
             return lhs.size() < rhs.size();

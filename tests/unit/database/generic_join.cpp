@@ -37,67 +37,65 @@ namespace ygg::tests
 {
 namespace
 {
-using namespace database;
 using Values = TypeList<uint_t>;
-using RelationBuilder = Builder<Relation<Values>>;
-using Change = incremental::Delta<Values>;
-using ColumnIndex = Index<Column>;
+using RelationBuilder = Builder<database::Relation<Values>>;
+using Change = database::incremental::Delta<Values>;
+using ColumnIndex = Index<database::Column>;
 
 // Borrowed views use a relation repository only as their context.
-template<ColumnTypes Types>
-BorrowedRelationView<Types> borrow(const Builder<Relation<Types>>& relation)
+template<database::ColumnTypes Types>
+database::BorrowedRelationView<Types> borrow(const Builder<database::Relation<Types>>& relation)
 {
-    static const auto context = RelationRepositoryFactory<Types> {}.create();
+    static const auto context = database::RelationRepositoryFactory<Types> {}.create();
     return { relation, context };
 }
 
-static_assert(RelationViewConcept<BorrowedRelationView<Values>, Values>);
+static_assert(database::RelationViewConcept<database::BorrowedRelationView<Values>, Values>);
 
-struct ThrowingRelation : BorrowedRelationView<Values>
+struct ThrowingRelation : database::BorrowedRelationView<Values>
 {
     size_t fail_on_row;
     mutable size_t row_calls = 0;
 
-    ThrowingRelation(const RelationBuilder& input, size_t fail_on) : BorrowedRelationView<Values>(borrow(input)), fail_on_row(fail_on) {}
+    ThrowingRelation(const RelationBuilder& input, size_t fail_on) : database::BorrowedRelationView<Values>(borrow(input)), fail_on_row(fail_on) {}
 
     std::span<const std::byte> row(size_t position) const
     {
         if (++row_calls == fail_on_row)
             throw std::runtime_error("Injected relation read failure.");
-        return BorrowedRelationView<Values>::row(position);
+        return database::BorrowedRelationView<Values>::row(position);
     }
 };
 
-template<ColumnTypes Types, RelationViewRange<Types> R>
-GenericJoinPlan<Types>
-plan_for(const R& inputs, std::initializer_list<ColumnIndex> variables, std::initializer_list<ColumnIndex> output)
+template<database::ColumnTypes Types, database::RelationViewRange<Types> R>
+database::GenericJoinPlan<Types> plan_for(const R& inputs, std::initializer_list<ColumnIndex> variables, std::initializer_list<ColumnIndex> output)
 {
-    std::vector<std::vector<ColumnLayout>> schemas;
+    std::vector<std::vector<database::ColumnLayout>> schemas;
     for (const auto& input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
-    return GenericJoinPlan<Types>(schemas, { variables.begin(), variables.size() }, { output.begin(), output.size() });
+    return database::GenericJoinPlan<Types>(schemas, { variables.begin(), variables.size() }, { output.begin(), output.size() });
 }
 
-template<ColumnTypes Types, RelationViewConcept<Types> A, RelationViewConcept<Types> E>
+template<database::ColumnTypes Types, database::RelationViewConcept<Types> A, database::RelationViewConcept<Types> E>
 void expect_same(const A& actual, const E& expected)
 {
     ASSERT_TRUE(std::ranges::equal(actual.columns().span(), expected.columns().span()));
     ASSERT_EQ(actual.size(), expected.size());
     for (size_t row = 0; row < expected.size(); ++row)
-        EXPECT_TRUE(actual.contains(Row<Types>(expected.row(row), expected.columns().span())));
+        EXPECT_TRUE(actual.contains(database::Row<Types>(expected.row(row), expected.columns().span())));
 }
 
-template<ColumnTypes Types, RelationViewRange<Types> R>
-Builder<Relation<Types>> binary_reference(const R& inputs, const GenericJoinPlan<Types>& plan)
+template<database::ColumnTypes Types, database::RelationViewRange<Types> R>
+Builder<database::Relation<Types>> binary_reference(const R& inputs, const database::GenericJoinPlan<Types>& plan)
 {
-    Builder<Relation<Types>> result;
+    Builder<database::Relation<Types>> result;
     result.insert(std::tuple {});
     for (const auto input : inputs)
-        result = join<Types>(result, input);
+        result = database::join<Types>(result, input);
     std::vector<ColumnIndex> output;
     for (const auto column : plan.output_columns().span())
         output.push_back(column.label);
-    return project<Types>(result, output);
+    return database::project<Types>(result, output);
 }
 
 void apply(RelationBuilder& input, const Change& change, bool undo = false)
@@ -114,11 +112,11 @@ void apply(RelationBuilder& input, const Change& change, bool undo = false)
         input.insert(added.row(i));
 }
 
-void expect_update(const incremental::GenericJoinEvaluator<Values>& evaluator, const RelationBuilder& before, const RelationBuilder& after)
+void expect_update(const database::incremental::GenericJoinEvaluator<Values>& evaluator, const RelationBuilder& before, const RelationBuilder& after)
 {
     expect_same<Values>(evaluator.get_result(), after);
-    const auto added = difference<Values>(after, before);
-    const auto removed = difference<Values>(before, after);
+    const auto added = database::difference<Values>(after, before);
+    const auto removed = database::difference<Values>(before, after);
     expect_same<Values>(evaluator.get_delta().added, added);
     expect_same<Values>(evaluator.get_delta().removed, removed);
 }
@@ -141,19 +139,19 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
     const std::array inputs { borrow(r), borrow(s), borrow(t) };
     std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
     const std::array output { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) };
-    std::vector<std::vector<ColumnLayout>> schemas;
+    std::vector<std::vector<database::ColumnLayout>> schemas;
     for (const auto input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
     do
     {
-        const GenericJoinPlan<Values> plan(schemas, variables, output);
-        GenericJoinWorkspace<Values> workspace(plan);
+        const database::GenericJoinPlan<Values> plan(schemas, variables, output);
+        database::GenericJoinWorkspace<Values> workspace(plan);
         RelationBuilder result(plan.output_columns().span());
         const auto expected = binary_reference<Values>(inputs, plan);
-        generic_join<Values>(inputs, plan, result, workspace);
+        database::generic_join<Values>(inputs, plan, result, workspace);
         expect_same<Values>(result, expected);
         EXPECT_EQ(result.size(), 34);
-        generic_join<Values>(inputs, plan, result, workspace);
+        database::generic_join<Values>(inputs, plan, result, workspace);
         expect_same<Values>(result, expected);
         EXPECT_GT(workspace.memory_usage(), 0);
     } while (std::ranges::next_permutation(variables).found);
@@ -174,24 +172,24 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
             s.insert(std::tuple { uint_t(0), i });
             t.insert(std::tuple { i, i });
         }
-        const auto intermediate = join<Values>(r, s);
+        const auto intermediate = database::join<Values>(r, s);
         ASSERT_EQ(intermediate.size(), count * count);
-        const auto expected = join<Values>(intermediate, t);
+        const auto expected = database::join<Values>(intermediate, t);
         ASSERT_EQ(expected.size(), count);
 
         const std::array inputs { borrow(r), borrow(s), borrow(t) };
-        std::vector<std::vector<ColumnLayout>> schemas;
+        std::vector<std::vector<database::ColumnLayout>> schemas;
         for (const auto input : inputs)
             schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
         std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
         const auto output = variables;
         do
         {
-            const GenericJoinPlan<Values> plan(schemas, variables, output);
-            GenericJoinWorkspace<Values> workspace(plan);
+            const database::GenericJoinPlan<Values> plan(schemas, variables, output);
+            database::GenericJoinWorkspace<Values> workspace(plan);
             RelationBuilder result(plan.output_columns().span());
             database::detail::generic_join_work = {};
-            generic_join<Values>(inputs, plan, result, workspace);
+            database::generic_join<Values>(inputs, plan, result, workspace);
             const auto work = database::detail::generic_join_work;
             expect_same<Values>(result, expected);
             // This family has linear extension intersections in every order.
@@ -217,23 +215,23 @@ TEST(YggdrasilTests, DatabaseGenericJoinHandlesDisconnectedAndNullaryInputs)
     truth.insert(std::tuple {});
     const std::array inputs { borrow(a), borrow(b), borrow(truth) };
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(2), ColumnIndex(1) }, { ColumnIndex(1), ColumnIndex(2) });
-    GenericJoinWorkspace<Values> workspace(plan);
+    database::GenericJoinWorkspace<Values> workspace(plan);
     RelationBuilder result(plan.output_columns().span());
-    generic_join<Values>(inputs, plan, result, workspace);
+    database::generic_join<Values>(inputs, plan, result, workspace);
     EXPECT_EQ(result.size(), 4);
     truth.clear();
-    generic_join<Values>(inputs, plan, result, workspace);
+    database::generic_join<Values>(inputs, plan, result, workspace);
     EXPECT_TRUE(result.empty());
 
-    const auto empty_plan = plan_for<Values>(std::array<BorrowedRelationView<Values>, 0> {}, {}, {});
-    GenericJoinWorkspace<Values> empty_workspace(empty_plan);
+    const auto empty_plan = plan_for<Values>(std::array<database::BorrowedRelationView<Values>, 0> {}, {}, {});
+    database::GenericJoinWorkspace<Values> empty_workspace(empty_plan);
     RelationBuilder empty_result;
-    generic_join<Values>(std::array<BorrowedRelationView<Values>, 0> {}, empty_plan, empty_result, empty_workspace);
+    database::generic_join<Values>(std::array<database::BorrowedRelationView<Values>, 0> {}, empty_plan, empty_result, empty_workspace);
     EXPECT_EQ(empty_result.size(), 1);
     EXPECT_TRUE(empty_result.contains(std::tuple {}));
     const std::array nullary_inputs { borrow(truth), borrow(truth) };
     const auto nullary_plan = plan_for<Values>(nullary_inputs, {}, {});
-    incremental::GenericJoinEvaluator<Values> evaluator(nullary_plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(nullary_plan);
     evaluator.initialize(nullary_inputs);
     Change change({});
     change.added.insert(std::tuple {});
@@ -250,14 +248,14 @@ TEST(YggdrasilTests, DatabaseGenericJoinHandlesDisconnectedAndNullaryInputs)
 TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueComparators)
 {
     using Types = TypeList<GenericJoinValue, double, bool>;
-    Builder<Columns<Types>> left_schema;
+    Builder<database::Columns<Types>> left_schema;
     left_schema.push_back<GenericJoinValue>(ColumnIndex(1));
     left_schema.push_back<double>(ColumnIndex(2));
-    Builder<Columns<Types>> right_schema;
+    Builder<database::Columns<Types>> right_schema;
     right_schema.push_back<double>(ColumnIndex(2));
     right_schema.push_back<bool>(ColumnIndex(3));
-    Builder<Relation<Types>> left(left_schema.span());
-    Builder<Relation<Types>> right(right_schema.span());
+    Builder<database::Relation<Types>> left(left_schema.span());
+    Builder<database::Relation<Types>> right(right_schema.span());
     const auto nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000001 });
     const auto other_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000002 });
     left.insert(std::tuple { GenericJoinValue { 4 }, -0.0 });
@@ -266,17 +264,17 @@ TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueCompa
     right.insert(std::tuple { other_nan, true });
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for<Types>(inputs, { ColumnIndex(2), ColumnIndex(3), ColumnIndex(1) }, { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) });
-    GenericJoinWorkspace<Types> workspace(plan);
-    Builder<Relation<Types>> result(plan.output_columns().span());
-    generic_join<Types>(inputs, plan, result, workspace);
+    database::GenericJoinWorkspace<Types> workspace(plan);
+    Builder<database::Relation<Types>> result(plan.output_columns().span());
+    database::generic_join<Types>(inputs, plan, result, workspace);
     const auto expected = binary_reference<Types>(inputs, plan);
     expect_same<Types>(result, expected);
     ASSERT_EQ(result.size(), 2);
     EXPECT_TRUE(result.contains(std::tuple { false, GenericJoinValue { 4 }, 0.0 }));
-    incremental::GenericJoinEvaluator<Types> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Types> evaluator(plan);
     evaluator.initialize(inputs);
-    incremental::Delta<Types> left_change(left_schema.span());
-    incremental::Delta<Types> right_change(right_schema.span());
+    database::incremental::Delta<Types> left_change(left_schema.span());
+    database::incremental::Delta<Types> right_change(right_schema.span());
     left_change.removed.insert(std::tuple { GenericJoinValue { 4 }, 0.0 });
     left_change.added.insert(std::tuple { GenericJoinValue { 6 }, -0.0 });
     right_change.removed.insert(std::tuple { nan, true });
@@ -291,7 +289,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueCompa
 
 TEST(YggdrasilTests, DatabaseGenericJoinIncrementalConsolidatesMixedAliasChangesAndUndo)
 {
-    RelationRepositoryFactory<Values> factory;
+    database::RelationRepositoryFactory<Values> factory;
     auto repository = factory.create();
     RelationBuilder edge({ ColumnIndex(1), ColumnIndex(2) });
     edge.insert(std::tuple { uint_t(1), uint_t(2) });
@@ -303,7 +301,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalConsolidatesMixedAliasChanges
     ASSERT_EQ(first.get_storage_address(), second.get_storage_address());
     const std::array inputs { first, second, first };
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(2), ColumnIndex(1), ColumnIndex(3) }, { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) });
-    incremental::GenericJoinEvaluator<Values> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(plan);
     evaluator.initialize(inputs);
     const auto before = binary_reference<Values>(inputs, plan);
     Change change(edge.columns().span());
@@ -342,7 +340,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalAvoidsTransientCrossedMatches
     right.insert(std::tuple { uint_t(2) });
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(1) }, { ColumnIndex(1) });
-    incremental::GenericJoinEvaluator<Values> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(plan);
     evaluator.initialize(inputs);
     Change a(left.columns().span());
     Change b(right.columns().span());
@@ -365,10 +363,10 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalProjectionPreservesReplacedWi
     right.insert(std::tuple { uint_t(10), uint_t(9) });
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(2), ColumnIndex(1), ColumnIndex(3) }, { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) });
-    incremental::GenericJoinEvaluator<Values> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(plan);
     evaluator.initialize(inputs);
-    incremental::ProjectionEvaluator<Values> projected(ProjectionPlan<Values>(plan.output_columns().span(), { ColumnIndex(3) }));
-    Workspace<Values> workspace;
+    database::incremental::ProjectionEvaluator<Values> projected(database::ProjectionPlan<Values>(plan.output_columns().span(), { ColumnIndex(3) }));
+    database::Workspace<Values> workspace;
     projected.initialize(evaluator.get_result(), workspace);
     Change a(left.columns().span());
     Change b(right.columns().span());
@@ -389,7 +387,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalRandomBatchesMatchFullReevalu
                                                RelationBuilder({ ColumnIndex(3), ColumnIndex(1) }) };
     const std::array inputs { borrow(relations[0]), borrow(relations[1]), borrow(relations[2]) };
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(2), ColumnIndex(3), ColumnIndex(1) }, { ColumnIndex(3), ColumnIndex(2), ColumnIndex(1) });
-    incremental::GenericJoinEvaluator<Values> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(plan);
     evaluator.initialize(inputs);
     std::mt19937 random(42);
     for (size_t batch = 0; batch < 50; ++batch)
@@ -440,15 +438,15 @@ TEST(YggdrasilTests, DatabaseGenericJoinValidatesPlansInputsAndFailureRecovery)
     const std::array two_inputs { borrow(input), borrow(second) };
     EXPECT_THROW((plan_for<Values>(two_inputs, { ColumnIndex(1), ColumnIndex(1) }, { ColumnIndex(1), ColumnIndex(2) })), std::invalid_argument);
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(1) }, { ColumnIndex(1) });
-    GenericJoinWorkspace<Values> workspace(plan);
+    database::GenericJoinWorkspace<Values> workspace(plan);
     RelationBuilder output(plan.output_columns().span());
     output.insert(std::tuple { uint_t(99) });
     const std::array wrong { borrow(second) };
-    EXPECT_THROW(generic_join<Values>(wrong, plan, output, workspace), std::invalid_argument);
+    EXPECT_THROW(database::generic_join<Values>(wrong, plan, output, workspace), std::invalid_argument);
     EXPECT_TRUE(output.contains(std::tuple { uint_t(99) }));
-    EXPECT_THROW(generic_join<Values>(inputs, plan, input, workspace), std::invalid_argument);
+    EXPECT_THROW(database::generic_join<Values>(inputs, plan, input, workspace), std::invalid_argument);
     EXPECT_EQ(input.size(), 1);
-    incremental::GenericJoinEvaluator<Values> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(plan);
     Change delta(input.columns().span());
     const std::array change { std::pair { borrow(delta.added), borrow(delta.removed) } };
     EXPECT_THROW(evaluator.update(change), std::logic_error);
@@ -483,7 +481,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinRejectsInvalidBatchesBeforeMutationAndGu
     input.insert(std::tuple { uint_t(1) });
     const std::array inputs { borrow(input), borrow(input) };
     const auto plan = plan_for<Values>(inputs, { ColumnIndex(1) }, { ColumnIndex(1) });
-    incremental::GenericJoinEvaluator<Values> evaluator(plan);
+    database::incremental::GenericJoinEvaluator<Values> evaluator(plan);
     evaluator.initialize(inputs);
     Change first(input.columns().span()), second(input.columns().span());
     first.removed.insert(std::tuple { uint_t(1) });
@@ -502,14 +500,14 @@ TEST(YggdrasilTests, DatabaseGenericJoinRejectsInvalidBatchesBeforeMutationAndGu
 
     const std::array single_input { borrow(input) };
     const auto single_plan = plan_for<Values>(single_input, { ColumnIndex(1) }, { ColumnIndex(1) });
-    incremental::GenericJoinEvaluator<Values> failing(single_plan);
+    database::incremental::GenericJoinEvaluator<Values> failing(single_plan);
     failing.initialize(single_input);
     Change insertion(input.columns().span());
     insertion.added.insert(std::tuple { uint_t(2) });
     // Validation and the delta trie read successfully; mutation then fails after
     // the new output has already been appended to the internal delta relation.
     const ThrowingRelation unstable(insertion.added, 4);
-    const std::array broken { std::pair<ThrowingRelation, BorrowedRelationView<Values>> { unstable, borrow(insertion.removed) } };
+    const std::array broken { std::pair<ThrowingRelation, database::BorrowedRelationView<Values>> { unstable, borrow(insertion.removed) } };
     EXPECT_THROW(failing.update(broken), std::runtime_error);
     EXPECT_THROW(failing.get_result(), std::logic_error);
     EXPECT_THROW(failing.get_delta(), std::logic_error);

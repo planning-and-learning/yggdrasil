@@ -10,7 +10,6 @@
 #include "yggdrasil/python/diagnostics.hpp"
 
 namespace nb = nanobind;
-using namespace ygg::diagnostics;
 
 namespace
 {
@@ -18,12 +17,16 @@ namespace
 class ParserError : public std::runtime_error
 {
 public:
-    explicit ParserError(Diagnostic diagnostic) : std::runtime_error(format_diagnostic(diagnostic)), m_diagnostic(std::move(diagnostic)) {}
+    explicit ParserError(ygg::diagnostics::Diagnostic diagnostic) :
+        std::runtime_error(ygg::diagnostics::format_diagnostic(diagnostic)),
+        m_diagnostic(std::move(diagnostic))
+    {
+    }
 
-    const Diagnostic& diagnostic() const noexcept { return m_diagnostic; }
+    const ygg::diagnostics::Diagnostic& diagnostic() const noexcept { return m_diagnostic; }
 
 private:
-    Diagnostic m_diagnostic;
+    ygg::diagnostics::Diagnostic m_diagnostic;
 };
 
 class SemanticError : public ParserError
@@ -39,18 +42,19 @@ NB_MODULE(yggdrasil_diagnostics_test, m)
     const auto parser_error = ygg::bind_diagnostic_exception<ParserError>(m, "ParserError", PyExc_RuntimeError);
     ygg::bind_diagnostic_exception<SemanticError>(m, "SemanticError", parser_error);
 
-    m.def("raise_base", [] { throw ParserError(Diagnostic { "base failure" }); });
+    m.def("raise_base", [] { throw ParserError(ygg::diagnostics::Diagnostic { "base failure" }); });
     m.def("raise_semantic",
           []
           {
-              auto source = std::make_shared<Source>("first\nsecond\n", "temporary.policy");
-              auto related = std::make_shared<Source>("related", "related.policy");
-              throw SemanticError(Diagnostic {
-                  "invalid second declaration",
-                  SourceSpan(source, 6, 12),
-                  { DiagnosticNote { "first declaration", SourceSpan(source, 0, 5) }, DiagnosticNote { "related declaration", SourceSpan(related, 0, 7) } } });
+              auto source = std::make_shared<ygg::diagnostics::Source>("first\nsecond\n", "temporary.policy");
+              auto related = std::make_shared<ygg::diagnostics::Source>("related", "related.policy");
+              throw SemanticError(
+                  ygg::diagnostics::Diagnostic { "invalid second declaration",
+                                                 ygg::diagnostics::SourceSpan(source, 6, 12),
+                                                 { ygg::diagnostics::DiagnosticNote { "first declaration", ygg::diagnostics::SourceSpan(source, 0, 5) },
+                                                   ygg::diagnostics::DiagnosticNote { "related declaration", ygg::diagnostics::SourceSpan(related, 0, 7) } } });
           });
     m.def("raise_unrelated", [] { throw std::runtime_error("unrelated failure"); });
-    m.def("roundtrip_span", [](SourceSpan span) { return span; });
-    m.def("roundtrip_diagnostic", [](Diagnostic diagnostic) { return diagnostic; });
+    m.def("roundtrip_span", [](ygg::diagnostics::SourceSpan span) { return span; });
+    m.def("roundtrip_diagnostic", [](ygg::diagnostics::Diagnostic diagnostic) { return diagnostic; });
 }

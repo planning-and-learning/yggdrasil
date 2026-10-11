@@ -2,14 +2,13 @@
 
 namespace yggdrasil::database_python
 {
-using namespace nb::literals;
-
 void bind_query_select_equal(nb::module_& m, QueryRepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<db::Query<Values, db::QuerySelectEqualTag>>>(m, "QuerySelectEqualIndex");
+    using namespace nb::literals;
+    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QuerySelectEqualTag>>>(m, "QuerySelectEqualIndex");
 
     {
-        using V = QueryData<db::QuerySelectEqualTag>;
+        using V = QueryData<ygg::database::QuerySelectEqualTag>;
         ygg::bind_data<V>(m, "QuerySelectEqualData")
             .def(nb::init<QueryView, Column, Column>(), "arg"_a, "lhs_column"_a, "rhs_column"_a)
             .def_rw("arg", &V::arg)
@@ -18,7 +17,7 @@ void bind_query_select_equal(nb::module_& m, QueryRepositoryBinding& repository)
     }
 
     {
-        using V = ConcreteQueryView<db::QuerySelectEqualTag>;
+        using V = ConcreteQueryView<ygg::database::QuerySelectEqualTag>;
         auto cls = nb::class_<V>(m, "QuerySelectEqual");
         cls.def("get_index", &V::get_index)
             .def("columns", &V::columns, nb::keep_alive<0, 1>())
@@ -29,7 +28,7 @@ void bind_query_select_equal(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<db::Query<Values, db::QuerySelectEqualTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QuerySelectEqualTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

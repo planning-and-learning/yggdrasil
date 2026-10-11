@@ -2,14 +2,13 @@
 
 namespace yggdrasil::database_python
 {
-using namespace nb::literals;
-
 void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<db::Query<Values, db::QueryRenameTag>>>(m, "QueryRenameIndex");
+    using namespace nb::literals;
+    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryRenameTag>>>(m, "QueryRenameIndex");
 
     {
-        using V = QueryData<db::QueryRenameTag>;
+        using V = QueryData<ygg::database::QueryRenameTag>;
         ygg::bind_data<V>(m, "QueryRenameData")
             .def(nb::init<QueryView, std::vector<Column>>(), "arg"_a, "labels"_a)
             .def_rw("arg", &V::arg)
@@ -17,7 +16,7 @@ void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
     }
 
     {
-        using V = ConcreteQueryView<db::QueryRenameTag>;
+        using V = ConcreteQueryView<ygg::database::QueryRenameTag>;
         auto cls = nb::class_<V>(m, "QueryRename");
         cls.def("get_index", &V::get_index)
             .def("columns", &V::columns, nb::keep_alive<0, 1>())
@@ -26,7 +25,7 @@ void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<db::Query<Values, db::QueryRenameTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryRenameTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

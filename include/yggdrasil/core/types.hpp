@@ -138,6 +138,10 @@ concept ViewConcept = requires(const T& type, const C& context, const View<T, C>
     { view.get_handle() } -> std::same_as<const T&>;
 };
 
+/// The type a container view yields for a stored T: View<T, C> if T is viewable in C, else T itself.
+template<typename T, typename C>
+using ViewOrValue = std::conditional_t<ViewConcept<T, C>, View<T, C>, T>;
+
 // Storage decision: trivially copyable data types are treated as flat in-memory
 // values.
 template<typename T>

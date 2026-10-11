@@ -62,9 +62,11 @@ struct RelationRepositoryConfig
 
 struct BlockArraySetStorage
 {
+private:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     using container_type = ygg::BlockArraySet<Block, Coder, 16, ThreadSafe>;
 
+public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t)
     {
@@ -74,9 +76,11 @@ struct BlockArraySetStorage
 
 struct BitPackedArraySetStorage
 {
+private:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     using container_type = ygg::BitPackedArraySet<Block, Coder, 16, ThreadSafe>;
 
+public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t object_index_width)
     {
@@ -337,8 +341,11 @@ public:
     static constexpr bool thread_safe = ThreadSafe;
 
     using container_type = internal_container_type;
+
+private:
     using ConstViewType = typename container_type::ConstArrayView;
 
+public:
     /**
      * Local methods access only the current repository layer.
      * Handle-producing methods return raw handles because the caller already knows the context.

@@ -39,10 +39,8 @@ namespace ygg
 template<typename C, typename T, size_t N>
 struct Less<View<::cista::array<T, N>, C>>
 {
-    using Type = View<::cista::array<T, N>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires OrderedByLess<std::ranges::range_value_t<const Type>>
+    bool operator()(const View<::cista::array<T, N>, C>& lhs, const View<::cista::array<T, N>, C>& rhs) const
+        requires OrderedByLess<std::ranges::range_value_t<const View<::cista::array<T, N>, C>>>
     {
         return less_range(lhs, rhs);
     }
@@ -51,9 +49,7 @@ struct Less<View<::cista::array<T, N>, C>>
 template<typename T1, typename T2>
 struct Less<::cista::pair<T1, T2>>
 {
-    using Type = ::cista::pair<T1, T2>;
-
-    constexpr bool operator()(const Type& lhs, const Type& rhs) const
+    constexpr bool operator()(const ::cista::pair<T1, T2>& lhs, const ::cista::pair<T1, T2>& rhs) const
         requires OrderedByLess<T1> && OrderedByLess<T2>
     {
         if (Less<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first))
@@ -67,37 +63,32 @@ struct Less<::cista::pair<T1, T2>>
 template<typename C, typename T1, typename T2>
 struct Less<View<::cista::pair<T1, T2>, C>>
 {
-    using Type = View<::cista::pair<T1, T2>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
+    bool operator()(const View<::cista::pair<T1, T2>, C>& lhs, const View<::cista::pair<T1, T2>, C>& rhs) const
         requires requires {
             { lhs.get_first() } -> OrderedByLess;
             { lhs.get_second() } -> OrderedByLess;
         }
     {
-        using First = std::remove_cvref_t<decltype(lhs.get_first())>;
+        using First = ViewOrValue<T1, C>;
         if (Less<First> {}(lhs.get_first(), rhs.get_first()))
             return true;
         if (Less<First> {}(rhs.get_first(), lhs.get_first()))
             return false;
-        return Less<std::remove_cvref_t<decltype(lhs.get_second())>> {}(lhs.get_second(), rhs.get_second());
+        return Less<ViewOrValue<T2, C>> {}(lhs.get_second(), rhs.get_second());
     }
 };
 
 template<typename Ptr>
 struct Less<::cista::basic_string<Ptr>>
 {
-    using Type = ::cista::basic_string<Ptr>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const noexcept { return less_range(lhs, rhs); }
+    bool operator()(const ::cista::basic_string<Ptr>& lhs, const ::cista::basic_string<Ptr>& rhs) const noexcept { return less_range(lhs, rhs); }
 };
 
 template<typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
 struct Less<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>>
 {
-    using Type = ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
+    bool operator()(const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& lhs,
+                    const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& rhs) const
         requires OrderedByLess<T>
     {
         return less_range(lhs, rhs);
@@ -107,10 +98,9 @@ struct Less<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Alloc
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
 struct Less<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>
 {
-    using Type = View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires OrderedByLess<std::ranges::range_value_t<const Type>>
+    bool operator()(const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>& lhs,
+                    const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>& rhs) const
+        requires OrderedByLess<std::ranges::range_value_t<const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>>
     {
         return less_range(lhs, rhs);
     }
@@ -119,9 +109,7 @@ struct Less<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, 
 template<typename T>
 struct Less<::cista::optional<T>>
 {
-    using Type = ::cista::optional<T>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
+    bool operator()(const ::cista::optional<T>& lhs, const ::cista::optional<T>& rhs) const
         requires OrderedByLess<T>
     {
         if (lhs.has_value() != rhs.has_value())
@@ -134,9 +122,7 @@ struct Less<::cista::optional<T>>
 template<typename C, typename T>
 struct Less<View<::cista::optional<T>, C>>
 {
-    using Type = View<::cista::optional<T>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
+    bool operator()(const View<::cista::optional<T>, C>& lhs, const View<::cista::optional<T>, C>& rhs) const
         requires requires {
             { lhs.value() } -> OrderedByLess;
         }
@@ -144,16 +130,14 @@ struct Less<View<::cista::optional<T>, C>>
         if (lhs.has_value() != rhs.has_value())
             return !lhs.has_value();
 
-        return lhs.has_value() ? Less<std::remove_cvref_t<decltype(lhs.value())>> {}(lhs.value(), rhs.value()) : false;
+        return lhs.has_value() ? Less<ViewOrValue<T, C>> {}(lhs.value(), rhs.value()) : false;
     }
 };
 
 template<typename... Ts>
 struct Less<::cista::offset::variant<Ts...>>
 {
-    using Type = ::cista::offset::variant<Ts...>;
-
-    constexpr bool operator()(const Type& lhs, const Type& rhs) const
+    constexpr bool operator()(const ::cista::offset::variant<Ts...>& lhs, const ::cista::offset::variant<Ts...>& rhs) const
         requires(OrderedByLess<Ts> && ...)
     {
         if (lhs.valid() != rhs.valid())
@@ -166,13 +150,13 @@ struct Less<::cista::offset::variant<Ts...>>
             return lhs.index() < rhs.index();
 
         return lhs.apply(
-            [&](auto&& l)
+            [&]<typename L>(L&& l)
             {
                 return rhs.apply(
-                    [&](auto&& r)
+                    [&]<typename R>(R&& r)
                     {
-                        if constexpr (std::is_same_v<std::remove_cvref_t<decltype(l)>, std::remove_cvref_t<decltype(r)>>)
-                            return Less<std::remove_cvref_t<decltype(l)>> {}(l, r);
+                        if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
+                            return Less<std::remove_cvref_t<L>> {}(l, r);
                         return false;
                     });
             });
@@ -182,10 +166,8 @@ struct Less<::cista::offset::variant<Ts...>>
 template<typename C, typename... Ts>
 struct Less<View<::cista::offset::variant<Ts...>, C>>
 {
-    using Type = View<::cista::offset::variant<Ts...>, C>;
-
-    bool operator()(const Type& lhs, const Type& rhs) const
-        requires(OrderedByLess<std::conditional_t<ViewConcept<Ts, C>, View<Ts, C>, Ts>> && ...)
+    bool operator()(const View<::cista::offset::variant<Ts...>, C>& lhs, const View<::cista::offset::variant<Ts...>, C>& rhs) const
+        requires(OrderedByLess<ViewOrValue<Ts, C>> && ...)
     {
         if (lhs.valid() != rhs.valid())
             return !lhs.valid();
@@ -197,13 +179,13 @@ struct Less<View<::cista::offset::variant<Ts...>, C>>
             return lhs.index_variant().index() < rhs.index_variant().index();
 
         return lhs.apply(
-            [&](auto&& l)
+            [&]<typename L>(L&& l)
             {
                 return rhs.apply(
-                    [&](auto&& r)
+                    [&]<typename R>(R&& r)
                     {
-                        if constexpr (std::is_same_v<std::remove_cvref_t<decltype(l)>, std::remove_cvref_t<decltype(r)>>)
-                            return Less<std::remove_cvref_t<decltype(l)>> {}(l, r);
+                        if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
+                            return Less<std::remove_cvref_t<L>> {}(l, r);
                         return false;
                     });
             });

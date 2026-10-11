@@ -44,6 +44,10 @@ concept Identifiable = requires(const T a) {
     { a.identifying_members() };
 };
 
+/// @brief The type returned by identifying_members().
+template<Identifiable T>
+using IdentifyingMembers = decltype(std::declval<const T&>().identifying_members());
+
 template<typename Range, typename Value>
 concept InputRangeOf = std::ranges::input_range<Range> && std::same_as<std::ranges::range_value_t<Range>, Value>;
 

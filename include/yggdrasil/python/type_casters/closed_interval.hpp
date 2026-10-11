@@ -35,6 +35,7 @@ NAMESPACE_BEGIN(detail)
 template<std::floating_point T>
 struct type_caster<::ygg::ClosedInterval<T>>
 {
+private:
     using Interval = ::ygg::ClosedInterval<T>;
     using Bounds = std::tuple<T, T>;
     using PythonValue = std::optional<std::variant<T, Bounds>>;
@@ -42,6 +43,7 @@ struct type_caster<::ygg::ClosedInterval<T>>
     using ScalarCaster = make_caster<T>;
     using BoundsCaster = make_caster<Bounds>;
 
+public:
     NB_TYPE_CASTER(Interval, io_name("float | tuple[float, float]", "float | tuple[float, float] | None"))
 
     bool from_python(handle src, uint32_t flags, cleanup_list* cleanup) noexcept

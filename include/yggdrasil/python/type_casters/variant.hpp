@@ -26,9 +26,12 @@ template<typename Variant, typename C>
 struct type_caster<::ygg::ViewVariant<Variant, C>>
 {
     using Value = ::ygg::ViewVariant<Variant, C>;
+
+private:
     using Base = typename Value::base_type;
     using BaseCaster = make_caster<Base>;
 
+public:
     static constexpr auto Name = BaseCaster::Name;
     template<typename T>
     using Cast = movable_cast_t<T>;
@@ -67,10 +70,8 @@ struct type_caster<::ygg::ViewVariant<Variant, C>>
 template<typename C, typename... Ts>
 struct type_caster<::ygg::View<::cista::offset::variant<Ts...>, C>>
 {
-    using ViewT = ::ygg::View<::cista::offset::variant<Ts...>, C>;
-
     // Optional nice typing: Union[...]
-    static constexpr auto Name = union_name(make_caster<std::conditional_t<::ygg::ViewConcept<Ts, C>, ::ygg::View<Ts, C>, Ts>>::Name...);
+    static constexpr auto Name = union_name(make_caster<::ygg::ViewOrValue<Ts, C>>::Name...);
 
     // No Python -> C++ conversion
     bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
@@ -82,12 +83,7 @@ struct type_caster<::ygg::View<::cista::offset::variant<Ts...>, C>>
             return none().release();
 
         // Use View::apply so ViewConcept alternatives are exposed as views.
-        return v.apply(
-            [&](auto&& arg) -> handle
-            {
-                using A = std::decay_t<decltype(arg)>;
-                return make_caster<A>::from_cpp(std::forward<decltype(arg)>(arg), policy, cleanup);
-            });
+        return v.apply([&]<typename Arg>(Arg&& arg) -> handle { return make_caster<std::decay_t<Arg>>::from_cpp(std::forward<Arg>(arg), policy, cleanup); });
     }
 };
 
@@ -133,7 +129,7 @@ struct type_caster<::cista::offset::variant<Ts...>>
         if (!value.valid())
             return none().release();
 
-        return std::visit([&](auto&& v) { return make_caster<decltype(v)>::from_cpp(std::forward<decltype(v)>(v), policy, cleanup); }, std::forward<T>(value));
+        return std::visit([&]<typename V>(V&& v) { return make_caster<V>::from_cpp(std::forward<V>(v), policy, cleanup); }, std::forward<T>(value));
     }
 };
 

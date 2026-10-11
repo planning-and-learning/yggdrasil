@@ -51,9 +51,10 @@ class BitPackedArrayPool;
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe = false>
 class BasicBitPackedArrayView
 {
-public:
+private:
     using block_type = std::remove_const_t<Block>;
 
+public:
     static_assert(!ThreadSafe || std::atomic_ref<block_type>::is_always_lock_free, "Concurrent bit-packed access requires lock-free atomic blocks.");
     static_assert(!ThreadSafe || alignof(block_type) >= std::atomic_ref<block_type>::required_alignment,
                   "Concurrent bit-packed access requires atomic_ref-compatible block alignment.");
@@ -62,8 +63,8 @@ public:
      * Type aliases
      */
 
-    using value_type = typename Coder::value_type;
-    using reference_type = std::conditional_t<ThreadSafe, bit::atomic_int_reference<block_type, Coder>, typename bit::int_reference<block_type, Coder>>;
+    using value_type = bit::CoderValue<Coder>;
+    using reference_type = std::conditional_t<ThreadSafe, bit::atomic_int_reference<block_type, Coder>, bit::int_reference<block_type, Coder>>;
     using reference = std::conditional_t<std::is_const_v<Block>, value_type, reference_type>;
 
     /**
@@ -200,6 +201,7 @@ public:
     {
     private:
         using view_type = View;
+        using raw_view_type = std::remove_const_t<View>;
         static constexpr bool is_const_iterator = std::is_const_v<View> || std::is_const_v<Block>;
         using block_pointer = std::conditional_t<is_const_iterator, const block_type*, block_type*>;
 
@@ -215,7 +217,6 @@ public:
 
     public:
         using difference_type = std::ptrdiff_t;
-        using raw_view_type = std::remove_const_t<View>;
         using value_type = typename raw_view_type::value_type;
         using reference = std::conditional_t<is_const_iterator, value_type, typename raw_view_type::reference_type>;
         using iterator_category = std::random_access_iterator_tag;
@@ -439,7 +440,7 @@ public:
     static constexpr bool thread_safe = ThreadSafe;
 
     using block_type = std::remove_const_t<Block>;
-    using value_type = typename Coder::value_type;
+    using value_type = bit::CoderValue<Coder>;
     using ArrayView = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
     using ConstArrayView = BasicBitPackedArrayView<const Block, Coder, ThreadSafe>;
     using reference_type = typename ArrayView::reference_type;
