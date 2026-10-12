@@ -386,7 +386,7 @@ unchanged and read the distance column:
 Builder<Relation<>> result(plan.output_columns().span());
 const uint_t full = min_distance(sources, edges, targets, plan, result, workspace);
 
-incremental::MinDistanceEvaluator<> minimum(plan);
+incremental::SourceMinDistance<> minimum(plan);
 minimum.initialize(sources, edges, targets);
 minimum.update(source_delta.change(), edge_delta.change(), target_delta.change());
 const uint_t current = minimum.get_result();
