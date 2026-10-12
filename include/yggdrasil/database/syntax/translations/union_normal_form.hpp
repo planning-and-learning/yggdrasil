@@ -35,7 +35,7 @@ struct ConjunctiveNegation
     std::vector<ConjunctiveBranch> branches;
 };
 
-/// A conjunctive branch of the edge query in union normal form (relational algebra's differences stay nested).
+/// A conjunctive branch: one conjunctive query (a rule body) of the union, with its negated subqueries.
 struct ConjunctiveBranch
 {
     std::vector<ConjunctiveAtom> atoms;
@@ -50,8 +50,9 @@ struct QueryVariable
     size_t size = 0;
 };
 
-/// A query as a union of conjunctive branches over shared variables (the union normal form of relational algebra).
-/// Differences stay nested as negated branches. Every variable of a branch is bound by one of its atoms, so a negation
+/// A query as a union of conjunctive queries with nested negation (UCQ¬; Abiteboul, Hull & Vianu, "Foundations of
+/// Databases", 1995, ch. 5), its branches over shared variables. Differences and antijoins stay nested as negated
+/// branches. Every variable of a branch is bound by one of its atoms, so a negation
 /// only filters rows once its outer variables are bound (relational algebra is safe-range).
 struct UnionNormalForm
 {
@@ -69,9 +70,7 @@ namespace detail
 template<ColumnTypes Values>
 class UnionNormalFormBuilder
 {
-    std::vector<QueryVariable>& m_variables;
-    size_t& m_frame_size;
-    std::vector<std::vector<ColumnLayout>>& m_slot_columns;  ///< The schema of each input slot.
+    UnionNormalForm m_result;  ///< Variables, frame size and input schemas so far.
 
     static std::vector<ConjunctiveBranch> product(std::vector<ConjunctiveBranch> lhs, const std::vector<ConjunctiveBranch>& rhs)
     {
@@ -101,18 +100,20 @@ class UnionNormalFormBuilder
     }
 
 public:
-    UnionNormalFormBuilder(std::vector<QueryVariable>& variables, size_t& frame_size, std::vector<std::vector<ColumnLayout>>& slot_columns) :
-        m_variables(variables),
-        m_frame_size(frame_size),
-        m_slot_columns(slot_columns)
+    /// The union normal form of a query.
+    UnionNormalForm build(QueryView<Values> query) &&
     {
+        for (const auto& column : query.columns())
+            m_result.output.push_back(fresh(column));
+        m_result.branches = flatten(query, m_result.output);
+        return std::move(m_result);
     }
 
     uint32_t fresh(const ColumnLayout& column)
     {
-        m_variables.push_back(QueryVariable { m_frame_size, column.size });
-        m_frame_size += column.size;
-        return uint32_t(m_variables.size() - 1);
+        m_result.variables.push_back(QueryVariable { m_result.frame_size, column.size });
+        m_result.frame_size += column.size;
+        return uint32_t(m_result.variables.size() - 1);
     }
 
     /// `mapping` holds the variable of each of the query's columns, by position.
@@ -125,19 +126,20 @@ public:
                 if constexpr (std::same_as<Tag, QueryInputTag>)
                 {
                     const auto slot = concrete.get_input_slot();
-                    if (m_slot_columns.size() <= slot)
-                        m_slot_columns.resize(slot + 1);
-                    if (!m_slot_columns[slot].empty() && !std::ranges::equal(m_slot_columns[slot], columns))
+                    if (m_result.input_columns.size() <= slot)
+                        m_result.input_columns.resize(slot + 1);
+                    if (!m_result.input_columns[slot].empty() && !std::ranges::equal(m_result.input_columns[slot], columns))
                         throw std::invalid_argument("Union normal form: an input slot has two schemas.");
-                    m_slot_columns[slot].assign(columns.begin(), columns.end());
+                    m_result.input_columns[slot].assign(columns.begin(), columns.end());
                     auto branch = ConjunctiveBranch {};
                     branch.atoms.push_back(ConjunctiveAtom { concrete.get_input_slot(), std::vector<uint32_t>(mapping.begin(), mapping.end()) });
                     return { std::move(branch) };
                 }
                 else if constexpr (std::same_as<Tag, QueryEmptyTag>)
                     return {};
-                else if constexpr (std::same_as<Tag, QueryJoinTag>)
+                else if constexpr (std::same_as<Tag, QueryJoinTag> || std::same_as<Tag, QuerySemijoinTag>)
                 {
+                    // A semijoin's rhs-only columns are not in the output, so they get fresh variables.
                     const auto lhs = concrete.get_lhs();
                     const auto rhs = concrete.get_rhs();
                     return product(flatten(lhs, by_label(lhs.columns(), columns, mapping)), flatten(rhs, by_label(rhs.columns(), columns, mapping)));
@@ -193,8 +195,9 @@ public:
                     result.insert(result.end(), std::make_move_iterator(right.begin()), std::make_move_iterator(right.end()));
                     return result;
                 }
-                else if constexpr (std::same_as<Tag, QueryDifferenceTag>)
+                else if constexpr (std::same_as<Tag, QueryDifferenceTag> || std::same_as<Tag, QueryAntijoinTag>)
                 {
+                    // An antijoin's rhs-only columns get fresh variables inside the negation.
                     const auto lhs = concrete.get_lhs();
                     const auto rhs = concrete.get_rhs();
                     auto result = flatten(lhs, by_label(lhs.columns(), columns, mapping));
@@ -205,7 +208,10 @@ public:
                     return result;
                 }
                 else
+                {
+                    static_assert(std::same_as<Tag, QueryDistanceTag>, "unhandled query operator");
                     throw std::invalid_argument("Union normal form: distances are not first-order queries.");
+                }
             },
             query.get_variant());
     }
@@ -216,12 +222,7 @@ public:
 template<ColumnTypes Values>
 UnionNormalForm union_normal_form(QueryView<Values> query)
 {
-    auto result = UnionNormalForm {};
-    auto builder = detail::UnionNormalFormBuilder<Values>(result.variables, result.frame_size, result.input_columns);
-    for (const auto& column : query.columns())
-        result.output.push_back(builder.fresh(column));
-    result.branches = builder.flatten(query, result.output);
-    return result;
+    return detail::UnionNormalFormBuilder<Values> {}.build(query);
 }
 
 }  // namespace ygg::database

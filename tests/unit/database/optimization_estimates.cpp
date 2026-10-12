@@ -170,3 +170,21 @@ TEST(DatabaseOptimizationEstimates, FactorIdentitySeparatesInputsAndQueries)
     EXPECT_NEAR(combined.rows, 50, 1e-9);
 }
 }  // namespace
+
+namespace
+{
+TEST(DatabaseOptimizationEstimates, SemijoinAndAntijoinPartitionTheirLhs)
+{
+    auto queries = ygg::tests::qb::repository<>();
+    const auto a = ygg::tests::qb::input(queries, 0, { x, y });
+    const auto b = ygg::tests::qb::input(queries, 1, { y, z });
+    ygg::database::Statistics<> statistics;
+    statistics.inputs[0] = { 100, { { x, 10 }, { y, 20 } } };
+    statistics.inputs[1] = { 200, { { y, 20 }, { z, 10 } } };
+    const auto semijoin = estimate(ygg::tests::qb::semijoin(queries, a, b), statistics);
+    const auto antijoin = estimate(ygg::tests::qb::antijoin(queries, a, b), statistics);
+    EXPECT_LE(semijoin.rows, 100);
+    EXPECT_NEAR(semijoin.rows + antijoin.rows, 100, 1e-9);
+    EXPECT_NEAR(semijoin.distinct.at(x), std::min(10.0, semijoin.rows), 1e-9);  // V(R, a), capped by the rows.
+}
+}  // namespace

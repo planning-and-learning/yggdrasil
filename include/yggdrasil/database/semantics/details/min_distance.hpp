@@ -20,58 +20,6 @@
 namespace ygg::database::detail
 {
 
-/// The edges of a bound edge query as successors, predecessors and edge checks (the search oracle concepts).
-/// `Evaluator` is a BoundQueryEvaluator or incremental::BoundQueryEvaluator; the bindings bind the source columns,
-/// the target columns, and both.
-template<typename Evaluator>
-class EdgeOracle
-{
-public:
-    EdgeOracle(Evaluator& edges, size_t forward, size_t backward, size_t check, size_t target_offset, size_t& edge_checks) :
-        m_edges(&edges),
-        m_forward(forward),
-        m_backward(backward),
-        m_check(check),
-        m_target_offset(target_offset),
-        m_edge_checks(&edge_checks)
-    {
-    }
-
-    template<typename OnVertex>
-    void successors(std::span<const std::byte> vertex, OnVertex&& on_vertex)
-    {
-        m_edges->evaluate(m_forward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset)); });
-    }
-    template<typename OnVertex>
-    void predecessors(std::span<const std::byte> vertex, OnVertex&& on_vertex)
-    {
-        m_edges->evaluate(m_backward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.first(m_target_offset)); });
-    }
-    bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
-    {
-        ++*m_edge_checks;
-        auto bytes = std::vector<std::byte>(from.begin(), from.end());
-        bytes.insert(bytes.end(), to.begin(), to.end());
-        auto exists = false;
-        m_edges->evaluate(m_check,
-                          bytes,
-                          [&](std::span<const std::byte>)
-                          {
-                              exists = true;
-                              return false;
-                          });
-        return exists;
-    }
-
-private:
-    Evaluator* m_edges;
-    size_t m_forward;
-    size_t m_backward;
-    size_t m_check;
-    size_t m_target_offset;
-    size_t* m_edge_checks;
-};
-
 inline std::vector<size_t> column_range(size_t first, size_t last)
 {
     auto positions = std::vector<size_t>();
@@ -100,6 +48,77 @@ Evaluator relation_edges(const DistancePlan<Values>& plan, bool static_edges)
     input->columns.set(columns.begin(), columns.end());
     return Evaluator(insert_query(repository, builder, *input), { static_edges });
 }
+
+/// An edge query bound for search: `Evaluator` (a BoundQueryEvaluator or incremental::BoundQueryEvaluator) with the
+/// bindings of the source columns (successors), the target columns (predecessors) and both (edge checks), so that it
+/// models the search oracle concepts. Counts the edge checks.
+template<typename Evaluator, ColumnTypes Values>
+class EdgeQuery
+{
+public:
+    EdgeQuery(Evaluator edges, const DistancePlan<Values>& plan) :
+        m_vertex_size(plan.tuple_size()),
+        m_target_offset(plan.edge_columns()[plan.arity()].offset),
+        m_source_columns(plan.source_columns().span().begin(), plan.source_columns().span().end()),
+        m_target_columns(plan.target_columns().span().begin(), plan.target_columns().span().end()),
+        m_edges(std::move(edges)),
+        m_forward(m_edges.prepare(column_range(0, plan.arity()))),
+        m_backward(m_edges.prepare(column_range(plan.arity(), 2 * plan.arity()))),
+        m_check(m_edges.prepare(column_range(0, 2 * plan.arity())))
+    {
+    }
+
+    Evaluator& evaluator() noexcept { return m_edges; }
+    const Evaluator& evaluator() const noexcept { return m_edges; }
+    size_t vertex_size() const noexcept { return m_vertex_size; }
+    /// Where an edge row's target vertex starts.
+    size_t target_offset() const noexcept { return m_target_offset; }
+    size_t edge_checks() const noexcept { return m_edge_checks; }
+
+    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
+    void require_columns(const S& sources, const T& targets) const
+    {
+        require_plan_columns(sources.columns().span(), m_source_columns);
+        require_plan_columns(targets.columns().span(), m_target_columns);
+    }
+
+    template<typename OnVertex>
+    void successors(std::span<const std::byte> vertex, OnVertex&& on_vertex)
+    {
+        m_edges.evaluate(m_forward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset)); });
+    }
+    template<typename OnVertex>
+    void predecessors(std::span<const std::byte> vertex, OnVertex&& on_vertex)
+    {
+        m_edges.evaluate(m_backward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.first(m_target_offset)); });
+    }
+    bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
+    {
+        ++m_edge_checks;
+        auto bytes = std::vector<std::byte>(from.begin(), from.end());
+        bytes.insert(bytes.end(), to.begin(), to.end());
+        auto exists = false;
+        m_edges.evaluate(m_check,
+                         bytes,
+                         [&](std::span<const std::byte>)
+                         {
+                             exists = true;
+                             return false;
+                         });
+        return exists;
+    }
+
+private:
+    size_t m_vertex_size;
+    size_t m_target_offset;
+    std::vector<ColumnLayout> m_source_columns;
+    std::vector<ColumnLayout> m_target_columns;
+    Evaluator m_edges;
+    size_t m_forward;
+    size_t m_backward;
+    size_t m_check;
+    size_t m_edge_checks = 0;
+};
 
 /// The targets of a search, as a vertex set.
 class TargetSet

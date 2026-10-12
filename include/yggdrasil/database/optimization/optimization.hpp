@@ -22,18 +22,6 @@
 
 namespace ygg::database
 {
-/// Row and per-column distinct counts of one relation.
-template<ColumnTypes Values, typename Relation>
-RelationStatistics measure_relation(const Relation& relation)
-{
-    RelationStatistics stats;
-    stats.rows = static_cast<double>(relation.size());
-    const auto columns = relation.columns();
-    for (const auto& column : columns.span())
-        stats.distinct[column.label] = static_cast<double>(project<Values>(relation, { column.label }).size());
-    return stats;
-}
-
 /// Measures row and per-column distinct counts of the relations bound to each input slot.
 template<ColumnTypes Values, RelationViewRange<Values> R>
 Statistics<Values> collect_statistics(const R& inputs)

@@ -8,7 +8,7 @@
 
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
-#include "yggdrasil/database/semantics/search/backward_closure.hpp"
+#include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 
 #include <algorithm>
@@ -25,44 +25,51 @@ namespace ygg::database
 /// Counters of one A* search.
 struct AStarCounters
 {
-    size_t expanded = 0;           ///< Vertices whose successors were generated.
-    size_t tree_hits = 0;          ///< 1 if the search ended on a stored path.
-    size_t backward_vertices = 0;  ///< Vertices the backward closure found during the search.
-    size_t closure_dead = 0;       ///< 1 if the complete backward closure proved the sources unreachable.
+    size_t expanded = 0;            ///< Vertices whose successors were generated.
+    size_t tree_hits = 0;           ///< Searches ended on a stored path.
+    size_t backward_vertices = 0;   ///< Vertices the backward frontier found.
+    size_t backward_exhausted = 0;  ///< Searches whose exhausted backward frontier proved the sources unreachable.
+
+    AStarCounters& operator+=(const AStarCounters& other) noexcept
+    {
+        expanded += other.expanded;
+        tree_hits += other.tree_hits;
+        backward_vertices += other.backward_vertices;
+        backward_exhausted += other.backward_exhausted;
+        return *this;
+    }
 };
 
 /// One best-first search from sources to the targets with unit edge costs (Hart, Nilsson & Raphael, "A Formal Basis
 /// for the Heuristic Determination of Minimum Cost Paths", IEEE Trans. SSC 1968). The estimate is the maximum of the
-/// caller's heuristic, the tree's learned distance and the backward closure's bound; all three are consistent, so a
+/// caller's heuristic h, the tree's learned distance and the backward frontier's bound; all three are consistent, so a
 /// vertex is closed once. Buckets by f, then by g: within an f, larger g is expanded first, which leaves plateaus
 /// towards the targets.
 ///
-/// The search is bidirectional: before each bucket the backward closure advances while its frontier is not larger than
-/// the forward open list (Pohl's cardinality comparison, "Bi-directional Search", Machine Intelligence 6, 1971). It
-/// ends at a target, at a stored vertex on a valid tree path (MPGAA*'s goal condition), or when the complete closure
+/// The search is bidirectional: before each expansion the backward frontier advances while it is not larger than the
+/// forward open list (Pohl's cardinality comparison, "Bi-directional Search", Machine Intelligence 6, 1971). It ends at
+/// a target, at a stored vertex on a valid tree path (MPGAA*'s goal condition), or when the exhausted backward frontier
 /// excludes every source.
 ///
-/// Learning (GAA*) uses m = min(d, the smallest g + max(heuristic, learned) of an open or dropped vertex) instead of
-/// d: a search that ends early on a backward level, or on a closure proof, then still learns bounds that are
-/// consistent without the closure, which is discarded when edges are added. [Our addition.]
+/// Learning (GAA*: h(s) := m - g(s) for closed s) uses m = min(d, the smallest g + h_learn of an open or dropped
+/// vertex) instead of the distance d, where h_learn = max(h, learned) omits the backward bound: a search that ends
+/// early on a backward level, or on an exhausted frontier, then still learns bounds that are consistent without the
+/// backward frontier, which is discarded when edges are added. [Our addition.]
 template<typename Oracle, DistanceHeuristic H>
     requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
 class AStar
 {
 public:
-    static constexpr uint_t none = SearchTree::none;
-    static constexpr uint_t infinity = SearchTree::infinity;
-
     AStar(Oracle& oracle,
           SearchTree& tree,
-          BackwardClosure& closure,
+          BackwardFrontier& backward,
           const H& heuristic,
           const RawArraySet<std::byte, 64>& targets,
           size_t vertex_size,
           uint32_t version) :
         m_oracle(oracle),
         m_tree(tree),
-        m_closure(closure),
+        m_backward(backward),
         m_heuristic(heuristic),
         m_targets(targets),
         m_version(version),
@@ -79,7 +86,7 @@ public:
         m_tree.begin_search();
         if (closed_off(sources))
         {
-            ++m_counters.closure_dead;
+            ++m_counters.backward_exhausted;
             return infinity;
         }
         if (const auto distance = reuse(sources))
@@ -87,18 +94,17 @@ public:
         for (size_t i = 0; i < sources.size(); ++i)
             push(sources.row(i), 0, none);
         for (uint_t f = 0; f < m_buckets.size(); ++f)
-            while (const auto g_bucket = top_bucket(f))
+            while (const auto g = top_bucket(f))
             {
-                if (advance_closure(sources))
+                if (advance_backward(sources))
                 {
-                    ++m_counters.closure_dead;
+                    ++m_counters.backward_exhausted;
                     return finish(infinity, std::nullopt);
                 }
-                auto batch = std::move(m_buckets[f][*g_bucket]);
-                m_buckets[f][*g_bucket].clear();
-                for (const auto index : batch)
-                    if (const auto distance = visit(index, f))
-                        return *distance;
+                const auto index = m_buckets[f][*g].back();
+                m_buckets[f][*g].pop_back();
+                if (const auto distance = visit(index, f))
+                    return *distance;
             }
         return finish(infinity, std::nullopt);
     }
@@ -108,7 +114,7 @@ public:
 private:
     Oracle& m_oracle;
     SearchTree& m_tree;
-    BackwardClosure& m_closure;
+    BackwardFrontier& m_backward;
     const H& m_heuristic;
     const RawArraySet<std::byte, 64>& m_targets;
     uint32_t m_version;
@@ -116,18 +122,18 @@ private:
     RawArraySet<std::byte, 64> m_vertices;  ///< Generated vertices, indexed like the vectors below.
     std::vector<uint_t> m_g;
     std::vector<uint_t> m_h;          ///< The A* estimate when queued.
-    std::vector<uint_t> m_learnable;  ///< max(heuristic, learned): the estimate learning may rely on.
+    std::vector<uint_t> m_h_learn;    ///< max(h, learned): the estimate learning may rely on.
     std::vector<uint_t> m_parent;
     std::vector<bool> m_closed;
     size_t m_open = 0;
-    uint_t m_dropped = infinity;  ///< The smallest g + learnable among vertices dropped by the closure alone.
+    uint_t m_dropped = infinity;  ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
     std::vector<std::vector<std::vector<uint_t>>> m_buckets;
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
     uint_t value(uint_t id) const noexcept
     {
-        const auto level = m_closure.level(id);
+        const auto level = m_backward.level(id);
         return level == none ? m_tree.learned(id) : std::max(m_tree.learned(id), level);
     }
 
@@ -141,13 +147,13 @@ private:
             m_version);
     }
 
-    /// Whether the complete closure contains no source.
+    /// Whether the exhausted backward frontier found no source.
     template<typename Sources>
     bool closed_off(const Sources& sources) const
     {
-        return m_closure.complete()
+        return m_backward.exhausted()
                && std::ranges::none_of(std::views::iota(size_t(0), sources.size()),
-                                       [&](size_t i) { return m_closure.level(m_tree.find(sources.row(i)).value_or(none)) != none; });
+                                       [&](size_t i) { return m_backward.level(m_tree.find(sources.row(i)).value_or(none)) != none; });
     }
 
     /// A single stored source on a valid tree path has an exact value; a learned infinity proves it dead.
@@ -167,13 +173,13 @@ private:
         return value(*stored);
     }
 
-    /// Cardinality comparison; returns whether the completed closure excludes every source.
+    /// Cardinality comparison; returns whether the exhausted backward frontier excludes every source.
     template<typename Sources>
-    bool advance_closure(const Sources& sources)
+    bool advance_backward(const Sources& sources)
     {
-        while (!m_closure.complete() && m_closure.frontier_size() <= m_open)
+        while (!m_backward.exhausted() && m_backward.frontier_size() <= m_open)
         {
-            m_counters.backward_vertices += m_closure.step(m_tree, m_oracle, m_heuristic);
+            m_counters.backward_vertices += m_backward.step(m_tree, m_oracle, m_heuristic);
             if (closed_off(sources))
                 return true;
         }
@@ -212,7 +218,7 @@ private:
                 estimate = std::max(estimate, m_tree.learned(*stored));
             if (estimate == infinity)
                 return;
-            const auto bound = m_closure.bound(stored);
+            const auto bound = m_backward.bound(stored);
             if (bound == infinity)
             {
                 m_dropped = std::min(m_dropped, cost + estimate);
@@ -221,7 +227,7 @@ private:
             m_vertices.insert(vertex);
             m_g.push_back(cost);
             m_h.push_back(std::max(estimate, bound));
-            m_learnable.push_back(estimate);
+            m_h_learn.push_back(estimate);
             m_parent.push_back(from);
             m_closed.push_back(false);
             ++m_open;
@@ -241,13 +247,13 @@ private:
         if (m_targets.contains(vertex))
             return finish(f, index);
         const auto stored = m_tree.find(vertex);
-        // The closure may have raised its bound since the vertex was queued.
-        const auto bound = m_closure.bound(stored);
+        // The backward frontier may have raised its bound since the vertex was queued.
+        const auto bound = m_backward.bound(stored);
         if (bound == infinity)
         {
-            m_dropped = std::min(m_dropped, m_g[index] + m_learnable[index]);
+            m_dropped = std::min(m_dropped, m_g[index] + m_h_learn[index]);
             m_closed[index] = true;
-            m_learnable[index] = infinity;
+            m_h_learn[index] = infinity;
             --m_open;
             return std::nullopt;
         }
@@ -284,17 +290,17 @@ private:
     /// Learns for closed vertices (see the class comment) and links the found path into the tree.
     uint_t finish(uint_t distance, std::optional<uint_t> last)
     {
-        auto bound = std::min(distance, m_dropped);
+        auto m = std::min(distance, m_dropped);
         for (uint_t i = 0; i < m_closed.size(); ++i)
-            if (!m_closed[i] && m_learnable[i] != infinity)
-                bound = std::min(bound, m_g[i] + m_learnable[i]);
+            if (!m_closed[i] && m_h_learn[i] != infinity)
+                m = std::min(m, m_g[i] + m_h_learn[i]);
         // Closed vertices are stored even when they learn nothing: repair walks stored predecessors only.
         for (uint_t i = 0; i < m_closed.size(); ++i)
             if (m_closed[i])
             {
                 const auto id = ensure(i);
-                if (bound > m_g[i])
-                    m_tree.learn(id, bound == infinity ? infinity : bound - m_g[i]);
+                if (m > m_g[i])
+                    m_tree.learn(id, m == infinity ? infinity : m - m_g[i]);
             }
         if (last)
             for (auto child = *last; m_parent[child] != none; child = m_parent[child])

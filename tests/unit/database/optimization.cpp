@@ -385,7 +385,7 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
         for (size_t depth = 0; depth < 4; ++depth)
         {
             auto columns = labels(root);
-            switch (random() % 7)
+            switch (random() % 9)
             {
                 case 0:
                     root = ygg::tests::qb::join(queries, root, leaves[random() % leaves.size()]);
@@ -415,6 +415,12 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
                     break;
                 case 6:
                     root = ygg::tests::qb::difference(queries, root, peer(root));
+                    break;
+                case 7:
+                    root = ygg::tests::qb::semijoin(queries, root, leaves[random() % leaves.size()]);
+                    break;
+                case 8:
+                    root = ygg::tests::qb::antijoin(queries, root, leaves[random() % leaves.size()]);
                     break;
             }
         }

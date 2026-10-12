@@ -11,7 +11,7 @@
 #include "yggdrasil/database/semantics/incremental/search/adaptive_path_tree.hpp"
 #include "yggdrasil/database/semantics/min_distance.hpp"
 #include "yggdrasil/database/semantics/search/a_star.hpp"
-#include "yggdrasil/database/semantics/search/backward_closure.hpp"
+#include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 
 #include <cstddef>
@@ -29,14 +29,15 @@ namespace ygg::database::incremental
 ///
 /// Method (steps 1-3 as in database::MinDistance, min_distance.hpp):
 ///  1. Edges, by an incremental::BoundQueryEvaluator (incremental/bound_evaluation.hpp) over snapshots of the inputs.
-///  2. Search: A* (search/a_star.hpp); the estimate is the maximum of H, the learned distance and the closure's bound.
-///  3. Bidirectionality: the backward closure (search/backward_closure.hpp), kept across calls.
-///  4. Reuse. While the targets stay the same, a path tree (incremental/search/adaptive_path_tree.hpp) persists:
-///     closed vertices learn distance bounds (GAA*), and a search stops at a stored vertex whose next chain still
-///     exists and drops by one per edge (MPGAA*); edges are re-checked lazily after input changes.
+///  2. Search: A* (search/a_star.hpp); the estimate is the maximum of H, the learned distance and the backward bound.
+///  3. Bidirectionality: the backward frontier (search/backward_frontier.hpp), kept across calls.
+///  4. Reuse. While the targets stay the same, the SearchTree persists: closed vertices learn distance bounds (GAA*),
+///     and a search stops at a stored vertex whose next chain still exists and drops by one per edge (MPGAA*); edges
+///     are re-checked lazily after input changes.
 ///  5. Changes. bind() diffs the inputs. Removed edges keep every bound admissible. Added edges are found by seeding
-///     the branches with the changed rows (delta rules), learned distances are repaired, and the backward closure
-///     restarts. New targets, or changes the delta rules cannot express, reset the tree.
+///     the branches with the changed rows (delta rules), learned distances are repaired (repair(),
+///     incremental/search/adaptive_path_tree.hpp), and the backward frontier restarts. New targets, or changes the
+///     delta rules cannot express, reset the tree.
 ///
 /// Contract: H is consistent in every state while the targets stay unchanged (DistanceHeuristic).
 ///
@@ -59,17 +60,17 @@ public:
     {
     }
 
-    size_t input_count() const noexcept { return m_edges.input_count(); }
-    const Builder<Relation<Values>>& input(size_t slot) const { return m_edges.input(slot); }
+    size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
+    const Builder<Relation<Values>>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
 
     /// Binds the current inputs: input(slot) returns slot's relation view (see BoundQueryEvaluator::bind).
     template<typename Input>
     void bind(Input&& input, const std::vector<bool>& maybe_changed = {})
     {
-        const auto changes = m_edges.bind(input, maybe_changed);
+        const auto changes = m_edges.evaluator().bind(input, maybe_changed);
         // Seeds run in the new state of every input, so an edge built from several changed rows is found from any.
         for (const auto& change : changes)
-            if (!m_reset_pending && !m_edges.seed(change, [&](std::span<const std::byte> edge) { return record_added(edge); }))
+            if (!m_reset_pending && !m_edges.evaluator().seed(change, [&](std::span<const std::byte> edge) { return record_added(edge); }))
                 m_reset_pending = true;
         if (m_reset_pending)
             m_added.clear();
@@ -87,71 +88,50 @@ public:
     template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
     uint_t min_distance(const S& sources, const T& targets, const H& heuristic = {})
     {
-        if (!m_edges.bound())
+        if (!m_edges.evaluator().bound())
             throw std::invalid_argument("Min distance: inputs are not bound.");
-        database::detail::require_plan_columns(sources.columns().span(), m_source_columns);
-        database::detail::require_plan_columns(targets.columns().span(), m_target_columns);
+        m_edges.require_columns(sources, targets);
         ++m_statistics.searches;
-        auto oracle = Oracle(m_edges, m_forward, m_backward, m_check, m_target_offset, m_statistics.edge_checks);
-        if (!(m_active && m_targets.same(targets)) || m_reset_pending)
+        if (m_reset_pending || !m_targets.same(targets))
             reset(targets, heuristic);
         else if (!m_added.empty())
         {
-            // Added edges can shorten distances: learned ones are repaired, the backward closure restarts.
-            m_statistics.repaired += m_tree.repair(m_added, oracle, heuristic);
-            restart_closure(heuristic);
+            // Added edges can shorten distances: learned ones are repaired, the backward frontier restarts.
+            m_statistics.repaired += repair(m_tree, m_added, m_edges, heuristic);
+            restart_backward(heuristic);
         }
         m_added.clear();
-        auto search = AStar<Oracle, H>(oracle, m_tree.tree(), m_closure, heuristic, m_targets.vertices(), m_vertex_size, m_edges.version());
+        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_edges.vertex_size(), m_edges.evaluator().version());
         const auto distance = search.run(sources);
-        m_statistics.expanded += search.counters().expanded;
-        m_statistics.tree_hits += search.counters().tree_hits;
-        m_statistics.backward_vertices += search.counters().backward_vertices;
-        m_statistics.closure_dead += search.counters().closure_dead;
+        m_statistics += search.counters();
+        m_statistics.edge_checks = m_edges.edge_checks();
         return distance;
     }
 
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
+    using Edges = database::detail::EdgeQuery<BoundQueryEvaluator<Values>, Values>;
+
     MinDistance(BoundQueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
-        m_k(plan.arity()),
-        m_vertex_size(plan.tuple_size()),
-        m_target_offset(plan.edge_columns()[plan.arity()].offset),
-        m_source_columns(plan.source_columns().span().begin(), plan.source_columns().span().end()),
-        m_target_columns(plan.target_columns().span().begin(), plan.target_columns().span().end()),
-        m_edges(std::move(edges)),
-        m_forward(m_edges.prepare(database::detail::column_range(0, m_k))),
-        m_backward(m_edges.prepare(database::detail::column_range(m_k, 2 * m_k))),
-        m_check(m_edges.prepare(database::detail::column_range(0, 2 * m_k))),
+        m_edges(std::move(edges), plan),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size()),
         m_added(plan.tuple_size())
     {
     }
 
-    using Oracle = database::detail::EdgeOracle<BoundQueryEvaluator<Values>>;
-
-    size_t m_k;
-    size_t m_vertex_size;
-    size_t m_target_offset;
-    std::vector<ColumnLayout> m_source_columns;
-    std::vector<ColumnLayout> m_target_columns;
-    BoundQueryEvaluator<Values> m_edges;
-    size_t m_forward;
-    size_t m_backward;
-    size_t m_check;
-    AdaptivePathTree m_tree;
-    BackwardClosure m_closure;
+    Edges m_edges;
+    SearchTree m_tree;
+    BackwardFrontier m_backward;
     database::detail::TargetSet m_targets;
     EdgeList m_added;  ///< Edges the last bind() can have added.
-    bool m_active = false;
     bool m_reset_pending = true;
     MinDistanceStatistics m_statistics;
 
     bool record_added(std::span<const std::byte> edge)
     {
-        m_added.add(edge.first(m_target_offset), edge.subspan(m_target_offset));
+        m_added.add(edge.first(m_edges.target_offset()), edge.subspan(m_edges.target_offset()));
         return true;
     }
 
@@ -161,12 +141,11 @@ private:
         ++m_statistics.resets;
         m_tree.clear();
         m_targets.assign(targets);
-        m_active = true;
         m_reset_pending = false;
-        restart_closure(heuristic);
+        restart_backward(heuristic);
     }
 
-    void restart_closure(const H& heuristic) { m_closure.start(m_targets.ensure_in(m_tree.tree(), heuristic)); }
+    void restart_backward(const H& heuristic) { m_backward.start(m_targets.ensure_in(m_tree, heuristic)); }
 };
 
 }  // namespace ygg::database::incremental

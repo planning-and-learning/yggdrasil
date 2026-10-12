@@ -214,7 +214,9 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
                                     ygg::tests::qb::difference(repository, a, b),
                                     ygg::tests::qb::join(repository, a, a),
                                     ygg::tests::qb::project(repository, joined, {}),
-                                    ygg::tests::qb::empty(repository, { x }) };
+                                    ygg::tests::qb::empty(repository, { x }),
+                                    ygg::tests::qb::semijoin(repository, a, c),
+                                    ygg::tests::qb::antijoin(repository, a, c) };
     const auto plan = ygg::database::compile(roots);
     ygg::database::QueryEvaluator<> full(plan);
     ygg::database::incremental::QueryEvaluator<> incremental(plan);
@@ -371,7 +373,16 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
                                     ygg::tests::qb::select_value(repository, difference, x, ygg::uint_t(1)),
                                     ygg::tests::qb::project(repository, ygg::tests::qb::join(repository, a, edges), {}),
                                     ygg::tests::qb::join(repository, ready, project_union),
-                                    ygg::tests::qb::rename(repository, project_union, { z }) };
+                                    ygg::tests::qb::rename(repository, project_union, { z }),
+                                    ygg::tests::qb::semijoin(repository, u, edges),
+                                    ygg::tests::qb::antijoin(repository, u, edges),
+                                    ygg::tests::qb::semijoin(repository, a, ready),
+                                    ygg::tests::qb::antijoin(repository, difference, ready),
+                                    ygg::tests::qb::antijoin(repository, project_union, project_b),
+                                    // References: u ⋉ edges = π_{x,y}(u ⋈ edges) and u ▷ edges = u \ (u ⋉ edges).
+                                    ygg::tests::qb::project(repository, ygg::tests::qb::join(repository, u, edges), { x, y }),
+                                    u };
+    constexpr size_t semijoin_root = 12, antijoin_root = 13, reference_root = 17, union_root = 18;
     const auto plan = ygg::database::compile(roots);
     std::array<Relation, 4> inputs { Relation({ x, y }), Relation({ x, y }), Relation({ y, z }), Relation(std::span<const Column> {}) };
     const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]), borrow(inputs[3]) };
@@ -426,6 +437,9 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
             EXPECT_EQ(rows(incremental.get_delta(root).added), minus(after, before[root]));
             EXPECT_EQ(rows(incremental.get_delta(root).removed), minus(before[root], after));
         }
+        const auto reference = rows(full.get_result(reference_root));
+        EXPECT_EQ(rows(full.get_result(semijoin_root)), reference);
+        EXPECT_EQ(rows(full.get_result(antijoin_root)), minus(rows(full.get_result(union_root)), reference));
     }
 }
 

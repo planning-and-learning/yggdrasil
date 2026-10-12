@@ -95,6 +95,17 @@ database::QueryView<Values> difference(database::QueryRepository<Values>& reposi
     return binary<database::QueryDifferenceTag>(repository, lhs, rhs);
 }
 
+template<database::ColumnTypes Values>
+database::QueryView<Values> semijoin(database::QueryRepository<Values>& repository, database::QueryView<Values> lhs, database::QueryView<Values> rhs)
+{
+    return binary<database::QuerySemijoinTag>(repository, lhs, rhs);
+}
+template<database::ColumnTypes Values>
+database::QueryView<Values> antijoin(database::QueryRepository<Values>& repository, database::QueryView<Values> lhs, database::QueryView<Values> rhs)
+{
+    return binary<database::QueryAntijoinTag>(repository, lhs, rhs);
+}
+
 template<typename Tag, database::ColumnTypes Values>
 database::QueryView<Values>
 relabel(database::QueryRepository<Values>& repository, database::QueryView<Values> arg, std::span<const Index<database::Column>> labels)

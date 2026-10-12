@@ -10,6 +10,7 @@
 #include "yggdrasil/database/semantics/incremental/generic_join.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
+#include "yggdrasil/database/semantics/incremental/semijoin.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
 
 #include <ranges>
@@ -164,6 +165,25 @@ struct NodeRules<Values, QueryJoinTag>
     static void update(State& state, QueryView<Values, QueryJoinTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
     {
         state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change(), workspace);
+    }
+};
+
+template<ColumnTypes Values, typename Tag>
+    requires(std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
+struct NodeRules<Values, Tag>
+{
+    using State = SemijoinEvaluator<Values>;
+
+    static State make(QueryView<Values, Tag> operation) { return State(operation.get_plan(), std::same_as<Tag, QueryAntijoinTag>); }
+    template<typename Graph, typename R>
+    static void initialize(State& state, QueryView<Values, Tag> operation, const Graph& graph, const R&, Workspace<Values>&)
+    {
+        state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()));
+    }
+    template<typename Graph, typename R>
+    static void update(State& state, QueryView<Values, Tag> operation, const Graph& graph, const R&, Workspace<Values>&)
+    {
+        state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change());
     }
 };
 

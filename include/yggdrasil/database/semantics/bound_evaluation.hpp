@@ -28,20 +28,14 @@
 namespace ygg::database
 {
 
-namespace incremental
-{
-template<ColumnTypes Values>
-class BoundQueryEvaluator;
-}
-
 /// Evaluation of a query with some of its output columns bound to given values, over owned snapshots of its inputs.
 ///
 /// The query is compiled into union normal form (union_normal_form.hpp). Each set of bound columns gets one
 /// ConjunctivePlan per branch (conjunctive_plan.hpp), evaluated by index nested-loop joins over a JoinIndex of each
 /// input on the columns bound at its step; a negation rejects a row if one of its branches matches.
 ///
-/// Inputs are borrowed during bind() only. Kept across input changes, with the rows a change adds, it is the state of
-/// incremental::BoundQueryEvaluator.
+/// Inputs are borrowed during bind() only. incremental::BoundQueryEvaluator keeps it across input changes and runs its
+/// plans with variables bound by changed rows (plans(), bind_atom(), run_plan()).
 template<ColumnTypes Values>
 class BoundQueryEvaluator
 {
@@ -136,15 +130,50 @@ public:
                 std::ranges::copy(values.subspan(offset, size), variable(m_query.output[position]).begin());
                 offset += size;
             }
-            const auto& plan = prepared.plans[b];
-            if (accepts(m_query.branches[b], plan, plan.equal, plan.value, plan.negations) && !run(m_query.branches[b], plan, 0, [&] { return on_row(output_row()); }))
+            if (!run_plan(b, prepared.plans[b], on_row))
                 return;
         }
     }
 
+    const UnionNormalForm& query() const noexcept { return m_query; }
+
+    /// One plan per branch, with the variables marked in `bound` bound on arrival.
+    std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound)
+    {
+        auto compiled = std::vector<ConjunctivePlan>();
+        for (const auto& branch : m_query.branches)
+        {
+            auto& plan = compiled.emplace_back(plan_branch(m_query, branch, bound, [&](size_t slot) -> const RelationStatistics& { return statistics(slot); }));
+            resolve(branch, plan);
+        }
+        return compiled;
+    }
+
+    /// Binds the atom's variables to an input row; false if the row repeats a variable with different values.
+    bool bind_atom(const ConjunctiveAtom& atom, std::span<const std::byte> row)
+    {
+        const auto& columns = m_query.input_columns[atom.slot];
+        for (size_t c = 0; c < atom.vars.size(); ++c)
+        {
+            const auto bytes = detail::column_bytes(row, columns[c]);
+            if (size_t(std::ranges::find(atom.vars, atom.vars[c]) - atom.vars.begin()) == c)
+                std::ranges::copy(bytes, variable(atom.vars[c]).begin());
+            else if (!std::ranges::equal(bytes, variable(atom.vars[c])))
+                return false;
+        }
+        return true;
+    }
+
+    /// Runs a plan of branch `b` whose initially bound variables are set, calling on_row(row) for each output row;
+    /// returns false once on_row returned false.
+    template<typename OnRow>
+    bool run_plan(size_t b, const ConjunctivePlan& plan, OnRow&& on_row)
+    {
+        const auto& branch = m_query.branches[b];
+        return !accepts(branch, plan, plan.filters) || run(branch, plan, 0, [&] { return on_row(output_row()); });
+    }
+
 private:
-    template<ColumnTypes>
-    friend class incremental::BoundQueryEvaluator;  // Runs plans with variables bound by changed rows.
 
     struct Binding
     {
@@ -215,18 +244,8 @@ private:
     const RelationStatistics& statistics(size_t slot)
     {
         auto& measured = m_statistics[slot];
-        if (measured)
-            return *measured;
-        measured.emplace();
-        const auto& rows = *m_inputs[slot];
-        measured->rows = double(rows.size());
-        for (const auto& column : m_query.input_columns[slot])
-        {
-            auto values = RawArraySet<std::byte, 64>(column.size);
-            for (size_t r = 0; r < rows.size(); ++r)
-                values.insert(detail::column_bytes(rows.row(r), column));
-            measured->distinct[column.label] = double(values.size());
-        }
+        if (!measured)
+            measured = measure_relation<Values>(*m_inputs[slot]);
         return *measured;
     }
 
@@ -263,38 +282,23 @@ private:
                 resolve(branch.negations[i].branches[b], plan.negation_plans[i][b]);
     }
 
-    std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound)
-    {
-        auto compiled = std::vector<ConjunctivePlan>();
-        for (const auto& branch : m_query.branches)
-        {
-            auto& plan = compiled.emplace_back(plan_branch(m_query, branch, bound, [&](size_t slot) -> const RelationStatistics& { return statistics(slot); }));
-            resolve(branch, plan);
-        }
-        return compiled;
-    }
-
     // ---- Execution ----------------------------------------------------------------------------------------------
 
-    bool accepts(const ConjunctiveBranch& branch,
-                 const ConjunctivePlan& plan,
-                 std::span<const size_t> equal,
-                 std::span<const size_t> value,
-                 std::span<const size_t> negations)
+    bool accepts(const ConjunctiveBranch& branch, const ConjunctivePlan& plan, const ConjunctiveFilters& filters)
     {
-        for (const auto i : equal)
+        for (const auto i : filters.equal)
             if (!std::ranges::equal(variable(branch.equal[i].first), variable(branch.equal[i].second)))
                 return false;
-        for (const auto i : value)
+        for (const auto i : filters.value)
             if (!std::ranges::equal(variable(branch.value[i].first), branch.value[i].second))
                 return false;
         // A negation rejects the row if any of its branches matches (an anti-join, its outer variables bound).
-        for (const auto i : negations)
+        for (const auto i : filters.negations)
             for (size_t b = 0; b < branch.negations[i].branches.size(); ++b)
             {
                 const auto& inner = branch.negations[i].branches[b];
                 const auto& inner_plan = plan.negation_plans[i][b];
-                if (accepts(inner, inner_plan, inner_plan.equal, inner_plan.value, inner_plan.negations) && !run(inner, inner_plan, 0, [] { return false; }))
+                if (accepts(inner, inner_plan, inner_plan.filters) && !run(inner, inner_plan, 0, [] { return false; }))
                     return false;
             }
         return true;
@@ -318,7 +322,7 @@ private:
             for (const auto& [c, var] : step.compare)
                 if (!std::ranges::equal(detail::column_bytes(row, columns[c]), variable(var)))
                     return true;
-            return !accepts(branch, plan, step.equal, step.value, step.negations) || run(branch, plan, step_index + 1, emit);
+            return !accepts(branch, plan, step.filters) || run(branch, plan, step_index + 1, emit);
         };
         const auto& lookup = m_lookups[step.index];
         auto& entry = m_indexes[lookup.index];

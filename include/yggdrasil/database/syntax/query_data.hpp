@@ -90,10 +90,11 @@ struct Data<database::Query<Values, database::QueryEmptyTag>>
 };
 
 // Prepared schemas and positions are serialized but do not define operator identity.
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryJoinTag>>
+template<database::ColumnTypes Values, typename Tag>
+    requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
+struct Data<database::Query<Values, Tag>>
 {
-    Index<database::Query<Values, database::QueryJoinTag>> index;
+    Index<database::Query<Values, Tag>> index;
     Index<database::Query<Values>> lhs;
     Index<database::Query<Values>> rhs;
     database::JoinPlan<Values> plan;

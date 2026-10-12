@@ -20,6 +20,15 @@
 namespace ygg::database
 {
 
+/// Filters of a branch that become checkable at one point of a plan: indices into the branch's equalities, constants
+/// and negations.
+struct ConjunctiveFilters
+{
+    std::vector<size_t> equal;
+    std::vector<size_t> value;
+    std::vector<size_t> negations;
+};
+
 /// One atom of a conjunctive plan: the columns bound on arrival (its lookup key), the variables it binds, and the
 /// filters that become checkable after it.
 struct ConjunctiveStep
@@ -30,9 +39,7 @@ struct ConjunctiveStep
     std::vector<size_t> positions;                     ///< The atom's columns bound on arrival, in column order.
     std::vector<std::pair<size_t, uint32_t>> assign;   ///< Column, variable bound here.
     std::vector<std::pair<size_t, uint32_t>> compare;  ///< Column, variable bound earlier in this row.
-    std::vector<size_t> equal;
-    std::vector<size_t> value;
-    std::vector<size_t> negations;
+    ConjunctiveFilters filters;
     size_t index = unresolved;  ///< The executor's lookup structure for (slot, positions); set by the executor.
 };
 
@@ -40,17 +47,17 @@ struct ConjunctiveStep
 /// from the start are checked before the first step; negations carry plans of their own, their outer variables bound.
 struct ConjunctivePlan
 {
-    std::vector<size_t> equal;
-    std::vector<size_t> value;
-    std::vector<size_t> negations;
+    ConjunctiveFilters filters;  ///< Checkable before the first step.
     std::vector<ConjunctiveStep> steps;
     std::vector<std::vector<ConjunctivePlan>> negation_plans;  ///< Per negation, per branch.
 };
 
 /// A greedy left-deep order for index nested-loop evaluation: next the atom with the smallest expected fanout, using
 /// System R's uniform estimate that divides an input's rows by the distinct values of each bound column (Selinger et
-/// al., "Access Path Selection in a Relational Database Management System", SIGMOD 1979). Each equality, constant and
-/// negation attaches to the first step after which its variables are bound. `statistics(slot)` measures an input.
+/// al., "Access Path Selection in a Relational Database Management System", SIGMOD 1979). Greedy instead of System R's
+/// dynamic programming over left-deep orders: branches are small and planned once per set of bound columns. Each
+/// equality, constant and negation attaches to the first step after which its variables are bound. `statistics(slot)`
+/// measures an input.
 template<typename Statistics>
     requires std::invocable<Statistics&, size_t>
 ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranch& branch, std::vector<bool> bound, Statistics&& statistics)
@@ -68,28 +75,28 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
     auto pending_equal = std::vector<bool>(branch.equal.size(), true);
     auto pending_value = std::vector<bool>(branch.value.size(), true);
     auto pending_negation = std::vector<bool>(branch.negations.size(), true);
-    const auto attach = [&](std::vector<size_t>& equal, std::vector<size_t>& value, std::vector<size_t>& negations)
+    const auto attach = [&](ConjunctiveFilters& filters)
     {
         for (size_t i = 0; i < branch.equal.size(); ++i)
             if (pending_equal[i] && bound[branch.equal[i].first] && bound[branch.equal[i].second])
             {
                 pending_equal[i] = false;
-                equal.push_back(i);
+                filters.equal.push_back(i);
             }
         for (size_t i = 0; i < branch.value.size(); ++i)
             if (pending_value[i] && bound[branch.value[i].first])
             {
                 pending_value[i] = false;
-                value.push_back(i);
+                filters.value.push_back(i);
             }
         for (size_t i = 0; i < branch.negations.size(); ++i)
             if (pending_negation[i] && std::ranges::all_of(branch.negations[i].outer, [&](uint32_t var) { return bool(bound[var]); }))
             {
                 pending_negation[i] = false;
-                negations.push_back(i);
+                filters.negations.push_back(i);
             }
     };
-    attach(plan.equal, plan.value, plan.negations);
+    attach(plan.filters);
     auto remaining = std::vector<size_t>(branch.atoms.size());
     for (size_t i = 0; i < remaining.size(); ++i)
         remaining[i] = i;
@@ -116,7 +123,7 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
         for (const auto var : assigned)
             bound[var] = true;
         remaining.erase(best);
-        attach(step.equal, step.value, step.negations);
+        attach(step.filters);
     }
     for (const auto& negation : branch.negations)
     {

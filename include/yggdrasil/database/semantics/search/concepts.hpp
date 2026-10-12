@@ -10,12 +10,18 @@
 
 #include <concepts>
 #include <cstddef>
+#include <limits>
 #include <span>
 
 namespace ygg::database
 {
 
-/// An estimate of a vertex's distance to the targets; uint_t's maximum means no target is reachable.
+/// The distance of a vertex from which no target is reachable.
+inline constexpr uint_t infinity = std::numeric_limits<uint_t>::max();
+/// No vertex (e.g. an unset next or parent pointer).
+inline constexpr uint_t none = std::numeric_limits<uint_t>::max();
+
+/// An estimate of a vertex's distance to the targets; infinity means no target is reachable.
 ///
 /// Contract, relied on for exactness: the estimate is consistent (h(u) <= 1 + h(v) for every edge (u, v), and 0 on
 /// targets) in every graph the inputs can form while the targets stay unchanged, i.e. it depends on the targets and on

@@ -34,6 +34,8 @@ public:
         else if constexpr (std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryProjectTag>
                            || std::same_as<Tag, database::QueryDistanceTag> || std::same_as<Tag, database::QueryGenericJoinTag>)
             return get_plan().output_columns().span();
+        else if constexpr (std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
+            return get_plan().lhs_columns().span();
         else
             return { this->get_data().columns.data(), this->get_data().columns.size() };
     }
@@ -44,12 +46,14 @@ public:
         return make_view(this->get_data().arg, this->get_context());
     }
     auto get_lhs() const
-        requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>)
+        requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>
+                 || std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
     {
         return make_view(this->get_data().lhs, this->get_context());
     }
     auto get_rhs() const
-        requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>)
+        requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>
+                 || std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
     {
         return make_view(this->get_data().rhs, this->get_context());
     }
@@ -105,7 +109,8 @@ public:
     }
     const auto& get_plan() const
         requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryDistanceTag>
-                 || std::same_as<Tag, database::QueryGenericJoinTag>)
+                 || std::same_as<Tag, database::QueryGenericJoinTag> || std::same_as<Tag, database::QuerySemijoinTag>
+                 || std::same_as<Tag, database::QueryAntijoinTag>)
     {
         return this->get_data().plan;
     }

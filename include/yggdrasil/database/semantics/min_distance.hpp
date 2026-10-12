@@ -10,7 +10,7 @@
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/search/a_star.hpp"
-#include "yggdrasil/database/semantics/search/backward_closure.hpp"
+#include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 
@@ -24,16 +24,13 @@
 namespace ygg::database
 {
 
-struct MinDistanceStatistics
+/// The counters of all searches (AStarCounters) and of the work between them.
+struct MinDistanceStatistics : AStarCounters
 {
     size_t searches = 0;
-    size_t expanded = 0;           ///< Forward vertices whose successors were generated.
-    size_t tree_hits = 0;          ///< Searches ended on a stored path.
-    size_t resets = 0;             ///< Path trees discarded (new targets, or changes delta rules cannot express).
-    size_t backward_vertices = 0;  ///< Vertices found by the backward closure.
-    size_t closure_dead = 0;       ///< Searches answered by a complete backward closure.
-    size_t repaired = 0;           ///< Vertices whose learned distance dropped after added edges.
-    size_t edge_checks = 0;        ///< Stored edges validated against the current inputs.
+    size_t resets = 0;       ///< Path trees discarded (new targets, or changes delta rules cannot express).
+    size_t repaired = 0;     ///< Vertices whose learned distance dropped after added edges.
+    size_t edge_checks = 0;  ///< Stored edges validated against the current inputs.
 };
 
 /// Exact minimum distance from any source to any target, or uint_t's maximum if none is reachable, from the inputs of
@@ -45,10 +42,10 @@ struct MinDistanceStatistics
 ///     (bound_evaluation.hpp) evaluates it over the call's inputs with some columns bound: a vertex's source columns
 ///     for its successors, its target columns for its predecessors, both for an edge check.
 ///  2. Search. A* (search/a_star.hpp) with f/g buckets. The estimate is the maximum of the heuristic H, the distances
-///     the search learned, and the backward closure's bound.
-///  3. Bidirectionality. The backward closure (search/backward_closure.hpp) advances whenever its frontier is not
-///     larger than the forward open list. Its levels are exact distances; once it is complete, sources outside it are
-///     unreachable. A search ends at a vertex on a valid closure chain (search/search_tree.hpp).
+///     the search learned, and the backward frontier's bound.
+///  3. Bidirectionality. The backward frontier (search/backward_frontier.hpp) advances whenever it is not larger than
+///     the forward open list. Its levels are exact distances; once it is exhausted, sources outside it are
+///     unreachable. A search ends at a vertex on a valid chain to a target (search/search_tree.hpp).
 ///
 /// Nothing but compiled plans and static inputs is kept across calls; incremental::MinDistance keeps the search tree
 /// and updates it from input changes. Inputs are borrowed during min_distance() only.
@@ -70,27 +67,23 @@ public:
     {
     }
 
-    size_t input_count() const noexcept { return m_edges.input_count(); }
+    size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
 
     /// The minimum distance over the edges of the inputs: input(slot) returns slot's relation view.
     template<typename Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
         requires std::invocable<Input&, size_t>
     uint_t min_distance(Input&& input, const S& sources, const T& targets, const H& heuristic = {})
     {
-        detail::require_plan_columns(sources.columns().span(), m_source_columns);
-        detail::require_plan_columns(targets.columns().span(), m_target_columns);
-        m_edges.bind(input);
+        m_edges.require_columns(sources, targets);
+        m_edges.evaluator().bind(input);
         ++m_statistics.searches;
         m_tree.clear();
         m_targets.assign(targets);
-        m_closure.start(m_targets.ensure_in(m_tree, heuristic));
-        auto oracle = Oracle(m_edges, m_forward, m_backward, m_check, m_target_offset, m_statistics.edge_checks);
-        auto search = AStar<Oracle, H>(oracle, m_tree, m_closure, heuristic, m_targets.vertices(), m_vertex_size, m_edges.version());
+        m_backward.start(m_targets.ensure_in(m_tree, heuristic));
+        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_edges.vertex_size(), m_edges.evaluator().version());
         const auto distance = search.run(sources);
-        m_statistics.expanded += search.counters().expanded;
-        m_statistics.tree_hits += search.counters().tree_hits;
-        m_statistics.backward_vertices += search.counters().backward_vertices;
-        m_statistics.closure_dead += search.counters().closure_dead;
+        m_statistics += search.counters();
+        m_statistics.edge_checks = m_edges.edge_checks();
         return distance;
     }
 
@@ -104,32 +97,18 @@ public:
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    using Oracle = detail::EdgeOracle<BoundQueryEvaluator<Values>>;
+    using Edges = detail::EdgeQuery<BoundQueryEvaluator<Values>, Values>;
 
     MinDistance(BoundQueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
-        m_vertex_size(plan.tuple_size()),
-        m_target_offset(plan.edge_columns()[plan.arity()].offset),
-        m_source_columns(plan.source_columns().span().begin(), plan.source_columns().span().end()),
-        m_target_columns(plan.target_columns().span().begin(), plan.target_columns().span().end()),
-        m_edges(std::move(edges)),
-        m_forward(m_edges.prepare(detail::column_range(0, plan.arity()))),
-        m_backward(m_edges.prepare(detail::column_range(plan.arity(), 2 * plan.arity()))),
-        m_check(m_edges.prepare(detail::column_range(0, 2 * plan.arity()))),
+        m_edges(std::move(edges), plan),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size())
     {
     }
 
-    size_t m_vertex_size;
-    size_t m_target_offset;
-    std::vector<ColumnLayout> m_source_columns;
-    std::vector<ColumnLayout> m_target_columns;
-    BoundQueryEvaluator<Values> m_edges;
-    size_t m_forward;
-    size_t m_backward;
-    size_t m_check;
+    Edges m_edges;
     SearchTree m_tree;
-    BackwardClosure m_closure;
+    BackwardFrontier m_backward;
     detail::TargetSet m_targets;
     MinDistanceStatistics m_statistics;
 };

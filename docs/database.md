@@ -101,6 +101,8 @@ return-by-value overloads take it explicitly.
 | `join<Values>(lhs, rhs)` | Natural join on common labels, followed by rhs-only columns. |
 | `union_<Values>(lhs, rhs)` | Union with an identical ordered typed schema. |
 | `difference<Values>(lhs, rhs)` | Difference with an identical ordered typed schema. |
+| `semijoin<Values>(lhs, rhs)` | lhs ⋉ rhs: the lhs rows with a match in rhs on the common labels. |
+| `antijoin<Values>(lhs, rhs)` | lhs ▷ rhs: the lhs rows without such a match. Without common labels, lhs if rhs is empty. |
 | `builder.rename(labels)` | Change labels while retaining types and rows. |
 
 Common join labels and equality columns must have matching types. Projection
@@ -171,7 +173,9 @@ object domain needs no special-case representation.
 current results and maintain added/removed row sets. Deltas use the same typed
 schemas and packed rows. Projection tracks witnesses; a change that replaces a
 witness without changing membership produces no output delta. Join supports
-updates to either or both operands. Every incremental evaluator's `update` takes
+updates to either or both operands. `database/incremental/semijoin.hpp`
+maintains semijoins and antijoins: only the changed lhs rows and the lhs rows
+sharing a key with a changed rhs row can change membership. Every incremental evaluator's `update` takes
 one change per input: an `(added, removed)` pair read with `std::get`, such as
 `Delta::change()` or `std::tie(added, removed)`; `incremental::RelationChange`
 states the requirement. Prepared byte operations are shared with full
@@ -520,17 +524,19 @@ const auto& result = evaluator.get_result();
 schema. It implements established algorithms as published:
 
 1. **Normalization.** The textbook algebraic rewrites [GMUW08]: selections are
-   pushed down through joins, projections, renames, unions, and differences,
-   projections through renames and unions, and empty relations are propagated.
+   pushed down through joins, projections, renames, unions, and differences, and
+   into the lhs of semijoins and antijoins, projections through renames and
+   unions, and empty relations are propagated.
 2. **Join blocks.** Each maximal tree of joins is planned as a whole. Unions,
-   differences, distances, and selections spanning several join operands bound
-   the blocks.
+   differences, semijoins, antijoins, distances, and selections spanning several
+   join operands bound the blocks.
 3. **Planning each block.** A block whose operands all have known cardinalities
    (measured inputs, observed queries, or queries over them) is planned
    cost-based, any other block from structure:
    - *Cost-based:* DPccp [MN06] finds the bushy join order of least C_out
      [CM95, Leis15] under System R estimates [Selinger79], with the textbook
-     estimates of [GMUW08] for projection, union, and difference and observed
+     estimates of [GMUW08] for projection, union, and difference, T(R ⋉ S) =
+     min(T(R), T(π_R(R ⋈ S))) and T(R ▷ S) = T(R) − T(R ⋉ S), and observed
      cardinalities replacing estimates [LEO01]; disconnected components are
      joined last by cross products. The join tree is then refined by Algorithm 4
      of [Freitag20]: growing joins and their ancestors become one
@@ -651,7 +657,7 @@ Like the C++ library, every operator has an index (`QueryJoinIndex`), a record
 (`QueryJoinData`), and a view (`QueryJoin`) with its getters; `repository.insert(data)`
 returns `(view, created)`. `QueryData(view)` makes the type-erased `Query` that
 operators take as operands. The records are `QueryInputData(slot, columns)`,
-`QueryEmptyData(columns)`, `QueryJoinData`/`QueryUnionData`/`QueryDifferenceData(lhs, rhs)`,
+`QueryEmptyData(columns)`, `QueryJoinData`/`QueryUnionData`/`QueryDifferenceData`/`QuerySemijoinData`/`QueryAntijoinData(lhs, rhs)`,
 `QueryProjectData`/`QueryRenameData(arg, labels)`, `QuerySelectEqualData(arg, lhs, rhs)`,
 `QuerySelectValueData(arg, column, type, value)`, `QueryDistanceData(sources, edges,
 targets, distance_column)`, and `QueryGenericJoinData(inputs, variable_order,

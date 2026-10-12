@@ -83,7 +83,7 @@ public:
     template<typename OnRow>
     bool seed(const InputChange<Values>& change, OnRow&& on_row)
     {
-        for (size_t b = 0; b < m_base.m_query.branches.size(); ++b)
+        for (size_t b = 0; b < m_base.query().branches.size(); ++b)
             if (!seed_branch(b, change, on_row))
                 return false;
         return true;
@@ -96,7 +96,7 @@ private:
     template<typename V>
     InputChange<Values> diff(size_t slot, const V& rows) const
     {
-        const auto columns = std::span<const ColumnLayout>(m_base.m_query.input_columns[slot]);
+        const auto columns = std::span<const ColumnLayout>(m_base.query().input_columns[slot]);
         database::detail::require_plan_columns(rows.columns().span(), columns);
         auto change = InputChange<Values> { slot, Builder<Relation<Values>>(columns), Builder<Relation<Values>>(columns) };
         const auto& snapshot = m_base.input(slot);
@@ -111,7 +111,7 @@ private:
 
     const ConjunctivePlan& seed_plan(size_t branch, const ConjunctiveAtom& atom)
     {
-        auto bound = std::vector<bool>(m_base.m_query.variables.size(), false);
+        auto bound = std::vector<bool>(m_base.query().variables.size(), false);
         for (const auto var : atom.vars)
             bound[var] = true;
         auto found = m_seed_plans.find(bound);
@@ -120,24 +120,10 @@ private:
         return found->second[branch];
     }
 
-    /// Binds the atom's variables to a changed row; false if the row repeats a variable with different values.
-    bool bind_atom(const ConjunctiveAtom& atom, std::span<const ColumnLayout> columns, std::span<const std::byte> row)
-    {
-        for (size_t c = 0; c < atom.vars.size(); ++c)
-        {
-            const auto bytes = database::detail::column_bytes(row, columns[c]);
-            if (size_t(std::ranges::find(atom.vars, atom.vars[c]) - atom.vars.begin()) == c)
-                std::ranges::copy(bytes, m_base.variable(atom.vars[c]).begin());
-            else if (!std::ranges::equal(bytes, m_base.variable(atom.vars[c])))
-                return false;
-        }
-        return true;
-    }
-
     template<typename OnRow>
     bool seed_branch(size_t b, const InputChange<Values>& change, OnRow& on_row)
     {
-        const auto& query = m_base.m_query;
+        const auto& query = m_base.query();
         const auto& top = query.branches[b];
         auto top_vars = std::vector<bool>(query.variables.size(), false);
         for (const auto& atom : top.atoms)
@@ -154,8 +140,8 @@ private:
                     return false;
                 const auto& plan = seed_plan(b, atom);
                 for (size_t r = 0; r < rows.size(); ++r)
-                    if (bind_atom(atom, query.input_columns[change.slot], rows.row(r)) && m_base.accepts(top, plan, plan.equal, plan.value, plan.negations))
-                        m_base.run(top, plan, 0, [&] { return on_row(m_base.output_row()); });
+                    if (m_base.bind_atom(atom, rows.row(r)))
+                        m_base.run_plan(b, plan, on_row);
             }
             for (const auto& negation : branch.negations)
                 for (const auto& inner : negation.branches)

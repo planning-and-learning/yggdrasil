@@ -430,6 +430,64 @@ Builder<Relation<Values>> difference(const L& lhs, const R& rhs)
     return out;
 }
 
+namespace detail
+{
+/// Keeps the lhs rows whose match in rhs on the plan's keys exists (`matching`) or does not.
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void filter_matches(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, bool matching, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+{
+    require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
+    require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
+    prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
+    const auto lhs_keys = plan.lhs_keys();
+    const auto rhs_keys = plan.rhs_keys();
+    if (!lhs_keys.empty() && !rhs.empty())
+        build_join_index<Values>(rhs, rhs_keys, workspace.join_index);
+    const auto matched = [&](std::span<const std::byte> row)
+    {
+        if (rhs.empty() || lhs_keys.empty())
+            return !rhs.empty();
+        for (const auto match : workspace.join_index.values(join_key_hash(row, lhs_keys)))
+            if (join_keys_equal(rhs.row(match), rhs_keys, row, lhs_keys))
+                return true;
+        return false;
+    };
+    for (size_t i = 0; i < lhs.size(); ++i)
+        if (matched(lhs.row(i)) == matching)
+            out.insert(Row<Values>(lhs.row(i), lhs.columns().span()));
+}
+}  // namespace detail
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void semijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+{
+    detail::filter_matches(lhs, rhs, plan, true, out, workspace);
+}
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+Builder<Relation<Values>> semijoin(const L& lhs, const R& rhs)
+{
+    auto workspace = Workspace<Values>();
+    auto out = Builder<Relation<Values>>(lhs.columns().span());
+    semijoin(lhs, rhs, JoinPlan<Values>(lhs.columns().span(), rhs.columns().span()), out, workspace);
+    return out;
+}
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void antijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+{
+    detail::filter_matches(lhs, rhs, plan, false, out, workspace);
+}
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+Builder<Relation<Values>> antijoin(const L& lhs, const R& rhs)
+{
+    auto workspace = Workspace<Values>();
+    auto out = Builder<Relation<Values>>(lhs.columns().span());
+    antijoin(lhs, rhs, JoinPlan<Values>(lhs.columns().span(), rhs.columns().span()), out, workspace);
+    return out;
+}
+
 }  // namespace ygg::database
 
 #endif

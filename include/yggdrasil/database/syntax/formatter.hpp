@@ -39,6 +39,10 @@ constexpr const char* query_operation_name(QueryView<Values, Tag>)
         return "difference";
     else if constexpr (std::same_as<Concrete, QueryView<Values, QueryDistanceTag>>)
         return "distance";
+    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySemijoinTag>>)
+        return "semijoin";
+    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryAntijoinTag>>)
+        return "antijoin";
     else
     {
         static_assert(std::same_as<Concrete, QueryView<Values, QueryGenericJoinTag>>);

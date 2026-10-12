@@ -205,9 +205,8 @@ TEST_P(DatabaseIncrementalMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDiff
         { a, b, a2, b2 });
     const auto all = qb::union_(repository, qb::union_(repository, first, second), teleport);
     // Safe-range negation: no edge may enter a blocked pair, nor end on equal coordinates.
-    const auto entering_blocked = qb::project(repository, qb::join(repository, all, qb::rename(repository, blocked, { a2, b2 })), { a, b, a2, b2 });
     const auto diagonal = qb::select_equal(repository, all, a2, b2);
-    const auto edges = qb::difference(repository, qb::difference(repository, all, entering_blocked), diagonal);
+    const auto edges = qb::difference(repository, qb::antijoin(repository, all, qb::rename(repository, blocked, { a2, b2 })), diagonal);
 
     auto inputs = std::vector<Relation>();
     for (const auto& columns : std::vector<std::vector<Column>> { { x, y }, { x }, { x, y }, { x, y }, { x, y } })

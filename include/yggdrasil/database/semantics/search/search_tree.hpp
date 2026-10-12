@@ -27,28 +27,20 @@ namespace ygg::database
 /// Edges of a chain are checked lazily, and a check is kept until the graph's version changes.
 ///
 /// The tree knows edges only through EdgeCheck; the caller supplies the value used along a chain (e.g. the larger of
-/// the learned distance and an exact backward level). Kept across searches, it is the state of
-/// incremental::AdaptivePathTree.
+/// the learned distance and an exact backward level). incremental::MinDistance keeps it across searches and repairs it
+/// (incremental/search/adaptive_path_tree.hpp).
 class SearchTree
 {
 public:
-    static constexpr uint_t none = std::numeric_limits<uint_t>::max();
-    static constexpr uint_t infinity = none;
-
     explicit SearchTree(size_t vertex_size) : m_vertices(vertex_size) {}
 
     void clear()
     {
         m_vertices.clear();
-        m_learned.clear();
-        m_next.clear();
-        m_checked.clear();
-        m_valid.clear();
-        m_edge_version.clear();
-        m_edge_target.clear();
+        m_nodes.clear();
     }
 
-    size_t size() const noexcept { return m_learned.size(); }
+    size_t size() const noexcept { return m_nodes.size(); }
     std::optional<uint_t> find(std::span<const std::byte> vertex) const { return m_vertices.find(vertex); }
     std::span<const std::byte> vertex(uint_t id) const { return m_vertices[id]; }
 
@@ -58,26 +50,21 @@ public:
         if (const auto stored = m_vertices.find(vertex))
             return *stored;
         const auto id = m_vertices.insert(vertex);
-        m_learned.push_back(estimate);
-        m_next.push_back(none);
-        m_checked.push_back(0);
-        m_valid.push_back(false);
-        m_edge_version.push_back(0);
-        m_edge_target.push_back(none);
+        m_nodes.push_back(Node { estimate });
         return id;
     }
 
-    uint_t learned(uint_t id) const noexcept { return m_learned[id]; }
+    uint_t learned(uint_t id) const noexcept { return m_nodes[id].learned; }
     /// Raises the learned distance to a bound a search established (Generalized Adaptive A*).
-    void learn(uint_t id, uint_t bound) noexcept { m_learned[id] = std::max(m_learned[id], bound); }
+    void learn(uint_t id, uint_t bound) noexcept { m_nodes[id].learned = std::max(m_nodes[id].learned, bound); }
     /// Lowers the learned distance and drops the next pointer, after edges were added.
     void lower(uint_t id, uint_t bound) noexcept
     {
-        m_learned[id] = bound;
-        m_next[id] = none;
+        m_nodes[id].learned = bound;
+        set_next(id, none);
     }
-    uint_t next(uint_t id) const noexcept { return m_next[id]; }
-    void link(uint_t from, uint_t to) noexcept { m_next[from] = to; }
+    uint_t next(uint_t id) const noexcept { return m_nodes[id].next; }
+    void link(uint_t from, uint_t to) noexcept { set_next(from, to); }
 
     /// Starts a new search: chain checks of earlier searches are forgotten.
     void begin_search() noexcept { ++m_epoch; }
@@ -92,9 +79,9 @@ public:
         auto result = false;
         for (auto u = start;;)
         {
-            if (m_checked[u] == m_epoch)
+            if (m_nodes[u].checked == m_epoch)
             {
-                result = m_valid[u];
+                result = m_nodes[u].valid;
                 break;
             }
             chain.push_back(u);
@@ -103,37 +90,49 @@ public:
                 result = true;
                 break;
             }
-            const auto v = m_next[u];
+            const auto v = m_nodes[u].next;
             if (v == none || value(v) == infinity || value(u) != value(v) + 1)
                 break;
-            if (m_edge_version[u] != version || m_edge_target[u] != v)
+            if (m_nodes[u].edge_version != version)
             {
                 if (!edges.edge_exists(vertex(u), vertex(v)))
                 {
-                    m_next[u] = none;
+                    set_next(u, none);
                     break;
                 }
-                m_edge_version[u] = version;
-                m_edge_target[u] = v;
+                m_nodes[u].edge_version = version;
             }
             u = v;
         }
         for (const auto u : chain)
         {
-            m_checked[u] = m_epoch;
-            m_valid[u] = result;
+            m_nodes[u].checked = m_epoch;
+            m_nodes[u].valid = result;
         }
         return result;
     }
 
 private:
+    static constexpr uint32_t unchecked = std::numeric_limits<uint32_t>::max();
+
+    struct Node
+    {
+        uint_t learned = 0;
+        uint_t next = none;
+        uint32_t checked = 0;              ///< Epoch of the last chain check.
+        bool valid = false;                ///< Its result.
+        uint32_t edge_version = unchecked; ///< Graph version at which the edge to next was checked.
+    };
+
+    /// A new next pointer has an unchecked edge.
+    void set_next(uint_t id, uint_t next) noexcept
+    {
+        m_nodes[id].next = next;
+        m_nodes[id].edge_version = unchecked;
+    }
+
     RawArraySet<std::byte, 64> m_vertices;
-    std::vector<uint_t> m_learned;
-    std::vector<uint_t> m_next;
-    std::vector<uint32_t> m_checked;  ///< Epoch of the last chain check.
-    std::vector<bool> m_valid;        ///< Its result.
-    std::vector<uint32_t> m_edge_version;
-    std::vector<uint_t> m_edge_target;
+    std::vector<Node> m_nodes;
     uint32_t m_epoch = 0;
 };
 

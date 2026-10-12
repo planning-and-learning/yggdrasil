@@ -98,6 +98,23 @@ def test_records_views_and_insertion_identity():
     assert isinstance(repo.insert(db.QueryDifferenceData(a, a))[0], db.QueryDifference)
 
 
+def test_semijoin_and_antijoin_filter_their_lhs():
+    edges = relation([0, 1], [(1, 7), (2, 8), (3, 9)])
+    reached = relation([1], [(7,), (9,)])
+    repo = FACTORY.create()
+    edges_query, reached_query = inputs_of(repo, [edges, reached])
+    semijoin, _ = repo.insert(db.QuerySemijoinData(edges_query, reached_query))
+    assert isinstance(semijoin, db.QuerySemijoin) and isinstance(semijoin.get_index(), db.QuerySemijoinIndex)
+    assert tuple(semijoin.columns()) == tuple(columns(0, 1))
+    antijoin, _ = repo.insert(db.QueryAntijoinData(edges_query, reached_query))
+    assert isinstance(antijoin, db.QueryAntijoin) and antijoin.get_rhs() == reached_query
+    roots = [repo.insert(db.QueryData(semijoin))[0], repo.insert(db.QueryData(antijoin))[0]]
+    evaluation = db.QueryEvaluator(db.compile(roots))
+    evaluation.evaluate([edges, reached])
+    assert rows(evaluation.get_result(0)) == {(1, 7), (3, 9)}
+    assert rows(evaluation.get_result(1)) == {(2, 8)}
+
+
 def test_difference_projection_barrier_and_nullary_support():
     source = relation([0, 1], [(1, 7), (1, 8)])
     removed = relation([0, 1], [(1, 7)])
