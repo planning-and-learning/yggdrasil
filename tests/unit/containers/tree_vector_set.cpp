@@ -22,6 +22,7 @@
 #include <barrier>
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <thread>
@@ -54,7 +55,8 @@ TEST(YggdrasilTests, CommonTreeVectorSetRoundTripsAndSharesTrees)
         auto singleton_output = std::array<uint_t, 1> {};
         singleton_set.read(singleton_index, singleton_output);
         EXPECT_EQ(singleton_output, singleton);
-        EXPECT_EQ(singleton_set.num_leaves(), 1);
+        EXPECT_EQ(singleton_index.root, singleton.front());
+        EXPECT_EQ(singleton_set.num_leaves(), 0);
         EXPECT_EQ(singleton_set.num_nodes(), 0);
     }
 
@@ -68,7 +70,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetRoundTripsAndSharesTrees)
     constexpr auto repeated = std::array<uint_t, 4> { 1, 2, 1, 2 };
     const auto repeated_index = set.insert(repeated);
     EXPECT_EQ(repeated_index.size, repeated.size());
-    EXPECT_EQ(set.num_leaves(), 2);
+    EXPECT_EQ(set.num_leaves(), 0);
     EXPECT_EQ(set.num_nodes(), 2);
 
     auto output = std::array<uint_t, repeated.size()> {};
@@ -80,7 +82,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetRoundTripsAndSharesTrees)
     auto shared_subtree_output = std::array<uint_t, shared_subtree.size()> {};
     set.read(shared_subtree_index, shared_subtree_output);
     EXPECT_EQ(shared_subtree_output, shared_subtree);
-    EXPECT_EQ(set.num_leaves(), 2);
+    EXPECT_EQ(set.num_leaves(), 0);
     EXPECT_EQ(set.num_nodes(), 2);
 
     EXPECT_EQ(set.insert(repeated), repeated_index);
@@ -101,6 +103,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsDifferentLeafTypesAndLengths)
     auto float_output = std::array<double, floats.size()> {};
     float_set.read(float_index, float_output);
     EXPECT_EQ(float_output, floats);
+    EXPECT_EQ(float_set.num_leaves(), floats.size());
 
     auto custom_set = TreeVectorSet<CustomLeaf> {};
     constexpr auto custom = std::array<CustomLeaf, 3> { CustomLeaf { 1, 2 }, CustomLeaf { 3, 4 }, CustomLeaf { 5, 6 } };
@@ -108,6 +111,46 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsDifferentLeafTypesAndLengths)
     auto custom_output = std::array<CustomLeaf, custom.size()> {};
     custom_set.read(custom_index, custom_output);
     EXPECT_EQ(custom_output, custom);
+    EXPECT_EQ(custom_set.num_leaves(), custom.size());
+}
+
+TEST(YggdrasilTests, CommonTreeVectorSetStoresUintLeavesInline)
+{
+    auto set = TreeVectorSet<uint_t> {};
+
+    // Values coinciding with node indices and the full value range must round-trip.
+    constexpr auto max = std::numeric_limits<uint_t>::max();
+    constexpr auto vectors = std::array {
+        std::array<uint_t, 5> { 0, 1, 0, 1, 2 },
+        std::array<uint_t, 5> { 0, max, 0, max, 0 },
+        std::array<uint_t, 5> { 1, 0, 2, 1, 0 },
+    };
+    auto indices = std::array<TreeVectorIndex<uint_t>, vectors.size()> {};
+    for (size_t i = 0; i < vectors.size(); ++i)
+    {
+        indices[i] = set.insert(vectors[i]);
+        auto output = std::array<uint_t, 5> {};
+        set.read(indices[i], output);
+        EXPECT_EQ(output, vectors[i]);
+    }
+    for (size_t i = 0; i < vectors.size(); ++i)
+    {
+        EXPECT_EQ(set.insert(vectors[i]), indices[i]);
+        for (size_t j = i + 1; j < vectors.size(); ++j)
+            EXPECT_NE(indices[i], indices[j]);
+    }
+
+    for (const auto value : { uint_t { 0 }, uint_t { 1 }, max })
+    {
+        const auto single = std::array<uint_t, 1> { value };
+        const auto index = set.insert(single);
+        EXPECT_EQ(index, (TreeVectorIndex<uint_t> { value, 1 }));
+        auto output = std::array<uint_t, 1> {};
+        set.read(index, output);
+        EXPECT_EQ(output, single);
+    }
+
+    EXPECT_EQ(set.num_leaves(), 0);
 }
 
 TEST(YggdrasilTests, CommonTreeVectorSetSupportsConcurrentInsertionAndReads)
@@ -157,7 +200,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsConcurrentInsertionAndReads)
 
     threads.clear();
     EXPECT_EQ(errors.load(std::memory_order_relaxed), 0);
-    EXPECT_EQ(set.num_leaves(), (sequence_count + 1) * sequence_size);
+    EXPECT_EQ(set.num_leaves(), 0);
     for (size_t sequence = 0; sequence < sequence_count; ++sequence)
         for (size_t thread = 1; thread < thread_count; ++thread)
             EXPECT_EQ(handles[thread][sequence], handles[0][sequence]);

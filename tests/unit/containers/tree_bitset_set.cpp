@@ -17,6 +17,7 @@
 
 #include "yggdrasil/containers/tree_bitset_set.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <barrier>
@@ -38,7 +39,7 @@ namespace ygg::tests
 namespace
 {
 
-using Block = std::uint64_t;
+using Block = std::uint32_t;
 
 static_assert(Identifiable<TreeBitsetIndex<Block>>);
 static_assert(std::three_way_comparable<TreeBitsetIndex<Block>>);
@@ -75,6 +76,34 @@ std::map<uint_t, Block> visit_all(const Set& set, typename Set::index_type index
     return words;
 }
 
+TEST(YggdrasilTests, CommonTreeBitsetSetHelpersPrepareFlipsAndBlocks)
+{
+    using Flip = TreeBitsetFlip<Block>;
+
+    // Flips of the same block combine by XOR; flips that cancel out disappear.
+    auto flips = std::vector<Flip> { Flip { 5, 1 }, Flip { 2, 4 }, Flip { 5, 2 }, Flip { 2, 4 }, Flip { 0, 8 } };
+    normalize_flips(flips);
+    EXPECT_EQ(flips, (std::vector<Flip> { Flip { 0, 8 }, Flip { 5, 3 } }));
+
+    auto diff = std::vector<Flip> {};
+    append_diff_flips<Block>(std::vector<Block> { 1, 2, 3 }, std::vector<Block> { 1, 6 }, diff);
+    EXPECT_EQ(diff, (std::vector<Flip> { Flip { 1, 4 }, Flip { 2, 3 } }));
+
+    // 64-bit dynamic_bitset blocks split into 32-bit blocks and back.
+    auto bits = boost::dynamic_bitset<std::uint64_t> {};
+    bits.append(std::uint64_t { 0x0000000500000003 });
+    bits.append(std::uint64_t { 0x0000000000000007 });
+    auto blocks = std::vector<Block> {};
+    append_blocks(bits, blocks);
+    EXPECT_EQ(blocks, (std::vector<Block> { 3, 5, 7, 0 }));
+    trim_trailing_zero_blocks(blocks);
+    EXPECT_EQ(blocks, (std::vector<Block> { 3, 5, 7 }));
+
+    auto restored = boost::dynamic_bitset<std::uint64_t> {};
+    assign_blocks<Block>(blocks, restored);
+    EXPECT_EQ(restored, bits);
+}
+
 TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
 {
     auto set = TreeBitsetSet<Block> {};
@@ -89,7 +118,7 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
     const auto single_index = set.insert(single);
     EXPECT_EQ(single_index.size, 1);
     EXPECT_EQ(read_all(set, single_index), std::vector<Block>(single.begin(), single.end()));
-    EXPECT_EQ(set.num_leaves(), 1);
+    EXPECT_EQ(single_index.root, single.front());  // Blocks are stored inline.
     EXPECT_EQ(set.num_nodes(), 0);
 
     // Leading zero blocks and zero subtrees are not stored.
@@ -97,16 +126,14 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
     const auto sparse_index = set.insert(sparse);
     EXPECT_EQ(read_all(set, sparse_index), std::vector<Block>(sparse.begin(), sparse.end()));
     EXPECT_EQ(visit_all(set, sparse_index), (std::map<uint_t, Block> { { 7, 7 } }));
-    EXPECT_EQ(set.num_leaves(), 2);
-    // Like in TreeVectorSet, node records are shared across heights: (Z, leaf 1) at height 1 equals (Z, node 1) at height 3.
-    EXPECT_EQ(set.num_nodes(), 2);
+    EXPECT_EQ(set.num_nodes(), 3);
 
     auto far = std::vector<Block>(size_t { 1 } << 20);
     far.front() = 1;
-    far.back() = Block { 1 } << 63;
+    far.back() = Block { 1 } << 31;
     const auto far_index = set.insert(far);
     EXPECT_EQ(read_all(set, far_index), far);
-    EXPECT_EQ(visit_all(set, far_index), (std::map<uint_t, Block> { { 0, 1 }, { (1u << 20) - 1, Block { 1 } << 63 } }));
+    EXPECT_EQ(visit_all(set, far_index), (std::map<uint_t, Block> { { 0, 1 }, { (1u << 20) - 1, Block { 1 } << 31 } }));
 
     EXPECT_EQ(set.insert(single), single_index);
     EXPECT_EQ(set.insert(sparse), sparse_index);
@@ -115,6 +142,50 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
 
     set.clear();
     EXPECT_TRUE(set.empty());
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetStoresWideBlocksInLeafTable)
+{
+    using WideBlock = std::uint64_t;
+    using Flip = TreeBitsetFlip<WideBlock>;
+    auto set = TreeBitsetSet<WideBlock> {};
+
+    const auto blocks = std::vector<WideBlock> { 1, 0, ~WideBlock { 0 }, WideBlock { 1 } << 63 };
+    const auto index = set.insert(blocks);
+    auto output = std::vector<WideBlock>(blocks.size());
+    set.read(index, output);
+    EXPECT_EQ(output, blocks);
+    EXPECT_EQ(set.num_leaves(), 3);  // Wide blocks do not fit into a child slot; the zero block is not stored.
+
+    const auto changed = set.insert(index, std::array<Flip, 2> { Flip { 1, 5 }, Flip { 3, WideBlock { 1 } << 63 } });
+    EXPECT_EQ(changed, set.insert(std::vector<WideBlock> { 1, 5, ~WideBlock { 0 } }));
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetStoresSlotWideBlocksInline)
+{
+    auto set = TreeBitsetSet<Block> {};
+    set.insert(std::vector<Block> { 1, 2, 3, 4, 5 });
+    EXPECT_EQ(set.num_leaves(), 0);
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetDistinguishesAllOnesBlocksFromZeroSubtrees)
+{
+    using Flip = TreeBitsetFlip<Block>;
+    auto set = TreeBitsetSet<Block> {};
+
+    // An all-ones block has the bit pattern of the zero-subtree sentinel, but leaves are read by position.
+    constexpr auto ones = ~Block { 0 };
+    for (const auto& blocks : { std::vector<Block> { ones }, std::vector<Block> { ones, ones }, std::vector<Block> { 0, ones }, std::vector<Block> { ones, 0, 0, ones } })
+    {
+        const auto index = set.insert(blocks);
+        EXPECT_EQ(read_all(set, index), blocks);
+        EXPECT_EQ(visit_all(set, index).size(), static_cast<size_t>(std::ranges::count(blocks, ones)));
+    }
+
+    const auto base = set.insert(std::vector<Block> { 1, 2, 3 });
+    const auto flipped = set.insert(base, std::array<Flip, 2> { Flip { 0, ones ^ 1 }, Flip { 2, 3 } });
+    EXPECT_EQ(flipped, set.insert(std::vector<Block> { ones, 2 }));
+    EXPECT_EQ(set.insert(flipped, std::array<Flip, 1> { Flip { 0, ones } }), set.insert(std::vector<Block> { 0, 2 }));
 }
 
 TEST(YggdrasilTests, CommonTreeBitsetSetDeltaInsertMatchesFullInsert)
@@ -126,22 +197,60 @@ TEST(YggdrasilTests, CommonTreeBitsetSetDeltaInsertMatchesFullInsert)
 
     // Same size: only the path to block 2 is new.
     const auto nodes_before = set.num_nodes();
-    const auto changed = set.insert(base, std::array<Flip, 1> { Flip { 2, 0b11 } }, 5);
+    const auto changed = set.insert(base, std::array<Flip, 1> { Flip { 2, 0b11 } });
     EXPECT_EQ(changed, set.insert(std::array<Block, 5> { 1, 2, 0, 4, 5 }));
     EXPECT_LE(set.num_nodes() - nodes_before, 3);
 
     // Growing and shrinking.
-    const auto grown = set.insert(base, std::array<Flip, 1> { Flip { 9, 1 } }, 10);
+    const auto grown = set.insert(base, std::array<Flip, 1> { Flip { 9, 1 } });
     EXPECT_EQ(grown, set.insert(std::array<Block, 10> { 1, 2, 3, 4, 5, 0, 0, 0, 0, 1 }));
-    const auto shrunk = set.insert(grown, std::array<Flip, 2> { Flip { 4, 5 }, Flip { 9, 1 } }, 4);
+    const auto shrunk = set.insert(grown, std::array<Flip, 2> { Flip { 4, 5 }, Flip { 9, 1 } });
     EXPECT_EQ(shrunk, set.insert(std::array<Block, 4> { 1, 2, 3, 4 }));
-    EXPECT_EQ(set.insert(shrunk, std::array<Flip, 1> { Flip { 4, 5 } }, 5), base);
+    EXPECT_EQ(set.insert(shrunk, std::array<Flip, 1> { Flip { 4, 5 } }), base);
 
     // No flips leaves the index unchanged; clearing everything gives the empty index.
-    EXPECT_EQ(set.insert(base, std::span<const Flip> {}, 5), base);
-    EXPECT_EQ(set.insert(base, std::array<Flip, 5> { Flip { 0, 1 }, Flip { 1, 2 }, Flip { 2, 3 }, Flip { 3, 4 }, Flip { 4, 5 } }, 0),
+    EXPECT_EQ(set.insert(base, std::span<const Flip> {}), base);
+    EXPECT_EQ(set.insert(base, std::array<Flip, 5> { Flip { 0, 1 }, Flip { 1, 2 }, Flip { 2, 3 }, Flip { 3, 4 }, Flip { 4, 5 } }),
               TreeBitsetIndex<Block> {});
-    EXPECT_EQ(set.insert(TreeBitsetIndex<Block> {}, std::array<Flip, 1> { Flip { 3, 8 } }, 4), set.insert(std::array<Block, 4> { 0, 0, 0, 8 }));
+    EXPECT_EQ(set.insert(TreeBitsetIndex<Block> {}, std::array<Flip, 1> { Flip { 3, 8 } }), set.insert(std::array<Block, 4> { 0, 0, 0, 8 }));
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetDeltaInsertAcrossPowerOfTwoSizes)
+{
+    using Flip = TreeBitsetFlip<Block>;
+    auto set = TreeBitsetSet<Block> {};
+
+    // Sizes just below, at, and above powers of two, where the shapes of base and result differ most.
+    for (const uint_t from : { 1u, 2u, 7u, 64u, 65u, 511u, 512u, 513u, 1000u })
+    {
+        for (const uint_t to : { 1u, 3u, 63u, 64u, 65u, 257u, 512u, 513u, 1500u })
+        {
+            auto base_blocks = std::vector<Block>(from);
+            for (uint_t i = 0; i < from; ++i)
+                base_blocks[i] = Block(i % 3 == 0 ? i + 1 : 0);
+            base_blocks.back() = 1;
+            const auto base = set.insert(base_blocks);
+
+            // Set the new last block, clear the old last block if it lies beyond, and change one block in between.
+            auto blocks = base_blocks;
+            blocks.resize(std::max(from, to), Block { 0 });
+            auto flips = std::vector<Flip> {};
+            const auto middle = std::min(from, to) / 2;
+            flips.push_back(Flip { middle, Block { 0b100 } });
+            if (to - 1 != middle && blocks[to - 1] == 0)
+                flips.push_back(Flip { to - 1, Block { 1 } });
+            for (uint_t i = to; i < from; ++i)
+                if (blocks[i] != 0)
+                    flips.push_back(Flip { i, blocks[i] });
+            std::ranges::sort(flips, {}, &Flip::position);
+            for (const auto& flip : flips)
+                blocks[flip.position] ^= flip.mask;
+            while (!blocks.empty() && blocks.back() == 0)
+                blocks.pop_back();
+
+            EXPECT_EQ(set.insert(base, flips), set.insert(blocks)) << "from " << from << " to " << to;
+        }
+    }
 }
 
 TEST(YggdrasilTests, CommonTreeBitsetSetRandomDeltaChainsMatchFullInsert)
@@ -165,7 +274,7 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRandomDeltaChainsMatchFullInsert)
             {
                 auto flips = std::map<uint_t, Block> {};
                 for (size_t k = num_flips(rng); k > 0; --k)
-                    flips[position(rng)] ^= Block { 1 } << (rng() % 64);
+                    flips[position(rng)] ^= Block { 1 } << (rng() % 32);
 
                 auto flip_list = std::vector<Flip> {};
                 for (const auto& [p, mask] : flips)
@@ -180,7 +289,7 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRandomDeltaChainsMatchFullInsert)
                 const auto blocks = to_blocks(words);
                 const auto nodes_before = set.num_nodes();
                 const auto height = blocks.empty() ? 0 : std::bit_width(blocks.size());
-                index = set.insert(index, flip_list, to_uint_t(blocks.size()));
+                index = set.insert(index, flip_list);
 
                 // Changing a block and growing or shrinking each rebuild at most one path.
                 EXPECT_LE(set.num_nodes() - nodes_before, (flip_list.size() + 2) * (height + 1));
@@ -222,9 +331,9 @@ TEST(YggdrasilTests, CommonTreeBitsetSetSupportsConcurrentDeltaInsertionAndReads
                 auto index = published;
                 for (size_t step = 0; step < step_count; ++step)
                 {
-                    const auto flip = Flip { static_cast<uint_t>(step % (block_count - 1)), Block { 1 } << (step % 63 + 1) };
+                    const auto flip = Flip { static_cast<uint_t>(step % (block_count - 1)), Block { 1 } << (step % 31 + 1) };
                     blocks[flip.position] ^= flip.mask;
-                    index = set.insert(index, std::span<const Flip>(&flip, 1), block_count);
+                    index = set.insert(index, std::span<const Flip>(&flip, 1));
                     handles[thread][step] = index;
 
                     auto output = std::vector<Block>(block_count);

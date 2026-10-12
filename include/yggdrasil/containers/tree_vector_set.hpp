@@ -29,10 +29,20 @@
 #include <span>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace ygg::detail
 {
+/// Stands in for the leaf table of tree sets whose leaves are stored inline, so that no table is instantiated.
+struct NoLeafSet
+{
+    void clear() noexcept {}
+    static constexpr size_t memory_usage() noexcept { return 0; }
+    static constexpr size_t size() noexcept { return 0; }
+    static constexpr bool empty() noexcept { return true; }
+};
+
 
 template<typename T>
 struct TreeVectorLeaf;
@@ -97,6 +107,7 @@ struct TreeVectorIndex
 /// Stores canonical vectors as balanced trees of canonical scalar leaves and
 /// internal nodes. The subtree length determines whether an index identifies a
 /// leaf or an internal node, so nodes only need to store their two child indices.
+/// Values with the size of a child index are stored inline in the child slot, so num_leaves() stays 0.
 /// ThreadSafe permits concurrent insertion, size queries, and reads of published indices.
 /// Clear, memory inspection, move, and destruction require quiescence.
 template<std::copyable T, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
@@ -106,7 +117,10 @@ class TreeVectorSet
 private:
     using Leaf = detail::TreeVectorLeaf<T>;
     using Node = detail::TreeVectorNode<T>;
-    using LeafSet = IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>;
+    // Unique object representations make bitwise identity agree with equality (rules out float, padding).
+    static constexpr bool inline_leaves = std::has_unique_object_representations_v<T> && sizeof(T) == sizeof(uint_t);
+
+    using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
 
     uint_t insert_recursive(std::span<const T> values)
@@ -114,7 +128,12 @@ private:
         assert(!values.empty());
 
         if (values.size() == 1)
-            return static_cast<uint_t>(m_leaves.insert(Data<Leaf> { values.front() }).first);
+        {
+            if constexpr (inline_leaves)
+                return std::bit_cast<uint_t>(values.front());
+            else
+                return static_cast<uint_t>(m_leaves.insert(Data<Leaf> { values.front() }).first);
+        }
 
         const auto middle = std::bit_floor(values.size() - 1);
         const auto left = insert_recursive(values.first(middle));
@@ -128,7 +147,10 @@ private:
 
         if (values.size() == 1)
         {
-            values.front() = m_leaves[Index<Leaf>(root)].value;
+            if constexpr (inline_leaves)
+                values.front() = std::bit_cast<T>(root);
+            else
+                values.front() = m_leaves[Index<Leaf>(root)].value;
             return;
         }
 
@@ -177,7 +199,7 @@ public:
     bool empty() const noexcept { return m_leaves.empty() && m_nodes.empty(); }
 
 private:
-    LeafSet m_leaves;
+    [[no_unique_address]] LeafSet m_leaves;
     NodeSet m_nodes;
 };
 

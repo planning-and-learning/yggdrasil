@@ -23,16 +23,22 @@
 #include "yggdrasil/core/types_utils.hpp"
 
 #include <algorithm>
+#include <array>
 #include <bit>
+#include <boost/dynamic_bitset.hpp>
+#include <boost/iterator/function_output_iterator.hpp>
 #include <cassert>
 #include <compare>
 #include <concepts>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ygg
 {
@@ -59,35 +65,52 @@ struct TreeBitsetFlip
     friend bool operator==(const TreeBitsetFlip&, const TreeBitsetFlip&) = default;
 };
 
-/// Stores canonical bitsets, given as blocks with a nonzero last block, as balanced trees
-/// of canonical block leaves and internal nodes, shaped like TreeVectorSet. Block i always
-/// sits at position i, so changing a block only changes its path to the root. All-zero
-/// subtrees are represented by the sentinel Index<>::MAX and are never stored.
+/// Stores canonical bitsets, given as blocks with a nonzero last block, as balanced trees shaped like
+/// TreeVectorSet. As there, blocks with the width of a child index are stored inline in the child slots,
+/// without a leaf table; wider blocks are stored in a leaf table. Block i always sits at position i, so
+/// changing a block only changes its path to the root. All-zero subtrees are never stored: they are the
+/// sentinel Index<>::MAX, except that an inline zero block is the value 0.
 /// ThreadSafe permits concurrent insertion, size queries, and reads of published indices.
 /// Clear, memory inspection, move, and destruction require quiescence.
 template<std::unsigned_integral Block, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
 class TreeBitsetSet
 {
 private:
+    static constexpr bool inline_leaves = sizeof(Block) == sizeof(uint_t);
+
     using Leaf = detail::TreeVectorLeaf<Block>;
     using Node = detail::TreeVectorNode<Block>;
-    using LeafSet = IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>;
+    using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
     using Flip = TreeBitsetFlip<Block>;
 
-    static_assert(Index<Leaf>::MAX == Index<Node>::MAX);
-    static constexpr uint_t ZERO = Index<Leaf>::MAX;
+    static constexpr uint_t ZERO = Index<Node>::MAX;
+
+    /// The slot value of an all-zero subtree covering `size` blocks.
+    static constexpr uint_t zero(uint_t size) noexcept { return (inline_leaves && size == 1) ? uint_t { 0 } : ZERO; }
 
     uint_t insert_leaf(Block value)
     {
-        if (value == Block { 0 })
-            return ZERO;
-        return static_cast<uint_t>(m_leaves.insert(Data<Leaf> { value }).first);
+        if constexpr (inline_leaves)
+            return std::bit_cast<uint_t>(value);
+        else
+            return value == Block { 0 } ? ZERO : static_cast<uint_t>(m_leaves.insert(Data<Leaf> { value }).first);
     }
 
-    uint_t insert_node(uint_t left, uint_t right)
+    Block leaf_value(uint_t slot) const
     {
-        if (left == ZERO && right == ZERO)
+        if constexpr (inline_leaves)
+            return std::bit_cast<Block>(slot);
+        else
+            return slot == ZERO ? Block { 0 } : m_leaves[Index<Leaf>(slot)].value;
+    }
+
+    static constexpr uint_t split(uint_t size) noexcept { return static_cast<uint_t>(std::bit_floor(size - 1)); }
+
+    uint_t insert_node(uint_t left, uint_t right, uint_t size)
+    {
+        const auto middle = split(size);
+        if (left == zero(middle) && right == zero(size - middle))
             return ZERO;
         return static_cast<uint_t>(m_nodes.insert(Data<Node> { left, right }).first);
     }
@@ -99,58 +122,77 @@ private:
         if (values.size() == 1)
             return insert_leaf(values.front());
 
-        const auto middle = std::bit_floor(values.size() - 1);
+        const auto size = to_uint_t(values.size());
+        const auto middle = split(size);
         const auto left = insert_recursive(values.first(middle));
         const auto right = insert_recursive(values.subspan(middle));
-        return insert_node(left, right);
+        return insert_node(left, right, size);
     }
 
-    /// Returns the root of the subtree of `base` that covers exactly [offset, offset + size),
-    /// or nullopt if `base` has no such subtree. Zero subtrees cover any range inside them.
-    std::optional<uint_t> find_subtree(TreeBitsetIndex<Block> base, uint_t offset, uint_t size) const
+    /// Finds subtrees of a base bitset for the ranges that insert_delta_recursive visits. These ranges arrive in
+    /// depth-first order, so the cursor keeps its last descent path and only climbs as far as the next range requires
+    /// instead of descending from the root for every range.
+    class BaseCursor
     {
-        if (offset >= base.size)
-            return ZERO;
-        if (offset + size > base.size)
-            return std::nullopt;
+    public:
+        BaseCursor(const NodeSet& nodes, TreeBitsetIndex<Block> base) : m_nodes(nodes), m_base_size(base.size) { m_path[0] = Frame { base.root, 0, base.size }; }
 
-        auto root = base.root;
-        auto root_offset = uint_t { 0 };
-        auto root_size = base.size;
-        while (root != ZERO && root_size != size)
+        /// Returns the subtree of the base that covers exactly [offset, offset + size), or nullopt if the base has
+        /// no such subtree. Ranges inside all-zero subtrees, or beyond the base, are zero.
+        std::optional<uint_t> find(uint_t offset, uint_t size)
         {
-            if (root_size == 1)
+            if (offset >= m_base_size)
+                return zero(size);
+            if (offset + size > m_base_size)
                 return std::nullopt;
 
-            const auto& node = m_nodes[Index<Node>(root)];
-            const auto middle = static_cast<uint_t>(std::bit_floor(root_size - 1));
-            if (offset + size <= root_offset + middle)
+            while (!m_path[m_depth].contains(offset, size))  // The root frame contains every range inside the base.
+                --m_depth;
+
+            while (true)
             {
-                root = node.left;
-                root_size = middle;
+                const auto frame = m_path[m_depth];
+                if (frame.size == size)
+                    return frame.root;
+                if (frame.root == ZERO)
+                    return zero(size);
+
+                const auto& node = m_nodes[Index<Node>(frame.root)];
+                const auto middle = split(frame.size);
+                if (offset + size <= frame.offset + middle)
+                    m_path[++m_depth] = Frame { node.left, frame.offset, middle };
+                else if (offset >= frame.offset + middle)
+                    m_path[++m_depth] = Frame { node.right, frame.offset + middle, frame.size - middle };
+                else
+                    return std::nullopt;
             }
-            else if (offset >= root_offset + middle)
-            {
-                root = node.right;
-                root_offset += middle;
-                root_size -= middle;
-            }
-            else
-                return std::nullopt;
         }
-        assert(root == ZERO || root_offset == offset);
-        return root;
-    }
+
+    private:
+        struct Frame
+        {
+            uint_t root;
+            uint_t offset;
+            uint_t size;
+
+            bool contains(uint_t other_offset, uint_t other_size) const noexcept { return offset <= other_offset && other_offset + other_size <= offset + size; }
+        };
+
+        const NodeSet& m_nodes;
+        uint_t m_base_size;
+        std::array<Frame, std::numeric_limits<uint_t>::digits + 2> m_path {};  // Bounded by the tree height.
+        size_t m_depth = 0;
+    };
 
     /// Builds the subtree for [offset, offset + size) of the new bitset. `base_root` covers the
-    /// same range in the base bitset if `base_known`; otherwise it is looked up in `base`.
-    uint_t insert_delta_recursive(TreeBitsetIndex<Block> base, bool base_known, uint_t base_root, uint_t offset, uint_t size, std::span<const Flip> flips)
+    /// same range in the base bitset if `base_known`; otherwise it is looked up with `base`.
+    uint_t insert_delta_recursive(BaseCursor& base, bool base_known, uint_t base_root, uint_t offset, uint_t size, std::span<const Flip> flips)
     {
         assert(size > 0);
 
         if (!base_known)
         {
-            if (const auto root = find_subtree(base, offset, size))
+            if (const auto root = base.find(offset, size))
             {
                 base_known = true;
                 base_root = *root;
@@ -163,15 +205,14 @@ private:
         if (size == 1)
         {
             assert(base_known);
-            const auto value = (base_root == ZERO) ? Block { 0 } : m_leaves[Index<Leaf>(base_root)].value;
-            return insert_leaf(flips.empty() ? value : Block(value ^ flips.front().mask));
+            return flips.empty() ? base_root : insert_leaf(leaf_value(base_root) ^ flips.front().mask);
         }
 
-        const auto middle = static_cast<uint_t>(std::bit_floor(size - 1));
-        const auto split = std::ranges::lower_bound(flips, offset + middle, {}, &Flip::position) - flips.begin();
+        const auto middle = split(size);
+        const auto split_flips = std::ranges::lower_bound(flips, offset + middle, {}, &Flip::position) - flips.begin();
 
-        auto left_root = ZERO;
-        auto right_root = ZERO;
+        auto left_root = zero(middle);
+        auto right_root = zero(size - middle);
         if (base_known && base_root != ZERO)
         {
             const auto& node = m_nodes[Index<Node>(base_root)];
@@ -179,14 +220,46 @@ private:
             right_root = node.right;
         }
 
-        const auto left = insert_delta_recursive(base, base_known, left_root, offset, middle, flips.first(split));
-        const auto right = insert_delta_recursive(base, base_known, right_root, offset + middle, size - middle, flips.subspan(split));
-        return insert_node(left, right);
+        const auto left = insert_delta_recursive(base, base_known, left_root, offset, middle, flips.first(split_flips));
+        const auto right = insert_delta_recursive(base, base_known, right_root, offset + middle, size - middle, flips.subspan(split_flips));
+        return insert_node(left, right, size);
+    }
+
+    /// Returns the number of blocks up to and including the last nonzero block of the subtree.
+    uint_t trimmed_size(uint_t root, uint_t size) const
+    {
+        auto offset = uint_t { 0 };
+        while (root != zero(size))
+        {
+            if (size == 1)
+                return offset + 1;
+
+            const auto& node = m_nodes[Index<Node>(root)];
+            const auto middle = split(size);
+            if (node.right != zero(size - middle))
+            {
+                root = node.right;
+                offset += middle;
+                size -= middle;
+            }
+            else
+            {
+                root = node.left;  // Nonzero, since insert_node never stores two zero children.
+                size = middle;
+            }
+        }
+        return offset;
     }
 
     void read_recursive(uint_t root, std::span<Block> values) const
     {
         assert(!values.empty());
+
+        if (values.size() == 1)
+        {
+            values.front() = leaf_value(root);
+            return;
+        }
 
         if (root == ZERO)
         {
@@ -194,14 +267,8 @@ private:
             return;
         }
 
-        if (values.size() == 1)
-        {
-            values.front() = m_leaves[Index<Leaf>(root)].value;
-            return;
-        }
-
         const auto& node = m_nodes[Index<Node>(root)];
-        const auto middle = std::bit_floor(values.size() - 1);
+        const auto middle = split(to_uint_t(values.size()));
         read_recursive(node.left, values.first(middle));
         read_recursive(node.right, values.subspan(middle));
     }
@@ -211,17 +278,17 @@ private:
     {
         assert(size > 0);
 
-        if (root == ZERO)
+        if (root == zero(size))
             return;
 
         if (size == 1)
         {
-            callback(offset, m_leaves[Index<Leaf>(root)].value);
+            callback(offset, leaf_value(root));
             return;
         }
 
         const auto& node = m_nodes[Index<Node>(root)];
-        const auto middle = static_cast<uint_t>(std::bit_floor(size - 1));
+        const auto middle = split(size);
         for_each_block_recursive(node.left, offset, middle, callback);
         for_each_block_recursive(node.right, offset + middle, size - middle, callback);
     }
@@ -249,20 +316,28 @@ public:
     }
 
     /// Inserts the bitset obtained from `base` by applying `flips`, which must be sorted by
-    /// unique position. The result must have exactly `size` blocks, i.e., its last block nonzero.
-    /// Only the paths from the flipped blocks, and from blocks at changed sizes, to the root are rebuilt.
-    index_type insert(index_type base, std::span<const flip_type> flips, uint_t size)
+    /// unique position. Only the paths from the flipped blocks, and from blocks at changed sizes,
+    /// to the root are rebuilt. The result is trimmed to its last nonzero block.
+    index_type insert(index_type base, std::span<const flip_type> flips)
     {
         assert(std::ranges::is_sorted(flips, std::ranges::less {}, &Flip::position));
         assert(std::ranges::adjacent_find(flips, {}, &Flip::position) == flips.end());
-        assert(flips.empty() || flips.back().position < std::max(size, base.size));
 
+        const auto upper = flips.empty() ? base.size : std::max(base.size, flips.back().position + 1);
+        if (upper == 0)
+            return index_type {};
+
+        auto cursor = BaseCursor(m_nodes, base);
+        const auto root = insert_delta_recursive(cursor, false, zero(upper), 0, upper, flips);
+        const auto size = trimmed_size(root, upper);
+        if (size == upper)
+            return index_type { root, size };
         if (size == 0)
             return index_type {};
 
-        const auto root = insert_delta_recursive(base, false, ZERO, 0, size, flips.first(std::ranges::lower_bound(flips, size, {}, &Flip::position) - flips.begin()));
-        assert(root != ZERO);
-        return index_type { root, size };
+        // Cleared trailing blocks: rebuild the right spine for the shorter size, reusing all other subtrees.
+        auto trimmed = BaseCursor(m_nodes, index_type { root, upper });
+        return index_type { insert_delta_recursive(trimmed, false, zero(size), 0, size, {}), size };
     }
 
     void read(index_type index, std::span<Block> blocks) const
@@ -294,9 +369,79 @@ public:
     bool empty() const noexcept { return m_leaves.empty() && m_nodes.empty(); }
 
 private:
-    LeafSet m_leaves;
+    [[no_unique_address]] LeafSet m_leaves;
     NodeSet m_nodes;
 };
+
+/// Sorts `flips` by position and combines flips of the same block, dropping flips that cancel out.
+/// The result satisfies the precondition of TreeBitsetSet::insert(base, flips).
+template<std::unsigned_integral Block>
+void normalize_flips(std::vector<TreeBitsetFlip<Block>>& flips)
+{
+    std::ranges::sort(flips, {}, &TreeBitsetFlip<Block>::position);
+
+    auto last = size_t { 0 };
+    for (size_t i = 0; i < flips.size(); ++i)
+    {
+        if (last > 0 && flips[last - 1].position == flips[i].position)
+            flips[last - 1].mask ^= flips[i].mask;
+        else
+            flips[last++] = flips[i];
+    }
+    flips.resize(last);
+    std::erase_if(flips, [](const TreeBitsetFlip<Block>& flip) { return flip.mask == Block { 0 }; });
+}
+
+/// Appends one flip per block in which `from` and `to` differ, in increasing position order.
+template<std::unsigned_integral Block>
+void append_diff_flips(std::span<const Block> from, std::span<const Block> to, std::vector<TreeBitsetFlip<Block>>& flips)
+{
+    for (size_t i = 0; i < std::max(from.size(), to.size()); ++i)
+    {
+        const auto mask = Block((i < from.size() ? from[i] : Block { 0 }) ^ (i < to.size() ? to[i] : Block { 0 }));
+        if (mask != Block { 0 })
+            flips.push_back(TreeBitsetFlip<Block> { to_uint_t(i), mask });
+    }
+}
+
+/// Appends the bits of `bitset` as blocks of type Block, which may be narrower than the blocks of `bitset`.
+template<std::unsigned_integral Block, std::unsigned_integral BitsetBlock, typename Allocator>
+    requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
+void append_blocks(const boost::dynamic_bitset<BitsetBlock, Allocator>& bitset, std::vector<Block>& blocks)
+{
+    constexpr auto parts = sizeof(BitsetBlock) / sizeof(Block);
+    boost::to_block_range(bitset,
+                          boost::make_function_output_iterator(
+                              [&](BitsetBlock block)
+                              {
+                                  for (size_t i = 0; i < parts; ++i)
+                                      blocks.push_back(Block(block >> (i * std::numeric_limits<Block>::digits)));
+                              }));
+}
+
+/// Removes trailing zero blocks, as TreeBitsetSet::insert(blocks) requires a nonzero last block.
+template<std::unsigned_integral Block>
+void trim_trailing_zero_blocks(std::vector<Block>& blocks)
+{
+    while (!blocks.empty() && blocks.back() == Block { 0 })
+        blocks.pop_back();
+}
+
+/// Replaces the bits of `bitset` by those of `blocks`. The size becomes a multiple of the block width of `bitset`.
+template<std::unsigned_integral Block, std::unsigned_integral BitsetBlock, typename Allocator>
+    requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
+void assign_blocks(std::span<const Block> blocks, boost::dynamic_bitset<BitsetBlock, Allocator>& bitset)
+{
+    constexpr auto parts = sizeof(BitsetBlock) / sizeof(Block);
+    bitset.clear();
+    for (size_t i = 0; i < blocks.size(); i += parts)
+    {
+        auto block = BitsetBlock { 0 };
+        for (size_t j = 0; j < parts && i + j < blocks.size(); ++j)
+            block |= BitsetBlock(blocks[i + j]) << (j * std::numeric_limits<Block>::digits);
+        bitset.append(block);
+    }
+}
 
 }  // namespace ygg
 
