@@ -586,19 +586,17 @@ belong to one repository.
 
 ### Relaxation
 
-`relax(query, known, repository, builder)` (`syntax/translations/relaxation.hpp`) over-approximates a query whose
-inputs not marked `known(slot)` may hold any rows. The result Q̂ reads only the known inputs, which are renumbered
-into `Relaxation::slots`, and has a subset S' of the query's labels. For all inputs, Q ⊆ Q̂ × U^(labels not in S'),
-and `nullopt` means nothing is constrained.
+`relax(roots, known, repository, builder)` (`syntax/translations/relaxation.hpp`) over-approximates queries whose
+inputs not marked `known(slot)` may hold any rows. Each result Q̂ reads only the known inputs, which are renumbered once
+for all roots into `Relaxation::slots`, and has a subset S' of the query's labels. For all inputs, Q ⊆ Q̂ × U^(labels
+not in S'), and `nullopt` means nothing is constrained.
 
-The rules:
-- unknown inputs drop out of joins and semijoins;
-- a union keeps only the labels both sides constrain;
-- differences and antijoins keep their lhs, and their rhs only if it reads known inputs alone;
-- selections on unconstrained columns are dropped.
+Relaxing π_L(Q) needs only the labels L. Labels no one needs are eliminated as early as possible:
+- a conjunct that shares nothing needed becomes a nullary existence test;
+- antijoins and differences are kept only as exact filters on needed labels.
 
-With every input known, Q̂ = Q. The header has the full translation table and references (possible answers under
-incomplete information; relaxed problems in heuristic search). Evaluate Q̂ like any query, e.g. after `optimize()`.
+This is the projection of pattern databases. The header has the full translation table and references. Evaluate the
+results like any query, e.g. after `optimize()`.
 
 ### Statistics
 

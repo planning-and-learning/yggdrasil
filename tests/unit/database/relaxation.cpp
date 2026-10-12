@@ -43,25 +43,27 @@ struct Relaxed
     ygg::database::Relaxation<> relaxation;
 };
 
-std::unique_ptr<Relaxed> relax(View query, const std::array<bool, 4>& known)
+std::unique_ptr<Relaxed> relax(std::span<const View> roots, const std::array<bool, 4>& known)
 {
     auto result = std::make_unique<Relaxed>();
-    result->relaxation = ygg::database::relax(query, [&](size_t slot) { return known[slot]; }, result->repository, qb::builder<ygg::database::DefaultColumnTypes>());
+    result->relaxation = ygg::database::relax(roots, [&](size_t slot) { return known[slot]; }, result->repository, qb::builder<ygg::database::DefaultColumnTypes>());
     return result;
 }
+std::unique_ptr<Relaxed> relax(View query, const std::array<bool, 4>& known) { return relax(std::span<const View>(&query, 1), known); }
 
 /// Q(I) ⊆ Q̂(I) × U^(free labels): Q's rows projected onto Q̂'s labels are rows of Q̂.
-void expect_superset(View query, const ygg::database::Relaxation<>& relaxation, const std::array<Relation, 4>& inputs)
+void expect_superset(View query, const ygg::database::Relaxation<>& relaxation, size_t root, const std::array<Relation, 4>& inputs)
 {
-    if (!relaxation.query)
+    const auto& relaxed_query = relaxation.queries[root];
+    if (!relaxed_query)
         return;
     const auto full = evaluate(query, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
     auto known = std::vector<const Relation*>();
     for (const auto slot : relaxation.slots)
         known.push_back(&inputs[slot]);
-    const auto relaxed = evaluate(*relaxation.query, known);
-    const auto labels = ygg::database::column_labels(relaxation.query->columns());
-    for (const auto& column : relaxation.query->columns())
+    const auto relaxed = evaluate(*relaxed_query, known);
+    const auto labels = ygg::database::column_labels(relaxed_query->columns());
+    for (const auto& column : relaxed_query->columns())
         EXPECT_TRUE(ygg::database::contains_column(query.columns(), column.label));
     const auto projected = ygg::database::project<ygg::database::DefaultColumnTypes>(full, std::span<const Column>(labels));
     for (size_t i = 0; i < projected.size(); ++i)
@@ -97,10 +99,16 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
     for (size_t expression = 0; expression < 128; ++expression)
     {
         auto root = leaves[random() % leaves.size()];
+        // Exactness is lost once a projection eliminates labels a difference or antijoin below it shares.
+        auto negated = false;
+        auto exact = true;
         for (size_t depth = 0; depth < 4; ++depth)
         {
             auto columns = labels_of(root);
-            switch (random() % 9)
+            const auto operation = random() % 9;
+            negated = negated || operation == 6 || operation == 8;
+            exact = exact && !(operation == 1 && negated);
+            switch (operation)
             {
                 case 0:
                     root = qb::join(queries, root, leaves[random() % leaves.size()]);
@@ -150,17 +158,25 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
                         input.insert(std::tuple { left, right });
         }
         const auto known = std::array { bool(random() % 2), bool(random() % 2), bool(random() % 2), bool(random() % 2) };
-        const auto partial = relax(root, known);
-        expect_superset(root, partial->relaxation, inputs);
+        // The root and a projection of it onto random labels, relaxed together.
+        auto kept = labels_of(root);
+        std::shuffle(kept.begin(), kept.end(), random);
+        kept.resize(random() % (kept.size() + 1));
+        const auto roots = std::array { root, qb::project(queries, root, std::span<const Column>(kept)) };
+        const auto partial = relax(roots, known);
+        expect_superset(roots[0], partial->relaxation, 0, inputs);
+        expect_superset(roots[1], partial->relaxation, 1, inputs);
 
-        const auto exact = relax(root, { true, true, true, true });
-        ASSERT_TRUE(exact->relaxation.query.has_value());
-        EXPECT_EQ(ygg::database::column_labels(exact->relaxation.query->columns()), labels_of(root));
+        if (!exact)
+            continue;
+        const auto all_known = relax(root, { true, true, true, true });
+        ASSERT_TRUE(all_known->relaxation.queries[0].has_value());
+        EXPECT_EQ(ygg::database::column_labels(all_known->relaxation.queries[0]->columns()), labels_of(root));
         auto all = std::vector<const Relation*>();
-        for (const auto slot : exact->relaxation.slots)
+        for (const auto slot : all_known->relaxation.slots)
             all.push_back(&inputs[slot]);
         const auto expected = evaluate(root, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
-        const auto actual = evaluate(*exact->relaxation.query, all);
+        const auto actual = evaluate(*all_known->relaxation.queries[0], all);
         EXPECT_EQ(actual.size(), expected.size());
         for (size_t i = 0; i < expected.size(); ++i)
             EXPECT_TRUE(actual.contains(expected.row(i)));
@@ -177,22 +193,74 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
 
     // An unknown conjunct drops out of a join; its label z is unconstrained.
     const auto joined = relax(qb::join(queries, known_edges, unknown), both_known);
-    ASSERT_TRUE(joined->relaxation.query.has_value());
-    EXPECT_EQ(ygg::database::column_labels(joined->relaxation.query->columns()), (std::vector<Column> { x, y }));
+    ASSERT_TRUE(joined->relaxation.queries[0].has_value());
+    EXPECT_EQ(ygg::database::column_labels(joined->relaxation.queries[0]->columns()), (std::vector<Column> { x, y }));
     EXPECT_EQ(joined->relaxation.slots, (std::vector<size_t> { 0 }));
 
     // A union with an unknown side constrains nothing.
     const auto renamed = qb::rename(queries, unknown, { x, y });
-    EXPECT_FALSE(relax(qb::union_(queries, known_edges, renamed), both_known)->relaxation.query.has_value());
+    EXPECT_FALSE(relax(qb::union_(queries, known_edges, renamed), both_known)->relaxation.queries[0].has_value());
 
     // A known antijoin rhs stays: the result is exact.
     const auto anti = relax(qb::antijoin(queries, known_edges, blocked), both_known);
-    ASSERT_TRUE(anti->relaxation.query.has_value());
-    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(*anti->relaxation.query));
+    ASSERT_TRUE(anti->relaxation.queries[0].has_value());
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(*anti->relaxation.queries[0]));
 
     // A selection on an unconstrained column is dropped.
     const auto selected = relax(qb::select_value(queries, qb::join(queries, known_edges, unknown), z, ygg::uint_t(1)), both_known);
-    ASSERT_TRUE(selected->relaxation.query.has_value());
-    EXPECT_TRUE(ygg::database::is<ygg::database::QueryJoinTag>(*selected->relaxation.query) || ygg::database::is<ygg::database::QueryInputTag>(*selected->relaxation.query));
+    ASSERT_TRUE(selected->relaxation.queries[0].has_value());
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryJoinTag>(*selected->relaxation.queries[0]) || ygg::database::is<ygg::database::QueryInputTag>(*selected->relaxation.queries[0]));
+}
+
+TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
+{
+    // π_{x,y}((E(x,y) ⋈ I(u,v)) ▷ I(y,u)): I(u,v) shares nothing needed, and the antijoin filters on u, which is
+    // eliminated, so the relaxation is E with I(u,v) reduced to an existence test, without a product.
+    auto queries = qb::repository<>();
+    const Column u(3), v(4);
+    const auto edges = qb::input(queries, 0, { x, y });
+    const auto identity = qb::input(queries, 1, { u, v });
+    const auto blocked = qb::rename(queries, identity, { y, u });
+    const auto walk = qb::antijoin(queries, qb::join(queries, edges, identity), blocked);
+    const auto pattern = qb::project(queries, walk, { x, y });
+    const auto relaxed = relax(pattern, { true, true, true, true });
+    ASSERT_TRUE(relaxed->relaxation.queries[0].has_value());
+    const auto plan = ygg::database::compile({ *relaxed->relaxation.queries[0] });
+    for (size_t i = 0; i < plan.node_count(); ++i)
+    {
+        const auto node = plan[ygg::Index<ygg::database::Query<>>(ygg::to_uint_t(i))];
+        EXPECT_FALSE(ygg::database::is<ygg::database::QueryAntijoinTag>(node));
+        // Every join has a nullary side: the existence test of I.
+        if (ygg::database::is<ygg::database::QueryJoinTag>(node))
+        {
+            const auto join = ygg::database::as<ygg::database::QueryJoinTag>(node);
+            EXPECT_TRUE(join.get_lhs().columns().empty() || join.get_rhs().columns().empty());
+        }
+    }
+
+    // An antijoin whose shared labels are all needed stays exact.
+    const auto kept = relax(qb::antijoin(queries, edges, qb::rename(queries, identity, { x, y })), { true, true, true, true });
+    ASSERT_TRUE(kept->relaxation.queries[0].has_value());
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(*kept->relaxation.queries[0]));
+}
+
+TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
+{
+    auto queries = qb::repository<>();
+    const auto a = qb::input(queries, 0, { x, y });
+    const auto c = qb::input(queries, 2, { y, z });
+    const auto joined = qb::join(queries, a, c);
+    const auto roots = std::array { qb::project(queries, joined, { x }), qb::project(queries, c, { z }) };
+    const auto relaxed = relax(roots, { true, false, true, false });
+    ASSERT_TRUE(relaxed->relaxation.queries[0].has_value() && relaxed->relaxation.queries[1].has_value());
+    EXPECT_EQ(relaxed->relaxation.slots, (std::vector<size_t> { 0, 2 }));
+    auto inputs = std::array<Relation, 4> { Relation({ x, y }), Relation({ x, y }), Relation({ y, z }), Relation({ x, z }) };
+    inputs[0].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
+    inputs[2].insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
+    const auto plan = ygg::database::compile({ *relaxed->relaxation.queries[0], *relaxed->relaxation.queries[1] });
+    auto evaluator = ygg::database::QueryEvaluator<>(plan);
+    evaluator.evaluate(std::array { borrow(inputs[0]), borrow(inputs[2]) });
+    EXPECT_EQ(evaluator.get_result(0).size(), 1);
+    EXPECT_EQ(evaluator.get_result(1).size(), 1);
 }
 }  // namespace
