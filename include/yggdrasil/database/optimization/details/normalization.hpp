@@ -19,8 +19,9 @@
 /// Algebraic normalization by the classic heuristics (H. Garcia-Molina, J. D. Ullman,
 /// J. Widom, "Database Systems: The Complete Book", 2nd ed., 2008, ch. 16): push
 /// selections down through join, projection, rename, union, and difference (and into the
-/// lhs of semijoins and antijoins); push
-/// projections through rename and union, never through difference; collapse nested
+/// lhs of semijoins and antijoins); push projections through rename and union, and into the
+/// lhs of semijoins and antijoins (keeping the labels shared with the rhs), never through
+/// difference (selections already go below projections); collapse nested
 /// projections; propagate empty relations. One deterministic bottom-up pass.
 namespace ygg::database::detail
 {
@@ -95,8 +96,38 @@ class Normalizer
             const auto inner = inverse(operation, columns);
             return rename(project(operation.get_arg(), inner), columns);
         }
+        // Into the lhs of a semijoin or antijoin, keeping the labels it shares with the rhs.
+        if (is<QuerySemijoinTag>(arg))
+            return project_filter_join<QuerySemijoinTag>(arg, columns);
+        if (is<QueryAntijoinTag>(arg))
+            return project_filter_join<QueryAntijoinTag>(arg, columns);
+        return finish_project(arg, columns);
+    }
+    QueryView<Values> finish_project(QueryView<Values> arg, std::span<const Index<Column>> columns)
+    {
         const auto result = m_build.template relabel<QueryProjectTag>(arg, columns);
         return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
+    }
+
+    /// The labels of `arg` in `columns` or in `extra`, in the order of `arg`.
+    static std::vector<Index<Column>> kept_labels(QueryView<Values> arg, std::span<const Index<Column>> columns, std::span<const Index<Column>> extra)
+    {
+        std::vector<Index<Column>> labels;
+        for (const auto& column : arg.columns())
+            if (std::ranges::find(columns, column.label) != columns.end() || std::ranges::find(extra, column.label) != extra.end())
+                labels.push_back(column.label);
+        return labels;
+    }
+    template<class Tag>
+    QueryView<Values> project_filter_join(QueryView<Values> arg, std::span<const Index<Column>> columns)
+    {
+        const auto operation = as<Tag>(arg);
+        const auto lhs = operation.get_lhs();
+        const auto kept = kept_labels(lhs, columns, column_labels(operation.get_rhs().columns()));
+        // Nothing to drop below: the projection stays above.
+        if (kept.size() == lhs.columns().size())
+            return finish_project(arg, columns);
+        return project(filter_join<Tag>(project(lhs, kept), operation.get_rhs()), columns);
     }
 
     static std::vector<Index<Column>> tested(const Operation<QuerySelectEqualTag>& data) { return { data.lhs_column, data.rhs_column }; }

@@ -584,6 +584,22 @@ publishing immutable query data. Query records hold plain indices, so callers
 keep operands in the repository they insert into. The roots passed to `optimize`
 belong to one repository.
 
+### Relaxation
+
+`relax(query, known, repository, builder)` (`syntax/translations/relaxation.hpp`) over-approximates a query whose
+inputs not marked `known(slot)` may hold any rows. The result Q̂ reads only the known inputs, which are renumbered
+into `Relaxation::slots`, and has a subset S' of the query's labels. For all inputs, Q ⊆ Q̂ × U^(labels not in S'),
+and `nullopt` means nothing is constrained.
+
+The rules:
+- unknown inputs drop out of joins and semijoins;
+- a union keeps only the labels both sides constrain;
+- differences and antijoins keep their lhs, and their rhs only if it reads known inputs alone;
+- selections on unconstrained columns are dropped.
+
+With every input known, Q̂ = Q. The header has the full translation table and references (possible answers under
+incomplete information; relaxed problems in heuristic search). Evaluate Q̂ like any query, e.g. after `optimize()`.
+
 ### Statistics
 
 `Statistics<Values>` describes what is known; everything is optional and nothing

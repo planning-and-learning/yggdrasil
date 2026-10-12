@@ -84,10 +84,10 @@ QueryView<Values> yannakakis(const JoinBlock<Values>& block, std::span<const std
     auto relations = block.atoms;
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
         if (parent[*atom])
-            relations[*parent[*atom]] = build.semijoin(relations[*parent[*atom]], relations[*atom]);
+            relations[*parent[*atom]] = semijoin(build, relations[*parent[*atom]], relations[*atom]);
     for (const auto atom : preorder)
         if (parent[atom])
-            relations[atom] = build.semijoin(relations[atom], relations[*parent[atom]]);
+            relations[atom] = semijoin(build, relations[atom], relations[*parent[atom]]);
 
     std::vector<std::optional<QueryView<Values>>> results(count);
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
