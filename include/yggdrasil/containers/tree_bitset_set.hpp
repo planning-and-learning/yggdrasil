@@ -440,6 +440,55 @@ void assign_blocks(std::span<const Block> blocks, boost::dynamic_bitset<BitsetBl
     }
 }
 
+/// Inserts `bits` into `set`. `blocks` is scratch space.
+template<std::unsigned_integral Block, size_t FirstSegmentSize, bool ThreadSafe, size_t Arity, std::unsigned_integral BitsetBlock, typename Allocator>
+    requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
+TreeBitsetIndex<Block> insert_bitset(TreeBitsetSet<Block, FirstSegmentSize, ThreadSafe, Arity>& set,
+                                     const boost::dynamic_bitset<BitsetBlock, Allocator>& bits,
+                                     std::vector<Block>& blocks)
+{
+    blocks.clear();
+    append_blocks(bits, blocks);
+    trim_trailing_zero_blocks(blocks);
+    return set.insert(blocks);
+}
+
+/// Inserts `bits` into `set` as a delta to the stored `parent`, whose bits are `parent_bits`. Linear in the bitset
+/// size; when the changed bits are known, inserting their flips directly is cheaper. `blocks` and `flips` are scratch space.
+template<std::unsigned_integral Block, size_t FirstSegmentSize, bool ThreadSafe, size_t Arity, std::unsigned_integral BitsetBlock, typename Allocator>
+    requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
+TreeBitsetIndex<Block> insert_bitset(TreeBitsetSet<Block, FirstSegmentSize, ThreadSafe, Arity>& set,
+                                     TreeBitsetIndex<Block> parent,
+                                     const boost::dynamic_bitset<BitsetBlock, Allocator>& parent_bits,
+                                     const boost::dynamic_bitset<BitsetBlock, Allocator>& bits,
+                                     std::vector<Block>& blocks,
+                                     std::vector<TreeBitsetFlip<Block>>& flips)
+{
+    blocks.clear();
+    append_blocks(parent_bits, blocks);
+    const auto num_parent_blocks = blocks.size();
+    append_blocks(bits, blocks);
+
+    flips.clear();
+    append_diff_flips<Block>(std::span(blocks).first(num_parent_blocks), std::span(blocks).subspan(num_parent_blocks), flips);
+    return set.insert(parent, flips);
+}
+
+/// Reads `index` from `set` into `bits`, which then ends at its last set bit. `blocks` is scratch space.
+template<std::unsigned_integral Block, size_t FirstSegmentSize, bool ThreadSafe, size_t Arity, std::unsigned_integral BitsetBlock, typename Allocator>
+    requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
+void read_bitset(const TreeBitsetSet<Block, FirstSegmentSize, ThreadSafe, Arity>& set,
+                 TreeBitsetIndex<Block> index,
+                 boost::dynamic_bitset<BitsetBlock, Allocator>& bits,
+                 std::vector<Block>& blocks)
+{
+    blocks.resize(index.size);
+    set.read(index, blocks);
+    assign_blocks<Block>(blocks, bits);
+    if (!blocks.empty())
+        bits.resize((blocks.size() - 1) * std::numeric_limits<Block>::digits + std::bit_width(blocks.back()));
+}
+
 }  // namespace ygg
 
 #endif

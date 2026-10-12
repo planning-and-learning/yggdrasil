@@ -22,6 +22,7 @@
 #include <atomic>
 #include <barrier>
 #include <bit>
+#include <boost/dynamic_bitset.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -490,6 +491,52 @@ TEST(YggdrasilTests, CommonTreeBitsetSetSupportsConcurrentDeltaInsertionForArity
     for (size_t step = 0; step < step_count; ++step)
         for (size_t thread = 1; thread < thread_count; ++thread)
             EXPECT_EQ(handles[thread][step], handles[0][step]);
+}
+
+/// A random bitset of `num_bits` bits whose last bit is set, i.e., that ends at its last set bit.
+template<std::unsigned_integral BitsetBlock>
+boost::dynamic_bitset<BitsetBlock> random_trimmed_bitset(std::mt19937_64& rng, size_t num_bits)
+{
+    auto bits = boost::dynamic_bitset<BitsetBlock>(num_bits);
+    for (size_t i = 0; i < num_bits; ++i)
+        bits[i] = rng() % 4 == 0;
+    if (num_bits > 0)
+        bits[num_bits - 1] = true;
+    return bits;
+}
+
+template<std::unsigned_integral BitsetBlock, size_t Arity>
+void expect_dynamic_bitset_adapters()
+{
+    SCOPED_TRACE(testing::Message() << "Arity " << Arity << ", " << sizeof(BitsetBlock) << "-byte bitset blocks");
+    auto rng = std::mt19937_64 { 11 * Arity };
+    auto set = TreeBitsetSet<Block, 32, false, Arity> {};
+    auto blocks = std::vector<Block> {};
+    auto flips = std::vector<TreeBitsetFlip<Block>> {};
+
+    for (const size_t num_bits : { 0, 1, 31, 32, 33, 64, 65, 100, 1000, 5000 })
+    {
+        const auto bits = random_trimmed_bitset<BitsetBlock>(rng, num_bits);
+        const auto index = insert_bitset(set, bits, blocks);
+        auto read = boost::dynamic_bitset<BitsetBlock> {};
+        read_bitset(set, index, read, blocks);
+        EXPECT_EQ(read, bits);
+
+        // A delta to any stored parent gives the same tree as a full insert.
+        for (const size_t parent_bits : { 0, 7, 64, 3000 })
+        {
+            const auto parent = random_trimmed_bitset<BitsetBlock>(rng, parent_bits);
+            const auto parent_index = insert_bitset(set, parent, blocks);
+            EXPECT_EQ(insert_bitset(set, parent_index, parent, bits, blocks, flips), index);
+        }
+    }
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetDynamicBitsetAdaptersRoundTrip)
+{
+    expect_dynamic_bitset_adapters<unsigned long, 2>();
+    expect_dynamic_bitset_adapters<unsigned long, 4>();
+    expect_dynamic_bitset_adapters<std::uint32_t, 4>();
 }
 
 }  // namespace
