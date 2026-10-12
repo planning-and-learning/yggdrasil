@@ -204,6 +204,25 @@ TEST(YggdrasilTests, CommonDynamicBitsetTrimTrailingZeros)
     bitset.reset();
     ygg::trim_trailing_zeros(bitset);
     EXPECT_TRUE(bitset.empty());
+
+    // Block boundaries and many trailing zero blocks.
+    auto sparse = boost::dynamic_bitset<>(100001);
+    sparse.set(3);
+    sparse.set(63);
+    sparse.set(64);
+    sparse.set(100000);
+    ygg::trim_trailing_zeros(sparse);
+    EXPECT_EQ(sparse.size(), 100001);
+    sparse.reset(100000);
+    ygg::trim_trailing_zeros(sparse);
+    EXPECT_EQ(sparse.size(), 65);
+    sparse.reset(64);
+    ygg::trim_trailing_zeros(sparse);
+    EXPECT_EQ(sparse.size(), 64);
+    sparse.reset(63);
+    ygg::trim_trailing_zeros(sparse);
+    EXPECT_EQ(sparse.size(), 4);
+    EXPECT_TRUE(sparse.test(3));
 }
 
 TEST(YggdrasilTests, CommonDynamicBitsetAdaptersHashAndCompareSpans)
