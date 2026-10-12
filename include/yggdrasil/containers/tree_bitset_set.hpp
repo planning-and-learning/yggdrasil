@@ -68,20 +68,23 @@ struct TreeBitsetFlip
 };
 
 /// Stores canonical bitsets, given as blocks with a nonzero last block, as balanced trees shaped like
-/// TreeVectorSet. As there, blocks with the width of a child index are stored inline in the child slots,
+/// TreeVectorSet, with Arity children per internal node. As there, blocks with the width of a child index are
+/// stored inline in the child slots,
 /// without a leaf table; wider blocks are stored in a leaf table. Block i always sits at position i, so
 /// changing a block only changes its path to the root. All-zero subtrees are never stored: they are the
 /// sentinel Index<>::MAX, except that an inline zero block is the value 0.
 /// ThreadSafe permits concurrent insertion, size queries, and reads of published indices.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<std::unsigned_integral Block, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
+template<std::unsigned_integral Block, size_t FirstSegmentSize = 32, bool ThreadSafe = false, size_t Arity = 2>
+    requires(std::has_single_bit(Arity) && Arity >= 2)
 class TreeBitsetSet
 {
 private:
     static constexpr bool inline_leaves = sizeof(Block) == sizeof(uint_t);
 
     using Leaf = detail::TreeVectorLeaf<Block>;
-    using Node = detail::TreeVectorNode<Block>;
+    using Node = detail::TreeVectorNode<Block, Arity>;
+    using Children = std::array<uint_t, Arity>;
     using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
     using Flip = TreeBitsetFlip<Block>;
@@ -107,14 +110,26 @@ private:
             return slot == ZERO ? Block { 0 } : m_leaves[Index<Leaf>(slot)].value;
     }
 
-    static constexpr uint_t split(uint_t size) noexcept { return static_cast<uint_t>(std::bit_floor(size - 1)); }
+    static constexpr uint_t chunk(uint_t size) noexcept { return detail::tree_chunk<Arity>(size); }
 
-    uint_t insert_node(uint_t left, uint_t right, uint_t size)
+    /// The number of blocks covered by child `k` of a subtree covering `size` blocks.
+    static constexpr uint_t child_size(uint_t size, uint_t k) noexcept { return std::min(chunk(size), size - k * chunk(size)); }
+
+    /// Stores the node of a subtree covering `size` blocks, whose unused trailing children are tree_unused_child.
+    uint_t insert_node(const Children& children, uint_t size)
     {
-        const auto middle = split(size);
-        if (left == zero(middle) && right == zero(size - middle))
-            return ZERO;
-        return static_cast<uint_t>(m_nodes.insert(Data<Node> { left, right }).first);
+        const auto num_children = detail::tree_num_children<Arity>(size);
+        for (uint_t k = 0; k < num_children; ++k)
+            if (children[k] != zero(child_size(size, k)))
+                return static_cast<uint_t>(m_nodes.insert(Data<Node> { children }).first);
+        return ZERO;
+    }
+
+    static Children unused_children() noexcept
+    {
+        auto children = Children {};
+        children.fill(detail::tree_unused_child);
+        return children;
     }
 
     uint_t insert_recursive(std::span<const Block> values)
@@ -125,10 +140,10 @@ private:
             return insert_leaf(values.front());
 
         const auto size = to_uint_t(values.size());
-        const auto middle = split(size);
-        const auto left = insert_recursive(values.first(middle));
-        const auto right = insert_recursive(values.subspan(middle));
-        return insert_node(left, right, size);
+        auto children = unused_children();
+        for (uint_t k = 0, offset = 0; offset < size; ++k, offset += chunk(size))
+            children[k] = insert_recursive(values.subspan(offset, child_size(size, k)));
+        return insert_node(children, size);
     }
 
     /// Finds subtrees of a base bitset for the ranges that insert_delta_recursive visits. These ranges arrive in
@@ -160,13 +175,12 @@ private:
                     return zero(size);
 
                 const auto& node = m_nodes[Index<Node>(frame.root)];
-                const auto middle = split(frame.size);
-                if (offset + size <= frame.offset + middle)
-                    m_path[++m_depth] = Frame { node.left, frame.offset, middle };
-                else if (offset >= frame.offset + middle)
-                    m_path[++m_depth] = Frame { node.right, frame.offset + middle, frame.size - middle };
-                else
+                const auto k = (offset - frame.offset) / chunk(frame.size);
+                const auto child_offset = frame.offset + k * chunk(frame.size);
+                const auto child_blocks = child_size(frame.size, k);
+                if (offset + size > child_offset + child_blocks)
                     return std::nullopt;
+                m_path[++m_depth] = Frame { node.children[k], child_offset, child_blocks };
             }
         }
 
@@ -210,21 +224,22 @@ private:
             return flips.empty() ? base_root : insert_leaf(leaf_value(base_root) ^ flips.front().mask);
         }
 
-        const auto middle = split(size);
-        const auto split_flips = std::ranges::lower_bound(flips, offset + middle, {}, &Flip::position) - flips.begin();
-
-        auto left_root = zero(middle);
-        auto right_root = zero(size - middle);
+        const auto num_children = detail::tree_num_children<Arity>(size);
+        auto children = unused_children();
         if (base_known && base_root != ZERO)
-        {
-            const auto& node = m_nodes[Index<Node>(base_root)];
-            left_root = node.left;
-            right_root = node.right;
-        }
+            children = m_nodes[Index<Node>(base_root)].children;
+        else
+            for (uint_t k = 0; k < num_children; ++k)
+                children[k] = zero(child_size(size, k));
 
-        const auto left = insert_delta_recursive(base, base_known, left_root, offset, middle, flips.first(split_flips));
-        const auto right = insert_delta_recursive(base, base_known, right_root, offset + middle, size - middle, flips.subspan(split_flips));
-        return insert_node(left, right, size);
+        for (uint_t k = 0, child_offset = offset; k < num_children; ++k, child_offset += chunk(size))
+        {
+            const auto child_blocks = child_size(size, k);
+            const auto split_flips = std::ranges::lower_bound(flips, child_offset + child_blocks, {}, &Flip::position) - flips.begin();
+            children[k] = insert_delta_recursive(base, base_known, children[k], child_offset, child_blocks, flips.first(split_flips));
+            flips = flips.subspan(split_flips);
+        }
+        return insert_node(children, size);
     }
 
     /// Returns the number of blocks up to and including the last nonzero block of the subtree.
@@ -236,19 +251,14 @@ private:
             if (size == 1)
                 return offset + 1;
 
+            // Descend into the last nonzero child, which exists since insert_node never stores all-zero children.
             const auto& node = m_nodes[Index<Node>(root)];
-            const auto middle = split(size);
-            if (node.right != zero(size - middle))
-            {
-                root = node.right;
-                offset += middle;
-                size -= middle;
-            }
-            else
-            {
-                root = node.left;  // Nonzero, since insert_node never stores two zero children.
-                size = middle;
-            }
+            auto k = detail::tree_num_children<Arity>(size) - 1;
+            while (node.children[k] == zero(child_size(size, k)))
+                --k;
+            root = node.children[k];
+            offset += k * chunk(size);
+            size = child_size(size, k);
         }
         return offset;
     }
@@ -270,9 +280,9 @@ private:
         }
 
         const auto& node = m_nodes[Index<Node>(root)];
-        const auto middle = split(to_uint_t(values.size()));
-        read_recursive(node.left, values.first(middle));
-        read_recursive(node.right, values.subspan(middle));
+        const auto size = to_uint_t(values.size());
+        for (uint_t k = 0, offset = 0; offset < size; ++k, offset += chunk(size))
+            read_recursive(node.children[k], values.subspan(offset, child_size(size, k)));
     }
 
 public:
@@ -281,6 +291,7 @@ public:
     using flip_type = Flip;
 
     static constexpr bool thread_safe = ThreadSafe;
+    static constexpr size_t arity = Arity;
 
     TreeBitsetSet() = default;
     TreeBitsetSet(const TreeBitsetSet&) = delete;

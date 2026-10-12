@@ -23,6 +23,7 @@
 #include <bit>
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <random>
 #include <limits>
 #include <span>
 #include <stdexcept>
@@ -235,6 +236,58 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsConcurrentInsertionAndReads)
     for (size_t sequence = 0; sequence < sequence_count; ++sequence)
         for (size_t thread = 1; thread < thread_count; ++thread)
             EXPECT_EQ(handles[thread][sequence], handles[0][sequence]);
+}
+
+/// Round trips, canonical trees and write deltas for vectors whose sizes leave unused child slots on the right edge.
+template<typename Value, size_t Arity>
+void expect_arity_vectors()
+{
+    SCOPED_TRACE(testing::Message() << "Arity " << Arity << ", " << sizeof(Value) << "-byte values");
+    auto rng = std::mt19937_64 { Arity };
+    auto set = TreeVectorSet<Value, 32, false, Arity> {};
+    static_assert(decltype(set)::arity == Arity);
+
+    auto sizes = std::vector<uint_t> { 1, 2 };
+    for (uint_t power = Arity; power <= Arity * Arity * Arity; power *= Arity)
+        for (const auto size : { power - 1, power, power + 1 })
+            sizes.push_back(size);
+
+    for (const auto size : sizes)
+    {
+        // Few distinct values, so that subtrees are shared.
+        auto values = std::vector<Value>(size);
+        for (auto& value : values)
+            value = Value(rng() % 4);
+
+        const auto index = set.insert(values);
+        auto output = std::vector<Value>(size);
+        set.read(index, output);
+        EXPECT_EQ(output, values);
+        EXPECT_EQ(set.insert(values), index);
+
+        auto writes = std::vector<TreeVectorWrite<Value>> {};
+        for (uint_t position = 0; position < size; ++position)
+            if (rng() % 5 == 0)
+                writes.push_back(TreeVectorWrite<Value> { position, Value(rng() % 7) });
+        const auto nodes_before = set.num_nodes();
+        const auto written = set.insert(index, std::span<const TreeVectorWrite<Value>>(writes));
+        for (const auto& write : writes)
+            values[write.position] = write.value;
+        set.read(written, output);
+        EXPECT_EQ(output, values);
+        EXPECT_EQ(written, set.insert(values));
+        const auto levels = (std::bit_width(size) + std::countr_zero(Arity) - 1) / std::countr_zero(Arity) + 1;
+        EXPECT_LE(set.num_nodes() - nodes_before, writes.size() * levels);
+    }
+}
+
+TEST(YggdrasilTests, CommonTreeVectorSetSupportsArities)
+{
+    expect_arity_vectors<uint_t, 2>();
+    expect_arity_vectors<uint_t, 4>();
+    expect_arity_vectors<uint_t, 8>();
+    expect_arity_vectors<double, 4>();  // Leaf table leaves.
+    expect_arity_vectors<double, 8>();
 }
 
 }  // namespace

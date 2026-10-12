@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <limits>
 #include <map>
 #include <random>
 #include <span>
@@ -297,6 +298,163 @@ TEST(YggdrasilTests, CommonTreeBitsetSetSupportsConcurrentDeltaInsertionAndReads
 
     auto set = Set {};
     auto published_blocks = std::vector<Block>(block_count, 1);
+    const auto published = set.insert(published_blocks);
+    auto start = std::barrier<>(static_cast<std::ptrdiff_t>(thread_count));
+    auto handles = std::vector(thread_count, std::vector<typename Set::index_type>(step_count));
+    auto errors = std::atomic_size_t { 0 };
+    auto threads = std::vector<std::jthread> {};
+    threads.reserve(thread_count);
+
+    for (size_t thread = 0; thread < thread_count; ++thread)
+    {
+        threads.emplace_back(
+            [&, thread]
+            {
+                start.arrive_and_wait();
+                auto blocks = published_blocks;
+                auto index = published;
+                for (size_t step = 0; step < step_count; ++step)
+                {
+                    const auto flip = Flip { static_cast<uint_t>(step % (block_count - 1)), Block { 1 } << (step % 31 + 1) };
+                    blocks[flip.position] ^= flip.mask;
+                    index = set.insert(index, std::span<const Flip>(&flip, 1));
+                    handles[thread][step] = index;
+
+                    auto output = std::vector<Block>(block_count);
+                    set.read(index, output);
+                    if (output != blocks)
+                        errors.fetch_add(1, std::memory_order_relaxed);
+                }
+            });
+    }
+
+    threads.clear();
+    EXPECT_EQ(errors.load(std::memory_order_relaxed), 0);
+    for (size_t step = 0; step < step_count; ++step)
+        for (size_t thread = 1; thread < thread_count; ++thread)
+            EXPECT_EQ(handles[thread][step], handles[0][step]);
+}
+
+/// Sizes 1, Arity +- 1, Arity^2 +- 1 and Arity^3 +- 1 have unused child slots on the right edge.
+template<size_t Arity>
+std::vector<uint_t> arity_sizes()
+{
+    auto sizes = std::vector<uint_t> { 1, 2 };
+    for (uint_t power = Arity; power <= Arity * Arity * Arity; power *= Arity)
+        for (const auto size : { power - 1, power, power + 1 })
+            sizes.push_back(size);
+    return sizes;
+}
+
+template<std::unsigned_integral TestBlock, size_t Arity>
+void expect_arity_round_trips_and_canonical_trees()
+{
+    SCOPED_TRACE(testing::Message() << "Arity " << Arity << ", " << sizeof(TestBlock) << "-byte blocks");
+    auto rng = std::mt19937_64 { Arity };
+    auto set = TreeBitsetSet<TestBlock, 32, false, Arity> {};
+    for (const auto size : arity_sizes<Arity>())
+    {
+        // Sparse blocks, so that zero subtrees occur at every level.
+        auto blocks = std::vector<TestBlock>(size);
+        for (auto& block : blocks)
+            block = (rng() % 3 == 0) ? TestBlock(rng() | 1) : TestBlock { 0 };
+        blocks.back() = TestBlock { 1 };
+
+        const auto index = set.insert(blocks);
+        auto output = std::vector<TestBlock>(size);
+        set.read(index, output);
+        EXPECT_EQ(output, blocks);
+        EXPECT_EQ(set.insert(blocks), index);
+
+        // Building the same bitset from the empty bitset by flips gives the same tree.
+        auto flips = std::vector<TreeBitsetFlip<TestBlock>> {};
+        for (uint_t i = 0; i < size; ++i)
+            if (blocks[i] != TestBlock { 0 })
+                flips.push_back(TreeBitsetFlip<TestBlock> { i, blocks[i] });
+        EXPECT_EQ(set.insert(TreeBitsetIndex<TestBlock> {}, flips), index);
+    }
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndCanonicalTreesForArities)
+{
+    expect_arity_round_trips_and_canonical_trees<Block, 2>();
+    expect_arity_round_trips_and_canonical_trees<Block, 4>();
+    expect_arity_round_trips_and_canonical_trees<Block, 8>();
+    expect_arity_round_trips_and_canonical_trees<std::uint64_t, 4>();  // Leaf table blocks.
+}
+
+template<std::unsigned_integral TestBlock, size_t Arity>
+void expect_random_delta_chains_match_full_insert()
+{
+    SCOPED_TRACE(testing::Message() << "Arity " << Arity << ", " << sizeof(TestBlock) << "-byte blocks");
+    using Flip = TreeBitsetFlip<TestBlock>;
+
+    auto rng = std::mt19937_64 { 7 * Arity };
+    auto set = TreeBitsetSet<TestBlock, 32, false, Arity> {};
+
+    for (const uint_t universe : { 1u, 3u, uint_t(Arity + 1), 200u, 5000u })
+    {
+        for (size_t chain = 0; chain < 10; ++chain)
+        {
+            auto words = std::map<uint_t, TestBlock> {};
+            auto index = TreeBitsetIndex<TestBlock> {};
+            auto position = std::uniform_int_distribution<uint_t>(0, universe - 1);
+            auto num_flips = std::uniform_int_distribution<size_t>(0, 6);
+
+            for (size_t step = 0; step < 40; ++step)
+            {
+                auto flips = std::map<uint_t, TestBlock> {};
+                for (size_t k = num_flips(rng); k > 0; --k)
+                    flips[position(rng)] ^= TestBlock { 1 } << (rng() % std::numeric_limits<TestBlock>::digits);
+
+                auto flip_list = std::vector<Flip> {};
+                for (const auto& [p, mask] : flips)
+                {
+                    if (mask == 0)
+                        continue;
+                    flip_list.push_back(Flip { p, mask });
+                    if ((words[p] ^= mask) == 0)
+                        words.erase(p);
+                }
+
+                auto blocks = std::vector<TestBlock>(words.empty() ? 0 : words.rbegin()->first + 1);
+                for (const auto& [p, block] : words)
+                    blocks[p] = block;
+
+                const auto nodes_before = set.num_nodes();
+                const auto levels = blocks.empty() ? 0 : (std::bit_width(blocks.size()) + std::countr_zero(Arity) - 1) / std::countr_zero(Arity) + 1;
+                index = set.insert(index, flip_list);
+
+                // Changing a block and growing or shrinking each rebuild at most one path.
+                EXPECT_LE(set.num_nodes() - nodes_before, (flip_list.size() + 2) * (levels + 1));
+                auto output = std::vector<TestBlock>(index.size);
+                set.read(index, output);
+                EXPECT_EQ(output, blocks);
+                EXPECT_EQ(index, set.insert(blocks));
+            }
+        }
+    }
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetRandomDeltaChainsMatchFullInsertForArities)
+{
+    expect_random_delta_chains_match_full_insert<Block, 2>();
+    expect_random_delta_chains_match_full_insert<Block, 4>();
+    expect_random_delta_chains_match_full_insert<Block, 8>();
+    expect_random_delta_chains_match_full_insert<std::uint64_t, 4>();  // Leaf table blocks.
+}
+
+TEST(YggdrasilTests, CommonTreeBitsetSetSupportsConcurrentDeltaInsertionForArity4)
+{
+    using Set = TreeBitsetSet<Block, 1, true, 4>;
+    using Flip = TreeBitsetFlip<Block>;
+
+    constexpr auto thread_count = size_t { 8 };
+    constexpr auto step_count = size_t { 128 };
+    constexpr auto block_count = uint_t { 37 };
+
+    auto set = Set {};
+    const auto published_blocks = std::vector<Block>(block_count, 1);
     const auto published = set.insert(published_blocks);
     auto start = std::barrier<>(static_cast<std::ptrdiff_t>(thread_count));
     auto handles = std::vector(thread_count, std::vector<typename Set::index_type>(step_count));

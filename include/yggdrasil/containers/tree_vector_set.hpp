@@ -22,11 +22,13 @@
 #include "yggdrasil/core/types_utils.hpp"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cassert>
 #include <compare>
 #include <concepts>
 #include <cstddef>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <tuple>
@@ -48,8 +50,34 @@ struct NoLeafSet
 template<typename T>
 struct TreeVectorLeaf;
 
-template<typename T>
+template<typename T, size_t Arity = 2>
 struct TreeVectorNode;
+
+/// The children of a subtree covering `size` >= 2 positions each cover `tree_chunk<Arity>(size)` positions, except
+/// that the last may cover fewer: the smallest power of Arity whose Arity-fold covers `size`. Positions of a block
+/// never depend on later positions, so changing a position only changes its path to the root. For Arity 2 this
+/// is bit_floor(size - 1).
+template<size_t Arity>
+    requires(std::has_single_bit(Arity) && Arity >= 2)
+constexpr uint_t tree_chunk(uint_t size) noexcept
+{
+    assert(size >= 2);
+    constexpr auto bits = std::countr_zero(Arity);
+    const auto levels = (std::bit_width(size - 1) + bits - 1) / bits;
+    return uint_t { 1 } << (bits * (levels - 1));
+}
+
+/// Number of children used by a subtree covering `size` >= 2 positions, in [2, Arity].
+template<size_t Arity>
+constexpr uint_t tree_num_children(uint_t size) noexcept
+{
+    const auto chunk = tree_chunk<Arity>(size);
+    return (size + chunk - 1) / chunk;
+}
+
+/// Value of child slots beyond the end of a subtree, which only occur in its last node per level.
+/// Fixed so that equal vectors are equal trees; never read.
+inline constexpr uint_t tree_unused_child = std::numeric_limits<uint_t>::max();
 
 }  // namespace ygg::detail
 
@@ -74,18 +102,17 @@ struct Data<detail::TreeVectorLeaf<T>>
 };
 
 
-template<typename T>
-struct Data<detail::TreeVectorNode<T>>
+template<typename T, size_t Arity>
+struct Data<detail::TreeVectorNode<T, Arity>>
 {
-    uint_t left;
-    uint_t right;
+    std::array<uint_t, Arity> children;
 
     Data() = default;
-    Data(uint_t left_, uint_t right_) : left(left_), right(right_) {}
+    explicit Data(const std::array<uint_t, Arity>& children_) : children(children_) {}
 
-    auto cista_members() noexcept { return std::tie(left, right); }
-    auto cista_members() const noexcept { return std::tie(left, right); }
-    auto identifying_members() const noexcept { return std::tie(left, right); }
+    auto cista_members() noexcept { return std::tie(children); }
+    auto cista_members() const noexcept { return std::tie(children); }
+    auto identifying_members() const noexcept { return std::tie(children); }
     void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
@@ -114,18 +141,19 @@ struct TreeVectorWrite
 };
 
 /// Stores canonical vectors as balanced trees of canonical scalar leaves and
-/// internal nodes. The subtree length determines whether an index identifies a
-/// leaf or an internal node, so nodes only need to store their two child indices.
+/// internal nodes with Arity children each (see detail::tree_chunk). The subtree length determines whether an
+/// index identifies a leaf or an internal node, so nodes only need to store their child indices.
 /// Values with the size of a child index are stored inline in the child slot, so num_leaves() stays 0.
 /// ThreadSafe permits concurrent insertion, size queries, and reads of published indices.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<std::copyable T, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
-    requires Hashable<T> && EqualityComparableByEqualTo<T>
+template<std::copyable T, size_t FirstSegmentSize = 32, bool ThreadSafe = false, size_t Arity = 2>
+    requires Hashable<T> && EqualityComparableByEqualTo<T> && (std::has_single_bit(Arity) && Arity >= 2)
 class TreeVectorSet
 {
 private:
     using Leaf = detail::TreeVectorLeaf<T>;
-    using Node = detail::TreeVectorNode<T>;
+    using Node = detail::TreeVectorNode<T, Arity>;
+    using Children = std::array<uint_t, Arity>;
     // Unique object representations make bitwise identity agree with equality (rules out float, padding).
     static constexpr bool inline_leaves = std::has_unique_object_representations_v<T> && sizeof(T) == sizeof(uint_t);
 
@@ -142,6 +170,8 @@ private:
             return static_cast<uint_t>(m_leaves.insert(Data<Leaf> { value }).first);
     }
 
+    uint_t insert_node(const Children& children) { return static_cast<uint_t>(m_nodes.insert(Data<Node> { children }).first); }
+
     uint_t insert_recursive(std::span<const T> values)
     {
         assert(!values.empty());
@@ -149,10 +179,13 @@ private:
         if (values.size() == 1)
             return insert_leaf(values.front());
 
-        const auto middle = std::bit_floor(values.size() - 1);
-        const auto left = insert_recursive(values.first(middle));
-        const auto right = insert_recursive(values.subspan(middle));
-        return static_cast<uint_t>(m_nodes.insert(Data<Node> { left, right }).first);
+        const auto size = to_uint_t(values.size());
+        const auto chunk = detail::tree_chunk<Arity>(size);
+        auto children = Children {};
+        children.fill(detail::tree_unused_child);
+        for (uint_t k = 0, offset = 0; offset < size; ++k, offset += chunk)
+            children[k] = insert_recursive(values.subspan(offset, std::min(chunk, size - offset)));
+        return insert_node(children);
     }
 
     /// Rebuilds the subtree `base_root` covering [offset, offset + size) with `writes` applied.
@@ -166,14 +199,16 @@ private:
         if (size == 1)
             return insert_leaf(writes.front().value);
 
-        const auto& node = m_nodes[Index<Node>(base_root)];
-        const auto base_left = node.left;
-        const auto base_right = node.right;
-        const auto middle = static_cast<uint_t>(std::bit_floor(size - 1));
-        const auto split = std::ranges::lower_bound(writes, offset + middle, {}, &Write::position) - writes.begin();
-        const auto left = insert_writes_recursive(base_left, offset, middle, writes.first(split));
-        const auto right = insert_writes_recursive(base_right, offset + middle, size - middle, writes.subspan(split));
-        return static_cast<uint_t>(m_nodes.insert(Data<Node> { left, right }).first);
+        auto children = m_nodes[Index<Node>(base_root)].children;
+        const auto chunk = detail::tree_chunk<Arity>(size);
+        for (uint_t k = 0, child_offset = offset; child_offset < offset + size; ++k, child_offset += chunk)
+        {
+            const auto child_size = std::min(chunk, offset + size - child_offset);
+            const auto split = std::ranges::lower_bound(writes, child_offset + child_size, {}, &Write::position) - writes.begin();
+            children[k] = insert_writes_recursive(children[k], child_offset, child_size, writes.first(split));
+            writes = writes.subspan(split);
+        }
+        return insert_node(children);
     }
 
     void read_recursive(uint_t root, std::span<T> values) const
@@ -190,9 +225,10 @@ private:
         }
 
         const auto& node = m_nodes[Index<Node>(root)];
-        const auto middle = std::bit_floor(values.size() - 1);
-        read_recursive(node.left, values.first(middle));
-        read_recursive(node.right, values.subspan(middle));
+        const auto size = to_uint_t(values.size());
+        const auto chunk = detail::tree_chunk<Arity>(size);
+        for (uint_t k = 0, offset = 0; offset < size; ++k, offset += chunk)
+            read_recursive(node.children[k], values.subspan(offset, std::min(chunk, size - offset)));
     }
 
 public:
@@ -201,6 +237,7 @@ public:
     using write_type = Write;
 
     static constexpr bool thread_safe = ThreadSafe;
+    static constexpr size_t arity = Arity;
 
     TreeVectorSet() = default;
     TreeVectorSet(const TreeVectorSet&) = delete;
