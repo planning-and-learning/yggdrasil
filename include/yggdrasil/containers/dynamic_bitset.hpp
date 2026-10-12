@@ -53,10 +53,23 @@ inline void set(size_t pos, bool value, boost::dynamic_bitset<>& bitset)
 template<typename Block, typename Allocator>
 void trim_trailing_zeros(boost::dynamic_bitset<Block, Allocator>& bitset)
 {
-    auto last = boost::dynamic_bitset<Block, Allocator>::npos;
-    for (auto pos = bitset.find_first(); pos != boost::dynamic_bitset<Block, Allocator>::npos; pos = bitset.find_next(pos))
-        last = pos;
-    bitset.resize(last == boost::dynamic_bitset<Block, Allocator>::npos ? 0 : last + 1);
+    using Bitset = boost::dynamic_bitset<Block, Allocator>;
+
+    // Scans from the back one block at a time: find_next only searches the last block, since the bitset ends there.
+    while (!bitset.empty())
+    {
+        const auto begin = (bitset.size() - 1) / Bitset::bits_per_block * Bitset::bits_per_block;
+        auto last = (begin == 0) ? bitset.find_first() : bitset.find_next(begin - 1);
+        if (last == Bitset::npos)
+        {
+            bitset.resize(begin);
+            continue;
+        }
+        for (auto pos = bitset.find_next(last); pos != Bitset::npos; pos = bitset.find_next(pos))
+            last = pos;
+        bitset.resize(last + 1);
+        return;
+    }
 }
 
 template<std::unsigned_integral Block>

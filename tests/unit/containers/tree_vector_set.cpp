@@ -20,8 +20,11 @@
 #include <array>
 #include <atomic>
 #include <barrier>
+#include <bit>
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <random>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <thread>
@@ -54,7 +57,8 @@ TEST(YggdrasilTests, CommonTreeVectorSetRoundTripsAndSharesTrees)
         auto singleton_output = std::array<uint_t, 1> {};
         singleton_set.read(singleton_index, singleton_output);
         EXPECT_EQ(singleton_output, singleton);
-        EXPECT_EQ(singleton_set.num_leaves(), 1);
+        EXPECT_EQ(singleton_index.root, singleton.front());
+        EXPECT_EQ(singleton_set.num_leaves(), 0);
         EXPECT_EQ(singleton_set.num_nodes(), 0);
     }
 
@@ -68,7 +72,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetRoundTripsAndSharesTrees)
     constexpr auto repeated = std::array<uint_t, 4> { 1, 2, 1, 2 };
     const auto repeated_index = set.insert(repeated);
     EXPECT_EQ(repeated_index.size, repeated.size());
-    EXPECT_EQ(set.num_leaves(), 2);
+    EXPECT_EQ(set.num_leaves(), 0);
     EXPECT_EQ(set.num_nodes(), 2);
 
     auto output = std::array<uint_t, repeated.size()> {};
@@ -80,7 +84,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetRoundTripsAndSharesTrees)
     auto shared_subtree_output = std::array<uint_t, shared_subtree.size()> {};
     set.read(shared_subtree_index, shared_subtree_output);
     EXPECT_EQ(shared_subtree_output, shared_subtree);
-    EXPECT_EQ(set.num_leaves(), 2);
+    EXPECT_EQ(set.num_leaves(), 0);
     EXPECT_EQ(set.num_nodes(), 2);
 
     EXPECT_EQ(set.insert(repeated), repeated_index);
@@ -101,6 +105,7 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsDifferentLeafTypesAndLengths)
     auto float_output = std::array<double, floats.size()> {};
     float_set.read(float_index, float_output);
     EXPECT_EQ(float_output, floats);
+    EXPECT_EQ(float_set.num_leaves(), floats.size());
 
     auto custom_set = TreeVectorSet<CustomLeaf> {};
     constexpr auto custom = std::array<CustomLeaf, 3> { CustomLeaf { 1, 2 }, CustomLeaf { 3, 4 }, CustomLeaf { 5, 6 } };
@@ -108,6 +113,76 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsDifferentLeafTypesAndLengths)
     auto custom_output = std::array<CustomLeaf, custom.size()> {};
     custom_set.read(custom_index, custom_output);
     EXPECT_EQ(custom_output, custom);
+    EXPECT_EQ(custom_set.num_leaves(), custom.size());
+}
+
+TEST(YggdrasilTests, CommonTreeVectorSetStoresUintLeavesInline)
+{
+    auto set = TreeVectorSet<uint_t> {};
+
+    // Values coinciding with node indices and the full value range must round-trip.
+    constexpr auto max = std::numeric_limits<uint_t>::max();
+    constexpr auto vectors = std::array {
+        std::array<uint_t, 5> { 0, 1, 0, 1, 2 },
+        std::array<uint_t, 5> { 0, max, 0, max, 0 },
+        std::array<uint_t, 5> { 1, 0, 2, 1, 0 },
+    };
+    auto indices = std::array<TreeVectorIndex<uint_t>, vectors.size()> {};
+    for (size_t i = 0; i < vectors.size(); ++i)
+    {
+        indices[i] = set.insert(vectors[i]);
+        auto output = std::array<uint_t, 5> {};
+        set.read(indices[i], output);
+        EXPECT_EQ(output, vectors[i]);
+    }
+    for (size_t i = 0; i < vectors.size(); ++i)
+    {
+        EXPECT_EQ(set.insert(vectors[i]), indices[i]);
+        for (size_t j = i + 1; j < vectors.size(); ++j)
+            EXPECT_NE(indices[i], indices[j]);
+    }
+
+    for (const auto value : { uint_t { 0 }, uint_t { 1 }, max })
+    {
+        const auto single = std::array<uint_t, 1> { value };
+        const auto index = set.insert(single);
+        EXPECT_EQ(index, (TreeVectorIndex<uint_t> { value, 1 }));
+        auto output = std::array<uint_t, 1> {};
+        set.read(index, output);
+        EXPECT_EQ(output, single);
+    }
+
+    EXPECT_EQ(set.num_leaves(), 0);
+}
+
+TEST(YggdrasilTests, CommonTreeVectorSetWritesMatchFullInsert)
+{
+    const auto expect_writes = [](auto set, auto values, auto writes)
+    {
+        using Value = typename decltype(values)::value_type;
+        const auto base = set.insert(values);
+        const auto nodes_before = set.num_nodes();
+        const auto written = set.insert(base, std::span(writes));
+        for (const auto& write : writes)
+            values[write.position] = write.value;
+        auto output = std::vector<Value>(values.size());
+        set.read(written, output);
+        EXPECT_EQ(output, values);
+        EXPECT_EQ(written, set.insert(values));
+        EXPECT_LE(set.num_nodes() - nodes_before, writes.size() * std::bit_width(values.size()));
+    };
+
+    // Inline leaves, a value equal to its position's old value, and the last position.
+    expect_writes(TreeVectorSet<uint_t> {},
+                  std::vector<uint_t> { 1, 2, 3, 4, 5, 6, 7 },
+                  std::vector<TreeVectorWrite<uint_t>> { { 0, 9 }, { 3, 4 }, { 6, 0 } });
+    // Leaf table leaves.
+    expect_writes(TreeVectorSet<double> {},
+                  std::vector<double> { 1.5, 2.5, 3.5, 4.5, 5.5 },
+                  std::vector<TreeVectorWrite<double>> { { 1, -2.0 }, { 4, 8.25 } });
+    // No writes and single-value vectors.
+    expect_writes(TreeVectorSet<uint_t> {}, std::vector<uint_t> { 1, 2, 3 }, std::vector<TreeVectorWrite<uint_t>> {});
+    expect_writes(TreeVectorSet<double> {}, std::vector<double> { 1.0 }, std::vector<TreeVectorWrite<double>> { { 0, 3.0 } });
 }
 
 TEST(YggdrasilTests, CommonTreeVectorSetSupportsConcurrentInsertionAndReads)
@@ -157,10 +232,62 @@ TEST(YggdrasilTests, CommonTreeVectorSetSupportsConcurrentInsertionAndReads)
 
     threads.clear();
     EXPECT_EQ(errors.load(std::memory_order_relaxed), 0);
-    EXPECT_EQ(set.num_leaves(), (sequence_count + 1) * sequence_size);
+    EXPECT_EQ(set.num_leaves(), 0);
     for (size_t sequence = 0; sequence < sequence_count; ++sequence)
         for (size_t thread = 1; thread < thread_count; ++thread)
             EXPECT_EQ(handles[thread][sequence], handles[0][sequence]);
+}
+
+/// Round trips, canonical trees and write deltas for vectors whose sizes leave unused child slots on the right edge.
+template<typename Value, size_t Arity>
+void expect_arity_vectors()
+{
+    SCOPED_TRACE(testing::Message() << "Arity " << Arity << ", " << sizeof(Value) << "-byte values");
+    auto rng = std::mt19937_64 { Arity };
+    auto set = TreeVectorSet<Value, 32, false, Arity> {};
+    static_assert(decltype(set)::arity == Arity);
+
+    auto sizes = std::vector<uint_t> { 1, 2 };
+    for (uint_t power = Arity; power <= Arity * Arity * Arity; power *= Arity)
+        for (const auto size : { power - 1, power, power + 1 })
+            sizes.push_back(size);
+
+    for (const auto size : sizes)
+    {
+        // Few distinct values, so that subtrees are shared.
+        auto values = std::vector<Value>(size);
+        for (auto& value : values)
+            value = Value(rng() % 4);
+
+        const auto index = set.insert(values);
+        auto output = std::vector<Value>(size);
+        set.read(index, output);
+        EXPECT_EQ(output, values);
+        EXPECT_EQ(set.insert(values), index);
+
+        auto writes = std::vector<TreeVectorWrite<Value>> {};
+        for (uint_t position = 0; position < size; ++position)
+            if (rng() % 5 == 0)
+                writes.push_back(TreeVectorWrite<Value> { position, Value(rng() % 7) });
+        const auto nodes_before = set.num_nodes();
+        const auto written = set.insert(index, std::span<const TreeVectorWrite<Value>>(writes));
+        for (const auto& write : writes)
+            values[write.position] = write.value;
+        set.read(written, output);
+        EXPECT_EQ(output, values);
+        EXPECT_EQ(written, set.insert(values));
+        const auto levels = (std::bit_width(size) + std::countr_zero(Arity) - 1) / std::countr_zero(Arity) + 1;
+        EXPECT_LE(set.num_nodes() - nodes_before, writes.size() * levels);
+    }
+}
+
+TEST(YggdrasilTests, CommonTreeVectorSetSupportsArities)
+{
+    expect_arity_vectors<uint_t, 2>();
+    expect_arity_vectors<uint_t, 4>();
+    expect_arity_vectors<uint_t, 8>();
+    expect_arity_vectors<double, 4>();  // Leaf table leaves.
+    expect_arity_vectors<double, 8>();
 }
 
 }  // namespace
