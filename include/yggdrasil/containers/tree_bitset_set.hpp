@@ -20,6 +20,7 @@
 
 #include "yggdrasil/containers/indexed_hash_set.hpp"
 #include "yggdrasil/containers/tree_vector_set.hpp"
+#include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 
 #include <algorithm>
@@ -31,6 +32,7 @@
 #include <compare>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <span>
@@ -273,26 +275,6 @@ private:
         read_recursive(node.right, values.subspan(middle));
     }
 
-    template<typename Callback>
-    void for_each_block_recursive(uint_t root, uint_t offset, uint_t size, Callback& callback) const
-    {
-        assert(size > 0);
-
-        if (root == zero(size))
-            return;
-
-        if (size == 1)
-        {
-            callback(offset, leaf_value(root));
-            return;
-        }
-
-        const auto& node = m_nodes[Index<Node>(root)];
-        const auto middle = split(size);
-        for_each_block_recursive(node.left, offset, middle, callback);
-        for_each_block_recursive(node.right, offset + middle, size - middle, callback);
-    }
-
 public:
     using value_type = Block;
     using index_type = TreeBitsetIndex<Block>;
@@ -348,14 +330,6 @@ public:
             read_recursive(index.root, blocks);
     }
 
-    /// Calls `callback(position, block)` for each nonzero block in increasing position order.
-    template<typename Callback>
-    void for_each_block(index_type index, Callback&& callback) const
-    {
-        if (index.size != 0)
-            for_each_block_recursive(index.root, 0, index.size, callback);
-    }
-
     void clear() noexcept
     {
         m_nodes.clear();
@@ -390,6 +364,18 @@ void normalize_flips(std::vector<TreeBitsetFlip<Block>>& flips)
     }
     flips.resize(last);
     std::erase_if(flips, [](const TreeBitsetFlip<Block>& flip) { return flip.mask == Block { 0 }; });
+}
+
+/// Appends the flips that XOR the `length`-bit integer `value` into the bits starting at bit `offset` of block
+/// `position`, as used for bit-packed integers. The integer may span two blocks.
+template<std::unsigned_integral Block>
+void append_int_flips(uint_t position, uint8_t offset, uint8_t length, Block value, std::vector<TreeBitsetFlip<Block>>& flips)
+{
+    auto masks = std::array<Block, 2> {};
+    bit::write_int(masks.data(), value, offset, length);
+    for (uint_t i = 0; i < masks.size(); ++i)
+        if (masks[i] != Block { 0 })
+            flips.push_back(TreeBitsetFlip<Block> { position + i, masks[i] });
 }
 
 /// Appends one flip per block in which `from` and `to` differ, in increasing position order.

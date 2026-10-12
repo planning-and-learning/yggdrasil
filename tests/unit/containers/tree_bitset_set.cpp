@@ -26,7 +26,6 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <map>
-#include <optional>
 #include <random>
 #include <span>
 #include <stdexcept>
@@ -60,22 +59,6 @@ std::vector<Block> read_all(const Set& set, typename Set::index_type index)
     return blocks;
 }
 
-template<typename Set>
-std::map<uint_t, Block> visit_all(const Set& set, typename Set::index_type index)
-{
-    auto words = std::map<uint_t, Block> {};
-    auto last = std::optional<uint_t> {};
-    set.for_each_block(index,
-                       [&](uint_t position, Block block)
-                       {
-                           EXPECT_NE(block, Block { 0 });
-                           EXPECT_TRUE(!last || *last < position);
-                           last = position;
-                           words.emplace(position, block);
-                       });
-    return words;
-}
-
 TEST(YggdrasilTests, CommonTreeBitsetSetHelpersPrepareFlipsAndBlocks)
 {
     using Flip = TreeBitsetFlip<Block>;
@@ -84,6 +67,11 @@ TEST(YggdrasilTests, CommonTreeBitsetSetHelpersPrepareFlipsAndBlocks)
     auto flips = std::vector<Flip> { Flip { 5, 1 }, Flip { 2, 4 }, Flip { 5, 2 }, Flip { 2, 4 }, Flip { 0, 8 } };
     normalize_flips(flips);
     EXPECT_EQ(flips, (std::vector<Flip> { Flip { 0, 8 }, Flip { 5, 3 } }));
+
+    // A 6-bit integer at bit 30 of block 1 spans blocks 1 and 2.
+    auto int_flips = std::vector<Flip> {};
+    append_int_flips<Block>(1, 30, 6, Block { 0b101101 }, int_flips);
+    EXPECT_EQ(int_flips, (std::vector<Flip> { Flip { 1, Block { 0b01 } << 30 }, Flip { 2, Block { 0b1011 } } }));
 
     auto diff = std::vector<Flip> {};
     append_diff_flips<Block>(std::vector<Block> { 1, 2, 3 }, std::vector<Block> { 1, 6 }, diff);
@@ -112,7 +100,6 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
     EXPECT_EQ(empty, TreeBitsetIndex<Block> {});
     EXPECT_TRUE(set.empty());
     set.read(empty, std::span<Block> {});
-    EXPECT_TRUE(visit_all(set, empty).empty());
 
     constexpr auto single = std::array<Block, 1> { 0b1011 };
     const auto single_index = set.insert(single);
@@ -125,7 +112,6 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
     constexpr auto sparse = std::array<Block, 8> { 0, 0, 0, 0, 0, 0, 0, 7 };
     const auto sparse_index = set.insert(sparse);
     EXPECT_EQ(read_all(set, sparse_index), std::vector<Block>(sparse.begin(), sparse.end()));
-    EXPECT_EQ(visit_all(set, sparse_index), (std::map<uint_t, Block> { { 7, 7 } }));
     EXPECT_EQ(set.num_nodes(), 3);
 
     auto far = std::vector<Block>(size_t { 1 } << 20);
@@ -133,7 +119,6 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRoundTripsAndSkipsZeroBlocks)
     far.back() = Block { 1 } << 31;
     const auto far_index = set.insert(far);
     EXPECT_EQ(read_all(set, far_index), far);
-    EXPECT_EQ(visit_all(set, far_index), (std::map<uint_t, Block> { { 0, 1 }, { (1u << 20) - 1, Block { 1 } << 31 } }));
 
     EXPECT_EQ(set.insert(single), single_index);
     EXPECT_EQ(set.insert(sparse), sparse_index);
@@ -179,7 +164,6 @@ TEST(YggdrasilTests, CommonTreeBitsetSetDistinguishesAllOnesBlocksFromZeroSubtre
     {
         const auto index = set.insert(blocks);
         EXPECT_EQ(read_all(set, index), blocks);
-        EXPECT_EQ(visit_all(set, index).size(), static_cast<size_t>(std::ranges::count(blocks, ones)));
     }
 
     const auto base = set.insert(std::vector<Block> { 1, 2, 3 });
@@ -294,7 +278,6 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRandomDeltaChainsMatchFullInsert)
                 // Changing a block and growing or shrinking each rebuild at most one path.
                 EXPECT_LE(set.num_nodes() - nodes_before, (flip_list.size() + 2) * (height + 1));
                 EXPECT_EQ(read_all(set, index), blocks);
-                EXPECT_EQ(visit_all(set, index), words);
                 EXPECT_EQ(index, set.insert(blocks));
                 EXPECT_EQ(read_all(reference, reference.insert(blocks)), blocks);
             }

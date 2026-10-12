@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/indexed_hash_set.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <compare>
@@ -104,6 +105,14 @@ struct TreeVectorIndex
     auto identifying_members() const noexcept { return std::tie(root, size); }
 };
 
+/// Overwrites the value at `position`.
+template<typename T>
+struct TreeVectorWrite
+{
+    uint_t position {};
+    T value {};
+};
+
 /// Stores canonical vectors as balanced trees of canonical scalar leaves and
 /// internal nodes. The subtree length determines whether an index identifies a
 /// leaf or an internal node, so nodes only need to store their two child indices.
@@ -123,21 +132,47 @@ private:
     using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
 
+    using Write = TreeVectorWrite<T>;
+
+    uint_t insert_leaf(const T& value)
+    {
+        if constexpr (inline_leaves)
+            return std::bit_cast<uint_t>(value);
+        else
+            return static_cast<uint_t>(m_leaves.insert(Data<Leaf> { value }).first);
+    }
+
     uint_t insert_recursive(std::span<const T> values)
     {
         assert(!values.empty());
 
         if (values.size() == 1)
-        {
-            if constexpr (inline_leaves)
-                return std::bit_cast<uint_t>(values.front());
-            else
-                return static_cast<uint_t>(m_leaves.insert(Data<Leaf> { values.front() }).first);
-        }
+            return insert_leaf(values.front());
 
         const auto middle = std::bit_floor(values.size() - 1);
         const auto left = insert_recursive(values.first(middle));
         const auto right = insert_recursive(values.subspan(middle));
+        return static_cast<uint_t>(m_nodes.insert(Data<Node> { left, right }).first);
+    }
+
+    /// Rebuilds the subtree `base_root` covering [offset, offset + size) with `writes` applied.
+    uint_t insert_writes_recursive(uint_t base_root, uint_t offset, uint_t size, std::span<const Write> writes)
+    {
+        assert(size > 0);
+
+        if (writes.empty())
+            return base_root;
+
+        if (size == 1)
+            return insert_leaf(writes.front().value);
+
+        const auto& node = m_nodes[Index<Node>(base_root)];
+        const auto base_left = node.left;
+        const auto base_right = node.right;
+        const auto middle = static_cast<uint_t>(std::bit_floor(size - 1));
+        const auto split = std::ranges::lower_bound(writes, offset + middle, {}, &Write::position) - writes.begin();
+        const auto left = insert_writes_recursive(base_left, offset, middle, writes.first(split));
+        const auto right = insert_writes_recursive(base_right, offset + middle, size - middle, writes.subspan(split));
         return static_cast<uint_t>(m_nodes.insert(Data<Node> { left, right }).first);
     }
 
@@ -163,6 +198,7 @@ private:
 public:
     using value_type = T;
     using index_type = TreeVectorIndex<T>;
+    using write_type = Write;
 
     static constexpr bool thread_safe = ThreadSafe;
 
@@ -176,6 +212,17 @@ public:
     {
         const auto size = to_uint_t(values.size());
         return values.empty() ? index_type {} : index_type { insert_recursive(values), size };
+    }
+
+    /// Inserts the vector obtained from `base` by applying `writes`, which must be sorted by unique position
+    /// within the vector. Only the paths from the written positions to the root are rebuilt.
+    index_type insert(index_type base, std::span<const write_type> writes)
+    {
+        assert(std::ranges::is_sorted(writes, std::ranges::less {}, &Write::position));
+        assert(std::ranges::adjacent_find(writes, {}, &Write::position) == writes.end());
+        assert(writes.empty() || writes.back().position < base.size);
+
+        return base.size == 0 ? base : index_type { insert_writes_recursive(base.root, 0, base.size, writes), base.size };
     }
 
     void read(index_type index, std::span<T> values) const
