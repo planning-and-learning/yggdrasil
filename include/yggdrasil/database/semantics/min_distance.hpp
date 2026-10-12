@@ -24,13 +24,10 @@
 namespace ygg::database
 {
 
-/// The counters of all searches (AStarCounters) and of the work between them.
+/// The counters of all searches (AStarCounters) and of the repairs between them.
 struct MinDistanceStatistics : AStarCounters
 {
-    size_t searches = 0;
-    size_t resets = 0;       ///< Path trees discarded (new targets, or changes delta rules cannot express).
-    size_t repaired = 0;     ///< Vertices whose learned distance dropped after added edges.
-    size_t edge_checks = 0;  ///< Stored edges validated against the current inputs.
+    size_t repaired = 0;  ///< Vertices whose learned distance dropped after added edges.
 };
 
 /// Exact minimum distance from any source to any target, or uint_t's maximum if none is reachable, from the inputs of
@@ -76,14 +73,12 @@ public:
     {
         m_edges.require_columns(sources, targets);
         m_edges.evaluator().bind(input);
-        ++m_statistics.searches;
         m_tree.clear();
         m_targets.assign(targets);
         m_backward.start(m_targets.ensure_in(m_tree, heuristic));
         auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_edges.vertex_size(), m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
-        m_statistics.edge_checks = m_edges.edge_checks();
         return distance;
     }
 

@@ -17,7 +17,6 @@
 #include <cstddef>
 #include <deque>
 #include <map>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -43,8 +42,7 @@ public:
     /// `static_slots` marks inputs that never change after the first bind().
     explicit BoundQueryEvaluator(QueryView<Values> query, const std::vector<bool>& static_slots = {}) :
         m_query(union_normal_form(query)),
-        m_columns(query.columns().begin(), query.columns().end()),
-        m_pool(std::make_unique<RelationPool<Values>>())
+        m_columns(query.columns().begin(), query.columns().end())
     {
         m_frame.resize(m_query.frame_size);
         m_static.assign(input_count(), false);
@@ -52,9 +50,8 @@ public:
             m_static[slot] = static_slots[slot];
         // Pooled snapshots have the storage identity a JoinIndex requires.
         for (const auto& columns : m_query.input_columns)
-            m_inputs.push_back(m_pool->get_or_allocate(std::span<const ColumnLayout>(columns)));
+            m_inputs.push_back(m_pool.get_or_allocate(std::span<const ColumnLayout>(columns)));
         m_bound.assign(input_count(), false);
-        m_statistics.resize(input_count());
     }
 
     size_t input_count() const noexcept { return m_query.input_columns.size(); }
@@ -137,13 +134,20 @@ public:
 
     const UnionNormalForm& query() const noexcept { return m_query; }
 
-    /// One plan per branch, with the variables marked in `bound` bound on arrival.
+    /// One plan per branch, with the variables marked in `bound` bound on arrival, for the current inputs' sizes.
     std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound)
     {
+        auto measured = std::vector<std::optional<RelationStatistics>>(input_count());
+        const auto statistics = [&](size_t slot) -> const RelationStatistics&
+        {
+            if (!measured[slot])
+                measured[slot] = measure_relation<Values>(*m_inputs[slot]);
+            return *measured[slot];
+        };
         auto compiled = std::vector<ConjunctivePlan>();
         for (const auto& branch : m_query.branches)
         {
-            auto& plan = compiled.emplace_back(plan_branch(m_query, branch, bound, [&](size_t slot) -> const RelationStatistics& { return statistics(slot); }));
+            auto& plan = compiled.emplace_back(plan_branch(m_query, branch, bound, statistics));
             resolve(branch, plan);
         }
         return compiled;
@@ -197,12 +201,11 @@ private:
 
     UnionNormalForm m_query;
     std::vector<ColumnLayout> m_columns;
-    std::unique_ptr<RelationPool<Values>> m_pool;  ///< Behind a pointer: pools do not move, evaluators do.
+    RelationPool<Values> m_pool;  ///< Owns the input snapshots; declared before them, so it outlives them.
     std::vector<std::byte> m_frame;                ///< The variables' values while a branch runs.
     std::vector<bool> m_static;
     std::vector<UniqueObjectPoolPtr<Builder<Relation<Values>>>> m_inputs;
     std::vector<bool> m_bound;
-    std::vector<std::optional<RelationStatistics>> m_statistics;  ///< Per slot, measured when a plan is compiled.
     std::deque<KeyIndex> m_indexes;
     std::deque<Lookup> m_lookups;  ///< By ConjunctiveStep::index.
     std::vector<Binding> m_bindings;
@@ -235,19 +238,10 @@ private:
         for (auto& entry : m_indexes)
             if (entry.slot == slot)
                 entry.index.reset();
-        m_statistics[slot].reset();
         ++m_version;
     }
 
     // ---- Plans --------------------------------------------------------------------------------------------------
-
-    const RelationStatistics& statistics(size_t slot)
-    {
-        auto& measured = m_statistics[slot];
-        if (!measured)
-            measured = measure_relation<Values>(*m_inputs[slot]);
-        return *measured;
-    }
 
     size_t index_id(size_t slot, const std::vector<size_t>& positions)
     {

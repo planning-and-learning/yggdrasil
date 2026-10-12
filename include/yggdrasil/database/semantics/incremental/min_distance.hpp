@@ -91,7 +91,6 @@ public:
         if (!m_edges.evaluator().bound())
             throw std::invalid_argument("Min distance: inputs are not bound.");
         m_edges.require_columns(sources, targets);
-        ++m_statistics.searches;
         if (m_reset_pending || !m_targets.same(targets))
             reset(targets, heuristic);
         else if (!m_added.empty())
@@ -104,7 +103,6 @@ public:
         auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_edges.vertex_size(), m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
-        m_statistics.edge_checks = m_edges.edge_checks();
         return distance;
     }
 
@@ -138,7 +136,6 @@ private:
     template<RelationViewConcept<Values> T>
     void reset(const T& targets, const H& heuristic)
     {
-        ++m_statistics.resets;
         m_tree.clear();
         m_targets.assign(targets);
         m_reset_pending = false;

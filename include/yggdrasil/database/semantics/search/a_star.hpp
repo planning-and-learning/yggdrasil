@@ -25,17 +25,13 @@ namespace ygg::database
 /// Counters of one A* search.
 struct AStarCounters
 {
-    size_t expanded = 0;            ///< Vertices whose successors were generated.
-    size_t tree_hits = 0;           ///< Searches ended on a stored path.
-    size_t backward_vertices = 0;   ///< Vertices the backward frontier found.
-    size_t backward_exhausted = 0;  ///< Searches whose exhausted backward frontier proved the sources unreachable.
+    size_t tree_hits = 0;          ///< Searches ended on a stored path.
+    size_t backward_vertices = 0;  ///< Vertices the backward frontier found.
 
     AStarCounters& operator+=(const AStarCounters& other) noexcept
     {
-        expanded += other.expanded;
         tree_hits += other.tree_hits;
         backward_vertices += other.backward_vertices;
-        backward_exhausted += other.backward_exhausted;
         return *this;
     }
 };
@@ -67,28 +63,27 @@ public:
           const RawArraySet<std::byte, 64>& targets,
           size_t vertex_size,
           uint32_t version) :
-        m_oracle(oracle),
-        m_tree(tree),
-        m_backward(backward),
-        m_heuristic(heuristic),
-        m_targets(targets),
+        m_oracle(&oracle),
+        m_tree(&tree),
+        m_backward(&backward),
+        m_heuristic(&heuristic),
+        m_targets(&targets),
         m_version(version),
         m_vertices(vertex_size)
     {
     }
     AStar(const AStar&) = delete;
     AStar& operator=(const AStar&) = delete;
+    AStar(AStar&&) = delete;  // One search, run in place.
+    AStar& operator=(AStar&&) = delete;
 
     /// The distance from the nearest source; `sources` has size() and row(i).
     template<typename Sources>
     uint_t run(const Sources& sources)
     {
-        m_tree.begin_search();
+        m_tree->begin_search();
         if (closed_off(sources))
-        {
-            ++m_counters.backward_exhausted;
             return infinity;
-        }
         if (const auto distance = reuse(sources))
             return *distance;
         for (size_t i = 0; i < sources.size(); ++i)
@@ -97,10 +92,7 @@ public:
             while (const auto g = top_bucket(f))
             {
                 if (advance_backward(sources))
-                {
-                    ++m_counters.backward_exhausted;
                     return finish(infinity, std::nullopt);
-                }
                 const auto index = m_buckets[f][*g].back();
                 m_buckets[f][*g].pop_back();
                 if (const auto distance = visit(index, f))
@@ -112,11 +104,11 @@ public:
     const AStarCounters& counters() const noexcept { return m_counters; }
 
 private:
-    Oracle& m_oracle;
-    SearchTree& m_tree;
-    BackwardFrontier& m_backward;
-    const H& m_heuristic;
-    const RawArraySet<std::byte, 64>& m_targets;
+    Oracle* m_oracle;
+    SearchTree* m_tree;
+    BackwardFrontier* m_backward;
+    const H* m_heuristic;
+    const RawArraySet<std::byte, 64>* m_targets;
     uint32_t m_version;
 
     RawArraySet<std::byte, 64> m_vertices;  ///< Generated vertices, indexed like the vectors below.
@@ -133,17 +125,17 @@ private:
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
     uint_t value(uint_t id) const noexcept
     {
-        const auto level = m_backward.level(id);
-        return level == none ? m_tree.learned(id) : std::max(m_tree.learned(id), level);
+        const auto level = m_backward->level(id);
+        return level == none ? m_tree->learned(id) : std::max(m_tree->learned(id), level);
     }
 
     bool on_valid_path(uint_t id)
     {
-        return m_tree.on_valid_path(
+        return m_tree->on_valid_path(
             id,
             [&](uint_t u) { return value(u); },
-            [&](uint_t u) { return m_targets.contains(m_tree.vertex(u)); },
-            m_oracle,
+            [&](uint_t u) { return m_targets->contains(m_tree->vertex(u)); },
+            *m_oracle,
             m_version);
     }
 
@@ -151,9 +143,9 @@ private:
     template<typename Sources>
     bool closed_off(const Sources& sources) const
     {
-        return m_backward.exhausted()
+        return m_backward->exhausted()
                && std::ranges::none_of(std::views::iota(size_t(0), sources.size()),
-                                       [&](size_t i) { return m_backward.level(m_tree.find(sources.row(i)).value_or(none)) != none; });
+                                       [&](size_t i) { return m_backward->level(m_tree->find(sources.row(i)).value_or(none)) != none; });
     }
 
     /// A single stored source on a valid tree path has an exact value; a learned infinity proves it dead.
@@ -162,10 +154,10 @@ private:
     {
         if (sources.size() != 1)
             return std::nullopt;
-        const auto stored = m_tree.find(sources.row(0));
+        const auto stored = m_tree->find(sources.row(0));
         if (!stored)
             return std::nullopt;
-        if (m_tree.learned(*stored) == infinity)
+        if (m_tree->learned(*stored) == infinity)
             return infinity;
         if (!on_valid_path(*stored))
             return std::nullopt;
@@ -177,9 +169,9 @@ private:
     template<typename Sources>
     bool advance_backward(const Sources& sources)
     {
-        while (!m_backward.exhausted() && m_backward.frontier_size() <= m_open)
+        while (!m_backward->exhausted() && m_backward->frontier_size() <= m_open)
         {
-            m_counters.backward_vertices += m_backward.step(m_tree, m_oracle, m_heuristic);
+            m_counters.backward_vertices += m_backward->step(*m_tree, *m_oracle, *m_heuristic);
             if (closed_off(sources))
                 return true;
         }
@@ -211,14 +203,14 @@ private:
             return;
         if (!found)
         {
-            auto estimate = m_heuristic.estimate(vertex);
-            assert(from == none || estimate == infinity || m_heuristic.estimate(m_vertices[from]) <= estimate + 1);  // Consistency.
-            const auto stored = m_tree.find(vertex);
+            auto estimate = m_heuristic->estimate(vertex);
+            assert(from == none || estimate == infinity || m_heuristic->estimate(m_vertices[from]) <= estimate + 1);  // Consistency.
+            const auto stored = m_tree->find(vertex);
             if (stored)
-                estimate = std::max(estimate, m_tree.learned(*stored));
+                estimate = std::max(estimate, m_tree->learned(*stored));
             if (estimate == infinity)
                 return;
-            const auto bound = m_backward.bound(stored);
+            const auto bound = m_backward->bound(stored);
             if (bound == infinity)
             {
                 m_dropped = std::min(m_dropped, cost + estimate);
@@ -244,11 +236,11 @@ private:
         if (m_closed[index] || m_g[index] + m_h[index] != f)
             return std::nullopt;
         const auto vertex = m_vertices[index];
-        if (m_targets.contains(vertex))
+        if (m_targets->contains(vertex))
             return finish(f, index);
-        const auto stored = m_tree.find(vertex);
+        const auto stored = m_tree->find(vertex);
         // The backward frontier may have raised its bound since the vertex was queued.
-        const auto bound = m_backward.bound(stored);
+        const auto bound = m_backward->bound(stored);
         if (bound == infinity)
         {
             m_dropped = std::min(m_dropped, m_g[index] + m_h_learn[index]);
@@ -277,9 +269,8 @@ private:
     {
         m_closed[index] = true;
         --m_open;
-        ++m_counters.expanded;
         const auto source = std::vector<std::byte>(m_vertices[index].begin(), m_vertices[index].end());
-        m_oracle.successors(source,
+        m_oracle->successors(source,
                             [&](std::span<const std::byte> to)
                             {
                                 push(to, m_g[index] + 1, index);
@@ -300,15 +291,15 @@ private:
             {
                 const auto id = ensure(i);
                 if (m > m_g[i])
-                    m_tree.learn(id, m == infinity ? infinity : m - m_g[i]);
+                    m_tree->learn(id, m == infinity ? infinity : m - m_g[i]);
             }
         if (last)
             for (auto child = *last; m_parent[child] != none; child = m_parent[child])
-                m_tree.link(ensure(m_parent[child]), ensure(child));
+                m_tree->link(ensure(m_parent[child]), ensure(child));
         return distance;
     }
 
-    uint_t ensure(uint_t index) { return m_tree.ensure(m_vertices[index], m_heuristic.estimate(m_vertices[index])); }
+    uint_t ensure(uint_t index) { return m_tree->ensure(m_vertices[index], m_heuristic->estimate(m_vertices[index])); }
 };
 
 }  // namespace ygg::database

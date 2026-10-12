@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_SYNTAX_TRANSLATIONS_RELAXATION_HPP_
 #define YGG_DATABASE_SYNTAX_TRANSLATIONS_RELAXATION_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/syntax/copy.hpp"
 #include "yggdrasil/database/syntax/operator_builder.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
@@ -13,7 +14,6 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
-#include <map>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -65,9 +65,8 @@ public:
 private:
     OperatorBuilder<Values> m_build;
     Known m_known;
-    std::vector<size_t> m_slots;
-    std::map<size_t, size_t> m_renumbered;  ///< Original slot -> relaxed input.
-    std::map<std::pair<uint_t, std::vector<uint_t>>, std::optional<QueryView<Values>>> m_relaxed;
+    std::vector<size_t> m_slots;  ///< The original slot of each relaxed input.
+    UnorderedMap<std::pair<uint_t, std::vector<uint_t>>, std::optional<QueryView<Values>>> m_relaxed;
 
     static Labels labels(QueryView<Values> query) { return column_labels(query.columns()); }
     static bool contains(const Labels& labels, Index<Column> label) { return std::ranges::find(labels, label) != labels.end(); }
@@ -96,10 +95,12 @@ private:
     /// The relaxed input of a known slot.
     size_t renumbered(size_t slot)
     {
-        const auto [found, inserted] = m_renumbered.emplace(slot, m_slots.size());
-        if (inserted)
-            m_slots.push_back(slot);
-        return found->second;
+        // ponytail: linear in the number of inputs, which edge queries keep small.
+        const auto found = std::ranges::find(m_slots, slot);
+        if (found != m_slots.end())
+            return size_t(found - m_slots.begin());
+        m_slots.push_back(slot);
+        return m_slots.size() - 1;
     }
     /// The query itself over the relaxed inputs, or nullopt if it reads an unknown input.
     std::optional<QueryView<Values>> copy(QueryView<Values> query)

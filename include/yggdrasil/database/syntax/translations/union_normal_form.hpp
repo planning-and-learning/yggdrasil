@@ -72,7 +72,7 @@ class UnionNormalFormBuilder
 {
     UnionNormalForm m_result;  ///< Variables, frame size and input schemas so far.
 
-    static std::vector<ConjunctiveBranch> product(std::vector<ConjunctiveBranch> lhs, const std::vector<ConjunctiveBranch>& rhs)
+    static std::vector<ConjunctiveBranch> product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs)
     {
         std::vector<ConjunctiveBranch> result;
         for (const auto& l : lhs)

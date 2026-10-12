@@ -51,7 +51,7 @@ Evaluator relation_edges(const DistancePlan<Values>& plan, bool static_edges)
 
 /// An edge query bound for search: `Evaluator` (a BoundQueryEvaluator or incremental::BoundQueryEvaluator) with the
 /// bindings of the source columns (successors), the target columns (predecessors) and both (edge checks), so that it
-/// models the search oracle concepts. Counts the edge checks.
+/// models the search oracle concepts.
 template<typename Evaluator, ColumnTypes Values>
 class EdgeQuery
 {
@@ -73,7 +73,6 @@ public:
     size_t vertex_size() const noexcept { return m_vertex_size; }
     /// Where an edge row's target vertex starts.
     size_t target_offset() const noexcept { return m_target_offset; }
-    size_t edge_checks() const noexcept { return m_edge_checks; }
 
     template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
     void require_columns(const S& sources, const T& targets) const
@@ -94,7 +93,6 @@ public:
     }
     bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
     {
-        ++m_edge_checks;
         auto bytes = std::vector<std::byte>(from.begin(), from.end());
         bytes.insert(bytes.end(), to.begin(), to.end());
         auto exists = false;
@@ -117,7 +115,6 @@ private:
     size_t m_forward;
     size_t m_backward;
     size_t m_check;
-    size_t m_edge_checks = 0;
 };
 
 /// The targets of a search, as a vertex set.

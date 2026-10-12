@@ -6,11 +6,11 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_EVALUATION_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_EVALUATION_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/semantics/bound_evaluation.hpp"
 
 #include <algorithm>
 #include <cstddef>
-#include <map>
 #include <span>
 #include <type_traits>
 #include <utility>
@@ -91,7 +91,7 @@ public:
 
 private:
     database::BoundQueryEvaluator<Values> m_base;
-    std::map<std::vector<bool>, std::vector<ConjunctivePlan>> m_seed_plans;
+    UnorderedMap<std::vector<bool>, std::vector<ConjunctivePlan>> m_seed_plans;  ///< By the variables bound on arrival.
 
     template<typename V>
     InputChange<Values> diff(size_t slot, const V& rows) const
@@ -109,6 +109,7 @@ private:
         return change;
     }
 
+    /// The plan of a branch with the atom's variables bound; valid until the next call.
     const ConjunctivePlan& seed_plan(size_t branch, const ConjunctiveAtom& atom)
     {
         auto bound = std::vector<bool>(m_base.query().variables.size(), false);
