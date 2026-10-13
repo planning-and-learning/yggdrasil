@@ -33,15 +33,19 @@ namespace ygg::database::incremental
 ///  3. Bidirectionality: the backward frontier (search/backward_frontier.hpp), kept across calls.
 ///  4. Reuse. While the targets stay the same, the SearchTree persists: closed vertices learn distance bounds (GAA*),
 ///     and a search stops at a stored vertex whose next chain still exists and drops by one per edge (MPGAA*); edges
-///     are re-checked lazily after input changes.
-///  5. Changes. bind() diffs the inputs. Removed edges keep every bound admissible. Added edges are found by seeding
-///     the branches with the changed rows (delta rules), learned distances are repaired (repair(),
-///     incremental/search/adaptive_path_tree.hpp), and the backward frontier restarts. New targets, or changes the
-///     delta rules cannot express, reset the tree.
+///     are re-checked lazily after input changes that can remove edges (BoundQueryEvaluator::version()).
+///  5. Changes. bind() diffs the inputs, or update() takes their exact changes. Removed edges keep every bound
+///     admissible. Added edges are found by seeding
+///     the branches with the changed rows (delta rules), and learned distances are repaired (TreeRepair,
+///     incremental/search/adaptive_path_tree.hpp). The backward frontier's bounds b (the level of a found vertex,
+///     otherwise one beyond the last level, or infinity once exhausted) are consistent on the old edges, so they stay
+///     valid unless an added edge u -> v has b(u) > b(v) + 1; only then does the frontier restart, as only edges that
+///     break consistency need work in LPA* (Koenig, Likhachev & Furcy, "Lifelong Planning A*", AIJ 2004). New
+///     targets, or changes the delta rules cannot express, reset the tree.
 ///
 /// Contract: H is consistent in every state while the targets stay unchanged (DistanceHeuristic).
 ///
-/// Inputs are borrowed during bind() only.
+/// Inputs and changes are borrowed during bind() and update() only.
 template<ColumnTypes Values, DistanceHeuristic H = BlindDistanceHeuristic>
     requires ColumnValueFor<uint_t, Values>
 class MinDistance
@@ -65,13 +69,28 @@ public:
 
     /// Binds the current inputs: input(slot) returns slot's relation view (see BoundQueryEvaluator::bind).
     template<typename Input>
-    void bind(Input&& input, const std::vector<bool>& maybe_changed = {})
+    void bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
-        const auto changes = m_edges.evaluator().bind(input, maybe_changed);
+        auto& evaluator = m_edges.evaluator();
         // Seeds run in the new state of every input, so an edge built from several changed rows is found from any.
-        for (const auto& change : changes)
-            if (!m_reset_pending && !m_edges.evaluator().seed(change, [&](std::span<const std::byte> edge) { return record_added(edge); }))
-                m_reset_pending = true;
+        for (const auto slot : evaluator.bind(input, maybe_changed))
+            seed(slot, evaluator.change(slot).added, evaluator.change(slot).removed);
+        if (m_reset_pending)
+            m_added.clear();
+    }
+
+    /// Applies exact changes to bound inputs instead of diffing them: for each slot marked in `changed`, change(slot)
+    /// has relation views `added` (rows not in the slot) and `removed` (rows in it).
+    template<typename Change>
+    void update(const Change& change, const std::vector<bool>& changed)
+    {
+        auto& evaluator = m_edges.evaluator();
+        for (size_t slot = 0; slot < changed.size(); ++slot)
+            if (changed[slot])
+                evaluator.apply(slot, change(slot).added, change(slot).removed);
+        for (size_t slot = 0; slot < changed.size(); ++slot)
+            if (changed[slot])
+                seed(slot, change(slot).added, change(slot).removed);
         if (m_reset_pending)
             m_added.clear();
     }
@@ -80,30 +99,55 @@ public:
     template<RelationViewConcept<Values> E>
     void bind_edges(const E& edges, bool maybe_changed = true)
     {
-        bind([&](size_t) -> const E& { return edges; }, std::vector<bool> { maybe_changed });
+        m_edges_changed.assign(1, maybe_changed);
+        bind([&](size_t) -> const E& { return edges; }, m_edges_changed);
     }
 
-    /// The minimum distance over the edges of the bound inputs. H must stay the same function while the targets are
-    /// unchanged.
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
-    uint_t min_distance(const S& sources, const T& targets, const H& heuristic = {})
+    /// Sets the targets; different targets discard the stored search. Callers that know the targets are unchanged
+    /// need not call it again.
+    template<RelationViewConcept<Values> T>
+    void set_targets(const T& targets)
     {
-        if (!m_edges.evaluator().bound())
-            throw std::invalid_argument("Min distance: inputs are not bound.");
-        m_edges.require_columns(sources, targets);
-        if (m_reset_pending || !m_targets.same(targets))
-            reset(targets, heuristic);
-        else if (!m_added.empty())
+        m_edges.require_target_columns(targets);
+        if (m_targets_set && m_targets.same(targets))
+            return;
+        m_targets.assign(targets);
+        m_targets_set = true;
+        m_reset_pending = true;
+    }
+
+    /// The minimum distance over the edges of the bound inputs to the targets set last. H must stay the same function
+    /// while the targets are unchanged.
+    template<RelationViewConcept<Values> S>
+    uint_t min_distance(const S& sources, const H& heuristic)
+    {
+        if (!m_edges.evaluator().bound() || !m_targets_set)
+            throw std::invalid_argument("Min distance: inputs or targets are not set.");
+        m_edges.require_source_columns(sources);
+        if (m_reset_pending)
+            reset(heuristic);
+        else
         {
-            // Added edges can shorten distances: learned ones are repaired, the backward frontier restarts.
-            m_statistics.repaired += repair(m_tree, m_added, m_edges, heuristic);
-            restart_backward(heuristic);
+            // Added edges can shorten distances: learned ones are repaired.
+            if (!m_added.empty())
+                m_statistics.repaired += m_repair.run(m_tree, m_added, m_edges, heuristic);
+            if (m_restart_backward)
+                restart_backward(heuristic);
         }
         m_added.clear();
-        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_edges.vertex_size(), m_edges.evaluator().version());
+        m_restart_backward = false;
+        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
+    }
+
+    /// set_targets(targets), then min_distance(sources, heuristic).
+    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
+    uint_t min_distance(const S& sources, const T& targets, const H& heuristic = {})
+    {
+        set_targets(targets);
+        return min_distance(sources, heuristic);
     }
 
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
@@ -115,7 +159,8 @@ private:
         m_edges(std::move(edges), plan),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size()),
-        m_added(plan.tuple_size())
+        m_added(plan.tuple_size()),
+        m_search(plan.tuple_size())
     {
     }
 
@@ -123,21 +168,40 @@ private:
     SearchTree m_tree;
     BackwardFrontier m_backward;
     database::detail::TargetSet m_targets;
-    EdgeList m_added;  ///< Edges the last bind() can have added.
+    EdgeList m_added;  ///< Edges bind() can have added whose source is stored: the only ones repair reads.
+    bool m_restart_backward = false;  ///< An added edge breaks the backward frontier's bounds.
     bool m_reset_pending = true;
+    bool m_targets_set = false;
+    std::vector<bool> m_edges_changed;  ///< bind_edges()'s flag for bind(), kept to avoid allocations.
+    TreeRepair m_repair;
+    AStarStorage m_search;
     MinDistanceStatistics m_statistics;
 
     bool record_added(std::span<const std::byte> edge)
     {
-        m_added.add(edge.first(m_edges.target_offset()), edge.subspan(m_edges.target_offset()));
+        const auto from = edge.first(m_edges.target_offset());
+        const auto to = edge.subspan(m_edges.target_offset());
+        const auto stored = m_tree.find(from);
+        if (!m_restart_backward)
+        {
+            const auto to_bound = m_backward.bound(m_tree.find(to));
+            m_restart_backward = to_bound != infinity && m_backward.bound(stored) > to_bound + 1;
+        }
+        if (stored)
+            m_added.add(from, to);
         return true;
     }
 
-    template<RelationViewConcept<Values> T>
-    void reset(const T& targets, const H& heuristic)
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    void seed(size_t slot, const A& added, const R& removed)
+    {
+        if (!m_reset_pending && !m_edges.evaluator().seed(slot, added, removed, [&](std::span<const std::byte> edge) { return record_added(edge); }))
+            m_reset_pending = true;
+    }
+
+    void reset(const H& heuristic)
     {
         m_tree.clear();
-        m_targets.assign(targets);
         m_reset_pending = false;
         restart_backward(heuristic);
     }

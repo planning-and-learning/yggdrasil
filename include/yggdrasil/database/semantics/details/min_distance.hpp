@@ -74,30 +74,34 @@ public:
     /// Where an edge row's target vertex starts.
     size_t target_offset() const noexcept { return m_target_offset; }
 
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
-    void require_columns(const S& sources, const T& targets) const
+    template<RelationViewConcept<Values> S>
+    void require_source_columns(const S& sources) const
     {
         require_plan_columns(sources.columns().span(), m_source_columns);
+    }
+    template<RelationViewConcept<Values> T>
+    void require_target_columns(const T& targets) const
+    {
         require_plan_columns(targets.columns().span(), m_target_columns);
     }
 
     template<typename OnVertex>
-    void successors(std::span<const std::byte> vertex, OnVertex&& on_vertex)
+    void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
         m_edges.evaluate(m_forward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset)); });
     }
     template<typename OnVertex>
-    void predecessors(std::span<const std::byte> vertex, OnVertex&& on_vertex)
+    void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
         m_edges.evaluate(m_backward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.first(m_target_offset)); });
     }
     bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
     {
-        auto bytes = std::vector<std::byte>(from.begin(), from.end());
-        bytes.insert(bytes.end(), to.begin(), to.end());
+        m_edge.assign(from.begin(), from.end());
+        m_edge.insert(m_edge.end(), to.begin(), to.end());
         auto exists = false;
         m_edges.evaluate(m_check,
-                         bytes,
+                         m_edge,
                          [&](std::span<const std::byte>)
                          {
                              exists = true;
@@ -115,6 +119,7 @@ private:
     size_t m_forward;
     size_t m_backward;
     size_t m_check;
+    std::vector<std::byte> m_edge;  ///< The bytes of the checked edge, kept to avoid allocations.
 };
 
 /// The targets of a search, as a vertex set.
@@ -136,20 +141,21 @@ public:
         for (size_t i = 0; i < targets.size(); ++i)
             m_vertices.insert(targets.row(i));
     }
-    const RawArraySet<std::byte, 64>& vertices() const noexcept { return m_vertices; }
+    const VertexSet& vertices() const noexcept { return m_vertices; }
 
-    /// The targets' indices in the tree, stored with their estimates.
-    template<typename H>
-    std::vector<uint_t> ensure_in(SearchTree& tree, const H& heuristic) const
+    /// The targets' indices in the tree, stored with their estimates; valid until the next call.
+    template<DistanceHeuristic H>
+    std::span<const uint_t> ensure_in(SearchTree& tree, const H& heuristic)
     {
-        auto ids = std::vector<uint_t>();
+        m_ids.clear();
         for (size_t i = 0; i < m_vertices.size(); ++i)
-            ids.push_back(tree.ensure(m_vertices[uint_t(i)], heuristic.estimate(m_vertices[uint_t(i)])));
-        return ids;
+            m_ids.push_back(tree.ensure(m_vertices[uint_t(i)], heuristic));
+        return m_ids;
     }
 
 private:
-    RawArraySet<std::byte, 64> m_vertices;
+    VertexSet m_vertices;
+    std::vector<uint_t> m_ids;
 };
 
 }  // namespace ygg::database::detail

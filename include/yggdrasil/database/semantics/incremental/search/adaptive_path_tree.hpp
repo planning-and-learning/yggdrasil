@@ -10,9 +10,9 @@
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <functional>
-#include <queue>
 #include <span>
 #include <utility>
 #include <vector>
@@ -38,7 +38,7 @@ public:
     std::span<const std::byte> to(size_t i) const { return m_vertices[m_edges[i].second]; }
 
 private:
-    RawArraySet<std::byte, 64> m_vertices;
+    VertexSet m_vertices;
     std::vector<std::pair<uint_t, uint_t>> m_edges;
 };
 
@@ -47,43 +47,56 @@ private:
 /// distances over stored predecessors; unstored vertices keep the heuristic's estimate. Learned bounds stay admissible
 /// and consistent with the heuristic, so removed edges keep them valid. A lowered vertex's next pointer is relinked to
 /// the vertex that lowered it, as with the support pointers of Multipath Generalized Adaptive A* (Hernández, Asín &
-/// Baier, AAAI 2015); SearchTree::on_valid_path() checks the link when it is used. Returns the number of lowered
-/// vertices.
-template<PredecessorOracle Predecessors, DistanceHeuristic H>
-size_t repair(SearchTree& tree, const EdgeList& added, Predecessors& predecessors, const H& heuristic)
+/// Baier, AAAI 2015); SearchTree::on_valid_path() checks the link when it is used. The target of an added edge is
+/// stored only if it lowers the edge's source. Owns its queue, so repeated repairs do not allocate.
+class TreeRepair
 {
-    using Entry = std::pair<uint_t, uint_t>;
-    auto queue = std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>>();
-    const auto lower = [&](uint_t from, uint_t to)
+public:
+    /// Returns the number of lowered vertices.
+    template<PredecessorOracle Predecessors, DistanceHeuristic H>
+    size_t run(SearchTree& tree, const EdgeList& added, Predecessors& predecessors, const H& heuristic)
     {
-        if (tree.learned(to) == infinity || tree.learned(from) <= tree.learned(to) + 1)
-            return;
+        m_queue.clear();
+        for (size_t i = 0; i < added.size(); ++i)
+            if (const auto from = tree.find(added.from(i)); from && lowers(tree, *from, tree.value(added.to(i), heuristic)))
+                lower(tree, *from, tree.ensure(added.to(i), heuristic));
+        auto lowered = size_t(0);
+        while (!m_queue.empty())
+        {
+            std::ranges::pop_heap(m_queue, std::greater<> {});
+            const auto [learned, id] = m_queue.back();
+            m_queue.pop_back();
+            if (learned != tree.learned(id))
+                continue;
+            ++lowered;
+            m_vertex.assign(tree.vertex(id).begin(), tree.vertex(id).end());
+            predecessors.predecessors(m_vertex,
+                                      [&](std::span<const std::byte> from)
+                                      {
+                                          if (const auto stored = tree.find(from); stored && lowers(tree, *stored, tree.learned(id)))
+                                              lower(tree, *stored, id);
+                                          return true;
+                                      });
+        }
+        return lowered;
+    }
+
+private:
+    std::vector<std::pair<uint_t, uint_t>> m_queue;  ///< A min-heap of (learned, vertex).
+    std::vector<std::byte> m_vertex;                  ///< A copy of the lowered vertex: storing vertices may move them.
+
+    static bool lowers(const SearchTree& tree, uint_t from, uint_t to_value) noexcept
+    {
+        return to_value != infinity && tree.learned(from) > to_value + 1;
+    }
+    void lower(SearchTree& tree, uint_t from, uint_t to)
+    {
         tree.lower(from, tree.learned(to) + 1);
         tree.link(from, to);
-        queue.emplace(tree.learned(from), from);
-    };
-    for (size_t i = 0; i < added.size(); ++i)
-        if (const auto from = tree.find(added.from(i)))
-            lower(*from, tree.ensure(added.to(i), heuristic.estimate(added.to(i))));
-    auto lowered = size_t(0);
-    while (!queue.empty())
-    {
-        const auto [learned, id] = queue.top();
-        queue.pop();
-        if (learned != tree.learned(id))
-            continue;
-        ++lowered;
-        const auto target = std::vector<std::byte>(tree.vertex(id).begin(), tree.vertex(id).end());
-        predecessors.predecessors(target,
-                                  [&](std::span<const std::byte> from)
-                                  {
-                                      if (const auto stored = tree.find(from))
-                                          lower(*stored, id);
-                                      return true;
-                                  });
+        m_queue.emplace_back(tree.learned(from), from);
+        std::ranges::push_heap(m_queue, std::greater<> {});
     }
-    return lowered;
-}
+};
 
 }  // namespace ygg::database::incremental
 

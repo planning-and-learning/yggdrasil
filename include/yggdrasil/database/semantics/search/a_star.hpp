@@ -36,11 +36,101 @@ struct AStarCounters
     }
 };
 
+/// The open list of A*: a binary heap of vertex indices by smallest f, then largest g, then latest push, the order of
+/// a two-level bucket queue whose buckets are stacks. Preferring large g (and the latest of equals) among equal f is the
+/// tie-breaking that leaves plateaus towards the targets (Asai & Fukunaga, "Tiebreaking Strategies for A* Search: How
+/// to Explore the Final Frontier", JAIR 2017). One vector, so clear() keeps its capacity and a reused open list does
+/// not allocate.
+class OpenList
+{
+public:
+    struct Entry
+    {
+        uint_t f = 0;
+        uint_t g = 0;
+        uint_t push = 0;   ///< Push order.
+        uint_t index = 0;  ///< The generated vertex.
+    };
+
+    void clear() noexcept
+    {
+        m_heap.clear();
+        m_pushes = 0;
+    }
+    bool empty() const noexcept { return m_heap.empty(); }
+    void push(uint_t f, uint_t g, uint_t index)
+    {
+        m_heap.push_back(Entry { f, g, m_pushes++, index });
+        std::ranges::push_heap(m_heap, later);
+    }
+    Entry pop()
+    {
+        std::ranges::pop_heap(m_heap, later);
+        const auto entry = m_heap.back();
+        m_heap.pop_back();
+        return entry;
+    }
+
+private:
+    std::vector<Entry> m_heap;
+    uint_t m_pushes = 0;
+
+    /// Whether lhs is popped after rhs.
+    static bool later(const Entry& lhs, const Entry& rhs) noexcept
+    {
+        if (lhs.f != rhs.f)
+            return lhs.f > rhs.f;
+        if (lhs.g != rhs.g)
+            return lhs.g < rhs.g;
+        return lhs.push < rhs.push;
+    }
+};
+
+template<typename Oracle, DistanceHeuristic H>
+    requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
+class AStar;
+
+/// The generated vertices of one A* search and its open list, owned by the caller and reused across searches, so that
+/// a search allocates only when it generates more vertices than every earlier one. Opaque to the caller: m_nodes is
+/// indexed like m_vertices, which only AStar maintains.
+class AStarStorage
+{
+public:
+    explicit AStarStorage(size_t vertex_size) : m_vertices(vertex_size) {}
+
+private:
+    template<typename Oracle, DistanceHeuristic H>
+        requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
+    friend class AStar;
+
+    /// One generated vertex.
+    struct Node
+    {
+        uint_t g = 0;
+        uint_t h = 0;        ///< The A* estimate when queued.
+        uint_t h_learn = 0;  ///< max(heuristic, learned): the estimate learning may rely on.
+        uint_t parent = 0;
+        uint_t stored = 0;   ///< The tree index, or none if the vertex was not stored when last looked up.
+        bool closed = false;
+    };
+
+    void clear() noexcept
+    {
+        m_vertices.clear();
+        m_nodes.clear();
+        m_open_list.clear();
+    }
+
+    VertexSet m_vertices;
+    std::vector<Node> m_nodes;
+    OpenList m_open_list;
+    std::vector<std::byte> m_vertex;  ///< A copy of the expanded vertex: generating successors may move m_vertices.
+};
+
 /// One best-first search from sources to the targets with unit edge costs (Hart, Nilsson & Raphael, "A Formal Basis
 /// for the Heuristic Determination of Minimum Cost Paths", IEEE Trans. SSC 1968). The estimate is the maximum of the
 /// caller's heuristic h, the tree's learned distance and the backward frontier's bound; all three are consistent, so a
-/// vertex is closed once. Buckets by f, then by g: within an f, larger g is expanded first, which leaves plateaus
-/// towards the targets.
+/// vertex is closed once. Within an f, larger g is expanded first (OpenList).
 ///
 /// The search is bidirectional: before each expansion the backward frontier advances while it is not larger than the
 /// forward open list (Pohl's cardinality comparison, "Bi-directional Search", Machine Intelligence 6, 1971). It ends at
@@ -50,7 +140,7 @@ struct AStarCounters
 /// Learning (GAA*: h(s) := m - g(s) for closed s) uses m = min(d, the smallest g + h_learn of an open or dropped
 /// vertex) instead of the distance d, where h_learn = max(h, learned) omits the backward bound: a search that ends
 /// early on a backward level, or on an exhausted frontier, then still learns bounds that are consistent without the
-/// backward frontier, which is discarded when edges are added. [Our addition.]
+/// backward frontier, which is discarded when added edges break its bounds. [Our addition.]
 template<typename Oracle, DistanceHeuristic H>
     requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
 class AStar
@@ -60,22 +150,24 @@ public:
           SearchTree& tree,
           BackwardFrontier& backward,
           const H& heuristic,
-          const RawArraySet<std::byte, 64>& targets,
-          size_t vertex_size,
+          const VertexSet& targets,
+          AStarStorage& storage,
           uint32_t version) :
         m_oracle(&oracle),
         m_tree(&tree),
         m_backward(&backward),
         m_heuristic(&heuristic),
         m_targets(&targets),
-        m_version(version),
-        m_vertices(vertex_size)
+        m_storage(&storage),
+        m_version(version)
     {
+        m_storage->clear();
     }
     AStar(const AStar&) = delete;
     AStar& operator=(const AStar&) = delete;
     AStar(AStar&&) = delete;  // One search, run in place.
     AStar& operator=(AStar&&) = delete;
+    ~AStar() = default;
 
     /// The distance from the nearest source; `sources` has size() and row(i).
     template<typename Sources>
@@ -88,16 +180,14 @@ public:
             return *distance;
         for (size_t i = 0; i < sources.size(); ++i)
             push(sources.row(i), 0, none);
-        for (uint_t f = 0; f < m_buckets.size(); ++f)
-            while (const auto g = top_bucket(f))
-            {
-                if (advance_backward(sources))
-                    return finish(infinity, std::nullopt);
-                const auto index = m_buckets[f][*g].back();
-                m_buckets[f][*g].pop_back();
-                if (const auto distance = visit(index, f))
-                    return *distance;
-            }
+        while (!m_storage->m_open_list.empty())
+        {
+            if (advance_backward(sources))
+                return finish(infinity, std::nullopt);
+            const auto entry = m_storage->m_open_list.pop();
+            if (const auto distance = visit(entry.index, entry.f))
+                return *distance;
+        }
         return finish(infinity, std::nullopt);
     }
 
@@ -108,18 +198,11 @@ private:
     SearchTree* m_tree;
     BackwardFrontier* m_backward;
     const H* m_heuristic;
-    const RawArraySet<std::byte, 64>* m_targets;
+    const VertexSet* m_targets;
+    AStarStorage* m_storage;
     uint32_t m_version;
-
-    RawArraySet<std::byte, 64> m_vertices;  ///< Generated vertices, indexed like the vectors below.
-    std::vector<uint_t> m_g;
-    std::vector<uint_t> m_h;          ///< The A* estimate when queued.
-    std::vector<uint_t> m_h_learn;    ///< max(h, learned): the estimate learning may rely on.
-    std::vector<uint_t> m_parent;
-    std::vector<bool> m_closed;
     size_t m_open = 0;
     uint_t m_dropped = infinity;  ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
-    std::vector<std::vector<std::vector<uint_t>>> m_buckets;
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
@@ -178,33 +261,29 @@ private:
         return false;
     }
 
-    std::optional<size_t> top_bucket(uint_t f) const
-    {
-        for (auto g = m_buckets[f].size(); g > 0; --g)
-            if (!m_buckets[f][g - 1].empty())
-                return g - 1;
-        return std::nullopt;
-    }
+    AStarStorage::Node& node(uint_t index) noexcept { return m_storage->m_nodes[index]; }
 
-    void enqueue(uint_t index)
+    void enqueue(uint_t index) { m_storage->m_open_list.push(node(index).g + node(index).h, node(index).g, index); }
+
+    /// The tree index of a generated vertex. A vertex not stored when generated is looked up again: the backward
+    /// frontier may have stored it since.
+    std::optional<uint_t> stored(uint_t index)
     {
-        const auto f = m_g[index] + m_h[index];
-        if (m_buckets.size() <= f)
-            m_buckets.resize(f + 1);
-        if (m_buckets[f].size() <= m_g[index])
-            m_buckets[f].resize(m_g[index] + 1);
-        m_buckets[f][m_g[index]].push_back(index);
+        auto& id = node(index).stored;
+        if (id == none)
+            id = m_tree->find(m_storage->m_vertices[index]).value_or(none);
+        return id == none ? std::nullopt : std::optional<uint_t>(id);
     }
 
     void push(std::span<const std::byte> vertex, uint_t cost, uint_t from)
     {
-        const auto found = m_vertices.find(vertex);
-        if (found && (m_closed[*found] || m_g[*found] <= cost))
+        const auto found = m_storage->m_vertices.find(vertex);
+        if (found && (node(*found).closed || node(*found).g <= cost))
             return;
         if (!found)
         {
             auto estimate = m_heuristic->estimate(vertex);
-            assert(from == none || estimate == infinity || m_heuristic->estimate(m_vertices[from]) <= estimate + 1);  // Consistency.
+            assert(from == none || estimate == infinity || m_heuristic->estimate(m_storage->m_vertices[from]) <= estimate + 1);  // Consistency.
             const auto stored = m_tree->find(vertex);
             if (stored)
                 estimate = std::max(estimate, m_tree->learned(*stored));
@@ -216,50 +295,46 @@ private:
                 m_dropped = std::min(m_dropped, cost + estimate);
                 return;
             }
-            m_vertices.insert(vertex);
-            m_g.push_back(cost);
-            m_h.push_back(std::max(estimate, bound));
-            m_h_learn.push_back(estimate);
-            m_parent.push_back(from);
-            m_closed.push_back(false);
+            m_storage->m_vertices.insert(vertex);
+            m_storage->m_nodes.push_back(AStarStorage::Node { .h = std::max(estimate, bound), .h_learn = estimate, .stored = stored.value_or(none) });
             ++m_open;
         }
-        const auto index = found ? *found : uint_t(m_g.size() - 1);
-        m_g[index] = cost;
-        m_parent[index] = from;
+        const auto index = found ? *found : uint_t(m_storage->m_nodes.size() - 1);
+        node(index).g = cost;
+        node(index).parent = from;
         enqueue(index);
     }
 
     /// Pops a vertex queued at f; returns the distance if the search ends there.
     std::optional<uint_t> visit(uint_t index, uint_t f)
     {
-        if (m_closed[index] || m_g[index] + m_h[index] != f)
+        auto& current = node(index);
+        if (current.closed || current.g + current.h != f)
             return std::nullopt;
-        const auto vertex = m_vertices[index];
-        if (m_targets->contains(vertex))
+        if (m_targets->contains(m_storage->m_vertices[index]))
             return finish(f, index);
-        const auto stored = m_tree->find(vertex);
+        const auto id = stored(index);
         // The backward frontier may have raised its bound since the vertex was queued.
-        const auto bound = m_backward->bound(stored);
+        const auto bound = m_backward->bound(id);
         if (bound == infinity)
         {
-            m_dropped = std::min(m_dropped, m_g[index] + m_h_learn[index]);
-            m_closed[index] = true;
-            m_h_learn[index] = infinity;
+            m_dropped = std::min(m_dropped, current.g + current.h_learn);
+            current.closed = true;
+            current.h_learn = infinity;
             --m_open;
             return std::nullopt;
         }
-        if (bound > m_h[index])
+        if (bound > current.h)
         {
-            m_h[index] = bound;
+            current.h = bound;
             enqueue(index);
             return std::nullopt;
         }
         // It stays open for learning: its successors were not generated.
-        if (stored && on_valid_path(*stored))
+        if (id && on_valid_path(*id))
         {
             ++m_counters.tree_hits;
-            return finish(m_g[index] + value(*stored), index);
+            return finish(current.g + value(*id), index);
         }
         expand(index);
         return std::nullopt;
@@ -267,39 +342,47 @@ private:
 
     void expand(uint_t index)
     {
-        m_closed[index] = true;
+        node(index).closed = true;
         --m_open;
-        const auto source = std::vector<std::byte>(m_vertices[index].begin(), m_vertices[index].end());
-        m_oracle->successors(source,
+        const auto vertex = m_storage->m_vertices[index];
+        m_storage->m_vertex.assign(vertex.begin(), vertex.end());
+        const auto cost = node(index).g + 1;
+        m_oracle->successors(m_storage->m_vertex,
                             [&](std::span<const std::byte> to)
                             {
-                                push(to, m_g[index] + 1, index);
+                                push(to, cost, index);
                                 return true;
                             });
     }
 
-    /// Learns for closed vertices (see the class comment) and links the found path into the tree.
+    /// Learns for closed vertices (see the class comment) and links the found path into the tree. Only vertices that
+    /// learn more than h_learn are stored: an unstored vertex's value is the heuristic's estimate, so storing one that
+    /// learns nothing would record that estimate again. The stored values remain consistent: a closed vertex x that
+    /// learns nothing has m <= g(x) + h(x), so a closed predecessor p learns m - g(p) <= 1 + h(x). As in LRTA*'s
+    /// table of updated values (Korf, "Real-Time Heuristic Search", AIJ 1990), the tree holds only what was learned.
     uint_t finish(uint_t distance, std::optional<uint_t> last)
     {
+        const auto& nodes = m_storage->m_nodes;
         auto m = std::min(distance, m_dropped);
-        for (uint_t i = 0; i < m_closed.size(); ++i)
-            if (!m_closed[i] && m_h_learn[i] != infinity)
-                m = std::min(m, m_g[i] + m_h_learn[i]);
-        // Closed vertices are stored even when they learn nothing: repair walks stored predecessors only.
-        for (uint_t i = 0; i < m_closed.size(); ++i)
-            if (m_closed[i])
-            {
-                const auto id = ensure(i);
-                if (m > m_g[i])
-                    m_tree->learn(id, m == infinity ? infinity : m - m_g[i]);
-            }
+        for (const auto& open : nodes)
+            if (!open.closed && open.h_learn != infinity)
+                m = std::min(m, open.g + open.h_learn);
+        for (uint_t i = 0; i < nodes.size(); ++i)
+            if (nodes[i].closed && m > nodes[i].g)
+                if (const auto learned = m == infinity ? infinity : m - nodes[i].g; learned > nodes[i].h_learn)
+                    m_tree->learn(ensure(i), learned);
         if (last)
-            for (auto child = *last; m_parent[child] != none; child = m_parent[child])
-                m_tree->link(ensure(m_parent[child]), ensure(child));
+            for (auto child = *last; nodes[child].parent != none; child = nodes[child].parent)
+                m_tree->link(ensure(nodes[child].parent), ensure(child));
         return distance;
     }
 
-    uint_t ensure(uint_t index) { return m_tree->ensure(m_vertices[index], m_heuristic->estimate(m_vertices[index])); }
+    uint_t ensure(uint_t index)
+    {
+        if (const auto id = stored(index))
+            return *id;
+        return node(index).stored = m_tree->ensure(m_storage->m_vertices[index], *m_heuristic);
+    }
 };
 
 }  // namespace ygg::database

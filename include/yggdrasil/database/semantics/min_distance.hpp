@@ -68,15 +68,16 @@ public:
 
     /// The minimum distance over the edges of the inputs: input(slot) returns slot's relation view.
     template<typename Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
-        requires std::invocable<Input&, size_t>
-    uint_t min_distance(Input&& input, const S& sources, const T& targets, const H& heuristic = {})
+        requires std::invocable<const Input&, size_t>
+    uint_t min_distance(const Input& input, const S& sources, const T& targets, const H& heuristic = {})
     {
-        m_edges.require_columns(sources, targets);
+        m_edges.require_source_columns(sources);
+        m_edges.require_target_columns(targets);
         m_edges.evaluator().bind(input);
         m_tree.clear();
         m_targets.assign(targets);
         m_backward.start(m_targets.ensure_in(m_tree, heuristic));
-        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_edges.vertex_size(), m_edges.evaluator().version());
+        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -97,7 +98,8 @@ private:
     MinDistance(BoundQueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
         m_edges(std::move(edges), plan),
         m_tree(plan.tuple_size()),
-        m_targets(plan.tuple_size())
+        m_targets(plan.tuple_size()),
+        m_search(plan.tuple_size())
     {
     }
 
@@ -105,6 +107,7 @@ private:
     SearchTree m_tree;
     BackwardFrontier m_backward;
     detail::TargetSet m_targets;
+    AStarStorage m_search;
     MinDistanceStatistics m_statistics;
 };
 

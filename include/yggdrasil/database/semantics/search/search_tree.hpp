@@ -20,6 +20,10 @@
 namespace ygg::database
 {
 
+/// Vertices of a search as fixed-size byte arrays, stored in segments of vertex_segment_size arrays.
+inline constexpr size_t vertex_segment_size = 64;
+using VertexSet = RawArraySet<std::byte, vertex_segment_size>;
+
 /// The stored vertices of searches towards fixed targets: per vertex a lower bound on its distance (learned) and one
 /// next pointer along a found path. A vertex whose next chain reaches a target, with values that drop by one per
 /// existing edge, has an exact value: the goal condition of Multipath Generalized Adaptive A* (Hernández, Asín &
@@ -44,14 +48,24 @@ public:
     std::optional<uint_t> find(std::span<const std::byte> vertex) const { return m_vertices.find(vertex); }
     std::span<const std::byte> vertex(uint_t id) const { return m_vertices[id]; }
 
-    /// The stored index of a vertex, inserting it with its heuristic estimate as learned distance.
-    uint_t ensure(std::span<const std::byte> vertex, uint_t estimate)
+    /// The stored index of a vertex, inserting it with its heuristic estimate as learned distance. The estimate is
+    /// computed only on insertion.
+    template<DistanceHeuristic H>
+    uint_t ensure(std::span<const std::byte> vertex, const H& heuristic)
     {
         if (const auto stored = m_vertices.find(vertex))
             return *stored;
+        const auto estimate = heuristic.estimate(vertex);
         const auto id = m_vertices.insert(vertex);
         m_nodes.push_back(Node { estimate });
         return id;
+    }
+    /// The learned distance of a vertex: its stored value, or the heuristic's estimate if it is not stored.
+    template<DistanceHeuristic H>
+    uint_t value(std::span<const std::byte> vertex, const H& heuristic) const
+    {
+        const auto stored = m_vertices.find(vertex);
+        return stored ? learned(*stored) : heuristic.estimate(vertex);
     }
 
     uint_t learned(uint_t id) const noexcept { return m_nodes[id].learned; }
@@ -72,10 +86,11 @@ public:
     /// Whether the next chain from `start` reaches a target with values that drop by one per existing edge. Edge
     /// checks hold until `version` changes.
     template<typename Value, typename IsTarget, EdgeCheck Edges>
-        requires std::invocable<Value&, uint_t> && std::predicate<IsTarget&, uint_t>
-    bool on_valid_path(uint_t start, Value&& value, IsTarget&& is_target, Edges& edges, uint32_t version)
+        requires std::invocable<const Value&, uint_t> && std::predicate<const IsTarget&, uint_t>
+    bool on_valid_path(uint_t start, const Value& value, const IsTarget& is_target, Edges& edges, uint32_t version)
     {
-        auto chain = std::vector<uint_t>();
+        auto& chain = m_chain;
+        chain.clear();
         auto result = false;
         for (auto u = start;;)
         {
@@ -131,9 +146,10 @@ private:
         m_nodes[id].edge_version = unchecked;
     }
 
-    RawArraySet<std::byte, 64> m_vertices;
+    VertexSet m_vertices;
     std::vector<Node> m_nodes;
     uint32_t m_epoch = 0;
+    std::vector<uint_t> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
 };
 
 }  // namespace ygg::database

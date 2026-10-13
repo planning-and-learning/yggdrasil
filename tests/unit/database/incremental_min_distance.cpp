@@ -101,6 +101,15 @@ void check_sequence(ygg::database::QueryView<Values> edges,
     const auto plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
     auto blind = ygg::database::incremental::MinDistance<Values>(edges, plan, static_slots);
     auto guided = ygg::database::incremental::MinDistance<Values, HalfDistance>(edges, plan, static_slots);
+    // Fed the exact changes of its inputs (update()) instead of diffing them (bind()).
+    auto exact = ygg::database::incremental::MinDistance<Values, HalfDistance>(edges, plan, static_slots);
+    auto previous = std::vector<Relation>();
+    struct Change
+    {
+        Relation added;
+        Relation removed;
+    };
+    auto changes = std::vector<Change>();
     auto evaluator = ygg::database::QueryEvaluator<Values>(ygg::database::compile({ edges }));
     evaluator.evaluate(borrow_all(maximal));
     auto supergraph = Relation(evaluator.get_result().columns().span());
@@ -124,9 +133,37 @@ void check_sequence(ygg::database::QueryView<Values> edges,
         const auto input = [&](size_t slot) { return views[slot]; };
         blind.bind(input);
         guided.bind(input);
+        if (previous.empty())
+            exact.bind(input);
+        else
+        {
+            auto changed = std::vector<bool>(inputs.size(), false);
+            changes.clear();
+            for (size_t slot = 0; slot < inputs.size(); ++slot)
+            {
+                auto& change = changes.emplace_back(Change { Relation(inputs[slot].columns().span()), Relation(inputs[slot].columns().span()) });
+                for (size_t i = 0; i < inputs[slot].size(); ++i)
+                    if (!previous[slot].contains(inputs[slot].row(i)))
+                        change.added.insert(inputs[slot].row(i));
+                for (size_t i = 0; i < previous[slot].size(); ++i)
+                    if (!inputs[slot].contains(previous[slot].row(i)))
+                        change.removed.insert(previous[slot].row(i));
+                const auto is_static = slot < static_slots.size() && static_slots[slot];
+                changed[slot] = !is_static && (!change.added.empty() || !change.removed.empty());
+            }
+            exact.update([&](size_t slot) -> const Change& { return changes[slot]; }, changed);
+        }
+        previous.clear();
+        for (const auto& relation : inputs)
+        {
+            auto& copy = previous.emplace_back(relation.columns().span());
+            for (size_t i = 0; i < relation.size(); ++i)
+                copy.insert(relation.row(i));
+        }
         heuristic.distances = distances_to(supergraph, targets, k);
         ASSERT_EQ(blind.min_distance(borrow(sources), borrow(targets)), expected) << "step " << step;
         ASSERT_EQ(guided.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        ASSERT_EQ(exact.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
         // Reuse across calls without changes.
         ASSERT_EQ(guided.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
         checked += expected != std::numeric_limits<uint_t>::max();
@@ -310,5 +347,43 @@ TEST_P(DatabaseIncrementalMinDistance, RelationEdgesUnderChanges)
 }
 
 INSTANTIATE_TEST_SUITE_P(Seeds, DatabaseIncrementalMinDistance, testing::Range(1u, 9u));
+
+TEST(DatabaseIncrementalBoundEvaluation, VersionChangesOnlyWhenRowsCanBeRemoved)
+{
+    namespace qb = ygg::tests::qb;
+    auto repository = qb::repository<Values>();
+    // E(x, y) without the edges into N(y).
+    const auto edges = qb::antijoin(repository, qb::input(repository, 0, { x, y }), qb::rename(repository, qb::input(repository, 1, { x }), { y }));
+    auto e = Relation({ x, y });
+    auto n = Relation({ x });
+    e.insert(std::tuple { uint_t(0), uint_t(1) });
+    auto evaluator = ygg::database::incremental::BoundQueryEvaluator<Values>(edges);
+    evaluator.bind([&](size_t slot) { return borrow(slot == 0 ? e : n); });
+    auto e_added = Relation({ x, y });
+    auto e_removed = Relation({ x, y });
+    auto n_added = Relation({ x });
+    auto n_removed = Relation({ x });
+    const auto bumps = [&](size_t slot)
+    {
+        const auto version = evaluator.version();
+        if (slot == 0)
+            evaluator.apply(0, e_added, e_removed);
+        else
+            evaluator.apply(1, n_added, n_removed);
+        e_added.clear();
+        e_removed.clear();
+        n_added.clear();
+        n_removed.clear();
+        return evaluator.version() != version;
+    };
+    e_added.insert(std::tuple { uint_t(1), uint_t(2) });
+    EXPECT_FALSE(bumps(0));  // A positive input gains a row: no edge can disappear.
+    e_removed.insert(std::tuple { uint_t(0), uint_t(1) });
+    EXPECT_TRUE(bumps(0));  // It loses one.
+    n_added.insert(std::tuple { uint_t(2) });
+    EXPECT_TRUE(bumps(1));  // The negated input gains a row.
+    n_removed.insert(std::tuple { uint_t(2) });
+    EXPECT_FALSE(bumps(1));  // It loses one.
+}
 
 }  // namespace

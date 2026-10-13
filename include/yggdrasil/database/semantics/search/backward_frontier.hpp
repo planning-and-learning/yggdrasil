@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <utility>
 #include <span>
 #include <vector>
 
@@ -49,16 +50,17 @@ public:
     template<PredecessorOracle Predecessors, DistanceHeuristic H>
     size_t step(SearchTree& tree, Predecessors& predecessors, const H& heuristic)
     {
-        const auto frontier = std::move(m_frontier);
+        std::swap(m_frontier, m_expanding);
         m_frontier.clear();
         const auto level = m_depth + 1;
-        for (const auto parent : frontier)
+        for (const auto parent : m_expanding)
         {
-            const auto target = std::vector<std::byte>(tree.vertex(parent).begin(), tree.vertex(parent).end());
-            predecessors.predecessors(target,
+            // A copy: inserting predecessors into the tree may move its vertices.
+            m_vertex.assign(tree.vertex(parent).begin(), tree.vertex(parent).end());
+            predecessors.predecessors(m_vertex,
                                       [&](std::span<const std::byte> from)
                                       {
-                                          const auto id = tree.ensure(from, heuristic.estimate(from));
+                                          const auto id = tree.ensure(from, heuristic);
                                           auto& found = level_slot(id);
                                           if (found != none)
                                               return true;
@@ -89,6 +91,8 @@ public:
 private:
     std::vector<uint_t> m_level;  ///< By the tree's vertex index.
     std::vector<uint_t> m_frontier;
+    std::vector<uint_t> m_expanding;  ///< The level step() expands; kept with m_vertex to avoid allocations.
+    std::vector<std::byte> m_vertex;
     uint_t m_depth = 0;
     bool m_exhausted = false;
 
