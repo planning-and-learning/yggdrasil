@@ -46,7 +46,7 @@ Python packages that consume this native prefix should depend on:
 
 ```toml
 dependencies = [
-    "pyyggdrasil>=0.3.0,<0.4",
+    "pyyggdrasil>=0.4.0,<0.5",
 ]
 ```
 
@@ -209,7 +209,7 @@ cmake -S . -B build \
 ```
 
 ```cmake
-find_package(yggdrasil 0.3.0 CONFIG REQUIRED)
+find_package(yggdrasil 0.4.0 CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE yggdrasil::yggdrasil)
 ```
 
