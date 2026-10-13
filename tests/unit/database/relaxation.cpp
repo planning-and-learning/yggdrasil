@@ -4,10 +4,12 @@
 #include <gtest/gtest.h>
 #include <random>
 #include <vector>
+#include <yggdrasil/database/semantics/bound/query_evaluation.hpp>
 #include <yggdrasil/database/semantics/operations.hpp>
 #include <yggdrasil/database/semantics/query_evaluation.hpp>
 #include <yggdrasil/database/semantics/relation_repository.hpp>
 #include <yggdrasil/database/syntax/formatter.hpp>
+#include <yggdrasil/database/syntax/row.hpp>
 #include <yggdrasil/database/syntax/translations/relaxation.hpp>
 
 namespace
@@ -263,4 +265,39 @@ TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
     EXPECT_EQ(evaluator.get_result(0).size(), 1);
     EXPECT_EQ(evaluator.get_result(1).size(), 1);
 }
+TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
+{
+    // π_{x,y}(E(x,y) ⋈ I(u,v)) with y bound: I(u,v) is an existence test, so each predecessor x is emitted once, not
+    // once per row of I.
+    auto queries = qb::repository<>();
+    const Column u(3), v(4);
+    const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::input(queries, 1, { u, v })), { x, y });
+    constexpr auto objects = ygg::uint_t(50);
+    auto edges = Relation({ x, y });
+    auto identity = Relation({ u, v });
+    for (ygg::uint_t o = 0; o < objects; ++o)
+    {
+        edges.insert(std::tuple { o, ygg::uint_t(0) });
+        identity.insert(std::tuple { o, o });
+    }
+    auto evaluator = ygg::database::bound::QueryEvaluator<ygg::database::DefaultColumnTypes>(query);
+    evaluator.bind_slot(0, edges);
+    evaluator.bind_slot(1, identity);
+    const auto predecessors = evaluator.prepare({ 1 });
+    auto bytes = std::vector<std::byte>();
+    auto emitted = std::vector<ygg::uint_t>();
+    evaluator.evaluate(predecessors,
+                       ygg::database::encode_row<ygg::database::DefaultColumnTypes, ygg::uint_t>(std::array { ygg::uint_t(0) }, bytes),
+                       [&](std::span<const std::byte> row)
+                       {
+                           emitted.push_back(ygg::database::Row<ygg::database::DefaultColumnTypes>(row, evaluator.columns()).get<ygg::uint_t>(0));
+                           return true;
+                       });
+    std::ranges::sort(emitted);
+    auto expected = std::vector<ygg::uint_t>();
+    for (ygg::uint_t o = 0; o < objects; ++o)
+        expected.push_back(o);
+    EXPECT_EQ(emitted, expected);
+}
+
 }  // namespace

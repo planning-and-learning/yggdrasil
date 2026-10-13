@@ -6,7 +6,7 @@
 #ifndef YGG_DATABASE_SEMANTICS_MIN_DISTANCE_HPP_
 #define YGG_DATABASE_SEMANTICS_MIN_DISTANCE_HPP_
 
-#include "yggdrasil/database/semantics/bound_evaluation.hpp"
+#include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/search/a_star.hpp"
@@ -35,9 +35,9 @@ struct MinDistanceStatistics : AStarCounters
 /// which is a query of one input.
 ///
 /// Method:
-///  1. Edges. The edge query is translated into union normal form (union_normal_form.hpp), and a BoundQueryEvaluator
-///     (bound_evaluation.hpp) evaluates it over the call's inputs with some columns bound: a vertex's source columns
-///     for its successors, its target columns for its predecessors, both for an edge check.
+///  1. Edges. The edge query is translated into union normal form (bound/union_normal_form.hpp), and a
+///     bound::QueryEvaluator (bound/query_evaluation.hpp) evaluates it over the call's inputs with some columns bound:
+///     a vertex's source columns for its successors, its target columns for its predecessors, both for an edge check.
 ///  2. Search. A* (search/a_star.hpp) with f/g buckets. The estimate is the maximum of the heuristic H, the distances
 ///     the search learned, and the backward frontier's bound.
 ///  3. Bidirectionality. The backward frontier (search/backward_frontier.hpp) advances whenever it is not larger than
@@ -54,13 +54,13 @@ public:
     /// Edges given by a query over inputs. `edges` has the plan's edge columns; `static_slots` marks its inputs that
     /// never change, which are then read on the first call only.
     MinDistance(QueryView<Values> edges, const DistancePlan<Values>& plan, const std::vector<bool>& static_slots = {}) :
-        MinDistance(BoundQueryEvaluator<Values>(detail::checked_edges(edges, plan), static_slots), plan)
+        MinDistance(bound::QueryEvaluator<Values>(detail::checked_edges(edges, plan), static_slots), plan)
     {
     }
 
     /// Edges given as a relation with the plan's edge columns.
     explicit MinDistance(const DistancePlan<Values>& plan, bool static_edges = false) :
-        MinDistance(detail::relation_edges<BoundQueryEvaluator<Values>>(plan, static_edges), plan)
+        MinDistance(detail::relation_edges<bound::QueryEvaluator<Values>>(plan, static_edges), plan)
     {
     }
 
@@ -93,9 +93,9 @@ public:
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    using Edges = detail::EdgeQuery<BoundQueryEvaluator<Values>, Values>;
+    using Edges = detail::EdgeQuery<bound::QueryEvaluator<Values>, Values>;
 
-    MinDistance(BoundQueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
+    MinDistance(bound::QueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
         m_edges(std::move(edges), plan),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size()),

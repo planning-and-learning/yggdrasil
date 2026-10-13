@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef YGG_DATABASE_SYNTAX_TRANSLATIONS_UNION_NORMAL_FORM_HPP_
-#define YGG_DATABASE_SYNTAX_TRANSLATIONS_UNION_NORMAL_FORM_HPP_
+#ifndef YGG_DATABASE_SEMANTICS_BOUND_UNION_NORMAL_FORM_HPP_
+#define YGG_DATABASE_SEMANTICS_BOUND_UNION_NORMAL_FORM_HPP_
 
 #include "yggdrasil/database/syntax/query.hpp"
 
@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace ygg::database
+namespace ygg::database::bound
 {
 
 /// One input occurrence of a conjunctive branch: the variable bound by each of its columns.
@@ -225,6 +225,6 @@ UnionNormalForm union_normal_form(QueryView<Values> query)
     return detail::UnionNormalFormBuilder<Values> {}.build(query);
 }
 
-}  // namespace ygg::database
+}  // namespace ygg::database::bound
 
 #endif

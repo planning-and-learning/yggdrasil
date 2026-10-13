@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_EVALUATION_HPP_
-#define YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_EVALUATION_HPP_
+#ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_QUERY_EVALUATION_HPP_
+#define YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_QUERY_EVALUATION_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
-#include "yggdrasil/database/semantics/bound_evaluation.hpp"
+#include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
+#include "yggdrasil/database/semantics/operations.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -17,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace ygg::database::incremental
+namespace ygg::database::incremental::bound
 {
 
 /// The rows bind() added to and removed from an input slot.
@@ -29,8 +30,8 @@ struct InputChange
     Builder<Relation<Values>> removed;
 };
 
-/// A BoundQueryEvaluator kept across input changes. bind() diffs the inputs against the bound snapshots, or apply()
-/// takes a caller's exact change, and seed() finds the rows a change can add by delta rules for unions of conjunctive
+/// A bound::QueryEvaluator kept across input changes. initialize() binds the first inputs; update() takes a caller's
+/// exact change, or bind() diffs the inputs against the bound snapshots; and seed() finds the rows a change can add by delta rules for unions of conjunctive
 /// queries (Gupta & Mumick, "Maintenance of Materialized Views: Problems, Techniques, and Applications", IEEE Data Eng.
 /// Bull. 1995): a branch is evaluated with the changed atom's variables bound to each added row of a positive
 /// occurrence, or to each removed row of a negated one. The result is a superset of the added rows, each of which
@@ -41,10 +42,10 @@ struct InputChange
 /// negation are monotone in their positive atoms and antitone in their negated ones (Abiteboul, Hull & Vianu,
 /// "Foundations of Databases", 1995), so other changes keep every output row, and checks of earlier rows stay valid.
 template<ColumnTypes Values>
-class BoundQueryEvaluator
+class QueryEvaluator
 {
 public:
-    explicit BoundQueryEvaluator(QueryView<Values> query, const std::vector<bool>& static_slots = {}) : m_base(query, static_slots)
+    explicit QueryEvaluator(QueryView<Values> query, const std::vector<bool>& static_slots = {}) : m_base(query, static_slots)
     {
         for (size_t slot = 0; slot < input_count(); ++slot)
         {
@@ -54,7 +55,7 @@ public:
         m_changed.reserve(input_count());
         m_positive.assign(input_count(), false);
         m_negative.assign(input_count(), false);
-        const auto mark = [&](auto&& self, const ConjunctiveBranch& branch, bool negated) -> void
+        const auto mark = [&](auto&& self, const database::bound::ConjunctiveBranch& branch, bool negated) -> void
         {
             for (const auto& atom : branch.atoms)
                 (negated ? m_negative : m_positive)[atom.slot] = true;
@@ -80,9 +81,21 @@ public:
         m_base.evaluate(binding, values, on_row);
     }
 
-    /// Binds the current inputs: input(slot) returns slot's relation view. Static slots are read on the first bind
-    /// only; after it, slots not marked in `maybe_changed` are assumed unchanged and are not read either. Returns the
-    /// slots bound before that changed, whose changes change(slot) holds; both are valid until the next bind().
+    /// Binds every input, static ones included, as a new baseline: input(slot) returns slot's relation view.
+    template<typename Input>
+        requires std::invocable<const Input&, size_t> && RelationViewConcept<std::invoke_result_t<const Input&, size_t>, Values>
+    void initialize(const Input& input)
+    {
+        m_changed.clear();
+        for (size_t slot = 0; slot < input_count(); ++slot)
+            m_base.bind_slot(slot, input(slot));
+        ++m_version;
+    }
+
+    /// Diffs the current inputs against the bound snapshots: input(slot) returns slot's relation view. Slots not bound
+    /// yet are bound, as by initialize(); static slots are read then only. After that, slots not marked in
+    /// `maybe_changed` are assumed unchanged and are not read either. Returns the slots bound before that changed,
+    /// whose changes change(slot) holds; both are valid until the next bind().
     template<typename Input>
         requires std::invocable<const Input&, size_t> && RelationViewConcept<std::invoke_result_t<const Input&, size_t>, Values>
     std::span<const size_t> bind(const Input& input, const std::vector<bool>& maybe_changed = {})
@@ -111,12 +124,19 @@ public:
 
     /// Applies an exact change to a bound, non-static slot: `removed` rows are in it, `added` rows are not.
     template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
-    void apply(size_t slot, const A& added, const R& removed)
+    void update(size_t slot, const A& added, const R& removed)
     {
         database::detail::require_plan_columns(added.columns().span(), m_base.query().input_columns[slot]);
         database::detail::require_plan_columns(removed.columns().span(), m_base.query().input_columns[slot]);
         if (!m_base.is_bound(slot) || m_base.is_static(slot))
-            throw std::invalid_argument("BoundQueryEvaluator: changes apply to bound, non-static slots only.");
+            throw std::invalid_argument("incremental::bound::QueryEvaluator: changes apply to bound, non-static slots only.");
+        apply(slot, added, removed);
+    }
+
+    /// Applies a change that is known to be valid (see update()).
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    void apply(size_t slot, const A& added, const R& removed)
+    {
         m_base.replace(slot, added, removed);
         if ((m_positive[slot] && !removed.empty()) || (m_negative[slot] && !added.empty()))
             ++m_version;
@@ -135,8 +155,8 @@ public:
     }
 
 private:
-    database::BoundQueryEvaluator<Values> m_base;
-    UnorderedMap<std::vector<bool>, std::vector<ConjunctivePlan>> m_seed_plans;  ///< By the variables bound on arrival.
+    database::bound::QueryEvaluator<Values> m_base;
+    UnorderedMap<std::vector<bool>, std::vector<database::bound::ConjunctivePlan>> m_seed_plans;  ///< By the variables bound on arrival.
     std::vector<InputChange<Values>> m_changes;  ///< By slot; reused across bind() calls.
     std::vector<size_t> m_changed;               ///< The slots the last bind() changed.
     std::vector<bool> m_positive;                ///< By slot: whether it occurs under an even number of negations.
@@ -149,20 +169,13 @@ private:
     template<typename V>
     void diff(const V& rows, InputChange<Values>& change) const
     {
-        database::detail::require_plan_columns(rows.columns().span(), change.added.columns().span());
-        change.added.clear();
-        change.removed.clear();
         const auto& snapshot = m_base.input(change.slot);
-        for (size_t r = 0; r < rows.size(); ++r)
-            if (!snapshot.contains(rows.row(r)))
-                change.added.insert(rows.row(r));
-        for (size_t r = 0; r < snapshot.size(); ++r)
-            if (!rows.contains(snapshot.row(r)))
-                change.removed.insert(snapshot.row(r));
+        database::difference<Values>(rows, snapshot, change.added);
+        database::difference<Values>(snapshot, rows, change.removed);
     }
 
     /// The plan of a branch with the atom's variables bound; valid until the next call.
-    const ConjunctivePlan& seed_plan(size_t branch, const ConjunctiveAtom& atom)
+    const database::bound::ConjunctivePlan& seed_plan(size_t branch, const database::bound::ConjunctiveAtom& atom)
     {
         m_bound.assign(m_base.query().variables.size(), false);
         for (const auto var : atom.vars)
@@ -183,7 +196,7 @@ private:
         for (const auto& atom : top.atoms)
             for (const auto var : atom.vars)
                 top_vars[var] = true;
-        const auto seed_atom = [&](const ConjunctiveAtom& atom, const auto& rows) -> bool
+        const auto seed_atom = [&](const database::bound::ConjunctiveAtom& atom, const auto& rows) -> bool
         {
             if (atom.slot != slot || rows.empty())
                 return true;
@@ -192,10 +205,10 @@ private:
             const auto& plan = seed_plan(b, atom);
             for (size_t r = 0; r < rows.size(); ++r)
                 if (m_base.bind_atom(atom, rows.row(r)))
-                    m_base.run_plan(b, plan, on_row);
+                    m_base.run_plan(plan, on_row);
             return true;
         };
-        const auto walk = [&](auto&& self, const ConjunctiveBranch& branch, bool negated) -> bool
+        const auto walk = [&](auto&& self, const database::bound::ConjunctiveBranch& branch, bool negated) -> bool
         {
             for (const auto& atom : branch.atoms)
                 if (!(negated ? seed_atom(atom, removed) : seed_atom(atom, added)))
@@ -210,6 +223,6 @@ private:
     }
 };
 
-}  // namespace ygg::database::incremental
+}  // namespace ygg::database::incremental::bound
 
 #endif

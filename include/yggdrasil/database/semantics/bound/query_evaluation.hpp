@@ -3,16 +3,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef YGG_DATABASE_SEMANTICS_BOUND_EVALUATION_HPP_
-#define YGG_DATABASE_SEMANTICS_BOUND_EVALUATION_HPP_
+#ifndef YGG_DATABASE_SEMANTICS_BOUND_QUERY_EVALUATION_HPP_
+#define YGG_DATABASE_SEMANTICS_BOUND_QUERY_EVALUATION_HPP_
 
 #include "yggdrasil/containers/unordered_multi_map.hpp"
-#include "yggdrasil/database/semantics/conjunctive_plan.hpp"
+#include "yggdrasil/database/semantics/bound/conjunctive_plan.hpp"
+#include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 #include "yggdrasil/database/semantics/details/join_index.hpp"
 #include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
-#include "yggdrasil/database/syntax/translations/union_normal_form.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-namespace ygg::database
+namespace ygg::database::bound
 {
 
 /// Evaluation of a query with some of its output columns bound to given values, over owned snapshots of its inputs.
@@ -35,14 +35,14 @@ namespace ygg::database
 /// input on the columns bound at its step; a negation rejects a row if one of its branches matches. replace() keeps the
 /// indexes of a changed input current row by row, as the incremental join's indexes are (incremental/join.hpp).
 ///
-/// Inputs are borrowed during bind() only. incremental::BoundQueryEvaluator keeps it across input changes and runs its
-/// plans with variables bound by changed rows (plans(), bind_atom(), run_plan()).
+/// Inputs are borrowed during bind() only. incremental::bound::QueryEvaluator keeps it across input changes and runs
+/// its plans with variables bound by changed rows (plans(), bind_atom(), run_plan()).
 template<ColumnTypes Values>
-class BoundQueryEvaluator
+class QueryEvaluator
 {
 public:
     /// `static_slots` marks inputs that never change after the first bind().
-    explicit BoundQueryEvaluator(QueryView<Values> query, const std::vector<bool>& static_slots = {}) :
+    explicit QueryEvaluator(QueryView<Values> query, const std::vector<bool>& static_slots = {}) :
         m_query(union_normal_form(query)),
         m_columns(query.columns().begin(), query.columns().end())
     {
@@ -80,7 +80,7 @@ public:
     template<RelationViewConcept<Values> V>
     void bind_slot(size_t slot, const V& rows)
     {
-        detail::require_plan_columns(rows.columns().span(), m_query.input_columns[slot]);
+        database::detail::require_plan_columns(rows.columns().span(), m_query.input_columns[slot]);
         auto& snapshot = *m_inputs[slot];
         snapshot.clear();
         for (size_t r = 0; r < rows.size(); ++r)
@@ -100,21 +100,21 @@ public:
         {
             const auto position = snapshot.find(Row<Values>(removed.row(r), columns));
             if (!position)
-                throw std::invalid_argument("BoundQueryEvaluator: removed row is absent from the input.");
+                throw std::invalid_argument("bound::QueryEvaluator: removed row is absent from the input.");
             const auto last = to_uint_t(snapshot.size() - 1);
-            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.erase(detail::join_key_hash(snapshot.row(*position), entry.keys), *position); });
+            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.erase(database::detail::join_key_hash(snapshot.row(*position), entry.keys), *position); });
             snapshot.erase(*position);
             if (*position != last)
                 for_each_index(slot,
-                               [&](KeyIndex& entry) { entry.rows.replace(detail::join_key_hash(snapshot.row(*position), entry.keys), last, *position); });
+                               [&](KeyIndex& entry) { entry.rows.replace(database::detail::join_key_hash(snapshot.row(*position), entry.keys), last, *position); });
         }
         for (size_t r = 0; r < added.size(); ++r)
         {
             const auto previous_size = snapshot.size();
             const auto position = snapshot.insert(Row<Values>(added.row(r), columns));
             if (position != previous_size)
-                throw std::invalid_argument("BoundQueryEvaluator: added row is already present in the input.");
-            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert(detail::join_key_hash(added.row(r), entry.keys), position); });
+                throw std::invalid_argument("bound::QueryEvaluator: added row is already present in the input.");
+            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert(database::detail::join_key_hash(added.row(r), entry.keys), position); });
         }
         ++m_version;
     }
@@ -138,7 +138,7 @@ public:
         auto& prepared = m_bindings.at(binding);
         if (prepared.plans.empty() && !m_query.branches.empty())
             prepared.plans = plans(bound_variables(prepared.positions));
-        for (size_t b = 0; b < m_query.branches.size(); ++b)
+        for (const auto& plan : prepared.plans)
         {
             auto offset = size_t(0);
             for (const auto position : prepared.positions)
@@ -147,7 +147,7 @@ public:
                 std::ranges::copy(values.subspan(offset, size), variable(m_query.output[position]).begin());
                 offset += size;
             }
-            if (!run_plan(b, prepared.plans[b], on_row))
+            if (!run_plan(plan, on_row))
                 return;
         }
     }
@@ -168,7 +168,7 @@ public:
         for (const auto& branch : m_query.branches)
         {
             auto& plan = compiled.emplace_back(plan_branch(m_query, branch, bound, statistics));
-            resolve(branch, plan);
+            resolve(plan);
         }
         return compiled;
     }
@@ -179,7 +179,7 @@ public:
         const auto& columns = m_query.input_columns[atom.slot];
         for (size_t c = 0; c < atom.vars.size(); ++c)
         {
-            const auto bytes = detail::column_bytes(row, columns[c]);
+            const auto bytes = database::detail::column_bytes(row, columns[c]);
             if (size_t(std::ranges::find(atom.vars, atom.vars[c]) - atom.vars.begin()) == c)
                 std::ranges::copy(bytes, variable(atom.vars[c]).begin());
             else if (!std::ranges::equal(bytes, variable(atom.vars[c])))
@@ -188,13 +188,12 @@ public:
         return true;
     }
 
-    /// Runs a plan of branch `b` whose initially bound variables are set, calling on_row(row) for each output row;
-    /// returns false once on_row returned false.
+    /// Runs a plan whose initially bound variables are set, calling on_row(row) for each output row; returns false
+    /// once on_row returned false.
     template<typename OnRow>
-    bool run_plan(size_t b, const ConjunctivePlan& plan, const OnRow& on_row)
+    bool run_plan(const ConjunctivePlan& plan, const OnRow& on_row)
     {
-        const auto& branch = m_query.branches[b];
-        return !accepts(branch, plan, plan.filters) || run(branch, plan, 0, [&] { return on_row(output_row()); });
+        return !accepts(plan, plan.filters) || run(plan, 0, [&] { return on_row(output_row()); });
     }
 
 private:
@@ -274,80 +273,82 @@ private:
 
     // ---- Plans --------------------------------------------------------------------------------------------------
 
-    size_t index_id(size_t slot, const std::vector<size_t>& positions)
+    size_t index_id(size_t slot, std::span<const std::pair<size_t, uint32_t>> key)
     {
+        auto positions = std::vector<size_t>();
+        for (const auto& [c, var] : key)
+            positions.push_back(c);
         for (size_t id = 0; id < m_indexes.size(); ++id)
             if (m_indexes[id].slot == slot && m_indexes[id].positions == positions)
                 return id;
         auto& entry = m_indexes.emplace_back();
         entry.slot = slot;
-        entry.positions = positions;
         for (const auto position : positions)
-            entry.keys.push_back(detail::column_slice(m_query.input_columns[slot][position]));
+            entry.keys.push_back(database::detail::column_slice(m_query.input_columns[slot][position]));
+        entry.positions = std::move(positions);
         return m_indexes.size() - 1;
     }
 
     /// Resolves each step's lookup structure, recursively into negations.
-    void resolve(const ConjunctiveBranch& branch, ConjunctivePlan& plan)
+    void resolve(ConjunctivePlan& plan)
     {
         for (auto& step : plan.steps)
         {
-            const auto& atom = branch.atoms[step.atom];
             auto& lookup = m_lookups.emplace_back();
-            lookup.index = index_id(atom.slot, step.positions);
-            for (const auto position : step.positions)
+            lookup.index = index_id(step.slot, step.key);
+            for (const auto& [c, var] : step.key)
             {
-                const auto& variable = m_query.variables[atom.vars[position]];
-                lookup.probe.push_back(ColumnSlice { m_query.input_columns[atom.slot][position].type, variable.offset, variable.size });
+                const auto& variable = m_query.variables[var];
+                lookup.probe.push_back(ColumnSlice { m_query.input_columns[step.slot][c].type, variable.offset, variable.size });
             }
             step.index = m_lookups.size() - 1;
         }
-        for (size_t i = 0; i < plan.negation_plans.size(); ++i)
-            for (size_t b = 0; b < plan.negation_plans[i].size(); ++b)
-                resolve(branch.negations[i].branches[b], plan.negation_plans[i][b]);
+        for (auto& plans : plan.negation_plans)
+            for (auto& inner : plans)
+                resolve(inner);
     }
 
     // ---- Execution ----------------------------------------------------------------------------------------------
 
-    bool accepts(const ConjunctiveBranch& branch, const ConjunctivePlan& plan, const ConjunctiveFilters& filters)
+    bool accepts(const ConjunctivePlan& plan, const ConjunctiveFilters& filters)
     {
-        for (const auto i : filters.equal)
-            if (!std::ranges::equal(variable(branch.equal[i].first), variable(branch.equal[i].second)))
+        for (const auto& [lhs, rhs] : filters.equal)
+            if (!std::ranges::equal(variable(lhs), variable(rhs)))
                 return false;
-        for (const auto i : filters.value)
-            if (!std::ranges::equal(variable(branch.value[i].first), branch.value[i].second))
+        for (const auto& [var, constant] : filters.value)
+            if (!std::ranges::equal(variable(var), constant))
                 return false;
         // A negation rejects the row if any of its branches matches (an anti-join, its outer variables bound).
         for (const auto i : filters.negations)
-            for (size_t b = 0; b < branch.negations[i].branches.size(); ++b)
-            {
-                const auto& inner = branch.negations[i].branches[b];
-                const auto& inner_plan = plan.negation_plans[i][b];
-                if (accepts(inner, inner_plan, inner_plan.filters) && !run(inner, inner_plan, 0, [] { return false; }))
+            for (const auto& inner : plan.negation_plans[i])
+                if (accepts(inner, inner.filters) && !run(inner, 0, [] { return false; }))
                     return false;
-            }
         return true;
     }
 
-    /// Depth-first over the plan's steps; returns false once `emit` asked to stop.
+    /// Depth-first over the plan's steps; returns false once `emit` asked to stop. An existence step stops at its first
+    /// row that reaches the rest of the plan.
     template<typename Emit>
-    bool run(const ConjunctiveBranch& branch, const ConjunctivePlan& plan, size_t step_index, const Emit& emit)
+    bool run(const ConjunctivePlan& plan, size_t step_index, const Emit& emit)
     {
         if (step_index == plan.steps.size())
             return emit();
         const auto& step = plan.steps[step_index];
-        const auto& atom = branch.atoms[step.atom];
-        const auto& rows = *m_inputs[atom.slot];
-        const auto& columns = m_query.input_columns[atom.slot];
+        const auto& rows = *m_inputs[step.slot];
+        const auto& columns = m_query.input_columns[step.slot];
+        auto proceed = true;  // False once emit asked to stop.
         const auto visit = [&](size_t r)
         {
             const auto row = rows.row(r);
             for (const auto& [c, var] : step.assign)
-                std::ranges::copy(detail::column_bytes(row, columns[c]), variable(var).begin());
+                std::ranges::copy(database::detail::column_bytes(row, columns[c]), variable(var).begin());
             for (const auto& [c, var] : step.compare)
-                if (!std::ranges::equal(detail::column_bytes(row, columns[c]), variable(var)))
+                if (!std::ranges::equal(database::detail::column_bytes(row, columns[c]), variable(var)))
                     return true;
-            return !accepts(branch, plan, step.filters) || run(branch, plan, step_index + 1, emit);
+            if (!accepts(plan, step.filters))
+                return true;
+            proceed = run(plan, step_index + 1, emit);
+            return proceed && !step.exists;
         };
         const auto& lookup = m_lookups[step.index];
         auto& entry = m_indexes[lookup.index];
@@ -355,7 +356,7 @@ private:
         {
             for (size_t r = 0; r < rows.size(); ++r)
                 if (!visit(r))
-                    return false;
+                    return proceed;
             return true;
         }
         if (!entry.built)
@@ -363,19 +364,19 @@ private:
             entry.rows.clear();
             entry.rows.reserve(rows.size());
             for (size_t r = 0; r < rows.size(); ++r)
-                entry.rows.insert(detail::join_key_hash(rows.row(r), entry.keys), to_uint_t(r));
+                entry.rows.insert(database::detail::join_key_hash(rows.row(r), entry.keys), to_uint_t(r));
             entry.built = true;
         }
         // The key's variables stay bound while this step iterates, so the frame is the probe.
         const auto probe = std::span<const std::byte>(m_frame);
-        for (const auto r : entry.rows.values(detail::join_key_hash(probe, lookup.probe)))
-            if (detail::join_keys_equal(rows.row(r), entry.keys, probe, lookup.probe) && !visit(r))
-                return false;
+        for (const auto r : entry.rows.values(database::detail::join_key_hash(probe, lookup.probe)))
+            if (database::detail::join_keys_equal(rows.row(r), entry.keys, probe, lookup.probe) && !visit(r))
+                return proceed;
         return true;
     }
 
 };
 
-}  // namespace ygg::database
+}  // namespace ygg::database::bound
 
 #endif

@@ -7,7 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_MIN_DISTANCE_HPP_
 
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
-#include "yggdrasil/database/semantics/incremental/bound_evaluation.hpp"
+#include "yggdrasil/database/semantics/incremental/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/incremental/search/adaptive_path_tree.hpp"
 #include "yggdrasil/database/semantics/min_distance.hpp"
 #include "yggdrasil/database/semantics/search/a_star.hpp"
@@ -28,15 +28,16 @@ namespace ygg::database::incremental
 /// relation, which is a query of one input.
 ///
 /// Method (steps 1-3 as in database::MinDistance, min_distance.hpp):
-///  1. Edges, by an incremental::BoundQueryEvaluator (incremental/bound_evaluation.hpp) over snapshots of the inputs.
+///  1. Edges, by an incremental::bound::QueryEvaluator (incremental/bound/query_evaluation.hpp) over snapshots of the
+///     inputs.
 ///  2. Search: A* (search/a_star.hpp); the estimate is the maximum of H, the learned distance and the backward bound.
 ///  3. Bidirectionality: the backward frontier (search/backward_frontier.hpp), kept across calls.
 ///  4. Reuse. While the targets stay the same, the SearchTree persists: closed vertices learn distance bounds (GAA*),
 ///     and a search stops at a stored vertex whose next chain still exists and drops by one per edge (MPGAA*); edges
-///     are re-checked lazily after input changes that can remove edges (BoundQueryEvaluator::version()).
-///  5. Changes. bind() diffs the inputs, or update() takes their exact changes. Removed edges keep every bound
-///     admissible. Added edges are found by seeding
-///     the branches with the changed rows (delta rules), and learned distances are repaired (TreeRepair,
+///     are re-checked lazily after input changes that can remove edges (incremental::bound::QueryEvaluator::version()).
+///  5. Changes. initialize() binds a new baseline; bind() diffs the inputs, or update() takes their exact changes.
+///     Removed edges keep every bound admissible. Added edges are found by seeding the branches with the changed
+///     rows (delta rules), and learned distances are repaired (TreeRepair,
 ///     incremental/search/adaptive_path_tree.hpp). The backward frontier's bounds b (the level of a found vertex,
 ///     otherwise one beyond the last level, or infinity once exhausted) are consistent on the old edges, so they stay
 ///     valid unless an added edge u -> v has b(u) > b(v) + 1; only then does the frontier restart, as only edges that
@@ -54,20 +55,31 @@ public:
     /// Edges given by a query over inputs. `edges` has the plan's edge columns; `static_slots` marks its inputs that
     /// never change after the first bind().
     MinDistance(QueryView<Values> edges, const DistancePlan<Values>& plan, const std::vector<bool>& static_slots = {}) :
-        MinDistance(BoundQueryEvaluator<Values>(database::detail::checked_edges(edges, plan), static_slots), plan)
+        MinDistance(incremental::bound::QueryEvaluator<Values>(database::detail::checked_edges(edges, plan), static_slots), plan)
     {
     }
 
     /// Edges given as a relation with the plan's edge columns, bound by bind_edges().
     explicit MinDistance(const DistancePlan<Values>& plan, bool static_edges = false) :
-        MinDistance(database::detail::relation_edges<BoundQueryEvaluator<Values>>(plan, static_edges), plan)
+        MinDistance(database::detail::relation_edges<incremental::bound::QueryEvaluator<Values>>(plan, static_edges), plan)
     {
     }
 
     size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
     const Builder<Relation<Values>>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
 
-    /// Binds the current inputs: input(slot) returns slot's relation view (see BoundQueryEvaluator::bind).
+    /// Binds every input as a new baseline: input(slot) returns slot's relation view (see
+    /// incremental::bound::QueryEvaluator::initialize). The stored search is discarded.
+    template<typename Input>
+    void initialize(const Input& input)
+    {
+        m_edges.evaluator().initialize(input);
+        m_reset_pending = true;
+        m_added.clear();
+    }
+
+    /// Diffs the current inputs against the bound ones: input(slot) returns slot's relation view (see
+    /// incremental::bound::QueryEvaluator::bind).
     template<typename Input>
     void bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
@@ -87,7 +99,7 @@ public:
         auto& evaluator = m_edges.evaluator();
         for (size_t slot = 0; slot < changed.size(); ++slot)
             if (changed[slot])
-                evaluator.apply(slot, change(slot).added, change(slot).removed);
+                evaluator.update(slot, change(slot).added, change(slot).removed);
         for (size_t slot = 0; slot < changed.size(); ++slot)
             if (changed[slot])
                 seed(slot, change(slot).added, change(slot).removed);
@@ -153,9 +165,9 @@ public:
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    using Edges = database::detail::EdgeQuery<BoundQueryEvaluator<Values>, Values>;
+    using Edges = database::detail::EdgeQuery<incremental::bound::QueryEvaluator<Values>, Values>;
 
-    MinDistance(BoundQueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
+    MinDistance(incremental::bound::QueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
         m_edges(std::move(edges), plan),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size()),

@@ -620,7 +620,25 @@ estimate, and projection starts a new scope for its hidden columns. Statistics
 guide planning only; they never justify replacing an input by a constant or an
 empty relation.
 
-### Full and incremental evaluation
+### Evaluators
+
+Evaluators differ along two independent axes: what they return, the whole result (*full*, the default) or answers to
+lookups with some output columns given (*bound*); and whether they follow input changes (*incremental*) or evaluate
+the current inputs only (*one-shot*, the default). A namespace exists only for a non-default mode, its directory under
+`<yggdrasil/database/semantics/>` has the same name, and the class is always `QueryEvaluator`:
+
+| | one-shot | incremental |
+|---|---|---|
+| full | `QueryEvaluator` (`query_evaluation.hpp`) | `incremental::QueryEvaluator` (`incremental/query.hpp`) |
+| bound | `bound::QueryEvaluator` (`bound/query_evaluation.hpp`) | `incremental::bound::QueryEvaluator` (`incremental/bound/query_evaluation.hpp`) |
+
+Use full evaluation for a whole result, bound evaluation for many selective lookups against the same inputs (the edge
+oracle of the distance search), and an incremental evaluator when the inputs change between uses. Bound evaluation
+compiles the query into union normal form (`bound/union_normal_form.hpp`) and plans each branch per set of bound
+columns (`bound/conjunctive_plan.hpp`). Every incremental evaluator takes its first inputs with `initialize` and exact
+changes with `update`; the bound ones also offer `bind`, which diffs the inputs when the changes are unknown, and
+`seed`, which reports the answers a change can add. The operator plans of the query records (`JoinPlan`, `ProjectionPlan`,
+`GenericJoinPlan`, `DistancePlan`) are shared by all evaluators and stay in `ygg::database`.
 
 `<yggdrasil/database/semantics/query_evaluation.hpp>` provides `QueryEvaluator<Values>`.
 `evaluate(bindings)` computes all roots, reusing retained output and scratch

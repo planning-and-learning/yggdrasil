@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef YGG_DATABASE_SEMANTICS_CONJUNCTIVE_PLAN_HPP_
-#define YGG_DATABASE_SEMANTICS_CONJUNCTIVE_PLAN_HPP_
+#ifndef YGG_DATABASE_SEMANTICS_BOUND_CONJUNCTIVE_PLAN_HPP_
+#define YGG_DATABASE_SEMANTICS_BOUND_CONJUNCTIVE_PLAN_HPP_
 
 #include "yggdrasil/database/optimization/statistics.hpp"
-#include "yggdrasil/database/syntax/translations/union_normal_form.hpp"
+#include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -17,34 +17,35 @@
 #include <utility>
 #include <vector>
 
-namespace ygg::database
+namespace ygg::database::bound
 {
 
-/// Filters of a branch that become checkable at one point of a plan: indices into the branch's equalities, constants
-/// and negations.
+/// Filters of a branch that become checkable at one point of a plan.
 struct ConjunctiveFilters
 {
-    std::vector<size_t> equal;
-    std::vector<size_t> value;
-    std::vector<size_t> negations;
+    std::vector<std::pair<uint32_t, uint32_t>> equal;                ///< Variables that must hold equal values.
+    std::vector<std::pair<uint32_t, std::vector<std::byte>>> value;  ///< Variable, the constant it must hold.
+    std::vector<size_t> negations;                                   ///< Indices into the plan's negation_plans.
 };
 
-/// One atom of a conjunctive plan: the columns bound on arrival (its lookup key), the variables it binds, and the
-/// filters that become checkable after it.
+/// One atom of a conjunctive plan: its input slot, the columns bound on arrival (its lookup key), the variables it
+/// binds, and the filters that become checkable after it.
 struct ConjunctiveStep
 {
     static constexpr size_t unresolved = std::numeric_limits<size_t>::max();
 
-    size_t atom = 0;
-    std::vector<size_t> positions;                     ///< The atom's columns bound on arrival, in column order.
+    size_t slot = 0;
+    std::vector<std::pair<size_t, uint32_t>> key;      ///< Column, variable bound on arrival, in column order.
     std::vector<std::pair<size_t, uint32_t>> assign;   ///< Column, variable bound here.
     std::vector<std::pair<size_t, uint32_t>> compare;  ///< Column, variable bound earlier in this row.
     ConjunctiveFilters filters;
-    size_t index = unresolved;  ///< The executor's lookup structure for (slot, positions); set by the executor.
+    bool exists = false;        ///< No later step, filter or output reads its variables: one matching row suffices.
+    size_t index = unresolved;  ///< The executor's lookup structure for (slot, key columns); set by the executor.
 };
 
 /// A branch's atoms in evaluation order for one set of initially bound variables. Filters whose variables are bound
 /// from the start are checked before the first step; negations carry plans of their own, their outer variables bound.
+/// A plan is self-contained: executing it needs no branch.
 struct ConjunctivePlan
 {
     ConjunctiveFilters filters;  ///< Checkable before the first step.
@@ -56,8 +57,15 @@ struct ConjunctivePlan
 /// System R's uniform estimate that divides an input's rows by the distinct values of each bound column (Selinger et
 /// al., "Access Path Selection in a Relational Database Management System", SIGMOD 1979). Greedy instead of System R's
 /// dynamic programming over left-deep orders: branches are small and planned once per set of bound columns. Each
-/// equality, constant and negation attaches to the first step after which its variables are bound. `statistics(slot)`
-/// measures an input.
+/// equality, constant and negation attaches to the first step after which its variables are bound. A step whose
+/// variables nothing after it reads is an existence test, so the rest of the plan runs for its first matching row
+/// only; projected-away subqueries thus cost one match instead of all of them. This is the semijoin form of a join
+/// whose other columns are projected away, π_X(R ⋈ S) = R ⋉ S (Bernstein & Chiu, "Using Semi-Joins to Solve
+/// Relational Queries", JACM 1981), decided per step as the existence checks of compiled Datalog rules are (Scholz,
+/// Jordan, Subotić & Westmann, "On Fast Large-Scale Program Analysis in Datalog", CC 2016). A step that also binds a
+/// variable read later is not one, so it may still emit duplicates; binding the output variables before the
+/// existential ones avoids them (Bagan, Durand & Grandjean, "On Acyclic Conjunctive Queries and Constant Delay
+/// Enumeration", CSL 2007). `statistics(slot)` measures an input.
 template<typename Statistics>
     requires std::invocable<Statistics&, size_t>
 ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranch& branch, std::vector<bool> bound, Statistics&& statistics)
@@ -81,13 +89,13 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
             if (pending_equal[i] && bound[branch.equal[i].first] && bound[branch.equal[i].second])
             {
                 pending_equal[i] = false;
-                filters.equal.push_back(i);
+                filters.equal.push_back(branch.equal[i]);
             }
         for (size_t i = 0; i < branch.value.size(); ++i)
             if (pending_value[i] && bound[branch.value[i].first])
             {
                 pending_value[i] = false;
-                filters.value.push_back(i);
+                filters.value.push_back(branch.value[i]);
             }
         for (size_t i = 0; i < branch.negations.size(); ++i)
             if (pending_negation[i] && std::ranges::all_of(branch.negations[i].outer, [&](uint32_t var) { return bool(bound[var]); }))
@@ -105,13 +113,13 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
         const auto best = std::ranges::min_element(remaining, {}, [&](size_t atom) { return fanout(branch.atoms[atom]); });
         const auto& atom = branch.atoms[*best];
         auto& step = plan.steps.emplace_back();
-        step.atom = *best;
+        step.slot = atom.slot;
         auto assigned = std::vector<uint32_t>();
         for (size_t c = 0; c < atom.vars.size(); ++c)
         {
             const auto var = atom.vars[c];
             if (bound[var])
-                step.positions.push_back(c);
+                step.key.emplace_back(c, var);
             else if (std::ranges::find(assigned, var) != assigned.end())
                 step.compare.emplace_back(c, var);
             else
@@ -125,6 +133,24 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
         remaining.erase(best);
         attach(step.filters);
     }
+    auto read = std::vector<bool>(query.variables.size(), false);
+    for (const auto var : query.output)
+        read[var] = true;
+    for (auto s = plan.steps.size(); s-- > 0;)
+    {
+        auto& step = plan.steps[s];
+        step.exists = std::ranges::none_of(step.assign, [&](const std::pair<size_t, uint32_t>& assignment) { return bool(read[assignment.second]); });
+        for (const auto& pairs : { &step.key, &step.assign, &step.compare })
+            for (const auto& [c, var] : *pairs)
+                read[var] = true;
+        for (const auto& [lhs, rhs] : step.filters.equal)
+            read[lhs] = read[rhs] = true;
+        for (const auto& [var, constant] : step.filters.value)
+            read[var] = true;
+        for (const auto i : step.filters.negations)
+            for (const auto var : branch.negations[i].outer)
+                read[var] = true;
+    }
     for (const auto& negation : branch.negations)
     {
         auto outer = std::vector<bool>(query.variables.size(), false);
@@ -137,6 +163,6 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
     return plan;
 }
 
-}  // namespace ygg::database
+}  // namespace ygg::database::bound
 
 #endif

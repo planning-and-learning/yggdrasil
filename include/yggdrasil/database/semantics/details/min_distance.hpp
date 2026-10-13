@@ -49,7 +49,7 @@ Evaluator relation_edges(const DistancePlan<Values>& plan, bool static_edges)
     return Evaluator(insert_query(repository, builder, *input), { static_edges });
 }
 
-/// An edge query bound for search: `Evaluator` (a BoundQueryEvaluator or incremental::BoundQueryEvaluator) with the
+/// An edge query bound for search: `Evaluator` (a bound::QueryEvaluator or incremental::bound::QueryEvaluator) with the
 /// bindings of the source columns (successors), the target columns (predecessors) and both (edge checks), so that it
 /// models the search oracle concepts.
 template<typename Evaluator, ColumnTypes Values>

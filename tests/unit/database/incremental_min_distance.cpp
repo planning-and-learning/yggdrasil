@@ -357,8 +357,8 @@ TEST(DatabaseIncrementalBoundEvaluation, VersionChangesOnlyWhenRowsCanBeRemoved)
     auto e = Relation({ x, y });
     auto n = Relation({ x });
     e.insert(std::tuple { uint_t(0), uint_t(1) });
-    auto evaluator = ygg::database::incremental::BoundQueryEvaluator<Values>(edges);
-    evaluator.bind([&](size_t slot) { return borrow(slot == 0 ? e : n); });
+    auto evaluator = ygg::database::incremental::bound::QueryEvaluator<Values>(edges);
+    evaluator.initialize([&](size_t slot) { return borrow(slot == 0 ? e : n); });
     auto e_added = Relation({ x, y });
     auto e_removed = Relation({ x, y });
     auto n_added = Relation({ x });
@@ -367,9 +367,9 @@ TEST(DatabaseIncrementalBoundEvaluation, VersionChangesOnlyWhenRowsCanBeRemoved)
     {
         const auto version = evaluator.version();
         if (slot == 0)
-            evaluator.apply(0, e_added, e_removed);
+            evaluator.update(0, e_added, e_removed);
         else
-            evaluator.apply(1, n_added, n_removed);
+            evaluator.update(1, n_added, n_removed);
         e_added.clear();
         e_removed.clear();
         n_added.clear();
