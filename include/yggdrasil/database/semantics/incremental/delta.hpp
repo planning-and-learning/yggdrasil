@@ -9,15 +9,19 @@
 #include "yggdrasil/database/semantics/operations.hpp"
 
 #include <cassert>
+#include <concepts>
 #include <initializer_list>
 #include <ranges>
-#include <tuple>
-#include <utility>
 #include <span>
 #include <stdexcept>
+#include <tuple>
+#include <utility>
 
 namespace ygg::database::incremental
 {
+template<ColumnTypes Values>
+class QueryEvaluator;
+
 namespace detail
 {
 template<ColumnTypes Values, typename Tag>
@@ -52,6 +56,14 @@ template<typename C, typename Values>
 concept RelationChange = requires(const C& change) {
     { std::get<0>(change) } -> RelationViewConcept<Values>;
     { std::get<1>(change) } -> RelationViewConcept<Values>;
+};
+
+/// The exact changes of a query's inputs by slot: f(slot).added and f(slot).removed are relation views, the rows added to
+/// and removed from input slot `slot`.
+template<typename F, typename Values>
+concept SlotChanges = std::invocable<const F&, size_t> && requires(const F& change, size_t slot) {
+    { change(slot).added } -> RelationViewConcept<Values>;
+    { change(slot).removed } -> RelationViewConcept<Values>;
 };
 
 /// Sized random-access changes, one per input.

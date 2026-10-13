@@ -150,7 +150,7 @@ public:
 namespace ygg::database
 {
 /// Calls f(QueryView<Values>) for every operand of a query, in operand order.
-template<ColumnTypes Values, typename Tag, typename F>
+template<ColumnTypes Values, typename Tag, std::invocable<QueryView<Values>> F>
 void for_each_child(QueryView<Values, Tag> view, F&& f)
 {
     if constexpr (std::same_as<Tag, void>)

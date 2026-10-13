@@ -8,6 +8,7 @@
 
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
@@ -85,12 +86,12 @@ public:
         require_plan_columns(targets.columns().span(), m_target_columns);
     }
 
-    template<typename OnVertex>
+    template<RowPredicate OnVertex>
     void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
         m_edges.evaluate(m_forward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset)); });
     }
-    template<typename OnVertex>
+    template<RowPredicate OnVertex>
     void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
         m_edges.evaluate(m_backward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.first(m_target_offset)); });
@@ -123,18 +124,19 @@ private:
 };
 
 /// The targets of a search, as a vertex set.
+template<ColumnTypes Values>
 class TargetSet
 {
 public:
     explicit TargetSet(size_t vertex_size) : m_vertices(vertex_size) {}
 
-    template<typename Targets>
+    template<RelationViewConcept<Values> Targets>
     bool same(const Targets& targets) const
     {
         return targets.size() == m_vertices.size()
                && std::ranges::all_of(std::views::iota(size_t(0), targets.size()), [&](size_t i) { return m_vertices.contains(targets.row(i)); });
     }
-    template<typename Targets>
+    template<RelationViewConcept<Values> Targets>
     void assign(const Targets& targets)
     {
         m_vertices.clear();

@@ -69,16 +69,6 @@ JoinIndex<Values>::JoinIndex(const V& build, std::span<const ColumnSlice> keys) 
 }
 
 template<ColumnTypes Values>
-template<RelationViewConcept<Values> V, typename OnRow>
-bool JoinIndex<Values>::for_each_match(const V& build, std::span<const std::byte> probe, std::span<const ColumnSlice> probe_keys, OnRow&& on_row) const
-{
-    for (const auto row : m_index.values(detail::join_key_hash(probe, probe_keys)))
-        if (detail::join_keys_equal(build.row(row), m_keys, probe, probe_keys) && !on_row(row))
-            return false;
-    return true;
-}
-
-template<ColumnTypes Values>
 template<RelationViewConcept<Values> V>
 bool JoinIndex<Values>::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
 {

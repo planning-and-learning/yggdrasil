@@ -39,10 +39,6 @@ public:
     bool matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept;
     const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
 
-    /// Calls on_row(i) for each row i of `build`, the indexed relation, whose key fields equal those of `probe` at
-    /// `probe_keys` (in key order); stops and returns false when on_row returns false.
-    template<RelationViewConcept<Values> V, typename OnRow>
-    bool for_each_match(const V& build, std::span<const std::byte> probe, std::span<const ColumnSlice> probe_keys, OnRow&& on_row) const;
     auto identifying_members() const noexcept { return std::make_tuple(m_relation_index, std::span<const ColumnSlice>(m_keys)); }
 };
 

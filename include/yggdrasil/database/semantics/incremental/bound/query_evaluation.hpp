@@ -9,6 +9,7 @@
 #include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -75,15 +76,14 @@ public:
     /// Increases whenever a change can remove output rows (see the class comment).
     uint32_t version() const noexcept { return m_version; }
     size_t prepare(std::vector<size_t> positions) { return m_base.prepare(std::move(positions)); }
-    template<typename OnRow>
+    template<RowPredicate OnRow>
     void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
     {
         m_base.evaluate(binding, values, on_row);
     }
 
     /// Binds every input, static ones included, as a new baseline: input(slot) returns slot's relation view.
-    template<typename Input>
-        requires std::invocable<const Input&, size_t> && RelationViewConcept<std::invoke_result_t<const Input&, size_t>, Values>
+    template<SlotRelations<Values> Input>
     void initialize(const Input& input)
     {
         m_changed.clear();
@@ -96,8 +96,7 @@ public:
     /// yet are bound, as by initialize(); static slots are read then only. After that, slots not marked in
     /// `maybe_changed` are assumed unchanged and are not read either. Returns the slots bound before that changed,
     /// whose changes change(slot) holds; both are valid until the next bind().
-    template<typename Input>
-        requires std::invocable<const Input&, size_t> && RelationViewConcept<std::invoke_result_t<const Input&, size_t>, Values>
+    template<SlotRelations<Values> Input>
     std::span<const size_t> bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
         m_changed.clear();
@@ -145,7 +144,7 @@ public:
     /// Calls on_row(row) for every output row the slot's change (applied before) can have added, with repetitions and
     /// rows that existed before. Returns false if a changed row binds variables outside its branch's atoms, which delta
     /// rules cannot express; then the added rows are unknown.
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, typename OnRow>
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, RowPredicate OnRow>
     bool seed(size_t slot, const A& added, const R& removed, const OnRow& on_row)
     {
         for (size_t b = 0; b < m_base.query().branches.size(); ++b)
@@ -166,7 +165,7 @@ private:
     std::vector<bool> m_top_vars;
 
     /// Replaces `change` by the difference of `rows` from the slot's snapshot.
-    template<typename V>
+    template<RelationViewConcept<Values> V>
     void diff(const V& rows, InputChange<Values>& change) const
     {
         const auto& snapshot = m_base.input(change.slot);
@@ -186,7 +185,7 @@ private:
         return found->second[branch];
     }
 
-    template<typename A, typename R, typename OnRow>
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, RowPredicate OnRow>
     bool seed_branch(size_t b, size_t slot, const A& added, const R& removed, const OnRow& on_row)
     {
         const auto& query = m_base.query();

@@ -6,6 +6,9 @@
 #ifndef YGG_DATABASE_SYNTAX_ROW_HPP_
 #define YGG_DATABASE_SYNTAX_ROW_HPP_
 
+#include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/core/type_list.hpp"
+#include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/syntax/columns.hpp"
 
 #include <array>
@@ -60,7 +63,8 @@ public:
         return get<T>(column_index(m_columns, column));
     }
 
-    template<typename Visitor>
+    /// Calls visitor with the value at `position`, decoded as its column's type.
+    template<InvocableWithEach<Values> Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
         if (position >= size())
@@ -101,21 +105,25 @@ std::array<std::byte, (ColumnCodec<Ts>::size + ... + size_t { 0 })> encode_row(c
 
 namespace detail
 {
-template<ColumnValue T, typename C>
-T resolve_column(T value, const C&)
+template<ColumnTypes Values, ColumnValue T>
+T resolve_column(T value, const RelationRepository<Values>&)
 {
     return value;
 }
 
-template<typename Tag, typename C>
+template<ColumnTypes Values, typename Tag>
     requires ColumnValue<Index<Tag>>
-auto resolve_column(Index<Tag> value, const C& context)
+auto resolve_column(Index<Tag> value, const RelationRepository<Values>& context)
 {
-    if constexpr (ViewConcept<Index<Tag>, C>)
+    if constexpr (ViewConcept<Index<Tag>, RelationRepository<Values>>)
         return make_view(value, context);
     else
         return value;
 }
+
+/// The type resolve_column() returns for a column value of type T in context C, with C first for MapTypeListSecondT.
+template<typename C, typename T>
+using ResolvedColumn = ViewOrValue<T, C>;
 }  // namespace detail
 }  // namespace ygg::database
 
@@ -150,7 +158,8 @@ public:
         return get<T>(database::column_index(columns(), column));
     }
 
-    template<typename Visitor>
+    /// Calls visitor with the value at `position`, resolved through the context.
+    template<InvocableWithEach<MapTypeListSecondT<database::detail::ResolvedColumn, C, Values>> Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
         return m_handle.visit(position,

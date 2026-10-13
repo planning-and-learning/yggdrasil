@@ -19,6 +19,7 @@
 #define YGG_CORE_CONCEPTS_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/core/type_list.hpp"
 
 #include <concepts>
 #include <cstddef>
@@ -96,6 +97,20 @@ concept EqualityComparableByEqualTo = EqualToFor<EqualTo<std::remove_cvref_t<T>>
 
 template<typename T>
 concept OrderedByLess = LessFor<Less<std::remove_cvref_t<T>>, T>;
+
+template<typename F, typename List>
+struct InvocableWithEachTrait : std::false_type
+{
+};
+
+template<typename F, typename... Ts>
+struct InvocableWithEachTrait<F, TypeList<Ts...>> : std::bool_constant<(std::invocable<F, Ts> && ...)>
+{
+};
+
+/// A visitor that can be called with a value of each type of `List` (a TypeList), e.g. each alternative of a variant.
+template<typename F, typename List>
+concept InvocableWithEach = InvocableWithEachTrait<F, List>::value;
 
 }
 

@@ -7,6 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_MIN_DISTANCE_HPP_
 
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
+#include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/incremental/search/adaptive_path_tree.hpp"
 #include "yggdrasil/database/semantics/min_distance.hpp"
@@ -70,7 +71,7 @@ public:
 
     /// Binds every input as a new baseline: input(slot) returns slot's relation view (see
     /// incremental::bound::QueryEvaluator::initialize). The stored search is discarded.
-    template<typename Input>
+    template<SlotRelations<Values> Input>
     void initialize(const Input& input)
     {
         m_edges.evaluator().initialize(input);
@@ -80,7 +81,7 @@ public:
 
     /// Diffs the current inputs against the bound ones: input(slot) returns slot's relation view (see
     /// incremental::bound::QueryEvaluator::bind).
-    template<typename Input>
+    template<SlotRelations<Values> Input>
     void bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
         auto& evaluator = m_edges.evaluator();
@@ -93,7 +94,7 @@ public:
 
     /// Applies exact changes to bound inputs instead of diffing them: for each slot marked in `changed`, change(slot)
     /// has relation views `added` (rows not in the slot) and `removed` (rows in it).
-    template<typename Change>
+    template<SlotChanges<Values> Change>
     void update(const Change& change, const std::vector<bool>& changed)
     {
         auto& evaluator = m_edges.evaluator();
@@ -148,7 +149,7 @@ public:
         }
         m_added.clear();
         m_restart_backward = false;
-        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        auto search = AStar<Values, Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -179,7 +180,7 @@ private:
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;
-    database::detail::TargetSet m_targets;
+    database::detail::TargetSet<Values> m_targets;
     EdgeList m_added;  ///< Edges bind() can have added whose source is stored: the only ones repair reads.
     bool m_restart_backward = false;  ///< An added edge breaks the backward frontier's bounds.
     bool m_reset_pending = true;

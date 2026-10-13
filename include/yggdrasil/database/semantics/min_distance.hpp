@@ -67,8 +67,7 @@ public:
     size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
 
     /// The minimum distance over the edges of the inputs: input(slot) returns slot's relation view.
-    template<typename Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
-        requires std::invocable<const Input&, size_t>
+    template<SlotRelations<Values> Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
     uint_t min_distance(const Input& input, const S& sources, const T& targets, const H& heuristic = {})
     {
         m_edges.require_source_columns(sources);
@@ -77,7 +76,7 @@ public:
         m_tree.clear();
         m_targets.assign(targets);
         m_backward.start(m_targets.ensure_in(m_tree, heuristic));
-        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        auto search = AStar<Values, Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -106,7 +105,7 @@ private:
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;
-    detail::TargetSet m_targets;
+    detail::TargetSet<Values> m_targets;
     AStarStorage m_search;
     MinDistanceStatistics m_statistics;
 };

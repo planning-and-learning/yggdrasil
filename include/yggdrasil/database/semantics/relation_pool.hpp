@@ -51,7 +51,7 @@ private:
     /// By row width. Handles point back to their pool, which therefore lives at a stable address behind a pointer.
     UnorderedMap<size_t, std::unique_ptr<UniqueObjectPool<ygg::Builder<Relation<Values>>>>> m_pools;
 
-    template<typename Schema>
+    template<ColumnSchema Schema>
     UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> allocate(size_t width, Schema columns);
 
 public:

@@ -15,6 +15,7 @@
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <deque>
 #include <map>
@@ -67,8 +68,7 @@ public:
 
     /// Binds the current inputs: input(slot) returns slot's relation view. Static slots are read on the first bind
     /// only.
-    template<typename Input>
-        requires std::invocable<const Input&, size_t> && RelationViewConcept<std::invoke_result_t<const Input&, size_t>, Values>
+    template<SlotRelations<Values> Input>
     void bind(const Input& input)
     {
         for (size_t slot = 0; slot < input_count(); ++slot)
@@ -132,7 +132,7 @@ public:
 
     /// Calls on_row(row) for each output row whose prepared columns hold `values` (their bytes, concatenated in the
     /// prepared order); stops when on_row returns false.
-    template<typename OnRow>
+    template<RowPredicate OnRow>
     void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
     {
         auto& prepared = m_bindings.at(binding);
@@ -190,7 +190,7 @@ public:
 
     /// Runs a plan whose initially bound variables are set, calling on_row(row) for each output row; returns false
     /// once on_row returned false.
-    template<typename OnRow>
+    template<RowPredicate OnRow>
     bool run_plan(const ConjunctivePlan& plan, const OnRow& on_row)
     {
         return !accepts(plan, plan.filters) || run(plan, 0, [&] { return on_row(output_row()); });
@@ -263,7 +263,7 @@ private:
     }
 
     /// Calls f on each built index of the slot that has key columns.
-    template<typename F>
+    template<std::invocable<KeyIndex&> F>
     void for_each_index(size_t slot, const F& f)
     {
         for (auto& entry : m_indexes)
@@ -328,7 +328,7 @@ private:
 
     /// Depth-first over the plan's steps; returns false once `emit` asked to stop. An existence step stops at its first
     /// row that reaches the rest of the plan.
-    template<typename Emit>
+    template<std::predicate Emit>
     bool run(const ConjunctivePlan& plan, size_t step_index, const Emit& emit)
     {
         if (step_index == plan.steps.size())

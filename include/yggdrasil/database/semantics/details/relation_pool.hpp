@@ -18,7 +18,7 @@ RelationPool<Values> RelationPoolFactory<Values>::create_pool()
 }
 
 template<ColumnTypes Values>
-template<typename Schema>
+template<ColumnSchema Schema>
 UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::allocate(size_t width, Schema columns)
 {
     auto& pool = m_pools[width];

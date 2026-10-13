@@ -39,7 +39,7 @@ class StatisticsAccumulator
 {
 public:
     /// Adds one sample of key's relation.
-    template<typename Relation>
+    template<RelationViewConcept<Values> Relation>
     void add(const Key& key, const Relation& relation)
     {
         auto& total = m_totals[key];
@@ -53,6 +53,7 @@ public:
     /// Means of rows and per-column distinct counts. A nonempty mean is at least one row, so distinct counts lie in
     /// [1, rows]. A key empty in every sample keeps 0 rows and adds a warning naming it with describe(key).
     template<typename Describe>
+        requires std::invocable<Describe&, const Key&> && std::convertible_to<std::invoke_result_t<Describe&, const Key&>, std::string>
     UnorderedMap<Key, RelationStatistics> finish(diagnostics::Warnings& warnings, Describe&& describe) const
     {
         UnorderedMap<Key, RelationStatistics> result;

@@ -7,6 +7,7 @@
 
 #include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <optional>
@@ -32,7 +33,7 @@ struct Statistics
 };
 
 /// Row and per-column distinct counts of one relation.
-template<ColumnTypes Values, typename Relation>
+template<ColumnTypes Values, RelationViewConcept<Values> Relation>
 RelationStatistics measure_relation(const Relation& relation)
 {
     RelationStatistics stats;
