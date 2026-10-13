@@ -51,7 +51,17 @@ public:
             key.second.push_back(label.get_value());
         std::ranges::sort(key.second);
         if (const auto it = m_relaxed.find(key); it != m_relaxed.end())
-            return it->second;
+        {
+            // The cached result has the needed labels in the order of the first request; reorder them to `needed`.
+            auto cached = it->second;
+            if (cached)
+            {
+                const auto reordered = intersection(needed, labels(*cached));
+                if (reordered != labels(*cached))
+                    cached = m_build.project(*cached, reordered);
+            }
+            return cached;
+        }
         auto result = ygg::visit([&]<typename Tag>(QueryView<Values, Tag> concrete) { return relax(concrete, needed); }, query.get_variant());
         // Labels nobody needs are eliminated here, in the order of `needed`; with none needed, only the emptiness remains.
         if (result)

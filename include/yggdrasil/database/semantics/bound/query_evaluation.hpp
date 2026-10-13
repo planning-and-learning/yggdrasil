@@ -15,14 +15,14 @@
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
-#include <map>
 #include <optional>
 #include <span>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -36,8 +36,8 @@ namespace ygg::database::bound
 /// input on the columns bound at its step; a negation rejects a row if one of its branches matches. replace() keeps the
 /// indexes of a changed input current row by row, as the incremental join's indexes are (incremental/join.hpp).
 ///
-/// Inputs are borrowed during bind() only. incremental::bound::QueryEvaluator keeps it across input changes and runs
-/// its plans with variables bound by changed rows (plans(), bind_atom(), run_plan()).
+/// Inputs are borrowed during bind() only. incremental::bound::QueryEvaluator wraps one to keep it bound across input
+/// changes, and runs its plans with variables bound by changed rows (plans(), bind_atom(), run_plan()).
 template<ColumnTypes Values>
 class QueryEvaluator
 {
@@ -61,7 +61,7 @@ public:
     const Builder<Relation<Values>>& input(size_t slot) const { return *m_inputs.at(slot); }
     bool bound() const noexcept { return std::ranges::find(m_bound, false) == m_bound.end(); }
     /// Increases whenever an input changes.
-    uint32_t version() const noexcept { return m_version; }
+    uint64_t version() const noexcept { return m_version; }
 
     bool is_bound(size_t slot) const noexcept { return m_bound[slot]; }
     bool is_static(size_t slot) const noexcept { return m_static[slot]; }
@@ -90,17 +90,24 @@ public:
     }
 
     /// Applies a change to a bound input slot: `removed` rows are in it, `added` rows are not. Built indexes of the slot
-    /// are updated in place.
+    /// are updated in place. Every row is checked before any is applied, so a change that throws leaves the slot, its
+    /// indexes and version() unchanged; an empty change does not increase version().
     template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
     void replace(size_t slot, const A& added, const R& removed)
     {
+        if (added.empty() && removed.empty())
+            return;
         auto& snapshot = *m_inputs[slot];
         const auto columns = std::span<const ColumnLayout>(m_query.input_columns[slot]);
         for (size_t r = 0; r < removed.size(); ++r)
+            if (!snapshot.contains(Row<Values>(removed.row(r), columns)))
+                throw std::invalid_argument("bound::QueryEvaluator: removed row is absent from the input.");
+        for (size_t r = 0; r < added.size(); ++r)
+            if (snapshot.contains(Row<Values>(added.row(r), columns)))
+                throw std::invalid_argument("bound::QueryEvaluator: added row is already present in the input.");
+        for (size_t r = 0; r < removed.size(); ++r)
         {
             const auto position = snapshot.find(Row<Values>(removed.row(r), columns));
-            if (!position)
-                throw std::invalid_argument("bound::QueryEvaluator: removed row is absent from the input.");
             const auto last = to_uint_t(snapshot.size() - 1);
             for_each_index(slot, [&](KeyIndex& entry) { entry.rows.erase(database::detail::join_key_hash(snapshot.row(*position), entry.keys), *position); });
             snapshot.erase(*position);
@@ -110,10 +117,7 @@ public:
         }
         for (size_t r = 0; r < added.size(); ++r)
         {
-            const auto previous_size = snapshot.size();
             const auto position = snapshot.insert(Row<Values>(added.row(r), columns));
-            if (position != previous_size)
-                throw std::invalid_argument("bound::QueryEvaluator: added row is already present in the input.");
             for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert(database::detail::join_key_hash(added.row(r), entry.keys), position); });
         }
         ++m_version;
@@ -230,7 +234,7 @@ private:
     std::deque<Lookup> m_lookups;  ///< By ConjunctiveStep::index.
     std::vector<Binding> m_bindings;
     std::vector<std::byte> m_row;
-    uint32_t m_version = 0;
+    uint64_t m_version = 0;
 
     std::span<std::byte> variable(uint32_t var) noexcept { return std::span(m_frame).subspan(m_query.variables[var].offset, m_query.variables[var].size); }
 
@@ -263,7 +267,8 @@ private:
     }
 
     /// Calls f on each built index of the slot that has key columns.
-    template<std::invocable<KeyIndex&> F>
+    template<typename F>
+        requires std::invocable<const F&, KeyIndex&>
     void for_each_index(size_t slot, const F& f)
     {
         for (auto& entry : m_indexes)
@@ -328,12 +333,14 @@ private:
 
     /// Depth-first over the plan's steps; returns false once `emit` asked to stop. An existence step stops at its first
     /// row that reaches the rest of the plan.
-    template<std::predicate Emit>
+    template<typename Emit>
+        requires std::predicate<const Emit&>
     bool run(const ConjunctivePlan& plan, size_t step_index, const Emit& emit)
     {
         if (step_index == plan.steps.size())
             return emit();
         const auto& step = plan.steps[step_index];
+        assert(step.index != ConjunctiveStep::unresolved);
         const auto& rows = *m_inputs[step.slot];
         const auto& columns = m_query.input_columns[step.slot];
         auto proceed = true;  // False once emit asked to stop.

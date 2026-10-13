@@ -657,6 +657,28 @@ only remain alive during the call. Results belong to the evaluator, and may not
 be fed back as aliased inputs to that same evaluator. `memory_usage()` reports
 retained evaluator storage; it is distinct from the optimizer's estimate.
 
+#### Distance search
+
+`MinDistance<Values, H>` (`min_distance.hpp`) and `incremental::MinDistance<Values, H>`
+(`incremental/min_distance.hpp`) compute the exact minimum distance from any source to any
+target over edges given by a query over input slots (or by one edge relation), and return
+`uint_t`'s maximum when no target is reachable. Edges are never materialized: a bound
+evaluator answers successor, predecessor and edge-check lookups, and A* (a binary heap
+ordered by f, then g) runs against a backward breadth-first frontier.
+
+- `MinDistance::min_distance(input, sources, targets, heuristic)` binds the inputs for one
+  call; only compiled plans and static slots are kept.
+- `incremental::MinDistance` keeps the search tree across calls. `initialize(input)` binds a
+  new baseline; `bind(input, maybe_changed)` diffs the inputs against it, and
+  `update(change, changed)` takes exact `(added, removed)` changes per slot. A change that
+  throws makes the next search start afresh.
+  Its `set_targets(targets)` sets the targets, and different targets discard the stored
+  search; `min_distance(sources, heuristic)` then searches over the current inputs.
+
+The heuristic `H` (`search/concepts.hpp`, `DistanceHeuristic`) must be consistent in every
+graph the inputs can form while the targets stay unchanged: it may depend on the targets and
+on static inputs only. `BlindDistanceHeuristic` is the zero estimate.
+
 ### Python query API
 
 ```python

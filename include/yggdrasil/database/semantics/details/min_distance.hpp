@@ -9,6 +9,7 @@
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
+#include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
@@ -124,19 +125,18 @@ private:
 };
 
 /// The targets of a search, as a vertex set.
-template<ColumnTypes Values>
 class TargetSet
 {
 public:
     explicit TargetSet(size_t vertex_size) : m_vertices(vertex_size) {}
 
-    template<RelationViewConcept<Values> Targets>
+    template<VertexRange Targets>
     bool same(const Targets& targets) const
     {
         return targets.size() == m_vertices.size()
                && std::ranges::all_of(std::views::iota(size_t(0), targets.size()), [&](size_t i) { return m_vertices.contains(targets.row(i)); });
     }
-    template<RelationViewConcept<Values> Targets>
+    template<VertexRange Targets>
     void assign(const Targets& targets)
     {
         m_vertices.clear();

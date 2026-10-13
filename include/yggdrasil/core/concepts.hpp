@@ -98,6 +98,8 @@ concept EqualityComparableByEqualTo = EqualToFor<EqualTo<std::remove_cvref_t<T>>
 template<typename T>
 concept OrderedByLess = LessFor<Less<std::remove_cvref_t<T>>, T>;
 
+namespace detail
+{
 template<typename F, typename List>
 struct InvocableWithEachTrait : std::false_type
 {
@@ -107,10 +109,11 @@ template<typename F, typename... Ts>
 struct InvocableWithEachTrait<F, TypeList<Ts...>> : std::bool_constant<(std::invocable<F, Ts> && ...)>
 {
 };
+}  // namespace detail
 
 /// A visitor that can be called with a value of each type of `List` (a TypeList), e.g. each alternative of a variant.
 template<typename F, typename List>
-concept InvocableWithEach = InvocableWithEachTrait<F, List>::value;
+concept InvocableWithEach = detail::InvocableWithEachTrait<F, List>::value;
 
 }
 

@@ -10,10 +10,12 @@
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -45,7 +47,7 @@ struct ConjunctiveStep
 
 /// A branch's atoms in evaluation order for one set of initially bound variables. Filters whose variables are bound
 /// from the start are checked before the first step; negations carry plans of their own, their outer variables bound.
-/// A plan is self-contained: executing it needs no branch.
+/// A plan is self-contained: executing it needs no branch, only the evaluator that resolved it.
 struct ConjunctivePlan
 {
     ConjunctiveFilters filters;  ///< Checkable before the first step.
@@ -67,7 +69,7 @@ struct ConjunctivePlan
 /// existential ones avoids them (Bagan, Durand & Grandjean, "On Acyclic Conjunctive Queries and Constant Delay
 /// Enumeration", CSL 2007). `statistics(slot)` measures an input.
 template<typename Statistics>
-    requires std::invocable<Statistics&, size_t>
+    requires std::invocable<Statistics&, size_t> && std::convertible_to<std::invoke_result_t<Statistics&, size_t>, const RelationStatistics&>
 ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranch& branch, std::vector<bool> bound, Statistics&& statistics)
 {
     const auto fanout = [&](const ConjunctiveAtom& atom)
@@ -133,6 +135,9 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
         remaining.erase(best);
         attach(step.filters);
     }
+    // Every variable of a filter or a negation's outer variable is bound by some atom of the branch (safe queries).
+    assert(std::ranges::find(pending_equal, true) == pending_equal.end() && std::ranges::find(pending_value, true) == pending_value.end()
+           && std::ranges::find(pending_negation, true) == pending_negation.end());
     auto read = std::vector<bool>(query.variables.size(), false);
     for (const auto var : query.output)
         read[var] = true;

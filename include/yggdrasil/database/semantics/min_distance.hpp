@@ -38,8 +38,8 @@ struct MinDistanceStatistics : AStarCounters
 ///  1. Edges. The edge query is translated into union normal form (bound/union_normal_form.hpp), and a
 ///     bound::QueryEvaluator (bound/query_evaluation.hpp) evaluates it over the call's inputs with some columns bound:
 ///     a vertex's source columns for its successors, its target columns for its predecessors, both for an edge check.
-///  2. Search. A* (search/a_star.hpp) with f/g buckets. The estimate is the maximum of the heuristic H, the distances
-///     the search learned, and the backward frontier's bound.
+///  2. Search. A* (search/a_star.hpp) with a binary heap ordered by f, then g. The estimate is the maximum of the
+///     heuristic H, the distances the search learned, and the backward frontier's bound.
 ///  3. Bidirectionality. The backward frontier (search/backward_frontier.hpp) advances whenever it is not larger than
 ///     the forward open list. Its levels are exact distances; once it is exhausted, sources outside it are
 ///     unreachable. A search ends at a vertex on a valid chain to a target (search/search_tree.hpp).
@@ -76,7 +76,7 @@ public:
         m_tree.clear();
         m_targets.assign(targets);
         m_backward.start(m_targets.ensure_in(m_tree, heuristic));
-        auto search = AStar<Values, Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -105,7 +105,7 @@ private:
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;
-    detail::TargetSet<Values> m_targets;
+    detail::TargetSet m_targets;
     AStarStorage m_search;
     MinDistanceStatistics m_statistics;
 };

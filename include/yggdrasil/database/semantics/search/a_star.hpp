@@ -7,7 +7,6 @@
 #define YGG_DATABASE_SEMANTICS_SEARCH_A_STAR_HPP_
 
 #include "yggdrasil/containers/raw_array_set.hpp"
-#include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 #include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
@@ -15,6 +14,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -87,7 +87,7 @@ private:
     }
 };
 
-template<ColumnTypes Values, typename Oracle, DistanceHeuristic H>
+template<typename Oracle, DistanceHeuristic H>
     requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
 class AStar;
 
@@ -100,7 +100,7 @@ public:
     explicit AStarStorage(size_t vertex_size) : m_vertices(vertex_size) {}
 
 private:
-    template<ColumnTypes Values, typename Oracle, DistanceHeuristic H>
+    template<typename Oracle, DistanceHeuristic H>
         requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
     friend class AStar;
 
@@ -142,7 +142,7 @@ private:
 /// vertex) instead of the distance d, where h_learn = max(h, learned) omits the backward bound: a search that ends
 /// early on a backward level, or on an exhausted frontier, then still learns bounds that are consistent without the
 /// backward frontier, which is discarded when added edges break its bounds. [Our addition.]
-template<ColumnTypes Values, typename Oracle, DistanceHeuristic H>
+template<typename Oracle, DistanceHeuristic H>
     requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
 class AStar
 {
@@ -153,7 +153,7 @@ public:
           const H& heuristic,
           const VertexSet& targets,
           AStarStorage& storage,
-          uint32_t version) :
+          uint64_t version) :
         m_oracle(&oracle),
         m_tree(&tree),
         m_backward(&backward),
@@ -171,7 +171,7 @@ public:
     ~AStar() = default;
 
     /// The distance from the nearest source.
-    template<RelationViewConcept<Values> Sources>
+    template<VertexRange Sources>
     uint_t run(const Sources& sources)
     {
         m_tree->begin_search();
@@ -201,7 +201,7 @@ private:
     const H* m_heuristic;
     const VertexSet* m_targets;
     AStarStorage* m_storage;
-    uint32_t m_version;
+    uint64_t m_version;
     size_t m_open = 0;
     uint_t m_dropped = infinity;  ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
     AStarCounters m_counters;
@@ -224,7 +224,7 @@ private:
     }
 
     /// Whether the exhausted backward frontier found no source.
-    template<RelationViewConcept<Values> Sources>
+    template<VertexRange Sources>
     bool closed_off(const Sources& sources) const
     {
         return m_backward->exhausted()
@@ -233,7 +233,7 @@ private:
     }
 
     /// A single stored source on a valid tree path has an exact value; a learned infinity proves it dead.
-    template<RelationViewConcept<Values> Sources>
+    template<VertexRange Sources>
     std::optional<uint_t> reuse(const Sources& sources)
     {
         if (sources.size() != 1)
@@ -250,7 +250,7 @@ private:
     }
 
     /// Cardinality comparison; returns whether the exhausted backward frontier excludes every source.
-    template<RelationViewConcept<Values> Sources>
+    template<VertexRange Sources>
     bool advance_backward(const Sources& sources)
     {
         while (!m_backward->exhausted() && m_backward->frontier_size() <= m_open)

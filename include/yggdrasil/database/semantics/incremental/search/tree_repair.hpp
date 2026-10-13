@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_SEARCH_ADAPTIVE_PATH_TREE_HPP_
-#define YGG_DATABASE_SEMANTICS_INCREMENTAL_SEARCH_ADAPTIVE_PATH_TREE_HPP_
+#ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_SEARCH_TREE_REPAIR_HPP_
+#define YGG_DATABASE_SEMANTICS_INCREMENTAL_SEARCH_TREE_REPAIR_HPP_
 
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"

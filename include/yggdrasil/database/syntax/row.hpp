@@ -105,17 +105,17 @@ std::array<std::byte, (ColumnCodec<Ts>::size + ... + size_t { 0 })> encode_row(c
 
 namespace detail
 {
-template<ColumnTypes Values, ColumnValue T>
-T resolve_column(T value, const RelationRepository<Values>&)
+template<typename C, ColumnValue T>
+T resolve_column(T value, const C&)
 {
     return value;
 }
 
-template<ColumnTypes Values, typename Tag>
+template<typename C, typename Tag>
     requires ColumnValue<Index<Tag>>
-auto resolve_column(Index<Tag> value, const RelationRepository<Values>& context)
+auto resolve_column(Index<Tag> value, const C& context)
 {
-    if constexpr (ViewConcept<Index<Tag>, RelationRepository<Values>>)
+    if constexpr (ViewConcept<Index<Tag>, C>)
         return make_view(value, context);
     else
         return value;

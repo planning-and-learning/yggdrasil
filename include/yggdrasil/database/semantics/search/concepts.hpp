@@ -38,6 +38,13 @@ struct BlindDistanceHeuristic
     uint_t estimate(std::span<const std::byte>) const noexcept { return 0; }
 };
 
+/// A random-access sequence of vertices: size() of them, row(i) the bytes of the i-th (e.g. a relation view).
+template<typename R>
+concept VertexRange = requires(const R& range, size_t i) {
+    { range.size() } -> std::convertible_to<size_t>;
+    { range.row(i) } -> std::convertible_to<std::span<const std::byte>>;
+};
+
 /// Calls on_vertex(w) for each edge (v, w); stops when it returns false.
 template<typename O>
 concept SuccessorOracle = requires(O& oracle, std::span<const std::byte> vertex) {

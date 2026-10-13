@@ -386,4 +386,145 @@ TEST(DatabaseIncrementalBoundEvaluation, VersionChangesOnlyWhenRowsCanBeRemoved)
     EXPECT_FALSE(bumps(1));  // It loses one.
 }
 
+/// The exact change of one input slot, for MinDistance::update().
+struct SlotChange
+{
+    Relation added = Relation({ x, y });
+    Relation removed = Relation({ x, y });
+};
+
+/// Edges E0(x, y) ∪ E1(x, y) over slots 0 and 1, from source 0 to target 2.
+struct TwoSlotEdges
+{
+    ygg::database::QueryRepository<Values> repository = ygg::tests::qb::repository<Values>();
+    ygg::database::QueryView<Values> edges = ygg::tests::qb::union_(repository, ygg::tests::qb::input(repository, 0, { x, y }), ygg::tests::qb::input(repository, 1, { x, y }));
+    Relation sources = Relation({ x });
+    Relation targets = Relation({ y });
+    ygg::database::DistancePlan<Values> plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
+    std::vector<Relation> inputs;
+
+    TwoSlotEdges()
+    {
+        sources.insert(std::tuple { uint_t(0) });
+        targets.insert(std::tuple { uint_t(2) });
+        inputs.emplace_back(std::initializer_list<Column> { x, y });
+        inputs.emplace_back(std::initializer_list<Column> { x, y });
+        inputs[0].insert(std::tuple { uint_t(0), uint_t(1) });
+        inputs[0].insert(std::tuple { uint_t(1), uint_t(2) });
+    }
+    auto input() const
+    {
+        return [this](size_t slot) { return borrow(inputs[slot]); };
+    }
+};
+
+TEST(DatabaseIncrementalMinDistanceContract, InitializeDiscardsTheSearchWithUnchangedTargets)
+{
+    auto graph = TwoSlotEdges();
+    auto changes = std::vector<SlotChange>(2);
+    const auto change = [&](size_t slot) -> const SlotChange& { return changes[slot]; };
+    for (const auto via_update : { false, true })
+    {
+        SCOPED_TRACE(via_update);
+        auto search = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+        graph.inputs[0].clear();
+        graph.inputs[0].insert(std::tuple { uint_t(0), uint_t(1) });
+        graph.inputs[0].insert(std::tuple { uint_t(1), uint_t(2) });
+        graph.inputs[1].clear();
+        if (via_update)
+        {
+            search.initialize(graph.input());
+            changes[1].added.clear();
+            changes[1].added.insert(std::tuple { uint_t(1), uint_t(1) });
+            search.update(change, { false, true });
+        }
+        else
+            search.bind(graph.input());
+        ASSERT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
+        // A shortcut in a new baseline: the stored path 0 -> 1 -> 2 still exists but is no longer shortest.
+        graph.inputs[0].insert(std::tuple { uint_t(0), uint_t(2) });
+        search.initialize(graph.input());
+        EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 1);
+    }
+}
+
+TEST(DatabaseIncrementalMinDistanceContract, UpdateRejectsStaticUnboundAndOutOfRangeSlots)
+{
+    auto graph = TwoSlotEdges();
+    auto changes = std::vector<SlotChange>(3);
+    changes[1].added.insert(std::tuple { uint_t(1), uint_t(1) });
+    changes[2].added.insert(std::tuple { uint_t(1), uint_t(1) });
+    const auto change = [&](size_t slot) -> const SlotChange& { return changes[slot]; };
+
+    auto unbound = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+    EXPECT_THROW(unbound.update(change, { false, true }), std::invalid_argument);
+
+    auto with_static = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan, { false, true });
+    with_static.initialize(graph.input());
+    EXPECT_THROW(with_static.update(change, { false, true }), std::invalid_argument);
+
+    auto search = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+    search.initialize(graph.input());
+    EXPECT_THROW(search.update(change, { false, false, true }), std::invalid_argument);
+    EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
+}
+
+TEST(DatabaseIncrementalMinDistanceContract, DistancesStayExactAfterAThrowingUpdate)
+{
+    auto graph = TwoSlotEdges();
+    auto search = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+    search.initialize(graph.input());
+    ASSERT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
+    // Slot 0 gains the shortcut 0 -> 2 before slot 1's change throws: its removed row is absent.
+    auto changes = std::vector<SlotChange>(2);
+    changes[0].added.insert(std::tuple { uint_t(0), uint_t(2) });
+    changes[1].removed.insert(std::tuple { uint_t(5), uint_t(5) });
+    EXPECT_THROW(search.update([&](size_t slot) -> const SlotChange& { return changes[slot]; }, { true, true }), std::invalid_argument);
+    EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 1);
+}
+
+TEST(DatabaseIncrementalBoundEvaluation, FailedChangesLeaveTheInputUnchanged)
+{
+    namespace qb = ygg::tests::qb;
+    auto repository = qb::repository<Values>();
+    auto e = Relation({ x, y });
+    e.insert(std::tuple { uint_t(0), uint_t(1) });
+    e.insert(std::tuple { uint_t(0), uint_t(2) });
+    auto evaluator = ygg::database::incremental::bound::QueryEvaluator<Values>(qb::input(repository, 0, { x, y }));
+    evaluator.initialize([&](size_t) { return borrow(e); });
+    const auto successors = evaluator.prepare({ 0 });
+    const auto count = [&]
+    {
+        auto bytes = std::vector<std::byte>();
+        auto rows = size_t(0);
+        evaluator.evaluate(successors,
+                           ygg::database::encode_row<Values, uint_t>(std::array { uint_t(0) }, bytes),
+                           [&](std::span<const std::byte>)
+                           {
+                               ++rows;
+                               return true;
+                           });
+        return rows;
+    };
+    ASSERT_EQ(count(), 2);  // Builds the index on x.
+    const auto version = evaluator.version();
+    auto added = Relation({ x, y });
+    auto removed = Relation({ x, y });
+    // A present row removed before an absent one.
+    removed.insert(std::tuple { uint_t(0), uint_t(1) });
+    removed.insert(std::tuple { uint_t(3), uint_t(3) });
+    EXPECT_THROW(evaluator.update(0, added, removed), std::invalid_argument);
+    // A new row added before a present one.
+    removed.clear();
+    added.insert(std::tuple { uint_t(0), uint_t(3) });
+    added.insert(std::tuple { uint_t(0), uint_t(2) });
+    EXPECT_THROW(evaluator.update(0, added, removed), std::invalid_argument);
+    EXPECT_EQ(evaluator.version(), version);
+    EXPECT_EQ(evaluator.input(0).size(), 2);
+    EXPECT_TRUE(evaluator.input(0).contains(std::tuple { uint_t(0), uint_t(1) }));
+    EXPECT_FALSE(evaluator.input(0).contains(std::tuple { uint_t(0), uint_t(3) }));
+    EXPECT_EQ(count(), 2);
+    EXPECT_THROW(evaluator.update(1, added, removed), std::invalid_argument);
+}
+
 }  // namespace

@@ -12,10 +12,11 @@
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -32,11 +33,11 @@ struct InputChange
 };
 
 /// A bound::QueryEvaluator kept across input changes. initialize() binds the first inputs; update() takes a caller's
-/// exact change, or bind() diffs the inputs against the bound snapshots; and seed() finds the rows a change can add by delta rules for unions of conjunctive
-/// queries (Gupta & Mumick, "Maintenance of Materialized Views: Problems, Techniques, and Applications", IEEE Data Eng.
-/// Bull. 1995): a branch is evaluated with the changed atom's variables bound to each added row of a positive
-/// occurrence, or to each removed row of a negated one. The result is a superset of the added rows, each of which
-/// exists in the new state.
+/// exact change, or bind() diffs the inputs against the bound snapshots; and seed() finds the rows a change can add by
+/// delta rules for unions of conjunctive queries (Gupta & Mumick, "Maintenance of Materialized Views: Problems,
+/// Techniques, and Applications", IEEE Data Eng. Bull. 1995): a branch is evaluated with the changed atom's variables
+/// bound to each added row of a positive occurrence, or to each removed row of a negated one. The result is a superset
+/// of the added rows, each of which exists in the new state.
 ///
 /// version() increases only on changes that can remove output rows: removed rows of an input that occurs positively, or
 /// added rows of one that occurs negated (under an odd number of negations). Unions of conjunctive queries with
@@ -74,7 +75,7 @@ public:
     bool bound() const noexcept { return m_base.bound(); }
     bool is_static(size_t slot) const noexcept { return m_base.is_static(slot); }
     /// Increases whenever a change can remove output rows (see the class comment).
-    uint32_t version() const noexcept { return m_version; }
+    uint64_t version() const noexcept { return m_version; }
     size_t prepare(std::vector<size_t> positions) { return m_base.prepare(std::move(positions)); }
     template<RowPredicate OnRow>
     void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
@@ -121,10 +122,13 @@ public:
     /// The change of a slot that the last bind() returned.
     const InputChange<Values>& change(size_t slot) const { return m_changes.at(slot); }
 
-    /// Applies an exact change to a bound, non-static slot: `removed` rows are in it, `added` rows are not.
+    /// Applies an exact change to a bound, non-static slot: `removed` rows are in it, `added` rows are not. A change
+    /// that throws leaves the slot and version() unchanged (bound::QueryEvaluator::replace).
     template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
     void update(size_t slot, const A& added, const R& removed)
     {
+        if (slot >= input_count())
+            throw std::invalid_argument("incremental::bound::QueryEvaluator: slot is out of range.");
         database::detail::require_plan_columns(added.columns().span(), m_base.query().input_columns[slot]);
         database::detail::require_plan_columns(removed.columns().span(), m_base.query().input_columns[slot]);
         if (!m_base.is_bound(slot) || m_base.is_static(slot))
@@ -132,23 +136,20 @@ public:
         apply(slot, added, removed);
     }
 
-    /// Applies a change that is known to be valid (see update()).
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
-    void apply(size_t slot, const A& added, const R& removed)
-    {
-        m_base.replace(slot, added, removed);
-        if ((m_positive[slot] && !removed.empty()) || (m_negative[slot] && !added.empty()))
-            ++m_version;
-    }
-
-    /// Calls on_row(row) for every output row the slot's change (applied before) can have added, with repetitions and
-    /// rows that existed before. Returns false if a changed row binds variables outside its branch's atoms, which delta
+    /// Calls on_row(row) for every output row the slot's change (applied before) can add, with repetitions and rows
+    /// that existed before. Returns false if a changed row binds variables outside its branch's atoms, which delta
     /// rules cannot express; then the added rows are unknown.
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, RowPredicate OnRow>
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, typename OnRow>
+        requires std::invocable<const OnRow&, std::span<const std::byte>>
     bool seed(size_t slot, const A& added, const R& removed, const OnRow& on_row)
     {
+        const auto each = [&](std::span<const std::byte> row)
+        {
+            on_row(row);
+            return true;
+        };
         for (size_t b = 0; b < m_base.query().branches.size(); ++b)
-            if (!seed_branch(b, slot, added, removed, on_row))
+            if (!seed_branch(b, slot, added, removed, each))
                 return false;
         return true;
     }
@@ -160,9 +161,18 @@ private:
     std::vector<size_t> m_changed;               ///< The slots the last bind() changed.
     std::vector<bool> m_positive;                ///< By slot: whether it occurs under an even number of negations.
     std::vector<bool> m_negative;                ///< By slot: whether it occurs under an odd number of negations.
-    uint32_t m_version = 0;
+    uint64_t m_version = 0;
     std::vector<bool> m_bound;                   ///< Scratch of seed_plan() and seed_branch(), kept to avoid allocations.
     std::vector<bool> m_top_vars;
+
+    /// Applies a change that is known to be valid (see update()).
+    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    void apply(size_t slot, const A& added, const R& removed)
+    {
+        m_base.replace(slot, added, removed);
+        if ((m_positive[slot] && !removed.empty()) || (m_negative[slot] && !added.empty()))
+            ++m_version;
+    }
 
     /// Replaces `change` by the difference of `rows` from the slot's snapshot.
     template<RelationViewConcept<Values> V>

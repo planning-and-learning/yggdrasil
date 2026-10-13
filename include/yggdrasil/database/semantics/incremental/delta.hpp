@@ -19,9 +19,6 @@
 
 namespace ygg::database::incremental
 {
-template<ColumnTypes Values>
-class QueryEvaluator;
-
 namespace detail
 {
 template<ColumnTypes Values, typename Tag>

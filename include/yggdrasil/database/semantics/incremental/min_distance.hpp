@@ -9,12 +9,13 @@
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/bound/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/incremental/search/adaptive_path_tree.hpp"
+#include "yggdrasil/database/semantics/incremental/search/tree_repair.hpp"
 #include "yggdrasil/database/semantics/min_distance.hpp"
 #include "yggdrasil/database/semantics/search/a_star.hpp"
 #include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 
+#include <concepts>
 #include <cstddef>
 #include <span>
 #include <stdexcept>
@@ -38,12 +39,12 @@ namespace ygg::database::incremental
 ///     are re-checked lazily after input changes that can remove edges (incremental::bound::QueryEvaluator::version()).
 ///  5. Changes. initialize() binds a new baseline; bind() diffs the inputs, or update() takes their exact changes.
 ///     Removed edges keep every bound admissible. Added edges are found by seeding the branches with the changed
-///     rows (delta rules), and learned distances are repaired (TreeRepair,
-///     incremental/search/adaptive_path_tree.hpp). The backward frontier's bounds b (the level of a found vertex,
-///     otherwise one beyond the last level, or infinity once exhausted) are consistent on the old edges, so they stay
-///     valid unless an added edge u -> v has b(u) > b(v) + 1; only then does the frontier restart, as only edges that
-///     break consistency need work in LPA* (Koenig, Likhachev & Furcy, "Lifelong Planning A*", AIJ 2004). New
-///     targets, or changes the delta rules cannot express, reset the tree.
+///     rows (delta rules), and learned distances are repaired (TreeRepair, incremental/search/tree_repair.hpp). The
+///     backward frontier's bounds b (the level of a found vertex, otherwise one beyond the last level, or infinity once
+///     exhausted) are consistent on the old edges, so they stay valid unless an added edge u -> v has b(u) > b(v) + 1;
+///     only then does the frontier restart, as only edges that break consistency need work in LPA* (Koenig, Likhachev &
+///     Furcy, "Lifelong Planning A*", AIJ 2004). Levels are exact before removals and lower bounds after them. New
+///     targets, or changes the delta rules cannot express, reset the tree. A change that throws also resets it.
 ///
 /// Contract: H is consistent in every state while the targets stay unchanged (DistanceHeuristic).
 ///
@@ -74,9 +75,9 @@ public:
     template<SlotRelations<Values> Input>
     void initialize(const Input& input)
     {
-        m_edges.evaluator().initialize(input);
         m_reset_pending = true;
         m_added.clear();
+        m_edges.evaluator().initialize(input);
     }
 
     /// Diffs the current inputs against the bound ones: input(slot) returns slot's relation view (see
@@ -85,11 +86,14 @@ public:
     void bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
         auto& evaluator = m_edges.evaluator();
-        // Seeds run in the new state of every input, so an edge built from several changed rows is found from any.
-        for (const auto slot : evaluator.bind(input, maybe_changed))
-            seed(slot, evaluator.change(slot).added, evaluator.change(slot).removed);
-        if (m_reset_pending)
-            m_added.clear();
+        guarded(
+            [&]
+            {
+                // Seeds run in the new state of every input, so an edge built from several changed rows is found
+                // from any.
+                for (const auto slot : evaluator.bind(input, maybe_changed))
+                    seed(slot, evaluator.change(slot).added, evaluator.change(slot).removed);
+            });
     }
 
     /// Applies exact changes to bound inputs instead of diffing them: for each slot marked in `changed`, change(slot)
@@ -97,15 +101,19 @@ public:
     template<SlotChanges<Values> Change>
     void update(const Change& change, const std::vector<bool>& changed)
     {
+        if (changed.size() > input_count())
+            throw std::invalid_argument("Min distance: more changed slots than inputs.");
         auto& evaluator = m_edges.evaluator();
-        for (size_t slot = 0; slot < changed.size(); ++slot)
-            if (changed[slot])
-                evaluator.update(slot, change(slot).added, change(slot).removed);
-        for (size_t slot = 0; slot < changed.size(); ++slot)
-            if (changed[slot])
-                seed(slot, change(slot).added, change(slot).removed);
-        if (m_reset_pending)
-            m_added.clear();
+        guarded(
+            [&]
+            {
+                for (size_t slot = 0; slot < changed.size(); ++slot)
+                    if (changed[slot])
+                        evaluator.update(slot, change(slot).added, change(slot).removed);
+                for (size_t slot = 0; slot < changed.size(); ++slot)
+                    if (changed[slot])
+                        seed(slot, change(slot).added, change(slot).removed);
+            });
     }
 
     /// Binds the edge relation of a relation-edged instance; unchanged edges are not compared.
@@ -149,7 +157,7 @@ public:
         }
         m_added.clear();
         m_restart_backward = false;
-        auto search = AStar<Values, Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -180,7 +188,7 @@ private:
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;
-    database::detail::TargetSet<Values> m_targets;
+    database::detail::TargetSet m_targets;
     EdgeList m_added;  ///< Edges bind() can have added whose source is stored: the only ones repair reads.
     bool m_restart_backward = false;  ///< An added edge breaks the backward frontier's bounds.
     bool m_reset_pending = true;
@@ -190,7 +198,27 @@ private:
     AStarStorage m_search;
     MinDistanceStatistics m_statistics;
 
-    bool record_added(std::span<const std::byte> edge)
+    /// Runs a change of the inputs. A change that throws may have applied part of itself, so the stored bounds are not
+    /// trusted afterwards: the next min_distance() resets the tree.
+    template<typename F>
+        requires std::invocable<const F&>
+    void guarded(const F& change)
+    {
+        try
+        {
+            change();
+        }
+        catch (...)
+        {
+            m_reset_pending = true;
+            m_added.clear();
+            throw;
+        }
+        if (m_reset_pending)
+            m_added.clear();
+    }
+
+    void record_added(std::span<const std::byte> edge)
     {
         const auto from = edge.first(m_edges.target_offset());
         const auto to = edge.subspan(m_edges.target_offset());
@@ -202,13 +230,12 @@ private:
         }
         if (stored)
             m_added.add(from, to);
-        return true;
     }
 
     template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
     void seed(size_t slot, const A& added, const R& removed)
     {
-        if (!m_reset_pending && !m_edges.evaluator().seed(slot, added, removed, [&](std::span<const std::byte> edge) { return record_added(edge); }))
+        if (!m_reset_pending && !m_edges.evaluator().seed(slot, added, removed, [&](std::span<const std::byte> edge) { record_added(edge); }))
             m_reset_pending = true;
     }
 

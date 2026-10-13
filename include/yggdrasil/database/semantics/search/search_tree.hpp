@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <span>
@@ -32,7 +33,7 @@ using VertexSet = RawArraySet<std::byte, vertex_segment_size>;
 ///
 /// The tree knows edges only through EdgeCheck; the caller supplies the value used along a chain (e.g. the larger of
 /// the learned distance and an exact backward level). incremental::MinDistance keeps it across searches and repairs it
-/// (incremental/search/adaptive_path_tree.hpp).
+/// (incremental/search/tree_repair.hpp).
 class SearchTree
 {
 public:
@@ -87,7 +88,7 @@ public:
     /// checks hold until `version` changes.
     template<typename Value, typename IsTarget, EdgeCheck Edges>
         requires std::invocable<const Value&, uint_t> && std::predicate<const IsTarget&, uint_t>
-    bool on_valid_path(uint_t start, const Value& value, const IsTarget& is_target, Edges& edges, uint32_t version)
+    bool on_valid_path(uint_t start, const Value& value, const IsTarget& is_target, Edges& edges, uint64_t version)
     {
         auto& chain = m_chain;
         chain.clear();
@@ -128,15 +129,15 @@ public:
     }
 
 private:
-    static constexpr uint32_t unchecked = std::numeric_limits<uint32_t>::max();
+    static constexpr uint64_t unchecked = std::numeric_limits<uint64_t>::max();
 
     struct Node
     {
         uint_t learned = 0;
         uint_t next = none;
-        uint32_t checked = 0;              ///< Epoch of the last chain check.
+        uint64_t checked = 0;              ///< Epoch of the last chain check.
         bool valid = false;                ///< Its result.
-        uint32_t edge_version = unchecked; ///< Graph version at which the edge to next was checked.
+        uint64_t edge_version = unchecked; ///< Graph version at which the edge to next was checked.
     };
 
     /// A new next pointer has an unchecked edge.
@@ -148,7 +149,7 @@ private:
 
     VertexSet m_vertices;
     std::vector<Node> m_nodes;
-    uint32_t m_epoch = 0;
+    uint64_t m_epoch = 0;
     std::vector<uint_t> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
 };
 

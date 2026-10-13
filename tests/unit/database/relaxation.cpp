@@ -1,7 +1,9 @@
 #include "query_helpers.hpp"
 
+#include <algorithm>
 #include <array>
 #include <gtest/gtest.h>
+#include <limits>
 #include <random>
 #include <vector>
 #include <yggdrasil/database/semantics/bound/query_evaluation.hpp>
@@ -298,6 +300,103 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
     for (ygg::uint_t o = 0; o < objects; ++o)
         expected.push_back(o);
     EXPECT_EQ(emitted, expected);
+}
+
+/// The y of each row a bound evaluation of `query` (columns x, y) emits for x = 0, in order; on_row asks to stop after
+/// `limit` rows.
+std::vector<ygg::uint_t> bound_successors(View query, const std::vector<const Relation*>& inputs, size_t limit = std::numeric_limits<size_t>::max())
+{
+    auto evaluator = ygg::database::bound::QueryEvaluator<ygg::database::DefaultColumnTypes>(query);
+    for (size_t slot = 0; slot < inputs.size(); ++slot)
+        evaluator.bind_slot(slot, *inputs[slot]);
+    const auto successors = evaluator.prepare({ 0 });
+    auto bytes = std::vector<std::byte>();
+    auto emitted = std::vector<ygg::uint_t>();
+    evaluator.evaluate(successors,
+                       ygg::database::encode_row<ygg::database::DefaultColumnTypes, ygg::uint_t>(std::array { ygg::uint_t(0) }, bytes),
+                       [&](std::span<const std::byte> row)
+                       {
+                           emitted.push_back(ygg::database::Row<ygg::database::DefaultColumnTypes>(row, evaluator.columns()).get<ygg::uint_t>(1));
+                           return emitted.size() < limit;
+                       });
+    return emitted;
+}
+
+TEST(DatabaseRelaxation, VariablesReadByLaterFiltersAreNotExistenceTests)
+{
+    // E(0, y) has 10 rows and I(u, v) 3, so I is planned first and binds u, which only a later filter reads. A
+    // step that stopped at I's first row would lose the other rows.
+    auto queries = qb::repository<>();
+    const Column u(3), v(4);
+    const auto edges = qb::input(queries, 0, { x, y });
+    const auto identity = qb::input(queries, 1, { u, v });
+    auto e = Relation({ x, y });
+    auto i = Relation({ u, v });
+    auto blocked = Relation({ x });
+    for (ygg::uint_t w = 0; w < 10; ++w)
+        e.insert(std::tuple { ygg::uint_t(0), w });
+    for (ygg::uint_t w = 5; w < 8; ++w)
+        i.insert(std::tuple { w, ygg::uint_t(0) });
+    blocked.insert(std::tuple { ygg::uint_t(5) });
+
+    // A later select_equal reads u.
+    const auto equal = qb::project(queries, qb::select_equal(queries, qb::join(queries, edges, identity), u, y), { x, y });
+    auto successors = bound_successors(equal, { &e, &i });
+    std::ranges::sort(successors);
+    EXPECT_EQ(successors, (std::vector<ygg::uint_t> { 5, 6, 7 }));
+
+    // A later antijoin reads u as an outer variable; it rejects I's first row, u = 5. I binds u, so it may repeat rows.
+    const auto anti = qb::project(queries, qb::antijoin(queries, qb::join(queries, edges, identity), qb::rename(queries, qb::input(queries, 2, { x }), { u })), { x, y });
+    successors = bound_successors(anti, { &e, &i, &blocked });
+    std::ranges::sort(successors);
+    const auto [first, last] = std::ranges::unique(successors);
+    successors.erase(first, last);
+    EXPECT_EQ(successors.size(), 10);
+}
+
+TEST(DatabaseRelaxation, ExistenceStepsSkipRowsTheirOwnFiltersReject)
+{
+    // π_{x,y}(E(x,y) ⋈ σ_{u=7} I(u,v)): I is an existence test whose first rows fail u = 7. It must still find a
+    // matching row, and only one: (7, 0) and (7, 1) both match.
+    auto queries = qb::repository<>();
+    const Column u(3), v(4);
+    const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::select_value(queries, qb::input(queries, 1, { u, v }), u, ygg::uint_t(7))), { x, y });
+    auto e = Relation({ x, y });
+    auto i = Relation({ u, v });
+    for (ygg::uint_t w = 0; w < 10; ++w)
+        e.insert(std::tuple { ygg::uint_t(0), w });
+    for (const auto& row : { std::tuple { ygg::uint_t(5), ygg::uint_t(0) }, std::tuple { ygg::uint_t(6), ygg::uint_t(0) },
+                             std::tuple { ygg::uint_t(7), ygg::uint_t(0) }, std::tuple { ygg::uint_t(7), ygg::uint_t(1) } })
+        i.insert(row);
+    EXPECT_EQ(bound_successors(query, { &e, &i }).size(), 10);
+}
+
+TEST(DatabaseRelaxation, StopInsideAnExistenceStepEndsTheEvaluation)
+{
+    // E(0, y) has 5 rows and I(u, v) 50, so E is planned first and I is an existence test inside it. on_row stops at
+    // the first row; the stop must not end only the existence step.
+    auto queries = qb::repository<>();
+    const Column u(3), v(4);
+    const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::input(queries, 1, { u, v })), { x, y });
+    auto e = Relation({ x, y });
+    auto i = Relation({ u, v });
+    for (ygg::uint_t w = 0; w < 5; ++w)
+        e.insert(std::tuple { ygg::uint_t(0), w });
+    for (ygg::uint_t w = 0; w < 50; ++w)
+        i.insert(std::tuple { w, w });
+    EXPECT_EQ(bound_successors(query, { &e, &i }, 1).size(), 1);
+    EXPECT_EQ(bound_successors(query, { &e, &i }).size(), 5);
+}
+
+TEST(DatabaseRelaxation, CachedRelaxationsKeepTheRequestedColumnOrder)
+{
+    // π_y σ_{x=0} R relaxes R with the labels (y, x) first; the root R must still get R's relaxation as (x, y).
+    auto queries = qb::repository<>();
+    const auto r = qb::input(queries, 0, { x, y });
+    const auto roots = std::array { qb::project(queries, qb::select_value(queries, r, x, ygg::uint_t(0)), { y }), r };
+    const auto relaxed = relax(roots, { true, true, true, true });
+    ASSERT_TRUE(relaxed->relaxation.queries[1].has_value());
+    EXPECT_EQ(ygg::database::column_labels(relaxed->relaxation.queries[1]->columns()), (std::vector<Column> { x, y }));
 }
 
 }  // namespace
