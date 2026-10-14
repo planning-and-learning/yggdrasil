@@ -6,8 +6,6 @@
 #ifndef YGG_DATABASE_SYNTAX_TRANSLATIONS_RELAXATION_HPP_
 #define YGG_DATABASE_SYNTAX_TRANSLATIONS_RELAXATION_HPP_
 
-#include "yggdrasil/containers/associative_containers.hpp"
-#include "yggdrasil/database/syntax/copy.hpp"
 #include "yggdrasil/database/syntax/operator_builder.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
@@ -35,6 +33,16 @@ struct Relaxation
 namespace detail
 {
 
+/// Which side of R a relaxation bounds: the over-approximation R̂ contains every possible answer, the
+/// under-approximation Ř only certain ones (see relax() below). A subtrahend is bounded on the other side.
+enum class Polarity
+{
+    over,
+    under
+};
+
+constexpr Polarity flip(Polarity polarity) noexcept { return polarity == Polarity::over ? Polarity::under : Polarity::over; }
+
 template<ColumnTypes Values, std::predicate<size_t> Known>
 class Relaxer
 {
@@ -43,30 +51,14 @@ class Relaxer
 public:
     Relaxer(QueryRepository<Values>& repository, QueryBuilder<Values>& builder, Known known) : m_build(repository, builder), m_known(std::move(known)) {}
 
-    /// The relaxation of `query` restricted to the needed labels `needed` (see relax() below).
-    std::optional<QueryView<Values>> relax(QueryView<Values> query, const Labels& needed)
+    /// The relaxation of `query` on the side `polarity`, restricted to the needed labels `needed` (see relax() below);
+    /// nullopt means nothing is known: ⊤ when over, ∅ when under.
+    std::optional<QueryView<Values>> relax(QueryView<Values> query, const Labels& needed, Polarity polarity)
     {
-        auto key = std::pair { query.get_index().get_value(), std::vector<uint_t>() };
-        for (const auto label : needed)
-            key.second.push_back(label.get_value());
-        std::ranges::sort(key.second);
-        if (const auto it = m_relaxed.find(key); it != m_relaxed.end())
-        {
-            // The cached result has the needed labels in the order of the first request; reorder them to `needed`.
-            auto cached = it->second;
-            if (cached)
-            {
-                const auto reordered = intersection(needed, labels(*cached));
-                if (reordered != labels(*cached))
-                    cached = m_build.project(*cached, reordered);
-            }
-            return cached;
-        }
-        auto result = ygg::visit([&]<typename Tag>(QueryView<Values, Tag> concrete) { return relax(concrete, needed); }, query.get_variant());
+        auto result = ygg::visit([&]<typename Tag>(QueryView<Values, Tag> concrete) { return relax(concrete, needed, polarity); }, query.get_variant());
         // Labels nobody needs are eliminated here, in the order of `needed`; with none needed, only the emptiness remains.
         if (result)
             result = m_build.project(*result, intersection(needed, labels(*result)));
-        m_relaxed.emplace(std::move(key), result);
         return result;
     }
 
@@ -76,7 +68,6 @@ private:
     OperatorBuilder<Values> m_build;
     Known m_known;
     std::vector<size_t> m_slots;  ///< The original slot of each relaxed input.
-    UnorderedMap<std::pair<uint_t, std::vector<uint_t>>, std::optional<QueryView<Values>>> m_relaxed;
 
     static Labels labels(QueryView<Values> query) { return column_labels(query.columns()); }
     static bool contains(const Labels& labels, Index<Column> label) { return std::ranges::find(labels, label) != labels.end(); }
@@ -112,13 +103,6 @@ private:
         m_slots.push_back(slot);
         return m_slots.size() - 1;
     }
-    /// The query itself over the relaxed inputs, or nullopt if it reads an unknown input.
-    std::optional<QueryView<Values>> copy(QueryView<Values> query)
-    {
-        if (!std::ranges::all_of(input_slots(std::span<const QueryView<Values>>(&query, 1)), m_known))
-            return std::nullopt;
-        return database::copy(query, [&](size_t slot) { return renumbered(slot); }, m_build.repository(), m_build.builder());
-    }
     std::optional<QueryView<Values>> input(QueryView<Values, QueryInputTag> concrete)
     {
         const auto slot = concrete.get_input_slot();
@@ -132,18 +116,27 @@ private:
                 data.columns.set(columns.begin(), columns.end());
             });
     }
-    /// A ⋈ B, where an unconstrained side drops out.
-    std::optional<QueryView<Values>> join(std::optional<QueryView<Values>> lhs, std::optional<QueryView<Values>> rhs)
+    /// A conjunction (⋈, ⋉) of relaxed operands: an unknown side is its identity ⊤ when over and absorbs it as ∅ when
+    /// under.
+    template<typename Tag>
+    std::optional<QueryView<Values>> conjoin(std::optional<QueryView<Values>> lhs, std::optional<QueryView<Values>> rhs, Polarity polarity)
     {
-        if (!lhs)
-            return rhs;
-        if (!rhs)
-            return lhs;
-        return m_build.join(*lhs, *rhs);
+        if (!lhs || !rhs)
+            return polarity == Polarity::over ? (lhs ? lhs : rhs) : std::nullopt;
+        return m_build.template binary<Tag>(*lhs, *rhs);
+    }
+    /// A union of relaxed operands: an unknown side absorbs it as ⊤ when over and is its identity ∅ when under. Only
+    /// labels both sides constrain stay constrained.
+    std::optional<QueryView<Values>> disjoin(std::optional<QueryView<Values>> lhs, std::optional<QueryView<Values>> rhs, Polarity polarity)
+    {
+        if (!lhs || !rhs)
+            return polarity == Polarity::over ? std::nullopt : (lhs ? lhs : rhs);
+        const auto common = intersection(labels(*lhs), labels(*rhs));
+        return m_build.template binary<QueryUnionTag>(m_build.project(*lhs, common), m_build.project(*rhs, common));
     }
 
     template<typename Tag>
-    std::optional<QueryView<Values>> relax(QueryView<Values, Tag> concrete, const Labels& needed)
+    std::optional<QueryView<Values>> relax(QueryView<Values, Tag> concrete, const Labels& needed, Polarity polarity)
     {
         if constexpr (std::same_as<Tag, QueryInputTag>)
             return input(concrete);
@@ -165,12 +158,13 @@ private:
                 for (size_t j = 0; j < conjuncts.size(); ++j)
                     if (j != k)
                         others = united(std::move(others), labels(conjuncts[j]));
-                result = join(result, relax(conjuncts[k], intersection(labels(conjuncts[k]), others)));
+                const auto relaxed = relax(conjuncts[k], intersection(labels(conjuncts[k]), others), polarity);
+                result = k == 0 ? relaxed : conjoin<QueryJoinTag>(result, relaxed, polarity);
             }
             return result;
         }
         else if constexpr (std::same_as<Tag, QueryProjectTag>)
-            return relax(concrete.get_arg(), needed);
+            return relax(concrete.get_arg(), needed, polarity);
         else if constexpr (std::same_as<Tag, QueryRenameTag>)
         {
             const auto before = concrete.get_arg().columns();
@@ -178,7 +172,7 @@ private:
             auto inner = Labels();
             for (const auto label : needed)
                 inner.push_back(before[column_index(after, label)].label);
-            const auto arg = relax(concrete.get_arg(), inner);
+            const auto arg = relax(concrete.get_arg(), inner, polarity);
             if (!arg)
                 return std::nullopt;
             // The relaxed columns keep their labels' positions in the argument's schema.
@@ -197,7 +191,7 @@ private:
                 else
                     return Labels { data.column };
             }();
-            const auto arg = relax(concrete.get_arg(), united(needed, selected));
+            const auto arg = relax(concrete.get_arg(), united(needed, selected), polarity);
             if (!arg)
                 return std::nullopt;
             // A selection on an unconstrained column is dropped.
@@ -211,50 +205,36 @@ private:
                 });
         }
         else if constexpr (std::same_as<Tag, QueryUnionTag>)
-        {
-            const auto lhs = relax(concrete.get_lhs(), needed);
-            const auto rhs = relax(concrete.get_rhs(), needed);
-            if (!lhs || !rhs)
-                return std::nullopt;
-            // Only labels constrained on both sides stay constrained.
-            const auto common = intersection(labels(*lhs), labels(*rhs));
-            return m_build.template binary<QueryUnionTag>(m_build.project(*lhs, common), m_build.project(*rhs, common));
-        }
-        else if constexpr (std::same_as<Tag, QueryDifferenceTag>)
-        {
-            const auto lhs = relax(concrete.get_lhs(), needed);
-            if (!lhs)
-                return std::nullopt;
-            // Subtracting is kept only when exact: every label needed and constrained, and a known rhs.
-            const auto schema = labels(concrete.get_lhs());
-            if (subset(schema, needed) && subset(schema, labels(*lhs)))
-                if (const auto rhs = copy(concrete.get_rhs()))
-                    return m_build.template binary<QueryDifferenceTag>(*lhs, m_build.project(*rhs, labels(*lhs)));
-            return lhs;
-        }
+            return disjoin(relax(concrete.get_lhs(), needed, polarity), relax(concrete.get_rhs(), needed, polarity), polarity);
         else if constexpr (std::same_as<Tag, QuerySemijoinTag>)
         {
             const auto shared = intersection(labels(concrete.get_lhs()), labels(concrete.get_rhs()));
-            const auto lhs = relax(concrete.get_lhs(), united(needed, shared));
-            if (!lhs)
-                return std::nullopt;
-            const auto rhs = relax(concrete.get_rhs(), shared);
-            if (!rhs)
-                return lhs;
-            return m_build.template binary<QuerySemijoinTag>(*lhs, *rhs);
+            return conjoin<QuerySemijoinTag>(relax(concrete.get_lhs(), united(needed, shared), polarity),
+                                             relax(concrete.get_rhs(), shared, polarity),
+                                             polarity);
         }
-        else if constexpr (std::same_as<Tag, QueryAntijoinTag>)
+        else if constexpr (std::same_as<Tag, QueryDifferenceTag> || std::same_as<Tag, QueryAntijoinTag>)
         {
-            const auto lhs = relax(concrete.get_lhs(), needed);
-            if (!lhs)
-                return std::nullopt;
-            // Kept only as a filter on needed labels the relaxed lhs constrains, with a known rhs; filtering on labels
-            // eliminated above would require all their values (relational division).
+            // A \ B is A ▷ B on all of A's labels. The subtrahend is bounded on the other side: B̂ ⊇ B when under,
+            // B̌ ⊆ B when over.
             const auto shared = intersection(labels(concrete.get_lhs()), labels(concrete.get_rhs()));
-            if (subset(shared, needed) && subset(shared, labels(*lhs)))
-                if (const auto rhs = copy(concrete.get_rhs()))
-                    return m_build.template binary<QueryAntijoinTag>(*lhs, *rhs);
-            return lhs;
+            const auto lhs = relax(concrete.get_lhs(), polarity == Polarity::under ? united(needed, shared) : needed, polarity);
+            const auto rhs = relax(concrete.get_rhs(), shared, flip(polarity));
+            if (polarity == Polarity::under)
+            {
+                // B ⊆ B̂ × U: a row matching no row of B̂ on its labels matches none of B. Subtracting ⊤ leaves ∅.
+                if (!lhs || !rhs)
+                    return std::nullopt;
+                return m_build.template binary<QueryAntijoinTag>(*lhs, *rhs);
+            }
+            // Kept only as a filter on needed labels the relaxed lhs constrains; filtering on labels eliminated above
+            // would require all their values (relational division). Subtracting ∅ leaves the lhs.
+            if (!lhs || !rhs || !subset(shared, needed) || !subset(shared, labels(*lhs)))
+                return lhs;
+            if constexpr (std::same_as<Tag, QueryDifferenceTag>)
+                return m_build.template binary<Tag>(*lhs, m_build.project(*rhs, labels(*lhs)));
+            else
+                return m_build.template binary<Tag>(*lhs, *rhs);
         }
         else
         {
@@ -273,56 +253,69 @@ private:
 /// where U is the universe of values. Labels outside S' are unconstrained; nullopt (written ⊤ below) means no label
 /// is constrained. All roots share one numbering of the known inputs, so they can be compiled together.
 ///
-/// Translation, by induction on Q, of R̂_N = relax(R) restricted to the needed labels N (initially all of the root's
-/// labels; pass π_L(Q) to need only L). Every result is finally projected onto its labels in N, so a subquery with
-/// nothing needed becomes nullary, a test of its non-emptiness. S_R is R's schema, S'_R that of R̂, shared = S_A ∩ S_B,
-/// and R̃ is R itself if it reads only known inputs, otherwise ⊤:
+/// Subtrahends need the opposite bound, so the translation has two polarities: the over-approximation R̂ above and an
+/// under-approximation Ř, which reads only the known inputs, has R's schema, and satisfies Ř(I) ⊆ R(I) for all inputs
+/// I; nullopt (written ∅ below) means nothing is certain. Negation flips the polarity.
 ///
-///     Q                    Q̂ under N
-///     -------------------  ---------------------------------------------------------------------------------
-///     input s              s if known(s), otherwise ⊤
-///     empty                empty
-///     A ⋈ B, generic join  ⋈ of the conjuncts, each under its labels needed in N or by another conjunct;
-///                          a ⊤ conjunct drops out (⊤ is the identity of ⋈)
-///     π_L(A)               Â_N
-///     ρ(A)                 Â_ρ⁻¹(N), renamed as in ρ; ⊤ if Â = ⊤
-///     σ(A)                 σ(Â_(N ∪ selected)) if Â constrains the selected columns, otherwise Â_(N ∪ selected)
-///     A ∪ B                π_C(Â_N) ∪ π_C(B̂_N) with C = S'_A ∩ S'_B, possibly nullary; ⊤ if a side is ⊤
-///     A \ B                Â_N \ B̃ if N ⊇ S_A = S'_A and B̃ ≠ ⊤, otherwise Â_N
-///     A ⋉ B                Â_(N ∪ shared) ⋉ B̂_shared, or Â if B̂ = ⊤
-///     A ▷ B                Â_N ▷ B̃ if shared ⊆ N ∩ S'_A and B̃ ≠ ⊤, otherwise Â_N
+/// Translation, by induction on R, restricted to the needed labels N (initially all of the root's labels; pass π_L(Q)
+/// to need only L). Every result is finally projected onto its labels in N, so a subquery with nothing needed becomes
+/// nullary, a test of its non-emptiness; an under-approximation keeps all of N. S_R is R's schema, S'_R that of R̂, and
+/// shared = S_A ∩ S_B:
+///
+///     R                    R̂ under N                                     Ř under N
+///     -------------------  --------------------------------------------  -------------------------------------
+///     input s              s if known(s), otherwise ⊤                    s if known(s), otherwise ∅
+///     empty                empty                                         empty
+///     A ⋈ B, generic join  ⋈ of the conjuncts, each under its labels     the same ⋈; ∅ if a conjunct is ∅
+///                          needed in N or by another conjunct; a ⊤
+///                          conjunct drops out (the identity of ⋈)
+///     π_L(A)               Â_N                                           Ǎ_N
+///     ρ(A)                 Â_ρ⁻¹(N), renamed as in ρ; ⊤ if Â = ⊤          the same with Ǎ; ∅ if Ǎ = ∅
+///     σ(A)                 σ(Â_(N ∪ selected)) if Â constrains the       σ(Ǎ_(N ∪ selected)); ∅ if Ǎ = ∅
+///                          selected columns, otherwise Â_(N ∪ selected)
+///     A ∪ B                π_C(Â_N) ∪ π_C(B̂_N) with C = S'_A ∩ S'_B,      Ǎ_N ∪ B̌_N; a ∅ side drops out
+///                          possibly nullary; ⊤ if a side is ⊤
+///     A ⋉ B                Â_(N ∪ shared) ⋉ B̂_shared; a ⊤ side drops    Ǎ_(N ∪ shared) ⋉ B̌_shared; ∅ if a side is ∅
+///                          out (the identity of ⋉)
+///     A \ B                Â_N \ B̌_shared if N ⊇ S_A = S'_A and B̌ ≠ ∅,  Ǎ_(N ∪ shared) ▷ B̂_shared; ∅ if B̂ = ⊤
+///                          otherwise Â_N
+///     A ▷ B                Â_N ▷ B̌_shared if shared ⊆ N ∩ S'_A and       Ǎ_(N ∪ shared) ▷ B̂_shared; ∅ if B̂ = ⊤
+///                          B̌ ≠ ∅, otherwise Â_N
 ///     distance             not first-order; rejected
 ///
-/// Each rule keeps the contract: a ⊤ operand of ⋈ or ⋉ admits every row; eliminating a label no one needs is exact
-/// (π_L(A ⋈ B) = π_L(A) ⋈ π_∅(B) when B shares nothing with A or L); a union may only stay constrained where both
-/// sides are; subtracting an over-approximated or unknown set may remove too much, so only an exactly known subtrahend
-/// over needed labels is kept; a selection is checkable only on constrained columns. With every input known and no
-/// difference or antijoin below a projection that eliminates labels it shares, Q̂ = Q.
+/// Each rule keeps the contract: ⊤ is the identity of ⋈ and ⋉ and absorbs ∪, ∅ the reverse; eliminating a label no
+/// one needs is exact (π_L(A ⋈ B) = π_L(A) ⋈ π_∅(B) when B shares nothing with A or L); a union may only stay
+/// constrained where both sides are; a selection is checkable only on constrained columns. Subtracting B̌ ⊆ B removes
+/// no row of A \ B, if done on needed labels the relaxed lhs constrains; and as B ⊆ B̂ × U^(S_B \ S'_B), a row
+/// matching no row of B̂ on S'_B matches none of B, so Ǎ ▷ B̂ ⊆ A \ B. With every input known and no difference or
+/// antijoin below a projection that eliminates labels it shares, R̂ = Ř = R.
 ///
-/// Literature: Q̂ over-approximates the possible answers of Q in the possible-world semantics of incomplete
-/// databases, the unknown inputs being arbitrary relations (Imieliński & Lipski, "Incomplete Information in
-/// Relational Databases", JACM 1984; Abiteboul, Hull & Vianu, "Foundations of Databases", 1995, ch. 19; computing
-/// such approximations by query rewriting: Guagliardo & Libkin, "Making SQL Queries Correct on Incomplete
-/// Databases: A Feasibility Study", PODS 2016). In heuristic search, the same construction relaxes a problem by
-/// dropping the constraints it cannot evaluate in advance (Pearl, "Heuristics", 1984, ch. 4); relaxing π_L(Q) is the
-/// projection of pattern databases, which drops conditions on variables outside the pattern (Edelkamp, "Planning with
-/// Pattern Databases", ECP 2001; Haslum, Botea, Helmert, Bonet & Koenig, "Domain-Independent Construction of Pattern
-/// Database Heuristics for Cost-Optimal Planning", AAAI 2007), while antijoins within the pattern stay as in
-/// constrained pattern databases (Haslum, Bonet & Geffner, "New Admissible Heuristics for Domain-Independent
-/// Planning", AAAI 2005). Labels are eliminated as early as possible, as in early quantification (Burch, Clarke &
-/// Long, "Symbolic Model Checking with Partitioned Transition Relations", VLSI 1991) and variable elimination (Dechter,
-/// "Bucket Elimination", AIJ 1999; Abo Khamis, Ngo & Rudra, "FAQ: Questions Asked Frequently", PODS 2016); an exact
-/// antijoin on eliminated labels would need relational division (Codd, "Relational Completeness of Data Base
-/// Sublanguages", 1972). The rules above are our construction for yggdrasil's operators.
+/// Literature: R̂ over-approximates the possible answers of R and Ř under-approximates its certain answers in the
+/// possible-world semantics of incomplete databases, the unknown inputs being arbitrary relations (Imieliński &
+/// Lipski, "Incomplete Information in Relational Databases", JACM 1984; Abiteboul, Hull & Vianu, "Foundations of
+/// Databases", 1995, ch. 19). Both are computed by query rewriting, with negation exchanging them, (A − B)? = A? − B⁺,
+/// as in Guagliardo & Libkin's translations Q? and Q⁺ ("Making SQL Queries Correct on Incomplete Databases: A
+/// Feasibility Study", PODS 2016). In heuristic search, the same construction relaxes a problem by dropping the
+/// constraints it cannot evaluate in advance (Pearl, "Heuristics", 1984, ch. 4); relaxing π_L(Q) is the projection of
+/// pattern databases, which drops conditions on variables outside the pattern (Edelkamp, "Planning with Pattern
+/// Databases", ECP 2001; Haslum, Botea, Helmert, Bonet & Koenig, "Domain-Independent Construction of Pattern Database
+/// Heuristics for Cost-Optimal Planning", AAAI 2007), while antijoins within the pattern stay as in constrained
+/// pattern databases (Haslum, Bonet & Geffner, "New Admissible Heuristics for Domain-Independent Planning", AAAI
+/// 2005). Labels are eliminated as early as possible, as in early quantification (Burch, Clarke & Long, "Symbolic
+/// Model Checking with Partitioned Transition Relations", VLSI 1991) and variable elimination (Dechter, "Bucket
+/// Elimination", AIJ 1999; Abo Khamis, Ngo & Rudra, "FAQ: Questions Asked Frequently", PODS 2016); an exact antijoin
+/// on eliminated labels would need relational division (Codd, "Relational Completeness of Data Base Sublanguages",
+/// 1972). The treatment of eliminated labels in the rules above is our construction for yggdrasil's operators.
 ///
-/// The relaxed queries are built in `repository`; shared subqueries stay shared.
+/// The relaxed queries are built in `repository`, whose interning keeps shared subqueries shared. A subquery shared
+/// by several paths is relaxed once per path: edge queries are small, and this runs once per feature.
 template<ColumnTypes Values, std::predicate<size_t> Known>
 Relaxation<Values> relax(std::span<const QueryView<Values>> roots, Known&& known, QueryRepository<Values>& repository, QueryBuilder<Values>& builder)
 {
     auto relaxer = detail::Relaxer<Values, std::remove_cvref_t<Known>>(repository, builder, std::forward<Known>(known));
     auto queries = std::vector<std::optional<QueryView<Values>>>();
     for (const auto root : roots)
-        queries.push_back(relaxer.relax(root, column_labels(root.columns())));
+        queries.push_back(relaxer.relax(root, column_labels(root.columns()), detail::Polarity::over));
     return Relaxation<Values> { std::move(queries), std::move(relaxer).slots() };
 }
 

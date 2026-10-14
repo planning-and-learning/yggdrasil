@@ -205,6 +205,11 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
     const auto renamed = qb::rename(queries, unknown, { x, y });
     EXPECT_FALSE(relax(qb::union_(queries, known_edges, renamed), both_known)->relaxation.queries[0].has_value());
 
+    // A semijoin with an unknown lhs still constrains the shared label y by its known rhs: ⊤ ⋉ B̂ = B̂ on y.
+    const auto semi = relax(qb::semijoin(queries, unknown, known_edges), both_known);
+    ASSERT_TRUE(semi->relaxation.queries[0].has_value());
+    EXPECT_EQ(ygg::database::column_labels(semi->relaxation.queries[0]->columns()), (std::vector<Column> { y }));
+
     // A known antijoin rhs stays: the result is exact.
     const auto anti = relax(qb::antijoin(queries, known_edges, blocked), both_known);
     ASSERT_TRUE(anti->relaxation.queries[0].has_value());
@@ -388,7 +393,7 @@ TEST(DatabaseRelaxation, StopInsideAnExistenceStepEndsTheEvaluation)
     EXPECT_EQ(bound_successors(query, { &e, &i }).size(), 5);
 }
 
-TEST(DatabaseRelaxation, CachedRelaxationsKeepTheRequestedColumnOrder)
+TEST(DatabaseRelaxation, SharedSubqueriesKeepTheRequestedColumnOrder)
 {
     // π_y σ_{x=0} R relaxes R with the labels (y, x) first; the root R must still get R's relaxation as (x, y).
     auto queries = qb::repository<>();
@@ -397,6 +402,64 @@ TEST(DatabaseRelaxation, CachedRelaxationsKeepTheRequestedColumnOrder)
     const auto relaxed = relax(roots, { true, true, true, true });
     ASSERT_TRUE(relaxed->relaxation.queries[1].has_value());
     EXPECT_EQ(ygg::database::column_labels(relaxed->relaxation.queries[1]->columns()), (std::vector<Column> { x, y }));
+}
+
+/// Whether the root's relaxation, evaluated on the known inputs, equals `expected` evaluated on all of them.
+void expect_relaxes_to(View query, View expected, const std::array<bool, 4>& known, const std::array<Relation, 4>& inputs)
+{
+    const auto relaxed = relax(query, known);
+    ASSERT_TRUE(relaxed->relaxation.queries[0].has_value());
+    auto bound = std::vector<const Relation*>();
+    for (const auto slot : relaxed->relaxation.slots)
+        bound.push_back(&inputs[slot]);
+    const auto actual = evaluate(*relaxed->relaxation.queries[0], bound);
+    const auto wanted = evaluate(expected, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
+    EXPECT_EQ(actual.size(), wanted.size());
+    for (size_t i = 0; i < wanted.size(); ++i)
+        EXPECT_TRUE(actual.contains(wanted.row(i)));
+}
+
+std::array<Relation, 4> sample_inputs()
+{
+    auto inputs = std::array<Relation, 4> { Relation({ x, y }), Relation({ x, y }), Relation({ x, y }), Relation({ y, z }) };
+    auto random = std::mt19937(17);
+    for (auto& input : inputs)
+        for (ygg::uint_t left = 0; left < 4; ++left)
+            for (ygg::uint_t right = 0; right < 4; ++right)
+                if (random() % 2 != 0)
+                    input.insert(std::tuple { left, right });
+    return inputs;
+}
+
+TEST(DatabaseRelaxation, MixedSubtrahendsKeepTheirKnownPart)
+{
+    // A subtrahend is under-approximated: its known part is subtracted, its unknown part is not.
+    auto queries = qb::repository<>();
+    const auto a = qb::input(queries, 0, { x, y });
+    const auto b = qb::input(queries, 1, { x, y });
+    const auto c = qb::input(queries, 2, { x, y });
+    const auto known = std::array { true, true, false, true };
+    const auto inputs = sample_inputs();
+    expect_relaxes_to(qb::difference(queries, a, qb::union_(queries, b, c)), qb::difference(queries, a, b), known, inputs);
+    expect_relaxes_to(qb::antijoin(queries, a, qb::union_(queries, b, c)), qb::antijoin(queries, a, b), known, inputs);
+    // Nothing of B ⋈ C is certain, so nothing is subtracted.
+    expect_relaxes_to(qb::difference(queries, a, qb::join(queries, b, c)), a, known, inputs);
+}
+
+TEST(DatabaseRelaxation, NestedSubtrahendsFlipPolarityTwice)
+{
+    // A \ (B \ π_{x,y}(C ⋈ E)) with E unknown: the inner subtrahend is over-approximated by C, so the outer one is
+    // under-approximated by B \ C. With C unknown too, nothing of the outer subtrahend is certain.
+    auto queries = qb::repository<>();
+    const auto a = qb::input(queries, 0, { x, y });
+    const auto b = qb::input(queries, 1, { x, y });
+    const auto c = qb::input(queries, 2, { x, y });
+    const auto e = qb::input(queries, 3, { y, z });
+    const auto inner = qb::project(queries, qb::join(queries, c, e), { x, y });
+    const auto query = qb::difference(queries, a, qb::difference(queries, b, inner));
+    const auto inputs = sample_inputs();
+    expect_relaxes_to(query, qb::difference(queries, a, qb::difference(queries, b, c)), { true, true, true, false }, inputs);
+    expect_relaxes_to(query, a, { true, true, false, false }, inputs);
 }
 
 }  // namespace
