@@ -107,6 +107,11 @@ private:
 /// and are only known when observed. Not modeled: distributing joins over unions,
 /// sharing-aware choices across roots, and costs of incremental maintenance.
 ///
+/// Steps 2 to 4 assume full evaluation. A root evaluated bound only gets step 1: the
+/// bound evaluator flattens its query and orders the joins per binding from the bound
+/// columns, so a plan made for full materialization (for instance Yannakakis'
+/// semijoins) would only add atoms to every binding's plan.
+///
 /// The roots belong to one repository; the plan preserves every root's ordered, typed
 /// schema and set semantics.
 ///
@@ -133,9 +138,19 @@ private:
 /// [LEO01] M. Stillger, G. Lohman, V. Markl, M. Kandil, LEO – DB2's LEarning Optimizer,
 ///     VLDB 2001.
 template<ColumnTypes Values>
+QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots,
+                           std::span<const Evaluation> evaluations,
+                           const std::type_identity_t<Statistics<Values>>& statistics = {})
+{
+    return detail::optimize(roots, evaluations, statistics);
+}
+
+/// Plans roots that are all evaluated fully.
+template<ColumnTypes Values>
 QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
 {
-    return detail::optimize(roots, statistics);
+    const auto evaluations = std::vector<Evaluation>(roots.size(), Evaluation::full);
+    return optimize(roots, std::span<const Evaluation>(evaluations), statistics);
 }
 
 template<ColumnTypes Values>

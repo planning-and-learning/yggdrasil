@@ -10,6 +10,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace yggdrasil
@@ -45,10 +46,21 @@ void bind_database_optimization(nb::module_& m)
         .def_rw("inputs", &Statistics::inputs)
         .def_rw("expressions", &Statistics::expressions);
 
-    m.def("optimize",
-          &ygg::database::optimize<Values, Roots>,
-          nb::arg("roots"),
-          nb::arg("statistics") = Statistics {},
-          "Plan from structure, and from statistics for join blocks whose inputs are all measured.");
+    using Evaluation = ygg::database::Evaluation;
+    nb::enum_<Evaluation>(m, "Evaluation", "How a root is evaluated: fully, or bound with some columns given per call.")
+        .value("FULL", Evaluation::full)
+        .value("BOUND", Evaluation::bound);
+    m.def(
+        "optimize",
+        [](const Roots& roots, const Statistics& statistics, std::optional<std::vector<Evaluation>> evaluations)
+        {
+            const auto modes = evaluations.value_or(std::vector<Evaluation>(roots.size(), Evaluation::full));
+            return ygg::database::optimize<Values>(std::span<const ygg::database::QueryView<Values>>(roots), std::span<const Evaluation>(modes), statistics);
+        },
+        nb::arg("roots"),
+        nb::arg("statistics") = Statistics {},
+        nb::arg("evaluations") = nb::none(),
+        "Plan from structure, and from statistics for join blocks whose inputs are all measured. Roots evaluated BOUND are "
+        "only normalized; evaluations defaults to FULL for every root.");
 }
 }  // namespace yggdrasil
