@@ -400,6 +400,33 @@ Both return `uint_t`'s maximum when no target is reachable, and 0 when a source 
 The incremental form counts result rows per distance value, so deleting the current minimum
 reveals the next one. Memory follows the wrapped evaluator, plus one counter per distance value.
 
+### Must-pass objects
+
+`MustPass` (`semantics/must_pass.hpp`) finds, per key, the probe objects that every path from the key's
+sources to its targets passes in some vertex: the landmarks of the key's graph (Hoffmann, Porteous &
+Sebastia, JAIR 2004). Sources, edges and targets start with the same key columns; a vertex has k columns;
+probes have one column, and a vertex contains an object if one of its columns of the probes' type holds it:
+
+```cpp
+// sources (key…, vertex), edges (key…, from, to), targets (key…, vertex), probes (object)
+MustPassPlan<> plan(sources.columns().span(), edge_query.columns(), targets.columns().span(), probes.columns().span(), keys);
+MustPass<> must_pass(edge_query, plan);
+Builder<Relation<>> out(plan.output_columns().span());   // (key…, object)
+must_pass.must_pass(input, sources, targets, probes, out);
+```
+
+Like `MinDistance`, the edge query is evaluated on demand with the key and a vertex bound, so each key's
+graph is explored from its sources and never materialized. A* finds a shortest witness path; only probe
+objects on it can be must-pass. Objects in every source or every target are trivially must-pass (initial facts and
+goals are landmarks); every other object on the witness is verified as in landmark detection (Richter,
+Helmert & Westphal, AAAI 2008) by testing whether the targets stay reachable without the vertices
+containing it. Each search is bidirectional: a backward breadth-first search from the targets alternates
+with the forward side by the vertices each expanded, and its exhaustion proves unreachability from the
+smaller side. An optional heuristic (`MustPass<Values, H>`, given the key followed by a vertex) guides the
+forward side; with `exclude(key, object)` it is told which object a verification avoids. A key whose targets are unreachable has none. An edge
+query that projects vertices onto fewer columns is an abstraction: objects that must be passed in the
+projection must be passed by every original path too.
+
 ### Distance from Python
 
 Column labels are `ColumnIndex` values. Python evaluators and `distance` take
