@@ -44,6 +44,32 @@ struct Object
 {
 };
 
+template<typename ObjectTag, typename T, bool ThreadSafe>
+class BasicRelationRepository;
+
+template<typename ObjectTag, typename T, bool ThreadSafe>
+class PackedRelationRepository;
+
+/// Selects the repository implementation of relation T as `type`. Selectors are class templates: alias templates as
+/// template template arguments do not have a stable identity, which yields inconsistent symbol names across translation units.
+template<typename ObjectTag, typename T, bool ThreadSafe>
+struct DefaultRelationRepositorySelector
+{
+    using type = BasicRelationRepository<ObjectTag, T, ThreadSafe>;
+};
+
+template<template<typename, typename, bool> typename Selector, typename ObjectTag, typename... Ts>
+class SelectedRelationRepository;
+
+template<template<typename, typename, bool> typename Selector, typename ObjectTag, typename... Ts>
+class SelectedConcurrentRelationRepository;
+
+template<typename ObjectTag, typename... Ts>
+using RelationRepository = SelectedRelationRepository<DefaultRelationRepositorySelector, ObjectTag, Ts...>;
+
+template<typename ObjectTag, typename... Ts>
+using ConcurrentRelationRepository = SelectedConcurrentRelationRepository<DefaultRelationRepositorySelector, ObjectTag, Ts...>;
+
 struct Row
 {
 };

@@ -32,16 +32,10 @@
 
 namespace ygg::formalism
 {
-template<typename ObjectTag, typename... Ts>
-class RelationRepository;
-
-template<typename ObjectTag, typename... Ts>
-class ConcurrentRelationRepository;
-
 namespace detail
 {
-template<typename Repository, typename ObjectTag, bool ThreadSafe, typename... Ts>
-class RelationRepositoryBase : private BasicRelationRepository<ObjectTag, Ts, ThreadSafe>...
+template<typename Repository, typename ObjectTag, bool ThreadSafe, template<typename, typename, bool> typename Selector, typename... Ts>
+class RelationRepositoryBase : private Selector<ObjectTag, Ts, ThreadSafe>::type...
 {
 private:
     template<typename T, typename...>
@@ -59,8 +53,13 @@ private:
 public:
     using object_tag = ObjectTag;
     using RelationTypes = TypeList<Ts...>;
-    using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type, ThreadSafe>::container_type;
+    using container_type = typename Selector<ObjectTag, typename FirstType<Ts...>::type, ThreadSafe>::type::container_type;
     static constexpr bool thread_safe = ThreadSafe;
+
+    /// Whether the bindings of relation T are stored, i.e., inserting one can create it.
+    template<typename T>
+        requires SupportsRelation<RelationRepositoryBase, T>
+    static constexpr bool stores_bindings = Selector<ObjectTag, T, ThreadSafe>::type::stores_bindings;
 
     friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
 
@@ -187,17 +186,13 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() noexcept
-    {
-        return static_cast<BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this);
-    }
+    typename Selector<ObjectTag, T, ThreadSafe>::type& get() noexcept
+    { return static_cast<typename Selector<ObjectTag, T, ThreadSafe>::type&>(*this); }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    const BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() const noexcept
-    {
-        return static_cast<const BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this);
-    }
+    const typename Selector<ObjectTag, T, ThreadSafe>::type& get() const noexcept
+    { return static_cast<const typename Selector<ObjectTag, T, ThreadSafe>::type&>(*this); }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
@@ -299,7 +294,7 @@ public:
     RelationRepositoryBase(size_t index, const Repository* parent = nullptr) : RelationRepositoryBase(index, parent, RelationRepositoryConfig()) {}
 
     RelationRepositoryBase(size_t index, const Repository* parent, RelationRepositoryConfig config) :
-        BasicRelationRepository<ObjectTag, Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr, config)...,
+        Selector<ObjectTag, Ts, ThreadSafe>::type(parent ? &parent->template get<Ts>() : nullptr, config)...,
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),
         m_index(index)
@@ -320,31 +315,35 @@ public:
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept
-    {
-        return BasicRelationRepository<ObjectTag, T, ThreadSafe>::hash(builder);
-    }
+    { return Selector<ObjectTag, T, ThreadSafe>::type::hash(builder); }
 };
 }  // namespace detail
 
-template<typename ObjectTag, typename... Ts>
-class RelationRepository : public detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>
+template<template<typename, typename, bool> typename Selector, typename ObjectTag, typename... Ts>
+class SelectedRelationRepository :
+    public detail::RelationRepositoryBase<SelectedRelationRepository<Selector, ObjectTag, Ts...>, ObjectTag, false, Selector, Ts...>
 {
-    using Base = detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>;
+    using Base = detail::RelationRepositoryBase<SelectedRelationRepository<Selector, ObjectTag, Ts...>, ObjectTag, false, Selector, Ts...>;
 
 public:
-    RelationRepository(size_t index, const RelationRepository* parent = nullptr) : Base(index, parent) {}
-    RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
+    SelectedRelationRepository(size_t index, const SelectedRelationRepository* parent = nullptr) : Base(index, parent) {}
+    SelectedRelationRepository(size_t index, const SelectedRelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
 };
 
-template<typename ObjectTag, typename... Ts>
-class ConcurrentRelationRepository : public detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>
+template<template<typename, typename, bool> typename Selector, typename ObjectTag, typename... Ts>
+class SelectedConcurrentRelationRepository :
+    public detail::RelationRepositoryBase<SelectedConcurrentRelationRepository<Selector, ObjectTag, Ts...>, ObjectTag, true, Selector, Ts...>
 {
-    using Base = detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>;
+    using Base = detail::RelationRepositoryBase<SelectedConcurrentRelationRepository<Selector, ObjectTag, Ts...>, ObjectTag, true, Selector, Ts...>;
 
 public:
-    ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent = nullptr) : Base(index, parent) {}
-    ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
+    SelectedConcurrentRelationRepository(size_t index, const SelectedConcurrentRelationRepository* parent = nullptr) : Base(index, parent) {}
+    SelectedConcurrentRelationRepository(size_t index, const SelectedConcurrentRelationRepository* parent, RelationRepositoryConfig config) :
+        Base(index, parent, config)
+    {
+    }
 };
+
 }  // namespace ygg::formalism
 
 #endif

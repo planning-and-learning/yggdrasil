@@ -186,15 +186,14 @@ private:
     const Container* m_handle;
 };
 
-template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
-class View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>
+namespace detail
 {
-private:
-    using Container = BasicBitPackedArrayView<Block, Coder, ThreadSafe>;
-    using T = bit::CoderValue<Coder>;
-
+/// Read-only view over a container held by value, e.g., a proxy that decodes its elements on access.
+template<typename Container, typename T, typename C>
+class OwningRangeView
+{
 public:
-    View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
+    OwningRangeView(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
     size_t size() const noexcept { return get_data().size(); }
     bool empty() const noexcept { return get_data().empty(); }
@@ -335,155 +334,21 @@ private:
     const C* m_context;
     Container m_handle;
 };
+}  // namespace detail
+
+template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
+class View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C> :
+    public detail::OwningRangeView<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, bit::CoderValue<Coder>, C>
+{
+public:
+    using detail::OwningRangeView<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, bit::CoderValue<Coder>, C>::OwningRangeView;
+};
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
-class View<BasicBlockArrayView<Block, Coder>, C>
+class View<BasicBlockArrayView<Block, Coder>, C> : public detail::OwningRangeView<BasicBlockArrayView<Block, Coder>, bit::CoderValue<Coder>, C>
 {
-private:
-    using Container = BasicBlockArrayView<Block, Coder>;
-    using T = bit::CoderValue<Coder>;
-
 public:
-    View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
-
-    size_t size() const noexcept { return get_data().size(); }
-    bool empty() const noexcept { return get_data().empty(); }
-
-    decltype(auto) operator[](size_t i) const
-    {
-        if constexpr (ViewConcept<T, C>)
-            return make_view(get_data()[i], get_context());
-        else
-            return get_data()[i];
-    }
-
-    decltype(auto) at(size_t i) const
-    {
-        if constexpr (ViewConcept<T, C>)
-            return make_view(get_data().at(i), get_context());
-        else
-            return get_data().at(i);
-    }
-
-    decltype(auto) front() const
-    {
-        if constexpr (ViewConcept<T, C>)
-            return make_view(get_data().front(), get_context());
-        else
-            return get_data().front();
-    }
-
-    decltype(auto) back() const
-    {
-        if constexpr (ViewConcept<T, C>)
-            return make_view(get_data().back(), get_context());
-        else
-            return get_data().back();
-    }
-
-    struct const_iterator
-    {
-        const C* ctx;
-        ContainerConstIterator<Container> it;
-
-        using difference_type = std::ptrdiff_t;
-        using value_type = ViewOrValue<T, C>;
-        using iterator_category = std::random_access_iterator_tag;
-        using iterator_concept = std::random_access_iterator_tag;
-
-        const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
-
-        decltype(auto) operator*() const
-        {
-            if constexpr (ViewConcept<T, C>)
-                return make_view(*it, *ctx);
-            else
-                return *it;
-        }
-
-        // ++
-        const_iterator& operator++() noexcept
-        {
-            ++it;
-            return *this;
-        }
-        const_iterator operator++(int) noexcept
-        {
-            auto tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        // --
-        const_iterator& operator--() noexcept
-        {
-            --it;
-            return *this;
-        }
-        const_iterator operator--(int) noexcept
-        {
-            auto tmp = *this;
-            --(*this);
-            return tmp;
-        }
-
-        // += / -=
-        const_iterator& operator+=(difference_type n) noexcept
-        {
-            it += n;
-            return *this;
-        }
-        const_iterator& operator-=(difference_type n) noexcept
-        {
-            it -= n;
-            return *this;
-        }
-
-        // + / -
-        friend const_iterator operator+(const_iterator it, difference_type n) noexcept
-        {
-            it += n;
-            return it;
-        }
-
-        friend const_iterator operator+(difference_type n, const_iterator it) noexcept
-        {
-            it += n;
-            return it;
-        }
-
-        friend const_iterator operator-(const_iterator it, difference_type n) noexcept
-        {
-            it -= n;
-            return it;
-        }
-
-        // iterator - iterator
-        friend difference_type operator-(const_iterator lhs, const_iterator rhs) noexcept { return lhs.it - rhs.it; }
-
-        // []
-        auto operator[](difference_type n) const { return *(*this + n); }
-
-        friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it == rhs.it; }
-        friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
-    };
-
-    const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
-
-    const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
-
-    const_iterator cbegin() const noexcept { return begin(); }
-
-    const_iterator cend() const noexcept { return end(); }
-
-    const auto& get_data() const noexcept { return m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
-
-private:
-    const C* m_context;
-    Container m_handle;
+    using detail::OwningRangeView<BasicBlockArrayView<Block, Coder>, bit::CoderValue<Coder>, C>::OwningRangeView;
 };
 
 }  // namespace ygg

@@ -198,6 +198,11 @@ private:
 public:
     static constexpr bool thread_safe = SymbolRepo::thread_safe && RelationRepo::thread_safe;
 
+    /// Whether the bindings of relation T are stored, i.e., inserting one can create it.
+    template<typename T>
+        requires SupportsRelation<Repository, T>
+    static constexpr bool stores_bindings = RelationRepo::template stores_bindings<T>;
+
     friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
 
     /**
@@ -376,6 +381,17 @@ public:
     const auto& get_index() const noexcept { return m_index; }
     const auto& get_root() const noexcept { return *m_root; }
     std::uint8_t get_object_index_width() const noexcept { return m_relation_repository.get_object_index_width(); }
+
+    /// The repository of relation T in this layer, e.g., to configure it before its first binding.
+    template<typename T>
+        requires SupportsRelation<Repository, T>
+    auto& get_relation_repository() noexcept
+    { return m_relation_repository.template get<T>(); }
+
+    template<typename T>
+        requires SupportsRelation<Repository, T>
+    const auto& get_relation_repository() const noexcept
+    { return m_relation_repository.template get<T>(); }
 
     void clear() noexcept
     {

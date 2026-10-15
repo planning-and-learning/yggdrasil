@@ -20,7 +20,7 @@
 
 #include "yggdrasil/containers/bit_packed_array_set.hpp"
 #include "yggdrasil/containers/block_array_set.hpp"
-#include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/detail/slot_directory.hpp"
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
@@ -98,8 +98,6 @@ template<typename ObjectTag, typename T, bool ThreadSafe = false>
 class BasicRelationRepository
 {
 private:
-    static constexpr ygg::uint_t kInvalid = std::numeric_limits<ygg::uint_t>::max();
-
     using storage_type = typename RelationRepositoryTraits<ObjectTag>::storage_type;
 
     static auto make_container(size_t arity, std::uint8_t object_index_width)
@@ -123,189 +121,7 @@ private:
         }
     };
 
-    class SequentialSlotDirectory
-    {
-    public:
-        Slot* find(ygg::uint_t gi) noexcept
-        {
-            if (gi >= m_forward.size() || m_forward[gi] == kInvalid)
-                return nullptr;
-            return &m_slots[m_forward[gi]];
-        }
-
-        const Slot* find(ygg::uint_t gi) const noexcept { return const_cast<SequentialSlotDirectory*>(this)->find(gi); }
-
-        Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
-        {
-            const auto gi = ygg::uint_t(g);
-            if (gi >= m_forward.size())
-                m_forward.resize(gi + 1, kInvalid);
-
-            if (m_forward[gi] == kInvalid)
-            {
-                const auto slot = static_cast<ygg::uint_t>(m_slots.size());
-                m_slots.emplace_back(g, arity, parent_size, object_index_width);
-                m_forward[gi] = slot;
-            }
-
-            return m_slots[m_forward[gi]];
-        }
-
-        template<typename F>
-        void for_each(F&& function)
-        {
-            for (auto& slot : m_slots)
-                function(slot);
-        }
-
-        template<typename F>
-        void for_each(F&& function) const
-        {
-            for (const auto& slot : m_slots)
-                function(slot);
-        }
-
-        size_t memory_usage() const noexcept { return m_forward.capacity() * sizeof(ygg::uint_t) + m_slots.capacity() * sizeof(Slot); }
-
-    private:
-        std::vector<ygg::uint_t> m_forward;
-        std::vector<Slot> m_slots;
-    };
-
-    class ConcurrentSlotDirectory
-    {
-    private:
-        using Layout = ::ygg::detail::GeometricSegmentLayout<32, ygg::uint_t>;
-        static constexpr auto kMaxIndex = std::numeric_limits<ygg::uint_t>::max() - 1;
-        static constexpr size_t kNumSegments = Layout::segment_index(kMaxIndex) + 1;
-
-        struct Segment
-        {
-            explicit Segment(size_t size) : entries(std::make_unique<std::atomic<Slot*>[]>(size)), size(size)
-            {
-                for (size_t i = 0; i < size; ++i)
-                    entries[i].store(nullptr, std::memory_order_relaxed);
-            }
-
-            std::unique_ptr<std::atomic<Slot*>[]> entries;
-            size_t size;
-        };
-
-        static std::pair<size_t, size_t> locate(ygg::uint_t gi) noexcept
-        {
-            const auto segment = Layout::segment_index(gi);
-            return { segment, Layout::segment_offset(gi, segment) };
-        }
-
-        static constexpr size_t segment_size(size_t segment) noexcept
-        {
-            return segment + 1 == kNumSegments ? Layout::segment_offset(kMaxIndex, segment) + 1 : Layout::segment_capacity(segment);
-        }
-
-        Segment& get_or_create_segment(size_t index)
-        {
-            auto* segment = m_segments[index].load(std::memory_order_acquire);
-            if (segment)
-                return *segment;
-
-            auto candidate = std::make_unique<Segment>(segment_size(index));
-            auto* expected = static_cast<Segment*>(nullptr);
-            if (m_segments[index].compare_exchange_strong(expected, candidate.get(), std::memory_order_release, std::memory_order_acquire))
-                segment = candidate.release();
-            else
-                segment = expected;
-
-            return *segment;
-        }
-
-    public:
-        ConcurrentSlotDirectory() noexcept
-        {
-            for (auto& segment : m_segments)
-                segment.store(nullptr, std::memory_order_relaxed);
-        }
-
-        ~ConcurrentSlotDirectory()
-        {
-            for (auto& segment_ptr : m_segments)
-            {
-                auto* segment = segment_ptr.load(std::memory_order_relaxed);
-                if (!segment)
-                    continue;
-                for (size_t i = 0; i < segment->size; ++i)
-                    delete segment->entries[i].load(std::memory_order_relaxed);
-                delete segment;
-            }
-        }
-
-        ConcurrentSlotDirectory(const ConcurrentSlotDirectory&) = delete;
-        ConcurrentSlotDirectory& operator=(const ConcurrentSlotDirectory&) = delete;
-        ConcurrentSlotDirectory(ConcurrentSlotDirectory&&) = delete;
-        ConcurrentSlotDirectory& operator=(ConcurrentSlotDirectory&&) = delete;
-
-        Slot* find(ygg::uint_t gi) noexcept
-        {
-            const auto [segment_index, offset] = locate(gi);
-            const auto* segment = m_segments[segment_index].load(std::memory_order_acquire);
-            return segment ? segment->entries[offset].load(std::memory_order_acquire) : nullptr;
-        }
-
-        const Slot* find(ygg::uint_t gi) const noexcept { return const_cast<ConcurrentSlotDirectory*>(this)->find(gi); }
-
-        Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
-        {
-            const auto [segment_index, offset] = locate(ygg::uint_t(g));
-            auto& entry = get_or_create_segment(segment_index).entries[offset];
-
-            auto* slot = entry.load(std::memory_order_acquire);
-            if (slot)
-                return *slot;
-
-            auto candidate = std::make_unique<Slot>(g, arity, parent_size, object_index_width);
-            auto* expected = static_cast<Slot*>(nullptr);
-            if (entry.compare_exchange_strong(expected, candidate.get(), std::memory_order_release, std::memory_order_acquire))
-                slot = candidate.release();
-            else
-                slot = expected;
-
-            return *slot;
-        }
-
-        template<typename F>
-        void for_each(F&& function)
-        {
-            for (auto& segment_ptr : m_segments)
-            {
-                auto* segment = segment_ptr.load(std::memory_order_relaxed);
-                if (!segment)
-                    continue;
-                for (size_t i = 0; i < segment->size; ++i)
-                    if (auto* slot = segment->entries[i].load(std::memory_order_relaxed))
-                        function(*slot);
-            }
-        }
-
-        template<typename F>
-        void for_each(F&& function) const
-        {
-            const_cast<ConcurrentSlotDirectory*>(this)->for_each([&](Slot& slot) { function(std::as_const(slot)); });
-        }
-
-        size_t memory_usage() const noexcept
-        {
-            size_t bytes = 0;
-            for_each([&](const Slot&) { bytes += sizeof(Slot); });
-            for (const auto& segment_ptr : m_segments)
-                if (const auto* segment = segment_ptr.load(std::memory_order_relaxed))
-                    bytes += sizeof(Segment) + segment->size * sizeof(std::atomic<Slot*>);
-            return bytes;
-        }
-
-    private:
-        std::array<std::atomic<Segment*>, kNumSegments> m_segments;
-    };
-
-    using SlotDirectory = std::conditional_t<ThreadSafe, ConcurrentSlotDirectory, SequentialSlotDirectory>;
+    using SlotDirectory = ::ygg::detail::SlotDirectory<Slot, ThreadSafe>;
 
     const BasicRelationRepository* m_parent;
     std::uint8_t m_object_index_width;
@@ -320,7 +136,7 @@ private:
             return *slot;
 
         const auto parent_size = m_parent ? m_parent->size(g) : size_t { 0 };
-        return m_slots.get_or_create(g, arity, parent_size, m_object_index_width);
+        return m_slots.get_or_create(ygg::uint_t(g), g, arity, parent_size, m_object_index_width);
     }
 
     void clear_slots() noexcept
@@ -339,6 +155,7 @@ private:
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
+    static constexpr bool stores_bindings = true;
 
     using container_type = internal_container_type;
 
