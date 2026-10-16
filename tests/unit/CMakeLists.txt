@@ -61,6 +61,7 @@ add_yggdrasil_gtest(containers_unordered_multi_map "containers/unordered_multi_m
 add_yggdrasil_gtest(containers_span "containers/span.cpp")
 add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
 
+add_yggdrasil_gtest(formalism_binding_key "formalism/binding_key.cpp")
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
 target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
