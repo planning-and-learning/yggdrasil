@@ -114,6 +114,22 @@ public:
 
     size_t arity() const noexcept { return m_fields.size(); }
 
+    /// The encoding of argument j: its object's position, which is the object index itself for an identity field and
+    /// position_of[object] otherwise (absent if the object is beyond position_of or maps to a position >= radix), times stride.
+    struct FieldEncoding
+    {
+        std::span<const ygg::uint_t> position_of;
+        std::uint64_t radix;
+        std::uint64_t stride;
+        bool identity;
+    };
+
+    FieldEncoding field_encoding(size_t j) const noexcept
+    {
+        const auto& field = m_fields[j];
+        return FieldEncoding { field.position_of, field.radix, field.stride, field.identity };
+    }
+
     /// The packed row of the objects, or nullopt if an object lies outside its argument's domain.
     template<typename Objects>
     std::optional<ygg::uint_t> encode(const Objects& objects) const noexcept
