@@ -17,6 +17,7 @@
 #include <iterator>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -47,6 +48,14 @@ template<typename R, typename Values>
 concept RelationViewRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
                             && RelationViewConcept<std::ranges::range_reference_t<const R>, Values>;
 
+/// A row consumer: called with the bytes of each row; returning false stops the enumeration.
+template<typename F>
+concept RowPredicate = std::predicate<const F&, std::span<const std::byte>>;
+
+/// The inputs of a query by slot: f(slot) returns the relation view bound to input slot `slot`.
+template<typename F, typename Values>
+concept SlotRelations = std::invocable<const F&, size_t> && RelationViewConcept<std::invoke_result_t<const F&, size_t>, Values>;
+
 }  // namespace ygg::database
 
 namespace ygg::database::detail
@@ -55,6 +64,7 @@ namespace ygg::database::detail
 struct RowAt
 {
     template<typename V>
+        requires requires(const V& view, size_t index) { view[index]; }
     auto operator()(const V& view, size_t index) const
     {
         return view[index];

@@ -6,10 +6,10 @@
 #ifndef YGG_DATABASE_SEMANTICS_RELATION_POOL_HPP_
 #define YGG_DATABASE_SEMANTICS_RELATION_POOL_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/containers/unique_object_pool.hpp"
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 
-#include <map>
 #include <memory>
 #include <stdexcept>
 
@@ -48,10 +48,10 @@ class RelationPool
 {
 private:
     RelationPoolFactory<Values> m_factory;
-    // Node storage keeps each nonmovable object pool at a stable address.
-    std::map<size_t, UniqueObjectPool<ygg::Builder<Relation<Values>>>> m_pools;
+    /// By row width. Handles point back to their pool, which therefore lives at a stable address behind a pointer.
+    UnorderedMap<size_t, std::unique_ptr<UniqueObjectPool<ygg::Builder<Relation<Values>>>>> m_pools;
 
-    template<typename Schema>
+    template<ColumnSchema Schema>
     UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> allocate(size_t width, Schema columns);
 
 public:
@@ -59,6 +59,9 @@ public:
     explicit RelationPool(RelationPoolFactory<Values> factory) : m_factory(std::move(factory)) {}
     RelationPool(const RelationPool&) = delete;
     RelationPool& operator=(const RelationPool&) = delete;
+    // Handles point to the object pools, which stay at their heap addresses when this moves.
+    RelationPool(RelationPool&&) noexcept = default;
+    RelationPool& operator=(RelationPool&&) noexcept = default;
 
     [[nodiscard]] UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> get_or_allocate(std::span<const ColumnLayout> columns);
     [[nodiscard]] UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> get_or_allocate(std::span<const Index<Column>> columns);

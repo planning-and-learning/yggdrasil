@@ -121,42 +121,9 @@ std::vector<QueryView<Values>> reachable(std::span<const QueryView<Values>> root
     return result;
 }
 
-/// Copies the queries reachable from the roots into a fresh owning snapshot.
-template<ColumnTypes Values>
-QueryPlan<Values> compile(std::span<const QueryView<Values>> roots)
-{
-    using QueryIndex = Index<Query<Values>>;
-    if (roots.empty())
-        return QueryPlan<Values> {};
-    const auto& source = roots.front().get_repository();
-    auto repository = source.get_factory().create_shared();
-    QueryBuilder<Values> builder;
-    std::vector<std::optional<QueryView<Values>>> copies(source.size());
-    std::vector<QueryView<Values>> children;
-    for (const auto query : reachable(roots))
-    {
-        children.clear();
-        for_each_child(query, [&](QueryView<Values> child) { children.push_back(*copies[child.get_index().get_value()]); });
-        copies[query.get_index().get_value()] = detail::clone_query(query, std::span<const QueryView<Values>>(children), *repository, builder);
-    }
-    std::vector<QueryIndex> outputs;
-    outputs.reserve(roots.size());
-    for (const auto root : roots)
-        outputs.push_back(copies[root.get_index().get_value()]->get_index());
-    return QueryPlan<Values>(std::move(repository), std::move(outputs));
-}
-
-template<std::ranges::contiguous_range R>
-auto compile(const R& roots)
-{
-    return compile(std::span<const std::ranges::range_value_t<R>>(roots));
-}
-
-template<ColumnTypes Values>
-QueryPlan<Values> compile(std::initializer_list<QueryView<Values>> roots)
-{
-    return compile(std::span<const QueryView<Values>>(roots));
-}
 }  // namespace ygg::database
+
+// copy() and compile(), which need everything above.
+#include "yggdrasil/database/syntax/copy.hpp"
 
 #endif

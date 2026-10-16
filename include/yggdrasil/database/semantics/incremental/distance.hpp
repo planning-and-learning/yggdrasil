@@ -577,7 +577,7 @@ size_t DistanceEvaluator<Values>::memory_usage() const noexcept
 /// and counts its result rows per distance value, so deleting the minimum reveals the next one.
 template<ColumnTypes Values = DefaultColumnTypes>
     requires ColumnValueFor<uint_t, Values>
-class MinDistanceEvaluator
+class SourceMinDistance
 {
     size_t m_position;  ///< The distance column follows the edge columns.
     DistanceEvaluator<Values> m_evaluator;
@@ -597,7 +597,7 @@ class MinDistanceEvaluator
     }
 
 public:
-    explicit MinDistanceEvaluator(DistancePlan<Values> plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}
+    explicit SourceMinDistance(DistancePlan<Values> plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}
 
     /// Replace all inputs, retaining buffers.
     template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>

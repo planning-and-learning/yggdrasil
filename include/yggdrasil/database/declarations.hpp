@@ -58,6 +58,14 @@ struct QueryDistanceTag
 struct QueryGenericJoinTag
 {
 };
+/// R ⋉ S: the rows of R with a match in S on their shared columns.
+struct QuerySemijoinTag
+{
+};
+/// R ▷ S: the rows of R without a match in S on their shared columns.
+struct QueryAntijoinTag
+{
+};
 
 using QueryConstructorTags = TypeList<QueryInputTag,
                                       QueryEmptyTag,
@@ -69,7 +77,9 @@ using QueryConstructorTags = TypeList<QueryInputTag,
                                       QueryUnionTag,
                                       QueryDifferenceTag,
                                       QueryDistanceTag,
-                                      QueryGenericJoinTag>;
+                                      QueryGenericJoinTag,
+                                      QuerySemijoinTag,
+                                      QueryAntijoinTag>;
 
 /// Tag void is the type-erased query holding one of the concrete query records.
 template<ColumnTypes Values = DefaultColumnTypes, typename Tag = void>

@@ -10,10 +10,12 @@
 #include <type_traits>
 #include <utility>
 #include <yggdrasil/database/optimization/optimization.hpp>
+#include <yggdrasil/database/semantics/bound/query_evaluation.hpp>
 #include <yggdrasil/database/semantics/incremental/query.hpp>
 #include <yggdrasil/database/semantics/query_evaluation.hpp>
 #include <yggdrasil/database/semantics/relation_repository.hpp>
 #include <yggdrasil/database/syntax/formatter.hpp>
+#include <yggdrasil/database/syntax/row.hpp>
 
 namespace
 {
@@ -171,6 +173,62 @@ TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
     const auto bound = (inputs[0].size() + inputs[1].size() + inputs[2].size()) * reference.get_result().size();
     for (size_t position = 0; position < nodes.size(); ++position)
         EXPECT_LE(evaluator.get_result(position).size(), bound);
+}
+
+TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
+{
+    // π_{x,w}(R(x,y) ⋈ S(y,z) ⋈ T(z,w)), evaluated with x bound as the edges of a distance are. Yannakakis' semijoins
+    // would flatten into extra atoms of every binding's plan; a bound root keeps its three.
+    auto queries = ygg::tests::qb::repository<>();
+    const auto r = ygg::tests::qb::input(queries, 0, { x, y });
+    const auto s = ygg::tests::qb::input(queries, 1, { y, z });
+    const auto t = ygg::tests::qb::input(queries, 2, { z, w });
+    const auto root = ygg::tests::qb::project(queries, ygg::tests::qb::join(queries, ygg::tests::qb::join(queries, r, s), t), { x, w });
+    const auto atoms = [](ygg::database::QueryView<> query)
+    {
+        size_t result = 0;
+        for (const auto& branch : ygg::database::bound::union_normal_form(query).branches)
+            result += branch.atoms.size();
+        return result;
+    };
+    const auto roots = std::array { root };
+    const auto bound = std::array { ygg::database::Evaluation::bound };
+    const auto plan = ygg::database::optimize<ygg::database::DefaultColumnTypes>(std::span<const ygg::database::QueryView<>>(roots),
+                                                                                  std::span<const ygg::database::Evaluation>(bound));
+    const auto planned = plan[plan.roots().front()];
+    EXPECT_EQ(atoms(planned), 3);
+    const auto full = ygg::database::optimize(root);
+    EXPECT_GT(atoms(full[full.roots().front()]), 3);
+    std::array<Relation, 3> inputs { Relation({ x, y }), Relation({ y, z }), Relation({ z, w }) };
+    for (ygg::uint_t i = 0; i < 10; ++i)
+    {
+        inputs[0].insert(std::tuple { i % 3, i });
+        inputs[1].insert(std::tuple { i, i % 4 });
+        inputs[2].insert(std::tuple { i % 4, i });
+    }
+    const auto successors = [&](ygg::database::QueryView<> query)
+    {
+        auto evaluator = ygg::database::bound::QueryEvaluator<ygg::database::DefaultColumnTypes>(query);
+        for (size_t slot = 0; slot < inputs.size(); ++slot)
+            evaluator.bind_slot(slot, inputs[slot]);
+        const auto binding = evaluator.prepare({ 0 });
+        auto bytes = std::vector<std::byte>();
+        auto result = std::vector<std::vector<std::byte>>();
+        evaluator.evaluate(binding,
+                           ygg::database::encode_row<ygg::database::DefaultColumnTypes, ygg::uint_t>(std::array { ygg::uint_t(1) }, bytes),
+                           [&](std::span<const std::byte> row)
+                           {
+                               result.emplace_back(row.begin(), row.end());
+                               return true;
+                           });
+        std::ranges::sort(result);
+        return result;
+    };
+    EXPECT_FALSE(successors(root).empty());
+    EXPECT_EQ(successors(planned), successors(root));
+    EXPECT_THROW((ygg::database::optimize<ygg::database::DefaultColumnTypes>(std::span<const ygg::database::QueryView<>>(roots),
+                                                                             std::span<const ygg::database::Evaluation>())),
+                 std::invalid_argument);
 }
 
 TEST(DatabaseOptimization, StructureChoosesGenericJoinOnlyForCyclicBlocks)
@@ -385,7 +443,7 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
         for (size_t depth = 0; depth < 4; ++depth)
         {
             auto columns = labels(root);
-            switch (random() % 7)
+            switch (random() % 9)
             {
                 case 0:
                     root = ygg::tests::qb::join(queries, root, leaves[random() % leaves.size()]);
@@ -415,6 +473,12 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
                     break;
                 case 6:
                     root = ygg::tests::qb::difference(queries, root, peer(root));
+                    break;
+                case 7:
+                    root = ygg::tests::qb::semijoin(queries, root, leaves[random() % leaves.size()]);
+                    break;
+                case 8:
+                    root = ygg::tests::qb::antijoin(queries, root, leaves[random() % leaves.size()]);
                     break;
             }
         }

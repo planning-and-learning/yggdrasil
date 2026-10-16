@@ -22,18 +22,6 @@
 
 namespace ygg::database
 {
-/// Row and per-column distinct counts of one relation.
-template<ColumnTypes Values, typename Relation>
-RelationStatistics measure_relation(const Relation& relation)
-{
-    RelationStatistics stats;
-    stats.rows = static_cast<double>(relation.size());
-    const auto columns = relation.columns();
-    for (const auto& column : columns.span())
-        stats.distinct[column.label] = static_cast<double>(project<Values>(relation, { column.label }).size());
-    return stats;
-}
-
 /// Measures row and per-column distinct counts of the relations bound to each input slot.
 template<ColumnTypes Values, RelationViewRange<Values> R>
 Statistics<Values> collect_statistics(const R& inputs)
@@ -51,7 +39,7 @@ class StatisticsAccumulator
 {
 public:
     /// Adds one sample of key's relation.
-    template<typename Relation>
+    template<RelationViewConcept<Values> Relation>
     void add(const Key& key, const Relation& relation)
     {
         auto& total = m_totals[key];
@@ -65,6 +53,7 @@ public:
     /// Means of rows and per-column distinct counts. A nonempty mean is at least one row, so distinct counts lie in
     /// [1, rows]. A key empty in every sample keeps 0 rows and adds a warning naming it with describe(key).
     template<typename Describe>
+        requires std::invocable<Describe&, const Key&> && std::convertible_to<std::invoke_result_t<Describe&, const Key&>, std::string>
     UnorderedMap<Key, RelationStatistics> finish(diagnostics::Warnings& warnings, Describe&& describe) const
     {
         UnorderedMap<Key, RelationStatistics> result;
@@ -118,6 +107,11 @@ private:
 /// and are only known when observed. Not modeled: distributing joins over unions,
 /// sharing-aware choices across roots, and costs of incremental maintenance.
 ///
+/// Steps 2 to 4 assume full evaluation. A root evaluated bound only gets step 1: the
+/// bound evaluator flattens its query and orders the joins per binding from the bound
+/// columns, so a plan made for full materialization (for instance Yannakakis'
+/// semijoins) would only add atoms to every binding's plan.
+///
 /// The roots belong to one repository; the plan preserves every root's ordered, typed
 /// schema and set semantics.
 ///
@@ -144,9 +138,19 @@ private:
 /// [LEO01] M. Stillger, G. Lohman, V. Markl, M. Kandil, LEO – DB2's LEarning Optimizer,
 ///     VLDB 2001.
 template<ColumnTypes Values>
+QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots,
+                           std::span<const Evaluation> evaluations,
+                           const std::type_identity_t<Statistics<Values>>& statistics = {})
+{
+    return detail::optimize(roots, evaluations, statistics);
+}
+
+/// Plans roots that are all evaluated fully.
+template<ColumnTypes Values>
 QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
 {
-    return detail::optimize(roots, statistics);
+    const auto evaluations = std::vector<Evaluation>(roots.size(), Evaluation::full);
+    return optimize(roots, std::span<const Evaluation>(evaluations), statistics);
 }
 
 template<ColumnTypes Values>

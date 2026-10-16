@@ -289,6 +289,16 @@ Estimate estimate_operation(QueryView<Values, QueryDifferenceTag> query, FactorI
     const auto lhs = child(query.get_lhs()), rhs = child(query.get_rhs());
     return factor(capped({ std::max(0.0, lhs.rows - rhs.rows / 2), lhs.distinct }), query.columns(), identity);
 }
+/// Semijoin: T(R ⋉ S) = min(T(R), T(π_R(R ⋈ S))); antijoin: T(R ▷ S) = T(R) − T(R ⋉ S); V = V(R, a).
+template<ColumnTypes Values, typename Tag, class GetEstimate>
+    requires(std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
+Estimate estimate_operation(QueryView<Values, Tag> query, FactorIdentity identity, GetEstimate&& child, const Statistics<Values>&)
+{
+    const auto lhs = child(query.get_lhs());
+    const auto matched = std::min(lhs.rows, conjunction(combine(lhs, child(query.get_rhs())), column_labels(query.columns())).rows);
+    const auto rows = std::same_as<Tag, QuerySemijoinTag> ? matched : std::max(0.0, lhs.rows - matched);
+    return factor(capped({ rows, lhs.distinct }), query.columns(), identity);
+}
 /// The literature has no estimate for distances; they are only known when observed.
 template<ColumnTypes Values, class GetEstimate>
 Estimate estimate_operation(QueryView<Values, QueryDistanceTag>, FactorIdentity, GetEstimate&&, const Statistics<Values>&)

@@ -40,8 +40,9 @@ void prepare(Data<Query<Values, Tag>>& data, const QueryRepository<Values>&)
     validate_columns<Values>({ data.columns.data(), data.columns.size() });
 }
 
-template<ColumnTypes Values>
-void prepare(Data<Query<Values, QueryJoinTag>>& data, const QueryRepository<Values>& repository)
+template<ColumnTypes Values, typename Tag>
+    requires(std::same_as<Tag, QueryJoinTag> || std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
+void prepare(Data<Query<Values, Tag>>& data, const QueryRepository<Values>& repository)
 {
     data.plan = JoinPlan<Values>(child_columns(data.lhs, repository), child_columns(data.rhs, repository));
 }

@@ -15,6 +15,56 @@
 
 namespace ygg::database::incremental
 {
+namespace detail
+{
+/// Inserts rows absent from `rows`, indexing their positions by the hash of `keys`.
+template<ColumnTypes Values, RelationViewConcept<Values> V>
+void insert_rows(const V& input, Builder<Relation<Values>>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index)
+{
+    if (!keys.empty())
+        index.reserve_values(rows.size() + input.size());
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        const auto row = input.row(i);
+        const auto previous_size = rows.size();
+        const auto position = rows.insert(Row<Values>(row, input.columns().span()));
+        if (position != previous_size)
+            throw std::invalid_argument("Incremental evaluation: added row is already present in the input.");
+        if (!keys.empty())
+            index.insert(database::detail::join_key_hash(row, keys), position);
+    }
+}
+
+/// Erases rows present in `rows`, keeping the position index of insert_rows() current.
+template<ColumnTypes Values, RelationViewConcept<Values> V>
+void erase_rows(const V& input, Builder<Relation<Values>>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index)
+{
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        const auto position = rows.find(Row<Values>(input.row(i), input.columns().span()));
+        if (!position)
+            throw std::invalid_argument("Incremental evaluation: removed row is absent from the input.");
+        const auto last = ygg::to_uint_t(rows.size() - 1);
+        if (keys.empty())
+        {
+            rows.erase(*position);
+            continue;
+        }
+        const auto removed_key = database::detail::join_key_hash(rows.row(*position), keys);
+        rows.erase(*position);
+        [[maybe_unused]] const auto erased = index.erase(removed_key, *position);
+        assert(erased);
+        if (*position != last)
+        {
+            const auto moved_key = database::detail::join_key_hash(rows.row(*position), keys);
+            [[maybe_unused]] const auto replaced = index.replace(moved_key, last, *position);
+            assert(replaced);
+        }
+    }
+}
+
+}  // namespace detail
+
 
 /// First-order join delta rules as in Gupta et al. (SIGMOD 1993), Section 4:
 /// https://doi.org/10.1145/170035.170066. See also Budiu et al., "DBSP"
@@ -37,12 +87,6 @@ class JoinEvaluator
     Builder<Relation<Values>> m_result;
     Delta<Values> m_delta;
     bool m_initialized = false;
-
-    template<RelationViewConcept<Values> V>
-    static void insert_rows(const V& input, Builder<Relation<Values>>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index);
-
-    template<RelationViewConcept<Values> V>
-    static void erase_rows(const V& input, Builder<Relation<Values>>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index);
 
     template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
     void join(const L& lhs, const R& rhs, bool build_left, Builder<Relation<Values>>& output, Workspace<Values>& workspace) const;
@@ -74,58 +118,6 @@ public:
     /// Retained inputs, result, delta and indexes; excludes plan and caller workspace.
     size_t memory_usage() const noexcept;
 };
-
-template<ColumnTypes Values>
-template<RelationViewConcept<Values> V>
-void JoinEvaluator<Values>::insert_rows(const V& input,
-                                        Builder<Relation<Values>>& rows,
-                                        std::span<const ColumnSlice> keys,
-                                        UnorderedMultiMap<hash_t, uint_t>& index)
-{
-    if (!keys.empty())
-        index.reserve_values(rows.size() + input.size());
-    for (size_t i = 0; i < input.size(); ++i)
-    {
-        const auto row = input.row(i);
-        const auto previous_size = rows.size();
-        const auto position = rows.insert(Row<Values>(row, input.columns().span()));
-        if (position != previous_size)
-            throw std::invalid_argument("Incremental join: added row is already present in the input.");
-        if (!keys.empty())
-            index.insert(database::detail::join_key_hash(row, keys), position);
-    }
-}
-
-template<ColumnTypes Values>
-template<RelationViewConcept<Values> V>
-void JoinEvaluator<Values>::erase_rows(const V& input,
-                                       Builder<Relation<Values>>& rows,
-                                       std::span<const ColumnSlice> keys,
-                                       UnorderedMultiMap<hash_t, uint_t>& index)
-{
-    for (size_t i = 0; i < input.size(); ++i)
-    {
-        const auto position = rows.find(Row<Values>(input.row(i), input.columns().span()));
-        if (!position)
-            throw std::invalid_argument("Incremental join: removed row is absent from the input.");
-        const auto last = ygg::to_uint_t(rows.size() - 1);
-        if (keys.empty())
-        {
-            rows.erase(*position);
-            continue;
-        }
-        const auto removed_key = database::detail::join_key_hash(rows.row(*position), keys);
-        rows.erase(*position);
-        [[maybe_unused]] const auto erased = index.erase(removed_key, *position);
-        assert(erased);
-        if (*position != last)
-        {
-            const auto moved_key = database::detail::join_key_hash(rows.row(*position), keys);
-            [[maybe_unused]] const auto replaced = index.replace(moved_key, last, *position);
-            assert(replaced);
-        }
-    }
-}
 
 template<ColumnTypes Values>
 template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
@@ -168,8 +160,8 @@ void JoinEvaluator<Values>::initialize(const L& lhs, const R& rhs, Workspace<Val
     m_rhs_index.clear();
     m_result.clear();
     m_delta.clear();
-    insert_rows(lhs, m_lhs, m_plan.lhs_keys(), m_lhs_index);
-    insert_rows(rhs, m_rhs, m_plan.rhs_keys(), m_rhs_index);
+    detail::insert_rows(lhs, m_lhs, m_plan.lhs_keys(), m_lhs_index);
+    detail::insert_rows(rhs, m_rhs, m_plan.rhs_keys(), m_rhs_index);
     // Both indexes are ready, so probe the smaller input.
     join(m_lhs, m_rhs, m_lhs.size() >= m_rhs.size(), m_result, workspace);
     m_initialized = true;
@@ -197,13 +189,13 @@ void JoinEvaluator<Values>::apply(const L& lhs, const R& rhs, Workspace<Values>&
     // Remove from both sides before inserting. Each old/new pair is visited
     // once, and no temporary match between an added and removed row is emitted.
     join(lhs_removed, m_rhs, false, m_delta.removed, workspace);
-    erase_rows(lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
+    detail::erase_rows(lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
     join(m_lhs, rhs_removed, true, m_delta.removed, workspace);
-    erase_rows(rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
+    detail::erase_rows(rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
     join(lhs_added, m_rhs, false, m_delta.added, workspace);
-    insert_rows(lhs_added, m_lhs, m_plan.lhs_keys(), m_lhs_index);
+    detail::insert_rows(lhs_added, m_lhs, m_plan.lhs_keys(), m_lhs_index);
     join(m_lhs, rhs_added, true, m_delta.added, workspace);
-    insert_rows(rhs_added, m_rhs, m_plan.rhs_keys(), m_rhs_index);
+    detail::insert_rows(rhs_added, m_rhs, m_plan.rhs_keys(), m_rhs_index);
 
     detail::apply_delta(m_delta, m_result);
     m_initialized = true;

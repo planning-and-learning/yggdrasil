@@ -33,11 +33,11 @@ struct EqualTo;
 template<typename T>
 struct Less;
 
-template<typename T>
-using UnorderedSet = gtl::flat_hash_set<T, Hash<T>, EqualTo<T>>;
+template<typename T, typename H = Hash<T>, typename E = EqualTo<T>>
+using UnorderedSet = gtl::flat_hash_set<T, H, E>;
 
-template<typename T, typename V>
-using UnorderedMap = gtl::flat_hash_map<T, V, Hash<T>, EqualTo<T>>;
+template<typename T, typename V, typename H = Hash<T>, typename E = EqualTo<T>>
+using UnorderedMap = gtl::flat_hash_map<T, V, H, E>;
 
 template<typename T>
 using Set = gtl::btree_set<T, Less<T>>;

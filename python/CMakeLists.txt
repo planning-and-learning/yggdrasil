@@ -41,6 +41,8 @@ nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
     src/pyyggdrasil/database/query/difference.cpp
     src/pyyggdrasil/database/query/distance.cpp
     src/pyyggdrasil/database/query/generic_join.cpp
+    src/pyyggdrasil/database/query/semijoin.cpp
+    src/pyyggdrasil/database/query/antijoin.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
     src/pyyggdrasil/serialization/module.cpp

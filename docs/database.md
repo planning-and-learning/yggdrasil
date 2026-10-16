@@ -101,6 +101,8 @@ return-by-value overloads take it explicitly.
 | `join<Values>(lhs, rhs)` | Natural join on common labels, followed by rhs-only columns. |
 | `union_<Values>(lhs, rhs)` | Union with an identical ordered typed schema. |
 | `difference<Values>(lhs, rhs)` | Difference with an identical ordered typed schema. |
+| `semijoin<Values>(lhs, rhs)` | lhs ⋉ rhs: the lhs rows with a match in rhs on the common labels. |
+| `antijoin<Values>(lhs, rhs)` | lhs ▷ rhs: the lhs rows without such a match. Without common labels, lhs if rhs is empty. |
 | `builder.rename(labels)` | Change labels while retaining types and rows. |
 
 Common join labels and equality columns must have matching types. Projection
@@ -171,7 +173,9 @@ object domain needs no special-case representation.
 current results and maintain added/removed row sets. Deltas use the same typed
 schemas and packed rows. Projection tracks witnesses; a change that replaces a
 witness without changing membership produces no output delta. Join supports
-updates to either or both operands. Every incremental evaluator's `update` takes
+updates to either or both operands. `database/incremental/semijoin.hpp`
+maintains semijoins and antijoins: only the changed lhs rows and the lhs rows
+sharing a key with a changed rhs row can change membership. Every incremental evaluator's `update` takes
 one change per input: an `(added, removed)` pair read with `std::get`, such as
 `Delta::change()` or `std::tie(added, removed)`; `incremental::RelationChange`
 states the requirement. Prepared byte operations are shared with full
@@ -386,7 +390,7 @@ unchanged and read the distance column:
 Builder<Relation<>> result(plan.output_columns().span());
 const uint_t full = min_distance(sources, edges, targets, plan, result, workspace);
 
-incremental::MinDistanceEvaluator<> minimum(plan);
+incremental::SourceMinDistance<> minimum(plan);
 minimum.initialize(sources, edges, targets);
 minimum.update(source_delta.change(), edge_delta.change(), target_delta.change());
 const uint_t current = minimum.get_result();
@@ -395,6 +399,33 @@ const uint_t current = minimum.get_result();
 Both return `uint_t`'s maximum when no target is reachable, and 0 when a source equals a target.
 The incremental form counts result rows per distance value, so deleting the current minimum
 reveals the next one. Memory follows the wrapped evaluator, plus one counter per distance value.
+
+### Must-pass objects
+
+`MustPass` (`semantics/must_pass.hpp`) finds, per key, the probe objects that every path from the key's
+sources to its targets passes in some vertex: the landmarks of the key's graph (Hoffmann, Porteous &
+Sebastia, JAIR 2004). Sources, edges and targets start with the same key columns; a vertex has k columns;
+probes have one column, and a vertex contains an object if one of its columns of the probes' type holds it:
+
+```cpp
+// sources (key…, vertex), edges (key…, from, to), targets (key…, vertex), probes (object)
+MustPassPlan<> plan(sources.columns().span(), edge_query.columns(), targets.columns().span(), probes.columns().span(), keys);
+MustPass<> must_pass(edge_query, plan);
+Builder<Relation<>> out(plan.output_columns().span());   // (key…, object)
+must_pass.must_pass(input, sources, targets, probes, out);
+```
+
+Like `MinDistance`, the edge query is evaluated on demand with the key and a vertex bound, so each key's
+graph is explored from its sources and never materialized. A* finds a shortest witness path; only probe
+objects on it can be must-pass. Objects in every source or every target are trivially must-pass (initial facts and
+goals are landmarks); every other object on the witness is verified as in landmark detection (Richter,
+Helmert & Westphal, AAAI 2008) by testing whether the targets stay reachable without the vertices
+containing it. Each search is bidirectional: a backward breadth-first search from the targets alternates
+with the forward side by the vertices each expanded, and its exhaustion proves unreachability from the
+smaller side. An optional heuristic (`MustPass<Values, H>`, given the key followed by a vertex) guides the
+forward side; with `exclude(key, object)` it is told which object a verification avoids. A key whose targets are unreachable has none. An edge
+query that projects vertices onto fewer columns is an abstraction: objects that must be passed in the
+projection must be passed by every original path too.
 
 ### Distance from Python
 
@@ -520,17 +551,19 @@ const auto& result = evaluator.get_result();
 schema. It implements established algorithms as published:
 
 1. **Normalization.** The textbook algebraic rewrites [GMUW08]: selections are
-   pushed down through joins, projections, renames, unions, and differences,
-   projections through renames and unions, and empty relations are propagated.
+   pushed down through joins, projections, renames, unions, and differences, and
+   into the lhs of semijoins and antijoins, projections through renames and
+   unions, and empty relations are propagated.
 2. **Join blocks.** Each maximal tree of joins is planned as a whole. Unions,
-   differences, distances, and selections spanning several join operands bound
-   the blocks.
+   differences, semijoins, antijoins, distances, and selections spanning several
+   join operands bound the blocks.
 3. **Planning each block.** A block whose operands all have known cardinalities
    (measured inputs, observed queries, or queries over them) is planned
    cost-based, any other block from structure:
    - *Cost-based:* DPccp [MN06] finds the bushy join order of least C_out
      [CM95, Leis15] under System R estimates [Selinger79], with the textbook
-     estimates of [GMUW08] for projection, union, and difference and observed
+     estimates of [GMUW08] for projection, union, and difference, T(R ⋉ S) =
+     min(T(R), T(π_R(R ⋈ S))) and T(R ▷ S) = T(R) − T(R ⋉ S), and observed
      cardinalities replacing estimates [LEO01]; disconnected components are
      joined last by cross products. The join tree is then refined by Algorithm 4
      of [Freitag20]: growing joins and their ancestors become one
@@ -578,6 +611,20 @@ publishing immutable query data. Query records hold plain indices, so callers
 keep operands in the repository they insert into. The roots passed to `optimize`
 belong to one repository.
 
+### Relaxation
+
+`relax(roots, known, repository, builder)` (`syntax/translations/relaxation.hpp`) over-approximates queries whose
+inputs not marked `known(slot)` may hold any rows. Each result Q̂ reads only the known inputs, which are renumbered once
+for all roots into `Relaxation::slots`, and has a subset S' of the query's labels. For all inputs, Q ⊆ Q̂ × U^(labels
+not in S'), and `nullopt` means nothing is constrained.
+
+Relaxing π_L(Q) needs only the labels L. Labels no one needs are eliminated as early as possible:
+- a conjunct that shares nothing needed becomes a nullary existence test;
+- antijoins and differences are kept only as exact filters on needed labels.
+
+This is the projection of pattern databases. The header has the full translation table and references. Evaluate the
+results like any query, e.g. after `optimize()`.
+
 ### Statistics
 
 `Statistics<Values>` describes what is known; everything is optional and nothing
@@ -600,7 +647,25 @@ estimate, and projection starts a new scope for its hidden columns. Statistics
 guide planning only; they never justify replacing an input by a constant or an
 empty relation.
 
-### Full and incremental evaluation
+### Evaluators
+
+Evaluators differ along two independent axes: what they return, the whole result (*full*, the default) or answers to
+lookups with some output columns given (*bound*); and whether they follow input changes (*incremental*) or evaluate
+the current inputs only (*one-shot*, the default). A namespace exists only for a non-default mode, its directory under
+`<yggdrasil/database/semantics/>` has the same name, and the class is always `QueryEvaluator`:
+
+| | one-shot | incremental |
+|---|---|---|
+| full | `QueryEvaluator` (`query_evaluation.hpp`) | `incremental::QueryEvaluator` (`incremental/query.hpp`) |
+| bound | `bound::QueryEvaluator` (`bound/query_evaluation.hpp`) | `incremental::bound::QueryEvaluator` (`incremental/bound/query_evaluation.hpp`) |
+
+Use full evaluation for a whole result, bound evaluation for many selective lookups against the same inputs (the edge
+oracle of the distance search), and an incremental evaluator when the inputs change between uses. Bound evaluation
+compiles the query into union normal form (`bound/union_normal_form.hpp`) and plans each branch per set of bound
+columns (`bound/conjunctive_plan.hpp`). Every incremental evaluator takes its first inputs with `initialize` and exact
+changes with `update`; the bound ones also offer `bind`, which diffs the inputs when the changes are unknown, and
+`seed`, which reports the answers a change can add. The operator plans of the query records (`JoinPlan`, `ProjectionPlan`,
+`GenericJoinPlan`, `DistancePlan`) are shared by all evaluators and stay in `ygg::database`.
 
 `<yggdrasil/database/semantics/query_evaluation.hpp>` provides `QueryEvaluator<Values>`.
 `evaluate(bindings)` computes all roots, reusing retained output and scratch
@@ -618,6 +683,28 @@ can invalidate borrowed rows. Input adapters and their underlying storage need
 only remain alive during the call. Results belong to the evaluator, and may not
 be fed back as aliased inputs to that same evaluator. `memory_usage()` reports
 retained evaluator storage; it is distinct from the optimizer's estimate.
+
+#### Distance search
+
+`MinDistance<Values, H>` (`min_distance.hpp`) and `incremental::MinDistance<Values, H>`
+(`incremental/min_distance.hpp`) compute the exact minimum distance from any source to any
+target over edges given by a query over input slots (or by one edge relation), and return
+`uint_t`'s maximum when no target is reachable. Edges are never materialized: a bound
+evaluator answers successor, predecessor and edge-check lookups, and A* (a binary heap
+ordered by f, then g) runs against a backward breadth-first frontier.
+
+- `MinDistance::min_distance(input, sources, targets, heuristic)` binds the inputs for one
+  call; only compiled plans and static slots are kept.
+- `incremental::MinDistance` keeps the search tree across calls. `initialize(input)` binds a
+  new baseline; `bind(input, maybe_changed)` diffs the inputs against it, and
+  `update(change, changed)` takes exact `(added, removed)` changes per slot. A change that
+  throws makes the next search start afresh.
+  Its `set_targets(targets)` sets the targets, and different targets discard the stored
+  search; `min_distance(sources, heuristic)` then searches over the current inputs.
+
+The heuristic `H` (`search/concepts.hpp`, `DistanceHeuristic`) must be consistent in every
+graph the inputs can form while the targets stay unchanged: it may depend on the targets and
+on static inputs only. `BlindDistanceHeuristic` is the zero estimate.
 
 ### Python query API
 
@@ -651,7 +738,7 @@ Like the C++ library, every operator has an index (`QueryJoinIndex`), a record
 (`QueryJoinData`), and a view (`QueryJoin`) with its getters; `repository.insert(data)`
 returns `(view, created)`. `QueryData(view)` makes the type-erased `Query` that
 operators take as operands. The records are `QueryInputData(slot, columns)`,
-`QueryEmptyData(columns)`, `QueryJoinData`/`QueryUnionData`/`QueryDifferenceData(lhs, rhs)`,
+`QueryEmptyData(columns)`, `QueryJoinData`/`QueryUnionData`/`QueryDifferenceData`/`QuerySemijoinData`/`QueryAntijoinData(lhs, rhs)`,
 `QueryProjectData`/`QueryRenameData(arg, labels)`, `QuerySelectEqualData(arg, lhs, rhs)`,
 `QuerySelectValueData(arg, column, type, value)`, `QueryDistanceData(sources, edges,
 targets, distance_column)`, and `QueryGenericJoinData(inputs, variable_order,

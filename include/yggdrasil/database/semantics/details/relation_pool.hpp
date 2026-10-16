@@ -18,10 +18,13 @@ RelationPool<Values> RelationPoolFactory<Values>::create_pool()
 }
 
 template<ColumnTypes Values>
-template<typename Schema>
+template<ColumnSchema Schema>
 UniqueObjectPoolPtr<ygg::Builder<Relation<Values>>> RelationPool<Values>::allocate(size_t width, Schema columns)
 {
-    auto relation = m_pools[width].get_or_allocate(columns);
+    auto& pool = m_pools[width];
+    if (!pool)
+        pool = std::make_unique<UniqueObjectPool<ygg::Builder<Relation<Values>>>>();
+    auto relation = pool->get_or_allocate(columns);
     if (relation->m_storage_index == std::numeric_limits<size_t>::max())
         relation->m_storage_index = m_factory.next_index();
     return relation;

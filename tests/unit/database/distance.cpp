@@ -610,7 +610,7 @@ TEST(YggdrasilTests, DatabaseMinDistanceAggregatesTheDistanceColumnFullAndIncrem
     const database::DistancePlan<Values> plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::DistanceWorkspace<Values> workspace(plan);
     RelationBuilder result(plan.output_columns().span());
-    database::incremental::MinDistanceEvaluator<Values> evaluator(plan);
+    database::incremental::SourceMinDistance<Values> evaluator(plan);
     database::incremental::Delta<Values> ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
 
     // Each state changes sources, edges, or targets; the minimum moves up, down, to zero and to infinity.

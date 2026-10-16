@@ -17,8 +17,20 @@
 #include <concepts>
 #include <utility>
 #include <optional>
+#include <stdexcept>
 #include <span>
 #include <vector>
+
+namespace ygg::database
+{
+/// How a root is evaluated: fully, by materializing it, or bound, by the bound evaluator with some columns given per
+/// call (bound::QueryEvaluator).
+enum class Evaluation
+{
+    full,
+    bound,
+};
+}  // namespace ygg::database
 
 namespace ygg::database::detail
 {
@@ -160,10 +172,12 @@ void validate(std::span<const QueryView<Values>> roots, const Statistics<Values>
     }
 }
 
-/// Normalizes the reachable queries, plans each join block, and compiles the roots.
+/// Normalizes the reachable queries, plans each join block of the fully evaluated roots, and compiles the roots.
 template<ColumnTypes Values>
-QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const Statistics<Values>& statistics)
+QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, std::span<const Evaluation> evaluations, const Statistics<Values>& statistics)
 {
+    if (evaluations.size() != roots.size())
+        throw std::invalid_argument("optimize: one evaluation per root is required.");
     validate(roots, statistics);
     if (roots.empty())
         return {};
@@ -182,9 +196,12 @@ QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const Stati
     auto plans = source.get_factory().create();
     Planner<Values> planner(statistics, sources, normalized.size(), plans, builder);
     std::vector<QueryView<Values>> outputs;
-    for (const auto root : roots)
+    for (size_t i = 0; i < roots.size(); ++i)
     {
-        outputs.push_back(planner.plan(normalize(root)));
+        const auto root = roots[i];
+        // The bound evaluator orders each binding's joins itself, so a bound root keeps its normalized join structure.
+        outputs.push_back(evaluations[i] == Evaluation::bound ? copy(normalize(root), [](size_t slot) { return slot; }, plans, builder) :
+                                                                planner.plan(normalize(root)));
         assert(std::ranges::equal(outputs.back().columns(), root.columns()) && "Plans preserve ordered schemas.");
     }
     return compile(std::span<const QueryView<Values>>(outputs));

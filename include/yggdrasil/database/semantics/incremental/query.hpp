@@ -10,6 +10,7 @@
 #include "yggdrasil/database/semantics/incremental/generic_join.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
+#include "yggdrasil/database/semantics/incremental/semijoin.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
 
 #include <ranges>
@@ -19,6 +20,9 @@
 
 namespace ygg::database::incremental
 {
+template<ColumnTypes Values>
+class QueryEvaluator;
+
 namespace detail
 {
 template<ColumnTypes Values>
@@ -60,8 +64,8 @@ struct QueryDistance<Values, true> : DistanceEvaluator<Values>
 };
 
 /// How a query node of one operator is maintained: its state, built from the operation,
-/// initialized from the operands' results, and updated from their exact deltas. Graph
-/// provides result(query) and delta(query). Stateless operators keep only a value.
+/// initialized from the operands' results, and updated from their exact deltas. The
+/// evaluator provides result(query) and delta(query). Stateless operators keep only a value.
 /// Child deltas are exact by construction, so updates skip validation.
 template<ColumnTypes Values, typename Tag>
 struct NodeRules
@@ -70,15 +74,15 @@ struct NodeRules
 
     static State make(QueryView<Values, Tag> operation) { return State(operation.columns()); }
 
-    template<typename Graph, RelationViewRange<Values> R>
-    static void initialize(State& state, QueryView<Values, Tag> operation, const Graph& graph, const R& bindings, Workspace<Values>&)
+    template<RelationViewRange<Values> R>
+    static void initialize(State& state, QueryView<Values, Tag> operation, const QueryEvaluator<Values>& graph, const R& bindings, Workspace<Values>&)
     {
         state.delta.clear();
         database::detail::evaluate_stateless(operation, bindings, [&](QueryView<Values> query) -> const auto& { return graph.result(query); }, state.result);
     }
 
-    template<typename Graph, RelationDeltaRange<Values> R>
-    static void update(State& state, QueryView<Values, Tag> operation, const Graph& graph, const R& changes, Workspace<Values>&)
+    template<RelationDeltaRange<Values> R>
+    static void update(State& state, QueryView<Values, Tag> operation, const QueryEvaluator<Values>& graph, const R& changes, Workspace<Values>&)
     {
         state.delta.clear();
         if constexpr (std::same_as<Tag, QueryEmptyTag>)
@@ -137,13 +141,13 @@ struct NodeRules<Values, QueryProjectTag>
     using State = ProjectionEvaluator<Values>;
 
     static State make(QueryView<Values, QueryProjectTag> operation) { return State(operation.get_plan()); }
-    template<typename Graph, typename R>
-    static void initialize(State& state, QueryView<Values, QueryProjectTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    template<RelationViewRange<Values> R>
+    static void initialize(State& state, QueryView<Values, QueryProjectTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>& workspace)
     {
         state.initialize(graph.result(operation.get_arg()), workspace);
     }
-    template<typename Graph, typename R>
-    static void update(State& state, QueryView<Values, QueryProjectTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    template<RelationDeltaRange<Values> R>
+    static void update(State& state, QueryView<Values, QueryProjectTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>& workspace)
     {
         state.apply(graph.delta(operation.get_arg()).change(), workspace);
     }
@@ -155,15 +159,34 @@ struct NodeRules<Values, QueryJoinTag>
     using State = JoinEvaluator<Values>;
 
     static State make(QueryView<Values, QueryJoinTag> operation) { return State(operation.get_plan()); }
-    template<typename Graph, typename R>
-    static void initialize(State& state, QueryView<Values, QueryJoinTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    template<RelationViewRange<Values> R>
+    static void initialize(State& state, QueryView<Values, QueryJoinTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>& workspace)
     {
         state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()), workspace);
     }
-    template<typename Graph, typename R>
-    static void update(State& state, QueryView<Values, QueryJoinTag> operation, const Graph& graph, const R&, Workspace<Values>& workspace)
+    template<RelationDeltaRange<Values> R>
+    static void update(State& state, QueryView<Values, QueryJoinTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>& workspace)
     {
         state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change(), workspace);
+    }
+};
+
+template<ColumnTypes Values, typename Tag>
+    requires(std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
+struct NodeRules<Values, Tag>
+{
+    using State = SemijoinEvaluator<Values>;
+
+    static State make(QueryView<Values, Tag> operation) { return State(operation.get_plan(), std::same_as<Tag, QueryAntijoinTag>); }
+    template<RelationViewRange<Values> R>
+    static void initialize(State& state, QueryView<Values, Tag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>&)
+    {
+        state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()));
+    }
+    template<RelationDeltaRange<Values> R>
+    static void update(State& state, QueryView<Values, Tag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>&)
+    {
+        state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change());
     }
 };
 
@@ -173,13 +196,13 @@ struct NodeRules<Values, QueryGenericJoinTag>
     using State = GenericJoinEvaluator<Values>;
 
     static State make(QueryView<Values, QueryGenericJoinTag> operation) { return State(operation.get_plan()); }
-    template<typename Graph, typename R>
-    static void initialize(State& state, QueryView<Values, QueryGenericJoinTag> operation, const Graph& graph, const R&, Workspace<Values>&)
+    template<RelationViewRange<Values> R>
+    static void initialize(State& state, QueryView<Values, QueryGenericJoinTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>&)
     {
         state.initialize(operation.get_inputs() | std::views::transform([&](Index<Query<Values>> input) -> const auto& { return graph.result(input); }));
     }
-    template<typename Graph, typename R>
-    static void update(State& state, QueryView<Values, QueryGenericJoinTag> operation, const Graph& graph, const R&, Workspace<Values>&)
+    template<RelationDeltaRange<Values> R>
+    static void update(State& state, QueryView<Values, QueryGenericJoinTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>&)
     {
         state.apply(operation.get_inputs() | std::views::transform([&](Index<Query<Values>> input) { return graph.delta(input).change(); }));
     }
@@ -191,14 +214,14 @@ struct NodeRules<Values, QueryDistanceTag>
     using State = QueryDistance<Values>;
 
     static State make(QueryView<Values, QueryDistanceTag> operation) { return State(operation.get_plan()); }
-    template<typename Graph, typename R>
-    static void initialize(State& state, QueryView<Values, QueryDistanceTag> operation, const Graph& graph, const R&, Workspace<Values>&)
+    template<RelationViewRange<Values> R>
+    static void initialize(State& state, QueryView<Values, QueryDistanceTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>&)
     {
         if constexpr (ColumnValueFor<uint_t, Values>)
             state.initialize(graph.result(operation.get_sources()), graph.result(operation.get_edges()), graph.result(operation.get_targets()));
     }
-    template<typename Graph, typename R>
-    static void update(State& state, QueryView<Values, QueryDistanceTag> operation, const Graph& graph, const R&, Workspace<Values>&)
+    template<RelationDeltaRange<Values> R>
+    static void update(State& state, QueryView<Values, QueryDistanceTag> operation, const QueryEvaluator<Values>& graph, const R&, Workspace<Values>&)
     {
         if constexpr (ColumnValueFor<uint_t, Values>)
             state.apply(graph.delta(operation.get_sources()).change(), graph.delta(operation.get_edges()).change(), graph.delta(operation.get_targets()).change());

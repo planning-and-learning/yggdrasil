@@ -170,6 +170,22 @@ void difference(const L& lhs, const R& rhs, Builder<Relation<Values>>& out);
 template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
 Builder<Relation<Values>> difference(const L& lhs, const R& rhs);
 
+/// Semijoin lhs ⋉ rhs: the lhs rows with a match in rhs on the plan's keys. Without shared columns, lhs if rhs is
+/// nonempty. Hashes rhs.
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void semijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+Builder<Relation<Values>> semijoin(const L& lhs, const R& rhs);
+
+/// Antijoin lhs ▷ rhs: the lhs rows without a match in rhs on the plan's keys. Without shared columns, lhs if rhs is
+/// empty. Hashes rhs.
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+void antijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+
+template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+Builder<Relation<Values>> antijoin(const L& lhs, const R& rhs);
+
 }  // namespace ygg::database
 
 #include "yggdrasil/database/semantics/details/operations.hpp"

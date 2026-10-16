@@ -18,8 +18,10 @@
 
 /// Algebraic normalization by the classic heuristics (H. Garcia-Molina, J. D. Ullman,
 /// J. Widom, "Database Systems: The Complete Book", 2nd ed., 2008, ch. 16): push
-/// selections down through join, projection, rename, union, and difference; push
-/// projections through rename and union, never through difference; collapse nested
+/// selections down through join, projection, rename, union, and difference (and into the
+/// lhs of semijoins and antijoins); push projections through rename and union, and into the
+/// lhs of semijoins and antijoins (keeping the labels shared with the rhs), never through
+/// difference (selections already go below projections); collapse nested
 /// projections; propagate empty relations. One deterministic bottom-up pass.
 namespace ygg::database::detail
 {
@@ -50,6 +52,16 @@ class Normalizer
         if (is<QueryEmptyTag>(lhs) || is<QueryEmptyTag>(rhs))
             return lhs;
         return m_build.template binary<QueryDifferenceTag>(lhs, rhs);
+    }
+    /// A semijoin (`Tag` = QuerySemijoinTag) or antijoin: an empty rhs keeps nothing or everything.
+    template<class Tag>
+    QueryView<Values> filter_join(QueryView<Values> lhs, QueryView<Values> rhs)
+    {
+        if (is<QueryEmptyTag>(lhs))
+            return lhs;
+        if (is<QueryEmptyTag>(rhs))
+            return std::same_as<Tag, QuerySemijoinTag> ? m_build.empty(lhs.columns()) : lhs;
+        return m_build.template binary<Tag>(lhs, rhs);
     }
     /// Labels of the renamed query's argument for the given renamed labels.
     static std::vector<Index<Column>> inverse(QueryView<Values, QueryRenameTag> rename, std::span<const Index<Column>> renamed)
@@ -84,8 +96,38 @@ class Normalizer
             const auto inner = inverse(operation, columns);
             return rename(project(operation.get_arg(), inner), columns);
         }
+        // Into the lhs of a semijoin or antijoin, keeping the labels it shares with the rhs.
+        if (is<QuerySemijoinTag>(arg))
+            return project_filter_join<QuerySemijoinTag>(arg, columns);
+        if (is<QueryAntijoinTag>(arg))
+            return project_filter_join<QueryAntijoinTag>(arg, columns);
+        return finish_project(arg, columns);
+    }
+    QueryView<Values> finish_project(QueryView<Values> arg, std::span<const Index<Column>> columns)
+    {
         const auto result = m_build.template relabel<QueryProjectTag>(arg, columns);
         return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
+    }
+
+    /// The labels of `arg` in `columns` or in `extra`, in the order of `arg`.
+    static std::vector<Index<Column>> kept_labels(QueryView<Values> arg, std::span<const Index<Column>> columns, std::span<const Index<Column>> extra)
+    {
+        std::vector<Index<Column>> labels;
+        for (const auto& column : arg.columns())
+            if (std::ranges::find(columns, column.label) != columns.end() || std::ranges::find(extra, column.label) != extra.end())
+                labels.push_back(column.label);
+        return labels;
+    }
+    template<class Tag>
+    QueryView<Values> project_filter_join(QueryView<Values> arg, std::span<const Index<Column>> columns)
+    {
+        const auto operation = as<Tag>(arg);
+        const auto lhs = operation.get_lhs();
+        const auto kept = kept_labels(lhs, columns, column_labels(operation.get_rhs().columns()));
+        // Nothing to drop below: the projection stays above.
+        if (kept.size() == lhs.columns().size())
+            return finish_project(arg, columns);
+        return project(filter_join<Tag>(project(lhs, kept), operation.get_rhs()), columns);
     }
 
     static std::vector<Index<Column>> tested(const Operation<QuerySelectEqualTag>& data) { return { data.lhs_column, data.rhs_column }; }
@@ -140,6 +182,17 @@ class Normalizer
             const auto operation = as<QueryDifferenceTag>(arg);
             return difference(select(data, operation.get_lhs()), select(data, operation.get_rhs()));
         }
+        // The output of a semijoin or antijoin is its lhs.
+        if (is<QuerySemijoinTag>(arg))
+        {
+            const auto operation = as<QuerySemijoinTag>(arg);
+            return filter_join<QuerySemijoinTag>(select(data, operation.get_lhs()), operation.get_rhs());
+        }
+        if (is<QueryAntijoinTag>(arg))
+        {
+            const auto operation = as<QueryAntijoinTag>(arg);
+            return filter_join<QueryAntijoinTag>(select(data, operation.get_lhs()), operation.get_rhs());
+        }
         return m_build.template make<Tag>(
             [&](auto& filtered)
             {
@@ -159,6 +212,8 @@ class Normalizer
             return union_(child(query.get_lhs()), child(query.get_rhs()));
         else if constexpr (std::same_as<Tag, QueryDifferenceTag>)
             return difference(child(query.get_lhs()), child(query.get_rhs()));
+        else if constexpr (std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
+            return filter_join<Tag>(child(query.get_lhs()), child(query.get_rhs()));
         else if constexpr (std::same_as<Tag, QueryProjectTag>)
             return project(child(query.get_arg()), query.get_labels());
         else if constexpr (std::same_as<Tag, QueryRenameTag>)

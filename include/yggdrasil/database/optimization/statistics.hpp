@@ -6,6 +6,8 @@
 #define YGG_DATABASE_OPTIMIZATION_STATISTICS_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/database/semantics/operations.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <optional>
@@ -29,6 +31,18 @@ struct Statistics
     /// Observed results of queries in the roots' repository; they override estimates.
     UnorderedMap<Index<Query<Values>>, RelationStatistics> expressions;
 };
+
+/// Row and per-column distinct counts of one relation.
+template<ColumnTypes Values, RelationViewConcept<Values> Relation>
+RelationStatistics measure_relation(const Relation& relation)
+{
+    RelationStatistics stats;
+    stats.rows = static_cast<double>(relation.size());
+    const auto columns = relation.columns();
+    for (const auto& column : columns.span())
+        stats.distinct[column.label] = static_cast<double>(project<Values>(relation, { column.label }).size());
+    return stats;
+}
 }  // namespace ygg::database
 
 #endif

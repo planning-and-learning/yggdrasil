@@ -13,11 +13,20 @@
 #include "yggdrasil/database/syntax/row.hpp"
 
 #include <cassert>
+#include <concepts>
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <tuple>
+
+namespace ygg::database
+{
+/// A relation schema, given by its column layouts or by its column labels.
+template<typename S>
+concept ColumnSchema = std::same_as<S, std::span<const ColumnLayout>> || std::same_as<S, std::span<const Index<Column>>>;
+}  // namespace ygg::database
 
 namespace ygg
 {
@@ -35,7 +44,7 @@ private:
     Builder<database::Columns<Values>> m_columns;
     RawArraySet<std::byte, 64> m_rows;
 
-    template<typename Schema>
+    template<database::ColumnSchema Schema>
     void reinitialize(size_t width, Schema columns);
 
 public:
@@ -210,7 +219,7 @@ void Builder<database::Relation<Values>>::rename(std::span<const database::Colum
 }
 
 template<database::ColumnTypes Values>
-template<typename Schema>
+template<database::ColumnSchema Schema>
 void Builder<database::Relation<Values>>::reinitialize(size_t width, Schema columns)
 {
     if (width != m_rows.array_size())

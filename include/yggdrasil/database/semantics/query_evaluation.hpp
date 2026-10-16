@@ -156,6 +156,10 @@ public:
                         detail::evaluate_stateless(operation, bindings, child, out);
                     else if constexpr (std::same_as<Tag, QueryJoinTag>)
                         database::join(child(operation.get_lhs()), child(operation.get_rhs()), operation.get_plan(), out, m_workspace);
+                    else if constexpr (std::same_as<Tag, QuerySemijoinTag>)
+                        database::semijoin(child(operation.get_lhs()), child(operation.get_rhs()), operation.get_plan(), out, m_workspace);
+                    else if constexpr (std::same_as<Tag, QueryAntijoinTag>)
+                        database::antijoin(child(operation.get_lhs()), child(operation.get_rhs()), operation.get_plan(), out, m_workspace);
                     else if constexpr (std::same_as<Tag, QueryProjectTag>)
                         database::project(child(operation.get_arg()), operation.get_plan(), out, m_workspace);
                     else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)

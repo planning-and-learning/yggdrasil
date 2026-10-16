@@ -38,6 +38,7 @@ public:
     template<RelationViewConcept<Values> V>
     bool matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept;
     const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
+
     auto identifying_members() const noexcept { return std::make_tuple(m_relation_index, std::span<const ColumnSlice>(m_keys)); }
 };
 

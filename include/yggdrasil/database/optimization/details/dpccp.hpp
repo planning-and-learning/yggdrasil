@@ -9,6 +9,7 @@
 #include "yggdrasil/core/bit.hpp"
 
 #include <bit>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -100,6 +101,7 @@ public:
 /// A false callback return stops immediately and makes this function return false.
 /// Vertex indices are mask bits; arbitrary numbering and disconnected graphs work.
 template<typename Callback>
+    requires std::predicate<Callback&, std::uint64_t, std::uint64_t>
 bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callback&& emit)
 {
     if (adjacency.size() > max_dpccp_vertices)
