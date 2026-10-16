@@ -129,7 +129,7 @@ public:
     template<RelationViewConcept<Values> T>
     void set_targets(const T& targets)
     {
-        m_edges.require_target_columns(targets);
+        database::detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
         if (m_targets_set && m_targets.same(targets))
             return;
         m_targets.assign(targets);
@@ -144,20 +144,21 @@ public:
     {
         if (!m_edges.evaluator().bound() || !m_targets_set)
             throw std::invalid_argument("Min distance: inputs or targets are not set.");
-        m_edges.require_source_columns(sources);
+        database::detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
+        auto edges = m_edges.with_key({});
         if (m_reset_pending)
             reset(heuristic);
         else
         {
             // Added edges can shorten distances: learned ones are repaired.
             if (!m_added.empty())
-                m_statistics.repaired += m_repair.run(m_tree, m_added, m_edges, heuristic);
+                m_statistics.repaired += m_repair.run(m_tree, m_added, edges, heuristic);
             if (m_restart_backward)
                 restart_backward(heuristic);
         }
         m_added.clear();
         m_restart_backward = false;
-        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        auto search = AStar<typename Edges::Keyed, H>(edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -177,7 +178,8 @@ private:
     using Edges = database::detail::EdgeQuery<incremental::bound::QueryEvaluator<Values>, Values>;
 
     MinDistance(incremental::bound::QueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
-        m_edges(std::move(edges), plan),
+        m_plan(plan),
+        m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size()),
         m_added(plan.tuple_size()),
@@ -185,6 +187,7 @@ private:
     {
     }
 
+    DistancePlan<Values> m_plan;
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;

@@ -70,13 +70,14 @@ public:
     template<SlotRelations<Values> Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
     uint_t min_distance(const Input& input, const S& sources, const T& targets, const H& heuristic = {})
     {
-        m_edges.require_source_columns(sources);
-        m_edges.require_target_columns(targets);
+        detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
+        detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
         m_edges.evaluator().bind(input);
         m_tree.clear();
         m_targets.assign(targets);
         m_backward.start(m_targets.ensure_in(m_tree, heuristic));
-        auto search = AStar<Edges, H>(m_edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        auto edges = m_edges.with_key({});
+        auto search = AStar<typename Edges::Keyed, H>(edges, m_tree, m_backward, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto distance = search.run(sources);
         m_statistics += search.counters();
         return distance;
@@ -95,13 +96,15 @@ private:
     using Edges = detail::EdgeQuery<bound::QueryEvaluator<Values>, Values>;
 
     MinDistance(bound::QueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
-        m_edges(std::move(edges), plan),
+        m_plan(plan),
+        m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
         m_tree(plan.tuple_size()),
         m_targets(plan.tuple_size()),
         m_search(plan.tuple_size())
     {
     }
 
+    DistancePlan<Values> m_plan;
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;

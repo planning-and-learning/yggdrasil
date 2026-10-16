@@ -12,28 +12,24 @@
 #include "yggdrasil/database/semantics/must_pass_plan.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
+#include "yggdrasil/database/semantics/search/a_star.hpp"
+#include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
-#include <cstdint>
-#include <functional>
-#include <queue>
 #include <cstddef>
-#include <limits>
-#include <optional>
+#include <ranges>
 #include <span>
-#include <stdexcept>
-#include <tuple>
 #include <utility>
 #include <vector>
 
 namespace ygg::database
 {
 
-/// What the explorations of all calls visited.
-struct MustPassStatistics
+/// What the explorations of all calls visited, with the counters of their searches (AStarCounters).
+struct MustPassStatistics : AStarCounters
 {
     size_t keys = 0;      ///< Keys whose targets were reachable.
     size_t vertices = 0;  ///< Expanded vertices.
@@ -51,24 +47,25 @@ struct MustPassStatistics
 ///
 /// Method, per key:
 ///  1. Edges. As in MinDistance, a bound::QueryEvaluator evaluates the edge query over the call's inputs with the key
-///     and a vertex bound, so E_k is explored on demand from S_k and never materialized; successors are kept for the
-///     key's searches.
-///  2. Witness. A* (Hart, Nilsson & Raphael 1968) finds a shortest path from S_k to T_k. Only objects on this path can
-///     be must-pass: any other object is avoided by it. A short witness passes few objects, so few need verification.
+///     and a vertex bound, so E_k is explored on demand from S_k and never materialized or kept.
+///  2. Witness. A* (search/a_star.hpp, as in MinDistance) finds a shortest path from S_k to T_k. Only objects on this
+///     path can be must-pass: any other object is avoided by it. A short witness passes few objects, so few need
+///     verification.
 ///  3. Verification. An object contained in every source or every target is passed trivially, as initial facts and
-///     goals are landmarks. For each other probe object on the witness, A* tests whether T_k is reachable without the
-///     vertices containing it.
-///  4. Bidirectionality. Every search also runs breadth-first backward from T_k, alternating with the forward side by
-///     the vertices each expanded; once it is exhausted without meeting a source, T_k is unreachable (Pohl,
-///     "Bi-directional Search", Machine Intelligence 6, 1971). Unreachability, the expensive case, is so proven from
-///     the smaller side. The heuristic stays admissible on the remaining graph, so the searches are goal-directed; only
-///     an object that must be passed costs an exhaustive search.
+///     goals are landmarks. For each other probe object on the witness, the same A* tests whether T_k is reachable in
+///     the key's graph without the vertices containing it.
+///  4. Bidirectionality. As in MinDistance, every search also runs breadth-first backward from T_k (BackwardFrontier),
+///     interleaved by Pohl's cardinality comparison; once that side is exhausted without meeting a source, T_k is
+///     unreachable ("Bi-directional Search", Machine Intelligence 6, 1971). Unreachability, the expensive case, is so
+///     proven from the smaller side. The heuristic stays consistent on the remaining graph, so the searches are
+///     goal-directed; only an object that must be passed costs an exhaustive search. Each search starts with an empty
+///     search tree: distances learned without one object do not bound those without another.
 ///
 /// The heuristic H estimates the distance to the key's targets from the bytes of a key followed by a vertex (the bound
-/// columns of a successor query); it must be admissible for every key, and infinity prunes a vertex. If it has
-/// exclude(key, object), it is told before each search which object the search avoids (an empty span: none), so it may
-/// estimate on the smaller graph; an abstraction in which the targets become unreachable then proves a must-pass
-/// object without a search.
+/// columns of a successor query); it must be consistent (DistanceHeuristic) for every key, and infinity prunes a
+/// vertex. If it has exclude(key, object), it is told before each search which object the search avoids (an empty
+/// span: none), so it may estimate on the smaller graph; an abstraction in which the targets become unreachable then
+/// proves a must-pass object without a search.
 ///
 /// An edge query that projects vertices onto fewer columns defines an abstraction: every path of the original graph
 /// maps to a path of the projection, so objects that must be passed in the projection must be passed by the original's
@@ -84,16 +81,19 @@ public:
     MustPass(QueryView<Values> edges, const MustPassPlan<Values>& plan, const std::vector<bool>& static_slots = {}) :
         m_plan(plan),
         m_probe_positions(plan.probe_positions()),
-        m_edges(checked(edges, plan), static_slots),
-        m_forward(m_edges.prepare(detail::column_range(0, plan.keys() + plan.arity()))),
-        m_backward(m_edges.prepare(key_and_target_positions(plan))),
+        m_edges(bound::QueryEvaluator<Values>(checked(edges, plan), static_slots), plan.edge_columns().span(), plan.keys(), plan.arity()),
         m_keys(std::max<size_t>(plan.key_size(), 1)),
         m_probes(plan.probe_size()),
-        m_vertices(plan.vertex_size())
+        m_starts(plan.vertex_size()),
+        m_ends(plan.vertex_size()),
+        m_tree(plan.vertex_size()),
+        m_targets(plan.vertex_size()),
+        m_search(plan.vertex_size()),
+        m_estimated(plan.key_size() + plan.vertex_size())
     {
     }
 
-    size_t input_count() const noexcept { return m_edges.input_count(); }
+    size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
     const MustPassPlan<Values>& plan() const noexcept { return m_plan; }
 
     /// Appends to `out`, which has the plan's output columns, the must-pass probe objects of every key of the sources and
@@ -106,7 +106,7 @@ public:
         detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
         detail::require_plan_columns(probes.columns().span(), m_plan.probe_columns().span());
         detail::require_plan_columns(out.columns().span(), m_plan.output_columns().span());
-        m_edges.bind(input);
+        m_edges.evaluator().bind(input);
         m_probes.clear();
         for (size_t r = 0; r < probes.size(); ++r)
             m_probes.insert(probes.row(r));
@@ -129,16 +129,69 @@ public:
     const MustPassStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    static constexpr auto none = std::numeric_limits<uint_t>::max();
-
-    /// The key columns and the target vertex of an edge, the bound columns of a predecessor query.
-    static std::vector<size_t> key_and_target_positions(const MustPassPlan<Values>& plan)
+    /// Vertices of the current key by id, as a VertexRange.
+    struct Vertices
     {
-        auto positions = detail::column_range(0, plan.keys());
-        for (const auto position : detail::column_range(plan.keys() + plan.arity(), plan.keys() + 2 * plan.arity()))
-            positions.push_back(position);
-        return positions;
-    }
+        const VertexSet* set;
+        std::span<const uint_t> ids;
+
+        size_t size() const noexcept { return ids.size(); }
+        std::span<const std::byte> row(size_t i) const { return (*set)[ids[i]]; }
+    };
+
+    using Edges = detail::EdgeQuery<bound::QueryEvaluator<Values>, Values>;
+
+    /// The current key's edges (Edges::Keyed, evaluated on demand as in MinDistance) without the vertices containing
+    /// the excluded probe object: the oracle of AStar and BackwardFrontier.
+    class Graph
+    {
+    public:
+        Graph(typename Edges::Keyed edges, MustPass& owner) : m_edges(edges), m_owner(&owner) {}
+
+        template<RowPredicate OnVertex>
+        void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+        {
+            ++m_owner->m_statistics.vertices;
+            m_edges.successors(vertex, allowed_only(on_vertex));
+        }
+        template<RowPredicate OnVertex>
+        void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+        {
+            ++m_owner->m_statistics.backward;
+            m_edges.predecessors(vertex, allowed_only(on_vertex));
+        }
+        bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
+        {
+            return m_owner->allowed(from) && m_owner->allowed(to) && m_edges.edge_exists(from, to);
+        }
+
+    private:
+        /// on_vertex for allowed vertices; the others are skipped.
+        template<RowPredicate OnVertex>
+        auto allowed_only(const OnVertex& on_vertex)
+        {
+            return [this, &on_vertex](std::span<const std::byte> next)
+            {
+                ++m_owner->m_statistics.edges;
+                return !m_owner->allowed(next) || on_vertex(next);
+            };
+        }
+
+        typename Edges::Keyed m_edges;
+        MustPass* m_owner;
+    };
+
+    /// The heuristic on a vertex of the current key: H estimates from the key followed by the vertex.
+    class KeyedHeuristic
+    {
+    public:
+        explicit KeyedHeuristic(MustPass& owner) : m_owner(&owner) {}
+
+        uint_t estimate(std::span<const std::byte> vertex) const { return m_owner->estimate(vertex); }
+
+    private:
+        MustPass* m_owner;
+    };
 
     static QueryView<Values> checked(QueryView<Values> edges, const MustPassPlan<Values>& plan)
     {
@@ -177,219 +230,94 @@ private:
         }
     }
 
-    /// Interns a vertex of the current key with the probe objects it contains.
-    uint_t intern(std::span<const std::byte> vertex)
+    /// Calls on_probe with each probe object a vertex contains (an object at several positions once per position).
+    template<typename OnProbe>
+    void probes_of(std::span<const std::byte> vertex, const OnProbe& on_probe) const
     {
-        const auto before = m_vertices.size();
-        const auto id = uint_t(m_vertices.insert(vertex));
-        if (m_vertices.size() == before)
-            return id;
-        m_probe_offsets.push_back(m_vertex_probes.size());
         for (const auto position : m_probe_positions)
             if (const auto probe = m_probes.find(vertex.subspan(position, m_plan.probe_size())))
-                if (std::ranges::find(m_vertex_probes.begin() + long(m_probe_offsets.back()), m_vertex_probes.end(), uint_t(*probe)) == m_vertex_probes.end())
-                    m_vertex_probes.push_back(uint_t(*probe));
-        m_successor_ranges.emplace_back(0, none);
-        m_is_target.push_back(false);
-        return id;
+                on_probe(uint_t(*probe));
     }
-    std::span<const uint_t> probes_of(uint_t vertex) const
+    bool contains(std::span<const std::byte> vertex, uint_t probe) const
     {
-        const auto end = vertex + 1 < m_probe_offsets.size() ? m_probe_offsets[vertex + 1] : m_vertex_probes.size();
-        return std::span<const uint_t>(m_vertex_probes).subspan(m_probe_offsets[vertex], end - m_probe_offsets[vertex]);
+        const auto object = m_probes[probe];
+        return std::ranges::any_of(m_probe_positions,
+                                   [&](size_t position) { return std::ranges::equal(vertex.subspan(position, m_plan.probe_size()), object); });
     }
-    /// The successors of a vertex, evaluated on first use.
-    std::span<const uint_t> successors(uint_t vertex)
+    /// Whether the current search may visit a vertex: it does not contain the excluded probe object.
+    bool allowed(std::span<const std::byte> vertex) const { return m_excluded == none || !contains(vertex, m_excluded); }
+
+    /// The heuristic's estimate of a vertex of the current key.
+    uint_t estimate(std::span<const std::byte> vertex)
     {
-        if (m_successor_ranges[vertex].second == none)
-        {
-            std::ranges::copy(m_vertices[vertex], m_bound.begin() + long(m_plan.key_size()));
-            m_expanded.clear();
-            m_edges.evaluate(m_forward,
-                             m_bound,
-                             [&](std::span<const std::byte> edge)
-                             {
-                                 m_expanded.push_back(intern(edge.subspan(m_plan.edge_target_offset(), m_plan.vertex_size())));
-                                 return true;
-                             });
-            m_successor_ranges[vertex] = { m_successors.size(), uint_t(m_expanded.size()) };
-            m_successors.insert(m_successors.end(), m_expanded.begin(), m_expanded.end());
-            ++m_statistics.vertices;
-            m_statistics.edges += m_expanded.size();
-        }
-        const auto [first, count] = m_successor_ranges[vertex];
-        return std::span<const uint_t>(m_successors).subspan(first, count);
+        std::ranges::copy(vertex, m_estimated.begin() + long(m_plan.key_size()));
+        return m_heuristic->estimate(m_estimated);
     }
 
-    /// The predecessors of a vertex, evaluated on first use.
-    std::span<const uint_t> predecessors(uint_t vertex)
+    /// Whether a target of the current key is reachable without the vertices containing `excluded` (none: any). The
+    /// found path's vertices are passed to on_path.
+    template<typename OnPath>
+    bool search(uint_t excluded, const OnPath& on_path)
     {
-        if (m_predecessor_ranges.size() < m_vertices.size())
-            m_predecessor_ranges.resize(m_vertices.size(), { 0, none });
-        if (m_predecessor_ranges[vertex].second == none)
-        {
-            std::ranges::copy(m_vertices[vertex], m_bound.begin() + long(m_plan.key_size()));
-            m_expanded.clear();
-            m_edges.evaluate(m_backward,
-                             m_bound,
-                             [&](std::span<const std::byte> edge)
-                             {
-                                 m_expanded.push_back(intern(edge.subspan(m_plan.key_size(), m_plan.vertex_size())));
-                                 return true;
-                             });
-            if (m_predecessor_ranges.size() < m_vertices.size())
-                m_predecessor_ranges.resize(m_vertices.size(), { 0, none });
-            m_predecessor_ranges[vertex] = { m_predecessors.size(), uint_t(m_expanded.size()) };
-            m_predecessors.insert(m_predecessors.end(), m_expanded.begin(), m_expanded.end());
-            ++m_statistics.backward;
-        }
-        const auto [first, count] = m_predecessor_ranges[vertex];
-        return std::span<const uint_t>(m_predecessors).subspan(first, count);
-    }
-
-    /// The heuristic's estimate of a vertex of the current key, computed once.
-    uint_t estimate(uint_t vertex)
-    {
-        if (m_estimates.size() < m_vertices.size())
-            m_estimates.resize(m_vertices.size(), none);
-        if (m_estimates[vertex] == none)
-        {
-            std::ranges::copy(m_vertices[vertex], m_estimated.begin() + long(m_plan.key_size()));
-            m_estimates[vertex] = m_heuristic->estimate(m_estimated);
-        }
-        return m_estimates[vertex];
-    }
-
-    /// A target reached by A* from the key's sources without the vertices containing `excluded` (none: any), or none.
-    /// The parents of a search without exclusion form the witness path.
-    uint_t search(uint_t excluded)
-    {
-        const auto allowed = [&](uint_t vertex)
-        { return excluded == none || std::ranges::find(probes_of(vertex), excluded) == probes_of(vertex).end(); };
+        m_excluded = excluded;
         if constexpr (requires(H& h, std::span<const std::byte> bytes) { h.exclude(bytes, bytes); })
         {
-            const auto key = std::span<const std::byte>(m_bound).first(m_plan.key_size());
-            m_heuristic->exclude(key, excluded == none ? std::span<const std::byte>() : std::span<const std::byte>(m_probes[excluded]));
-            m_estimates.clear();
+            m_heuristic->exclude(m_key, excluded == none ? std::span<const std::byte>() : std::span<const std::byte>(m_probes[excluded]));
         }
-        ++m_stamp;
-        m_open = {};
-        const auto reach = [&](uint_t vertex, uint_t g, uint_t parent)
+        const auto keep_allowed = [&](const VertexSet& vertices, std::vector<uint_t>& out)
         {
-            if (m_stamp_of.size() < m_vertices.size())
-            {
-                m_stamp_of.resize(m_vertices.size(), 0);
-                m_g.resize(m_vertices.size(), none);
-                m_parent.resize(m_vertices.size(), none);
-            }
-            if (!allowed(vertex) || (m_stamp_of[vertex] == m_stamp && m_g[vertex] <= g))
-                return;
-            const auto h = estimate(vertex);
-            if (h == infinity)
-                return;
-            m_stamp_of[vertex] = m_stamp;
-            m_g[vertex] = g;
-            m_parent[vertex] = parent;
-            m_open.emplace(g + h, infinity - g, vertex);  // Ties go to the deeper vertex.
+            out.clear();
+            for (uint_t id = 0; id < vertices.size(); ++id)
+                if (allowed(vertices[id]))
+                    out.push_back(id);
         };
-        for (const auto start : m_starts)
-            reach(start, 0, none);
-        // Backward breadth-first from the targets: once it is exhausted without meeting a source, no target is
-        // reachable (bidirectional search, Pohl 1971). The sides alternate by the vertices they expanded, so an
-        // unreachable key is decided by the smaller of the two spaces at about twice its cost, and a reachable one costs
-        // at most twice the forward search. Meeting a source decides a removal test; the witness needs the forward
-        // path, so its search continues forward.
-        m_backward_queue.clear();
-        m_backward_next = 0;
-        const auto back = [&](uint_t vertex)
-        {
-            if (m_back_stamp.size() < m_vertices.size())
-                m_back_stamp.resize(m_vertices.size(), 0);
-            if (!allowed(vertex) || m_back_stamp[vertex] == m_stamp)
-                return false;
-            m_back_stamp[vertex] = m_stamp;
-            m_backward_queue.push_back(vertex);
-            return std::ranges::find(m_starts, vertex) != m_starts.end();
-        };
-        auto met = false;  // Whether the backward side reached a source: a target is reachable.
-        auto forward_expanded = size_t(0);
-        for (const auto end : m_ends)
-            met = back(end) || met;
-        if (met && excluded != none)
-            return m_ends.front();
-        while (!m_open.empty())
-        {
-            if (!met && m_backward_next == m_backward_queue.size())
-                return none;
-            if (!met && m_backward_next <= forward_expanded)
-            {
-                const auto vertex = m_backward_queue[m_backward_next++];
-                for (const auto previous : predecessors(vertex))
-                    met = back(previous) || met;
-                if (met && excluded != none)
-                    return m_ends.front();
-                continue;
-            }
-            const auto [f, depth, vertex] = m_open.top();
-            m_open.pop();
-            const auto g = infinity - depth;
-            if (g != m_g[vertex])
-                continue;
-            ++forward_expanded;
-            if (m_is_target[vertex])
-                return vertex;
-            for (const auto next : successors(vertex))
-                reach(next, g + 1, vertex);
-        }
-        return none;
+        keep_allowed(m_starts, m_allowed_starts);
+        keep_allowed(m_ends, m_allowed_ends);
+        auto graph = Graph(m_edges.with_key(m_key), *this);
+        const auto heuristic = KeyedHeuristic(*this);
+        m_tree.clear();
+        m_targets.assign(Vertices { &m_ends, m_allowed_ends });
+        m_frontier.start(m_targets.ensure_in(m_tree, heuristic));
+        auto search = AStar<Graph, KeyedHeuristic>(graph, m_tree, m_frontier, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
+        const auto reachable = search.run(Vertices { &m_starts, m_allowed_starts }) != infinity;
+        m_statistics += search.counters();
+        if (reachable)
+            search.path(on_path);
+        return reachable;
     }
 
     template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
     void verify(const S& sources, const T& targets, uint_t key, Builder<Relation<Values>>& out)
     {
         const auto key_bytes = key_of(sources.row(m_key_sources[key].front()));
-        m_vertices.clear();
-        m_probe_offsets.clear();
-        m_vertex_probes.clear();
-        m_successor_ranges.clear();
-        m_successors.clear();
-        m_predecessor_ranges.clear();
-        m_predecessors.clear();
-        m_back_stamp.clear();
-        m_is_target.clear();
-        m_stamp_of.clear();
-        m_g.clear();
-        m_parent.clear();
-        m_estimates.clear();
-        m_bound.assign(key_bytes.begin(), key_bytes.end());
-        m_bound.resize(m_plan.key_size() + m_plan.vertex_size());
-        m_estimated.assign(m_bound.begin(), m_bound.end());
+        m_key = key_bytes;
+        std::ranges::copy(key_bytes, m_estimated.begin());
         m_starts.clear();
         for (const auto r : m_key_sources[key])
-            m_starts.push_back(intern(vertex_of(sources.row(r))));
+            m_starts.insert(vertex_of(sources.row(r)));
         m_ends.clear();
         for (const auto r : m_key_targets[key])
+            m_ends.insert(vertex_of(targets.row(r)));
+        m_candidates.clear();
+        const auto on_witness = [&](std::span<const std::byte> vertex)
         {
-            const auto end = intern(vertex_of(targets.row(r)));
-            m_is_target[end] = true;
-            m_ends.push_back(end);
-        }
-        const auto reached = search(none);
-        if (reached == none)
+            probes_of(vertex,
+                      [&](uint_t probe)
+                      {
+                          if (std::ranges::find(m_candidates, probe) == m_candidates.end())
+                              m_candidates.push_back(probe);
+                      });
+        };
+        if (!search(none, on_witness))
             return;
         ++m_statistics.keys;
-        m_candidates.clear();
-        for (auto vertex = reached; vertex != none; vertex = m_parent[vertex])
-            for (const auto probe : probes_of(vertex))
-                if (std::ranges::find(m_candidates, probe) == m_candidates.end())
-                    m_candidates.push_back(probe);
         m_row.assign(key_bytes.begin(), key_bytes.end());
         m_row.resize(m_plan.key_size() + m_plan.probe_size());
-        const auto in_all = [&](const std::vector<uint_t>& vertices, uint_t probe)
-        { return std::ranges::all_of(vertices, [&](uint_t vertex) { return std::ranges::find(probes_of(vertex), probe) != probes_of(vertex).end(); }); };
+        const auto in_all = [&](const VertexSet& vertices, uint_t probe)
+        { return std::ranges::all_of(std::views::iota(uint_t(0), uint_t(vertices.size())), [&](uint_t id) { return contains(vertices[id], probe); }); };
         for (const auto probe : m_candidates)
             // An object in every source or every target is passed trivially, as initial facts and goals are landmarks.
-            if (in_all(m_starts, probe) || in_all(m_ends, probe) || (++m_statistics.removals, search(probe) == none))
+            if (in_all(m_starts, probe) || in_all(m_ends, probe) || (++m_statistics.removals, !search(probe, [](std::span<const std::byte>) {})))
             {
                 std::ranges::copy(m_probes[probe], m_row.begin() + long(m_plan.key_size()));
                 out.insert(std::span<const std::byte>(m_row));
@@ -398,39 +326,26 @@ private:
 
     MustPassPlan<Values> m_plan;
     std::vector<size_t> m_probe_positions;
-    bound::QueryEvaluator<Values> m_edges;
-    size_t m_forward;
-    size_t m_backward;
+    Edges m_edges;
     RawArraySet<std::byte> m_keys;    ///< Interned key bytes; unused without key columns.
     RawArraySet<std::byte> m_probes;  ///< Interned probe objects.
     std::vector<std::vector<size_t>> m_key_sources;
     std::vector<std::vector<size_t>> m_key_targets;
-    // The explored graph of the current key.
-    VertexSet m_vertices;
-    std::vector<size_t> m_probe_offsets;  ///< The probe objects of vertex v start at m_vertex_probes[m_probe_offsets[v]].
-    std::vector<uint_t> m_vertex_probes;
-    std::vector<std::pair<size_t, uint_t>> m_successor_ranges;  ///< First successor and count; count none if unexpanded.
-    std::vector<uint_t> m_successors;
-    std::vector<std::pair<size_t, uint_t>> m_predecessor_ranges;  ///< First predecessor and count; count none if unexpanded.
-    std::vector<uint_t> m_predecessors;
-    std::vector<uint_t> m_expanded;  ///< Successors of the vertex being expanded.
-    std::vector<bool> m_is_target;
-    std::vector<uint_t> m_starts;
-    std::vector<uint_t> m_ends;  ///< The key's target vertices.
+    // The current key.
+    std::span<const std::byte> m_key;  ///< Borrowed from the sources during must_pass().
+    VertexSet m_starts;
+    VertexSet m_ends;
     // Searches.
     H* m_heuristic = nullptr;
-    std::vector<uint_t> m_estimates;   ///< The heuristic's estimate of each vertex, or none if not computed.
-    std::vector<uint32_t> m_stamp_of;  ///< The search that reached a vertex last.
-    uint32_t m_stamp = 0;
-    std::vector<uint_t> m_g;
-    std::vector<uint_t> m_parent;
-    std::priority_queue<std::tuple<uint_t, uint_t, uint_t>, std::vector<std::tuple<uint_t, uint_t, uint_t>>, std::greater<>> m_open;  ///< f, infinity - g, vertex.
+    uint_t m_excluded = none;  ///< The probe object whose vertices the current search avoids, or none.
+    std::vector<uint_t> m_allowed_starts;
+    std::vector<uint_t> m_allowed_ends;
+    SearchTree m_tree;
+    BackwardFrontier m_frontier;
+    detail::TargetSet m_targets;
+    AStarStorage m_search;
     std::vector<uint_t> m_candidates;  ///< Probe objects on the witness.
-    std::vector<uint32_t> m_back_stamp;  ///< The search whose backward side reached a vertex last.
-    std::vector<uint_t> m_backward_queue;
-    size_t m_backward_next = 0;
     std::vector<std::byte> m_estimated;  ///< The key and a vertex, as given to the heuristic.
-    std::vector<std::byte> m_bound;    ///< The key and a vertex, the bound columns of a successor query.
     std::vector<std::byte> m_row;
     MustPassStatistics m_statistics;
 };

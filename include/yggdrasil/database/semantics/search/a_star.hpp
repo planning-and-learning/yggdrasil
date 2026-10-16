@@ -194,6 +194,26 @@ public:
 
     const AStarCounters& counters() const noexcept { return m_counters; }
 
+    /// Calls on_vertex(v) for each vertex v of the path found by run(), which returned a finite distance: the generated
+    /// vertices from a source to where the search ended, then the tree's next chain from there to a target.
+    template<typename OnVertex>
+    void path(const OnVertex& on_vertex) const
+    {
+        auto end = m_reused;
+        if (m_last != none)
+        {
+            for (auto index = m_last; index != none; index = m_storage->m_nodes[index].parent)
+                on_vertex(m_storage->m_vertices[index]);
+            end = m_storage->m_nodes[m_last].stored;
+        }
+        if (end == none)
+            return;
+        if (m_last == none)
+            on_vertex(m_tree->vertex(end));
+        for (auto id = m_tree->next(end); id != none; id = m_tree->next(id))
+            on_vertex(m_tree->vertex(id));
+    }
+
 private:
     Oracle* m_oracle;
     SearchTree* m_tree;
@@ -204,6 +224,8 @@ private:
     uint64_t m_version;
     size_t m_open = 0;
     uint_t m_dropped = infinity;  ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
+    uint_t m_last = none;         ///< The generated vertex the search ended at, if it ended at one.
+    uint_t m_reused = none;       ///< The stored source whose tree path ended the search without expanding, if any.
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
@@ -246,6 +268,7 @@ private:
         if (!on_valid_path(*stored))
             return std::nullopt;
         ++m_counters.tree_hits;
+        m_reused = *stored;
         return value(*stored);
     }
 
@@ -373,8 +396,11 @@ private:
                 if (const auto learned = m == infinity ? infinity : m - nodes[i].g; learned > nodes[i].h_learn)
                     m_tree->learn(ensure(i), learned);
         if (last)
+        {
+            m_last = *last;
             for (auto child = *last; nodes[child].parent != none; child = nodes[child].parent)
                 m_tree->link(ensure(nodes[child].parent), ensure(child));
+        }
         return distance;
     }
 

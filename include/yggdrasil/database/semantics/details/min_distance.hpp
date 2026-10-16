@@ -51,22 +51,24 @@ Evaluator relation_edges(const DistancePlan<Values>& plan, bool static_edges)
     return Evaluator(insert_query(repository, builder, *input), { static_edges });
 }
 
-/// An edge query bound for search: `Evaluator` (a bound::QueryEvaluator or incremental::bound::QueryEvaluator) with the
-/// bindings of the source columns (successors), the target columns (predecessors) and both (edge checks), so that it
-/// models the search oracle concepts.
+/// An edge query bound for search: `Evaluator` (a bound::QueryEvaluator or incremental::bound::QueryEvaluator) over
+/// edge columns k·u·u' (key columns k, possibly none, then two vertices of `arity` columns), with the bindings of the
+/// key and a source vertex (successors), the key and a target vertex (predecessors), and all of them (edge checks).
+/// The key is an argument of each call; with_key fixes it for a search, as a model of the search oracle concepts.
 template<typename Evaluator, ColumnTypes Values>
 class EdgeQuery
 {
 public:
-    EdgeQuery(Evaluator edges, const DistancePlan<Values>& plan) :
-        m_vertex_size(plan.tuple_size()),
-        m_target_offset(plan.edge_columns()[plan.arity()].offset),
-        m_source_columns(plan.source_columns().span().begin(), plan.source_columns().span().end()),
-        m_target_columns(plan.target_columns().span().begin(), plan.target_columns().span().end()),
+    EdgeQuery(Evaluator edges, std::span<const ColumnLayout> edge_columns, size_t keys, size_t arity) :
+        m_key_size(keys == 0 ? 0 : edge_columns[keys].offset),
+        m_target_offset(edge_columns[keys + arity].offset),
+        m_vertex_size(m_target_offset - m_key_size),
         m_edges(std::move(edges)),
-        m_forward(m_edges.prepare(column_range(0, plan.arity()))),
-        m_backward(m_edges.prepare(column_range(plan.arity(), 2 * plan.arity()))),
-        m_check(m_edges.prepare(column_range(0, 2 * plan.arity())))
+        m_forward(m_edges.prepare(column_range(0, keys + arity))),
+        m_backward(m_edges.prepare(key_and_target_positions(keys, arity))),
+        m_check(m_edges.prepare(column_range(0, keys + 2 * arity))),
+        m_bound(m_key_size + m_vertex_size),
+        m_edge(m_key_size + 2 * m_vertex_size)
     {
     }
 
@@ -76,31 +78,21 @@ public:
     /// Where an edge row's target vertex starts.
     size_t target_offset() const noexcept { return m_target_offset; }
 
-    template<RelationViewConcept<Values> S>
-    void require_source_columns(const S& sources) const
-    {
-        require_plan_columns(sources.columns().span(), m_source_columns);
-    }
-    template<RelationViewConcept<Values> T>
-    void require_target_columns(const T& targets) const
-    {
-        require_plan_columns(targets.columns().span(), m_target_columns);
-    }
-
     template<RowPredicate OnVertex>
-    void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    void successors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
-        m_edges.evaluate(m_forward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset)); });
+        m_edges.evaluate(m_forward, bound(key, vertex), [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset, m_vertex_size)); });
     }
     template<RowPredicate OnVertex>
-    void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    void predecessors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
-        m_edges.evaluate(m_backward, vertex, [&](std::span<const std::byte> edge) { return on_vertex(edge.first(m_target_offset)); });
+        m_edges.evaluate(m_backward, bound(key, vertex), [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_key_size, m_vertex_size)); });
     }
-    bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
+    bool edge_exists(std::span<const std::byte> key, std::span<const std::byte> from, std::span<const std::byte> to)
     {
-        m_edge.assign(from.begin(), from.end());
-        m_edge.insert(m_edge.end(), to.begin(), to.end());
+        std::ranges::copy(key, m_edge.begin());
+        std::ranges::copy(from, m_edge.begin() + long(m_key_size));
+        std::ranges::copy(to, m_edge.begin() + long(m_key_size + m_vertex_size));
         auto exists = false;
         m_edges.evaluate(m_check,
                          m_edge,
@@ -112,16 +104,60 @@ public:
         return exists;
     }
 
+    /// The edges of one key as a search oracle (SuccessorOracle, PredecessorOracle, EdgeCheck).
+    class Keyed
+    {
+    public:
+        Keyed(EdgeQuery& edges, std::span<const std::byte> key) : m_edges(&edges), m_key(key) {}
+
+        template<RowPredicate OnVertex>
+        void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+        {
+            m_edges->successors(m_key, vertex, on_vertex);
+        }
+        template<RowPredicate OnVertex>
+        void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+        {
+            m_edges->predecessors(m_key, vertex, on_vertex);
+        }
+        bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return m_edges->edge_exists(m_key, from, to); }
+
+    private:
+        EdgeQuery* m_edges;
+        std::span<const std::byte> m_key;
+    };
+
+    Keyed with_key(std::span<const std::byte> key) { return Keyed(*this, key); }
+
 private:
-    size_t m_vertex_size;
+    /// The key columns and the target vertex of an edge, the bound columns of a predecessor query.
+    static std::vector<size_t> key_and_target_positions(size_t keys, size_t arity)
+    {
+        auto positions = column_range(0, keys);
+        for (const auto position : column_range(keys + arity, keys + 2 * arity))
+            positions.push_back(position);
+        return positions;
+    }
+
+    /// The key and a vertex as one row of bound columns; without a key, the vertex itself.
+    std::span<const std::byte> bound(std::span<const std::byte> key, std::span<const std::byte> vertex)
+    {
+        if (key.empty())
+            return vertex;
+        std::ranges::copy(key, m_bound.begin());
+        std::ranges::copy(vertex, m_bound.begin() + long(m_key_size));
+        return m_bound;
+    }
+
+    size_t m_key_size;
     size_t m_target_offset;
-    std::vector<ColumnLayout> m_source_columns;
-    std::vector<ColumnLayout> m_target_columns;
+    size_t m_vertex_size;
     Evaluator m_edges;
     size_t m_forward;
     size_t m_backward;
     size_t m_check;
-    std::vector<std::byte> m_edge;  ///< The bytes of the checked edge, kept to avoid allocations.
+    std::vector<std::byte> m_bound;  ///< The key and a vertex, kept to avoid allocations.
+    std::vector<std::byte> m_edge;   ///< The key and the vertices of the checked edge, kept to avoid allocations.
 };
 
 /// The targets of a search, as a vertex set.

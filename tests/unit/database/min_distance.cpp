@@ -9,6 +9,8 @@
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/relation_repository.hpp"
 
+#include <array>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <map>
 #include <random>
@@ -300,6 +302,116 @@ TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
         ASSERT_EQ(guided.min_distance_edges(borrow(edges), borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
     }
     EXPECT_GT(guided.statistics().tree_hits, 0);
+}
+
+/// Vertices are uint_t values; edges are adjacency lists.
+struct ListGraph
+{
+    using Bytes = std::array<std::byte, sizeof(uint_t)>;
+
+    std::vector<std::vector<uint_t>> out;
+    std::vector<std::vector<uint_t>> in;
+
+    static uint_t id(std::span<const std::byte> vertex)
+    {
+        auto value = uint_t(0);
+        std::memcpy(&value, vertex.data(), sizeof(value));
+        return value;
+    }
+    static Bytes bytes(uint_t value)
+    {
+        auto result = Bytes {};
+        std::memcpy(result.data(), &value, sizeof(value));
+        return result;
+    }
+    template<typename OnVertex>
+    static void each(const std::vector<uint_t>& vertices, const OnVertex& on_vertex)
+    {
+        for (const auto w : vertices)
+            if (const auto b = bytes(w); !on_vertex(std::span<const std::byte>(b)))
+                return;
+    }
+    template<typename OnVertex>
+    void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    {
+        each(out[id(vertex)], on_vertex);
+    }
+    template<typename OnVertex>
+    void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    {
+        each(in[id(vertex)], on_vertex);
+    }
+    bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return std::ranges::find(out[id(from)], id(to)) != out[id(from)].end(); }
+};
+
+struct ListVertices
+{
+    std::vector<ListGraph::Bytes> rows;
+
+    size_t size() const noexcept { return rows.size(); }
+    std::span<const std::byte> row(size_t i) const { return rows[i]; }
+};
+
+/// AStar::path() visits a shortest path from a source to a target, whether the search ends at a target or on a stored
+/// chain of the backward frontier.
+TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
+{
+    auto rng = std::mt19937(GetParam());
+    const auto n = uint_t(40);
+    auto paths = size_t(0);
+    auto chains = size_t(0);  // Paths that end on a stored chain.
+    auto heuristic = ygg::database::BlindDistanceHeuristic {};
+    auto tree = ygg::database::SearchTree(sizeof(uint_t));
+    auto backward = ygg::database::BackwardFrontier {};
+    auto storage = ygg::database::AStarStorage(sizeof(uint_t));
+    for (size_t trial = 0; trial < 50; ++trial)
+    {
+        auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
+        for (size_t e = 0; e < 70; ++e)
+        {
+            const auto u = uint_t(rng() % n);
+            const auto v = uint_t(rng() % n);
+            if (u != v && std::ranges::find(graph.out[u], v) == graph.out[u].end())
+            {
+                graph.out[u].push_back(v);
+                graph.in[v].push_back(u);
+            }
+        }
+        auto sources = ListVertices {};
+        auto targets = ygg::database::VertexSet(sizeof(uint_t));
+        for (size_t i = 0; i < 2; ++i)
+        {
+            sources.rows.push_back(ListGraph::bytes(uint_t(rng() % n)));
+            targets.insert(std::span<const std::byte>(ListGraph::bytes(uint_t(rng() % n))));
+        }
+        tree.clear();
+        auto ids = std::vector<uint_t>();
+        for (size_t i = 0; i < targets.size(); ++i)
+            ids.push_back(tree.ensure(targets[uint_t(i)], heuristic));
+        backward.start(ids);
+        auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0);
+        const auto distance = search.run(sources);
+        if (distance == std::numeric_limits<uint_t>::max())
+            continue;
+        auto path = std::vector<uint_t>();
+        search.path([&](std::span<const std::byte> vertex) { path.push_back(ListGraph::id(vertex)); });
+        // Visited: where the search ended back to its source (the only source on the path, as sources have g = 0),
+        // then the stored chain from where it ended to a target.
+        const auto is_source = [&](uint_t v) { return std::ranges::any_of(sources.rows, [&](const auto& row) { return ListGraph::id(row) == v; }); };
+        const auto edge = [&](uint_t u, uint_t v) { return graph.edge_exists(ListGraph::bytes(u), ListGraph::bytes(v)); };
+        const auto source = size_t(std::ranges::find_if(path, is_source) - path.begin());
+        ASSERT_LT(source, path.size()) << "trial " << trial;
+        ASSERT_EQ(path.size(), distance + 1) << "trial " << trial;
+        for (size_t i = 0; i < source; ++i)
+            EXPECT_TRUE(edge(path[i + 1], path[i])) << "trial " << trial;
+        for (size_t i = source + 1; i < path.size(); ++i)
+            EXPECT_TRUE(edge(i == source + 1 ? path.front() : path[i - 1], path[i])) << "trial " << trial;
+        EXPECT_TRUE(targets.contains(std::span<const std::byte>(ListGraph::bytes(source + 1 < path.size() ? path.back() : path.front()))));
+        ++paths;
+        chains += source + 1 < path.size();
+    }
+    EXPECT_GT(paths, 10);
+    EXPECT_GT(chains, 0);
 }
 
 INSTANTIATE_TEST_SUITE_P(Seeds, DatabaseMinDistance, testing::Range(1u, 9u));
