@@ -321,13 +321,13 @@ void benchmark_relation_insert(benchmark::State& state)
 }
 
 template<typename Repository>
-void configure_sequential(benchmark::internal::Benchmark* benchmark, benchmark::IterationCount iterations)
+void configure_sequential(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations)
 {
     benchmark->Iterations(iterations)->Threads(1)->UseRealTime();
 }
 
 template<typename Repository>
-void configure_concurrent(benchmark::internal::Benchmark* benchmark, benchmark::IterationCount iterations)
+void configure_concurrent(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations)
 {
     benchmark->Iterations(iterations)->ThreadRange(1, 8)->UseRealTime();
 }

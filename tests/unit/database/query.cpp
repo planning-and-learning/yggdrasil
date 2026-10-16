@@ -150,7 +150,7 @@ TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
 
     auto mismatched = ygg::Data<ygg::database::Query<Values, ygg::database::QuerySelectValueTag>>(a, x, std::int32_t(7));
     EXPECT_EQ(mismatched.constant_type, (ygg::database::column_type<Values, std::int32_t>) );
-    EXPECT_THROW(ygg::database::insert(repository, mismatched), std::invalid_argument);
+    EXPECT_THROW(static_cast<void>(ygg::database::insert(repository, mismatched)), std::invalid_argument);
 }
 
 TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)

@@ -176,7 +176,7 @@ void benchmark_mixed(benchmark::State& state)
     report<Set>(state);
 }
 
-void configure(benchmark::internal::Benchmark* benchmark, benchmark::IterationCount iterations, bool concurrent)
+void configure(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations, bool concurrent)
 {
     benchmark->Iterations(iterations)->UseRealTime();
     if (concurrent)
