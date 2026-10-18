@@ -129,6 +129,9 @@ YGGDRASIL_STRIP_WHEEL=OFF uv build --wheel
 
 ## C++ contracts
 
+Headers and templates follow the [template and include rules](docs/TEMPLATE_RULES.md), which also apply to the
+downstream libraries.
+
 Use `CanonicalizableContext<Context, Handle>`; it replaces the former
 handle-first ordering and the `CanonicalizableContextFor` wrapper.
 `extend` and range `set` require iteration through a const range and append
