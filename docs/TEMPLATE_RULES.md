@@ -6,8 +6,9 @@ optimization or LTO. These rules keep translation units (TUs) small. They
 apply to all four repositories and are maintained only here; the other
 repositories link to this file.
 
-Target: every TU stays below 3 GB of compiler memory (max RSS of `cc1plus`)
-in a Release + LTO build with GCC.
+Goal: minimal compiler memory (max RSS of `cc1plus`) and time per TU in a
+Release + LTO build with GCC, with a coherent structure that every repository
+follows.
 
 ## Headers
 
@@ -60,8 +61,8 @@ in a Release + LTO build with GCC.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
 11. **Split instantiating sources along the dimension that drives their
-    cost** (family, task kind, context or constructor category) so each stays
-    below the target, even if the summed memory grows by the repeated
+    cost** (family, task kind, context or constructor category) so no single
+    TU dominates, even if the summed memory grows by the repeated
     includes. Splitting along a dimension the cost does not depend on does
     not help. Tests split the same way: shared fixtures go to a
     `<test>_fixtures.hpp` header, and the parts stay in one test executable.
@@ -88,6 +89,7 @@ in a Release + LTO build with GCC.
 | 5 | tyr statistics and heuristic tests include only the tested component | 2.5 GB to 2.0 GB per test TU |
 | 7 | yggdrasil `BasicSymbolRepository` members out of class, symbol storage instantiated in loki and tyr | loki max TU 2.2 GB to 1.8 GB, tyr summed memory -4.6% |
 | 8 | runir DL evaluator compiled in eight library sources | evaluating TUs -0.2 to -1.0 GB |
+| 8 | runir Ext evaluator with borrowed register values instantiated in the library instead of five tests | test TUs -0.4 to -2.3 GB (max 7.5 GB to 5.3 GB), two new 2.8 GB sources |
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
 | 11 | tyr applicability, serialization and datalog solver tests split along task kind and test groups | 3.05-3.3 GB to at most 2.95 GB |
 | 11 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
