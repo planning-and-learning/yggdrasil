@@ -23,12 +23,16 @@ in a Release + LTO build with GCC.
    and values only. Helpers that take views are templates over the view
    context, or live in the view header.
 4. **Hold heavy types by pointer or reference with declaration-only includes.**
-   In inline code, dereference with `*ptr.get()`, not `*ptr`: the overloaded
+   Where the header otherwise keeps the pointee incomplete, dereference a
+   smart pointer with `*ptr.get()`, not `*ptr`, in inline code: the overloaded
    `operator*` makes argument-dependent lookup complete every template
-   argument of the `shared_ptr`, which instantiates the pointee.
+   argument of the `shared_ptr`, which instantiates the pointee. Raw pointers
+   and pointees that are complete anyway are not affected.
 5. **Include what you use.** A header compiles on its own. Library code,
    tests and executables include the components they use, never umbrella
-   headers such as `tyr/planning/planning.hpp`.
+   headers such as `tyr/planning/planning.hpp`. This includes the formatter
+   headers of every type that is formatted (`tyr/planning/formatter.hpp`,
+   `yggdrasil/formatting/cista_formatters.hpp`).
 6. **Pimpl only at high-level entities** (heuristics, state repositories,
    executors), never in views, repositories, interning or evaluation.
 
@@ -44,20 +48,28 @@ in a Release + LTO build with GCC.
    the library. Users then only link. An `extern template` declaration of a
    class instantiates the class definition in every includer, so long extern
    lists or externs over heavy classes cost more than they save.
-9. **No deduced return types on functions that are declared `extern` or used
+9. **Make extern lists opt-in when the definitions must stay visible.** Put
+   `extern template` declarations for widely shared instantiations (such as
+   `BasicSymbolRepository<T>` of every symbol type) in a separate
+   `detail/<name>_instantiations.hpp` that only the TUs doing that work
+   include, e.g. parsers and translators that intern every type. Including
+   such a list everywhere costs every light TU the class instantiations.
+10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
-10. **Split instantiating sources along the dimension that drives their
+11. **Split instantiating sources along the dimension that drives their
     cost** (family, task kind, context or constructor category) so each stays
-    below the target. Splitting along a dimension the cost does not depend
-    on does not help.
+    below the target, even if the summed memory grows by the repeated
+    includes. Splitting along a dimension the cost does not depend on does
+    not help. Tests split the same way: shared fixtures go to a
+    `<test>_fixtures.hpp` header, and the parts stay in one test executable.
 
 ## Process
 
-11. **Measure before and after.** Use the standalone cost of a header
+12. **Measure before and after.** Use the standalone cost of a header
     (`-fsyntax-only` of a TU that only includes it), the cost of a single API
     call (the TU's includes plus that call, at `-fsyntax-only` and at `-O3`),
     and a full instrumented build logging the max RSS per TU.
-12. **Keep only what wins in the full build.** A smaller standalone header
+13. **Keep only what wins in the full build.** A smaller standalone header
     often does not shrink its includers, which may instantiate the same code
     anyway. Revert changes that do not lower the max or summed memory of the
     affected TUs.
@@ -73,4 +85,6 @@ in a Release + LTO build with GCC.
 | 5 | tyr statistics and heuristic tests include only the tested component | 2.5 GB to 2.0 GB per test TU |
 | 7 | yggdrasil `BasicSymbolRepository` members out of class, symbol storage instantiated in loki and tyr | loki max TU 2.2 GB to 1.8 GB, tyr summed memory -4.6% |
 | 8 | runir DL evaluator compiled in eight library sources | evaluating TUs -0.2 to -1.0 GB |
-| 10 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
+| 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
+| 11 | tyr applicability, serialization and datalog solver tests split along task kind and test groups | 3.05-3.3 GB to at most 2.95 GB |
+| 11 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
