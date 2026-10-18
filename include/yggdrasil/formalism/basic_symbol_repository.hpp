@@ -101,62 +101,22 @@ public:
      * knows the context.
      */
 
-    std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
-    {
-        const auto& container = m_slot.container;
-        assert(h == container.hash(builder));
-
-        if (auto index_or_nullopt = container.find_with_hash(builder, h))
-            return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
-
-        return std::nullopt;
-    }
+    std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept;
 
     /// Performs a local lookup without locking the underlying hash shard. The
     /// underlying collection's unsafe publication, lifetime, and immutability
     /// preconditions apply.
-    std::optional<Index<T>> find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
-    {
-        const auto& container = m_slot.container;
-        assert(h == container.hash(builder));
-
-        if (auto index_or_nullopt = container.find_unsafe_with_hash(builder, h))
-            return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
-
-        return std::nullopt;
-    }
+    std::optional<Index<T>> find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept;
 
     std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-    std::pair<Index<T>, bool> insert_local_with_hash(Data<T>& builder, size_t h)
-    {
-        if (const auto index = find_local_with_hash(builder, h))
-        {
-            builder.index = *index;
-            return { *index, false };
-        }
-
-        return create_local_with_hash(builder, h);
-    }
+    std::pair<Index<T>, bool> insert_local_with_hash(Data<T>& builder, size_t h);
 
     std::pair<Index<T>, bool> insert_local(Data<T>& builder) { return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
     /// Completes a hierarchy-wide miss by rechecking this layer before publishing
     /// storage.
-    std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
-    {
-        auto& container = m_slot.container;
-        const auto [index, created] = container.complete_miss_with_hash(h,
-                                                                        builder,
-                                                                        [&](Index<T> local_index) -> const Data<T>&
-                                                                        {
-                                                                            builder.index.value = m_slot.parent_size + ygg::uint_t(local_index);
-                                                                            assert(h == container.hash(builder) && "Symbol index must not affect identity.");
-                                                                            return builder;
-                                                                        });
-        builder.index.value = m_slot.parent_size + ygg::uint_t(index);
-        return { builder.index, created };
-    }
+    std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h);
 
     const Data<T>& at_local(Index<T> index) const
     {
@@ -215,8 +175,67 @@ public:
 
     size_t memory_usage() const noexcept { return m_slot.memory_usage(); }
 
-    static size_t hash(const Data<T>& builder) noexcept { return Slot<T>::hash(builder); }
+    static size_t hash(const Data<T>& builder) noexcept;
 };
+
+template<typename T, bool ThreadSafe>
+std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
+{
+    const auto& container = m_slot.container;
+    assert(h == container.hash(builder));
+
+    if (auto index_or_nullopt = container.find_with_hash(builder, h))
+        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
+
+    return std::nullopt;
+}
+
+template<typename T, bool ThreadSafe>
+std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
+{
+    const auto& container = m_slot.container;
+    assert(h == container.hash(builder));
+
+    if (auto index_or_nullopt = container.find_unsafe_with_hash(builder, h))
+        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
+
+    return std::nullopt;
+}
+
+template<typename T, bool ThreadSafe>
+std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_with_hash(Data<T>& builder, size_t h)
+{
+    if (const auto index = find_local_with_hash(builder, h))
+    {
+        builder.index = *index;
+        return { *index, false };
+    }
+
+    return create_local_with_hash(builder, h);
+}
+
+template<typename T, bool ThreadSafe>
+std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::create_local_with_hash(Data<T>& builder, size_t h)
+{
+    auto& container = m_slot.container;
+    const auto [index, created] = container.complete_miss_with_hash(h,
+                                                                    builder,
+                                                                    [&](Index<T> local_index) -> const Data<T>&
+                                                                    {
+                                                                        builder.index.value = m_slot.parent_size + ygg::uint_t(local_index);
+                                                                        assert(h == container.hash(builder) && "Symbol index must not affect identity.");
+                                                                        return builder;
+                                                                    });
+    builder.index.value = m_slot.parent_size + ygg::uint_t(index);
+    return { builder.index, created };
+}
+
+template<typename T, bool ThreadSafe>
+size_t BasicSymbolRepository<T, ThreadSafe>::hash(const Data<T>& builder) noexcept
+{
+    return Slot<T>::hash(builder);
+}
+
 }  // namespace ygg::formalism
 
 #endif
