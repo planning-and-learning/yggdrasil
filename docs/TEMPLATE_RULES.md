@@ -54,6 +54,9 @@ in a Release + LTO build with GCC.
    `detail/<name>_instantiations.hpp` that only the TUs doing that work
    include, e.g. parsers and translators that intern every type. Including
    such a list everywhere costs every light TU the class instantiations.
+   Keep the list in the main header instead when nearly every includer does
+   the work: in tyr, removing it from the repository headers made 60 TUs
+   heavier and one lighter. Decide by measuring both.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
 11. **Split instantiating sources along the dimension that drives their
