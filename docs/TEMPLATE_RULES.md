@@ -76,6 +76,11 @@ follows.
    the work: in tyr, removing it from the repository headers made 60 TUs
    heavier and one lighter. Decide by measuring both, in the full build: a
    standalone probe of the same command can show a gain the build does not.
+   Extern lists pay off for classes whose member bodies are heavy and used
+   by many TUs (interning: hashing, lookup, insertion). They lose for
+   classes whose cost is the class definition itself (object pools, builder
+   storage, relation storage): the declaration instantiates the definition
+   in every includer and saves little.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
 11. **Split instantiating sources only along the dimension that drives their
