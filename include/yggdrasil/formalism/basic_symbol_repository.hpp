@@ -154,7 +154,8 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr) : m_parent(parent), m_slot() { clear_slot(); }
+    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr);
+    ~BasicSymbolRepository();
 
     BasicSymbolRepository(const BasicSymbolRepository&) = delete;
     BasicSymbolRepository& operator=(const BasicSymbolRepository&) = delete;
@@ -177,6 +178,16 @@ public:
 
     static size_t hash(const Data<T>& builder) noexcept;
 };
+
+template<typename T, bool ThreadSafe>
+BasicSymbolRepository<T, ThreadSafe>::BasicSymbolRepository(const BasicSymbolRepository* parent) : m_parent(parent), m_slot()
+{
+    clear_slot();
+}
+
+/// Defined out of class so that extern template declarations also cover the storage destructors.
+template<typename T, bool ThreadSafe>
+BasicSymbolRepository<T, ThreadSafe>::~BasicSymbolRepository() = default;
 
 template<typename T, bool ThreadSafe>
 std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
