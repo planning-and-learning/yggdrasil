@@ -37,7 +37,10 @@ follows.
    with `Builder& m_builder`) is checked at the definition and needs the
    type complete: move such uses into small non-template functions defined
    in the library, or include the definition. Treat GCC's "invalid use of
-   incomplete type" warnings as errors.
+   incomplete type" warnings as errors. A class may also hold a
+   `std::vector` of an incomplete type: declare the members that need the
+   element complete (size, element access, move assignment, destructor) and
+   define them out of class with the other hidden definitions (rule 8).
 5. **Include what you use.** A header compiles on its own. Library code,
    tests and executables include the components they use, never umbrella
    headers such as `tyr/planning/planning.hpp`. This includes the formatter
@@ -136,6 +139,7 @@ follows.
 | 8 | runir DL evaluator compiled in eight library sources | evaluating TUs -0.2 to -1.0 GB |
 | 8 | runir Ext evaluator with borrowed register values instantiated in the library instead of five tests | test TUs -0.4 to -2.3 GB (max 7.5 GB to 5.3 GB), two new 2.8 GB sources |
 | 8 | runir Ext query evaluator over builder states instantiated in the library instead of a test | successor expander test 4.5 GB to 4.0 GB, library source +44 MB; tests that pass their own callbacks to member templates (`for_each_successor`) keep including the definitions |
+| 4 | runir incremental `EvaluationGraph` holds its nodes as a vector of incomplete types; the accessors that read nodes are defined in `detail/evaluation_impl.hpp` and instantiated in the library, `SetOperationWorkspace` has its own header, and the delta policy reaches the database workspace through a library function | `incremental/evaluation.hpp` 1.93 GB to 0.82 GB on its own; executors -0.27 and -0.35 GB, executor and evaluation tests -0.15 to -1.4 GB; peak at -j12 25.7/25.1 GB to 23.5/24.9 GB, same wall time |
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
 | 9 | runir optimization, query evaluation and successor expander tests include the lists of the families they intern | -0.3 to -0.5 GB per TU; the same lists cost +0.1 to +0.7 GB in TUs that only evaluate |
 | 9 | pyrunir bindings that intern or evaluate include their family's lists and the denotation list | 24 binding TUs -0.2 to -1.5 GB, summed pyrunir memory -22 GB; the lists cost up to +0.4 GB in bindings that only wrap views |
