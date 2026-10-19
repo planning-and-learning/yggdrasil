@@ -131,6 +131,15 @@ follows.
     another object declare `serialize_as(Dictionaries&, const T&)` instead
     of a competing `tag_invoke`.
 
+17. **Check compile-time contracts where the instantiation already exists.**
+    A `static_assert` over overload resolution against a heavy class
+    (`InternsData`, `rejects_symbol` on a repository) instantiates that
+    class. In a test that checks many repositories it re-instantiates all of
+    them; in the library source that explicitly instantiates the repository
+    it costs almost nothing. Put such contracts next to the explicit
+    instantiation, with the shared contract concepts in a `detail` header;
+    tests keep the contracts on light types.
+
 ## Process
 
 13. **Measure before and after.** Use the standalone cost of a header
@@ -154,6 +163,7 @@ follows.
 | 5 | pyrunir serialization bindings include their component's type list and serializers instead of `runir/serialization/{types,serialization}.hpp` (1.65 GB each); the type lists split into `runir/serialization/types/*.hpp` | 20 DL, denotation and Uns bindings -0.9 to -1.0 GB, ps bindings -0.25 to -0.62 GB, identical symbols; pyrunir summed memory -20 GB, peak at -j12 29.6/31.0 GB to 27.8/26.8 GB, same wall time |
 | 15 | runir DL `QueryOptimizer::for_each_child` without the `InvocableWithEach` constraint over all record types | pyrunir DL semantics and feature bindings -0.5 to -0.67 GB each (4.6 GB to 4.1 GB), optimization test -0.12 GB; pyrunir summed memory -5 GB, peak at -j12 26.4/28.2 GB to 26.3/25.6 GB |
 | 16 | yggdrasil `Dictionaries::convert` serializes described types and their ranges and optionals directly; runir's bidirectional graph uses `serialize_as` | pyrunir `graphs` binding 4.65 GB to 3.88 GB and 40 s to 36 s, execution and ps bindings -0.18 to -0.28 GB, DL bindings about -0.12 GB; same JSON (new nested test passes with the old and new header) |
+| 17 | runir constructor repository interning contracts moved from the DL family traits test into the nine `repository_*.cpp` sources | test 4.69 GB to 2.72 GB and 31 s to 17 s (the heaviest runir TU); repository sources +0 to +9 MB |
 | 6 | tyr planning `Parser` keeps its loki state behind a pointer | tyr summed memory -24.5 GB (38 TUs up to -0.74 GB), runir -12 GB |
 | 7 | yggdrasil `BasicSymbolRepository` members out of class, symbol storage instantiated in loki and tyr | loki max TU 2.2 GB to 1.8 GB, tyr summed memory -4.6% |
 | 7 | yggdrasil `BasicSymbolRepository` constructor and destructor out of class | loki max TU 1.80 GB to 1.70 GB; summed memory tyr -7.5 GB, runir -9.6 GB (query evaluation test 5.8 GB to 4.6 GB) |
