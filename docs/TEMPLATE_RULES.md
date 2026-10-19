@@ -37,7 +37,12 @@ follows.
    with `Builder& m_builder`) is checked at the definition and needs the
    type complete: move such uses into small non-template functions defined
    in the library, or include the definition. Treat GCC's "invalid use of
-   incomplete type" warnings as errors. A class may also hold a
+   incomplete type" warnings as errors. The same holds for calls: a call to a
+   function template with non-dependent arguments inside a template, or any
+   template call in a non-template inline function, instantiates the callee
+   in every includer even if the enclosing function is never used. Route
+   heavy ones (a query compiler, canonicalization) through a declared
+   library function. A class may also hold a
    `std::vector` of an incomplete type: declare the members that need the
    element complete (size, element access, move assignment, destructor) and
    define them out of class with the other hidden definitions (rule 8).
@@ -173,6 +178,8 @@ follows.
 | 8 | runir Ext evaluator with borrowed register values instantiated in the library instead of five tests | test TUs -0.4 to -2.3 GB (max 7.5 GB to 5.3 GB), two new 2.8 GB sources |
 | 8 | runir Ext query evaluator over builder states instantiated in the library instead of a test | successor expander test 4.5 GB to 4.0 GB, library source +44 MB; tests that pass their own callbacks to member templates (`for_each_successor`) keep including the definitions |
 | 4 | runir incremental `EvaluationGraph` holds its nodes as a vector of incomplete types; the accessors that read nodes are defined in `detail/evaluation_impl.hpp` and instantiated in the library, `SetOperationWorkspace` has its own header, and the delta policy reaches the database workspace through a library function | `incremental/evaluation.hpp` 1.93 GB to 0.82 GB on its own; executors -0.27 and -0.35 GB, executor and evaluation tests -0.15 to -1.4 GB; peak at -j12 25.7/25.1 GB to 23.5/24.9 GB, same wall time |
+| 4 | runir projection heuristic calls `ygg::database::compile` through a library function instead of a non-dependent call in `abstract_edges` | `heuristics/projection.hpp` 0.81 GB to 0.59 GB, `task_context.hpp` 1.38 GB to 1.04 GB on their own |
+| 7 | runir `ConstructorRepositoryFactory::create` defined in `detail/constructor_repository_impl.hpp` (the class is extern but `create` was in the class body) | a TU that creates a repository 2.27 GB to 0.78 GB; with the projection change: 49 runir TUs -50 MB to -0.6 GB, summed -13.3 GB, none heavier than +6 MB |
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
 | 9 | runir optimization, query evaluation and successor expander tests include the lists of the families they intern | -0.3 to -0.5 GB per TU; the same lists cost +0.1 to +0.7 GB in TUs that only evaluate |
 | 9 | pyrunir bindings that intern or evaluate include their family's lists and the denotation list | 24 binding TUs -0.2 to -1.5 GB, summed pyrunir memory -22 GB; the lists cost up to +0.4 GB in bindings that only wrap views |
