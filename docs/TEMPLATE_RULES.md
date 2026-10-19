@@ -47,6 +47,10 @@ follows.
    TUs and the declaration is cheap.** Define the members out of class:
    members defined in the class body are implicitly inline and GCC still
    instantiates them in every TU that uses them, despite `extern template`.
+   This includes the constructors and the destructor: declare them in the
+   class and define them out of class (`~T();` and
+   `template<...> T<...>::~T() = default;`), or every TU that creates or
+   destroys an object instantiates the destructors of all its members.
 8. **Prefer hiding definitions over `extern template`.** Put the definitions
    in `detail/<name>_impl.hpp`, include it only from the instantiating
    sources (and under `<PROJECT>_HEADER_INSTANTIATION`), and instantiate in
@@ -102,6 +106,7 @@ follows.
 | 4 | runir constructor and denotation repositories hold the tyr repository by pointer | `runir/kr/dl/repository.hpp` 0.75 GB to 0.47 GB |
 | 5 | tyr statistics and heuristic tests include only the tested component | 2.5 GB to 2.0 GB per test TU |
 | 7 | yggdrasil `BasicSymbolRepository` members out of class, symbol storage instantiated in loki and tyr | loki max TU 2.2 GB to 1.8 GB, tyr summed memory -4.6% |
+| 7 | yggdrasil `BasicSymbolRepository` constructor and destructor out of class | loki max TU 1.80 GB to 1.70 GB; summed memory tyr -7.5 GB, runir -9.6 GB (query evaluation test 5.8 GB to 4.6 GB) |
 | 8 | runir DL evaluator compiled in eight library sources | evaluating TUs -0.2 to -1.0 GB |
 | 8 | runir Ext evaluator with borrowed register values instantiated in the library instead of five tests | test TUs -0.4 to -2.3 GB (max 7.5 GB to 5.3 GB), two new 2.8 GB sources |
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
