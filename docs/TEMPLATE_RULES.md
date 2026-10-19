@@ -32,7 +32,12 @@ follows.
    uses a view by value (`std::optional<ClassifierView>`) includes the
    repository of that view: a view specialization constrained on an
    incomplete repository silently falls back to the primary template, and
-   GCC keeps that choice for the rest of the TU.
+   GCC keeps that choice for the rest of the TU. Code in a template that
+   uses a held type in a non-dependent expression (`m_builder.get_workspace()`
+   with `Builder& m_builder`) is checked at the definition and needs the
+   type complete: move such uses into small non-template functions defined
+   in the library, or include the definition. Treat GCC's "invalid use of
+   incomplete type" warnings as errors.
 5. **Include what you use.** A header compiles on its own. Library code,
    tests and executables include the components they use, never umbrella
    headers such as `tyr/planning/planning.hpp`. This includes the formatter
