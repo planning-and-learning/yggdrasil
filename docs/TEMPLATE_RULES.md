@@ -61,12 +61,15 @@ follows.
    standalone probe of the same command can show a gain the build does not.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
-11. **Split instantiating sources along the dimension that drives their
+11. **Split instantiating sources only along the dimension that drives their
     cost** (family, task kind, context or constructor category) so no single
     TU dominates, even if the summed memory grows by the repeated
-    includes. Splitting along a dimension the cost does not depend on does
-    not help. Tests split the same way: shared fixtures go to a
-    `<test>_fixtures.hpp` header, and the parts stay in one test executable.
+    includes. Test a dimension by compiling the parts merged: if the merged
+    source costs about as much as one part, the parts share their
+    instantiations and the split only compiles them twice, so merge them
+    as long as the merged source stays below the heaviest TU of the build.
+    Tests split the same way: shared fixtures go to a `<test>_fixtures.hpp`
+    header, and the parts stay in one test executable.
 
 ## Process
 
@@ -95,3 +98,5 @@ follows.
 | 9 | runir optimization, query evaluation and successor expander tests include the lists of the families they intern | -0.3 to -0.5 GB per TU; the same lists cost +0.1 to +0.7 GB in TUs that only evaluate |
 | 11 | tyr applicability, serialization and datalog solver tests split along task kind and test groups | 3.05-3.3 GB to at most 2.95 GB |
 | 11 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
+| 11 | runir DL evaluator and incremental engine merged from 16 sources (family x kind x context) into one per family | 2.8-3.6 GB per part, 3.5-4.0 GB per family; summed build memory 334 GB to 299 GB, wall 403 s to 370 s |
+| 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
