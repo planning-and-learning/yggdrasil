@@ -112,6 +112,15 @@ follows.
     per type: each container type instantiates its whole hash table. The
     key carries no dispatch; views are rebuilt from the index.
 
+15. **No all-types invocability constraints on internal visitors over long
+    type lists.** `InvocableWithEach<F, List>` (or `std::invocable<F, T>`
+    for each `T`) on a generic lambda instantiates the lambda body for every
+    type in the list, at every instantiation of the constrained function: a
+    recursive visitor over N record types costs N x N body instantiations
+    although each node visits only its few children. Constrain the public
+    entry point if a diagnostic is wanted; leave internal helpers that only
+    forward the visitor unconstrained.
+
 ## Process
 
 13. **Measure before and after.** Use the standalone cost of a header
@@ -133,6 +142,7 @@ follows.
 | 4 | runir constructor and denotation repositories hold the tyr repository by pointer | `runir/kr/dl/repository.hpp` 0.75 GB to 0.47 GB |
 | 5 | tyr statistics and heuristic tests include only the tested component | 2.5 GB to 2.0 GB per test TU |
 | 5 | pyrunir serialization bindings include their component's type list and serializers instead of `runir/serialization/{types,serialization}.hpp` (1.65 GB each); the type lists split into `runir/serialization/types/*.hpp` | 20 DL, denotation and Uns bindings -0.9 to -1.0 GB, ps bindings -0.25 to -0.62 GB, identical symbols; pyrunir summed memory -20 GB, peak at -j12 29.6/31.0 GB to 27.8/26.8 GB, same wall time |
+| 15 | runir DL `QueryOptimizer::for_each_child` without the `InvocableWithEach` constraint over all record types | pyrunir DL semantics and feature bindings -0.5 to -0.67 GB each (4.6 GB to 4.1 GB), optimization test -0.12 GB; pyrunir summed memory -5 GB, peak at -j12 26.4/28.2 GB to 26.3/25.6 GB |
 | 6 | tyr planning `Parser` keeps its loki state behind a pointer | tyr summed memory -24.5 GB (38 TUs up to -0.74 GB), runir -12 GB |
 | 7 | yggdrasil `BasicSymbolRepository` members out of class, symbol storage instantiated in loki and tyr | loki max TU 2.2 GB to 1.8 GB, tyr summed memory -4.6% |
 | 7 | yggdrasil `BasicSymbolRepository` constructor and destructor out of class | loki max TU 1.80 GB to 1.70 GB; summed memory tyr -7.5 GB, runir -9.6 GB (query evaluation test 5.8 GB to 4.6 GB) |
