@@ -59,7 +59,11 @@ follows.
 8. **Prefer hiding definitions over `extern template`.** Put the definitions
    in `detail/<name>_impl.hpp`, include it only from the instantiating
    sources (and under `<PROJECT>_HEADER_INSTANTIATION`), and instantiate in
-   the library. Users then only link. An `extern template` declaration of a
+   the library. Users then only link. Headers that the definitions need
+   include the declarations as `<name>_decl.hpp`, and only the public
+   `<name>.hpp` adds the definitions under `<PROJECT>_HEADER_INSTANTIATION`,
+   so that build mode has no include cycle. Build it once after moving
+   definitions. An `extern template` declaration of a
    class instantiates the class definition in every includer, so long extern
    lists or externs over heavy classes cost more than they save.
 9. **Make extern lists opt-in when the definitions must stay visible.** Put
