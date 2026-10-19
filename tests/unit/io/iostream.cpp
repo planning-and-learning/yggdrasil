@@ -18,7 +18,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include <type_traits>
-#include <yggdrasil.hpp>
+#include <yggdrasil/io/iostream.hpp>
 
 namespace ygg::tests
 {
