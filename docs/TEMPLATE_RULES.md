@@ -84,9 +84,9 @@ follows.
    classes whose cost is the class definition itself (object pools, builder
    storage, relation storage): the declaration instantiates the definition
    in every includer and saves little. The instantiating sources of a
-   list also lengthen the library's LTO link, a serial step of the build:
-   keep a list only where its includers save more than about 1 GB or
-   would otherwise become the heaviest TUs.
+   list also lengthen the library's LTO link, a serial step of the build;
+   peak build memory decides: drop a list only if that does not raise
+   the peak at the build's parallelism.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
 11. **Split instantiating sources only along the dimension that drives their
@@ -135,7 +135,7 @@ follows.
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
 | 9 | runir optimization, query evaluation and successor expander tests include the lists of the families they intern | -0.3 to -0.5 GB per TU; the same lists cost +0.1 to +0.7 GB in TUs that only evaluate |
 | 9 | pyrunir bindings that intern or evaluate include their family's lists and the denotation list | 24 binding TUs -0.2 to -1.5 GB, summed pyrunir memory -22 GB; the lists cost up to +0.4 GB in bindings that only wrap views |
-| 9 | runir grammar and CNF grammar lists dropped (their includers saved 0.1-0.6 GB) | library LTO link -56 s; build wall 379 s to 342 s, summed memory -9 GB, same max TU; peak at -j12 26.1 GB to 28.5 GB |
+| 9 | runir grammar and CNF grammar lists dropped, then restored | link -56 s and wall 379 s to 342 s, but peak at -j12 26.1 GB to 28.5 GB; restored because peak memory limits the build |
 | 9 | second runir sweep over all TUs above 1.4 GB without lists | ten more TUs -65 to -534 MB (domain_context, parser, structural termination, classifier and executor tests); none between 1.4 and 2 GB gained more than 100 MB |
 | 11 | tyr applicability, serialization and datalog solver tests split along task kind and test groups | 3.05-3.3 GB to at most 2.95 GB |
 | 11 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
