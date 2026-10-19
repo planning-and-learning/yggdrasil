@@ -97,7 +97,11 @@ follows.
     instantiations and the split only compiles them twice, so merge them
     as long as the merged source stays below the heaviest TU of the build.
     Tests split the same way: shared fixtures go to a `<test>_fixtures.hpp`
-    header, and the parts stay in one test executable.
+    header, and the parts stay in one test executable. A split lowers the
+    heaviest TU, but the peak build memory only if the heavy TUs no longer
+    overlap: the parts fill the parallel slots. Keep a split only if the
+    peak drops (identical builds vary by about 1 GB at -j12, so compare
+    two runs each).
 
 12. **One container for many record types.** Memo tables, visited sets and
     caches keyed by records of every type in a type list use one container
@@ -150,4 +154,5 @@ follows.
 | 14 | runir `datasets/declarations.hpp` so the task context does not include the task search context | `task_context.hpp` 1.7 GB to 1.4 GB on its own, +175 MB in the build: its includers need the search context; reverted |
 | 14 | runir DL optimizer behind a pointer and compiled once per family in the library (rules 6 and 8) | pyrunir summed memory -18 GB and TUs above 3 GiB 37 to 20, but peak at -j12 runir 26.4 GB to 28.9 GB, pyrunir 28.6 GB to 29.4 GB; reverted |
 | 14 | the same with each family's source split into optimizer and statistics halves (rule 11) | runir peak 26.6 GB to 26.9 GB and wall 333 s to 359 s, pyrunir peak 28.6 GB to 30.0 GB; reverted: new library sources raise the peak while other heavy TUs compile |
+| 11 | runir family traits, query evaluation and query allocation tests split along their test groups | heaviest TU 4.7 GB to 4.2 GB, but peak at -j12 24.6/26.0 GB before and 25.7/26.4 GB after, same wall time; reverted |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
