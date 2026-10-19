@@ -75,13 +75,19 @@ follows.
     Tests split the same way: shared fixtures go to a `<test>_fixtures.hpp`
     header, and the parts stay in one test executable.
 
+12. **One container for many record types.** Memo tables, visited sets and
+    caches keyed by records of every type in a type list use one container
+    keyed by (type position, index) instead of a tuple with one container
+    per type: each container type instantiates its whole hash table. The
+    key carries no dispatch; views are rebuilt from the index.
+
 ## Process
 
-12. **Measure before and after.** Use the standalone cost of a header
+13. **Measure before and after.** Use the standalone cost of a header
     (`-fsyntax-only` of a TU that only includes it), the cost of a single API
     call (the TU's includes plus that call, at `-fsyntax-only` and at `-O3`),
     and a full instrumented build logging the max RSS per TU.
-13. **Keep only what wins in the full build.** A smaller standalone header
+14. **Keep only what wins in the full build.** A smaller standalone header
     often does not shrink its includers, which may instantiate the same code
     anyway. Revert changes that do not lower the max or summed memory of the
     affected TUs.
@@ -103,5 +109,6 @@ follows.
 | 11 | tyr applicability, serialization and datalog solver tests split along task kind and test groups | 3.05-3.3 GB to at most 2.95 GB |
 | 11 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
 | 11 | runir DL evaluator and incremental engine merged from 16 sources (family x kind x context) into one per family | 2.8-3.6 GB per part, 3.5-4.0 GB per family; summed build memory 334 GB to 299 GB, wall 403 s to 370 s |
-| 13 | runir program executor data headers without the proof graph and plan definitions | 1.4 GB to 0.5 GB on their own, no change in the build: every includer uses the graph; reverted |
+| 14 | runir program executor data headers without the proof graph and plan definitions | 1.4 GB to 0.5 GB on their own, no change in the build: every includer uses the graph; reverted |
+| 12 | runir DL and ps optimizers memoize in one map instead of one per record type | optimization test 6.4 GB to 4.2 GB; pyrunir bindings that optimize -1.1 to -3.0 GB each (max 8.8 GB to 5.8 GB) |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
