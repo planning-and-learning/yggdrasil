@@ -76,8 +76,8 @@ struct EqualTo<T>
 {
     constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
     {
-        const auto lhs_nan = std::is_constant_evaluated() ? lhs != lhs : std::isnan(lhs);
-        const auto rhs_nan = std::is_constant_evaluated() ? rhs != rhs : std::isnan(rhs);
+        bool lhs_nan = std::is_constant_evaluated() ? lhs != lhs : std::isnan(lhs);
+        bool rhs_nan = std::is_constant_evaluated() ? rhs != rhs : std::isnan(rhs);
 
         if (lhs_nan || rhs_nan)
             return lhs_nan && rhs_nan;
