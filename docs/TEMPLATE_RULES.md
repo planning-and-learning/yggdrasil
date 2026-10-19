@@ -128,4 +128,5 @@ follows.
 | 12 | runir DL and ps optimizers memoize in one map instead of one per record type | optimization test 6.4 GB to 4.2 GB; pyrunir bindings that optimize -1.1 to -3.0 GB each (max 8.8 GB to 5.8 GB) |
 | 14 | yggdrasil `BasicRelationRepository` members out of class with extern declarations in loki and tyr | summed memory +0.1 GB loki, +1.2 GB tyr, +0.8 GB runir: few TUs use the relation storage; reverted |
 | 14 | runir `EvaluationPolicyConcept` in its own concepts header | `ps/rule_evaluator_concepts.hpp` 2.1 GB to 0.8 GB on its own, no change in the build: every includer needs the policies; reverted |
+| 14 | yggdrasil `BuilderStorage` constructor and destructor out of class, builders declared extern in loki and tyr (global) and runir (opt-in) | tyr summed memory +7.9 GB (123 TUs heavier, max 2.80 GB to 2.64 GB), runir +4.4 GB, opt-in sweep +0.2 to +1.3 GB in every heavy runir TU: the extern class instantiates every pool; reverted |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
