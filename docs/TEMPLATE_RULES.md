@@ -121,4 +121,5 @@ follows.
 | 11 | runir DL evaluator and incremental engine merged from 16 sources (family x kind x context) into one per family | 2.8-3.6 GB per part, 3.5-4.0 GB per family; summed build memory 334 GB to 299 GB, wall 403 s to 370 s |
 | 14 | runir program executor data headers without the proof graph and plan definitions | 1.4 GB to 0.5 GB on their own, no change in the build: every includer uses the graph; reverted |
 | 12 | runir DL and ps optimizers memoize in one map instead of one per record type | optimization test 6.4 GB to 4.2 GB; pyrunir bindings that optimize -1.1 to -3.0 GB each (max 8.8 GB to 5.8 GB) |
+| 14 | yggdrasil `BasicRelationRepository` members out of class with extern declarations in loki and tyr | summed memory +0.1 GB loki, +1.2 GB tyr, +0.8 GB runir: few TUs use the relation storage; reverted |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
