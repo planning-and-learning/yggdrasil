@@ -56,6 +56,9 @@ follows.
    class and define them out of class (`~T();` and
    `template<...> T<...>::~T() = default;`), or every TU that creates or
    destroys an object instantiates the destructors of all its members.
+   Instantiate the whole class (`template class T<...>;`), not only its
+   out-of-class members: under `extern template`, GCC also calls inline
+   members it does not inline, so the library must provide them too.
 8. **Prefer hiding definitions over `extern template`.** Put the definitions
    in `detail/<name>_impl.hpp`, include it only from the instantiating
    sources (and under `<PROJECT>_HEADER_INSTANTIATION`), and instantiate in
@@ -135,4 +138,5 @@ follows.
 | 14 | runir `EvaluationPolicyConcept` in its own concepts header | `ps/rule_evaluator_concepts.hpp` 2.1 GB to 0.8 GB on its own, no change in the build: every includer needs the policies; reverted |
 | 14 | yggdrasil `BuilderStorage` constructor and destructor out of class, builders declared extern in loki and tyr (global) and runir (opt-in) | tyr summed memory +7.9 GB (123 TUs heavier, max 2.80 GB to 2.64 GB), runir +4.4 GB, opt-in sweep +0.2 to +1.3 GB in every heavy runir TU: the extern class instantiates every pool; reverted |
 | 11 | runir DL grammar parser instantiations split by family | 4.2 GB, 64 s to 2.5-2.8 GB, 25-28 s per family; summed memory +3.7 GB |
+| 14 | runir symbol storage instantiated member by member (only out-of-class members) to shorten the library LTO link | link 240 s to 225 s, but tests failed to link: inline members such as `at_local` are called out of line; reverted |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
