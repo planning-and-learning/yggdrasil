@@ -125,6 +125,7 @@ follows.
 | 3 | `runir/kr/dl/semantics/register_values_data.hpp` | 0.75 GB to 0.26 GB |
 | 4 | runir constructor and denotation repositories hold the tyr repository by pointer | `runir/kr/dl/repository.hpp` 0.75 GB to 0.47 GB |
 | 5 | tyr statistics and heuristic tests include only the tested component | 2.5 GB to 2.0 GB per test TU |
+| 6 | tyr planning `Parser` keeps its loki state behind a pointer | tyr summed memory -24.5 GB (38 TUs up to -0.74 GB), runir -12 GB |
 | 7 | yggdrasil `BasicSymbolRepository` members out of class, symbol storage instantiated in loki and tyr | loki max TU 2.2 GB to 1.8 GB, tyr summed memory -4.6% |
 | 7 | yggdrasil `BasicSymbolRepository` constructor and destructor out of class | loki max TU 1.80 GB to 1.70 GB; summed memory tyr -7.5 GB, runir -9.6 GB (query evaluation test 5.8 GB to 4.6 GB) |
 | 7 | runir `EvaluationGraph` and `IncrementalEvaluation` destructors out of class | 8 TUs -57 to -113 MB |
