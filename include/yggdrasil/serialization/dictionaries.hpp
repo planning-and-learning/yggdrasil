@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -29,6 +30,23 @@ namespace detail
 template<typename T>
 using Index = std::unordered_map<T, size_t, Hash<T>, EqualTo<T>>;
 }
+
+/// Types with a describe_fields overload, serialized as dictionary rows.
+template<typename T>
+concept Described = requires(FieldNames& archive) { describe_fields(archive, std::type_identity<T> {}); };
+
+template<typename T>
+concept DescribedRange = std::ranges::input_range<const T> && Described<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>;
+
+template<typename T>
+struct IsDescribedOptional : std::false_type
+{
+};
+
+template<Described T>
+struct IsDescribedOptional<std::optional<T>> : std::true_type
+{
+};
 
 /// Objects referenced by stored keys must remain valid while the dictionaries are used.
 class Dictionaries
@@ -83,7 +101,7 @@ public:
         {
             // Filter before conversion: omitted fields must not collect descendants into other tables.
             if (accepts(name))
-                fields[name] = boost::json::value_from(value, &m_dictionaries);
+                fields[name] = m_dictionaries.convert(value);
         }
 
         template<typename Variant>
@@ -122,6 +140,38 @@ private:
     }
 
 public:
+    /// Converts described types, and ranges and optionals of them, without Boost's conversion dispatch, which
+    /// otherwise computes every conversion category of every nested type; other types use boost::json::value_from.
+    /// A type serialized as another object declares serialize_as(Dictionaries&, const T&) returning it.
+    template<typename T>
+    boost::json::value convert(const T& value)
+    {
+        if constexpr (requires { serialize_as(*this, value); })
+            return convert(serialize_as(*this, value));
+        else if constexpr (Described<T>)
+        {
+            auto result = boost::json::value {};
+            object(result, value, [&](auto& archive)
+            {
+                auto writer = FieldWriter {archive, value};
+                describe_fields(writer, std::type_identity<T> {});
+            });
+            return result;
+        }
+        else if constexpr (IsDescribedOptional<T>::value)
+            return value ? convert(*value) : boost::json::value(nullptr);
+        else if constexpr (DescribedRange<T>)
+        {
+            auto result = boost::json::value {};
+            auto& array = result.emplace_array();
+            for (const auto& item : value)
+                array.push_back(convert(item));
+            return result;
+        }
+        else
+            return boost::json::value_from(value, this);
+    }
+
     template<typename T, typename Fields>
     void object(boost::json::value& result, const T& value, Fields&& fields)
     {
@@ -170,7 +220,7 @@ public:
     {
         check_valid();
         m_started = true;
-        try { return boost::json::value_from(value, this); }
+        try { return convert(value); }
         catch (...) { m_failed = true; throw; }
     }
 
@@ -195,15 +245,10 @@ public:
 
 };
 
-template<typename T>
-    requires requires(FieldNames& archive) { describe_fields(archive, std::type_identity<T> {}); }
+template<Described T>
 void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const T& value, Dictionaries* dictionaries)
 {
-    dictionaries->object(result, value, [&](auto& archive)
-    {
-        auto writer = FieldWriter {archive, value};
-        describe_fields(writer, std::type_identity<T> {});
-    });
+    result = dictionaries->convert(value);
 }
 
 }
