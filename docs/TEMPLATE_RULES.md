@@ -42,7 +42,8 @@ follows.
    template call in a non-template inline function, instantiates the callee
    in every includer even if the enclosing function is never used. Route
    heavy ones (a query compiler, canonicalization) through a declared
-   library function. A class may also hold a
+   library function. `assert` bodies count too: they compile only in Debug
+   builds, so build Debug once after such changes. A class may also hold a
    `std::vector` of an incomplete type: declare the members that need the
    element complete (size, element access, move assignment, destructor) and
    define them out of class with the other hidden definitions (rule 8).
@@ -94,7 +95,11 @@ follows.
    in every includer and saves little. The instantiating sources of a
    list also lengthen the library's LTO link, a serial step of the build;
    peak build memory decides: drop a list only if that does not raise
-   the peak at the build's parallelism.
+   the peak at the build's parallelism. Opt-in lists rely on the library
+   exporting every instantiated member; ld64's LTO drops weak explicit
+   instantiations that nothing inside the dylib calls, so a library whose
+   includers call members it never calls itself builds without LTO on
+   macOS.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
 11. **Split instantiating sources only along the dimension that drives their
@@ -183,6 +188,9 @@ follows.
 | 4 | loki `detail::copy` declared with explicit types and defined in `src/semantic/translator.cpp` instead of two inline non-template functions | `semantic/translator/copy_translator.hpp` 1.27 GB to 1.00 GB on its own (6 sources and 2 tests) |
 | 5 | a standalone scan of all 1192 public headers (clang, one TU each) | three headers did not compile on their own: tyr `datalog/ground/workspaces/rule.hpp` and `datalog/statistics/program.hpp` (missing includes), runir `dl/family_traits.hpp` (include cycle with `declarations.hpp`) |
 | 7 | runir `ConstructorRepositoryFactory::create` defined in `detail/constructor_repository_impl.hpp` (the class is extern but `create` was in the class body) | a TU that creates a repository 2.27 GB to 0.78 GB; with the projection change: 49 runir TUs -50 MB to -0.6 GB, summed -13.3 GB, none heavier than +6 MB |
+| 7 | runir `DenotationRepository` constructor, destructor and factory, and the ps `BasicRepositoryFactory::create`, defined in the library | callers no longer construct or destroy the symbol pools; needed for the macOS link of the incremental query test |
+| 4 | runir CNF translation asserted `==` on two `shared_ptr`s to the planning repository | completed the repository type in Debug builds only (GCC 13 CI error); compares `.get()` now |
+| 9 | runir on macOS: ld64 LTO dropped the denotation and query pool members that only tests call through the opt-in extern lists | runir skips LTO on Apple; Linux keeps it |
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
 | 9 | runir optimization, query evaluation and successor expander tests include the lists of the families they intern | -0.3 to -0.5 GB per TU; the same lists cost +0.1 to +0.7 GB in TUs that only evaluate |
 | 9 | pyrunir bindings that intern or evaluate include their family's lists and the denotation list | 24 binding TUs -0.2 to -1.5 GB, summed pyrunir memory -22 GB; the lists cost up to +0.4 GB in bindings that only wrap views |
