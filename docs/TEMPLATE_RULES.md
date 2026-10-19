@@ -148,4 +148,6 @@ follows.
 | 11 | runir DL grammar parser instantiations split by family | 4.2 GB, 64 s to 2.5-2.8 GB, 25-28 s per family; summed memory +3.7 GB |
 | 14 | runir symbol storage instantiated member by member (only out-of-class members) to shorten the library LTO link | link 240 s to 225 s, but tests failed to link: inline members such as `at_local` are called out of line; reverted |
 | 14 | runir `datasets/declarations.hpp` so the task context does not include the task search context | `task_context.hpp` 1.7 GB to 1.4 GB on its own, +175 MB in the build: its includers need the search context; reverted |
+| 14 | runir DL optimizer behind a pointer and compiled once per family in the library (rules 6 and 8) | pyrunir summed memory -18 GB and TUs above 3 GiB 37 to 20, but peak at -j12 runir 26.4 GB to 28.9 GB, pyrunir 28.6 GB to 29.4 GB; reverted |
+| 14 | the same with each family's source split into optimizer and statistics halves (rule 11) | runir peak 26.6 GB to 26.9 GB and wall 333 s to 359 s, pyrunir peak 28.6 GB to 30.0 GB; reverted: new library sources raise the peak while other heavy TUs compile |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
