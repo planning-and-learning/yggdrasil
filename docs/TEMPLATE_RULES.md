@@ -83,7 +83,10 @@ follows.
    by many TUs (interning: hashing, lookup, insertion). They lose for
    classes whose cost is the class definition itself (object pools, builder
    storage, relation storage): the declaration instantiates the definition
-   in every includer and saves little.
+   in every includer and saves little. The instantiating sources of a
+   list also lengthen the library's LTO link, a serial step of the build:
+   keep a list only where its includers save more than about 1 GB or
+   would otherwise become the heaviest TUs.
 10. **No deduced return types on functions that are declared `extern` or used
    only through declarations**: deducing the type instantiates the body.
 11. **Split instantiating sources only along the dimension that drives their
@@ -130,6 +133,7 @@ follows.
 | 9 | runir Uns parser includes extern declarations of the Uns symbol storage | 3.95 GB to 2.89 GB |
 | 9 | runir optimization, query evaluation and successor expander tests include the lists of the families they intern | -0.3 to -0.5 GB per TU; the same lists cost +0.1 to +0.7 GB in TUs that only evaluate |
 | 9 | pyrunir bindings that intern or evaluate include their family's lists and the denotation list | 24 binding TUs -0.2 to -1.5 GB, summed pyrunir memory -22 GB; the lists cost up to +0.4 GB in bindings that only wrap views |
+| 9 | runir grammar and CNF grammar lists dropped (their includers saved 0.1-0.6 GB) | library LTO link -56 s; build wall 379 s to 342 s, summed memory -9 GB, same max TU; peak at -j12 26.1 GB to 28.5 GB |
 | 11 | tyr applicability, serialization and datalog solver tests split along task kind and test groups | 3.05-3.3 GB to at most 2.95 GB |
 | 11 | the runir optimization test split by task kind | no change (7.1 GB per half); the cost depends on the family |
 | 11 | runir DL evaluator and incremental engine merged from 16 sources (family x kind x context) into one per family | 2.8-3.6 GB per part, 3.5-4.0 GB per family; summed build memory 334 GB to 299 GB, wall 403 s to 370 s |
