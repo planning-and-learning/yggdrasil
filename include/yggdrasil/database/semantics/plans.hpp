@@ -26,7 +26,7 @@ struct ColumnSlice
     size_t size;
 
     bool operator==(const ColumnSlice&) const = default;
-    auto identifying_members() const noexcept { return std::tie(type, offset, size); }
+    static constexpr auto identifying_members() noexcept { return Members<&ColumnSlice::type, &ColumnSlice::offset, &ColumnSlice::size> {}; }
     auto cista_members() noexcept { return std::tie(type, offset, size); }
     auto cista_members() const noexcept { return std::tie(type, offset, size); }
 };

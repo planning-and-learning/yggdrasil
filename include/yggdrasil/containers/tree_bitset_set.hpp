@@ -54,7 +54,7 @@ struct TreeBitsetIndex
     friend bool operator==(const TreeBitsetIndex&, const TreeBitsetIndex&) = default;
     friend auto operator<=>(const TreeBitsetIndex&, const TreeBitsetIndex&) = default;
 
-    auto identifying_members() const noexcept { return std::tie(root, size); }
+    static constexpr auto identifying_members() noexcept { return Members<&TreeBitsetIndex::root, &TreeBitsetIndex::size> {}; }
 };
 
 /// Toggles the bits in `mask` of the block at `position`.

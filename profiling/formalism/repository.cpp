@@ -39,7 +39,7 @@ struct Data<profiling::TrivialSymbol>
     Index<profiling::TrivialSymbol> index;
     std::uint64_t value = 0;
 
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 
@@ -56,7 +56,7 @@ struct Data<profiling::SerializedSymbol>
     Data& operator=(Data&&) = default;
 
     auto cista_members() const noexcept { return std::tie(index, values); }
-    auto identifying_members() const noexcept { return std::tie(values); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
 };
 
 }

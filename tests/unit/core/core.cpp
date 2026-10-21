@@ -94,7 +94,7 @@ struct CoreTypeUtilsData
     explicit CoreTypeUtilsData(int value_) : value(value_) {}
 
     int value {};
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&CoreTypeUtilsData::value> {}; }
 };
 
 }  // namespace ygg::tests

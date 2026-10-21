@@ -28,9 +28,9 @@ struct ColumnLayout
 
     auto cista_members() noexcept { return std::tie(label, type, offset, size); }
     auto cista_members() const noexcept { return std::tie(label, type, offset, size); }
-    auto identifying_members() const noexcept { return std::tie(label, type); }
-    friend bool operator==(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.identifying_members() == rhs.identifying_members(); }
-    friend auto operator<=>(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.identifying_members() <=> rhs.identifying_members(); }
+    static constexpr auto identifying_members() noexcept { return Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
+    friend bool operator==(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.label == rhs.label && lhs.type == rhs.type; }
+    friend auto operator<=>(const ColumnLayout& lhs, const ColumnLayout& rhs) { return std::tie(lhs.label, lhs.type) <=> std::tie(rhs.label, rhs.type); }
 };
 }  // namespace ygg::database
 
@@ -47,7 +47,7 @@ struct Data<database::Columns>
 
     auto cista_members() noexcept { return std::tie(index, values); }
     auto cista_members() const noexcept { return std::tie(index, values); }
-    auto identifying_members() const noexcept { return std::tie(values); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::values> {}; }
     void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());

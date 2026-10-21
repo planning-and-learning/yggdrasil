@@ -374,7 +374,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
     const auto right_index_view = make_view(right_view.get_index(), repository);
     // Trivially copyable records are held by value; others are borrowed.
     static_assert(ygg::stores_view_by_value_v<RelationTag>);
-    EXPECT_EQ(right_data_view.get_handle().identifying_members(), right_data.identifying_members());
+    EXPECT_TRUE(ygg::EqualTo<std::remove_cvref_t<decltype(right_data)>> {}(right_data_view.get_handle(), right_data));
     EXPECT_EQ(&left_builder_view.get_handle(), &left);
     EXPECT_EQ(&right_index_view.get_context(), &repository);
     const auto check_access = [](const auto& view)

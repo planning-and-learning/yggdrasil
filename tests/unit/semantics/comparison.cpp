@@ -48,7 +48,7 @@ struct Value : ygg::comparison::Mixin<Value>
 
     constexpr explicit Value(int value) noexcept : value(value) {}
 
-    constexpr auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Value::value> {}; }
 };
 
 template<typename T>
@@ -65,7 +65,7 @@ struct ComparisonOwnedValue
 
     constexpr explicit ComparisonOwnedValue(int value) noexcept : value(value) {}
 
-    constexpr auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&ComparisonOwnedValue::value> {}; }
 };
 
 }  // namespace ygg
@@ -176,7 +176,7 @@ struct ListedRecord
     int name;
     double weight;
 
-    static constexpr auto identifying_members() noexcept { return Members<&ListedRecord::name, &ListedRecord::weight> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&ListedRecord::name, &ListedRecord::weight> {}; }
 };
 
 struct TiedRecord
@@ -191,7 +191,7 @@ struct EmptyListedRecord
 {
     int index;
 
-    static constexpr auto identifying_members() noexcept { return Members<> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<> {}; }
 };
 
 TEST(YggdrasilTests, MemberListsIdentifyLikeTiedMembers)

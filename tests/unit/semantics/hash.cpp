@@ -564,7 +564,7 @@ TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
     struct Record
     {
         decltype(wrapped) values;
-        auto identifying_members() const noexcept { return std::tie(values); }
+        static constexpr auto identifying_members() noexcept { return ygg::Members<&Record::values> {}; }
     };
     const auto record = Record { wrapped };
     EXPECT_THROW(ygg::Hash<> {}(record), std::runtime_error);

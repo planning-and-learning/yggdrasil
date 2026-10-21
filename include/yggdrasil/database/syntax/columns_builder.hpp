@@ -102,7 +102,7 @@ public:
 
     auto cista_members() noexcept { return std::tie(m_data); }
     auto cista_members() const noexcept { return std::tie(m_data); }
-    auto identifying_members() const noexcept { return m_data.identifying_members(); }
+    static constexpr auto identifying_members() noexcept { return Members<&Builder::m_data> {}; }
 };
 }  // namespace ygg
 

@@ -43,7 +43,7 @@ struct Data<database::Query<>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(variant); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::variant> {}; }
     auto cista_members() noexcept { return std::tie(index, variant); }
     auto cista_members() const noexcept { return std::tie(index, variant); }
     void clear() noexcept
@@ -62,7 +62,7 @@ struct Data<database::Query<database::QueryInputTag>>
     Data() = default;
     Data(size_t input_slot_, std::span<const database::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
 
-    auto identifying_members() const noexcept { return std::tie(input_slot, columns); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::input_slot, &Data::columns> {}; }
     auto cista_members() noexcept { return std::tie(index, input_slot, columns); }
     auto cista_members() const noexcept { return std::tie(index, input_slot, columns); }
     void clear() noexcept
@@ -80,7 +80,7 @@ struct Data<database::Query<database::QueryEmptyTag>>
     Data() = default;
     explicit Data(std::span<const database::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
 
-    auto identifying_members() const noexcept { return std::tie(columns); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::columns> {}; }
     auto cista_members() noexcept { return std::tie(index, columns); }
     auto cista_members() const noexcept { return std::tie(index, columns); }
     void clear() noexcept
@@ -106,7 +106,7 @@ struct Data<database::Query<Tag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(lhs, rhs); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::lhs, &Data::rhs> {}; }
     auto cista_members() noexcept { return std::tie(index, lhs, rhs, plan); }
     auto cista_members() const noexcept { return std::tie(index, lhs, rhs, plan); }
     void clear() noexcept
@@ -131,7 +131,7 @@ struct Data<database::Query<Tag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(lhs, rhs); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::lhs, &Data::rhs> {}; }
     auto cista_members() noexcept { return std::tie(index, lhs, rhs, columns); }
     auto cista_members() const noexcept { return std::tie(index, lhs, rhs, columns); }
     void clear() noexcept
@@ -155,7 +155,7 @@ struct Data<database::Query<database::QueryProjectTag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(arg, labels); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::labels> {}; }
     auto cista_members() noexcept { return std::tie(index, arg, labels, plan); }
     auto cista_members() const noexcept { return std::tie(index, arg, labels, plan); }
     void clear() noexcept
@@ -179,7 +179,7 @@ struct Data<database::Query<database::QueryRenameTag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(arg, labels); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::labels> {}; }
     auto cista_members() noexcept { return std::tie(index, arg, labels, columns); }
     auto cista_members() const noexcept { return std::tie(index, arg, labels, columns); }
     void clear() noexcept
@@ -212,7 +212,7 @@ struct Data<database::Query<database::QuerySelectEqualTag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(arg, lhs_column, rhs_column); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::lhs_column, &Data::rhs_column> {}; }
     auto cista_members() noexcept { return std::tie(index, arg, lhs_column, rhs_column, columns, lhs_position, rhs_position); }
     auto cista_members() const noexcept { return std::tie(index, arg, lhs_column, rhs_column, columns, lhs_position, rhs_position); }
     void clear() noexcept
@@ -247,7 +247,7 @@ struct Data<database::Query<database::QuerySelectValueTag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(arg, column, constant); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::column, &Data::constant> {}; }
     auto cista_members() noexcept { return std::tie(index, arg, column, constant, constant_type, columns, column_position); }
     auto cista_members() const noexcept { return std::tie(index, arg, column, constant, constant_type, columns, column_position); }
     void clear() noexcept
@@ -283,7 +283,7 @@ struct Data<database::Query<database::QueryDistanceTag>>
     {
     }
 
-    auto identifying_members() const noexcept { return std::tie(sources, edges, targets, distance_column); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::sources, &Data::edges, &Data::targets, &Data::distance_column> {}; }
     auto cista_members() noexcept { return std::tie(index, sources, edges, targets, distance_column, plan); }
     auto cista_members() const noexcept { return std::tie(index, sources, edges, targets, distance_column, plan); }
     void clear() noexcept
@@ -323,7 +323,7 @@ struct Data<database::Query<database::QueryGenericJoinTag>>
         output_order.set(output_order_.begin(), output_order_.end());
     }
 
-    auto identifying_members() const noexcept { return std::tie(inputs, variable_order, output_order); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::inputs, &Data::variable_order, &Data::output_order> {}; }
     auto cista_members() noexcept { return std::tie(index, inputs, variable_order, output_order, plan); }
     auto cista_members() const noexcept { return std::tie(index, inputs, variable_order, output_order, plan); }
     void clear() noexcept

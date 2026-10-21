@@ -75,7 +75,7 @@ struct Data<tests::RepositoryTypesElement>
     Index<tests::RepositoryTypesElement> index;
     int value = 0;
 
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 
@@ -92,7 +92,7 @@ struct Data<tests::RepositoryTypesSerializedElement>
     Data& operator=(Data&&) = default;
 
     auto cista_members() const noexcept { return std::tie(index, values); }
-    auto identifying_members() const noexcept { return std::tie(values); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
 };
 
 
@@ -101,7 +101,7 @@ struct Data<tests::RepositoryTypesRelation>
 {
     Index<tests::RepositoryTypesRelation> index;
     uint_t value = 0;
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 template<>
@@ -109,7 +109,7 @@ struct Data<formalism::Object<tests::RepositoryTypesObjectTag>>
 {
     Index<formalism::Object<tests::RepositoryTypesObjectTag>> index;
     uint_t value = 0;
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 
@@ -118,7 +118,7 @@ struct Data<tests::RepositoryTypesBuilderOther>
 {
     int value = 0;
 
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 template<>

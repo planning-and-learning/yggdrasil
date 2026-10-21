@@ -42,7 +42,7 @@ struct CustomLeaf
     uint_t second;
 
     friend bool operator==(const CustomLeaf&, const CustomLeaf&) = default;
-    auto identifying_members() const noexcept { return std::tie(first, second); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&CustomLeaf::first, &CustomLeaf::second> {}; }
 };
 
 static_assert(Identifiable<TreeVectorIndex<uint_t>>);

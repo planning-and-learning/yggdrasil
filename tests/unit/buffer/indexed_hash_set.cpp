@@ -40,7 +40,7 @@ struct Data<tests::BufferIndexedHashSetTag>
     uint_t symbol = 0;
     uint_t arity = 0;
 
-    auto identifying_members() const noexcept { return std::tie(symbol, arity); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::symbol, &Data::arity> {}; }
 };
 
 inline bool is_canonical(const Data<tests::BufferIndexedHashSetTag>&) { return true; }

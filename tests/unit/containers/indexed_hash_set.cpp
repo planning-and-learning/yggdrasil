@@ -50,7 +50,7 @@ struct Data<ygg::tests::IndexedHashSetTestTag>
 {
     int value {};
 
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 inline bool is_canonical(const Data<ygg::tests::IndexedHashSetTestTag>&) { return true; }

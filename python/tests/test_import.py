@@ -174,7 +174,7 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
             struct ItemData
             {
                 int value;
-                auto identifying_members() const noexcept { return std::tie(value); }
+                static constexpr auto identifying_members() noexcept { return ygg::Members<&ItemData::value> {}; }
             };
 
             namespace ygg

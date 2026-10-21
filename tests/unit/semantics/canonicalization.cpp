@@ -46,7 +46,7 @@ struct Data<ygg::tests::CanonicalizationTestTag>
 {
     ygg::uint_t value {};
 
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
 }  // namespace ygg

@@ -48,7 +48,7 @@ struct NestedEntity
     std::optional<DictionaryEntity> absent;
     std::vector<int> numbers;
 
-    auto identifying_members() const noexcept { return std::tie(id); }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&NestedEntity::id> {}; }
 };
 
 template<typename Archive>

@@ -59,7 +59,7 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 
     auto cista_members() noexcept { return std::tie(relation, objects); }
     auto cista_members() const noexcept { return std::tie(relation, objects); }
-    auto identifying_members() const noexcept { return std::tie(relation, objects); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::relation, &Data::objects> {}; }
     void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());

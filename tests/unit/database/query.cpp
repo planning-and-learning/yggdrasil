@@ -135,7 +135,7 @@ TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
     const ygg::Data<ygg::database::Query<ygg::database::QueryJoinTag>> by_index(a.get_index(), b.get_index());
     EXPECT_EQ(by_view.lhs, a.get_index());
     EXPECT_EQ(by_view.rhs, b.get_index());
-    EXPECT_EQ(by_view.identifying_members(), by_index.identifying_members());
+    EXPECT_TRUE(ygg::EqualTo<ygg::Data<ygg::database::Query<ygg::database::QueryJoinTag>>> {}(by_view, by_index));
     EXPECT_EQ(insert(by_view).get_index(), ygg::tests::qb::join(repository, a, b).get_index());
 
     const std::array labels { x };

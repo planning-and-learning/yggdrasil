@@ -94,7 +94,7 @@ struct Data<detail::TreeVectorLeaf<T>>
 
     auto cista_members() noexcept { return std::tie(value); }
     auto cista_members() const noexcept { return std::tie(value); }
-    auto identifying_members() const noexcept { return std::tie(value); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::value> {}; }
     void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
@@ -112,7 +112,7 @@ struct Data<detail::TreeVectorNode<T, Arity>>
 
     auto cista_members() noexcept { return std::tie(children); }
     auto cista_members() const noexcept { return std::tie(children); }
-    auto identifying_members() const noexcept { return std::tie(children); }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::children> {}; }
     void clear() noexcept
     {
         std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
@@ -129,7 +129,7 @@ struct TreeVectorIndex
     friend bool operator==(const TreeVectorIndex&, const TreeVectorIndex&) = default;
     friend auto operator<=>(const TreeVectorIndex&, const TreeVectorIndex&) = default;
 
-    auto identifying_members() const noexcept { return std::tie(root, size); }
+    static constexpr auto identifying_members() noexcept { return Members<&TreeVectorIndex::root, &TreeVectorIndex::size> {}; }
 };
 
 /// Overwrites the value at `position`.
