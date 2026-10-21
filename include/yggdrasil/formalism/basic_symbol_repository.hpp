@@ -226,22 +226,6 @@ std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_wit
 }
 
 template<typename T, bool ThreadSafe>
-std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::create_local_with_hash(Data<T>& builder, size_t h)
-{
-    auto& container = m_slot.container;
-    const auto [index, created] = container.complete_miss_with_hash(h,
-                                                                    builder,
-                                                                    [&](Index<T> local_index) -> const Data<T>&
-                                                                    {
-                                                                        builder.index.value = m_slot.parent_size + ygg::uint_t(local_index);
-                                                                        assert(h == container.hash(builder) && "Symbol index must not affect identity.");
-                                                                        return builder;
-                                                                    });
-    builder.index.value = m_slot.parent_size + ygg::uint_t(index);
-    return { builder.index, created };
-}
-
-template<typename T, bool ThreadSafe>
 size_t BasicSymbolRepository<T, ThreadSafe>::hash(const Data<T>& builder) noexcept
 {
     return Slot<T>::hash(builder);

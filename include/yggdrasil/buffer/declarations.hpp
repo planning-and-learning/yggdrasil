@@ -20,15 +20,9 @@
 
 #include "yggdrasil/core/types.hpp"
 
-#include <cista/serialization.h>
+#include <cista/targets/buf.h>
 #include <cstdint>
 #include <vector>
-
-namespace cista
-{
-template<typename Buf>
-struct buf;
-}
 
 namespace ygg::buffer
 {

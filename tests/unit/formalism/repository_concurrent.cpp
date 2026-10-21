@@ -14,6 +14,7 @@
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_view.hpp"
+#include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/core/types.hpp"
 

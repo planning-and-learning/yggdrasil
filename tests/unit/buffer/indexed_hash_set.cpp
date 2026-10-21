@@ -16,6 +16,7 @@
  */
 
 #include "yggdrasil/buffer/buffer.hpp"
+#include "yggdrasil/buffer/detail/indexed_hash_set_impl.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/canonicalization.hpp"
 

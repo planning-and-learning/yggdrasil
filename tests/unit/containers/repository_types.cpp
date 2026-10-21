@@ -21,6 +21,7 @@
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_view.hpp"
 #include "yggdrasil/formalism/builder.hpp"
+#include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"

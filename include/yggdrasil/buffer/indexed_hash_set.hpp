@@ -31,7 +31,7 @@
 #include "yggdrasil/serialization/cista_hash.hpp"
 
 #include <cassert>
-#include <cista/serialization.h>
+#include <cista/mode.h>
 #include <cstddef>
 #include <gtl/phmap.hpp>
 #include <limits>
@@ -65,14 +65,9 @@ private:
     using VectorType = SegmentedVector<const Data<Tag>*, FirstSegmentSize, ThreadSafe>;
     using SetType = ygg::detail::HashSetType<Index<Tag>, IndexableHash, IndexableEqualTo, ThreadSafe>;
 
+    /// Defined in detail/indexed_hash_set_impl.hpp, which needs cista/serialization.h.
     template<::cista::mode Mode>
-    const Data<Tag>* serialize(const Data<Tag>& element)
-    {
-        m_buf->reset();
-        ::cista::serialize<Mode>(*m_buf, element);
-        auto begin = m_arena->write(m_buf->base(), m_buf->size(), alignof(Data<Tag>));
-        return ::cista::deserialize<const Data<Tag>, Mode>(begin, begin + m_buf->size());
-    }
+    const Data<Tag>* serialize(const Data<Tag>& element);
 
     template<::cista::mode Mode, typename Factory>
     Index<Tag> append_new_with_index(Factory&& factory)
