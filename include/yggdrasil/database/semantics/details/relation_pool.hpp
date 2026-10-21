@@ -23,7 +23,7 @@ UniqueObjectPoolPtr<ygg::Builder<Relation>> RelationPool::allocate(size_t width,
     return relation;
 }
 
-template<ColumnValue T>
+template<ByteCodable T>
 UniqueObjectPoolPtr<ygg::Builder<Relation>> RelationPool::get_or_allocate(std::span<const Index<Column>> columns)
 {
     auto typed = ygg::Builder<Columns> {};
@@ -31,7 +31,7 @@ UniqueObjectPoolPtr<ygg::Builder<Relation>> RelationPool::get_or_allocate(std::s
     return allocate(typed.row_size(), typed.span());
 }
 
-template<ColumnValue T>
+template<ByteCodable T>
 UniqueObjectPoolPtr<ygg::Builder<Relation>> RelationPool::get_or_allocate(std::initializer_list<Index<Column>> columns)
 {
     return get_or_allocate<T>(std::span<const Index<Column>>(columns));

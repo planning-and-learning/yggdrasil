@@ -42,7 +42,7 @@ void validate_columns(std::span<const ColumnLayout> columns)
         const auto size = it->size;
         if (it->offset != offset || size == 0)
             throw std::invalid_argument("Columns: columns must be nonempty and packed contiguously.");
-        if (const auto builtin = builtin_column_size(it->type); builtin != 0 && builtin != size)
+        if (const auto builtin = builtin_byte_size(it->type); builtin != 0 && builtin != size)
             throw std::invalid_argument("Columns: column width does not match its type.");
         if (size > std::numeric_limits<size_t>::max() - offset)
             throw std::length_error("Columns: row byte width exceeds addressable memory.");
@@ -151,7 +151,7 @@ Builder<database::Columns>::Builder(std::initializer_list<Index<database::Column
 
 namespace ygg
 {
-void Builder<database::Columns>::push_back(Index<database::Column> column, database::ColumnTypeId type, size_t size)
+void Builder<database::Columns>::push_back(Index<database::Column> column, ygg::TypeId type, size_t size)
 {
     for (const auto& existing : span())
         if (existing.label == column)

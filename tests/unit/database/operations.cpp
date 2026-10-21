@@ -43,44 +43,44 @@ struct DatabaseThrowingValue
 };
 }  // namespace ygg::tests
 
-namespace ygg::database
+namespace ygg
 {
 template<>
-struct ColumnCodec<tests::DatabaseCountedValue>
+struct ByteCodec<tests::DatabaseCountedValue>
 {
-    static constexpr ColumnTypeId id = 1002;
-    static constexpr size_t size = ColumnCodec<uint_t>::size;
+    static constexpr TypeId id = 1002;
+    static constexpr size_t size = ByteCodec<uint_t>::size;
     static void encode(tests::DatabaseCountedValue value, std::span<std::byte> bytes)
     {
         ++tests::DatabaseCountedValue::encodes;
-        ColumnCodec<uint_t>::encode(value.value, bytes);
+        ByteCodec<uint_t>::encode(value.value, bytes);
     }
-    static tests::DatabaseCountedValue decode(std::span<const std::byte> bytes) { return { ColumnCodec<uint_t>::decode(bytes) }; }
+    static tests::DatabaseCountedValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
 };
 
 template<>
-struct ColumnCodec<tests::DatabaseModuloValue>
+struct ByteCodec<tests::DatabaseModuloValue>
 {
-    static constexpr ColumnTypeId id = 1003;
-    static constexpr size_t size = ColumnCodec<uint_t>::size;
-    static void encode(tests::DatabaseModuloValue value, std::span<std::byte> bytes) { ColumnCodec<uint_t>::encode(value.value % 10, bytes); }
-    static tests::DatabaseModuloValue decode(std::span<const std::byte> bytes) { return { ColumnCodec<uint_t>::decode(bytes) }; }
+    static constexpr TypeId id = 1003;
+    static constexpr size_t size = ByteCodec<uint_t>::size;
+    static void encode(tests::DatabaseModuloValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value % 10, bytes); }
+    static tests::DatabaseModuloValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
 };
 
 template<>
-struct ColumnCodec<tests::DatabaseThrowingValue>
+struct ByteCodec<tests::DatabaseThrowingValue>
 {
-    static constexpr ColumnTypeId id = 1004;
-    static constexpr size_t size = ColumnCodec<uint_t>::size;
+    static constexpr TypeId id = 1004;
+    static constexpr size_t size = ByteCodec<uint_t>::size;
     static void encode(tests::DatabaseThrowingValue value, std::span<std::byte> bytes)
     {
         if (tests::DatabaseThrowingValue::fail && value.value == 5)
             throw std::runtime_error("encoding failed");
-        ColumnCodec<uint_t>::encode(value.value, bytes);
+        ByteCodec<uint_t>::encode(value.value, bytes);
     }
-    static tests::DatabaseThrowingValue decode(std::span<const std::byte> bytes) { return { ColumnCodec<uint_t>::decode(bytes) }; }
+    static tests::DatabaseThrowingValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
 };
-}  // namespace ygg::database
+}  // namespace ygg
 
 namespace ygg::tests
 {
@@ -129,7 +129,7 @@ static_assert(std::same_as<decltype(std::declval<const database::JoinPlan&>().ou
 namespace
 {
 
-template<database::ColumnValue T>
+template<ygg::ByteCodable T>
 Builder<database::Columns> columns_of(std::initializer_list<Index<database::Column>> labels)
 {
     Builder<database::Columns> columns;
@@ -145,9 +145,9 @@ auto cells(Args... values)
 template<typename T>
 auto packed(std::span<const T> values)
 {
-    std::vector<std::byte> result(values.size() * database::ColumnCodec<T>::size);
+    std::vector<std::byte> result(values.size() * ygg::ByteCodec<T>::size);
     for (size_t i = 0; i < values.size(); ++i)
-        database::ColumnCodec<T>::encode(values[i], std::span(result).subspan(i * database::ColumnCodec<T>::size, database::ColumnCodec<T>::size));
+        ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;
 }
 
@@ -524,9 +524,9 @@ TEST(YggdrasilTests, DatabaseColumnsAndPlansSurviveCistaRelocation)
         std::vector<size_t> result;
         for (const auto column : range)
         {
-            EXPECT_EQ(column.type, (database::column_type<uint_t>) );
-            EXPECT_EQ(column.size, database::ColumnCodec<uint_t>::size);
-            result.push_back(column.offset / database::ColumnCodec<uint_t>::size);
+            EXPECT_EQ(column.type, (ygg::type_id<uint_t>) );
+            EXPECT_EQ(column.size, ygg::ByteCodec<uint_t>::size);
+            result.push_back(column.offset / ygg::ByteCodec<uint_t>::size);
         }
         return result;
     };
@@ -724,7 +724,7 @@ TEST(YggdrasilTests, DatabasePoolFactoryIdentifiesStorageAcrossPoolsAndRenames)
     first->insert(cells(4));
     second->insert(cells(5));
     database::JoinIndexCache cache;
-    const std::array<database::ColumnSlice, 1> keys { database::ColumnSlice { database::column_type<uint_t>, 0, sizeof(uint_t) } };
+    const std::array<database::ColumnSlice, 1> keys { database::ColumnSlice { ygg::type_id<uint_t>, 0, sizeof(uint_t) } };
     cache.get_or_create(*first, keys);
     cache.get_or_create(*second, keys);
     EXPECT_EQ(cache.size(), 2);
@@ -754,7 +754,7 @@ TEST(YggdrasilTests, DatabaseJoinIndexRejectsUnidentifiedStorage)
     Builder<database::Relation> right({ ColumnIndex(1) });
     left.insert(cells(1));
     right.insert(cells(1));
-    const std::array<database::ColumnSlice, 1> keys { database::ColumnSlice { database::column_type<uint_t>, 0, sizeof(uint_t) } };
+    const std::array<database::ColumnSlice, 1> keys { database::ColumnSlice { ygg::type_id<uint_t>, 0, sizeof(uint_t) } };
     EXPECT_THROW((database::JoinIndex(left, keys)), std::invalid_argument);
     database::JoinIndexCache cache;
     EXPECT_THROW(cache.get_or_create(left, keys), std::invalid_argument);
@@ -838,8 +838,8 @@ TEST(YggdrasilTests, DatabaseJoinIndexCacheSharesStorageAndOrderedPositionsAcros
     database::join(*build, probe, plan, cache, database::JoinReuse { true, false }, result, workspace);
     expect_relation(result, { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3), ColumnIndex(4) }, { { 7, 8, 90, 10 } });
     EXPECT_EQ(cache.size(), 1);
-    const std::array<database::ColumnSlice, 2> keys { database::ColumnSlice { database::column_type<uint_t>, 0, sizeof(uint_t) },
-                                                      database::ColumnSlice { database::column_type<uint_t>, sizeof(uint_t), sizeof(uint_t) } };
+    const std::array<database::ColumnSlice, 2> keys { database::ColumnSlice { ygg::type_id<uint_t>, 0, sizeof(uint_t) },
+                                                      database::ColumnSlice { ygg::type_id<uint_t>, sizeof(uint_t), sizeof(uint_t) } };
     EXPECT_EQ(&cache.get_or_create(*build, plan.lhs_keys()), &cache.get_or_create(*build, keys));
     database::join(probe, *build, reversed, cache, database::JoinReuse { false, true }, reverse_result, workspace);
     expect_relation(reverse_result, { ColumnIndex(1), ColumnIndex(2), ColumnIndex(4), ColumnIndex(3) }, { { 7, 8, 10, 90 } });
@@ -922,9 +922,9 @@ TEST(YggdrasilTests, DatabaseJoinIndexRejectsWrongStorageAndKeysBeforeClearingOu
     auto other = pool.get_or_allocate({ ColumnIndex(1), ColumnIndex(2) });
     const database::JoinPlan plan(left->columns(), right->columns());
     const database::JoinIndex unrelated(*other, plan.lhs_keys());
-    const std::array<database::ColumnSlice, 1> wrong_position { database::ColumnSlice { database::column_type<uint_t>, 0, sizeof(uint_t) } };
+    const std::array<database::ColumnSlice, 1> wrong_position { database::ColumnSlice { ygg::type_id<uint_t>, 0, sizeof(uint_t) } };
     const database::JoinIndex wrong_keys(*left, wrong_position);
-    const std::array<database::ColumnSlice, 1> out_of_bounds { database::ColumnSlice { database::column_type<uint_t>, 2 * sizeof(uint_t), sizeof(uint_t) } };
+    const std::array<database::ColumnSlice, 1> out_of_bounds { database::ColumnSlice { ygg::type_id<uint_t>, 2 * sizeof(uint_t), sizeof(uint_t) } };
     EXPECT_THROW((database::JoinIndex(*left, out_of_bounds)), std::out_of_range);
     Builder<database::Relation> result(plan.output_columns());
     result.insert(cells(7, 8, 9));

@@ -22,17 +22,17 @@ struct GenericJoinValue
 };
 }  // namespace ygg::tests
 
-namespace ygg::database
+namespace ygg
 {
 template<>
-struct ColumnCodec<tests::GenericJoinValue>
+struct ByteCodec<tests::GenericJoinValue>
 {
-    static constexpr ColumnTypeId id = 1005;
-    static constexpr size_t size = ColumnCodec<uint_t>::size;
-    static void encode(tests::GenericJoinValue value, std::span<std::byte> bytes) { ColumnCodec<uint_t>::encode(value.value, bytes); }
-    static tests::GenericJoinValue decode(std::span<const std::byte> bytes) { return { ColumnCodec<uint_t>::decode(bytes) }; }
+    static constexpr TypeId id = 1005;
+    static constexpr size_t size = ByteCodec<uint_t>::size;
+    static void encode(tests::GenericJoinValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value, bytes); }
+    static tests::GenericJoinValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
 };
-}  // namespace ygg::database
+}  // namespace ygg
 
 namespace ygg::tests
 {

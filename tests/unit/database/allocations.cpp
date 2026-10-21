@@ -181,7 +181,7 @@ using ColumnIndex = Index<database::Column>;
 namespace
 {
 
-template<database::ColumnValue T>
+template<ygg::ByteCodable T>
 Builder<database::Columns> columns_of(std::initializer_list<Index<database::Column>> labels)
 {
     Builder<database::Columns> columns;
@@ -197,9 +197,9 @@ auto cells(Args... values)
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * database::ColumnCodec<T>::size> result;
+    std::array<std::byte, N * ygg::ByteCodec<T>::size> result;
     for (size_t i = 0; i < N; ++i)
-        database::ColumnCodec<T>::encode(values[i], std::span(result).subspan(i * database::ColumnCodec<T>::size, database::ColumnCodec<T>::size));
+        ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;
 }
 
@@ -493,8 +493,8 @@ struct InterningEvaluation
             const auto seed = generation * 8192 + static_cast<uint_t>(logical_index) * 4;
             const std::array<uint_t, 3> first_row { seed, seed + 1, seed + 2 };
             const std::array<uint_t, 3> second_row { seed + 1, seed + 2, seed + 3 };
-            builder->insert(std::span<const std::byte>(packed(first_row)).first(arity * database::ColumnCodec<uint_t>::size));
-            builder->insert(std::span<const std::byte>(packed(second_row)).first(arity * database::ColumnCodec<uint_t>::size));
+            builder->insert(std::span<const std::byte>(packed(first_row)).first(arity * ygg::ByteCodec<uint_t>::size));
+            builder->insert(std::span<const std::byte>(packed(second_row)).first(arity * ygg::ByteCodec<uint_t>::size));
             const auto [original, created] = insert(repository, *builder, generation);
             const auto [copied, copied_created] = database::copy(original, copied_repository);
             valid &= copied_created && copied.get_data().schema_namespace == generation;
@@ -508,10 +508,10 @@ struct InterningEvaluation
             valid &= extracted->get_index().is_max() && extracted->size() == original.size();
             valid &= extracted->get_storage_index() == storage_index && extracted->columns().data() == schema_storage;
             valid &= std::ranges::equal(extracted->columns(), schema, {}, &database::ColumnLayout::label);
-            valid &= extracted->contains(std::span<const std::byte>(packed(first_row)).first(arity * database::ColumnCodec<uint_t>::size));
+            valid &= extracted->contains(std::span<const std::byte>(packed(first_row)).first(arity * ygg::ByteCodec<uint_t>::size));
             builder->clear();
-            builder->insert(std::span<const std::byte>(packed(second_row)).first(arity * database::ColumnCodec<uint_t>::size));
-            builder->insert(std::span<const std::byte>(packed(first_row)).first(arity * database::ColumnCodec<uint_t>::size));
+            builder->insert(std::span<const std::byte>(packed(second_row)).first(arity * ygg::ByteCodec<uint_t>::size));
+            builder->insert(std::span<const std::byte>(packed(first_row)).first(arity * ygg::ByteCodec<uint_t>::size));
             const auto [duplicate, duplicate_created] = insert(repository, *builder, generation);
             const auto renamed = repository.rename(original, std::span<const ColumnIndex>(renamed_columns.data(), arity), generation);
             valid &= created && !duplicate_created;
@@ -520,7 +520,7 @@ struct InterningEvaluation
             valid &= original.get_storage_index() == renamed.get_storage_index();
             valid &= original.at(0).bytes().data() == renamed.at(0).bytes().data();
             valid &= original.size() == 2 && renamed.arity() == arity;
-            valid &= renamed.contains(std::span<const std::byte>(packed(first_row)).first(arity * database::ColumnCodec<uint_t>::size));
+            valid &= renamed.contains(std::span<const std::byte>(packed(first_row)).first(arity * ygg::ByteCodec<uint_t>::size));
         }
         auto nullary = pool.get_or_allocate({});
         const auto false_view = insert(repository, *nullary, generation).first;

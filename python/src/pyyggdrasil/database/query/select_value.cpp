@@ -15,7 +15,7 @@ void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
                 "__init__",
                 [](V* self, QueryView arg, Column column, ColumnType type, nb::handle value)
                 {
-                    ygg::database::visit_column_type<Values>(static_cast<ygg::database::ColumnTypeId>(type),
+                    ygg::visit_type_id<Values>(static_cast<ygg::TypeId>(type),
                                                              [&]<typename T>(std::type_identity<T>)
                                                              {
                                                                  T converted;

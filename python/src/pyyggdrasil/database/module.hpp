@@ -11,18 +11,18 @@ namespace yggdrasil
 {
 namespace nb = nanobind;
 
-using DatabaseValues = ygg::database::DefaultColumnTypes;
+using DatabaseValues = ygg::BuiltinByteTypes;
 
 /// Python names of the column type ids.
-enum class ColumnType : ygg::database::ColumnTypeId
+enum class ColumnType : ygg::TypeId
 {
-    UINT32 = ygg::database::column_type<std::uint32_t>,
-    INT32 = ygg::database::column_type<std::int32_t>,
-    UINT64 = ygg::database::column_type<std::uint64_t>,
-    INT64 = ygg::database::column_type<std::int64_t>,
-    FLOAT32 = ygg::database::column_type<float>,
-    FLOAT64 = ygg::database::column_type<double>,
-    BOOL = ygg::database::column_type<bool>,
+    UINT32 = ygg::type_id<std::uint32_t>,
+    INT32 = ygg::type_id<std::int32_t>,
+    UINT64 = ygg::type_id<std::uint64_t>,
+    INT64 = ygg::type_id<std::int64_t>,
+    FLOAT32 = ygg::type_id<float>,
+    FLOAT64 = ygg::type_id<double>,
+    BOOL = ygg::type_id<bool>,
 };
 
 /// Borrowed relation views use a relation repository only as their context.

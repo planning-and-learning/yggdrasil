@@ -193,18 +193,18 @@ Builder<Relation> select_equal_columns(const V& input, Index<Column> lhs, Index<
     return out;
 }
 
-template<RelationViewConcept V, ColumnValue T>
+template<RelationViewConcept V, ByteCodable T>
 void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation>& out)
 {
     const auto& field = input.columns().span()[input.column_index(column)];
-    if (field.type != column_type<T>)
+    if (field.type != type_id<T>)
         throw std::invalid_argument("Relational operation: selected value has an incompatible column type.");
-    auto encoded = std::array<std::byte, ColumnCodec<T>::size> {};
-    ColumnCodec<T>::encode(value, encoded);
+    auto encoded = std::array<std::byte, ByteCodec<T>::size> {};
+    ByteCodec<T>::encode(value, encoded);
     select(input, [=](Row row) { return std::ranges::equal(row.bytes().subspan(field.offset, field.size), encoded); }, out);
 }
 
-template<RelationViewConcept V, ColumnValue T>
+template<RelationViewConcept V, ByteCodable T>
 Builder<Relation> select_equal_value(const V& input, Index<Column> column, const T& value)
 {
     auto out = Builder<Relation>(input.columns().span());

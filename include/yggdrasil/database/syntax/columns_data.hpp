@@ -22,7 +22,7 @@ namespace ygg::database
 struct ColumnLayout
 {
     Index<Column> label;
-    ColumnTypeId type;
+    TypeId type;
     size_t offset;
     size_t size;
 

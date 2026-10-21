@@ -67,7 +67,7 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     database::project(input, plan, initial, workspace);
     expect_same_rows(evaluator.get_result(), initial);
     ASSERT_EQ(initial.size(), 2);
-    EXPECT_EQ(initial.columns()[1].offset, database::ColumnCodec<bool>::size);
+    EXPECT_EQ(initial.columns()[1].offset, ygg::ByteCodec<bool>::size);
     EXPECT_TRUE(initial.contains(std::tuple { true, 1.5 }));
 
     database::incremental::Delta changes(columns.span());

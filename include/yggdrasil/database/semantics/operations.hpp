@@ -109,10 +109,10 @@ void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, 
 template<RelationViewConcept V>
 Builder<Relation> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs);
 
-template<RelationViewConcept V, ColumnValue T>
+template<RelationViewConcept V, ByteCodable T>
 void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation>& out);
 
-template<RelationViewConcept V, ColumnValue T>
+template<RelationViewConcept V, ByteCodable T>
 Builder<Relation> select_equal_value(const V& input, Index<Column> column, const T& value);
 
 /// Natural join: match common labels and return lhs columns followed by

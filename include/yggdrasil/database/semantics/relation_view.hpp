@@ -167,7 +167,7 @@ public:
 
     bool contains(std::span<const std::byte> row) const { return this->get_handle().contains(row); }
     bool contains(database::Row row) const { return this->get_handle().contains(row); }
-    template<database::ColumnValue... Ts>
+    template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
     {
         return this->get_handle().contains(values);
@@ -238,7 +238,7 @@ public:
         return contains_canonical(row.bytes());
     }
 
-    template<database::ColumnValue... Ts>
+    template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
     {
         return contains_canonical(database::encode_row(values, columns().span()));

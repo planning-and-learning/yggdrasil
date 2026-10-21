@@ -16,7 +16,7 @@
 
 namespace
 {
-using Values = ygg::database::DefaultColumnTypes;
+using Values = ygg::BuiltinByteTypes;
 using Column = ygg::Index<ygg::database::Column>;
 using Relation = ygg::Builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;

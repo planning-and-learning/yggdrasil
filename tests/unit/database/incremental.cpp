@@ -26,17 +26,17 @@ struct IncrementalValue
 };
 }  // namespace ygg::tests
 
-namespace ygg::database
+namespace ygg
 {
 template<>
-struct ColumnCodec<tests::IncrementalValue>
+struct ByteCodec<tests::IncrementalValue>
 {
-    static constexpr ColumnTypeId id = 1001;
-    static constexpr size_t size = ColumnCodec<uint_t>::size;
-    static void encode(tests::IncrementalValue value, std::span<std::byte> bytes) { ColumnCodec<uint_t>::encode(value.value, bytes); }
-    static tests::IncrementalValue decode(std::span<const std::byte> bytes) { return { ColumnCodec<uint_t>::decode(bytes) }; }
+    static constexpr TypeId id = 1001;
+    static constexpr size_t size = ByteCodec<uint_t>::size;
+    static void encode(tests::IncrementalValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value, bytes); }
+    static tests::IncrementalValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
 };
-}  // namespace ygg::database
+}  // namespace ygg
 
 namespace ygg::tests
 {
@@ -46,7 +46,7 @@ using ColumnIndex = Index<database::Column>;
 namespace
 {
 
-template<database::ColumnValue T>
+template<ygg::ByteCodable T>
 Builder<database::Columns> columns_of(std::initializer_list<Index<database::Column>> labels)
 {
     Builder<database::Columns> columns;
@@ -62,9 +62,9 @@ auto cells(Args... values)
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * database::ColumnCodec<T>::size> result;
+    std::array<std::byte, N * ygg::ByteCodec<T>::size> result;
     for (size_t i = 0; i < N; ++i)
-        database::ColumnCodec<T>::encode(values[i], std::span(result).subspan(i * database::ColumnCodec<T>::size, database::ColumnCodec<T>::size));
+        ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;
 }
 
@@ -185,10 +185,10 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
     EXPECT_EQ(evaluator.get_result().find(cells(9, 3)).value(), untouched_index);
     EXPECT_EQ(evaluator.get_result().row(replaced_index).data(), replaced_row.data());
     EXPECT_EQ(evaluator.get_result().row(untouched_index).data(), untouched_row.data());
-    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(replaced_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 7);
-    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(replaced_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 1);
-    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(untouched_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 9);
-    EXPECT_EQ(database::ColumnCodec<uint_t>::decode(untouched_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 3);
+    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(replaced_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 7);
+    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(replaced_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 1);
+    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(untouched_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 9);
+    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(untouched_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 3);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     update(erase_first.added, erase_first.removed);

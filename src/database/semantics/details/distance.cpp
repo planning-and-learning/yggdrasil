@@ -97,7 +97,7 @@ Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t
     const auto tuple_size = plan.tuple_size();
     std::ranges::copy(graph.vertices[from], row.begin());
     std::ranges::copy(graph.vertices[to], row.begin() + tuple_size);
-    ColumnCodec<uint_t>::encode(length, std::span(row).subspan(2 * tuple_size));
+    ByteCodec<uint_t>::encode(length, std::span(row).subspan(2 * tuple_size));
     return Row(row, plan.output_columns().span());
 }
 }

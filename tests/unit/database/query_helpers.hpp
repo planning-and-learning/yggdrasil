@@ -11,7 +11,7 @@
 namespace ygg::tests::qb
 {
 /// A schema whose columns all have type T.
-template<database::ColumnValue T>
+template<ygg::ByteCodable T>
 Builder<database::Columns> columns_of(std::initializer_list<Index<database::Column>> labels)
 {
     Builder<database::Columns> columns;
@@ -150,14 +150,14 @@ select_encoded(database::QueryRepository& repository, database::QueryView<> arg,
     data->constant_type = arg.columns()[database::column_index(arg.columns(), column)].type;
     return database::insert_query(repository, builder(), *data);
 }
-template<database::ColumnValue T>
+template<ygg::ByteCodable T>
 database::QueryView<>
 select_value(database::QueryRepository& repository, database::QueryView<> arg, Index<database::Column> column, T value)
 {
-    if (arg.columns()[database::column_index(arg.columns(), column)].type != database::column_type<T>)
+    if (arg.columns()[database::column_index(arg.columns(), column)].type != ygg::type_id<T>)
         throw std::invalid_argument("Query: constant type does not match selected column.");
-    std::array<std::byte, database::ColumnCodec<T>::size> bytes;
-    database::ColumnCodec<T>::encode(value, bytes);
+    std::array<std::byte, ygg::ByteCodec<T>::size> bytes;
+    ygg::ByteCodec<T>::encode(value, bytes);
     return select_encoded(repository, arg, column, bytes);
 }
 

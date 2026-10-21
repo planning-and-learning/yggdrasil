@@ -95,7 +95,7 @@ TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
     EXPECT_EQ(ygg::database::as<ygg::database::QuerySelectEqualTag>(equal).get_lhs_column(), x);
     EXPECT_EQ(ygg::database::as<ygg::database::QuerySelectEqualTag>(equal).get_rhs_column(), y);
     EXPECT_EQ(ygg::database::as<ygg::database::QuerySelectValueTag>(selected).get_column(), x);
-    EXPECT_EQ(ygg::database::ColumnCodec<ygg::uint_t>::decode(ygg::database::as<ygg::database::QuerySelectValueTag>(selected).get_constant()), 7);
+    EXPECT_EQ(ygg::ByteCodec<ygg::uint_t>::decode(ygg::database::as<ygg::database::QuerySelectValueTag>(selected).get_constant()), 7);
     EXPECT_EQ(ygg::database::as<ygg::database::QueryUnionTag>(united).get_rhs().get_index(), empty.get_index());
     EXPECT_EQ(ygg::database::as<ygg::database::QueryDifferenceTag>(difference).get_lhs().get_index(), a.get_index());
     EXPECT_EQ(ygg::database::as<ygg::database::QueryDistanceTag>(distance).get_sources().get_index(), projected.get_index());
@@ -147,7 +147,7 @@ TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
     EXPECT_TRUE(std::ranges::equal(ygg::database::column_labels(generic.columns()), std::array { x, y, z }));
 
     auto mismatched = ygg::Data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a, x, std::int32_t(7));
-    EXPECT_EQ(mismatched.constant_type, (ygg::database::column_type<std::int32_t>) );
+    EXPECT_EQ(mismatched.constant_type, (ygg::type_id<std::int32_t>) );
     EXPECT_THROW(static_cast<void>(ygg::database::insert(repository, mismatched)), std::invalid_argument);
 }
 

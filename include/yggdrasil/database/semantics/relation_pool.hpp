@@ -63,9 +63,9 @@ public:
 
     [[nodiscard]] UniqueObjectPoolPtr<ygg::Builder<Relation>> get_or_allocate(std::span<const ColumnLayout> columns);
     /// Labels alone give every column type T.
-    template<ColumnValue T = uint_t>
+    template<ByteCodable T = uint_t>
     [[nodiscard]] UniqueObjectPoolPtr<ygg::Builder<Relation>> get_or_allocate(std::span<const Index<Column>> columns);
-    template<ColumnValue T = uint_t>
+    template<ByteCodable T = uint_t>
     [[nodiscard]] UniqueObjectPoolPtr<ygg::Builder<Relation>> get_or_allocate(std::initializer_list<Index<Column>> columns);
 };
 

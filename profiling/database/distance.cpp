@@ -35,8 +35,8 @@ void append_vertex(std::vector<std::byte>& bytes, size_t arity, uint_t vertex)
     for (size_t field = 0; field < arity; ++field)
     {
         const auto offset = bytes.size();
-        bytes.resize(offset + database::ColumnCodec<uint_t>::size);
-        database::ColumnCodec<uint_t>::encode(vertex + 100000 * static_cast<uint_t>(field), std::span(bytes).subspan(offset));
+        bytes.resize(offset + ygg::ByteCodec<uint_t>::size);
+        ygg::ByteCodec<uint_t>::encode(vertex + 100000 * static_cast<uint_t>(field), std::span(bytes).subspan(offset));
     }
 }
 

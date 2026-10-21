@@ -76,7 +76,7 @@ public:
     uint_t insert(std::span<const std::byte> row);
     /// A borrowed row already has canonical bytes; its layout must match.
     uint_t insert(database::Row row);
-    template<database::ColumnValue... Ts>
+    template<ygg::ByteCodable... Ts>
     uint_t insert(const std::tuple<Ts...>& values)
     {
         const auto bytes = database::encode_row(values, m_columns.span());
@@ -85,7 +85,7 @@ public:
 
     std::optional<uint_t> find(std::span<const std::byte> row) const;
     std::optional<uint_t> find(database::Row row) const;
-    template<database::ColumnValue... Ts>
+    template<ygg::ByteCodable... Ts>
     std::optional<uint_t> find(const std::tuple<Ts...>& values) const
     {
         const auto bytes = database::encode_row(values, m_columns.span());
@@ -93,7 +93,7 @@ public:
     }
     bool contains(std::span<const std::byte> row) const { return find(row).has_value(); }
     bool contains(database::Row row) const { return find(row).has_value(); }
-    template<database::ColumnValue... Ts>
+    template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
     {
         return find(values).has_value();

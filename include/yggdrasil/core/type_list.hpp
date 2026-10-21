@@ -19,6 +19,7 @@
 #define YGG_CORE_TYPE_LIST_HPP_
 
 #include <concepts>
+#include <cstddef>
 #include <tuple>
 
 #include <type_traits>
@@ -31,6 +32,15 @@ struct TypeList
 {
     template<typename T>
     static constexpr bool contains = (std::same_as<T, Ts> || ...);
+
+    /// The position of the first T, or the number of types if T is absent.
+    template<typename T>
+    static constexpr std::size_t index_of = []
+    {
+        std::size_t index = 0;
+        (void) ((std::same_as<T, Ts> || (++index, false)) || ...);
+        return index;
+    }();
 };
 
 template<template<typename...> typename T, typename List>

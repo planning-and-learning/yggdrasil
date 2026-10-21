@@ -8,7 +8,7 @@
 
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
-#include "yggdrasil/database/syntax/column_codec.hpp"
+#include "yggdrasil/ids/byte_codec.hpp"
 
 namespace ygg::database
 {

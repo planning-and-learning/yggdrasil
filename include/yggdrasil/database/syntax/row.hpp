@@ -42,13 +42,13 @@ public:
     size_t size() const noexcept { return m_columns.size(); }
     bool empty() const noexcept { return m_columns.empty(); }
 
-    template<ColumnValue T>
+    template<ByteCodable T>
     T get(size_t position) const
     {
         return detail::read_column<T>(m_bytes, m_columns, position);
     }
     /// Decodes every column as T into the reusable buffer, which the result borrows.
-    template<ColumnValue T>
+    template<ByteCodable T>
     std::span<const T> get_all(std::vector<T>& buffer) const
     {
         buffer.clear();
@@ -56,47 +56,47 @@ public:
             buffer.push_back(get<T>(position));
         return buffer;
     }
-    template<ColumnValue T>
+    template<ByteCodable T>
     T get(Index<Column> column) const
     {
         return get<T>(column_index(m_columns, column));
     }
 
     /// Calls visitor with the value at `position`, decoded as its column's type, which must be one of Values.
-    template<ColumnTypes Values, InvocableWithEach<Values> Visitor>
+    template<ByteCodableTypes Values, InvocableWithEach<Values> Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
         if (position >= size())
             throw std::out_of_range("Row: column position is out of range.");
-        return visit_column_type<Values>(m_columns[position].type,
+        return visit_type_id<Values>(m_columns[position].type,
                                          [&]<typename T>(std::type_identity<T>)
                                          { return std::invoke(std::forward<Visitor>(visitor), get<T>(position)); });
     }
 };
 
 /// Encode a row whose columns all hold T into the reusable buffer, which the result borrows.
-template<ColumnValue T, std::ranges::sized_range R>
+template<ByteCodable T, std::ranges::sized_range R>
     requires std::convertible_to<std::ranges::range_reference_t<const R&>, T>
 std::span<const std::byte> encode_row(const R& values, std::vector<std::byte>& buffer)
 {
-    buffer.resize(std::ranges::size(values) * ColumnCodec<T>::size);
+    buffer.resize(std::ranges::size(values) * ByteCodec<T>::size);
     auto field = std::span<std::byte>(buffer);
     for (const auto& value : values)
     {
-        ColumnCodec<T>::encode(T(value), field.first(ColumnCodec<T>::size));
-        field = field.subspan(ColumnCodec<T>::size);
+        ByteCodec<T>::encode(T(value), field.first(ByteCodec<T>::size));
+        field = field.subspan(ByteCodec<T>::size);
     }
     return buffer;
 }
 
 /// Encode a complete typed row using an already validated schema. The fixed-size
 /// result lives on the stack; its arity and each value type must match the schema.
-template<ColumnValue... Ts>
-std::array<std::byte, (ColumnCodec<Ts>::size + ... + size_t { 0 })> encode_row(const std::tuple<Ts...>& values, std::span<const ColumnLayout> columns)
+template<ByteCodable... Ts>
+std::array<std::byte, (ByteCodec<Ts>::size + ... + size_t { 0 })> encode_row(const std::tuple<Ts...>& values, std::span<const ColumnLayout> columns)
 {
     if (columns.size() != sizeof...(Ts))
         throw std::invalid_argument("Relation: row arity does not match its schema.");
-    std::array<std::byte, (ColumnCodec<Ts>::size + ... + size_t { 0 })> bytes {};
+    std::array<std::byte, (ByteCodec<Ts>::size + ... + size_t { 0 })> bytes {};
     size_t position = 0;
     std::apply([&](const Ts&... value) { (detail::write_column<Ts>(bytes, columns, position++, value), ...); }, values);
     return bytes;
@@ -124,18 +124,18 @@ public:
     size_t size() const noexcept { return m_handle.size(); }
     bool empty() const noexcept { return m_handle.empty(); }
 
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     T get(size_t position) const
     {
         return m_handle.template get<T>(position);
     }
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     T get(Index<database::Column> column) const
     {
         return get<T>(database::column_index(columns(), column));
     }
 
-    template<database::ColumnTypes Values, InvocableWithEach<Values> Visitor>
+    template<ygg::ByteCodableTypes Values, InvocableWithEach<Values> Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
         return m_handle.template visit<Values>(position, std::forward<Visitor>(visitor));

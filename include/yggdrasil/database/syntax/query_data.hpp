@@ -10,7 +10,7 @@
 #include "yggdrasil/core/types_utils.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/generic_join.hpp"
-#include "yggdrasil/database/syntax/column_codec.hpp"
+#include "yggdrasil/ids/byte_codec.hpp"
 #include "yggdrasil/database/declarations.hpp"
 
 #include <array>
@@ -229,23 +229,23 @@ struct Data<database::Query<database::QuerySelectValueTag>>
     Index<database::Column> column;
     cista::offset::vector<std::byte> constant;
     /// The registered type ordinal of the encoded constant.
-    database::ColumnTypeId constant_type = 0;
+    ygg::TypeId constant_type = 0;
     cista::offset::vector<database::ColumnLayout> columns;
     size_t column_position = 0;
 
     Data() = default;
     /// The constant is encoded with the column codec of its type.
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     Data(Index<database::Query<>> arg_, Index<database::Column> column_, T value) :
         arg(arg_),
         column(column_),
-        constant_type(database::column_type<T>)
+        constant_type(ygg::type_id<T>)
     {
-        std::array<std::byte, database::ColumnCodec<T>::size> bytes;
-        database::ColumnCodec<T>::encode(value, bytes);
+        std::array<std::byte, ygg::ByteCodec<T>::size> bytes;
+        ygg::ByteCodec<T>::encode(value, bytes);
         constant.set(bytes.begin(), bytes.end());
     }
-    template<typename C, database::ColumnValue T>
+    template<typename C, ygg::ByteCodable T>
     Data(View<Index<database::Query<>>, C> arg_, Index<database::Column> column_, T value) : Data(arg_.get_index(), column_, value)
     {
     }

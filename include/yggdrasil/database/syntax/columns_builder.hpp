@@ -24,14 +24,14 @@ bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column
 std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns);
 size_t row_size(std::span<const ColumnLayout> columns) noexcept;
 /// The schema is already validated; validate the width and canonical field encodings.
-template<ColumnTypes Values>
+template<ByteCodableTypes Values>
 void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns);
 
 namespace detail
 {
-template<ColumnValue T>
+template<ByteCodable T>
 T read_column(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns, size_t position);
-template<ColumnValue T>
+template<ByteCodable T>
 void write_column(std::span<std::byte> bytes, std::span<const ColumnLayout> columns, size_t position, T value);
 }  // namespace detail
 }  // namespace ygg::database
@@ -71,15 +71,15 @@ public:
     size_t row_size() const noexcept { return database::row_size(span()); }
     size_t memory_usage() const noexcept { return m_data.values.allocated_size_ * sizeof(database::ColumnLayout); }
 
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     void push_back(Index<database::Column> column);
     /// Appends a column of the given type id and byte width.
-    void push_back(Index<database::Column> column, database::ColumnTypeId type, size_t size);
+    void push_back(Index<database::Column> column, ygg::TypeId type, size_t size);
     void assign(std::span<const database::ColumnLayout> columns);
     void assign(std::initializer_list<database::ColumnLayout> columns);
-    template<database::ColumnValue T = uint_t>
+    template<ygg::ByteCodable T = uint_t>
     void assign(std::span<const Index<database::Column>> columns);
-    template<database::ColumnValue T = uint_t>
+    template<ygg::ByteCodable T = uint_t>
     void assign(std::initializer_list<Index<database::Column>> columns);
     void initialize(std::span<const database::ColumnLayout> columns) { assign(columns); }
     void initialize(std::initializer_list<database::ColumnLayout> columns) { assign(columns); }
@@ -90,17 +90,17 @@ public:
     void rename(std::initializer_list<Index<database::Column>> columns) { rename(std::span<const Index<database::Column>>(columns)); }
     void clear() noexcept { m_data.clear(); }
 
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     T get(std::span<const std::byte> bytes, Index<database::Column> column) const
     {
         return database::detail::read_column<T>(bytes, span(), column_index(column));
     }
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
     {
         database::detail::write_column<T>(bytes, span(), column_index(column), value);
     }
-    template<database::ColumnTypes Values>
+    template<ygg::ByteCodableTypes Values>
     void validate_row(std::span<const std::byte> bytes) const
     {
         database::validate_row<Values>(bytes, span());

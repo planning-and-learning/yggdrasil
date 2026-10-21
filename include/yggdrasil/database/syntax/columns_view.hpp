@@ -48,17 +48,17 @@ public:
     size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
     size_t row_size() const noexcept { return database::row_size(span()); }
 
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     T get(std::span<const std::byte> bytes, Index<database::Column> column) const
     {
         return database::detail::read_column<T>(bytes, span(), column_index(column));
     }
-    template<database::ColumnValue T>
+    template<ygg::ByteCodable T>
     void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
     {
         database::detail::write_column<T>(bytes, span(), column_index(column), value);
     }
-    template<database::ColumnTypes Values>
+    template<ygg::ByteCodableTypes Values>
     void validate_row(std::span<const std::byte> bytes) const
     {
         database::validate_row<Values>(bytes, span());

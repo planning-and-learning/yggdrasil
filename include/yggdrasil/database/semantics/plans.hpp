@@ -21,7 +21,7 @@ namespace ygg::database
 /// Renaming columns preserves compiled keys and reusable join indexes.
 struct ColumnSlice
 {
-    ColumnTypeId type;
+    TypeId type;
     size_t offset;
     size_t size;
 

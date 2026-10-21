@@ -101,7 +101,7 @@ void bind_database_module_definitions(nb::module_& m)
             "push_back",
             [](Columns& columns, Column label, ColumnType type)
             {
-                ygg::database::visit_column_type<DatabaseValues>(static_cast<ygg::database::ColumnTypeId>(type),
+                ygg::visit_type_id<DatabaseValues>(static_cast<ygg::TypeId>(type),
                                                                  [&]<typename T>(std::type_identity<T>) { columns.template push_back<T>(label); });
             },
             nb::arg("label"),
@@ -136,7 +136,7 @@ void bind_database_module_definitions(nb::module_& m)
                 auto bytes = std::vector<std::byte>(relation.columns().row_size());
                 const auto columns = relation.columns().span();
                 for (size_t i = 0; i < columns.size(); ++i)
-                    ygg::database::visit_column_type<Values>(columns[i].type,
+                    ygg::visit_type_id<Values>(columns[i].type,
                                                              [&]<typename T>(std::type_identity<T>)
                                                              { relation.columns().template set<T>(bytes, columns[i].label, nb::cast<T>(row[i])); });
                 return relation.insert(Row(bytes, columns));

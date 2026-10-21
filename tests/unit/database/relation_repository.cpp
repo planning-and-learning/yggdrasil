@@ -37,17 +37,17 @@ struct DatabaseInternedValue
 };
 }  // namespace ygg::tests
 
-namespace ygg::database
+namespace ygg
 {
 template<>
-struct ColumnCodec<tests::DatabaseInternedValue>
+struct ByteCodec<tests::DatabaseInternedValue>
 {
-    static constexpr ColumnTypeId id = 1006;
-    static constexpr size_t size = ColumnCodec<uint_t>::size;
-    static void encode(tests::DatabaseInternedValue value, std::span<std::byte> bytes) { ColumnCodec<uint_t>::encode(value.value % 10, bytes); }
-    static tests::DatabaseInternedValue decode(std::span<const std::byte> bytes) { return { ColumnCodec<uint_t>::decode(bytes) }; }
+    static constexpr TypeId id = 1006;
+    static constexpr size_t size = ByteCodec<uint_t>::size;
+    static void encode(tests::DatabaseInternedValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value % 10, bytes); }
+    static tests::DatabaseInternedValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
 };
-}  // namespace ygg::database
+}  // namespace ygg
 
 namespace ygg::tests
 {
@@ -65,9 +65,9 @@ auto cells(Args... values)
 template<typename T>
 auto packed(std::span<const T> values)
 {
-    std::vector<std::byte> result(values.size() * database::ColumnCodec<T>::size);
+    std::vector<std::byte> result(values.size() * ygg::ByteCodec<T>::size);
     for (size_t i = 0; i < values.size(); ++i)
-        database::ColumnCodec<T>::encode(values[i], std::span(result).subspan(i * database::ColumnCodec<T>::size, database::ColumnCodec<T>::size));
+        ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;
 }
 
@@ -344,7 +344,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryDistinguishesNullaryTruthAndEmpty
 
     EXPECT_EQ(false_view.get_storage_index(), empty_unary.get_storage_index());
     database::JoinIndexCache cache;
-    const std::array<database::ColumnSlice, 1> key_positions { database::ColumnSlice { database::column_type<uint_t>, 0, sizeof(uint_t) } };
+    const std::array<database::ColumnSlice, 1> key_positions { database::ColumnSlice { ygg::type_id<uint_t>, 0, sizeof(uint_t) } };
     EXPECT_NO_THROW(cache.get_or_create(empty_unary, key_positions));
     EXPECT_EQ(cache.size(), 1);
     EXPECT_THROW(cache.get_or_create(false_view, key_positions), std::out_of_range);
@@ -895,22 +895,21 @@ struct UnsupportedColumn
 };
 
 template<typename Visitor>
-concept CanVisitColumnType = requires(Visitor&& visitor) { database::visit_column_type<MixedValues>(0, std::forward<Visitor>(visitor)); };
+concept CanVisitColumnType = requires(Visitor&& visitor) { ygg::visit_type_id<MixedValues>(0, std::forward<Visitor>(visitor)); };
 
 static_assert(CanVisitColumnType<decltype([](auto) { return size_t {}; })>);
 static_assert(!CanVisitColumnType<decltype([](std::type_identity<uint_t>) { return size_t {}; })>);
 static_assert(!CanVisitColumnType<int>);
 
-static_assert(database::ColumnTypes<database::DefaultColumnTypes>);
-static_assert(database::ColumnValueFor<uint_t, Values>);
-static_assert(database::ColumnValueFor<ColumnsIndex, MixedValues>);
-static_assert(!database::ColumnValueFor<double, Values>);
-static_assert(!database::ColumnValueFor<const uint_t, Values>);
-static_assert(!database::ColumnValueFor<uint_t, TypeList<>>);
-static_assert(!database::ColumnValueFor<uint_t, int>);
-static_assert(!database::ColumnTypes<TypeList<>>);
-static_assert(!database::ColumnTypes<TypeList<uint_t, uint_t>>);
-static_assert(!database::ColumnTypes<TypeList<UnsupportedColumn>>);
+static_assert(ygg::ByteCodableTypes<ygg::BuiltinByteTypes>);
+static_assert(ygg::ByteCodable<uint_t> && ygg::ByteCodable<ColumnsIndex> && ygg::ByteCodableTypes<MixedValues>);
+static_assert(!ygg::ByteCodable<const uint_t> && !ygg::ByteCodable<UnsupportedColumn>);
+static_assert(!ygg::ByteCodableTypes<int>);
+static_assert(ygg::type_id<std::uint32_t> == 1 && ygg::type_id<bool> == 7 && ygg::builtin_byte_size(ygg::type_id<double>) == 8);
+static_assert(ygg::builtin_byte_size(ygg::type_id<ColumnsIndex>) == 0);
+static_assert(!ygg::ByteCodableTypes<TypeList<>>);
+static_assert(!ygg::ByteCodableTypes<TypeList<uint_t, uint_t>>);
+static_assert(!ygg::ByteCodableTypes<TypeList<UnsupportedColumn>>);
 }
 
 TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
@@ -923,12 +922,12 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
     columns.push_back<bool>(ColumnIndex(2));
     columns.push_back<ColumnsIndex>(ColumnIndex(7));
     ASSERT_EQ(columns.size(), 4);
-    EXPECT_EQ(columns.row_size(), 2 * database::ColumnCodec<uint_t>::size + sizeof(double) + 1);
+    EXPECT_EQ(columns.row_size(), 2 * ygg::ByteCodec<uint_t>::size + sizeof(double) + 1);
     EXPECT_EQ(columns[0].offset, 0);
-    EXPECT_EQ(columns[1].offset, database::ColumnCodec<uint_t>::size);
-    EXPECT_EQ(columns[2].offset, database::ColumnCodec<uint_t>::size + sizeof(double));
-    EXPECT_EQ(columns[3].offset, database::ColumnCodec<uint_t>::size + sizeof(double) + 1);
-    EXPECT_EQ(columns[3].size, database::ColumnCodec<ColumnsIndex>::size);
+    EXPECT_EQ(columns[1].offset, ygg::ByteCodec<uint_t>::size);
+    EXPECT_EQ(columns[2].offset, ygg::ByteCodec<uint_t>::size + sizeof(double));
+    EXPECT_EQ(columns[3].offset, ygg::ByteCodec<uint_t>::size + sizeof(double) + 1);
+    EXPECT_EQ(columns[3].size, ygg::ByteCodec<ColumnsIndex>::size);
 
     auto rows = database::RelationRepositoryFactory().create();
     Builder<database::Relation> builder(columns);
@@ -1040,7 +1039,7 @@ TEST(YggdrasilTests, DatabaseTypedSchemaRejectsMalformedMetadataBeforeMutation)
     invalid[1].size -= 1;
     EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
     invalid.assign(columns.begin(), columns.end());
-    invalid[1].type = database::column_type<bool>;
+    invalid[1].type = ygg::type_id<bool>;
     EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
     invalid[1].type = 99;
     EXPECT_THROW(database::validate_row<TypedValues>(database::encode_row(std::tuple { uint_t { 7 }, 3.25 }, columns.span()), std::span(invalid)),
