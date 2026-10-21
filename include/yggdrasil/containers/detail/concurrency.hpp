@@ -19,13 +19,13 @@
 #define YGG_CONTAINERS_DETAIL_CONCURRENCY_HPP_
 
 #include "yggdrasil/containers/detail/lazy_insert.hpp"
+#include "yggdrasil/core/spin_mutex.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
 
 #include <cstddef>
 #include <gtl/phmap.hpp>
 #include <memory>
 #include <mutex>
-#include <oneapi/tbb/spin_rw_mutex.h>
 #include <optional>
 #include <shared_mutex>
 #include <utility>
@@ -44,7 +44,7 @@ namespace ygg::detail
  * and regressed packed mixed throughput. With seven bits, SpinSharedMutex also
  * outperformed std::shared_mutex across every shared relation workload.
  *
- * spin_rw_mutex is a fast, unfair, writer-preferred spinning lock. It fits our
+ * SpinSharedMutex is a fast, unfair, writer-preferred spinning lock. It fits our
  * short critical sections and at most eight non-oversubscribed workers; changes
  * to either assumption require rerunning profiling/formalism/repository.cpp.
  * GTL treats unknown mutexes as exclusive-only, hence the reader-lock adapter
@@ -58,20 +58,16 @@ namespace ygg::detail
  */
 inline constexpr size_t kParallelHashShardBits = 7;
 
-class SpinSharedMutex : public oneapi::tbb::spin_rw_mutex
-{
-};
-
 }  // namespace ygg::detail
 
 namespace gtl
 {
 
 template<>
-class LockableImpl<ygg::detail::SpinSharedMutex> : public ygg::detail::SpinSharedMutex
+class LockableImpl<ygg::SpinSharedMutex> : public ygg::SpinSharedMutex
 {
 public:
-    using mutex_type = ygg::detail::SpinSharedMutex;
+    using mutex_type = ygg::SpinSharedMutex;
     using Base = LockableBaseImpl<mutex_type>;
     using SharedLock = std::shared_lock<mutex_type>;
     using UniqueLock = std::unique_lock<mutex_type>;
