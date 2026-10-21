@@ -5,8 +5,71 @@
 
 #include "yggdrasil/database/semantics/generic_join.hpp"
 
+#include <algorithm>
+#include <stdexcept>
+#include <vector>
+
 namespace ygg::database
 {
+GenericJoinPlan::GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inputs,
+                                 std::span<const Index<Column>> variable_order,
+                                 std::span<const Index<Column>> output_order) :
+    m_inputs(inputs.size()),
+    m_order(variable_order.begin(), variable_order.end()),
+    m_keys(inputs.size()),
+    m_occurrences(variable_order.size())
+{
+    for (size_t i = 0; i < inputs.size(); ++i)
+        m_inputs[i].set(inputs[i].begin(), inputs[i].end());
+    std::vector<ColumnLayout> combined;
+    for (const auto& input : inputs)
+    {
+        validate_columns(input);
+        for (const auto column : input)
+        {
+            const auto found = std::ranges::find(combined, column.label, &ColumnLayout::label);
+            if (found == combined.end())
+                detail::append_column(combined, column);
+            else if (found->type != column.type || found->size != column.size)
+                throw std::invalid_argument("Generic join: common columns must have the same type.");
+        }
+    }
+    const auto require_order = [&](std::span<const Index<Column>> order)
+    {
+        if (order.size() != combined.size())
+            throw std::invalid_argument("Generic join: orders must contain every output column exactly once.");
+        for (size_t i = 0; i < order.size(); ++i)
+            if (std::ranges::find(combined, order[i], &ColumnLayout::label) == combined.end()
+                || std::ranges::find(order.first(i), order[i]) != order.first(i).end())
+                throw std::invalid_argument("Generic join: orders must contain every output column exactly once.");
+    };
+    require_order(variable_order);
+    require_order(output_order);
+    std::vector<ColumnLayout> output;
+    for (const auto label : output_order)
+        detail::append_column(output, combined[database::column_index(combined, label)]);
+    m_output.assign(output);
+    for (size_t depth = 0; depth < variable_order.size(); ++depth)
+    {
+        const auto label = variable_order[depth];
+        m_output_positions.push_back(detail::column_slice(output[database::column_index(output, label)]));
+        for (size_t input = 0; input < inputs.size(); ++input)
+        {
+            const auto found = std::ranges::find(inputs[input], label, &ColumnLayout::label);
+            if (found != inputs[input].end())
+            {
+                m_keys[input].push_back(detail::column_slice(*found));
+                m_occurrences[depth].push_back(input);
+            }
+        }
+    }
+}
+
+bool GenericJoinPlan::matches(const GenericJoinPlan& other) const
+{
+    return m_inputs == other.m_inputs && m_order == other.m_order && std::ranges::equal(m_output.span(), other.m_output.span());
+}
+
 namespace detail
 {
 void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept

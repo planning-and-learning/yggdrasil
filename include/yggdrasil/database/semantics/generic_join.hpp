@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_SEMANTICS_GENERIC_JOIN_HPP_
 #define YGG_DATABASE_SEMANTICS_GENERIC_JOIN_HPP_
 
+#include "yggdrasil/database/semantics/generic_join_plan.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 
 #include <cista/containers/vector.h>
@@ -14,102 +15,6 @@
 
 namespace ygg::database
 {
-/// Prepared full natural join. Variable order controls execution; output order
-/// independently preserves the caller's schema. Projection is a separate operator.
-class GenericJoinPlan
-{
-    cista::offset::vector<cista::offset::vector<ColumnLayout>> m_inputs;
-    Builder<Columns> m_output;
-    cista::offset::vector<Index<Column>> m_order;
-    cista::offset::vector<cista::offset::vector<ColumnSlice>> m_keys;
-    cista::offset::vector<cista::offset::vector<size_t>> m_occurrences;
-    cista::offset::vector<ColumnSlice> m_output_positions;
-
-public:
-    GenericJoinPlan() = default;
-    GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inputs,
-                    std::span<const Index<Column>> variable_order,
-                    std::span<const Index<Column>> output_order) :
-        m_inputs(inputs.size()),
-        m_order(variable_order.begin(), variable_order.end()),
-        m_keys(inputs.size()),
-        m_occurrences(variable_order.size())
-    {
-        for (size_t i = 0; i < inputs.size(); ++i)
-            m_inputs[i].set(inputs[i].begin(), inputs[i].end());
-        std::vector<ColumnLayout> combined;
-        for (const auto& input : inputs)
-        {
-            validate_columns(input);
-            for (const auto column : input)
-            {
-                const auto found = std::ranges::find(combined, column.label, &ColumnLayout::label);
-                if (found == combined.end())
-                    detail::append_column(combined, column);
-                else if (found->type != column.type || found->size != column.size)
-                    throw std::invalid_argument("Generic join: common columns must have the same type.");
-            }
-        }
-        const auto require_order = [&](std::span<const Index<Column>> order)
-        {
-            if (order.size() != combined.size())
-                throw std::invalid_argument("Generic join: orders must contain every output column exactly once.");
-            for (size_t i = 0; i < order.size(); ++i)
-                if (std::ranges::find(combined, order[i], &ColumnLayout::label) == combined.end()
-                    || std::ranges::find(order.first(i), order[i]) != order.first(i).end())
-                    throw std::invalid_argument("Generic join: orders must contain every output column exactly once.");
-        };
-        require_order(variable_order);
-        require_order(output_order);
-        std::vector<ColumnLayout> output;
-        for (const auto label : output_order)
-            detail::append_column(output, combined[database::column_index(combined, label)]);
-        m_output.assign(output);
-        for (size_t depth = 0; depth < variable_order.size(); ++depth)
-        {
-            const auto label = variable_order[depth];
-            m_output_positions.push_back(detail::column_slice(output[database::column_index(output, label)]));
-            for (size_t input = 0; input < inputs.size(); ++input)
-            {
-                const auto found = std::ranges::find(inputs[input], label, &ColumnLayout::label);
-                if (found != inputs[input].end())
-                {
-                    m_keys[input].push_back(detail::column_slice(*found));
-                    m_occurrences[depth].push_back(input);
-                }
-            }
-        }
-    }
-
-    size_t input_count() const noexcept { return m_inputs.size(); }
-    std::span<const ColumnLayout> input_columns(size_t input) const
-    {
-        const auto& columns = m_inputs.at(input);
-        return { columns.data(), columns.size() };
-    }
-    const auto& output_columns() const& noexcept { return m_output; }
-    const auto& output_columns() const&& = delete;
-    std::span<const Index<Column>> variable_order() const noexcept { return { m_order.data(), m_order.size() }; }
-    std::span<const ColumnSlice> input_keys(size_t input) const
-    {
-        const auto& keys = m_keys.at(input);
-        return { keys.data(), keys.size() };
-    }
-    std::span<const size_t> variable_inputs(size_t depth) const
-    {
-        const auto& occurrences = m_occurrences.at(depth);
-        return { occurrences.data(), occurrences.size() };
-    }
-    ColumnSlice output_position(size_t depth) const { return m_output_positions.at(depth); }
-
-    static constexpr auto cista_members() noexcept { return ygg::Members<&GenericJoinPlan::m_inputs, &GenericJoinPlan::m_output, &GenericJoinPlan::m_order, &GenericJoinPlan::m_keys, &GenericJoinPlan::m_occurrences, &GenericJoinPlan::m_output_positions> {}; }
-
-    bool matches(const GenericJoinPlan& other) const
-    {
-        return m_inputs == other.m_inputs && m_order == other.m_order && std::ranges::equal(m_output.span(), other.m_output.span());
-    }
-};
-
 namespace detail
 {
 // Test targets enable these counters consistently across all translation units.

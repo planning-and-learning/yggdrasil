@@ -6,7 +6,6 @@
 #ifndef YGG_DATABASE_SEMANTICS_MUST_PASS_PLAN_HPP_
 #define YGG_DATABASE_SEMANTICS_MUST_PASS_PLAN_HPP_
 
-#include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/columns.hpp"
 
 #include <cstddef>
