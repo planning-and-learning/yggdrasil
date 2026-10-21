@@ -27,8 +27,7 @@ struct ColumnSlice
 
     bool operator==(const ColumnSlice&) const = default;
     static constexpr auto identifying_members() noexcept { return Members<&ColumnSlice::type, &ColumnSlice::offset, &ColumnSlice::size> {}; }
-    auto cista_members() noexcept { return std::tie(type, offset, size); }
-    auto cista_members() const noexcept { return std::tie(type, offset, size); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&ColumnSlice::type, &ColumnSlice::offset, &ColumnSlice::size> {}; }
 };
 
 /// Owns typed schemas and resolves field copies once. Reuse with any relation
@@ -55,8 +54,7 @@ public:
     auto output_columns() const&& = delete;
     std::span<const ColumnSlice> positions() const noexcept { return { m_positions.data(), m_positions.size() }; }
 
-    auto cista_members() noexcept { return std::tie(m_input, m_output, m_positions); }
-    auto cista_members() const noexcept { return std::tie(m_input, m_output, m_positions); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&ProjectionPlan::m_input, &ProjectionPlan::m_output, &ProjectionPlan::m_positions> {}; }
 };
 
 /// Owns typed schemas and resolves natural-join keys and payload copies once.
@@ -89,8 +87,7 @@ public:
     std::span<const ColumnSlice> rhs_keys() const noexcept { return { m_rhs_keys.data(), m_rhs_keys.size() }; }
     std::span<const ColumnSlice> rhs_payload() const noexcept { return { m_rhs_payload.data(), m_rhs_payload.size() }; }
 
-    auto cista_members() noexcept { return std::tie(m_lhs, m_rhs, m_output, m_lhs_keys, m_rhs_keys, m_rhs_payload); }
-    auto cista_members() const noexcept { return std::tie(m_lhs, m_rhs, m_output, m_lhs_keys, m_rhs_keys, m_rhs_payload); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&JoinPlan::m_lhs, &JoinPlan::m_rhs, &JoinPlan::m_output, &JoinPlan::m_lhs_keys, &JoinPlan::m_rhs_keys, &JoinPlan::m_rhs_payload> {}; }
 };
 
 }  // namespace ygg::database

@@ -18,8 +18,7 @@ struct LeafPair
     Index<Leaf> first;
     Index<Leaf> second;
 
-    auto cista_members() noexcept { return std::tie(first, second); }
-    auto cista_members() const noexcept { return std::tie(first, second); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&LeafPair::first, &LeafPair::second> {}; }
 };
 }  // namespace ygg::tests::children
 
@@ -36,8 +35,7 @@ struct Data<tests::children::Node>
     ::cista::offset::vector<tests::children::LeafPair> pairs;
     int unrelated = 0;
 
-    auto cista_members() noexcept { return std::tie(index, single, list, matrix, variants, pairs, unrelated); }
-    auto cista_members() const noexcept { return std::tie(index, single, list, matrix, variants, pairs, unrelated); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::single, &Data::list, &Data::matrix, &Data::variants, &Data::pairs, &Data::unrelated> {}; }
 };
 }  // namespace ygg
 

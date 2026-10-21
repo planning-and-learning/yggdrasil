@@ -84,6 +84,13 @@ void clear(T& element)
         static_assert(dependent_false<T>::value, "Cannot clear T.");
 }
 
+/// Clears every field that T lists in cista_members().
+template<MemberListed T>
+void clear_members(T& element)
+{
+    for_each_member(element, [](auto& member) { clear(member); });
+}
+
 template<typename T, typename C>
 void append(View<Index<T>, C> view, IndexList<T>& ref_list)
 {

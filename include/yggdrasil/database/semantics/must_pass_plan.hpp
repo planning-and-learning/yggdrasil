@@ -91,8 +91,7 @@ public:
         return result;
     }
 
-    auto cista_members() noexcept { return std::tie(m_sources, m_edges, m_targets, m_probes, m_output, m_keys); }
-    auto cista_members() const noexcept { return std::tie(m_sources, m_edges, m_targets, m_probes, m_output, m_keys); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&MustPassPlan::m_sources, &MustPassPlan::m_edges, &MustPassPlan::m_targets, &MustPassPlan::m_probes, &MustPassPlan::m_output, &MustPassPlan::m_keys> {}; }
 };
 
 }  // namespace ygg::database

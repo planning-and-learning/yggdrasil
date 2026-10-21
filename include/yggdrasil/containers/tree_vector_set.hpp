@@ -92,12 +92,11 @@ struct Data<detail::TreeVectorLeaf<T>>
     Data() = default;
     Data(T value_) : value(std::move(value_)) {}
 
-    auto cista_members() noexcept { return std::tie(value); }
-    auto cista_members() const noexcept { return std::tie(value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::value> {}; }
     static constexpr auto identifying_members() noexcept { return Members<&Data::value> {}; }
     void clear() noexcept
     {
-        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+        ygg::clear_members(*this);
     }
 };
 
@@ -110,12 +109,11 @@ struct Data<detail::TreeVectorNode<T, Arity>>
     Data() = default;
     explicit Data(const std::array<uint_t, Arity>& children_) : children(children_) {}
 
-    auto cista_members() noexcept { return std::tie(children); }
-    auto cista_members() const noexcept { return std::tie(children); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::children> {}; }
     static constexpr auto identifying_members() noexcept { return Members<&Data::children> {}; }
     void clear() noexcept
     {
-        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+        ygg::clear_members(*this);
     }
 };
 

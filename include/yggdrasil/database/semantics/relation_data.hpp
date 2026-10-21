@@ -41,12 +41,11 @@ struct Data<database::Relation>
         set(columns_, columns_index);
     }
 
-    auto cista_members() noexcept { return std::tie(index, columns_index, row_set_index, schema_namespace); }
-    auto cista_members() const noexcept { return std::tie(index, columns_index, row_set_index, schema_namespace); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
     static constexpr auto identifying_members() noexcept { return Members<&Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
     void clear() noexcept
     {
-        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+        ygg::clear_members(*this);
     }
 };
 }  // namespace ygg

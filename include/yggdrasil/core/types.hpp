@@ -65,7 +65,7 @@ struct Index
 
     constexpr value_type get_value() const noexcept { return value; }
 
-    auto cista_members() const noexcept { return std::tie(value); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Index::value> {}; }
     static constexpr auto identifying_members() noexcept { return Members<&Index::value> {}; }
 };
 

@@ -100,8 +100,7 @@ public:
     }
     void validate_row(std::span<const std::byte> bytes) const { database::validate_row(bytes, span()); }
 
-    auto cista_members() noexcept { return std::tie(m_data); }
-    auto cista_members() const noexcept { return std::tie(m_data); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Builder::m_data> {}; }
     static constexpr auto identifying_members() noexcept { return Members<&Builder::m_data> {}; }
 };
 }  // namespace ygg

@@ -58,6 +58,28 @@ inline constexpr bool is_members_v<Members<Ms...>> = true;
 template<typename T>
 concept MemberIdentified = requires { T::identifying_members(); } && detail::is_members_v<decltype(T::identifying_members())>;
 
+/// @brief T lists all its fields as member pointers, which cista and yggdrasil iterate without a tuple:
+/// `static constexpr auto cista_members() noexcept { return Members<&Data::index, &Data::a> {}; }`.
+template<typename T>
+concept MemberListed = requires { T::cista_members(); } && detail::is_members_v<decltype(T::cista_members())>;
+
+namespace detail
+{
+template<typename T, typename F, auto... Ms>
+constexpr void for_each_member(T& t, F& f, Members<Ms...>)
+{
+    (f(t.*Ms), ...);
+}
+}
+
+/// Calls f with each field of t, in the order of cista_members().
+template<typename T, typename F>
+    requires MemberListed<std::remove_const_t<T>>
+constexpr void for_each_member(T& t, F&& f)
+{
+    detail::for_each_member(t, f, std::remove_const_t<T>::cista_members());
+}
+
 namespace detail
 {
 template<typename MemberPointer>

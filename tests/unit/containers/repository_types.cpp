@@ -91,7 +91,7 @@ struct Data<tests::RepositoryTypesSerializedElement>
     Data(Data&&) = default;
     Data& operator=(Data&&) = default;
 
-    auto cista_members() const noexcept { return std::tie(index, values); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::values> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
 };
 

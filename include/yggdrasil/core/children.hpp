@@ -1,6 +1,7 @@
 #ifndef YGGDRASIL_CORE_CHILDREN_HPP_
 #define YGGDRASIL_CORE_CHILDREN_HPP_
 
+#include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
 
@@ -61,12 +62,25 @@ void visit_child(const ::cista::offset::variant<Us...>& member, const C& context
     std::visit([&](const auto& alternative) { visit_child<Types, T>(alternative, context, f); }, member);
 }
 
+/// Calls f with each field of a struct whose cista_members() lists member pointers or returns a tuple.
+template<typename R, typename F>
+void for_each_cista_member(R& record, F&& f)
+{
+    if constexpr (MemberListed<std::remove_const_t<R>>)
+        ygg::for_each_member(record, f);
+    else
+        std::apply([&](auto&... member) { (f(member), ...); }, record.cista_members());
+}
+
+template<typename R>
+concept CistaMembered = requires(R& record) { record.cista_members(); };
+
 /// Structs with cista members (pairs of indices, plans, ...) are searched member by member; anything else holds no child.
 template<typename Types, typename T, typename C, typename F, typename M>
 void visit_child(const M& member, const C& context, F& f)
 {
-    if constexpr (requires { member.cista_members(); })
-        std::apply([&](const auto&... nested) { (visit_child<Types, T>(nested, context, f), ...); }, member.cista_members());
+    if constexpr (CistaMembered<const M>)
+        for_each_cista_member(member, [&](const auto& nested) { visit_child<Types, T>(nested, context, f); });
 }
 
 template<typename Types, typename T, typename C, typename F, typename U>
@@ -93,8 +107,8 @@ void map_child(::cista::offset::variant<Us...>& member, const C& context, F& f)
 template<typename Types, typename T, typename C, typename F, typename M>
 void map_child(M& member, const C& context, F& f)
 {
-    if constexpr (requires { member.cista_members(); })
-        std::apply([&](auto&... nested) { (map_child<Types, T>(nested, context, f), ...); }, member.cista_members());
+    if constexpr (CistaMembered<M>)
+        for_each_cista_member(member, [&](auto& nested) { map_child<Types, T>(nested, context, f); });
 }
 }  // namespace detail
 
@@ -102,7 +116,7 @@ void map_child(M& member, const C& context, F& f)
 template<typename Types, typename T, typename C, typename F>
 void for_each_child(View<Index<T>, C> view, F&& f)
 {
-    std::apply([&](const auto&... member) { (detail::visit_child<Types, T>(member, view.get_context(), f), ...); }, view.get_data().cista_members());
+    detail::for_each_cista_member(view.get_data(), [&](const auto& member) { detail::visit_child<Types, T>(member, view.get_context(), f); });
 }
 
 /// A copy of view's record with every child c replaced by f(c), a view of the same record type, in member order.
@@ -111,7 +125,7 @@ template<typename Types, typename T, typename C, typename F>
 Data<T> map_children(View<Index<T>, C> view, F&& f)
 {
     auto data = Data<T>(view.get_data());
-    std::apply([&](auto&... member) { (detail::map_child<Types, T>(member, view.get_context(), f), ...); }, data.cista_members());
+    detail::for_each_cista_member(data, [&](auto& member) { detail::map_child<Types, T>(member, view.get_context(), f); });
     return data;
 }
 

@@ -57,12 +57,11 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
 
-    auto cista_members() noexcept { return std::tie(relation, objects); }
-    auto cista_members() const noexcept { return std::tie(relation, objects); }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
     static constexpr auto identifying_members() noexcept { return Members<&Data::relation, &Data::objects> {}; }
     void clear() noexcept
     {
-        std::apply([](auto&... member) { (ygg::clear(member), ...); }, cista_members());
+        ygg::clear_members(*this);
     }
 };
 
