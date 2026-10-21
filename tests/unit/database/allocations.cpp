@@ -687,8 +687,8 @@ TEST(YggdrasilTests, DatabaseWarmedRelationInterningRetainsStorageAcrossReordere
 
 TEST(YggdrasilTests, DatabaseWarmedTypedTupleInsertionAllocatesAndFreesNothing)
 {
-    auto relation = Builder<database::Relation>(columns_of<ColumnIndex>({ ColumnIndex(0), ColumnIndex(1) }));
-    const auto row = std::tuple { ColumnIndex(2), ColumnIndex(5) };
+    auto relation = Builder<database::Relation>(columns_of<uint_t>({ ColumnIndex(0), ColumnIndex(1) }));
+    const auto row = std::tuple { uint_t { 2 }, uint_t { 5 } };
     for (size_t i = 0; i < 8; ++i)
     {
         relation.clear();
@@ -713,14 +713,14 @@ TEST(YggdrasilTests, DatabaseWarmedTypedTupleInsertionAllocatesAndFreesNothing)
 TEST(YggdrasilTests, DatabaseTypedTupleMembershipAcrossViewsAllocatesAndFreesNothing)
 {
     auto repository = database::RelationRepositoryFactory().create();
-    auto relation = Builder<database::Relation>(columns_of<ColumnIndex>({ ColumnIndex(0), ColumnIndex(1) }));
-    const auto row = std::tuple { ColumnIndex(2), ColumnIndex(5) };
+    auto relation = Builder<database::Relation>(columns_of<uint_t>({ ColumnIndex(0), ColumnIndex(1) }));
+    const auto row = std::tuple { uint_t { 2 }, uint_t { 5 } };
     relation.insert(row);
     const auto indexed = insert(repository, relation).first;
     const auto data_view = make_view(indexed.get_data(), repository);
     const auto builder_view = make_view(relation, repository);
-    auto other = Builder<database::Relation>(columns_of<ColumnIndex>({ ColumnIndex(0), ColumnIndex(1) }));
-    const auto other_values = std::tuple { ColumnIndex(2), ColumnIndex(6) };
+    auto other = Builder<database::Relation>(columns_of<uint_t>({ ColumnIndex(0), ColumnIndex(1) }));
+    const auto other_values = std::tuple { uint_t { 2 }, uint_t { 6 } };
     other.insert(other_values);
     const auto other_indexed = insert(repository, other).first;
     ASSERT_TRUE(other_indexed.contains(other_values));
@@ -749,8 +749,7 @@ struct IncrementalEvaluation
     const Builder<database::Relation> unchanged { ColumnIndex(1), ColumnIndex(3) };
     // Every output has eight join witnesses. Replacing a source row exercises
     // both support counts and mutable result storage without retaining history.
-    database::incremental::ProjectionEvaluator projecting { database::ProjectionPlan({ ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) },
-                                                                                                     { ColumnIndex(2) }) };
+    database::incremental::ProjectionEvaluator projecting { database::ProjectionPlan({ ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) }, { ColumnIndex(2) }) };
     database::incremental::Delta delta { ColumnIndex(1), ColumnIndex(2) };
     std::array<uint_t, rows> values {};
     database::Workspace workspace;

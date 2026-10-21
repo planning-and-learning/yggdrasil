@@ -19,7 +19,6 @@
 
 namespace
 {
-using Values = ygg::BuiltinByteTypes;
 using Column = ygg::Index<ygg::database::Column>;
 using Relation = ygg::Builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
@@ -99,8 +98,8 @@ TEST(DatabaseMustPass, ObjectsOnEveryPathPerKey)
 {
     // Key 0: a diamond 1 -> {2, 3} -> 4 -> 5; key 1: the same vertex numbers, but 2 -> 4 is the only route.
     auto edges = Relation({ key, u, v });
-    for (const auto& [k, from, to] : std::vector<std::tuple<uint_t, uint_t, uint_t>> { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 4 }, { 0, 3, 4 }, { 0, 4, 5 },
-                                                                                        { 1, 1, 2 }, { 1, 2, 4 }, { 1, 3, 4 } })
+    for (const auto& [k, from, to] : std::vector<
+             std::tuple<uint_t, uint_t, uint_t>> { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 4 }, { 0, 3, 4 }, { 0, 4, 5 }, { 1, 1, 2 }, { 1, 2, 4 }, { 1, 3, 4 } })
         edges.insert(std::tuple { k, from, to });
     auto sources = Relation({ key, u });
     sources.insert(std::tuple { uint_t(0), uint_t(1) });

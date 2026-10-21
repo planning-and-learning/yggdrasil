@@ -18,7 +18,6 @@
 
 namespace
 {
-using Values = ygg::BuiltinByteTypes;
 using Column = ygg::Index<ygg::database::Column>;
 using Relation = ygg::Builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
@@ -155,7 +154,13 @@ TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
     for (uint_t v = 0; v < 12; ++v)
         for (uint_t w = 0; w < 12; ++w)
             maximal[0].insert(std::tuple { v, w });
-    check_sequence(edges, maximal, inputs, { false }, sources, targets, 300,
+    check_sequence(edges,
+                   maximal,
+                   inputs,
+                   { false },
+                   sources,
+                   targets,
+                   300,
                    [&](size_t step)
                    {
                        if (step % 25 == 0)
@@ -190,12 +195,16 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
     const auto steps = qb::input(repository, 3, { x, y });
     const auto identity = qb::input(repository, 4, { x, y });
     const auto first = qb::project(repository,
-                                   qb::join(repository, qb::join(repository, qb::rename(repository, moves, { a, a2 }), qb::rename(repository, free, { a2 })),
+                                   qb::join(repository,
+                                            qb::join(repository, qb::rename(repository, moves, { a, a2 }), qb::rename(repository, free, { a2 })),
                                             qb::rename(repository, identity, { b, b2 })),
                                    { a, b, a2, b2 });
     const auto variable_order = std::array { a, b, a2, b2 };
     const auto inputs_of_second = std::array { qb::rename(repository, steps, { b, b2 }), qb::rename(repository, identity, { a, a2 }) };
-    const auto second = qb::project(repository, qb::generic_join(repository, std::span<const ygg::database::QueryView<>>(inputs_of_second), std::span<const Column>(variable_order)), { a, b, a2, b2 });
+    const auto second =
+        qb::project(repository,
+                    qb::generic_join(repository, std::span<const ygg::database::QueryView<>>(inputs_of_second), std::span<const Column>(variable_order)),
+                    { a, b, a2, b2 });
     const auto teleport = qb::project(
         repository,
         qb::join(repository, qb::select_value(repository, qb::rename(repository, moves, { a, a2 }), a, uint_t(0)), qb::rename(repository, identity, { b, b2 })),
@@ -239,7 +248,13 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
         maximal[3].insert(std::tuple { v, uint_t((v + 1) % n) });
         maximal[4].insert(std::tuple { v, v });
     }
-    check_sequence(edges, maximal, inputs, { false, false, false, true, true }, sources, targets, 300,
+    check_sequence(edges,
+                   maximal,
+                   inputs,
+                   { false, false, false, true, true },
+                   sources,
+                   targets,
+                   300,
                    [&](size_t step)
                    {
                        if (step % 30 == 0)

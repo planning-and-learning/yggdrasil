@@ -77,23 +77,6 @@ bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column
 std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns);
 
 inline size_t row_size(std::span<const ColumnLayout> columns) noexcept { return columns.empty() ? 0 : columns.back().offset + columns.back().size; }
-
-template<ByteCodableTypes Values>
-void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns)
-{
-    if (bytes.size() != row_size(columns))
-        throw std::invalid_argument("Relation: row byte width does not match its schema.");
-    for (const auto& column : columns)
-        visit_type_id<Values>(column.type,
-                                  [&]<typename T>(std::type_identity<T>)
-                                  {
-                                      const auto source = detail::column_bytes(bytes, column);
-                                      std::array<std::byte, ByteCodec<T>::size> canonical;
-                                      ByteCodec<T>::encode(ByteCodec<T>::decode(source), canonical);
-                                      if (!std::ranges::equal(source, canonical))
-                                          throw std::invalid_argument("Relation: row contains a noncanonical value encoding.");
-                                  });
-}
 }  // namespace ygg::database
 
 namespace ygg
@@ -102,7 +85,7 @@ namespace ygg
 template<ygg::ByteCodable T>
 void Builder<database::Columns>::push_back(Index<database::Column> column)
 {
-    push_back(column, ygg::type_id<T>, ygg::ByteCodec<T>::size);
+    push_back(column, ygg::type_id<T>);
 }
 
 template<ygg::ByteCodable T>

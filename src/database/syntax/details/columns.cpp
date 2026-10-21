@@ -34,6 +34,25 @@ std::span<const std::byte> column_bytes(std::span<const std::byte> bytes, const 
 
 namespace ygg::database
 {
+void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns)
+{
+    if (bytes.size() != row_size(columns))
+        throw std::invalid_argument("Relation: row byte width does not match its schema.");
+    for (const auto& column : columns)
+        visit_type_id(column.type,
+                      [&]<typename T>(std::type_identity<T>)
+                      {
+                          const auto source = detail::column_bytes(bytes, column);
+                          std::array<std::byte, ByteCodec<T>::size> canonical;
+                          ByteCodec<T>::encode(ByteCodec<T>::decode(source), canonical);
+                          if (!std::ranges::equal(source, canonical))
+                              throw std::invalid_argument("Relation: row contains a noncanonical value encoding.");
+                      });
+}
+}
+
+namespace ygg::database
+{
 void validate_columns(std::span<const ColumnLayout> columns)
 {
     size_t offset = 0;
@@ -42,7 +61,7 @@ void validate_columns(std::span<const ColumnLayout> columns)
         const auto size = it->size;
         if (it->offset != offset || size == 0)
             throw std::invalid_argument("Columns: columns must be nonempty and packed contiguously.");
-        if (const auto builtin = builtin_byte_size(it->type); builtin != 0 && builtin != size)
+        if (size != byte_size(it->type))
             throw std::invalid_argument("Columns: column width does not match its type.");
         if (size > std::numeric_limits<size_t>::max() - offset)
             throw std::length_error("Columns: row byte width exceeds addressable memory.");
@@ -121,44 +140,35 @@ std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns)
 
 namespace ygg
 {
-Builder<database::Columns>::Builder(std::span<const database::ColumnLayout> columns)
-{
-    assign(columns);
-}
+Builder<database::Columns>::Builder(std::span<const database::ColumnLayout> columns) { assign(columns); }
 }
 
 namespace ygg
 {
-Builder<database::Columns>::Builder(std::initializer_list<database::ColumnLayout> columns) : Builder(std::span<const database::ColumnLayout>(columns))
-{
-}
+Builder<database::Columns>::Builder(std::initializer_list<database::ColumnLayout> columns) : Builder(std::span<const database::ColumnLayout>(columns)) {}
 }
 
 namespace ygg
 {
-Builder<database::Columns>::Builder(std::span<const Index<database::Column>> columns)
-{
-    assign<>(columns);
-}
+Builder<database::Columns>::Builder(std::span<const Index<database::Column>> columns) { assign<>(columns); }
 }
 
 namespace ygg
 {
-Builder<database::Columns>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns))
-{
-}
+Builder<database::Columns>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns)) {}
 }
 
 namespace ygg
 {
-void Builder<database::Columns>::push_back(Index<database::Column> column, ygg::TypeId type, size_t size)
+void Builder<database::Columns>::push_back(Index<database::Column> column, ygg::TypeId type)
 {
     for (const auto& existing : span())
         if (existing.label == column)
             throw std::invalid_argument("Columns: duplicate column label.");
     const auto offset = row_size();
+    const auto size = byte_size(type);
     if (size == 0)
-        throw std::invalid_argument("Columns: columns must be nonempty.");
+        throw std::invalid_argument("Columns: invalid column type.");
     if (size > std::numeric_limits<size_t>::max() - offset)
         throw std::length_error("Columns: row byte width exceeds addressable memory.");
     m_data.values.push_back(database::ColumnLayout { column, type, offset, size });
@@ -168,18 +178,12 @@ void Builder<database::Columns>::push_back(Index<database::Column> column, ygg::
 
 namespace ygg
 {
-void Builder<database::Columns>::assign(std::span<const database::ColumnLayout> columns)
-{
-    database::detail::assign_columns(m_data, columns);
-}
+void Builder<database::Columns>::assign(std::span<const database::ColumnLayout> columns) { database::detail::assign_columns(m_data, columns); }
 }
 
 namespace ygg
 {
-void Builder<database::Columns>::assign(std::initializer_list<database::ColumnLayout> columns)
-{
-    assign(std::span<const database::ColumnLayout>(columns));
-}
+void Builder<database::Columns>::assign(std::initializer_list<database::ColumnLayout> columns) { assign(std::span<const database::ColumnLayout>(columns)); }
 }
 
 namespace ygg

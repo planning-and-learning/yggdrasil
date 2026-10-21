@@ -15,17 +15,17 @@
 #include "../../tests/unit/database/query_helpers.hpp"
 #include "yggdrasil/database/optimization/optimization.hpp"
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/must_pass.hpp"
-#include "yggdrasil/database/syntax/row.hpp"
+#include "yggdrasil/database/semantics/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/syntax/row.hpp"
 
 #include <algorithm>
 #include <array>
-#include <cstdlib>
-#include <cstring>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <fstream>
 #include <map>
@@ -37,7 +37,6 @@
 
 namespace
 {
-using Values = ygg::BuiltinByteTypes;
 using Column = ygg::Index<ygg::database::Column>;
 using Relation = ygg::Builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
@@ -125,10 +124,10 @@ struct PushDistance
 {
     const Task* task;
     bool obstacles;
-    std::vector<std::vector<std::pair<uint_t, uint_t>>> into;  ///< cell -> (from, direction) of its incoming edges
+    std::vector<std::vector<std::pair<uint_t, uint_t>>> into;         ///< cell -> (from, direction) of its incoming edges
     std::map<std::pair<uint_t, uint_t>, std::vector<uint_t>> before;  ///< (cell, direction) -> cells c with c -d-> cell
-    std::map<uint_t, std::vector<uint_t>> pushes;  ///< box -> pushes from each location, in the current search
-    std::map<uint_t, std::vector<uint_t>> base;    ///< box -> pushes without an excluded cell
+    std::map<uint_t, std::vector<uint_t>> pushes;                     ///< box -> pushes from each location, in the current search
+    std::map<uint_t, std::vector<uint_t>> base;                       ///< box -> pushes without an excluded cell
 
     /// With `obstacles`, the other boxes' cells block a box in the current state; still admissible for this state.
     PushDistance(const Task& task_, bool obstacles_) : task(&task_), obstacles(obstacles_), into(task_.names.size())
@@ -195,10 +194,7 @@ struct PushDistance
     }
 };
 
-double seconds_since(std::chrono::steady_clock::time_point start)
-{
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-}
+double seconds_since(std::chrono::steady_clock::time_point start) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); }
 
 }  // namespace
 
@@ -250,21 +246,21 @@ int main(int argc, char** argv)
     const auto free = [&](Column at_cell)
     { return qb::union_(queries, qb::join(queries, input(unfinished, { box }), input(clear, { at_cell })), input(at, { box, at_cell })); };
     const auto vertices = { box, robot, boxloc, next_robot, next_boxloc };
-    const auto moves =
+    const auto moves = qb::project(
+        queries,
+        qb::antijoin(
+            queries,
+            qb::join(queries, qb::join(queries, input(adjacent, { robot, next_robot, direction }), free(next_robot)), input(equal, { boxloc, next_boxloc })),
+            input(equal, { next_robot, boxloc })),
+        vertices);
+    const auto pushes =
         qb::project(queries,
-                    qb::antijoin(queries,
-                                 qb::join(queries,
-                                          qb::join(queries, input(adjacent, { robot, next_robot, direction }), free(next_robot)),
-                                          input(equal, { boxloc, next_boxloc })),
-                                 input(equal, { next_robot, boxloc })),
+                    qb::join(queries,
+                             qb::join(queries,
+                                      qb::join(queries, input(adjacent, { robot, boxloc, direction }), input(adjacent, { boxloc, next_boxloc, direction })),
+                                      input(equal, { boxloc, next_robot })),
+                             free(next_boxloc)),
                     vertices);
-    const auto pushes = qb::project(queries,
-                                    qb::join(queries,
-                                             qb::join(queries,
-                                                      qb::join(queries, input(adjacent, { robot, boxloc, direction }), input(adjacent, { boxloc, next_boxloc, direction })),
-                                                      input(equal, { boxloc, next_robot })),
-                                             free(next_boxloc)),
-                                    vertices);
     const auto edges = qb::union_(queries, moves, pushes);
 
     // Sources (box, agent, box cell), targets (box, any agent cell, goal cell) and probes (goal cells of unfinished boxes).
@@ -294,7 +290,11 @@ int main(int argc, char** argv)
         auto rows = Relation(plan.output_columns().span());
         const auto start = std::chrono::steady_clock::now();
         blind.must_pass(slot_input, borrow(sources), borrow(targets), borrow(probes), rows);
-        std::printf("blind: %.3f s, %zu rows, expanded %zu, backward %zu\n", seconds_since(start), rows.size(), blind.statistics().vertices, blind.statistics().backward);
+        std::printf("blind: %.3f s, %zu rows, expanded %zu, backward %zu\n",
+                    seconds_since(start),
+                    rows.size(),
+                    blind.statistics().vertices,
+                    blind.statistics().backward);
     }
     auto out = Relation(plan.output_columns().span());
     auto total = 0.0;
@@ -342,7 +342,11 @@ int main(int argc, char** argv)
         const auto& result = evaluator.get_result();
         for (size_t r = 0; r < result.size(); ++r)
             loops += result[r].get<uint_t>(1) == result[r].get<uint_t>(2);
-        std::printf("projected edges, full: %zu rows (%zu self loops), optimize %.3f s, evaluate %.3f s\n", result.size(), loops, compiled, seconds_since(evaluated));
+        std::printf("projected edges, full: %zu rows (%zu self loops), optimize %.3f s, evaluate %.3f s\n",
+                    result.size(),
+                    loops,
+                    compiled,
+                    seconds_since(evaluated));
     }
     if (std::getenv("PER_KEY"))  // Times each key alone.
     {
@@ -367,7 +371,8 @@ int main(int argc, char** argv)
         std::printf("  all keys alone: %.3f s; top 5: %.3f s\n", total, std::get<0>(timings[0]) + (timings.size() > 1 ? std::get<0>(timings[1]) : 0.0));
     }
     const auto& statistics = must_pass.statistics();
-    std::printf("boxes %zu unfinished %zu locations %zu: %.3f s per call; keys %zu, expanded %zu, edges %zu, removal searches %zu, backward expanded %zu (over %zu calls)\n",
+    std::printf("boxes %zu unfinished %zu locations %zu: %.3f s per call; keys %zu, expanded %zu, edges %zu, removal searches %zu, backward expanded %zu (over "
+                "%zu calls)\n",
                 task.at.size(),
                 unfinished.size(),
                 task.locations.size(),

@@ -1,5 +1,4 @@
 #include "module.hpp"
-
 #include "yggdrasil/database/optimization/optimization.hpp"
 #include "yggdrasil/database/semantics/incremental/query.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
@@ -14,7 +13,6 @@ namespace yggdrasil
 
 namespace
 {
-using Values = DatabaseValues;
 using FullEvaluator = ygg::database::QueryEvaluator;
 using IncrementalEvaluator = ygg::database::incremental::QueryEvaluator;
 

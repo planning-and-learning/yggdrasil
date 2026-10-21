@@ -31,26 +31,6 @@
 
 namespace ygg::tests
 {
-struct DatabaseInternedValue
-{
-    uint_t value;
-};
-}  // namespace ygg::tests
-
-namespace ygg
-{
-template<>
-struct ByteCodec<tests::DatabaseInternedValue>
-{
-    static constexpr TypeId id = 1006;
-    static constexpr size_t size = ByteCodec<uint_t>::size;
-    static void encode(tests::DatabaseInternedValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value % 10, bytes); }
-    static tests::DatabaseInternedValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
-};
-}  // namespace ygg
-
-namespace ygg::tests
-{
 using Values = TypeList<uint_t>;
 using ColumnIndex = Index<database::Column>;
 
@@ -200,8 +180,8 @@ TEST(YggdrasilTests, DatabasePreparedInterningRetainsRawSchemaValidation)
 {
     auto repository = database::RelationRepositoryFactory().create();
     auto invalid = Data<database::Columns>();
-    invalid.values.push_back(database::ColumnLayout { ColumnIndex(3), 0, 0, sizeof(uint_t) });
-    invalid.values.push_back(database::ColumnLayout { ColumnIndex(3), 0, sizeof(uint_t), sizeof(uint_t) });
+    invalid.values.push_back(database::ColumnLayout { ColumnIndex(3), ygg::type_id<uint_t>, 0, sizeof(uint_t) });
+    invalid.values.push_back(database::ColumnLayout { ColumnIndex(3), ygg::type_id<uint_t>, sizeof(uint_t), sizeof(uint_t) });
     EXPECT_THROW((void) database::insert(repository, invalid), std::invalid_argument);
     EXPECT_FALSE(repository.find(invalid));
 }
@@ -520,26 +500,27 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryViewsKeepRepositoryIdentity)
     EXPECT_TRUE(EqualTo<Data<RelationTag>> {}(*round_trip, data));
 }
 
-TEST(YggdrasilTests, DatabaseRelationRepositoryUsesCanonicalCustomEquality)
+TEST(YggdrasilTests, DatabaseRelationRepositoryInternsCanonicalEncodings)
 {
-    using ValueRelation = database::Relation;
     database::RelationRepositoryFactory factory;
     auto repository = factory.create();
     Builder<database::Columns> columns;
-    columns.assign<DatabaseInternedValue>({ ColumnIndex(1), ColumnIndex(2) });
-    Builder<ValueRelation> first { columns };
-    first.insert(std::tuple { DatabaseInternedValue { 12 }, DatabaseInternedValue { 13 } });
-    first.insert(std::tuple { DatabaseInternedValue { 15 }, DatabaseInternedValue { 16 } });
-    Builder<ValueRelation> equivalent { columns };
-    equivalent.insert(std::tuple { DatabaseInternedValue { 25 }, DatabaseInternedValue { 26 } });
-    equivalent.insert(std::tuple { DatabaseInternedValue { 22 }, DatabaseInternedValue { 23 } });
+    columns.assign<double>({ ColumnIndex(1), ColumnIndex(2) });
+    const double first_nan = std::bit_cast<double>(uint64_t { 0x7ff8000000000001 });
+    const double second_nan = std::bit_cast<double>(uint64_t { 0xfff8000000000042 });
+    Builder<database::Relation> first { columns };
+    first.insert(std::tuple { -0.0, 1.0 });
+    first.insert(std::tuple { first_nan, 2.0 });
+    Builder<database::Relation> equivalent { columns };
+    equivalent.insert(std::tuple { second_nan, 2.0 });
+    equivalent.insert(std::tuple { 0.0, 1.0 });
     const auto [original, created] = insert(repository, first);
     const auto [duplicate, duplicate_created] = insert(repository, equivalent);
     EXPECT_TRUE(created);
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(original.get_index(), duplicate.get_index());
     EXPECT_EQ(original.at(0).bytes().data(), duplicate.at(0).bytes().data());
-    EXPECT_EQ(original.at(0).get<DatabaseInternedValue>(size_t { 0 }).value, 2);
+    EXPECT_FALSE(std::signbit(original.at(0).get<double>(size_t { 0 })));
     EXPECT_EQ(repository.size(), 1);
 }
 
@@ -581,8 +562,8 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryRejectsInvalidDataAndForeignRenam
     EXPECT_TRUE(std::ranges::equal(builder.columns(), original.columns()));
     expect_rows(builder, { { 10, 20 }, { 30, 40 } });
     Data<database::Columns> invalid_schema;
-    invalid_schema.values.push_back(database::ColumnLayout { ColumnIndex(1), 0, 0, sizeof(uint_t) });
-    invalid_schema.values.push_back(database::ColumnLayout { ColumnIndex(1), 0, sizeof(uint_t), sizeof(uint_t) });
+    invalid_schema.values.push_back(database::ColumnLayout { ColumnIndex(1), ygg::type_id<uint_t>, 0, sizeof(uint_t) });
+    invalid_schema.values.push_back(database::ColumnLayout { ColumnIndex(1), ygg::type_id<uint_t>, sizeof(uint_t), sizeof(uint_t) });
     EXPECT_THROW(repository.insert(invalid_schema), std::invalid_argument);
     EXPECT_TRUE(invalid_schema.index.is_max());
 
@@ -789,14 +770,11 @@ TEST(YggdrasilTests, SharedContextViewsRetainTheirRepositoryAndKeepIdentity)
 
 namespace
 {
-/// Rows of interned relations leave values of other repositories raw; resolve them explicitly.
-template<typename Value, typename Repository>
-auto resolve_in(Value value, const Repository& repository)
+/// Columns store indices as uint_t; their owner resolves them.
+template<typename Repository>
+auto resolve_in(uint_t value, const Repository& repository)
 {
-    if constexpr (std::same_as<Value, ColumnsIndex>)
-        return make_view(value, repository);
-    else
-        return value;
+    return make_view(ColumnsIndex(value), repository);
 }
 }
 
@@ -805,12 +783,14 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
     auto entities = database::RelationRepositoryFactory().create();
     const auto first = entities.insert(std::array { ColumnIndex(7) }).first;
     const auto second = entities.insert(std::array { ColumnIndex(9) }).first;
+    const auto first_value = first.get_index().get_value();
+    const auto second_value = second.get_index().get_value();
     auto rows = database::RelationRepositoryFactory().create();
     Builder<database::Columns> columns;
-    columns.push_back<ColumnsIndex>(ColumnIndex(1));
-    columns.push_back<ColumnsIndex>(ColumnIndex(2));
+    columns.push_back<uint_t>(ColumnIndex(1));
+    columns.push_back<uint_t>(ColumnIndex(2));
     auto builder = Builder<database::Relation>(columns);
-    builder.insert(std::tuple { first.get_index(), second.get_index() });
+    builder.insert(std::tuple { first_value, second_value });
     const auto published = database::insert(rows, builder, 42).first;
     const auto index_view = make_view(published.get_index(), rows);
     const auto data_view = make_view(published.get_data(), rows);
@@ -819,21 +799,21 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
     static_assert(database::RelationViewConcept<decltype(index_view)>);
     static_assert(std::ranges::forward_range<decltype(index_view)>);
     static_assert(std::ranges::borrowed_range<decltype(index_view)>);
-    static_assert(std::same_as<decltype(index_view[0].get<ColumnsIndex>(size_t { 0 })), ColumnsIndex>);
-    static_assert(std::same_as<decltype(builder_view[0].get<ColumnsIndex>(size_t { 0 })), ColumnsIndex>);
+    static_assert(std::same_as<decltype(index_view[0].get<uint_t>(size_t { 0 })), uint_t>);
+    static_assert(std::same_as<decltype(builder_view[0].get<uint_t>(size_t { 0 })), uint_t>);
     const auto check = [&](const auto& view)
     {
         ASSERT_EQ(view.size(), 1);
-        EXPECT_EQ((database::Row(view.row(0), view.columns().span()).get<ColumnsIndex>(size_t { 0 })), first.get_index());
+        EXPECT_EQ((database::Row(view.row(0), view.columns().span()).get<uint_t>(size_t { 0 })), first_value);
         // Rows of interned relations name values owned elsewhere; callers resolve them explicitly.
-        EXPECT_EQ(resolve_in(view[0].template get<ColumnsIndex>(size_t { 0 }), entities), first);
-        EXPECT_EQ(resolve_in(view.at(0).template get<ColumnsIndex>(size_t { 1 }), entities), second);
+        EXPECT_EQ(resolve_in(view[0].template get<uint_t>(size_t { 0 }), entities), first);
+        EXPECT_EQ(resolve_in(view.at(0).template get<uint_t>(size_t { 1 }), entities), second);
         EXPECT_THROW(view.at(1), std::out_of_range);
         size_t count = 0;
         for (auto objects : view)
         {
-            EXPECT_EQ(resolve_in(objects.template get<ColumnsIndex>(size_t { 0 }), entities), first);
-            EXPECT_EQ(resolve_in(objects.template get<ColumnsIndex>(size_t { 1 }), entities), second);
+            EXPECT_EQ(resolve_in(objects.template get<uint_t>(size_t { 0 }), entities), first);
+            EXPECT_EQ(resolve_in(objects.template get<uint_t>(size_t { 1 }), entities), second);
             ++count;
         }
         EXPECT_EQ(count, 1);
@@ -843,35 +823,35 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
     check(builder_view);
     EXPECT_EQ(&builder_view[0].get_context(), &entities);
     const auto iterator = index_view.begin();
-    EXPECT_EQ((*iterator).get<ColumnsIndex>(size_t { 1 }), second.get_index());
-    const auto resolved = index_view[0].template visit<TypeList<ColumnsIndex>>(size_t { 0 }, [](auto value) { return value; });
-    EXPECT_EQ(resolved, first.get_index());
+    EXPECT_EQ((*iterator).get<uint_t>(size_t { 1 }), second_value);
+    const auto resolved = index_view[0].visit(size_t { 0 }, [](auto value) { return static_cast<uint_t>(value); });
+    EXPECT_EQ(resolved, first_value);
 
     const auto renamed = rows.rename(index_view, std::array { ColumnIndex(3), ColumnIndex(4) });
     static_assert(std::same_as<decltype(renamed), decltype(index_view)>);
     EXPECT_EQ(&renamed.get_context(), &rows);
     EXPECT_EQ(renamed.get_data().schema_namespace, 42);
     EXPECT_EQ(renamed.get_storage_address(), index_view.get_storage_address());
-    EXPECT_EQ(renamed[0].get<ColumnsIndex>(size_t { 0 }), first.get_index());
+    EXPECT_EQ(renamed[0].get<uint_t>(size_t { 0 }), first_value);
     auto other_rows = database::RelationRepositoryFactory().create();
     EXPECT_THROW(other_rows.rename(index_view, std::array { ColumnIndex(3), ColumnIndex(4) }), std::invalid_argument);
 
     Builder<database::Columns> probe_columns;
-    probe_columns.push_back<ColumnsIndex>(ColumnIndex(2));
+    probe_columns.push_back<uint_t>(ColumnIndex(2));
     auto probe = Builder<database::Relation>(probe_columns);
-    probe.insert(std::tuple { second.get_index() });
+    probe.insert(std::tuple { second_value });
     auto joined = database::join(data_view, make_view(probe, entities));
-    EXPECT_TRUE(joined.contains(std::tuple { first.get_index(), second.get_index() }));
+    EXPECT_TRUE(joined.contains(std::tuple { first_value, second_value }));
     auto projected = database::project(index_view, { ColumnIndex(2) });
-    EXPECT_TRUE(projected.contains(std::tuple { second.get_index() }));
+    EXPECT_TRUE(projected.contains(std::tuple { second_value }));
     auto assigned = Builder<database::Relation>();
     assign(assigned, index_view);
-    EXPECT_TRUE(assigned.contains(std::tuple { first.get_index(), second.get_index() }));
+    EXPECT_TRUE(assigned.contains(std::tuple { first_value, second_value }));
     const auto copied = database::copy(index_view, other_rows).first;
-    EXPECT_TRUE(copied.contains(std::tuple { first.get_index(), second.get_index() }));
+    EXPECT_TRUE(copied.contains(std::tuple { first_value, second_value }));
 
     auto truth = Builder<database::Relation>();
-    truth.insert(cells<ColumnsIndex>());
+    truth.insert(cells<uint_t>());
     const auto truth_view = make_view(truth, entities);
     EXPECT_TRUE((*truth_view.begin()).empty());
     EXPECT_EQ(std::ranges::distance(truth_view), 1);
@@ -881,8 +861,6 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
 
 namespace
 {
-using MixedValues = TypeList<uint_t, double, bool, ColumnsIndex>;
-
 template<typename Destination, typename Source>
 concept CanAssignColumns = requires(Destination& destination, const Source& source) { database::assign(destination, source); };
 
@@ -895,21 +873,16 @@ struct UnsupportedColumn
 };
 
 template<typename Visitor>
-concept CanVisitColumnType = requires(Visitor&& visitor) { ygg::visit_type_id<MixedValues>(0, std::forward<Visitor>(visitor)); };
+concept CanVisitColumnType = requires(Visitor&& visitor) { ygg::visit_type_id(ygg::TypeId::uint32, std::forward<Visitor>(visitor)); };
 
 static_assert(CanVisitColumnType<decltype([](auto) { return size_t {}; })>);
 static_assert(!CanVisitColumnType<decltype([](std::type_identity<uint_t>) { return size_t {}; })>);
 static_assert(!CanVisitColumnType<int>);
 
-static_assert(ygg::ByteCodableTypes<ygg::BuiltinByteTypes>);
-static_assert(ygg::ByteCodable<uint_t> && ygg::ByteCodable<ColumnsIndex> && ygg::ByteCodableTypes<MixedValues>);
-static_assert(!ygg::ByteCodable<const uint_t> && !ygg::ByteCodable<UnsupportedColumn>);
-static_assert(!ygg::ByteCodableTypes<int>);
-static_assert(ygg::type_id<std::uint32_t> == 1 && ygg::type_id<bool> == 7 && ygg::builtin_byte_size(ygg::type_id<double>) == 8);
-static_assert(ygg::builtin_byte_size(ygg::type_id<ColumnsIndex>) == 0);
-static_assert(!ygg::ByteCodableTypes<TypeList<>>);
-static_assert(!ygg::ByteCodableTypes<TypeList<uint_t, uint_t>>);
-static_assert(!ygg::ByteCodableTypes<TypeList<UnsupportedColumn>>);
+static_assert(ygg::ByteCodable<uint_t> && ygg::ByteCodable<double> && ygg::ByteCodable<bool>);
+static_assert(!ygg::ByteCodable<ColumnsIndex> && !ygg::ByteCodable<const uint_t> && !ygg::ByteCodable<UnsupportedColumn>);
+static_assert(ygg::type_id<std::uint32_t> == ygg::TypeId::uint32 && ygg::type_id<bool> == ygg::TypeId::boolean);
+static_assert(ygg::byte_size(ygg::type_id<double>) == 8 && ygg::byte_size(ygg::TypeId { 0 }) == 0);
 }
 
 TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
@@ -920,18 +893,18 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
     columns.push_back<uint_t>(ColumnIndex(4));
     columns.push_back<double>(ColumnIndex(9));
     columns.push_back<bool>(ColumnIndex(2));
-    columns.push_back<ColumnsIndex>(ColumnIndex(7));
+    columns.push_back<uint_t>(ColumnIndex(7));
     ASSERT_EQ(columns.size(), 4);
     EXPECT_EQ(columns.row_size(), 2 * ygg::ByteCodec<uint_t>::size + sizeof(double) + 1);
     EXPECT_EQ(columns[0].offset, 0);
     EXPECT_EQ(columns[1].offset, ygg::ByteCodec<uint_t>::size);
     EXPECT_EQ(columns[2].offset, ygg::ByteCodec<uint_t>::size + sizeof(double));
     EXPECT_EQ(columns[3].offset, ygg::ByteCodec<uint_t>::size + sizeof(double) + 1);
-    EXPECT_EQ(columns[3].size, ygg::ByteCodec<ColumnsIndex>::size);
+    EXPECT_EQ(columns[3].size, ygg::ByteCodec<uint_t>::size);
 
     auto rows = database::RelationRepositoryFactory().create();
     Builder<database::Relation> builder(columns);
-    const auto tuple = std::tuple { uint_t { 42 }, 1.25, true, entity.get_index() };
+    const auto tuple = std::tuple { uint_t { 42 }, 1.25, true, entity.get_index().get_value() };
     builder.insert(tuple);
     const auto stored = database::insert(rows, builder).first;
     const auto verify = [&](const auto& view)
@@ -940,15 +913,15 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
         EXPECT_EQ(row.template get<uint_t>(ColumnIndex(4)), 42);
         EXPECT_DOUBLE_EQ(row.template get<double>(ColumnIndex(9)), 1.25);
         EXPECT_TRUE(row.template get<bool>(ColumnIndex(2)));
-        EXPECT_EQ(resolve_in(row.template get<ColumnsIndex>(ColumnIndex(7)), entities), entity);
+        EXPECT_EQ(resolve_in(row.template get<uint_t>(ColumnIndex(7)), entities), entity);
         EXPECT_THROW(row.template get<double>(ColumnIndex(4)), std::invalid_argument);
         EXPECT_THROW(row.template get<uint_t>(ColumnIndex(99)), std::out_of_range);
         EXPECT_THROW(row.template get<uint_t>(size_t { 4 }), std::out_of_range);
-        EXPECT_TRUE(row.template visit<MixedValues>(3,
+        EXPECT_TRUE(row.visit(3,
                               [&](auto value)
                               {
-                                  if constexpr (std::same_as<decltype(value), ColumnsIndex>)
-                                      return value == entity.get_index();
+                                  if constexpr (std::same_as<decltype(value), uint_t>)
+                                      return ColumnsIndex(value) == entity.get_index();
                                   else
                                       return false;
                               }));
@@ -956,7 +929,7 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
     verify(make_view(builder, entities));
     verify(make_view(stored.get_data(), rows));
     verify(make_view(stored.get_index(), rows));
-    EXPECT_EQ(builder[0].get<ColumnsIndex>(ColumnIndex(7)), entity.get_index());
+    EXPECT_EQ(ColumnsIndex(builder[0].get<uint_t>(ColumnIndex(7))), entity.get_index());
     EXPECT_TRUE(stored.contains(tuple));
 
     const auto original_bytes = cista::serialize(columns);
@@ -978,7 +951,6 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
 
 TEST(YggdrasilTests, DatabaseFloatingPointRowsInternCanonicalNaNsAndSignedZero)
 {
-    using FloatValues = TypeList<double, bool>;
     Builder<database::Columns> columns;
     columns.push_back<double>(ColumnIndex(1));
     columns.push_back<bool>(ColumnIndex(2));
@@ -1008,13 +980,13 @@ TEST(YggdrasilTests, DatabaseFloatingPointRowsInternCanonicalNaNsAndSignedZero)
     const double negative_zero = -0.0;
     // Raw rows are only checked for width; callers holding the type list validate canonical encodings.
     std::memcpy(invalid.data(), &negative_zero, sizeof(negative_zero));
-    EXPECT_THROW(columns.validate_row<FloatValues>(invalid), std::invalid_argument);
+    EXPECT_THROW(columns.validate_row(invalid), std::invalid_argument);
     std::memcpy(invalid.data(), &first_nan, sizeof(first_nan));
-    EXPECT_THROW(columns.validate_row<FloatValues>(invalid), std::invalid_argument);
+    EXPECT_THROW(columns.validate_row(invalid), std::invalid_argument);
     invalid = database::encode_row(std::tuple { +0.0, false }, columns.span());
     invalid.back() = std::byte { 2 };
-    EXPECT_THROW(columns.validate_row<FloatValues>(invalid), std::invalid_argument);
-    EXPECT_NO_THROW(columns.validate_row<FloatValues>(database::encode_row(std::tuple { first_nan, true }, columns.span())));
+    EXPECT_THROW(columns.validate_row(invalid), std::invalid_argument);
+    EXPECT_NO_THROW(columns.validate_row(database::encode_row(std::tuple { first_nan, true }, columns.span())));
     const auto truncated = std::span<const std::byte>(invalid).first(invalid.size() - 1);
     EXPECT_THROW(builder.insert(truncated), std::invalid_argument);
     EXPECT_THROW(builder.contains(truncated), std::invalid_argument);
@@ -1024,7 +996,6 @@ TEST(YggdrasilTests, DatabaseFloatingPointRowsInternCanonicalNaNsAndSignedZero)
 
 TEST(YggdrasilTests, DatabaseTypedSchemaRejectsMalformedMetadataBeforeMutation)
 {
-    using TypedValues = TypeList<uint_t, double>;
     Builder<database::Columns> columns;
     columns.push_back<uint_t>(ColumnIndex(1));
     columns.push_back<double>(ColumnIndex(2));
@@ -1041,9 +1012,8 @@ TEST(YggdrasilTests, DatabaseTypedSchemaRejectsMalformedMetadataBeforeMutation)
     invalid.assign(columns.begin(), columns.end());
     invalid[1].type = ygg::type_id<bool>;
     EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
-    invalid[1].type = 99;
-    EXPECT_THROW(database::validate_row<TypedValues>(database::encode_row(std::tuple { uint_t { 7 }, 3.25 }, columns.span()), std::span(invalid)),
-                 std::invalid_argument);
+    invalid[1].type = ygg::TypeId { 99 };
+    EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
     EXPECT_THROW(relation.insert(std::tuple { 3.25, uint_t { 7 } }), std::invalid_argument);
     EXPECT_EQ(relation.get_index(), canonical);
     ASSERT_EQ(relation.size(), 1);
@@ -1085,21 +1055,21 @@ TEST(YggdrasilTests, DatabaseBuiltinCodecsPreserveSignedAndWideValues)
 TEST(YggdrasilTests, HomogeneousRowsRoundTripThroughReusableBuffers)
 {
     Builder<database::Columns> columns;
-    columns.push_back<ColumnsIndex>(ColumnIndex(1));
-    columns.push_back<ColumnsIndex>(ColumnIndex(2));
+    columns.push_back<std::uint64_t>(ColumnIndex(1));
+    columns.push_back<std::uint64_t>(ColumnIndex(2));
     auto bytes = std::vector<std::byte> {};
-    const auto values = std::vector { ColumnsIndex(4), ColumnsIndex(9) };
-    const auto encoded = database::encode_row<ColumnsIndex>(values, bytes);
+    const auto values = std::vector { std::uint64_t { 4 }, std::uint64_t { 9 } };
+    const auto encoded = database::encode_row<std::uint64_t>(values, bytes);
     EXPECT_EQ(encoded.data(), bytes.data());
     EXPECT_EQ(encoded.size(), columns.row_size());
 
-    auto decoded = std::vector<ColumnsIndex> {};
+    auto decoded = std::vector<std::uint64_t> {};
     const auto row = database::Row(encoded, columns.span());
     EXPECT_TRUE(std::ranges::equal(row.get_all(decoded), values));
     EXPECT_EQ(row.get_all(decoded).data(), decoded.data());
 
     auto relation = Builder<database::Relation>(columns);
-    relation.insert(std::tuple { ColumnsIndex(4), ColumnsIndex(9) });
+    relation.insert(std::tuple { std::uint64_t { 4 }, std::uint64_t { 9 } });
     EXPECT_TRUE(relation.contains(encoded));
 }
 

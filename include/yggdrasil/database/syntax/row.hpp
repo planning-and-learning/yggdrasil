@@ -62,15 +62,14 @@ public:
         return get<T>(column_index(m_columns, column));
     }
 
-    /// Calls visitor with the value at `position`, decoded as its column's type, which must be one of Values.
-    template<ByteCodableTypes Values, InvocableWithEach<Values> Visitor>
+    /// Calls visitor with the value at `position`, decoded as its column's type.
+    template<typename Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
         if (position >= size())
             throw std::out_of_range("Row: column position is out of range.");
-        return visit_type_id<Values>(m_columns[position].type,
-                                         [&]<typename T>(std::type_identity<T>)
-                                         { return std::invoke(std::forward<Visitor>(visitor), get<T>(position)); });
+        return visit_type_id(m_columns[position].type,
+                             [&]<typename T>(std::type_identity<T>) { return std::invoke(std::forward<Visitor>(visitor), get<T>(position)); });
     }
 };
 
@@ -135,10 +134,10 @@ public:
         return get<T>(database::column_index(columns(), column));
     }
 
-    template<ygg::ByteCodableTypes Values, InvocableWithEach<Values> Visitor>
+    template<typename Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
-        return m_handle.template visit<Values>(position, std::forward<Visitor>(visitor));
+        return m_handle.visit(position, std::forward<Visitor>(visitor));
     }
 };
 }  // namespace ygg

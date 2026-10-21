@@ -19,27 +19,6 @@
 
 namespace ygg::tests
 {
-struct IncrementalValue
-{
-    uint_t value;
-    friend auto operator<=>(const IncrementalValue&, const IncrementalValue&) = default;
-};
-}  // namespace ygg::tests
-
-namespace ygg
-{
-template<>
-struct ByteCodec<tests::IncrementalValue>
-{
-    static constexpr TypeId id = 1001;
-    static constexpr size_t size = ByteCodec<uint_t>::size;
-    static void encode(tests::IncrementalValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value, bytes); }
-    static tests::IncrementalValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
-};
-}  // namespace ygg
-
-namespace ygg::tests
-{
 using Values = TypeList<uint_t>;
 using ColumnIndex = Index<database::Column>;
 
@@ -103,9 +82,7 @@ void expect_update(const Evaluator& evaluator, const std::set<std::vector<T>>& b
     EXPECT_EQ(rows<T>(evaluator.get_delta().removed), removed);
 }
 
-void apply_batch(Builder<database::Relation>& input,
-                 const Builder<database::Relation>& added,
-                 const Builder<database::Relation>& removed)
+void apply_batch(Builder<database::Relation>& input, const Builder<database::Relation>& added, const Builder<database::Relation>& removed)
 {
     for (size_t i = 0; i < removed.size(); ++i)
         input.erase(input.find(removed.row(i)).value());
@@ -385,9 +362,9 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
     }
 }
 
-TEST(YggdrasilTests, DatabaseIncrementalJoinAcceptsInternedCustomCodecInputs)
+TEST(YggdrasilTests, DatabaseIncrementalJoinAcceptsInternedWideInputs)
 {
-    using Value = IncrementalValue;
+    using Value = std::uint64_t;
     Builder<database::Relation> dynamic(columns_of<Value>({ ColumnIndex(1), ColumnIndex(2) }));
     Builder<database::Relation> immutable(columns_of<Value>({ ColumnIndex(2), ColumnIndex(3) }));
     dynamic.insert(std::tuple { Value { 1 }, Value { 10 } });
@@ -531,9 +508,9 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 }
 
-TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsCustomCodecIndexesAcrossRowCompaction)
+TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsWideIndexesAcrossRowCompaction)
 {
-    using Value = IncrementalValue;
+    using Value = std::uint64_t;
     Builder<database::Relation> lhs(columns_of<Value>({ ColumnIndex(1), ColumnIndex(2) }));
     Builder<database::Relation> rhs(columns_of<Value>({ ColumnIndex(2), ColumnIndex(3) }));
     for (uint_t i = 0; i < 5; ++i)

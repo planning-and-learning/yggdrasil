@@ -24,7 +24,6 @@ bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column
 std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns);
 size_t row_size(std::span<const ColumnLayout> columns) noexcept;
 /// The schema is already validated; validate the width and canonical field encodings.
-template<ByteCodableTypes Values>
 void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns);
 
 namespace detail
@@ -73,8 +72,7 @@ public:
 
     template<ygg::ByteCodable T>
     void push_back(Index<database::Column> column);
-    /// Appends a column of the given type id and byte width.
-    void push_back(Index<database::Column> column, ygg::TypeId type, size_t size);
+    void push_back(Index<database::Column> column, ygg::TypeId type);
     void assign(std::span<const database::ColumnLayout> columns);
     void assign(std::initializer_list<database::ColumnLayout> columns);
     template<ygg::ByteCodable T = uint_t>
@@ -100,11 +98,7 @@ public:
     {
         database::detail::write_column<T>(bytes, span(), column_index(column), value);
     }
-    template<ygg::ByteCodableTypes Values>
-    void validate_row(std::span<const std::byte> bytes) const
-    {
-        database::validate_row<Values>(bytes, span());
-    }
+    void validate_row(std::span<const std::byte> bytes) const { database::validate_row(bytes, span()); }
 
     auto cista_members() noexcept { return std::tie(m_data); }
     auto cista_members() const noexcept { return std::tie(m_data); }

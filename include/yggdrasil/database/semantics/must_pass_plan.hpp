@@ -58,8 +58,8 @@ public:
         if (probe_positions().empty())
             throw std::invalid_argument("Must-pass: no vertex column has the probes' field type.");
         for (size_t i = 0; i < keys; ++i)
-            m_output.push_back(m_sources[i].label, m_sources[i].type, m_sources[i].size);
-        m_output.push_back(m_probes[0].label, m_probes[0].type, m_probes[0].size);
+            m_output.push_back(m_sources[i].label, m_sources[i].type);
+        m_output.push_back(m_probes[0].label, m_probes[0].type);
     }
 
     auto source_columns() const& noexcept { return make_view(m_sources, *this); }

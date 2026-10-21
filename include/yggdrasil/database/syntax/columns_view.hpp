@@ -58,11 +58,7 @@ public:
     {
         database::detail::write_column<T>(bytes, span(), column_index(column), value);
     }
-    template<ygg::ByteCodableTypes Values>
-    void validate_row(std::span<const std::byte> bytes) const
-    {
-        database::validate_row<Values>(bytes, span());
-    }
+    void validate_row(std::span<const std::byte> bytes) const { database::validate_row(bytes, span()); }
 };
 }  // namespace ygg
 

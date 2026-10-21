@@ -7,24 +7,24 @@
 #define YGG_CORE_TYPE_ID_HPP_
 
 #include <cstdint>
-#include <string_view>
 
 namespace ygg
 {
 
-/// Identifies a type within a process. Not a portable file format: hashed ids depend on the compiler's spelling.
-using TypeId = std::uint64_t;
-
-/// FNV-1a over the compiler's spelling of T.
-template<typename T>
-consteval TypeId type_name_hash()
+/// The value types of byte-encoded storage. Values are fixed and never reused.
+enum class TypeId : std::uint8_t
 {
-    constexpr std::string_view name = __PRETTY_FUNCTION__;
-    auto hash = TypeId { 14695981039346656037ull };
-    for (const auto c : name)
-        hash = (hash ^ static_cast<unsigned char>(c)) * TypeId { 1099511628211ull };
-    return hash;
-}
+    uint32 = 1,
+    int32 = 2,
+    uint64 = 3,
+    int64 = 4,
+    float32 = 5,
+    float64 = 6,
+    boolean = 7,
+};
+
+/// Formats as its number.
+constexpr std::uint8_t format_as(TypeId id) noexcept { return static_cast<std::uint8_t>(id); }
 
 }  // namespace ygg
 

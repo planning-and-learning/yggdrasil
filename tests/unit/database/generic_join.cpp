@@ -11,28 +11,8 @@
 #include <array>
 #include <bit>
 #include <gtest/gtest.h>
-#include <tuple>
 #include <random>
-
-namespace ygg::tests
-{
-struct GenericJoinValue
-{
-    uint_t value;
-};
-}  // namespace ygg::tests
-
-namespace ygg
-{
-template<>
-struct ByteCodec<tests::GenericJoinValue>
-{
-    static constexpr TypeId id = 1005;
-    static constexpr size_t size = ByteCodec<uint_t>::size;
-    static void encode(tests::GenericJoinValue value, std::span<std::byte> bytes) { ByteCodec<uint_t>::encode(value.value, bytes); }
-    static tests::GenericJoinValue decode(std::span<const std::byte> bytes) { return { ByteCodec<uint_t>::decode(bytes) }; }
-};
-}  // namespace ygg
+#include <tuple>
 
 namespace ygg::tests
 {
@@ -248,7 +228,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinHandlesDisconnectedAndNullaryInputs)
 TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueComparators)
 {
     Builder<database::Columns> left_schema;
-    left_schema.push_back<GenericJoinValue>(ColumnIndex(1));
+    left_schema.push_back<std::uint64_t>(ColumnIndex(1));
     left_schema.push_back<double>(ColumnIndex(2));
     Builder<database::Columns> right_schema;
     right_schema.push_back<double>(ColumnIndex(2));
@@ -257,8 +237,8 @@ TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueCompa
     Builder<database::Relation> right(right_schema.span());
     const auto nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000001 });
     const auto other_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000002 });
-    left.insert(std::tuple { GenericJoinValue { 4 }, -0.0 });
-    left.insert(std::tuple { GenericJoinValue { 5 }, nan });
+    left.insert(std::tuple { std::uint64_t { 4 }, -0.0 });
+    left.insert(std::tuple { std::uint64_t { 5 }, nan });
     right.insert(std::tuple { 0.0, false });
     right.insert(std::tuple { other_nan, true });
     const std::array inputs { borrow(left), borrow(right) };
@@ -269,19 +249,21 @@ TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueCompa
     const auto expected = binary_reference(inputs, plan);
     expect_same(result, expected);
     ASSERT_EQ(result.size(), 2);
-    EXPECT_TRUE(result.contains(std::tuple { false, GenericJoinValue { 4 }, 0.0 }));
+    EXPECT_TRUE(result.contains(std::tuple { false, std::uint64_t { 4 }, 0.0 }));
     database::incremental::GenericJoinEvaluator evaluator(plan);
     evaluator.initialize(inputs);
     database::incremental::Delta left_change(left_schema.span());
     database::incremental::Delta right_change(right_schema.span());
-    left_change.removed.insert(std::tuple { GenericJoinValue { 4 }, 0.0 });
-    left_change.added.insert(std::tuple { GenericJoinValue { 6 }, -0.0 });
+    left_change.removed.insert(std::tuple { std::uint64_t { 4 }, 0.0 });
+    left_change.added.insert(std::tuple { std::uint64_t { 6 }, -0.0 });
     right_change.removed.insert(std::tuple { nan, true });
-    const std::array changes { std::pair { borrow(left_change.added), borrow(left_change.removed) }, std::pair { borrow(right_change.added), borrow(right_change.removed) } };
+    const std::array changes { std::pair { borrow(left_change.added), borrow(left_change.removed) },
+                               std::pair { borrow(right_change.added), borrow(right_change.removed) } };
     evaluator.update(changes);
     ASSERT_EQ(evaluator.get_result().size(), 1);
-    EXPECT_TRUE(evaluator.get_result().contains(std::tuple { false, GenericJoinValue { 6 }, 0.0 }));
-    const std::array undo { std::pair { borrow(left_change.removed), borrow(left_change.added) }, std::pair { borrow(right_change.removed), borrow(right_change.added) } };
+    EXPECT_TRUE(evaluator.get_result().contains(std::tuple { false, std::uint64_t { 6 }, 0.0 }));
+    const std::array undo { std::pair { borrow(left_change.removed), borrow(left_change.added) },
+                            std::pair { borrow(right_change.removed), borrow(right_change.added) } };
     evaluator.update(undo);
     expect_same(evaluator.get_result(), expected);
 }

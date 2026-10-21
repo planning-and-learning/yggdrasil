@@ -19,7 +19,6 @@ namespace yggdrasil
 
 namespace
 {
-using Values = DatabaseValues;
 using Column = ygg::Index<ygg::database::Column>;
 
 /// A Python sequence index; negative values count from the end.
@@ -61,13 +60,13 @@ void bind_database_module_definitions(nb::module_& m)
     ygg::bind_index<Column>(m, "ColumnIndex");
 
     nb::enum_<ColumnType>(m, "ColumnType")
-        .value("UINT32", ColumnType::UINT32)
-        .value("INT32", ColumnType::INT32)
-        .value("UINT64", ColumnType::UINT64)
-        .value("INT64", ColumnType::INT64)
-        .value("FLOAT32", ColumnType::FLOAT32)
-        .value("FLOAT64", ColumnType::FLOAT64)
-        .value("BOOL", ColumnType::BOOL);
+        .value("UINT32", ColumnType::uint32)
+        .value("INT32", ColumnType::int32)
+        .value("UINT64", ColumnType::uint64)
+        .value("INT64", ColumnType::int64)
+        .value("FLOAT32", ColumnType::float32)
+        .value("FLOAT64", ColumnType::float64)
+        .value("BOOL", ColumnType::boolean);
 
     nb::class_<Row>(m,
                     "RelationRow",
@@ -76,21 +75,20 @@ void bind_database_module_definitions(nb::module_& m)
         .def("__len__", &Row::size)
         .def("__getitem__",
              [](Row row, std::ptrdiff_t index)
-             { return row.template visit<DatabaseValues>(sequence_index(index, row.size()), [](auto value) -> nb::object { return nb::cast(value); }); });
+             { return row.visit(sequence_index(index, row.size()), [](auto value) -> nb::object { return nb::cast(value); }); });
 
     nb::class_<ColumnIndices>(m,
                               "ColumnIndices",
                               "Read-only borrowed column labels. Keeps its Python owner alive; "
                               "replacing a builder's schema or clearing its repository invalidates the labels.")
         .def("__len__", &ColumnIndices::size)
-        .def("__getitem__",
-             [](ColumnIndices columns, std::ptrdiff_t index) { return columns[sequence_index(index, columns.size())].label; })
+        .def("__getitem__", [](ColumnIndices columns, std::ptrdiff_t index) { return columns[sequence_index(index, columns.size())].label; })
         .def("type",
              [](ColumnIndices columns, size_t index)
              {
                  if (index >= columns.size())
                      throw nb::index_error();
-                 return static_cast<ColumnType>(columns[index].type);
+                 return columns[index].type;
              });
 
     using Columns = ygg::Builder<ygg::database::Columns>;
@@ -99,11 +97,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<std::vector<Column>>(), nb::arg("labels"))
         .def(
             "push_back",
-            [](Columns& columns, Column label, ColumnType type)
-            {
-                ygg::visit_type_id<DatabaseValues>(static_cast<ygg::TypeId>(type),
-                                                                 [&]<typename T>(std::type_identity<T>) { columns.template push_back<T>(label); });
-            },
+            [](Columns& columns, Column label, ColumnType type) { columns.push_back(label, type); },
             nb::arg("label"),
             nb::arg("type"))
         .def("__len__", &Columns::size)
@@ -115,10 +109,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<ColumnIndices>(), nb::arg("columns"))
         .def(nb::init<std::vector<Column>>(), nb::arg("labels"))
         .def("__len__", &Relation::size)
-        .def(
-            "__getitem__",
-            &row_at<Relation>,
-            nb::keep_alive<0, 1>())
+        .def("__getitem__", &row_at<Relation>, nb::keep_alive<0, 1>())
         .def("arity", &Relation::arity)
         .def("empty", &Relation::empty)
         .def("at", &Relation::at, nb::arg("index"), nb::keep_alive<0, 1>())
@@ -136,9 +127,9 @@ void bind_database_module_definitions(nb::module_& m)
                 auto bytes = std::vector<std::byte>(relation.columns().row_size());
                 const auto columns = relation.columns().span();
                 for (size_t i = 0; i < columns.size(); ++i)
-                    ygg::visit_type_id<Values>(columns[i].type,
-                                                             [&]<typename T>(std::type_identity<T>)
-                                                             { relation.columns().template set<T>(bytes, columns[i].label, nb::cast<T>(row[i])); });
+                    ygg::visit_type_id(columns[i].type,
+                                       [&]<typename T>(std::type_identity<T>)
+                                       { relation.columns().template set<T>(bytes, columns[i].label, nb::cast<T>(row[i])); });
                 return relation.insert(Row(bytes, columns));
             },
             nb::arg("row"));
@@ -153,10 +144,7 @@ void bind_database_module_definitions(nb::module_& m)
             nb::arg("relation"),
             nb::keep_alive<1, 2>())
         .def("__len__", &BorrowedRelationView::size)
-        .def(
-            "__getitem__",
-            &row_at<BorrowedRelationView>,
-            nb::keep_alive<0, 1>())
+        .def("__getitem__", &row_at<BorrowedRelationView>, nb::keep_alive<0, 1>())
         .def("arity", &BorrowedRelationView::arity)
         .def("empty", &BorrowedRelationView::empty)
         .def(
@@ -190,10 +178,7 @@ void bind_database_module_definitions(nb::module_& m)
                                              "repository invalidates the view, its rows, and its column labels.")
                         .def("get_index", &RelationView::get_index)
                         .def("__len__", &RelationView::size)
-                        .def(
-                            "__getitem__",
-                            &row_at<RelationView>,
-                            nb::keep_alive<0, 1>())
+                        .def("__getitem__", &row_at<RelationView>, nb::keep_alive<0, 1>())
                         .def("arity", &RelationView::arity)
                         .def("empty", &RelationView::empty)
                         .def(
@@ -216,7 +201,9 @@ void bind_database_module_definitions(nb::module_& m)
         .def("clear", &RelationRepository::clear)
         .def(
             "insert",
-            [retainer](nb::typed<nb::handle, RelationRepository> owner, Relation& relation, std::size_t schema_namespace) -> nb::typed<nb::tuple, RelationView, bool>
+            [retainer](nb::typed<nb::handle, RelationRepository> owner,
+                       Relation& relation,
+                       std::size_t schema_namespace) -> nb::typed<nb::tuple, RelationView, bool>
             {
                 auto result = ygg::database::insert(nb::cast<RelationRepository&>(owner), relation, schema_namespace);
                 return nb::borrow<nb::typed<nb::tuple, RelationView, bool>>(ygg::python::cast_with_owner(result, owner, retainer));

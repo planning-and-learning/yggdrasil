@@ -7,49 +7,44 @@ Nullary relations and runtime arities remain supported.
 
 ## Types and schemas
 
-The template parameter is a `ygg::TypeList` of supported value types, not one
-cell type. `DefaultColumnTypes` contains `uint32_t`, `int32_t`, `uint64_t`,
-`int64_t`, `float`, `double`, and `bool`. A smaller or extended list can be used
-consistently for relations, schemas, plans, workspaces, and repositories.
+Columns hold one of a fixed set of value types: `uint32_t`, `int32_t`, `uint64_t`,
+`int64_t`, `float`, `double`, and `bool` (`ygg::ByteCodable`, in
+`<yggdrasil/core/byte_codec.hpp>`). Each has a `ygg::TypeId`, which schemas store,
+so relations, schemas, plans and repositories carry no list of value types.
+Indices are stored as `uint_t` (`index.get_value()`); the code that owns a relation
+knows which tag a column holds and converts back with `Index<Tag>(value)`.
 
 ```cpp
 #include <yggdrasil/database/semantics/operations.hpp>
 
 using namespace ygg::database;
-using Values = ygg::TypeList<std::uint32_t, double>;
 const ygg::Index<Column> source(0), target(1), distance(2);
 
-ygg::Builder<Columns<Values>> columns;
+ygg::Builder<Columns> columns;
 columns.push_back<std::uint32_t>(source);
 columns.push_back<std::uint32_t>(target);
 columns.push_back<double>(distance);
-ygg::Builder<Relation<Values>> paths(std::move(columns));
+ygg::Builder<Relation> paths(std::move(columns));
 paths.insert(std::tuple { std::uint32_t(3), std::uint32_t(8), 2.5 });
 paths.insert(std::tuple { std::uint32_t(3), std::uint32_t(9), 4.0 });
 
 const auto length = paths[0].get<double>(distance);
-auto reachable = project<Values>(paths, {source, target});
-auto exact = select_equal_value<Values>(paths, distance, 2.5);
+auto reachable = project(paths, {source, target});
+auto exact = select_equal_value(paths, distance, 2.5);
 ```
 
-`Column` identifies a schema-local label. `Columns<Values>` follows the usual
+`Column` identifies a schema-local label. `Columns` follows the usual
 `Builder`, `Data`, `Index`, `View` structure. Each `ColumnLayout` records a label,
-type ordinal, byte offset, and width. Identity depends on the ordered labels
+`TypeId`, byte offset, and width. Identity depends on the ordered labels
 and types; offsets and widths are derived and validated. `.span()` borrows the
 layout, `.row_size()` returns its packed byte width, and `column_index(label)`
 resolves a label. Labels must be unique. Constructing a schema from labels alone
-uses the first type in `Values` for every column.
+uses `uint_t` for every column; `assign<T>(labels)` picks another type.
 
-`ColumnCodec<T>` is the extension point for additional fixed-width values.
-`ColumnValue` requires a constant positive `size`, `encode(value, byte_span)`
-and `decode(const_byte_span)`. Equal values must have identical encodings;
-decoding must preserve their semantic value. Explicit codecs prevent padding
-or uninitialized object bytes from becoming part of a key. Scalar `Index<T>`
-types (the generic `Index<T>` in `core/types.hpp`) use the existing `IndexCoder`. Composite indices
-need an explicit codec.
-
-`ColumnValueFor<T, Values>` additionally requires `T` to be registered in the
-column family. Typed access and tuple operations use this shared constraint.
+`ByteCodec<T>` encodes each of these types with a fixed width. Equal values have
+identical encodings and decoding preserves their value, so padding or
+uninitialized object bytes never become part of a key. The set of types is
+closed; `visit_type_id(id, visitor)` turns a stored `TypeId` back into its type.
 
 Integer and floating-point codecs copy through `memcpy`; packed fields need no
 alignment and never expose typed references into bytes. Floating-point encoding
@@ -60,9 +55,9 @@ format. Previously serialized homogeneous relation records are incompatible.
 
 ## Rows and ownership
 
-`ygg::Builder<Relation<Values>>` owns a schema and `RawArraySet<std::byte>`.
+`ygg::Builder<Relation>` owns a schema and `RawArraySet<std::byte>`.
 `row(i)` exposes canonical bytes for prepared operations. `operator[]` and
-`at(i)` return a borrowed `Row<Values>`: `get<T>(label)` checks the requested type
+`at(i)` return a borrowed `Row`: `get<T>(label)` checks the requested type
 and returns a value; `visit(position, visitor)` dispatches a runtime column type.
 The visitor must return one common result type. `.bytes()` and `.columns()`
 expose the borrowed spans.
@@ -75,7 +70,7 @@ span validates width and canonical field encodings before mutation. Inserting
 `find` and `contains` offer the same tuple, typed-row, and raw-byte interfaces.
 
 Contextual `ygg::View` over relation `Builder`, `Data`, or `Index` handles uses
-`View<Row<Values>, Context>` for indexing and iteration. Primitive columns remain
+`View<Row, Context>` for indexing and iteration. Primitive columns remain
 values; typed indices resolve through `make_view` and the context's repository.
 This keeps object-view construction at the external access boundary. Row and
 relation iterators borrow storage; they do not copy payloads.
@@ -89,20 +84,19 @@ through an old view. There is no internal synchronization.
 ## Operations
 
 All operations accept builders or contextual views satisfying
-`RelationViewConcept<V, Values>`. Output/workspace overloads deduce `Values`;
-return-by-value overloads take it explicitly.
+`RelationViewConcept<V>`.
 
 | Operation | Meaning |
 | --- | --- |
-| `select<Values>(input, predicate)` | Keep rows accepted by a predicate over `Row<Values>`. |
-| `select_equal_columns<Values>(input, a, b)` | Compare columns with the same registered type. |
-| `select_equal_value<Values>(input, column, value)` | Match a constant encoded by that column's codec. |
-| `project<Values>(input, labels)` | Keep the ordered columns and eliminate duplicate rows. |
-| `join<Values>(lhs, rhs)` | Natural join on common labels, followed by rhs-only columns. |
-| `union_<Values>(lhs, rhs)` | Union with an identical ordered typed schema. |
-| `difference<Values>(lhs, rhs)` | Difference with an identical ordered typed schema. |
-| `semijoin<Values>(lhs, rhs)` | lhs ⋉ rhs: the lhs rows with a match in rhs on the common labels. |
-| `antijoin<Values>(lhs, rhs)` | lhs ▷ rhs: the lhs rows without such a match. Without common labels, lhs if rhs is empty. |
+| `select(input, predicate)` | Keep rows accepted by a predicate over `Row`. |
+| `select_equal_columns(input, a, b)` | Compare columns of the same type. |
+| `select_equal_value(input, column, value)` | Match a constant encoded by that column's codec. |
+| `project(input, labels)` | Keep the ordered columns and eliminate duplicate rows. |
+| `join(lhs, rhs)` | Natural join on common labels, followed by rhs-only columns. |
+| `union_(lhs, rhs)` | Union with an identical ordered typed schema. |
+| `difference(lhs, rhs)` | Difference with an identical ordered typed schema. |
+| `semijoin(lhs, rhs)` | lhs ⋉ rhs: the lhs rows with a match in rhs on the common labels. |
+| `antijoin(lhs, rhs)` | lhs ▷ rhs: the lhs rows without such a match. Without common labels, lhs if rhs is empty. |
 | `builder.rename(labels)` | Change labels while retaining types and rows. |
 
 Common join labels and equality columns must have matching types. Projection
@@ -113,34 +107,34 @@ example, a throwing predicate) may leave partial output. An output cannot alias
 an input. `assign(destination, source)` supports self-assignment, replaces the
 schema and rows, and retains buffers when byte widths match.
 
-Prepare `JoinPlan<Values>` and `ProjectionPlan<Values>` once per expression.
+Prepare `JoinPlan` and `ProjectionPlan` once per expression.
 Their byte slices resolve types, offsets, and widths outside the row loop:
 
 ```cpp
-const ProjectionPlan<Values> plan(paths.columns().span(), {source, target});
-ygg::Builder<Relation<Values>> output(plan.output_columns().span());
-Workspace<Values> workspace;
+const ProjectionPlan plan(paths.columns().span(), {source, target});
+ygg::Builder<Relation> output(plan.output_columns().span());
+Workspace workspace;
 project(paths, plan, output, workspace);
 ```
 
 Full and incremental operations share byte-key hashing, equality, and field
 copying. Row hashing uses the existing byte hashing path. Join keys stream their
 selected slices into XXHash; collisions compare actual key bytes. A join indexes
-the smaller input with `UnorderedMultiMap`. `JoinIndexCache<Values>` may retain
+the smaller input with `UnorderedMultiMap`. `JoinIndexCache` may retain
 indexes for immutable inputs. Its key includes ordered field types and offsets,
 so equal bytes with different interpretations cannot reuse an incompatible index.
 Renaming labels can still reuse a compatible index.
 
 ## Reuse and interning
 
-Keep a `Workspace<Values>` and output builders across evaluations. Scratch byte
-buffers, row containers, and hash tables retain capacity. `RelationPool<Values>`
+Keep a `Workspace` and output builders across evaluations. Scratch byte
+buffers, row containers, and hash tables retain capacity. `RelationPool`
 uses existing `UniqueObjectPool` instances grouped by **row byte width**, not
 logical arity. Prepare a schema once and pass its layout span to checkout to
 avoid rebuilding it in the update loop. Larger workloads may still grow storage.
 Each evaluator/thread needs its own mutable workspace and pools.
 
-`RelationRepository<Values>` interns schemas and compact relation records in the
+`RelationRepository` interns schemas and compact relation records in the
 existing symbol repository. Individual byte rows and sorted row-ID vectors are
 interned in `RawVectorSet`s. Relations with identical typed schemas and row sets
 share identity regardless of insertion order. Identical bytes may share physical
@@ -148,7 +142,7 @@ rows across schemas, but distinct typed schemas retain distinct relation identit
 Iteration follows sorted interned row IDs, not value order.
 
 ```cpp
-RelationRepositoryFactory<Values> factory;
+RelationRepositoryFactory factory;
 auto repository = factory.create();
 auto [stored, created] = insert(repository, paths);
 paths.clear(); // stored retains its canonical rows
@@ -225,7 +219,7 @@ mixed-type behavior are covered in `python/tests/test_database.py`.
 distances between tuple-valued vertices. Sources and targets have `k` columns;
 an edge has `2k`, with its source tuple first and target tuple second. All four
 vertex positions must have matching field types in the same order. Their column
-labels may differ. `Values` must include `uint_t` for the distance field.
+labels may differ. The distance field is a `uint_t` column.
 
 ```cpp
 using namespace ygg;
@@ -257,7 +251,7 @@ tuples are supported and represent the single empty vertex.
 
 The plan owns its schemas and checks arities/types once. Calls require each
 input's original ordered schema. The return-by-value form is
-`distance<Values>(sources, edges, targets, plan)`. The output/workspace form
+`distance(sources, edges, targets, plan)`. The output/workspace form
 retains capacity between calls; the workspace is reusable for the same vertex
 byte width. Schema, workspace-width, and output-alias errors are rejected before
 clearing output. A later evaluation failure can leave partial output.
@@ -289,7 +283,7 @@ assert(evaluator.get_delta().removed.contains(
 ```
 
 The evaluator owns the compact graph, source/target membership, maintained
-distances, output, and last `Delta<Values>`. Inputs are borrowed only during a
+distances, output, and last `Delta`. Inputs are borrowed only during a
 call. Pass empty changes for unchanged inputs. Deltas must describe actual set
 changes, with disjoint additions/removals and each input's original schema.
 Initialization replaces the baseline and clears the output delta. Swapping all
@@ -422,7 +416,7 @@ goals are landmarks); every other object on the witness is verified as in landma
 Helmert & Westphal, AAAI 2008) by testing whether the targets stay reachable without the vertices
 containing it. Each search is bidirectional: a backward breadth-first search from the targets alternates
 with the forward side by the vertices each expanded, and its exhaustion proves unreachability from the
-smaller side. An optional heuristic (`MustPass<Values, H>`, given the key followed by a vertex) guides the
+smaller side. An optional heuristic (`MustPass<H>`, given the key followed by a vertex) guides the
 forward side; with `exclude(key, object)` it is told which object a verification avoids. A key whose targets are unreachable has none. An edge
 query that projects vertices onto fewer columns is an abstraction: objects that must be passed in the
 projection must be passed by every original path too.
@@ -469,10 +463,10 @@ one `(added, removed)` tuple per input.
 ## Query graphs and optimization
 
 `<yggdrasil/database/syntax/query_repository.hpp>` adds an interned relational query graph without
-capturing input rows. A `QueryRepository<Values>` only stores and interns query
-records; create repositories with a `QueryRepositoryFactory<Values>`, whose
+capturing input rows. A `QueryRepository` only stores and interns query
+records; create repositories with a `QueryRepositoryFactory`, whose
 repositories have distinct identities. Queries are built like other interned
-data: check out a `Data<Query<Values, Tag>>` from a `QueryBuilder<Values>`, fill
+data: check out a `Data<Query<Tag>>` from a `QueryBuilder`, fill
 its operands and parameters, and intern it with `insert_query(repository,
 builder, data)` from `query_construction.hpp`. That inserts the concrete record
 and its heterogeneous root. `prepare_for_insert` validates operands, schemas,
@@ -482,7 +476,7 @@ repeated references to a slot use the same input relation.
 
 The data, view, and repository definitions are separated into
 `query_data.hpp`, `query_view.hpp`, and `query_repository.hpp`; the index is the generic `Index<T>`.
-`Query<Values, Tag>` identifies a concrete operation; `Query<Values>` is the
+`Query<Tag>` identifies a concrete operation; `Query<>` is the
 heterogeneous root whose data stores a variant of concrete query indices. Each
 concrete data type stores only its own operands and parameters. For example,
 `QueryJoinTag` has `lhs` and `rhs` query indices, while `QuerySelectValueTag` has
@@ -490,7 +484,7 @@ concrete data type stores only its own operands and parameters. For example,
 but do not participate in operator identity. Input and empty schemas, and the
 ordered labels requested by projection or rename, do participate in identity.
 
-`insert_query` returns `QueryView<Values>`. Its `get_variant()` exposes
+`insert_query` returns `QueryView`. Its `get_variant()` exposes
 concrete views with operation-specific getters such as `get_lhs()`, `get_arg()`,
 and `get_constant()`. All query views expose `columns()`; every view borrows its
 repository. `size()` counts heterogeneous root queries, not the separate
@@ -505,7 +499,7 @@ Generic Join is a query constructor with input queries, a variable order, and
 an independent output order. An empty output order is canonicalized to the
 natural union of the input columns.
 
-`compile(roots)` produces a copyable, read-only `QueryPlan<Values>`
+`compile(roots)` produces a copyable, read-only `QueryPlan`
 that owns a const query repository. Only reachable queries are copied, with
 children preceding their parents; shared queries and repeated roots stay shared.
 The plan preserves root order and ordered, typed output schemas and remains valid
@@ -627,7 +621,7 @@ results like any query, e.g. after `optimize()`.
 
 ### Statistics
 
-`Statistics<Values>` describes what is known; everything is optional and nothing
+`Statistics` describes what is known; everything is optional and nothing
 known means an unbounded domain:
 
 - `objects`: the domain size. It caps distinct counts; without it the domain is
@@ -667,10 +661,10 @@ changes with `update`; the bound ones also offer `bind`, which diffs the inputs 
 `seed`, which reports the answers a change can add. The operator plans of the query records (`JoinPlan`, `ProjectionPlan`,
 `GenericJoinPlan`, `DistancePlan`) are shared by all evaluators and stay in `ygg::database`.
 
-`<yggdrasil/database/semantics/query_evaluation.hpp>` provides `QueryEvaluator<Values>`.
+`<yggdrasil/database/semantics/query_evaluation.hpp>` provides `QueryEvaluator`.
 `evaluate(bindings)` computes all roots, reusing retained output and scratch
 storage. `<yggdrasil/database/semantics/incremental/query.hpp>` provides
-`incremental::QueryEvaluator<Values>`. Initialize it once with input bindings,
+`incremental::QueryEvaluator`. Initialize it once with input bindings,
 then call `update(changes)` with one `(added, removed)` pair of relation views per
 input slot. Each pair contains actual set additions and removals in that input's ordered typed schema.
 An empty change uses an empty relation with the correct schema. Swap additions
@@ -686,7 +680,7 @@ retained evaluator storage; it is distinct from the optimizer's estimate.
 
 #### Distance search
 
-`MinDistance<Values, H>` (`min_distance.hpp`) and `incremental::MinDistance<Values, H>`
+`MinDistance<H>` (`min_distance.hpp`) and `incremental::MinDistance<H>`
 (`incremental/min_distance.hpp`) compute the exact minimum distance from any source to any
 target over edges given by a query over input slots (or by one edge relation), and return
 `uint_t`'s maximum when no target is reachable. Edges are never materialized: a bound

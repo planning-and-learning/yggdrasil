@@ -1,6 +1,6 @@
-#include "module.hpp"
-
 #include "yggdrasil/database/semantics/distance.hpp"
+
+#include "module.hpp"
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
 #include "yggdrasil/database/semantics/relation.hpp"
 
@@ -13,7 +13,6 @@ namespace yggdrasil
 
 namespace
 {
-using Values = DatabaseValues;
 using Relation = ygg::Builder<ygg::database::Relation>;
 using Column = ygg::Index<ygg::database::Column>;
 using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
@@ -58,10 +57,14 @@ void bind_database_distance(nb::module_& m)
         .def("output_columns", [](const Plan& plan) { return plan.output_columns().span(); }, nb::keep_alive<0, 1>());
 
     nb::class_<Delta>(m, "RelationDelta", "Read-only added and removed rows from the last evaluator update. The next update replaces them.")
-        .def_prop_ro("added", [borrow](const Delta& delta) { return borrow(delta.added); }, nb::keep_alive<0, 1>())
+        .def_prop_ro(
+            "added",
+            [borrow](const Delta& delta) { return borrow(delta.added); },
+            nb::keep_alive<0, 1>())
         .def_prop_ro("removed", [borrow](const Delta& delta) { return borrow(delta.removed); }, nb::keep_alive<0, 1>());
 
-    auto evaluator = nb::class_<Evaluator>(m, "DistanceEvaluator", "Maintains distances and exact output deltas. Input relations are borrowed only during each call.");
+    auto evaluator =
+        nb::class_<Evaluator>(m, "DistanceEvaluator", "Maintains distances and exact output deltas. Input relations are borrowed only during each call.");
     evaluator.def(nb::init<Plan>(), nb::arg("plan"))
         .def(
             "get_result",

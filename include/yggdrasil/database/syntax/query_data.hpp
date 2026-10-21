@@ -6,12 +6,12 @@
 #define YGG_DATABASE_SYNTAX_QUERY_DATA_HPP_
 
 #include "yggdrasil/containers/variant.hpp"
+#include "yggdrasil/core/byte_codec.hpp"
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types_utils.hpp"
+#include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/generic_join.hpp"
-#include "yggdrasil/ids/byte_codec.hpp"
-#include "yggdrasil/database/declarations.hpp"
 
 #include <array>
 #include <cista/containers/variant.h>
@@ -20,8 +20,8 @@
 #include <cstddef>
 #include <ranges>
 #include <span>
-#include <type_traits>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -228,18 +228,15 @@ struct Data<database::Query<database::QuerySelectValueTag>>
     Index<database::Query<>> arg;
     Index<database::Column> column;
     cista::offset::vector<std::byte> constant;
-    /// The registered type ordinal of the encoded constant.
-    ygg::TypeId constant_type = 0;
+    /// The type of the encoded constant.
+    ygg::TypeId constant_type {};
     cista::offset::vector<database::ColumnLayout> columns;
     size_t column_position = 0;
 
     Data() = default;
     /// The constant is encoded with the column codec of its type.
     template<ygg::ByteCodable T>
-    Data(Index<database::Query<>> arg_, Index<database::Column> column_, T value) :
-        arg(arg_),
-        column(column_),
-        constant_type(ygg::type_id<T>)
+    Data(Index<database::Query<>> arg_, Index<database::Column> column_, T value) : arg(arg_), column(column_), constant_type(ygg::type_id<T>)
     {
         std::array<std::byte, ygg::ByteCodec<T>::size> bytes;
         ygg::ByteCodec<T>::encode(value, bytes);
@@ -270,10 +267,7 @@ struct Data<database::Query<database::QueryDistanceTag>>
     database::DistancePlan plan;
 
     Data() = default;
-    Data(Index<database::Query<>> sources_,
-         Index<database::Query<>> edges_,
-         Index<database::Query<>> targets_,
-         Index<database::Column> distance_column_) :
+    Data(Index<database::Query<>> sources_, Index<database::Query<>> edges_, Index<database::Query<>> targets_, Index<database::Column> distance_column_) :
         sources(sources_),
         edges(edges_),
         targets(targets_),
@@ -338,6 +332,5 @@ struct Data<database::Query<database::QueryGenericJoinTag>>
     }
 };
 }  // namespace ygg
-
 
 #endif

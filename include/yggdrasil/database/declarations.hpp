@@ -6,9 +6,9 @@
 #ifndef YGG_DATABASE_DECLARATIONS_HPP_
 #define YGG_DATABASE_DECLARATIONS_HPP_
 
+#include "yggdrasil/core/byte_codec.hpp"
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
-#include "yggdrasil/ids/byte_codec.hpp"
 
 namespace ygg::database
 {

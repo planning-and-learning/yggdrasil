@@ -2,7 +2,6 @@
 #define PYYGGDRASIL_DATABASE_QUERY_BINDINGS_HPP_
 
 #include "../module.hpp"
-
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/python/bindings.hpp"
 #include "yggdrasil/python/type_casters.hpp"
@@ -14,7 +13,6 @@ namespace yggdrasil::database_python
 {
 namespace nb = nanobind;
 
-using Values = DatabaseValues;
 using Column = ygg::Index<ygg::database::Column>;
 using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
 using QueryView = ygg::database::QueryView<>;

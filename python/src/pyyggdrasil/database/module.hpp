@@ -11,19 +11,8 @@ namespace yggdrasil
 {
 namespace nb = nanobind;
 
-using DatabaseValues = ygg::BuiltinByteTypes;
-
-/// Python names of the column type ids.
-enum class ColumnType : ygg::TypeId
-{
-    UINT32 = ygg::type_id<std::uint32_t>,
-    INT32 = ygg::type_id<std::int32_t>,
-    UINT64 = ygg::type_id<std::uint64_t>,
-    INT64 = ygg::type_id<std::int64_t>,
-    FLOAT32 = ygg::type_id<float>,
-    FLOAT64 = ygg::type_id<double>,
-    BOOL = ygg::type_id<bool>,
-};
+/// Python's ColumnType is the closed set of storage type ids.
+using ColumnType = ygg::TypeId;
 
 /// Borrowed relation views use a relation repository only as their context.
 const ygg::database::RelationRepository& borrowed_relation_context();
