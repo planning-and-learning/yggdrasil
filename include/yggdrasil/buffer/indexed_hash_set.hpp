@@ -141,7 +141,7 @@ public:
 
 private:
     VectorType m_storage;
-    std::unique_ptr<Lookup> m_lookup;
+    Lookup* m_lookup;  ///< Owned. std::unique_ptr would instantiate its tuple machinery for every element type.
 
     ::cista::buf<std::vector<uint8_t>>* m_buf;
     SegmentedBuffer* m_arena;

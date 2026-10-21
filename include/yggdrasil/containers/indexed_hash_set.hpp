@@ -121,7 +121,7 @@ public:
 
 private:
     VectorType m_storage;
-    std::unique_ptr<Lookup> m_lookup;
+    Lookup* m_lookup;  ///< Owned. std::unique_ptr would instantiate its tuple machinery for every element type.
 };
 }  // namespace ygg
 

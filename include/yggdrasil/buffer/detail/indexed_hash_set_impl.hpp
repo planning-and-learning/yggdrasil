@@ -88,7 +88,7 @@ public:
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::IndexedHashSet() :
     m_storage(),
-    m_lookup(std::make_unique<Lookup>(m_storage)),
+    m_lookup(new Lookup(m_storage)),
     m_buf(nullptr),
     m_arena(nullptr)
 {
@@ -97,7 +97,7 @@ IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::IndexedHashSet() :
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::IndexedHashSet(::cista::buf<std::vector<uint8_t>>& buf, SegmentedBuffer& arena) :
     m_storage(),
-    m_lookup(std::make_unique<Lookup>(m_storage)),
+    m_lookup(new Lookup(m_storage)),
     m_buf(&buf),
     m_arena(&arena)
 {
@@ -106,7 +106,7 @@ IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::IndexedHashSet(::cista:
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::IndexedHashSet(IndexedHashSet&& other) noexcept :
     m_storage(std::move(other.m_storage)),
-    m_lookup(std::move(other.m_lookup)),
+    m_lookup(std::exchange(other.m_lookup, nullptr)),
     m_buf(other.m_buf),
     m_arena(other.m_arena)
 {
@@ -119,7 +119,8 @@ auto IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::operator=(IndexedH
 {
     if (this == &other)
         return *this;
-    m_lookup = std::move(other.m_lookup);
+    delete m_lookup;
+    m_lookup = std::exchange(other.m_lookup, nullptr);
     m_storage = std::move(other.m_storage);
     m_buf = other.m_buf;
     m_arena = other.m_arena;
@@ -129,7 +130,10 @@ auto IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::operator=(IndexedH
 }
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
-IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::~IndexedHashSet() = default;
+IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::~IndexedHashSet()
+{
+    delete m_lookup;
+}
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 void IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::clear() noexcept
