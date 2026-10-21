@@ -39,14 +39,63 @@ struct Hash;
 template<typename T>
 struct Less;
 
-/// @brief Check whether T has a function that returns members that aims to identify the class.
+/// The members that identify a record, as member pointers:
+/// `static constexpr auto identifying_members() noexcept { return Members<&Data::a, &Data::b> {}; }`.
+template<auto... Ms>
+struct Members
+{
+};
+
+namespace detail
+{
+template<typename L>
+inline constexpr bool is_members_v = false;
+template<auto... Ms>
+inline constexpr bool is_members_v<Members<Ms...>> = true;
+}
+
+/// @brief T lists its identifying members as a Members type.
 template<typename T>
-concept Identifiable = requires(const T a) {
+concept MemberIdentified = requires { T::identifying_members(); } && detail::is_members_v<decltype(T::identifying_members())>;
+
+namespace detail
+{
+template<typename MemberPointer>
+struct MemberPointee;
+template<typename Class, typename Value>
+struct MemberPointee<Value Class::*>
+{
+    using type = Value;
+};
+
+template<std::size_t I, typename List>
+struct NthMember;
+template<std::size_t I, auto M, auto... Ms>
+struct NthMember<I, Members<M, Ms...>> : NthMember<I - 1, Members<Ms...>>
+{
+};
+template<auto M, auto... Ms>
+struct NthMember<0, Members<M, Ms...>>
+{
+    using type = typename MemberPointee<decltype(M)>::type;
+};
+}
+
+/// @brief The type of the I-th identifying member of a member-identified T.
+template<MemberIdentified T, std::size_t I>
+using IdentifyingMember = typename detail::NthMember<I, decltype(T::identifying_members())>::type;
+
+/// @brief T has a function that returns the members that identify it.
+template<typename T>
+concept FunctionIdentified = !MemberIdentified<T> && requires(const T a) {
     { a.identifying_members() };
 };
 
+template<typename T>
+concept Identifiable = FunctionIdentified<T> || MemberIdentified<T>;
+
 /// @brief The type returned by identifying_members().
-template<Identifiable T>
+template<FunctionIdentified T>
 using IdentifyingMembers = decltype(std::declval<const T&>().identifying_members());
 
 template<typename Range, typename Value>

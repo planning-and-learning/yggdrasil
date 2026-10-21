@@ -175,12 +175,18 @@ public:
     }
     /// Records compare structurally within their owning repository.
     auto identifying_members() const noexcept
-        requires requires(const DataViewBase& view) {
+        requires FunctionIdentified<Data<T>> && requires(const DataViewBase& view) {
             view.get_data().identifying_members();
             view.get_repository().get_index();
         }
     {
         return std::tuple_cat(get_data().identifying_members(), std::make_tuple(get_repository().get_index()));
+    }
+    auto identifying_members() const noexcept
+        requires MemberIdentified<Data<T>> && requires(const DataViewBase& view) { view.get_repository().get_index(); }
+    {
+        return []<auto... Ms>(const auto& data, auto index, Members<Ms...>)
+        { return std::tuple_cat(std::tie(data.*Ms...), std::make_tuple(index)); }(get_data(), get_repository().get_index(), Data<T>::identifying_members());
     }
 };
 

@@ -229,7 +229,19 @@ struct EqualTo<std::span<T, Extent>>
     }
 };
 
-template<Identifiable T>
+template<MemberIdentified T>
+struct EqualTo<T>
+{
+    using is_transparent = void;
+
+    constexpr bool operator()(const T& lhs, const T& rhs) const
+    {
+        return []<auto... Ms>(const T& a, const T& b, Members<Ms...>)
+        { return (EqualTo<std::remove_cvref_t<decltype(a.*Ms)>> {}(a.*Ms, b.*Ms) && ...); }(lhs, rhs, T::identifying_members());
+    }
+};
+
+template<FunctionIdentified T>
 struct EqualTo<T>
 {
     using is_transparent = void;

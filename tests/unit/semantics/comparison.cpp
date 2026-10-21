@@ -21,6 +21,7 @@
 #include "yggdrasil/ids/uint_mixins.hpp"
 #include "yggdrasil/serialization/cista_equal_to.hpp"
 #include "yggdrasil/serialization/cista_ordering.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 
 #include <array>
 #include <cmath>
@@ -165,6 +166,62 @@ TEST(YggdrasilTests, CommonComparisonMixinPropagatesIdentityFailures)
     const auto value = ThrowingIdentifiableComparison {};
     static_assert(!noexcept(value <=> value));
     EXPECT_THROW((value <=> value), std::runtime_error);
+}
+
+/// A class template, so the member pointers are formed while the class is still being instantiated.
+template<typename Tag>
+struct ListedRecord
+{
+    int index;
+    int name;
+    double weight;
+
+    static constexpr auto identifying_members() noexcept { return Members<&ListedRecord::name, &ListedRecord::weight> {}; }
+};
+
+struct TiedRecord
+{
+    int name;
+    double weight;
+
+    auto identifying_members() const noexcept { return std::tie(name, weight); }
+};
+
+struct EmptyListedRecord
+{
+    int index;
+
+    static constexpr auto identifying_members() noexcept { return Members<> {}; }
+};
+
+TEST(YggdrasilTests, MemberListsIdentifyLikeTiedMembers)
+{
+    using Listed = ListedRecord<struct ListedTag>;
+    static_assert(MemberIdentified<Listed> && !FunctionIdentified<Listed> && Identifiable<Listed>);
+    static_assert(FunctionIdentified<TiedRecord> && !MemberIdentified<TiedRecord>);
+    static_assert(std::same_as<IdentifyingMember<Listed, 0>, int> && std::same_as<IdentifyingMember<Listed, 1>, double>);
+
+    // The index is not an identifying member.
+    const auto a = Listed { 0, 1, 2.5 };
+    const auto b = Listed { 7, 1, 2.5 };
+    const auto c = Listed { 0, 1, 3.5 };
+    const auto d = Listed { 0, 2, 0.5 };
+    EXPECT_TRUE(EqualTo<Listed> {}(a, b));
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(EqualTo<Listed> {}(a, c));
+    EXPECT_EQ(Hash<Listed> {}(a), Hash<Listed> {}(b));
+    // Members are ordered in list order, like the tuple of tied members.
+    for (const auto& [lhs, rhs] : { std::pair { a, c }, std::pair { c, a }, std::pair { a, d }, std::pair { d, c }, std::pair { a, b } })
+    {
+        const auto tied_lhs = TiedRecord { lhs.name, lhs.weight };
+        const auto tied_rhs = TiedRecord { rhs.name, rhs.weight };
+        EXPECT_EQ(Less<Listed> {}(lhs, rhs), Less<TiedRecord> {}(tied_lhs, tied_rhs));
+        EXPECT_EQ(lhs <=> rhs, tied_lhs <=> tied_rhs);
+    }
+
+    EXPECT_TRUE(EqualTo<EmptyListedRecord> {}(EmptyListedRecord { 1 }, EmptyListedRecord { 2 }));
+    EXPECT_FALSE(Less<EmptyListedRecord> {}(EmptyListedRecord { 1 }, EmptyListedRecord { 2 }));
+    EXPECT_EQ(Hash<EmptyListedRecord> {}(EmptyListedRecord { 1 }), Hash<EmptyListedRecord> {}(EmptyListedRecord { 2 }));
 }
 
 }  // namespace ygg::tests

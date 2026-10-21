@@ -253,7 +253,41 @@ struct Less<std::span<T, Extent>>
     }
 };
 
-template<Identifiable T>
+namespace detail
+{
+template<typename T, auto M, auto... Ms>
+constexpr bool less_members(const T& a, const T& b)
+{
+    using V = std::remove_cvref_t<decltype(a.*M)>;
+    if (Less<V> {}(a.*M, b.*M))
+        return true;
+    if (Less<V> {}(b.*M, a.*M))
+        return false;
+    if constexpr (sizeof...(Ms) == 0)
+        return false;
+    else
+        return less_members<T, Ms...>(a, b);
+}
+}
+
+template<MemberIdentified T>
+struct Less<T>
+{
+    using is_transparent = void;
+
+    constexpr bool operator()(const T& lhs, const T& rhs) const
+    {
+        return []<auto... Ms>(const T& a, const T& b, Members<Ms...>)
+        {
+            if constexpr (sizeof...(Ms) == 0)
+                return false;
+            else
+                return detail::less_members<T, Ms...>(a, b);
+        }(lhs, rhs, T::identifying_members());
+    }
+};
+
+template<FunctionIdentified T>
 struct Less<T>
 {
     using is_transparent = void;

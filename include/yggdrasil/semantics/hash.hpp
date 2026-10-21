@@ -288,7 +288,18 @@ struct Hash<std::span<T, Extent>>
     }
 };
 
-template<Identifiable T>
+template<MemberIdentified T>
+struct Hash<T>
+{
+    using is_transparent = void;
+
+    hash_t operator()(const T& element) const
+    {
+        return []<auto... Ms>(const T& e, Members<Ms...>) { return ygg::hash_combine(e.*Ms...); }(element, T::identifying_members());
+    }
+};
+
+template<FunctionIdentified T>
 struct Hash<T>
 {
     using is_transparent = void;
