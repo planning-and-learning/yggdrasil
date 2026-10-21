@@ -18,16 +18,15 @@ namespace yggdrasil
 
 void bind_database_optimization(nb::module_& m)
 {
-    using Values = DatabaseValues;
-    using Plan = ygg::database::QueryPlan<Values>;
-    using Roots = std::vector<ygg::database::QueryView<Values>>;
-    using Statistics = ygg::database::Statistics<Values>;
+    using Plan = ygg::database::QueryPlan;
+    using Roots = std::vector<ygg::database::QueryView<>>;
+    using Statistics = ygg::database::Statistics;
     using Column = ygg::Index<ygg::database::Column>;
 
     nb::class_<Plan>(m, "QueryPlan", "Owns immutable query metadata; independent of the query repository.")
         .def_prop_ro("node_count", &Plan::node_count)
         .def_prop_ro("root_count", &Plan::root_count)
-        .def("explain", &ygg::database::explain<Values>);
+        .def("explain", &ygg::database::explain);
     m.def("compile", &ygg::database::compile<Roots>, nb::arg("roots"), "Copy the queries reachable from the roots into an independent plan.");
 
     using Distinct = ygg::UnorderedMap<Column, double>;
@@ -36,7 +35,7 @@ void bind_database_optimization(nb::module_& m)
         .def_rw("rows", &ygg::database::RelationStatistics::rows)
         .def_rw("distinct", &ygg::database::RelationStatistics::distinct);
     using InputStatistics = ygg::UnorderedMap<size_t, ygg::database::RelationStatistics>;
-    using ExpressionStatistics = ygg::UnorderedMap<ygg::Index<ygg::database::Query<Values>>, ygg::database::RelationStatistics>;
+    using ExpressionStatistics = ygg::UnorderedMap<ygg::Index<ygg::database::Query<>>, ygg::database::RelationStatistics>;
     nb::class_<Statistics>(m, "Statistics", "What is known about the data; everything is optional.")
         .def(nb::init<std::optional<size_t>, InputStatistics, ExpressionStatistics>(),
              nb::arg("objects") = nb::none(),
@@ -55,7 +54,7 @@ void bind_database_optimization(nb::module_& m)
         [](const Roots& roots, const Statistics& statistics, std::optional<std::vector<Evaluation>> evaluations)
         {
             const auto modes = evaluations.value_or(std::vector<Evaluation>(roots.size(), Evaluation::full));
-            return ygg::database::optimize<Values>(std::span<const ygg::database::QueryView<Values>>(roots), std::span<const Evaluation>(modes), statistics);
+            return ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const Evaluation>(modes), statistics);
         },
         nb::arg("roots"),
         nb::arg("statistics") = Statistics {},

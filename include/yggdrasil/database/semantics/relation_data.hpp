@@ -15,16 +15,16 @@
 
 namespace ygg
 {
-template<database::ColumnTypes Values>
-struct Data<database::Relation<Values>>
+template<>
+struct Data<database::Relation>
 {
-    Index<database::Relation<Values>> index;
-    Index<database::Columns<Values>> columns_index;
-    Index<database::RelationRowSet<Values>> row_set_index;
+    Index<database::Relation> index;
+    Index<database::Columns> columns_index;
+    Index<database::RelationRowSet> row_set_index;
     size_t schema_namespace = 0;
 
     Data() = default;
-    Data(Index<database::Columns<Values>> columns_index_, Index<database::RelationRowSet<Values>> row_set_index_, size_t schema_namespace_) :
+    Data(Index<database::Columns> columns_index_, Index<database::RelationRowSet> row_set_index_, size_t schema_namespace_) :
         index(),
         columns_index(columns_index_),
         row_set_index(row_set_index_),
@@ -32,7 +32,7 @@ struct Data<database::Relation<Values>>
     {
     }
     template<typename C>
-    Data(::ygg::View<Index<database::Columns<Values>>, C> columns_, Index<database::RelationRowSet<Values>> row_set_index_, size_t schema_namespace_) :
+    Data(::ygg::View<Index<database::Columns>, C> columns_, Index<database::RelationRowSet> row_set_index_, size_t schema_namespace_) :
         index(),
         columns_index(),
         row_set_index(row_set_index_),

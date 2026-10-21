@@ -21,7 +21,7 @@ namespace ygg::database
 /// Renaming columns preserves compiled keys and reusable join indexes.
 struct ColumnSlice
 {
-    size_t type;
+    ColumnTypeId type;
     size_t offset;
     size_t size;
 
@@ -33,11 +33,10 @@ struct ColumnSlice
 
 /// Owns typed schemas and resolves field copies once. Reuse with any relation
 /// having the same ordered input schema, regardless of its rows or identity.
-template<ColumnTypes Values = DefaultColumnTypes>
 class ProjectionPlan
 {
-    Builder<Columns<Values>> m_input;
-    Builder<Columns<Values>> m_output;
+    Builder<Columns> m_input;
+    Builder<Columns> m_output;
     cista::offset::vector<ColumnSlice> m_positions;
 
     void compile(std::span<const Index<Column>> columns);
@@ -62,12 +61,11 @@ public:
 
 /// Owns typed schemas and resolves natural-join keys and payload copies once.
 /// The smaller hash-build side is selected from current input sizes at runtime.
-template<ColumnTypes Values = DefaultColumnTypes>
 class JoinPlan
 {
-    Builder<Columns<Values>> m_lhs;
-    Builder<Columns<Values>> m_rhs;
-    Builder<Columns<Values>> m_output;
+    Builder<Columns> m_lhs;
+    Builder<Columns> m_rhs;
+    Builder<Columns> m_output;
     cista::offset::vector<ColumnSlice> m_lhs_keys;
     cista::offset::vector<ColumnSlice> m_rhs_keys;
     cista::offset::vector<ColumnSlice> m_rhs_payload;

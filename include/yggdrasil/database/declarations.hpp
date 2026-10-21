@@ -17,11 +17,9 @@ struct Column
 {
 };
 struct ColumnLayout;
-template<ColumnTypes Values = DefaultColumnTypes>
 struct Columns
 {
 };
-template<ColumnTypes Values = DefaultColumnTypes>
 struct Relation
 {
 };
@@ -82,42 +80,30 @@ using QueryConstructorTags = TypeList<QueryInputTag,
                                       QueryAntijoinTag>;
 
 /// Tag void is the type-erased query holding one of the concrete query records.
-template<ColumnTypes Values = DefaultColumnTypes, typename Tag = void>
+template<typename Tag = void>
     requires(std::is_void_v<Tag> || InTypeList<Tag, QueryConstructorTags>)
 struct Query
 {
 };
-template<ColumnTypes Values = DefaultColumnTypes>
 class QueryPlan;
-template<ColumnTypes Values = DefaultColumnTypes>
 class QueryRepository;
-template<ColumnTypes Values = DefaultColumnTypes>
 class QueryRepositoryFactory;
-template<ColumnTypes Values = DefaultColumnTypes, typename Tag = void>
-using QueryView = ygg::View<ygg::Index<Query<Values, Tag>>, QueryRepository<Values>>;
+template<typename Tag = void>
+using QueryView = ygg::View<ygg::Index<Query<Tag>>, QueryRepository>;
 
-template<ColumnTypes Values = DefaultColumnTypes>
 struct RelationRow
 {
 };
-template<ColumnTypes Values = DefaultColumnTypes>
 struct RelationRowSet
 {
 };
-template<ColumnTypes Values = DefaultColumnTypes>
 class Row;
-template<ColumnTypes Values = DefaultColumnTypes>
 class RelationPool;
-template<ColumnTypes Values = DefaultColumnTypes>
 class RelationPoolFactory;
-template<ColumnTypes Values = DefaultColumnTypes>
 class RelationRepository;
-template<ColumnTypes Values = DefaultColumnTypes>
 class RelationRepositoryFactory;
-template<ColumnTypes Values = DefaultColumnTypes>
-using RelationView = ygg::View<ygg::Index<Relation<Values>>, RelationRepository<Values>>;
-template<ColumnTypes Values = DefaultColumnTypes>
-using BorrowedRelationView = ygg::View<ygg::Builder<Relation<Values>>, RelationRepository<Values>>;
+using RelationView = ygg::View<ygg::Index<Relation>, RelationRepository>;
+using BorrowedRelationView = ygg::View<ygg::Builder<Relation>, RelationRepository>;
 }  // namespace ygg::database
 
 #endif

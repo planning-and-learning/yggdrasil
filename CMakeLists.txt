@@ -111,6 +111,7 @@ endif()
 
 # Targets
 
+add_subdirectory(src/database)
 add_subdirectory(python)
 
 if(YGGDRASIL_BUILD_TESTS)

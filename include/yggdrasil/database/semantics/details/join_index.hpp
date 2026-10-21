@@ -21,33 +21,16 @@ namespace ygg::database
 namespace detail
 {
 /// Hash canonical field bytes in logical key order, without materializing a key.
-inline hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice> keys) noexcept
-{
-    auto hash = boost::hash2::xxhash_64 {};
-    for (const auto key : keys)
-        hash.update(row.data() + key.offset, key.size);
-    return hash.result();
-}
+hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice> keys) noexcept;
 
-inline bool join_keys_equal(std::span<const std::byte> lhs,
+bool join_keys_equal(std::span<const std::byte> lhs,
                             std::span<const ColumnSlice> lhs_keys,
                             std::span<const std::byte> rhs,
-                            std::span<const ColumnSlice> rhs_keys) noexcept
-{
-    for (size_t i = 0; i < lhs_keys.size(); ++i)
-        if (!std::ranges::equal(lhs.subspan(lhs_keys[i].offset, lhs_keys[i].size), rhs.subspan(rhs_keys[i].offset, rhs_keys[i].size)))
-            return false;
-    return true;
-}
+                            std::span<const ColumnSlice> rhs_keys) noexcept;
 
-inline void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys)
-{
-    for (const auto key : keys)
-        if (std::ranges::none_of(columns, [&](const auto& column) { return column_slice(column) == key; }))
-            throw std::out_of_range("JoinIndex: key does not identify a field in the relation schema.");
-}
+void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
+template<RelationViewConcept V>
 void build_join_index(const V& build, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, size_t>& index)
 {
     index.clear();
@@ -57,27 +40,24 @@ void build_join_index(const V& build, std::span<const ColumnSlice> keys, Unorder
 }
 }  // namespace detail
 
-template<ColumnTypes Values>
-template<RelationViewConcept<Values> V>
-JoinIndex<Values>::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_relation_index(build.get_storage_index()), m_keys(keys.begin(), keys.end())
+template<RelationViewConcept V>
+JoinIndex::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_relation_index(build.get_storage_index()), m_keys(keys.begin(), keys.end())
 {
     if (m_relation_index == std::numeric_limits<size_t>::max())
         throw std::invalid_argument("JoinIndex: use a RelationPool to create indexed inputs.");
     detail::require_key_slices(build.columns().span(), keys);
     if (!keys.empty())
-        detail::build_join_index<Values>(build, keys, m_index);
+        detail::build_join_index(build, keys, m_index);
 }
 
-template<ColumnTypes Values>
-template<RelationViewConcept<Values> V>
-bool JoinIndex<Values>::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
+template<RelationViewConcept V>
+bool JoinIndex::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
 {
-    return ygg::EqualTo<JoinIndex<Values>> {}(*this, std::make_tuple(relation.get_storage_index(), keys));
+    return ygg::EqualTo<JoinIndex> {}(*this, std::make_tuple(relation.get_storage_index(), keys));
 }
 
-template<ColumnTypes Values>
-template<RelationViewConcept<Values> V>
-const JoinIndex<Values>& JoinIndexCache<Values>::get_or_create(const V& relation, std::span<const ColumnSlice> keys)
+template<RelationViewConcept V>
+const JoinIndex& JoinIndexCache::get_or_create(const V& relation, std::span<const ColumnSlice> keys)
 {
     // Canonical empty row sets can be shared across different schema arities.
     // Validate the current schema even when the row-storage key is cached.

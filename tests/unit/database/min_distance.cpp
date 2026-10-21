@@ -20,13 +20,13 @@ namespace
 {
 using Values = ygg::database::DefaultColumnTypes;
 using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation<Values>>;
-using View = ygg::database::BorrowedRelationView<Values>;
+using Relation = ygg::Builder<ygg::database::Relation>;
+using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 
 View borrow(const Relation& relation)
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<Values> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
 }
 
@@ -42,7 +42,7 @@ std::vector<uint_t> decode(std::span<const std::byte> bytes, std::span<const ygg
 {
     std::vector<uint_t> values;
     for (size_t c = 0; c < columns.size(); ++c)
-        values.push_back(ygg::database::Row<Values>(bytes, columns).get<uint_t>(c));
+        values.push_back(ygg::database::Row(bytes, columns).get<uint_t>(c));
     return values;
 }
 
@@ -90,7 +90,7 @@ std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const 
 /// (blind and with a consistent heuristic) against ygg::database::min_distance over the fully evaluated edges.
 /// `maximal` are inputs whose edges include those of every state.
 template<typename Mutate>
-void check_sequence(ygg::database::QueryView<Values> edges,
+void check_sequence(ygg::database::QueryView<> edges,
                     const std::vector<Relation>& maximal,
                     std::vector<Relation>& inputs,
                     std::vector<bool> static_slots,
@@ -100,17 +100,17 @@ void check_sequence(ygg::database::QueryView<Values> edges,
                     Mutate&& mutate)
 {
     const auto k = sources.arity();
-    const auto plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::MinDistance<Values>(edges, plan, static_slots);
-    auto guided = ygg::database::MinDistance<Values, HalfDistance>(edges, plan, static_slots);
-    auto evaluator = ygg::database::QueryEvaluator<Values>(ygg::database::compile({ edges }));
+    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
+    auto blind = ygg::database::MinDistance(edges, plan, static_slots);
+    auto guided = ygg::database::MinDistance<HalfDistance>(edges, plan, static_slots);
+    auto evaluator = ygg::database::QueryEvaluator(ygg::database::compile({ edges }));
     evaluator.evaluate(borrow_all(maximal));
     auto supergraph = Relation(evaluator.get_result().columns().span());
     for (size_t i = 0; i < evaluator.get_result().size(); ++i)
         supergraph.insert(evaluator.get_result().row(i));
     auto heuristic = HalfDistance {};
     heuristic.columns = sources.columns().span();
-    auto workspace = ygg::database::DistanceWorkspace<Values>(plan);
+    auto workspace = ygg::database::DistanceWorkspace(plan);
     auto result = Relation(plan.output_columns().span());
     auto checked = size_t(0);
     for (size_t step = 0; step < steps; ++step)
@@ -142,7 +142,7 @@ class DatabaseMinDistance : public testing::TestWithParam<unsigned>
 
 TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
 {
-    auto repository = ygg::tests::qb::repository<Values>();
+    auto repository = ygg::tests::qb::repository();
     const auto edges = ygg::tests::qb::input(repository, 0, { x, y });
     auto inputs = std::vector<Relation>();
     inputs.emplace_back(std::initializer_list<Column> { x, y });
@@ -181,7 +181,7 @@ TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
 
 TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
 {
-    auto repository = ygg::tests::qb::repository<Values>();
+    auto repository = ygg::tests::qb::repository();
     namespace qb = ygg::tests::qb;
     // Slots: 0 moves (x, y), 1 free cells (x), 2 blocked pairs (x, y), 3 static steps (x, y), 4 static identity (x, y).
     const auto moves = qb::input(repository, 0, { x, y });
@@ -195,7 +195,7 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
                                    { a, b, a2, b2 });
     const auto variable_order = std::array { a, b, a2, b2 };
     const auto inputs_of_second = std::array { qb::rename(repository, steps, { b, b2 }), qb::rename(repository, identity, { a, a2 }) };
-    const auto second = qb::project(repository, qb::generic_join(repository, std::span<const ygg::database::QueryView<Values>>(inputs_of_second), std::span<const Column>(variable_order)), { a, b, a2, b2 });
+    const auto second = qb::project(repository, qb::generic_join(repository, std::span<const ygg::database::QueryView<>>(inputs_of_second), std::span<const Column>(variable_order)), { a, b, a2, b2 });
     const auto teleport = qb::project(
         repository,
         qb::join(repository, qb::select_value(repository, qb::rename(repository, moves, { a, a2 }), a, uint_t(0)), qb::rename(repository, identity, { b, b2 })),
@@ -263,16 +263,16 @@ TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
     auto edges = Relation({ x, y });
     auto sources = Relation({ x });
     auto targets = Relation({ y });
-    const auto plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns().span(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::MinDistance<Values>(plan);
-    auto guided = ygg::database::MinDistance<Values, HalfDistance>(plan);
+    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), Column(99));
+    auto blind = ygg::database::MinDistance(plan);
+    auto guided = ygg::database::MinDistance<HalfDistance>(plan);
     auto complete = Relation({ x, y });
     for (uint_t v = 0; v < n; ++v)
         for (uint_t w = 0; w < n; ++w)
             complete.insert(std::tuple { v, w });
     auto heuristic = HalfDistance {};
     heuristic.columns = sources.columns().span();
-    auto workspace = ygg::database::DistanceWorkspace<Values>(plan);
+    auto workspace = ygg::database::DistanceWorkspace(plan);
     auto result = Relation(plan.output_columns().span());
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return uint_t(random() % n); };

@@ -26,93 +26,47 @@ namespace ygg::database::incremental
 /// until the next mutation. Rejected schema/overlap checks preserve the previous
 /// evaluation. After a failure during mutation, results and deltas are unavailable
 /// until initialize().
-template<ColumnTypes Values = DefaultColumnTypes>
 class ProjectionEvaluator
 {
-    ProjectionPlan<Values> m_plan;
-    Builder<Relation<Values>> m_result;
+    ProjectionPlan m_plan;
+    Builder<Relation> m_result;
     std::vector<size_t> m_supports;
-    Delta<Values> m_delta;
+    Delta m_delta;
     std::vector<uint_t> m_pending_removals;
     bool m_initialized = false;
 
-    std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace<Values>& workspace) const;
+    std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace& workspace) const;
     bool add(std::span<const std::byte> row);
     void remove(std::span<const std::byte> row);
     /// Applies a change that is known to be valid.
-    template<RelationChange<Values> C>
-    void apply(const C& change, Workspace<Values>& workspace);
+    template<RelationChange C>
+    void apply(const C& change, Workspace& workspace);
 
-    friend struct detail::NodeRules<Values, QueryProjectTag>;
+    friend struct detail::NodeRules<QueryProjectTag>;
 
 public:
-    explicit ProjectionEvaluator(ProjectionPlan<Values> plan);
+    explicit ProjectionEvaluator(ProjectionPlan plan);
 
     /// Replace the baseline, retaining buffers, and clear the last output delta.
-    template<RelationViewConcept<Values> V>
-    void initialize(const V& input, Workspace<Values>& workspace);
+    template<RelationViewConcept V>
+    void initialize(const V& input, Workspace& workspace);
 
     /// The change must describe an actual change to the initialized input set.
     /// Schema, overlap, and aliasing errors are rejected before changing the result.
-    template<RelationChange<Values> C>
-    void update(const C& change, Workspace<Values>& workspace);
+    template<RelationChange C>
+    void update(const C& change, Workspace& workspace);
 
-    const Builder<Relation<Values>>& get_result() const&;
-    const Builder<Relation<Values>>& get_result() const&& = delete;
-    const Delta<Values>& get_delta() const&;
-    const Delta<Values>& get_delta() const&& = delete;
+    const Builder<Relation>& get_result() const&;
+    const Builder<Relation>& get_result() const&& = delete;
+    const Delta& get_delta() const&;
+    const Delta& get_delta() const&& = delete;
 
     /// Retained working storage; excludes the immutable plan and caller workspace.
     size_t memory_usage() const noexcept;
 };
 
-template<ColumnTypes Values>
-std::span<const std::byte> ProjectionEvaluator<Values>::project_row(std::span<const std::byte> input, Workspace<Values>& workspace) const
-{
-    auto& row = workspace.row;
-    row.clear();
-    row.reserve(m_plan.output_columns().row_size());
-    database::detail::append_fields(row, input, m_plan.positions());
-    return row;
-}
-
-template<ColumnTypes Values>
-bool ProjectionEvaluator<Values>::add(std::span<const std::byte> row)
-{
-    const auto index = m_result.insert(Row<Values>(row, m_plan.output_columns().span()));
-    if (index == m_supports.size())
-    {
-        m_supports.push_back(1);
-        return true;
-    }
-    auto& count = m_supports[index];
-    if (count == std::numeric_limits<size_t>::max())
-        throw std::overflow_error("Incremental projection: support count overflow.");
-    ++count;
-    return false;
-}
-
-template<ColumnTypes Values>
-void ProjectionEvaluator<Values>::remove(std::span<const std::byte> row)
-{
-    const auto index = m_result.find(Row<Values>(row, m_plan.output_columns().span()));
-    if (!index || m_supports[*index] == 0)
-        throw std::invalid_argument("Incremental projection: removal has no supporting row.");
-    if (--m_supports[*index] == 0)
-        m_pending_removals.push_back(*index);
-}
-
-template<ColumnTypes Values>
-ProjectionEvaluator<Values>::ProjectionEvaluator(ProjectionPlan<Values> plan) :
-    m_plan(std::move(plan)),
-    m_result(m_plan.output_columns().span()),
-    m_delta(m_plan.output_columns().span())
-{
-}
-
-template<ColumnTypes Values>
-template<RelationViewConcept<Values> V>
-void ProjectionEvaluator<Values>::initialize(const V& input, Workspace<Values>& workspace)
+template<RelationViewConcept V>
+void ProjectionEvaluator::initialize(const V& input, Workspace& workspace)
 {
     database::detail::require_plan_columns(input.columns().span(), m_plan.input_columns().span());
     detail::require_unaliased(input, m_result, m_delta);
@@ -126,18 +80,16 @@ void ProjectionEvaluator<Values>::initialize(const V& input, Workspace<Values>& 
     m_initialized = true;
 }
 
-template<ColumnTypes Values>
-template<RelationChange<Values> C>
-void ProjectionEvaluator<Values>::update(const C& change, Workspace<Values>& workspace)
+template<RelationChange C>
+void ProjectionEvaluator::update(const C& change, Workspace& workspace)
 {
     detail::require_initialized(m_initialized);
     detail::require_change(change, m_plan.input_columns().span(), m_result, m_delta);
     apply(change, workspace);
 }
 
-template<ColumnTypes Values>
-template<RelationChange<Values> C>
-void ProjectionEvaluator<Values>::apply(const C& change, Workspace<Values>& workspace)
+template<RelationChange C>
+void ProjectionEvaluator::apply(const C& change, Workspace& workspace)
 {
     const auto& [added, removed] = change;
     m_initialized = false;
@@ -149,7 +101,7 @@ void ProjectionEvaluator<Values>::apply(const C& change, Workspace<Values>& work
     {
         const auto row = project_row(added.row(i), workspace);
         if (add(row))
-            m_delta.added.insert(Row<Values>(row, m_plan.output_columns().span()));
+            m_delta.added.insert(Row(row, m_plan.output_columns().span()));
     }
     // Inspect final support counts only (DBSP, Proposition 4.7). A replaced
     // witness revives its existing row without an erase/insert cycle.
@@ -158,32 +110,12 @@ void ProjectionEvaluator<Values>::apply(const C& change, Workspace<Values>& work
     for (const auto position : m_pending_removals)
         if (m_supports[position] == 0)
         {
-            m_delta.removed.insert(Row<Values>(m_result.row(position), m_plan.output_columns().span()));
+            m_delta.removed.insert(Row(m_result.row(position), m_plan.output_columns().span()));
             m_result.erase(position);
             m_supports[position] = m_supports.back();
             m_supports.pop_back();
         }
     m_initialized = true;
-}
-
-template<ColumnTypes Values>
-const Builder<Relation<Values>>& ProjectionEvaluator<Values>::get_result() const&
-{
-    detail::require_initialized(m_initialized);
-    return m_result;
-}
-
-template<ColumnTypes Values>
-const Delta<Values>& ProjectionEvaluator<Values>::get_delta() const&
-{
-    detail::require_initialized(m_initialized);
-    return m_delta;
-}
-
-template<ColumnTypes Values>
-size_t ProjectionEvaluator<Values>::memory_usage() const noexcept
-{
-    return m_result.memory_usage() + m_delta.memory_usage() + m_supports.capacity() * sizeof(size_t) + m_pending_removals.capacity() * sizeof(uint_t);
 }
 
 }  // namespace ygg::database::incremental

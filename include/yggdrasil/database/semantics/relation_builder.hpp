@@ -33,36 +33,37 @@ namespace ygg
 /// A set of canonical packed rows. The schema determines each column's type.
 /// Erase moves the final row into its place; clear retains tuple and hash storage.
 /// A zero-column relation is true exactly when it contains the empty tuple.
-template<database::ColumnTypes Values>
-struct Builder<database::Relation<Values>>
+template<>
+struct Builder<database::Relation>
 {
 private:
-    friend class database::RelationPool<Values>;
+    friend class database::RelationPool;
 
-    Index<database::Relation<Values>> m_index;
+    Index<database::Relation> m_index;
     size_t m_storage_index = std::numeric_limits<size_t>::max();
-    Builder<database::Columns<Values>> m_columns;
+    Builder<database::Columns> m_columns;
     RawArraySet<std::byte, 64> m_rows;
 
     template<database::ColumnSchema Schema>
     void reinitialize(size_t width, Schema columns);
 
 public:
-    explicit Builder(Builder<database::Columns<Values>> columns);
+    explicit Builder(Builder<database::Columns> columns);
     explicit Builder(std::span<const database::ColumnLayout> columns);
     explicit Builder(std::span<const Index<database::Column>> columns = {});
     Builder(std::initializer_list<Index<database::Column>> columns);
     Builder(const Builder&) = delete;
     Builder& operator=(const Builder&) = delete;
-    Builder(Builder&&) = default;
-    Builder& operator=(Builder&&) = default;
+    Builder(Builder&&) noexcept;
+    Builder& operator=(Builder&&) noexcept;
+    ~Builder();
 
-    Index<database::Relation<Values>> get_index() const noexcept { return m_index; }
-    void set_index(Index<database::Relation<Values>> index) noexcept { m_index = index; }
+    Index<database::Relation> get_index() const noexcept { return m_index; }
+    void set_index(Index<database::Relation> index) noexcept { m_index = index; }
     /// Factory-local identity, stable across clear/initialize/rename.
     size_t get_storage_index() const noexcept { return m_storage_index; }
-    const Builder<database::Columns<Values>>& columns() const& noexcept { return m_columns; }
-    const Builder<database::Columns<Values>>& columns() const&& = delete;
+    const Builder<database::Columns>& columns() const& noexcept { return m_columns; }
+    const Builder<database::Columns>& columns() const&& = delete;
     size_t arity() const noexcept { return m_columns.size(); }
     size_t size() const noexcept { return m_rows.size(); }
     bool empty() const noexcept { return m_rows.empty(); }
@@ -74,25 +75,25 @@ public:
     /// Raw bytes are checked for width and canonical encoding before mutation.
     uint_t insert(std::span<const std::byte> row);
     /// A borrowed row already has canonical bytes; its layout must match.
-    uint_t insert(database::Row<Values> row);
-    template<database::ColumnValueFor<Values>... Ts>
+    uint_t insert(database::Row row);
+    template<database::ColumnValue... Ts>
     uint_t insert(const std::tuple<Ts...>& values)
     {
-        const auto bytes = database::encode_row<Values>(values, m_columns.span());
-        return insert(database::Row<Values>(bytes, m_columns.span()));
+        const auto bytes = database::encode_row(values, m_columns.span());
+        return insert(database::Row(bytes, m_columns.span()));
     }
 
     std::optional<uint_t> find(std::span<const std::byte> row) const;
-    std::optional<uint_t> find(database::Row<Values> row) const;
-    template<database::ColumnValueFor<Values>... Ts>
+    std::optional<uint_t> find(database::Row row) const;
+    template<database::ColumnValue... Ts>
     std::optional<uint_t> find(const std::tuple<Ts...>& values) const
     {
-        const auto bytes = database::encode_row<Values>(values, m_columns.span());
+        const auto bytes = database::encode_row(values, m_columns.span());
         return m_rows.find(bytes);
     }
     bool contains(std::span<const std::byte> row) const { return find(row).has_value(); }
-    bool contains(database::Row<Values> row) const { return find(row).has_value(); }
-    template<database::ColumnValueFor<Values>... Ts>
+    bool contains(database::Row row) const { return find(row).has_value(); }
+    template<database::ColumnValue... Ts>
     bool contains(const std::tuple<Ts...>& values) const
     {
         return find(values).has_value();
@@ -101,8 +102,8 @@ public:
     /// Invalidates the erased and moved rows' positions and borrowed rows.
     void erase(size_t index);
     std::span<const std::byte> row(size_t index) const noexcept;
-    database::Row<Values> operator[](size_t index) const noexcept { return { row(index), m_columns.span() }; }
-    database::Row<Values> at(size_t index) const;
+    database::Row operator[](size_t index) const noexcept { return { row(index), m_columns.span() }; }
+    database::Row at(size_t index) const;
     void clear() noexcept;
     void rename(std::span<const Index<database::Column>> columns);
     void rename(std::span<const database::ColumnLayout> columns);
@@ -117,110 +118,8 @@ public:
     }
 };
 
-template<database::ColumnTypes Values>
-Builder<database::Relation<Values>>::Builder(Builder<database::Columns<Values>> columns) : m_columns(std::move(columns)), m_rows(m_columns.row_size())
-{
-}
-
-template<database::ColumnTypes Values>
-Builder<database::Relation<Values>>::Builder(std::span<const database::ColumnLayout> columns) : Builder(Builder<database::Columns<Values>>(columns))
-{
-}
-
-template<database::ColumnTypes Values>
-Builder<database::Relation<Values>>::Builder(std::span<const Index<database::Column>> columns) : Builder(Builder<database::Columns<Values>>(columns))
-{
-}
-
-template<database::ColumnTypes Values>
-Builder<database::Relation<Values>>::Builder(std::initializer_list<Index<database::Column>> columns) :
-    Builder(std::span<const Index<database::Column>>(columns))
-{
-}
-
-template<database::ColumnTypes Values>
-uint_t Builder<database::Relation<Values>>::insert(std::span<const std::byte> row)
-{
-    database::validate_row<Values>(row, m_columns.span());
-    const auto index = m_rows.insert(row);
-    ygg::clear(m_index);
-    return index;
-}
-
-template<database::ColumnTypes Values>
-uint_t Builder<database::Relation<Values>>::insert(database::Row<Values> row)
-{
-    if (!std::ranges::equal(row.columns(), m_columns.span()))
-        throw std::invalid_argument("Relation: row schema does not match.");
-    const auto index = m_rows.insert(row.bytes());
-    ygg::clear(m_index);
-    return index;
-}
-
-template<database::ColumnTypes Values>
-std::optional<uint_t> Builder<database::Relation<Values>>::find(std::span<const std::byte> row) const
-{
-    database::validate_row<Values>(row, m_columns.span());
-    return m_rows.find(row);
-}
-
-template<database::ColumnTypes Values>
-std::optional<uint_t> Builder<database::Relation<Values>>::find(database::Row<Values> row) const
-{
-    if (!std::ranges::equal(row.columns(), m_columns.span()))
-        throw std::invalid_argument("Relation: row schema does not match.");
-    return m_rows.find(row.bytes());
-}
-
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::erase(size_t index)
-{
-    if (index >= size())
-        throw std::out_of_range("Relation: row index out of range.");
-    m_rows.erase(static_cast<uint_t>(index));
-    ygg::clear(m_index);
-}
-
-template<database::ColumnTypes Values>
-std::span<const std::byte> Builder<database::Relation<Values>>::row(size_t index) const noexcept
-{
-    assert(index < size());
-    return m_rows[static_cast<uint_t>(index)];
-}
-
-template<database::ColumnTypes Values>
-database::Row<Values> Builder<database::Relation<Values>>::at(size_t index) const
-{
-    if (index >= size())
-        throw std::out_of_range("Relation: row index out of range.");
-    return (*this)[index];
-}
-
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::clear() noexcept
-{
-    ygg::clear(m_index);
-    m_rows.clear();
-}
-
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::rename(std::span<const Index<database::Column>> columns)
-{
-    m_columns.rename(columns);
-    ygg::clear(m_index);
-}
-
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::rename(std::span<const database::ColumnLayout> columns)
-{
-    database::detail::validate_relabel<Values>(m_columns.span(), columns);
-    m_columns.assign(columns);
-    ygg::clear(m_index);
-}
-
-template<database::ColumnTypes Values>
 template<database::ColumnSchema Schema>
-void Builder<database::Relation<Values>>::reinitialize(size_t width, Schema columns)
+void Builder<database::Relation>::reinitialize(size_t width, Schema columns)
 {
     if (width != m_rows.array_size())
     {
@@ -233,23 +132,5 @@ void Builder<database::Relation<Values>>::reinitialize(size_t width, Schema colu
     clear();
 }
 
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::initialize(std::span<const database::ColumnLayout> columns)
-{
-    database::validate_columns<Values>(columns);
-    reinitialize(database::row_size(columns), columns);
-}
-
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::initialize(std::span<const Index<database::Column>> columns)
-{
-    reinitialize(database::detail::label_row_size<Values>(columns), columns);
-}
-
-template<database::ColumnTypes Values>
-void Builder<database::Relation<Values>>::initialize(std::initializer_list<Index<database::Column>> columns)
-{
-    initialize(std::span<const Index<database::Column>>(columns));
-}
 }  // namespace ygg
 #endif

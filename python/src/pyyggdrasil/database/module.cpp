@@ -33,29 +33,29 @@ size_t sequence_index(std::ptrdiff_t index, size_t size)
 }
 
 template<typename R>
-ygg::database::Row<> row_at(const R& relation, std::ptrdiff_t index)
+ygg::database::Row row_at(const R& relation, std::ptrdiff_t index)
 {
-    return ygg::database::Row<>(relation.row(sequence_index(index, relation.size())), relation.columns().span());
+    return ygg::database::Row(relation.row(sequence_index(index, relation.size())), relation.columns().span());
 }
 }  // namespace
 
-const ygg::database::RelationRepository<>& borrowed_relation_context()
+const ygg::database::RelationRepository& borrowed_relation_context()
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return context;
 }
 
 void bind_database_module_definitions(nb::module_& m)
 {
-    using RelationTag = ygg::database::Relation<>;
+    using RelationTag = ygg::database::Relation;
     using Relation = ygg::Builder<RelationTag>;
-    using RelationView = ygg::database::RelationView<>;
-    using BorrowedRelationView = ygg::database::BorrowedRelationView<>;
+    using RelationView = ygg::database::RelationView;
+    using BorrowedRelationView = ygg::database::BorrowedRelationView;
     using RelationPtr = ygg::UniqueObjectPoolPtr<Relation>;
-    using RelationPool = ygg::database::RelationPool<>;
-    using RelationRepository = ygg::database::RelationRepository<>;
-    using RelationRepositoryFactory = ygg::database::RelationRepositoryFactory<>;
-    using Row = ygg::database::Row<>;
+    using RelationPool = ygg::database::RelationPool;
+    using RelationRepository = ygg::database::RelationRepository;
+    using RelationRepositoryFactory = ygg::database::RelationRepositoryFactory;
+    using Row = ygg::database::Row;
     using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
 
     ygg::bind_index<Column>(m, "ColumnIndex");
@@ -76,7 +76,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def("__len__", &Row::size)
         .def("__getitem__",
              [](Row row, std::ptrdiff_t index)
-             { return row.visit(sequence_index(index, row.size()), [](auto value) -> nb::object { return nb::cast(value); }); });
+             { return row.template visit<DatabaseValues>(sequence_index(index, row.size()), [](auto value) -> nb::object { return nb::cast(value); }); });
 
     nb::class_<ColumnIndices>(m,
                               "ColumnIndices",
@@ -93,13 +93,17 @@ void bind_database_module_definitions(nb::module_& m)
                  return static_cast<ColumnType>(columns[index].type);
              });
 
-    using Columns = ygg::Builder<ygg::database::Columns<>>;
+    using Columns = ygg::Builder<ygg::database::Columns>;
     nb::class_<Columns>(m, "Columns", "Mutable typed schema with unique column labels; untyped labels are UINT32.")
         .def(nb::init<>())
         .def(nb::init<std::vector<Column>>(), nb::arg("labels"))
         .def(
             "push_back",
-            [](Columns& columns, Column label, ColumnType type) { columns.push_back(label, static_cast<size_t>(type)); },
+            [](Columns& columns, Column label, ColumnType type)
+            {
+                ygg::database::visit_column_type<DatabaseValues>(static_cast<ygg::database::ColumnTypeId>(type),
+                                                                 [&]<typename T>(std::type_identity<T>) { columns.template push_back<T>(label); });
+            },
             nb::arg("label"),
             nb::arg("type"))
         .def("__len__", &Columns::size)

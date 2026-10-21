@@ -23,27 +23,27 @@
 namespace ygg::database
 {
 /// Measures row and per-column distinct counts of the relations bound to each input slot.
-template<ColumnTypes Values, RelationViewRange<Values> R>
-Statistics<Values> collect_statistics(const R& inputs)
+template<RelationViewRange R>
+Statistics collect_statistics(const R& inputs)
 {
-    Statistics<Values> result;
+    Statistics result;
     size_t slot = 0;
     for (const auto& input : inputs)
-        result.inputs[slot++] = measure_relation<Values>(input);
+        result.inputs[slot++] = measure_relation(input);
     return result;
 }
 
 /// Averages relation statistics over sample states (e.g. states of training tasks) into one estimate per key.
-template<ColumnTypes Values, typename Key>
+template<typename Key>
 class StatisticsAccumulator
 {
 public:
     /// Adds one sample of key's relation.
-    template<RelationViewConcept<Values> Relation>
+    template<RelationViewConcept Relation>
     void add(const Key& key, const Relation& relation)
     {
         auto& total = m_totals[key];
-        const auto sample = measure_relation<Values>(relation);
+        const auto sample = measure_relation(relation);
         ++total.samples;
         total.statistics.rows += sample.rows;
         for (const auto& [column, distinct] : sample.distinct)
@@ -137,33 +137,30 @@ private:
 ///     Worst-Case Optimal Joins in Relational Database Systems, PVLDB 13(11), 2020.
 /// [LEO01] M. Stillger, G. Lohman, V. Markl, M. Kandil, LEO – DB2's LEarning Optimizer,
 ///     VLDB 2001.
-template<ColumnTypes Values>
-QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots,
+inline QueryPlan optimize(std::span<const QueryView<>> roots,
                            std::span<const Evaluation> evaluations,
-                           const std::type_identity_t<Statistics<Values>>& statistics = {})
+                           const std::type_identity_t<Statistics>& statistics = {})
 {
     return detail::optimize(roots, evaluations, statistics);
 }
 
 /// Plans roots that are all evaluated fully.
-template<ColumnTypes Values>
-QueryPlan<Values> optimize(std::span<const QueryView<Values>> roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
+inline QueryPlan optimize(std::span<const QueryView<>> roots, const std::type_identity_t<Statistics>& statistics = {})
 {
     const auto evaluations = std::vector<Evaluation>(roots.size(), Evaluation::full);
     return optimize(roots, std::span<const Evaluation>(evaluations), statistics);
 }
 
-template<ColumnTypes Values>
-QueryPlan<Values> optimize(QueryView<Values> root, const std::type_identity_t<Statistics<Values>>& statistics = {})
+inline QueryPlan optimize(QueryView<> root, const std::type_identity_t<Statistics>& statistics = {})
 {
-    return optimize(std::span<const QueryView<Values>>(&root, 1), statistics);
+    return optimize(std::span<const QueryView<>>(&root, 1), statistics);
 }
 
-template<ColumnTypes Values, std::ranges::contiguous_range R>
-    requires std::same_as<std::ranges::range_value_t<R>, QueryView<Values>>
-QueryPlan<Values> optimize(const R& roots, const std::type_identity_t<Statistics<Values>>& statistics = {})
+template<std::ranges::contiguous_range R>
+    requires std::same_as<std::ranges::range_value_t<R>, QueryView<>>
+QueryPlan optimize(const R& roots, const std::type_identity_t<Statistics>& statistics = {})
 {
-    return optimize(std::span<const QueryView<Values>>(roots), statistics);
+    return optimize(std::span<const QueryView<>>(roots), statistics);
 }
 }  // namespace ygg::database
 #endif

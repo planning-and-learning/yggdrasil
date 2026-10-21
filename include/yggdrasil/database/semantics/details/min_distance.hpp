@@ -22,29 +22,18 @@
 namespace ygg::database::detail
 {
 
-inline std::vector<size_t> column_range(size_t first, size_t last)
-{
-    auto positions = std::vector<size_t>();
-    for (auto c = first; c < last; ++c)
-        positions.push_back(c);
-    return positions;
-}
+std::vector<size_t> column_range(size_t first, size_t last);
 
-template<ColumnTypes Values>
-QueryView<Values> checked_edges(QueryView<Values> edges, const DistancePlan<Values>& plan)
-{
-    require_plan_columns(edges.columns(), plan.edge_columns().span());
-    return edges;
-}
+QueryView<> checked_edges(QueryView<> edges, const DistancePlan& plan);
 
 /// An evaluator of a query of one input, slot 0, with the plan's edge columns. It compiles the query when constructed,
 /// so the repository may end afterwards.
-template<typename Evaluator, ColumnTypes Values>
-Evaluator relation_edges(const DistancePlan<Values>& plan, bool static_edges)
+template<typename Evaluator>
+Evaluator relation_edges(const DistancePlan& plan, bool static_edges)
 {
-    auto repository = QueryRepositoryFactory<Values> {}.create();
-    auto builder = QueryBuilder<Values> {};
-    auto input = checkout<Query<Values, QueryInputTag>>(builder);
+    auto repository = QueryRepositoryFactory {}.create();
+    auto builder = QueryBuilder {};
+    auto input = checkout<Query<QueryInputTag>>(builder);
     input->input_slot = 0;
     const auto columns = plan.edge_columns().span();
     input->columns.set(columns.begin(), columns.end());
@@ -55,7 +44,7 @@ Evaluator relation_edges(const DistancePlan<Values>& plan, bool static_edges)
 /// edge columns k·u·u' (key columns k, possibly none, then two vertices of `arity` columns), with the bindings of the
 /// key and a source vertex (successors), the key and a target vertex (predecessors), and all of them (edge checks).
 /// The key is an argument of each call; with_key fixes it for a search, as a model of the search oracle concepts.
-template<typename Evaluator, ColumnTypes Values>
+template<typename Evaluator>
 class EdgeQuery
 {
 public:

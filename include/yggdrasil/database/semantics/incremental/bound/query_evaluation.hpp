@@ -24,12 +24,11 @@ namespace ygg::database::incremental::bound
 {
 
 /// The rows bind() added to and removed from an input slot.
-template<ColumnTypes Values>
 struct InputChange
 {
     size_t slot = 0;
-    Builder<Relation<Values>> added;
-    Builder<Relation<Values>> removed;
+    Builder<Relation> added;
+    Builder<Relation> removed;
 };
 
 /// A bound::QueryEvaluator kept across input changes. initialize() binds the first inputs; update() takes a caller's
@@ -43,16 +42,15 @@ struct InputChange
 /// added rows of one that occurs negated (under an odd number of negations). Unions of conjunctive queries with
 /// negation are monotone in their positive atoms and antitone in their negated ones (Abiteboul, Hull & Vianu,
 /// "Foundations of Databases", 1995), so other changes keep every output row, and checks of earlier rows stay valid.
-template<ColumnTypes Values>
 class QueryEvaluator
 {
 public:
-    explicit QueryEvaluator(QueryView<Values> query, const std::vector<bool>& static_slots = {}) : m_base(query, static_slots)
+    explicit QueryEvaluator(QueryView<> query, const std::vector<bool>& static_slots = {}) : m_base(query, static_slots)
     {
         for (size_t slot = 0; slot < input_count(); ++slot)
         {
             const auto columns = std::span<const ColumnLayout>(m_base.query().input_columns[slot]);
-            m_changes.push_back(InputChange<Values> { slot, Builder<Relation<Values>>(columns), Builder<Relation<Values>>(columns) });
+            m_changes.push_back(InputChange { slot, Builder<Relation>(columns), Builder<Relation>(columns) });
         }
         m_changed.reserve(input_count());
         m_positive.assign(input_count(), false);
@@ -71,7 +69,7 @@ public:
 
     size_t input_count() const noexcept { return m_base.input_count(); }
     std::span<const ColumnLayout> columns() const noexcept { return m_base.columns(); }
-    const Builder<Relation<Values>>& input(size_t slot) const { return m_base.input(slot); }
+    const Builder<Relation>& input(size_t slot) const { return m_base.input(slot); }
     bool bound() const noexcept { return m_base.bound(); }
     bool is_static(size_t slot) const noexcept { return m_base.is_static(slot); }
     /// Increases whenever a change can remove output rows (see the class comment).
@@ -84,7 +82,7 @@ public:
     }
 
     /// Binds every input, static ones included, as a new baseline: input(slot) returns slot's relation view.
-    template<SlotRelations<Values> Input>
+    template<SlotRelations Input>
     void initialize(const Input& input)
     {
         m_changed.clear();
@@ -97,7 +95,7 @@ public:
     /// yet are bound, as by initialize(); static slots are read then only. After that, slots not marked in
     /// `maybe_changed` are assumed unchanged and are not read either. Returns the slots bound before that changed,
     /// whose changes change(slot) holds; both are valid until the next bind().
-    template<SlotRelations<Values> Input>
+    template<SlotRelations Input>
     std::span<const size_t> bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
         m_changed.clear();
@@ -120,11 +118,11 @@ public:
         return m_changed;
     }
     /// The change of a slot that the last bind() returned.
-    const InputChange<Values>& change(size_t slot) const { return m_changes.at(slot); }
+    const InputChange& change(size_t slot) const { return m_changes.at(slot); }
 
     /// Applies an exact change to a bound, non-static slot: `removed` rows are in it, `added` rows are not. A change
     /// that throws leaves the slot and version() unchanged (bound::QueryEvaluator::replace).
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    template<RelationViewConcept A, RelationViewConcept R>
     void update(size_t slot, const A& added, const R& removed)
     {
         if (slot >= input_count())
@@ -139,7 +137,7 @@ public:
     /// Calls on_row(row) for every output row the slot's change (applied before) can add, with repetitions and rows
     /// that existed before. Returns false if a changed row binds variables outside its branch's atoms, which delta
     /// rules cannot express; then the added rows are unknown.
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, typename OnRow>
+    template<RelationViewConcept A, RelationViewConcept R, typename OnRow>
         requires std::invocable<const OnRow&, std::span<const std::byte>>
     bool seed(size_t slot, const A& added, const R& removed, const OnRow& on_row)
     {
@@ -155,9 +153,9 @@ public:
     }
 
 private:
-    database::bound::QueryEvaluator<Values> m_base;
+    database::bound::QueryEvaluator m_base;
     UnorderedMap<std::vector<bool>, std::vector<database::bound::ConjunctivePlan>> m_seed_plans;  ///< By the variables bound on arrival.
-    std::vector<InputChange<Values>> m_changes;  ///< By slot; reused across bind() calls.
+    std::vector<InputChange> m_changes;  ///< By slot; reused across bind() calls.
     std::vector<size_t> m_changed;               ///< The slots the last bind() changed.
     std::vector<bool> m_positive;                ///< By slot: whether it occurs under an even number of negations.
     std::vector<bool> m_negative;                ///< By slot: whether it occurs under an odd number of negations.
@@ -166,7 +164,7 @@ private:
     std::vector<bool> m_top_vars;
 
     /// Applies a change that is known to be valid (see update()).
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    template<RelationViewConcept A, RelationViewConcept R>
     void apply(size_t slot, const A& added, const R& removed)
     {
         m_base.replace(slot, added, removed);
@@ -175,12 +173,12 @@ private:
     }
 
     /// Replaces `change` by the difference of `rows` from the slot's snapshot.
-    template<RelationViewConcept<Values> V>
-    void diff(const V& rows, InputChange<Values>& change) const
+    template<RelationViewConcept V>
+    void diff(const V& rows, InputChange& change) const
     {
         const auto& snapshot = m_base.input(change.slot);
-        database::difference<Values>(rows, snapshot, change.added);
-        database::difference<Values>(snapshot, rows, change.removed);
+        database::difference(rows, snapshot, change.added);
+        database::difference(snapshot, rows, change.removed);
     }
 
     /// The plan of a branch with the atom's variables bound; valid until the next call.
@@ -195,7 +193,7 @@ private:
         return found->second[branch];
     }
 
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R, RowPredicate OnRow>
+    template<RelationViewConcept A, RelationViewConcept R, RowPredicate OnRow>
     bool seed_branch(size_t b, size_t slot, const A& added, const R& removed, const OnRow& on_row)
     {
         const auto& query = m_base.query();

@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_antijoin(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryAntijoinTag>>>(m, "QueryAntijoinIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QueryAntijoinTag>>>(m, "QueryAntijoinIndex");
 
     {
         using V = QueryData<ygg::database::QueryAntijoinTag>;
@@ -26,7 +26,7 @@ void bind_query_antijoin(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryAntijoinTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QueryAntijoinTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

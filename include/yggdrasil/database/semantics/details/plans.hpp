@@ -28,13 +28,7 @@ concept ColumnSliceBuffer = requires(Buffer& buffer, size_t capacity, ColumnSlic
 
 inline ColumnSlice column_slice(const ColumnLayout& column) noexcept { return { column.type, column.offset, column.size }; }
 
-inline void append_column(std::vector<ColumnLayout>& output, ColumnLayout column)
-{
-    column.offset = output.empty() ? 0 : output.back().offset + output.back().size;
-    if (column.size > std::numeric_limits<size_t>::max() - column.offset)
-        throw std::overflow_error("Relational operation: row size overflow.");
-    output.push_back(column);
-}
+void append_column(std::vector<ColumnLayout>& output, ColumnLayout column);
 
 template<ColumnSliceBuffer Slices>
 void projection_positions(std::span<const ColumnLayout> input, std::span<const Index<Column>> labels, std::vector<ColumnLayout>& columns, Slices& positions)
@@ -81,64 +75,6 @@ void join_positions(std::span<const ColumnLayout> lhs,
     }
 }
 }  // namespace detail
-
-template<ColumnTypes Values>
-void ProjectionPlan<Values>::compile(std::span<const Index<Column>> columns)
-{
-    auto output = std::vector<ColumnLayout>();
-    detail::projection_positions(m_input.span(), columns, output, m_positions);
-    m_output.assign(output);
-}
-
-template<ColumnTypes Values>
-ProjectionPlan<Values>::ProjectionPlan(std::span<const ColumnLayout> input, std::span<const Index<Column>> columns) : m_input(input)
-{
-    compile(columns);
-}
-
-template<ColumnTypes Values>
-ProjectionPlan<Values>::ProjectionPlan(std::span<const ColumnLayout> input, std::initializer_list<Index<Column>> columns) :
-    ProjectionPlan(input, std::span<const Index<Column>>(columns))
-{
-}
-
-template<ColumnTypes Values>
-void JoinPlan<Values>::compile()
-{
-    auto columns = std::vector<ColumnLayout>();
-    detail::join_positions(m_lhs.span(), m_rhs.span(), columns, m_lhs_keys, m_rhs_keys, m_rhs_payload);
-    m_output.assign(columns);
-}
-
-template<ColumnTypes Values>
-JoinPlan<Values>::JoinPlan(std::span<const ColumnLayout> lhs, std::span<const ColumnLayout> rhs) : m_lhs(lhs), m_rhs(rhs)
-{
-    compile();
-}
-
-template<ColumnTypes Values>
-ProjectionPlan<Values>::ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns) : m_input(input)
-{
-    compile(columns);
-}
-
-template<ColumnTypes Values>
-ProjectionPlan<Values>::ProjectionPlan(std::initializer_list<Index<Column>> input, std::initializer_list<Index<Column>> columns) :
-    ProjectionPlan(std::span<const Index<Column>>(input), std::span<const Index<Column>>(columns))
-{
-}
-
-template<ColumnTypes Values>
-JoinPlan<Values>::JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs) : m_lhs(lhs), m_rhs(rhs)
-{
-    compile();
-}
-
-template<ColumnTypes Values>
-JoinPlan<Values>::JoinPlan(std::initializer_list<Index<Column>> lhs, std::initializer_list<Index<Column>> rhs) :
-    JoinPlan(std::span<const Index<Column>>(lhs), std::span<const Index<Column>>(rhs))
-{
-}
 
 }  // namespace ygg::database
 

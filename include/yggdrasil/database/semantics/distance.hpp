@@ -20,13 +20,12 @@ namespace ygg::database
 /// Sources and targets contain k-field vertices; each edge contains two such
 /// vertices. Positional field types must agree, independently of column labels.
 /// Output columns are the edge columns followed by a fresh uint_t distance column.
-template<ColumnTypes Values = DefaultColumnTypes>
 class DistancePlan
 {
-    Builder<Columns<Values>> m_sources;
-    Builder<Columns<Values>> m_edges;
-    Builder<Columns<Values>> m_targets;
-    Builder<Columns<Values>> m_output;
+    Builder<Columns> m_sources;
+    Builder<Columns> m_edges;
+    Builder<Columns> m_targets;
+    Builder<Columns> m_output;
 
 public:
     DistancePlan() = default;
@@ -69,8 +68,6 @@ struct DistanceGraph
 
 /// Reusable full-evaluation storage for one vertex byte width. Each call replaces
 /// its graph; sequential calls retain capacity. Do not share across concurrent calls.
-template<ColumnTypes Values = DefaultColumnTypes>
-    requires ColumnValueFor<uint_t, Values>
 class DistanceWorkspace
 {
     detail::DistanceGraph m_graph;
@@ -80,13 +77,13 @@ class DistanceWorkspace
     std::vector<std::byte> m_row;
 
 public:
-    explicit DistanceWorkspace(const DistancePlan<Values>& plan);
+    explicit DistanceWorkspace(const DistancePlan& plan);
 
     /// Whether the workspace serves the plan's vertex byte width.
-    bool matches(const DistancePlan<Values>& plan) const noexcept;
+    bool matches(const DistancePlan& plan) const noexcept;
     /// Appends the distances of the inputs, which match the plan, to out.
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
-    void append_distances(const S& sources, const E& edges, const T& targets, const DistancePlan<Values>& plan, Builder<Relation<Values>>& out);
+    template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
+    void append_distances(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& out);
     size_t memory_usage() const noexcept;
 };
 
@@ -94,29 +91,26 @@ public:
 /// Includes zero-length paths; unreachable pairs are absent. Input and output
 /// schemas and aliases are checked before clearing output. Evaluation failures
 /// may leave partial output. Inputs must not borrow the workspace's buffers.
-template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
-    requires ColumnValueFor<uint_t, Values>
+template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
 void distance(const S& sources,
               const E& edges,
               const T& targets,
-              const DistancePlan<Values>& plan,
-              Builder<Relation<Values>>& out,
-              DistanceWorkspace<Values>& workspace);
+              const DistancePlan& plan,
+              Builder<Relation>& out,
+              DistanceWorkspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
-    requires ColumnValueFor<uint_t, Values>
-Builder<Relation<Values>> distance(const S& sources, const E& edges, const T& targets, const DistancePlan<Values>& plan);
+template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
+Builder<Relation> distance(const S& sources, const E& edges, const T& targets, const DistancePlan& plan);
 
 /// The smallest distance between any source and target, from distance() into result.
 /// uint_t's maximum if no target is reachable.
-template<ColumnTypes Values, RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
-    requires ColumnValueFor<uint_t, Values>
+template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
 uint_t min_distance(const S& sources,
                     const E& edges,
                     const T& targets,
-                    const DistancePlan<Values>& plan,
-                    Builder<Relation<Values>>& result,
-                    DistanceWorkspace<Values>& workspace);
+                    const DistancePlan& plan,
+                    Builder<Relation>& result,
+                    DistanceWorkspace& workspace);
 
 }  // namespace ygg::database
 

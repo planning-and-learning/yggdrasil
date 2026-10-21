@@ -23,10 +23,9 @@ namespace ygg::database
 {
 
 /// Relaxations of queries over inputs of which only some are known.
-template<ColumnTypes Values = DefaultColumnTypes>
 struct Relaxation
 {
-    std::vector<std::optional<QueryView<Values>>> queries;  ///< Per root; nullopt if nothing is constrained.
+    std::vector<std::optional<QueryView<>>> queries;  ///< Per root; nullopt if nothing is constrained.
     std::vector<size_t> slots;                              ///< The original input slot of each relaxed input, shared by all roots.
 };
 
@@ -43,19 +42,19 @@ enum class Polarity
 
 constexpr Polarity flip(Polarity polarity) noexcept { return polarity == Polarity::over ? Polarity::under : Polarity::over; }
 
-template<ColumnTypes Values, std::predicate<size_t> Known>
+template<std::predicate<size_t> Known>
 class Relaxer
 {
     using Labels = std::vector<Index<Column>>;
 
 public:
-    Relaxer(QueryRepository<Values>& repository, QueryBuilder<Values>& builder, Known known) : m_build(repository, builder), m_known(std::move(known)) {}
+    Relaxer(QueryRepository& repository, QueryBuilder& builder, Known known) : m_build(repository, builder), m_known(std::move(known)) {}
 
     /// The relaxation of `query` on the side `polarity`, restricted to the needed labels `needed` (see relax() below);
     /// nullopt means nothing is known: ⊤ when over, ∅ when under.
-    std::optional<QueryView<Values>> relax(QueryView<Values> query, const Labels& needed, Polarity polarity)
+    std::optional<QueryView<>> relax(QueryView<> query, const Labels& needed, Polarity polarity)
     {
-        auto result = ygg::visit([&]<typename Tag>(QueryView<Values, Tag> concrete) { return relax(concrete, needed, polarity); }, query.get_variant());
+        auto result = ygg::visit([&]<typename Tag>(QueryView<Tag> concrete) { return relax(concrete, needed, polarity); }, query.get_variant());
         // Labels nobody needs are eliminated here, in the order of `needed`; with none needed, only the emptiness remains.
         if (result)
             result = m_build.project(*result, intersection(needed, labels(*result)));
@@ -65,11 +64,11 @@ public:
     std::vector<size_t> slots() && { return std::move(m_slots); }
 
 private:
-    OperatorBuilder<Values> m_build;
+    OperatorBuilder m_build;
     Known m_known;
     std::vector<size_t> m_slots;  ///< The original slot of each relaxed input.
 
-    static Labels labels(QueryView<Values> query) { return column_labels(query.columns()); }
+    static Labels labels(QueryView<> query) { return column_labels(query.columns()); }
     static bool contains(const Labels& labels, Index<Column> label) { return std::ranges::find(labels, label) != labels.end(); }
     /// The labels of `lhs` also in `rhs`, in the order of `lhs`.
     static Labels intersection(const Labels& lhs, const Labels& rhs)
@@ -103,7 +102,7 @@ private:
         m_slots.push_back(slot);
         return m_slots.size() - 1;
     }
-    std::optional<QueryView<Values>> input(QueryView<Values, QueryInputTag> concrete)
+    std::optional<QueryView<>> input(QueryView<QueryInputTag> concrete)
     {
         const auto slot = concrete.get_input_slot();
         if (!m_known(slot))
@@ -119,7 +118,7 @@ private:
     /// A conjunction (⋈, ⋉) of relaxed operands: an unknown side is its identity ⊤ when over and absorbs it as ∅ when
     /// under.
     template<typename Tag>
-    std::optional<QueryView<Values>> conjoin(std::optional<QueryView<Values>> lhs, std::optional<QueryView<Values>> rhs, Polarity polarity)
+    std::optional<QueryView<>> conjoin(std::optional<QueryView<>> lhs, std::optional<QueryView<>> rhs, Polarity polarity)
     {
         if (!lhs || !rhs)
             return polarity == Polarity::over ? (lhs ? lhs : rhs) : std::nullopt;
@@ -127,7 +126,7 @@ private:
     }
     /// A union of relaxed operands: an unknown side absorbs it as ⊤ when over and is its identity ∅ when under. Only
     /// labels both sides constrain stay constrained.
-    std::optional<QueryView<Values>> disjoin(std::optional<QueryView<Values>> lhs, std::optional<QueryView<Values>> rhs, Polarity polarity)
+    std::optional<QueryView<>> disjoin(std::optional<QueryView<>> lhs, std::optional<QueryView<>> rhs, Polarity polarity)
     {
         if (!lhs || !rhs)
             return polarity == Polarity::over ? std::nullopt : (lhs ? lhs : rhs);
@@ -136,7 +135,7 @@ private:
     }
 
     template<typename Tag>
-    std::optional<QueryView<Values>> relax(QueryView<Values, Tag> concrete, const Labels& needed, Polarity polarity)
+    std::optional<QueryView<>> relax(QueryView<Tag> concrete, const Labels& needed, Polarity polarity)
     {
         if constexpr (std::same_as<Tag, QueryInputTag>)
             return input(concrete);
@@ -144,14 +143,14 @@ private:
             return m_build.empty(concrete.columns());
         else if constexpr (std::same_as<Tag, QueryJoinTag> || std::same_as<Tag, QueryGenericJoinTag>)
         {
-            auto conjuncts = std::vector<QueryView<Values>>();
+            auto conjuncts = std::vector<QueryView<>>();
             if constexpr (std::same_as<Tag, QueryJoinTag>)
                 conjuncts = { concrete.get_lhs(), concrete.get_rhs() };
             else
                 for (const auto input : concrete.get_inputs())
                     conjuncts.emplace_back(input, concrete.get_repository());
             // A conjunct needs its labels that are needed above or shared with another conjunct (early elimination).
-            auto result = std::optional<QueryView<Values>>();
+            auto result = std::optional<QueryView<>>();
             for (size_t k = 0; k < conjuncts.size(); ++k)
             {
                 auto others = needed;
@@ -309,21 +308,21 @@ private:
 ///
 /// The relaxed queries are built in `repository`, whose interning keeps shared subqueries shared. A subquery shared
 /// by several paths is relaxed once per path: edge queries are small, and this runs once per feature.
-template<ColumnTypes Values, std::predicate<size_t> Known>
-Relaxation<Values> relax(std::span<const QueryView<Values>> roots, Known&& known, QueryRepository<Values>& repository, QueryBuilder<Values>& builder)
+template<std::predicate<size_t> Known>
+Relaxation relax(std::span<const QueryView<>> roots, Known&& known, QueryRepository& repository, QueryBuilder& builder)
 {
-    auto relaxer = detail::Relaxer<Values, std::remove_cvref_t<Known>>(repository, builder, std::forward<Known>(known));
-    auto queries = std::vector<std::optional<QueryView<Values>>>();
+    auto relaxer = detail::Relaxer<std::remove_cvref_t<Known>>(repository, builder, std::forward<Known>(known));
+    auto queries = std::vector<std::optional<QueryView<>>>();
     for (const auto root : roots)
         queries.push_back(relaxer.relax(root, column_labels(root.columns()), detail::Polarity::over));
-    return Relaxation<Values> { std::move(queries), std::move(relaxer).slots() };
+    return Relaxation { std::move(queries), std::move(relaxer).slots() };
 }
 
 /// The relaxation of one query; see the overload for several roots.
-template<ColumnTypes Values, std::predicate<size_t> Known>
-Relaxation<Values> relax(QueryView<Values> query, Known&& known, QueryRepository<Values>& repository, QueryBuilder<Values>& builder)
+template<std::predicate<size_t> Known>
+Relaxation relax(QueryView<> query, Known&& known, QueryRepository& repository, QueryBuilder& builder)
 {
-    return relax(std::span<const QueryView<Values>>(&query, 1), std::forward<Known>(known), repository, builder);
+    return relax(std::span<const QueryView<>>(&query, 1), std::forward<Known>(known), repository, builder);
 }
 
 }  // namespace ygg::database

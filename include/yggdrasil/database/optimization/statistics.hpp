@@ -21,7 +21,6 @@ struct RelationStatistics
 };
 
 /// What is known about the data. Everything is optional; nothing known means unbounded.
-template<ColumnTypes Values = DefaultColumnTypes>
 struct Statistics
 {
     /// Domain size; empty means an unbounded domain.
@@ -29,18 +28,18 @@ struct Statistics
     /// Measured inputs, keyed by input slot.
     UnorderedMap<size_t, RelationStatistics> inputs;
     /// Observed results of queries in the roots' repository; they override estimates.
-    UnorderedMap<Index<Query<Values>>, RelationStatistics> expressions;
+    UnorderedMap<Index<Query<>>, RelationStatistics> expressions;
 };
 
 /// Row and per-column distinct counts of one relation.
-template<ColumnTypes Values, RelationViewConcept<Values> Relation>
+template<RelationViewConcept Relation>
 RelationStatistics measure_relation(const Relation& relation)
 {
     RelationStatistics stats;
     stats.rows = static_cast<double>(relation.size());
     const auto columns = relation.columns();
     for (const auto& column : columns.span())
-        stats.distinct[column.label] = static_cast<double>(project<Values>(relation, { column.label }).size());
+        stats.distinct[column.label] = static_cast<double>(project(relation, { column.label }).size());
     return stats;
 }
 }  // namespace ygg::database

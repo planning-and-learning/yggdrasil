@@ -52,6 +52,11 @@ if(NOT TARGET yggdrasil::yggdrasil)
         INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::heap;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
 endif()
 
+# The compiled database engine, yggdrasil::database.
+if(NOT TARGET yggdrasil::database)
+    include("${CMAKE_CURRENT_LIST_DIR}/yggdrasilDatabaseTargets.cmake")
+endif()
+
 set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")
 
 unset(_yggdrasil_prefix)

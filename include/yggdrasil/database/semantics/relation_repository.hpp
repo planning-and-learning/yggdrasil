@@ -24,13 +24,12 @@ namespace ygg::database
 
 /// Copies share repository and row-storage identity sequences. Repositories
 /// used together in identity-keyed caches must come from the same factory.
-template<ColumnTypes Values>
 class RelationRepositoryFactory
 {
     std::shared_ptr<size_t> m_next_index = std::make_shared<size_t>(0);
-    RelationPoolFactory<Values> m_rows;
+    RelationPoolFactory m_rows;
 
-    friend class RelationRepository<Values>;
+    friend class RelationRepository;
 
     size_t next_index()
     {
@@ -40,36 +39,36 @@ class RelationRepositoryFactory
     }
 
 public:
-    explicit RelationRepositoryFactory(RelationPoolFactory<Values> rows = {}) : m_rows(std::move(rows)) {}
-    [[nodiscard]] RelationRepository<Values> create();
-    [[nodiscard]] std::shared_ptr<RelationRepository<Values>> create_shared();
+    explicit RelationRepositoryFactory(RelationPoolFactory rows = {}) : m_rows(std::move(rows)) {}
+    [[nodiscard]] RelationRepository create();
+    [[nodiscard]] std::shared_ptr<RelationRepository> create_shared();
 };
 
 /// Interns column schemas and compact relation records alongside rows and
 /// sorted row-ID sets. Builders are supplied by callers and never retained. All
 /// borrowed views are valid until clear/destruction; clear retains allocation
 /// for subsequent states.
-template<ColumnTypes Values>
 class RelationRepository
 {
-    friend class RelationRepositoryFactory<Values>;
+    friend class RelationRepositoryFactory;
 
 public:
-    using SymbolTypes = TypeList<Columns<Values>, Relation<Values>>;
+    using SymbolTypes = TypeList<Columns, Relation>;
 
 private:
-    formalism::SymbolRepository<Columns<Values>, Relation<Values>> m_symbols;
-    Data<Columns<Values>> m_columns_data;
+    formalism::SymbolRepository<Columns, Relation> m_symbols;
+    Data<Columns> m_columns_data;
     RawVectorSet<uint_t, std::byte> m_rows;
-    RawVectorSet<uint_t, Index<RelationRow<Values>>> m_row_sets;
-    std::vector<Index<RelationRow<Values>>> m_row_indices;
+    RawVectorSet<uint_t, Index<RelationRow>> m_row_sets;
+    std::vector<Index<RelationRow>> m_row_indices;
     std::vector<size_t> m_storage_indices;
-    RelationRepositoryFactory<Values> m_factory;
+    RelationRepositoryFactory m_factory;
     size_t m_index;
 
-    RelationRepository(size_t index, RelationRepositoryFactory<Values> factory) : m_factory(std::move(factory)), m_index(index) {}
+    RelationRepository(size_t index, RelationRepositoryFactory factory);
 
 public:
+    ~RelationRepository();
     RelationRepository(const RelationRepository&) = delete;
     RelationRepository& operator=(const RelationRepository&) = delete;
     RelationRepository(RelationRepository&&) = delete;
@@ -81,15 +80,15 @@ public:
     const auto& get_row_set_repository() const noexcept { return m_row_sets; }
 
     /// Interns the view's rows as a sorted row set.
-    template<RelationViewConcept<Values> V>
-    Index<RelationRowSet<Values>> insert_rows(const V& builder)
+    template<RelationViewConcept V>
+    Index<RelationRowSet> insert_rows(const V& builder)
     {
         m_row_indices.clear();
         m_row_indices.reserve(builder.size());
         for (size_t i = 0; i < builder.size(); ++i)
             m_row_indices.emplace_back(m_rows.insert(builder.row(i)));
         std::ranges::sort(m_row_indices);
-        const auto index = Index<RelationRowSet<Values>>(m_row_sets.insert(m_row_indices));
+        const auto index = Index<RelationRowSet>(m_row_sets.insert(m_row_indices));
         ensure_storage_index(index);
         return index;
     }
@@ -103,44 +102,27 @@ public:
         return std::nullopt;
     }
 
-    std::pair<View<Index<Columns<Values>>, RelationRepository>, bool> insert(Data<Columns<Values>>& data)
+    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(Data<Columns>& data)
     {
-        validate_columns<Values>(std::span<const ColumnLayout>(data.values.data(), data.values.size()));
-        const auto [index, created] = m_symbols.template insert_local<Columns<Values>>(data);
-        return { View<Index<Columns<Values>>, RelationRepository>(index, *this), created };
+        validate_columns(std::span<const ColumnLayout>(data.values.data(), data.values.size()));
+        const auto [index, created] = m_symbols.template insert_local<Columns>(data);
+        return { View<Index<Columns>, RelationRepository>(index, *this), created };
     }
 
-    std::pair<View<Index<Columns<Values>>, RelationRepository>, bool> insert(std::span<const ColumnLayout> columns)
+    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(std::span<const ColumnLayout> columns)
     {
         m_columns_data.clear();
         m_columns_data.values.set(columns.begin(), columns.end());
         return insert(m_columns_data);
     }
 
-    std::pair<View<Index<Columns<Values>>, RelationRepository>, bool> insert(std::span<const Index<Column>> columns)
+    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(std::span<const Index<Column>> columns)
     {
-        const auto schema = Builder<Columns<Values>>(columns);
+        const auto schema = Builder<Columns>(columns);
         return insert(schema.span());
     }
 
-    std::pair<RelationView<Values>, bool> insert(Data<Relation<Values>>& data)
-    {
-        if (!m_symbols.template is_local<Columns<Values>>(data.columns_index) || data.row_set_index.get_value() >= m_row_sets.size())
-            throw std::invalid_argument("RelationRepository: invalid schema or row-set index.");
-        const auto columns = get_columns(data.columns_index);
-        const auto rows = m_row_sets[data.row_set_index.get_value()];
-        for (size_t i = 0; i < rows.size(); ++i)
-        {
-            if (rows[i].get_value() >= m_rows.size() || m_rows[rows[i].get_value()].size() != columns.row_size())
-                throw std::invalid_argument("RelationRepository: row does not match the schema.");
-            validate_row<Values>(m_rows[rows[i].get_value()], columns.span());
-            if (i != 0 && rows[i - 1] >= rows[i])
-                throw std::invalid_argument("RelationRepository: row indices must be sorted and unique.");
-        }
-        ensure_storage_index(data.row_set_index);
-        const auto [index, created] = m_symbols.template insert_local<Relation<Values>>(data);
-        return { RelationView<Values>(index, *this), created };
-    }
+    std::pair<RelationView, bool> insert(Data<Relation>& data);
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
@@ -156,23 +138,23 @@ public:
     {
         return *this;
     }
-    size_t size() const noexcept { return m_symbols.template local_size<Relation<Values>>(); }
+    size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
     bool empty() const noexcept { return size() == 0; }
 
-    View<Index<Columns<Values>>, RelationRepository> get_columns(Index<Columns<Values>> index) const noexcept { return { index, *this }; }
+    View<Index<Columns>, RelationRepository> get_columns(Index<Columns> index) const noexcept { return { index, *this }; }
 
-    size_t get_storage_index(Index<RelationRowSet<Values>> row_set_index) const noexcept
+    size_t get_storage_index(Index<RelationRowSet> row_set_index) const noexcept
     {
         assert(row_set_index.get_value() < m_storage_indices.size());
         return m_storage_indices[row_set_index.get_value()];
     }
 
     template<typename C>
-    View<Index<Relation<Values>>, C> rename(View<Index<Relation<Values>>, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
+    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
     {
         if (&get_repository(source.get_context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
-        detail::validate_relabel<Values>(source.columns().span(), columns);
+        detail::validate_relabel(source.columns().span(), columns);
         auto data = source.get_data();
         ygg::clear(data.index);
         data.columns_index = insert(columns).first.get_index();
@@ -181,21 +163,21 @@ public:
     }
 
     template<typename C>
-    View<Index<Relation<Values>>, C> rename(View<Index<Relation<Values>>, C> source, std::span<const ColumnLayout> columns)
+    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const ColumnLayout> columns)
     {
         return rename(source, columns, source.get_data().schema_namespace);
     }
 
     template<typename C>
-    View<Index<Relation<Values>>, C> rename(View<Index<Relation<Values>>, C> source, std::span<const Index<Column>> columns, size_t schema_namespace)
+    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const Index<Column>> columns, size_t schema_namespace)
     {
-        auto schema = Builder<Columns<Values>>(source.columns().span());
+        auto schema = Builder<Columns>(source.columns().span());
         schema.rename(columns);
         return rename(source, schema.span(), schema_namespace);
     }
 
     template<typename C>
-    View<Index<Relation<Values>>, C> rename(View<Index<Relation<Values>>, C> source, std::span<const Index<Column>> columns)
+    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const Index<Column>> columns)
     {
         return rename(source, columns, source.get_data().schema_namespace);
     }
@@ -210,57 +192,33 @@ public:
     }
 
 private:
-    void ensure_storage_index(Index<RelationRowSet<Values>> index)
+    void ensure_storage_index(Index<RelationRowSet> index)
     {
         while (m_storage_indices.size() <= index.get_value())
             m_storage_indices.push_back(m_factory.m_rows.next_index());
     }
 };
 
-template<ColumnTypes Values>
-RelationRepository<Values> RelationRepositoryFactory<Values>::create()
-{
-    return RelationRepository<Values>(next_index(), *this);
-}
-
-template<ColumnTypes Values>
-std::shared_ptr<RelationRepository<Values>> RelationRepositoryFactory<Values>::create_shared()
-{
-    return std::shared_ptr<RelationRepository<Values>>(new RelationRepository<Values>(next_index(), *this));
-}
-
-template<ColumnTypes Values>
-const RelationRepository<Values>& get_repository(const RelationRepository<Values>& repository) noexcept
-{
-    return repository;
-}
+const RelationRepository& get_repository(const RelationRepository& repository) noexcept;
 
 // Validation stays in the raw repository members for both direct and prepared
 // calls.
-template<ColumnTypes Values>
-void prepare_for_insert(RelationRepository<Values>&, Data<Columns<Values>>&) noexcept
-{
-}
+void prepare_for_insert(RelationRepository&, Data<Columns>&) noexcept;
 
-template<ColumnTypes Values>
-void prepare_for_insert(RelationRepository<Values>&, Data<Relation<Values>>&) noexcept
-{
-}
+void prepare_for_insert(RelationRepository&, Data<Relation>&) noexcept;
 
 using formalism::insert;
 
 /// Insert mutable schemas and synchronize their canonical identity.
-template<ColumnTypes Values>
-auto insert(RelationRepository<Values>& repository, Builder<Columns<Values>>& builder)
+inline auto insert(RelationRepository& repository, Builder<Columns>& builder)
 {
     return formalism::insert(repository, builder.get_data());
 }
 
 /// Intern a compatible mutable relation without copying its tuple storage.
-template<ColumnTypes Values>
-auto insert(RelationRepository<Values>& repository, Builder<Relation<Values>>& builder, size_t schema_namespace = 0)
+inline auto insert(RelationRepository& repository, Builder<Relation>& builder, size_t schema_namespace = 0)
 {
-    auto data = Data<Relation<Values>>();
+    auto data = Data<Relation>();
     data.columns_index = repository.insert(builder.columns().span()).first.get_index();
     data.row_set_index = repository.insert_rows(builder);
     data.schema_namespace = schema_namespace;
@@ -270,30 +228,34 @@ auto insert(RelationRepository<Values>& repository, Builder<Relation<Values>>& b
 }
 
 /// Remap repository-local schema and row identities into the destination.
-template<ColumnTypes Values, typename C>
-auto copy(View<Data<Relation<Values>>, C> source, RelationRepository<Values>& repository)
+template<typename C>
+auto copy(View<Data<Relation>, C> source, RelationRepository& repository)
 {
-    auto data = Data<Relation<Values>>();
+    auto data = Data<Relation>();
     data.columns_index = repository.insert(source.columns().span()).first.get_index();
     data.row_set_index = repository.insert_rows(source);
     data.schema_namespace = source.get_data().schema_namespace;
     return formalism::insert(repository, data);
 }
 
-template<ColumnTypes Values, typename C>
-auto copy(View<Index<Relation<Values>>, C> source, RelationRepository<Values>& repository)
+template<typename C>
+auto copy(View<Index<Relation>, C> source, RelationRepository& repository)
 {
     if (&get_repository(source.get_context()) == &repository)
         return std::pair { make_view(source.get_index(), repository), false };
     return copy(make_view(source.get_data(), source.get_context()), repository);
 }
 
-template<ColumnTypes Values, ColumnsViewConcept<Values> V>
-auto copy(const V& source, RelationRepository<Values>& repository)
+template<ColumnsViewConcept V>
+auto copy(const V& source, RelationRepository& repository)
 {
     return repository.insert(source.span());
 }
 
 }  // namespace ygg::database
+
+// The symbol storage of schemas and relations is instantiated in the database library (docs/TEMPLATE_RULES.md, rule 9).
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Columns, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Relation, false>;
 
 #endif

@@ -21,14 +21,14 @@ namespace
 {
 using Values = ygg::database::DefaultColumnTypes;
 using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation<Values>>;
-using View = ygg::database::BorrowedRelationView<Values>;
+using Relation = ygg::Builder<ygg::database::Relation>;
+using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 namespace qb = ygg::tests::qb;
 
 View borrow(const Relation& relation)
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<Values> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
 }
 
@@ -50,10 +50,10 @@ Relation all_probes(uint_t objects)
 /// Must-pass objects of keyed edges (key, from..., to...) between keyed sources and targets (key, vertex...).
 Pairs must_pass(const Relation& edges, const Relation& sources, const Relation& targets, const Relation& probes)
 {
-    auto queries = qb::repository<Values>();
+    auto queries = qb::repository();
     const auto query = qb::input(queries, 0, edges.columns().span());
-    const auto plan = ygg::database::MustPassPlan<Values>(sources.columns().span(), query.columns(), targets.columns().span(), probes.columns().span(), 1);
-    auto computation = ygg::database::MustPass<Values>(query, plan);
+    const auto plan = ygg::database::MustPassPlan(sources.columns().span(), query.columns(), targets.columns().span(), probes.columns().span(), 1);
+    auto computation = ygg::database::MustPass(query, plan);
     auto out = Relation(plan.output_columns().span());
     const auto view = borrow(edges);
     computation.must_pass([&](size_t) { return view; }, borrow(sources), borrow(targets), borrow(probes), out);
@@ -190,7 +190,7 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
             const auto insert = [](Relation& relation, const std::vector<uint_t>& values)
             {
                 auto bytes = std::vector<std::byte>();
-                const auto encoded = ygg::database::encode_row<Values, uint_t>(values, bytes);
+                const auto encoded = ygg::database::encode_row<uint_t>(values, bytes);
                 if (relation.contains(encoded))
                     return false;
                 relation.insert(encoded);

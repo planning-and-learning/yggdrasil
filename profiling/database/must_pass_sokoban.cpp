@@ -39,14 +39,14 @@ namespace
 {
 using Values = ygg::database::DefaultColumnTypes;
 using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation<Values>>;
-using View = ygg::database::BorrowedRelationView<Values>;
+using Relation = ygg::Builder<ygg::database::Relation>;
+using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 namespace qb = ygg::tests::qb;
 
 View borrow(const Relation& relation)
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<Values> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
 }
 
@@ -238,7 +238,7 @@ int main(int argc, char** argv)
     }
 
     // The keyed edge query: free(box, l) = unfinished(box) x clear(l) + at(box, l), i.e. l is clear or the box's own cell.
-    auto queries = qb::repository<Values>();
+    auto queries = qb::repository();
     auto slots = std::deque<Relation>();  ///< The rows of each input slot, relabeled to the slot's columns.
     const auto input = [&](const Relation& relation, std::initializer_list<Column> labels)
     {
@@ -281,8 +281,8 @@ int main(int argc, char** argv)
                 targets.insert(std::tuple { b, location, task.goal.at(b) });
         probes.insert(std::tuple { task.goal.at(b) });
     }
-    const auto plan = ygg::database::MustPassPlan<Values>(sources.columns().span(), edges.columns(), targets.columns().span(), probes.columns().span(), 1);
-    auto must_pass = ygg::database::MustPass<Values, PushDistance>(edges, plan);
+    const auto plan = ygg::database::MustPassPlan(sources.columns().span(), edges.columns(), targets.columns().span(), probes.columns().span(), 1);
+    auto must_pass = ygg::database::MustPass<PushDistance>(edges, plan);
     auto heuristic = PushDistance(task, std::getenv("STATIC_HEURISTIC") == nullptr);
     auto views = std::vector<View>();
     for (const auto& relation : slots)
@@ -290,7 +290,7 @@ int main(int argc, char** argv)
     const auto slot_input = [&](size_t slot) { return views[slot]; };
     if (std::getenv("BLIND"))  // Without a heuristic, as runir's q_must_pass runs.
     {
-        auto blind = ygg::database::MustPass<Values>(edges, plan);
+        auto blind = ygg::database::MustPass(edges, plan);
         auto rows = Relation(plan.output_columns().span());
         const auto start = std::chrono::steady_clock::now();
         blind.must_pass(slot_input, borrow(sources), borrow(targets), borrow(probes), rows);
@@ -308,7 +308,7 @@ int main(int argc, char** argv)
     if (std::getenv("PROJECTED"))  // Times enumerating each key's edges projected onto the box column.
     {
         const auto projected = qb::project(queries, edges, { box, boxloc, next_boxloc });
-        auto evaluator = ygg::database::bound::QueryEvaluator<Values>(projected);
+        auto evaluator = ygg::database::bound::QueryEvaluator(projected);
         evaluator.bind(slot_input);
         const auto by_key = evaluator.prepare({ 0 });
         auto rows = size_t(0), loops = size_t(0);
@@ -318,7 +318,7 @@ int main(int argc, char** argv)
         {
             const auto b = unfinished[r].get<uint_t>(0);
             evaluator.evaluate(by_key,
-                               ygg::database::encode_row<Values, uint_t>(std::array { b }, bytes),
+                               ygg::database::encode_row<uint_t>(std::array { b }, bytes),
                                [&](std::span<const std::byte> row)
                                {
                                    auto values = std::array<uint_t, 3> {};
@@ -334,7 +334,7 @@ int main(int argc, char** argv)
     {
         const auto projected = qb::project(queries, edges, { box, boxloc, next_boxloc });
         const auto start = std::chrono::steady_clock::now();
-        auto evaluator = ygg::database::QueryEvaluator<Values>(ygg::database::optimize(projected));
+        auto evaluator = ygg::database::QueryEvaluator(ygg::database::optimize(projected));
         const auto compiled = seconds_since(start);
         auto loops = size_t(0);
         const auto evaluated = std::chrono::steady_clock::now();
@@ -352,7 +352,7 @@ int main(int argc, char** argv)
             const auto b = unfinished[r].get<uint_t>(0);
             auto one = Relation(sources.columns().span());
             one.insert(std::tuple { b, task.robot, task.at.at(b) });
-            auto alone = ygg::database::MustPass<Values, PushDistance>(edges, plan);
+            auto alone = ygg::database::MustPass<PushDistance>(edges, plan);
             auto rows = Relation(plan.output_columns().span());
             const auto start = std::chrono::steady_clock::now();
             alone.must_pass(slot_input, borrow(one), borrow(targets), borrow(probes), rows, heuristic);

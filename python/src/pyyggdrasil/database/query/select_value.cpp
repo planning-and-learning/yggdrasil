@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QuerySelectValueTag>>>(m, "QuerySelectValueIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QuerySelectValueTag>>>(m, "QuerySelectValueIndex");
 
     {
         using V = QueryData<ygg::database::QuerySelectValueTag>;
@@ -15,7 +15,7 @@ void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
                 "__init__",
                 [](V* self, QueryView arg, Column column, ColumnType type, nb::handle value)
                 {
-                    ygg::database::visit_column_type<Values>(static_cast<size_t>(type),
+                    ygg::database::visit_column_type<Values>(static_cast<ygg::database::ColumnTypeId>(type),
                                                              [&]<typename T>(std::type_identity<T>)
                                                              {
                                                                  T converted;
@@ -43,7 +43,7 @@ void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QuerySelectValueTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QuerySelectValueTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

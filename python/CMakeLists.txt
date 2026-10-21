@@ -56,7 +56,7 @@ target_include_directories(_pyyggdrasil PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
 )
 
-target_link_libraries(_pyyggdrasil PRIVATE TBB::tbb Boost::heap Boost::json fmt::fmt cista::cista)
+target_link_libraries(_pyyggdrasil PRIVATE yggdrasil::database TBB::tbb Boost::heap Boost::json fmt::fmt cista::cista)
 
 if(APPLE)
     set_target_properties(_pyyggdrasil PROPERTIES
@@ -101,6 +101,22 @@ install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/nanobind"
 
 install(TARGETS _pyyggdrasil
     DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
+    COMPONENT pyyggdrasil
+)
+
+install(
+    TARGETS database
+    EXPORT yggdrasilDatabaseTargets
+    LIBRARY DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}" COMPONENT pyyggdrasil
+    ARCHIVE DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}" COMPONENT pyyggdrasil
+    RUNTIME DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_BINDIR}" COMPONENT pyyggdrasil
+)
+
+install(
+    EXPORT yggdrasilDatabaseTargets
+    NAMESPACE yggdrasil::
+    FILE "yggdrasilDatabaseTargets.cmake"
+    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
     COMPONENT pyyggdrasil
 )
 

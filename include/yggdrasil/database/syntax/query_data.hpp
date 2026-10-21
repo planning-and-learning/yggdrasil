@@ -27,19 +27,19 @@
 
 namespace ygg
 {
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values>>
+template<>
+struct Data<database::Query<>>
 {
-    using Variant = IndexVariant<MapTypeListSecondT<database::Query, Values, database::QueryConstructorTags>>;
+    using Variant = IndexVariant<MapTypeListT<database::Query, database::QueryConstructorTags>>;
 
-    Index<database::Query<Values>> index;
+    Index<database::Query<>> index;
     Variant variant;
 
     Data() = default;
     explicit Data(Variant variant_) : index(), variant(std::move(variant_)) {}
     /// The erased record of an interned concrete query.
     template<typename Tag, typename C>
-    explicit Data(View<Index<database::Query<Values, Tag>>, C> concrete) : variant(concrete.get_index())
+    explicit Data(View<Index<database::Query<Tag>>, C> concrete) : variant(concrete.get_index())
     {
     }
 
@@ -52,10 +52,10 @@ struct Data<database::Query<Values>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryInputTag>>
+template<>
+struct Data<database::Query<database::QueryInputTag>>
 {
-    Index<database::Query<Values, database::QueryInputTag>> index;
+    Index<database::Query<database::QueryInputTag>> index;
     size_t input_slot = 0;
     cista::offset::vector<database::ColumnLayout> columns;
 
@@ -71,10 +71,10 @@ struct Data<database::Query<Values, database::QueryInputTag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryEmptyTag>>
+template<>
+struct Data<database::Query<database::QueryEmptyTag>>
 {
-    Index<database::Query<Values, database::QueryEmptyTag>> index;
+    Index<database::Query<database::QueryEmptyTag>> index;
     cista::offset::vector<database::ColumnLayout> columns;
 
     Data() = default;
@@ -90,19 +90,19 @@ struct Data<database::Query<Values, database::QueryEmptyTag>>
 };
 
 // Prepared schemas and positions are serialized but do not define operator identity.
-template<database::ColumnTypes Values, typename Tag>
+template<typename Tag>
     requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
-struct Data<database::Query<Values, Tag>>
+struct Data<database::Query<Tag>>
 {
-    Index<database::Query<Values, Tag>> index;
-    Index<database::Query<Values>> lhs;
-    Index<database::Query<Values>> rhs;
-    database::JoinPlan<Values> plan;
+    Index<database::Query<Tag>> index;
+    Index<database::Query<>> lhs;
+    Index<database::Query<>> rhs;
+    database::JoinPlan plan;
 
     Data() = default;
-    Data(Index<database::Query<Values>> lhs_, Index<database::Query<Values>> rhs_) : lhs(lhs_), rhs(rhs_) {}
+    Data(Index<database::Query<>> lhs_, Index<database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
     template<typename C>
-    Data(View<Index<database::Query<Values>>, C> lhs_, View<Index<database::Query<Values>>, C> rhs_) : Data(lhs_.get_index(), rhs_.get_index())
+    Data(View<Index<database::Query<>>, C> lhs_, View<Index<database::Query<>>, C> rhs_) : Data(lhs_.get_index(), rhs_.get_index())
     {
     }
 
@@ -115,19 +115,19 @@ struct Data<database::Query<Values, Tag>>
     }
 };
 
-template<database::ColumnTypes Values, typename Tag>
+template<typename Tag>
     requires(std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>)
-struct Data<database::Query<Values, Tag>>
+struct Data<database::Query<Tag>>
 {
-    Index<database::Query<Values, Tag>> index;
-    Index<database::Query<Values>> lhs;
-    Index<database::Query<Values>> rhs;
+    Index<database::Query<Tag>> index;
+    Index<database::Query<>> lhs;
+    Index<database::Query<>> rhs;
     cista::offset::vector<database::ColumnLayout> columns;
 
     Data() = default;
-    Data(Index<database::Query<Values>> lhs_, Index<database::Query<Values>> rhs_) : lhs(lhs_), rhs(rhs_) {}
+    Data(Index<database::Query<>> lhs_, Index<database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
     template<typename C>
-    Data(View<Index<database::Query<Values>>, C> lhs_, View<Index<database::Query<Values>>, C> rhs_) : Data(lhs_.get_index(), rhs_.get_index())
+    Data(View<Index<database::Query<>>, C> lhs_, View<Index<database::Query<>>, C> rhs_) : Data(lhs_.get_index(), rhs_.get_index())
     {
     }
 
@@ -140,18 +140,18 @@ struct Data<database::Query<Values, Tag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryProjectTag>>
+template<>
+struct Data<database::Query<database::QueryProjectTag>>
 {
-    Index<database::Query<Values, database::QueryProjectTag>> index;
-    Index<database::Query<Values>> arg;
+    Index<database::Query<database::QueryProjectTag>> index;
+    Index<database::Query<>> arg;
     cista::offset::vector<Index<database::Column>> labels;
-    database::ProjectionPlan<Values> plan;
+    database::ProjectionPlan plan;
 
     Data() = default;
-    Data(Index<database::Query<Values>> arg_, std::span<const Index<database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
+    Data(Index<database::Query<>> arg_, std::span<const Index<database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
     template<typename C>
-    Data(View<Index<database::Query<Values>>, C> arg_, std::span<const Index<database::Column>> labels_) : Data(arg_.get_index(), labels_)
+    Data(View<Index<database::Query<>>, C> arg_, std::span<const Index<database::Column>> labels_) : Data(arg_.get_index(), labels_)
     {
     }
 
@@ -164,18 +164,18 @@ struct Data<database::Query<Values, database::QueryProjectTag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryRenameTag>>
+template<>
+struct Data<database::Query<database::QueryRenameTag>>
 {
-    Index<database::Query<Values, database::QueryRenameTag>> index;
-    Index<database::Query<Values>> arg;
+    Index<database::Query<database::QueryRenameTag>> index;
+    Index<database::Query<>> arg;
     cista::offset::vector<Index<database::Column>> labels;
     cista::offset::vector<database::ColumnLayout> columns;
 
     Data() = default;
-    Data(Index<database::Query<Values>> arg_, std::span<const Index<database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
+    Data(Index<database::Query<>> arg_, std::span<const Index<database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
     template<typename C>
-    Data(View<Index<database::Query<Values>>, C> arg_, std::span<const Index<database::Column>> labels_) : Data(arg_.get_index(), labels_)
+    Data(View<Index<database::Query<>>, C> arg_, std::span<const Index<database::Column>> labels_) : Data(arg_.get_index(), labels_)
     {
     }
 
@@ -188,11 +188,11 @@ struct Data<database::Query<Values, database::QueryRenameTag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QuerySelectEqualTag>>
+template<>
+struct Data<database::Query<database::QuerySelectEqualTag>>
 {
-    Index<database::Query<Values, database::QuerySelectEqualTag>> index;
-    Index<database::Query<Values>> arg;
+    Index<database::Query<database::QuerySelectEqualTag>> index;
+    Index<database::Query<>> arg;
     Index<database::Column> lhs_column;
     Index<database::Column> rhs_column;
     cista::offset::vector<database::ColumnLayout> columns;
@@ -200,14 +200,14 @@ struct Data<database::Query<Values, database::QuerySelectEqualTag>>
     size_t rhs_position = 0;
 
     Data() = default;
-    Data(Index<database::Query<Values>> arg_, Index<database::Column> lhs_column_, Index<database::Column> rhs_column_) :
+    Data(Index<database::Query<>> arg_, Index<database::Column> lhs_column_, Index<database::Column> rhs_column_) :
         arg(arg_),
         lhs_column(lhs_column_),
         rhs_column(rhs_column_)
     {
     }
     template<typename C>
-    Data(View<Index<database::Query<Values>>, C> arg_, Index<database::Column> lhs_column_, Index<database::Column> rhs_column_) :
+    Data(View<Index<database::Query<>>, C> arg_, Index<database::Column> lhs_column_, Index<database::Column> rhs_column_) :
         Data(arg_.get_index(), lhs_column_, rhs_column_)
     {
     }
@@ -221,32 +221,32 @@ struct Data<database::Query<Values, database::QuerySelectEqualTag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QuerySelectValueTag>>
+template<>
+struct Data<database::Query<database::QuerySelectValueTag>>
 {
-    Index<database::Query<Values, database::QuerySelectValueTag>> index;
-    Index<database::Query<Values>> arg;
+    Index<database::Query<database::QuerySelectValueTag>> index;
+    Index<database::Query<>> arg;
     Index<database::Column> column;
     cista::offset::vector<std::byte> constant;
     /// The registered type ordinal of the encoded constant.
-    size_t constant_type = 0;
+    database::ColumnTypeId constant_type = 0;
     cista::offset::vector<database::ColumnLayout> columns;
     size_t column_position = 0;
 
     Data() = default;
     /// The constant is encoded with the column codec of its type.
-    template<database::ColumnValueFor<Values> T>
-    Data(Index<database::Query<Values>> arg_, Index<database::Column> column_, T value) :
+    template<database::ColumnValue T>
+    Data(Index<database::Query<>> arg_, Index<database::Column> column_, T value) :
         arg(arg_),
         column(column_),
-        constant_type(database::column_type<Values, T>)
+        constant_type(database::column_type<T>)
     {
         std::array<std::byte, database::ColumnCodec<T>::size> bytes;
         database::ColumnCodec<T>::encode(value, bytes);
         constant.set(bytes.begin(), bytes.end());
     }
-    template<typename C, database::ColumnValueFor<Values> T>
-    Data(View<Index<database::Query<Values>>, C> arg_, Index<database::Column> column_, T value) : Data(arg_.get_index(), column_, value)
+    template<typename C, database::ColumnValue T>
+    Data(View<Index<database::Query<>>, C> arg_, Index<database::Column> column_, T value) : Data(arg_.get_index(), column_, value)
     {
     }
 
@@ -259,20 +259,20 @@ struct Data<database::Query<Values, database::QuerySelectValueTag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryDistanceTag>>
+template<>
+struct Data<database::Query<database::QueryDistanceTag>>
 {
-    Index<database::Query<Values, database::QueryDistanceTag>> index;
-    Index<database::Query<Values>> sources;
-    Index<database::Query<Values>> edges;
-    Index<database::Query<Values>> targets;
+    Index<database::Query<database::QueryDistanceTag>> index;
+    Index<database::Query<>> sources;
+    Index<database::Query<>> edges;
+    Index<database::Query<>> targets;
     Index<database::Column> distance_column;
-    database::DistancePlan<Values> plan;
+    database::DistancePlan plan;
 
     Data() = default;
-    Data(Index<database::Query<Values>> sources_,
-         Index<database::Query<Values>> edges_,
-         Index<database::Query<Values>> targets_,
+    Data(Index<database::Query<>> sources_,
+         Index<database::Query<>> edges_,
+         Index<database::Query<>> targets_,
          Index<database::Column> distance_column_) :
         sources(sources_),
         edges(edges_),
@@ -281,9 +281,9 @@ struct Data<database::Query<Values, database::QueryDistanceTag>>
     {
     }
     template<typename C>
-    Data(View<Index<database::Query<Values>>, C> sources_,
-         View<Index<database::Query<Values>>, C> edges_,
-         View<Index<database::Query<Values>>, C> targets_,
+    Data(View<Index<database::Query<>>, C> sources_,
+         View<Index<database::Query<>>, C> edges_,
+         View<Index<database::Query<>>, C> targets_,
          Index<database::Column> distance_column_) :
         Data(sources_.get_index(), edges_.get_index(), targets_.get_index(), distance_column_)
     {
@@ -298,18 +298,18 @@ struct Data<database::Query<Values, database::QueryDistanceTag>>
     }
 };
 
-template<database::ColumnTypes Values>
-struct Data<database::Query<Values, database::QueryGenericJoinTag>>
+template<>
+struct Data<database::Query<database::QueryGenericJoinTag>>
 {
-    Index<database::Query<Values, database::QueryGenericJoinTag>> index;
-    cista::offset::vector<Index<database::Query<Values>>> inputs;
+    Index<database::Query<database::QueryGenericJoinTag>> index;
+    cista::offset::vector<Index<database::Query<>>> inputs;
     cista::offset::vector<Index<database::Column>> variable_order;
     cista::offset::vector<Index<database::Column>> output_order;
-    database::GenericJoinPlan<Values> plan;
+    database::GenericJoinPlan plan;
 
     Data() = default;
     /// An empty output order is canonicalized on insertion.
-    Data(std::span<const Index<database::Query<Values>>> inputs_,
+    Data(std::span<const Index<database::Query<>>> inputs_,
          std::span<const Index<database::Column>> variable_order_,
          std::span<const Index<database::Column>> output_order_ = {}) :
         index()
@@ -319,7 +319,7 @@ struct Data<database::Query<Values, database::QueryGenericJoinTag>>
         output_order.set(output_order_.begin(), output_order_.end());
     }
     template<typename C>
-    Data(const std::vector<::ygg::View<Index<database::Query<Values>>, C>>& inputs_,
+    Data(const std::vector<::ygg::View<Index<database::Query<>>, C>>& inputs_,
          std::span<const Index<database::Column>> variable_order_,
          std::span<const Index<database::Column>> output_order_ = {}) :
         index()

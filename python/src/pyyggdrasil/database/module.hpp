@@ -13,20 +13,20 @@ namespace nb = nanobind;
 
 using DatabaseValues = ygg::database::DefaultColumnTypes;
 
-/// Python names of the registered column type ordinals.
-enum class ColumnType : size_t
+/// Python names of the column type ids.
+enum class ColumnType : ygg::database::ColumnTypeId
 {
-    UINT32 = ygg::database::column_type<DatabaseValues, std::uint32_t>,
-    INT32 = ygg::database::column_type<DatabaseValues, std::int32_t>,
-    UINT64 = ygg::database::column_type<DatabaseValues, std::uint64_t>,
-    INT64 = ygg::database::column_type<DatabaseValues, std::int64_t>,
-    FLOAT32 = ygg::database::column_type<DatabaseValues, float>,
-    FLOAT64 = ygg::database::column_type<DatabaseValues, double>,
-    BOOL = ygg::database::column_type<DatabaseValues, bool>,
+    UINT32 = ygg::database::column_type<std::uint32_t>,
+    INT32 = ygg::database::column_type<std::int32_t>,
+    UINT64 = ygg::database::column_type<std::uint64_t>,
+    INT64 = ygg::database::column_type<std::int64_t>,
+    FLOAT32 = ygg::database::column_type<float>,
+    FLOAT64 = ygg::database::column_type<double>,
+    BOOL = ygg::database::column_type<bool>,
 };
 
 /// Borrowed relation views use a relation repository only as their context.
-const ygg::database::RelationRepository<>& borrowed_relation_context();
+const ygg::database::RelationRepository& borrowed_relation_context();
 
 void bind_database_module_definitions(nb::module_& m);
 void bind_database_distance(nb::module_& m);

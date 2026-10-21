@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_semijoin(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QuerySemijoinTag>>>(m, "QuerySemijoinIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QuerySemijoinTag>>>(m, "QuerySemijoinIndex");
 
     {
         using V = QueryData<ygg::database::QuerySemijoinTag>;
@@ -26,7 +26,7 @@ void bind_query_semijoin(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QuerySemijoinTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QuerySemijoinTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

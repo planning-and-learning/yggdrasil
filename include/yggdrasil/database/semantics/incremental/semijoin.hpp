@@ -23,36 +23,25 @@ namespace ygg::database::incremental
 /// Gupta & Mumick, "Maintenance of Materialized Views", IEEE Data Eng. Bull. 1995, with an existence test in place
 /// of the join). Owns the current inputs and their key indexes; supplied views are borrowed only during calls.
 /// After a failure during mutation, results and deltas are unavailable until initialize().
-template<ColumnTypes Values = DefaultColumnTypes>
 class SemijoinEvaluator
 {
-    JoinPlan<Values> m_plan;
+    JoinPlan m_plan;
     bool m_anti;
-    Builder<Relation<Values>> m_lhs;
-    Builder<Relation<Values>> m_rhs;
+    Builder<Relation> m_lhs;
+    Builder<Relation> m_rhs;
     UnorderedMultiMap<hash_t, uint_t> m_lhs_index;
     UnorderedMultiMap<hash_t, uint_t> m_rhs_index;
-    Builder<Relation<Values>> m_result;
-    Delta<Values> m_delta;
+    Builder<Relation> m_result;
+    Delta m_delta;
     bool m_initialized = false;
 
-    bool matched(std::span<const std::byte> lhs_row) const
-    {
-        const auto lhs_keys = m_plan.lhs_keys();
-        const auto rhs_keys = m_plan.rhs_keys();
-        if (lhs_keys.empty())
-            return !m_rhs.empty();
-        for (const auto position : m_rhs_index.values(database::detail::join_key_hash(lhs_row, lhs_keys)))
-            if (database::detail::join_keys_equal(m_rhs.row(position), rhs_keys, lhs_row, lhs_keys))
-                return true;
-        return false;
-    }
+    bool matched(std::span<const std::byte> lhs_row) const;
     bool kept(std::span<const std::byte> lhs_row) const { return matched(lhs_row) != m_anti; }
 
     /// Records the change of a row of the current L against the result before this update.
     void reconcile(std::span<const std::byte> lhs_row)
     {
-        const auto row = Row<Values>(lhs_row, m_lhs.columns().span());
+        const auto row = Row(lhs_row, m_lhs.columns().span());
         const auto was = m_result.contains(row);
         const auto is = kept(lhs_row);
         if (is && !was)
@@ -61,7 +50,7 @@ class SemijoinEvaluator
             m_delta.removed.insert(row);
     }
     /// Reconciles the rows of the current L that share the key of a changed row of R.
-    template<RelationViewConcept<Values> V>
+    template<RelationViewConcept V>
     void reconcile_matches(const V& rhs_rows)
     {
         const auto lhs_keys = m_plan.lhs_keys();
@@ -83,7 +72,7 @@ class SemijoinEvaluator
         }
     }
 
-    template<RelationChange<Values> L, RelationChange<Values> R>
+    template<RelationChange L, RelationChange R>
     void apply(const L& lhs, const R& rhs)
     {
         const auto& [lhs_added, lhs_removed] = lhs;
@@ -91,7 +80,7 @@ class SemijoinEvaluator
         m_initialized = false;
         m_delta.clear();
         for (size_t i = 0; i < lhs_removed.size(); ++i)
-            if (const auto row = Row<Values>(lhs_removed.row(i), m_lhs.columns().span()); m_result.contains(row))
+            if (const auto row = Row(lhs_removed.row(i), m_lhs.columns().span()); m_result.contains(row))
                 m_delta.removed.insert(row);
         detail::erase_rows(lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
         detail::erase_rows(rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
@@ -110,11 +99,11 @@ class SemijoinEvaluator
         m_initialized = true;
     }
 
-    template<ColumnTypes, typename>
+    template<typename>
     friend struct detail::NodeRules;
 
 public:
-    SemijoinEvaluator(JoinPlan<Values> plan, bool anti) :
+    SemijoinEvaluator(JoinPlan plan, bool anti) :
         m_plan(std::move(plan)),
         m_anti(anti),
         m_lhs(m_plan.lhs_columns().span()),
@@ -125,7 +114,7 @@ public:
     }
 
     /// Replace the baseline, retaining buffers, and clear the last output delta.
-    template<RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+    template<RelationViewConcept L, RelationViewConcept R>
     void initialize(const L& lhs, const R& rhs)
     {
         database::detail::require_plan_columns(lhs.columns().span(), m_plan.lhs_columns().span());
@@ -143,12 +132,12 @@ public:
         detail::insert_rows(rhs, m_rhs, m_plan.rhs_keys(), m_rhs_index);
         for (size_t i = 0; i < m_lhs.size(); ++i)
             if (kept(m_lhs.row(i)))
-                m_result.insert(Row<Values>(m_lhs.row(i), m_lhs.columns().span()));
+                m_result.insert(Row(m_lhs.row(i), m_lhs.columns().span()));
         m_initialized = true;
     }
 
     /// Each change describes actual set changes of that input. Reports the exact net change of the batch.
-    template<RelationChange<Values> L, RelationChange<Values> R>
+    template<RelationChange L, RelationChange R>
     void update(const L& lhs, const R& rhs)
     {
         detail::require_initialized(m_initialized);
@@ -157,18 +146,18 @@ public:
         apply(lhs, rhs);
     }
 
-    const Builder<Relation<Values>>& get_result() const&
+    const Builder<Relation>& get_result() const&
     {
         detail::require_initialized(m_initialized);
         return m_result;
     }
-    const Builder<Relation<Values>>& get_result() const&& = delete;
-    const Delta<Values>& get_delta() const&
+    const Builder<Relation>& get_result() const&& = delete;
+    const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);
         return m_delta;
     }
-    const Delta<Values>& get_delta() const&& = delete;
+    const Delta& get_delta() const&& = delete;
 
     size_t memory_usage() const noexcept
     {

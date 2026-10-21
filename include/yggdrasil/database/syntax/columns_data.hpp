@@ -22,7 +22,7 @@ namespace ygg::database
 struct ColumnLayout
 {
     Index<Column> label;
-    size_t type;
+    ColumnTypeId type;
     size_t offset;
     size_t size;
 
@@ -36,10 +36,10 @@ struct ColumnLayout
 
 namespace ygg
 {
-template<database::ColumnTypes Values>
-struct Data<database::Columns<Values>>
+template<>
+struct Data<database::Columns>
 {
-    Index<database::Columns<Values>> index;
+    Index<database::Columns> index;
     ::cista::offset::vector<database::ColumnLayout> values;
 
     Data() = default;

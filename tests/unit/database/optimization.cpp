@@ -21,15 +21,14 @@ namespace
 {
 using Column = ygg::Index<ygg::database::Column>;
 using PlanId = ygg::Index<ygg::database::Query<>>;
-using Relation = ygg::Builder<ygg::database::Relation<>>;
-using Delta = ygg::database::incremental::Delta<>;
-using Change = std::pair<ygg::database::BorrowedRelationView<>, ygg::database::BorrowedRelationView<>>;
+using Relation = ygg::Builder<ygg::database::Relation>;
+using Delta = ygg::database::incremental::Delta;
+using Change = std::pair<ygg::database::BorrowedRelationView, ygg::database::BorrowedRelationView>;
 
 // Borrowed views use a relation repository only as their context.
-template<ygg::database::ColumnTypes Values>
-ygg::database::BorrowedRelationView<Values> borrow(const ygg::Builder<ygg::database::Relation<Values>>& relation)
+inline ygg::database::BorrowedRelationView borrow(const ygg::Builder<ygg::database::Relation>& relation)
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<Values> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
 }
 const Column w(3), x(0), y(1), z(2);
@@ -49,7 +48,7 @@ auto difference(const auto& lhs, const auto& rhs)
     return result;
 }
 template<class Tag>
-size_t count(const ygg::database::QueryPlan<>& plan)
+size_t count(const ygg::database::QueryPlan& plan)
 {
     size_t result = 0;
     for (size_t position = 0; position < plan.node_count(); ++position)
@@ -65,14 +64,14 @@ std::vector<Column> labels(std::initializer_list<Column> values)
 
 TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
 {
-    ygg::Builder<ygg::database::Columns<>> columns;
+    ygg::Builder<ygg::database::Columns> columns;
     columns.push_back<double>(x);
     columns.push_back<bool>(y);
     Relation relation(columns.span());
     relation.insert(std::tuple { 0.0, false });
     relation.insert(std::tuple { -0.0, true });
     relation.insert(std::tuple { std::numeric_limits<double>::quiet_NaN(), false });
-    const auto stats = ygg::database::collect_statistics<ygg::database::DefaultColumnTypes>(std::array { borrow(relation) });
+    const auto stats = ygg::database::collect_statistics(std::array { borrow(relation) });
     EXPECT_EQ(stats.inputs.at(0).rows, 3);
     EXPECT_EQ(stats.inputs.at(0).distinct.at(x), 2);
     EXPECT_EQ(stats.inputs.at(0).distinct.at(y), 2);
@@ -80,7 +79,7 @@ TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
 
 TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmptyKeys)
 {
-    ygg::Builder<ygg::database::Columns<>> columns;
+    ygg::Builder<ygg::database::Columns> columns;
     columns.push_back<double>(x);
     columns.push_back<double>(y);
     Relation two(columns.span()), four(columns.span()), empty(columns.span());
@@ -89,7 +88,7 @@ TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmpty
     for (double i = 0; i < 4; ++i)
         four.insert(std::tuple { i, 0.0 });
 
-    auto accumulator = ygg::database::StatisticsAccumulator<ygg::database::DefaultColumnTypes, std::string>();
+    auto accumulator = ygg::database::StatisticsAccumulator<std::string>();
     for (const auto* sample : { &two, &four, &empty })
     {
         accumulator.add("sometimes", borrow(*sample));
@@ -108,10 +107,10 @@ TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmpty
 
 TEST(DatabaseOptimization, RejectsInvalidStatistics)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto input = ygg::tests::qb::input(queries, 0, { x });
     EXPECT_NO_THROW(ygg::database::optimize(input));
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0].rows = 3;
     EXPECT_NO_THROW(ygg::database::optimize(input, statistics));
     const auto valid = statistics;
@@ -143,7 +142,7 @@ TEST(DatabaseOptimization, GyoRecognizesAcyclicAndCyclicHypergraphs)
 
 TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto r = ygg::tests::qb::input(queries, 0, { x, y });
     const auto s = ygg::tests::qb::input(queries, 1, { y, z });
     const auto t = ygg::tests::qb::input(queries, 2, { z, w });
@@ -163,9 +162,9 @@ TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
     std::vector<ygg::database::QueryView<>> nodes;
     for (size_t position = 0; position < plan.node_count(); ++position)
         nodes.push_back(plan[PlanId(ygg::to_uint_t(position))]);
-    ygg::database::QueryEvaluator<> evaluator(ygg::database::compile(std::span<const ygg::database::QueryView<>>(nodes)));
+    ygg::database::QueryEvaluator evaluator(ygg::database::compile(std::span<const ygg::database::QueryView<>>(nodes)));
     evaluator.evaluate(refs);
-    ygg::database::QueryEvaluator<> reference(ygg::database::compile({ root })), optimized(plan);
+    ygg::database::QueryEvaluator reference(ygg::database::compile({ root })), optimized(plan);
     reference.evaluate(refs);
     optimized.evaluate(refs);
     EXPECT_EQ(rows(optimized.get_result()), rows(reference.get_result()));
@@ -179,7 +178,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
 {
     // π_{x,w}(R(x,y) ⋈ S(y,z) ⋈ T(z,w)), evaluated with x bound as the edges of a distance are. Yannakakis' semijoins
     // would flatten into extra atoms of every binding's plan; a bound root keeps its three.
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto r = ygg::tests::qb::input(queries, 0, { x, y });
     const auto s = ygg::tests::qb::input(queries, 1, { y, z });
     const auto t = ygg::tests::qb::input(queries, 2, { z, w });
@@ -193,7 +192,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     };
     const auto roots = std::array { root };
     const auto bound = std::array { ygg::database::Evaluation::bound };
-    const auto plan = ygg::database::optimize<ygg::database::DefaultColumnTypes>(std::span<const ygg::database::QueryView<>>(roots),
+    const auto plan = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots),
                                                                                   std::span<const ygg::database::Evaluation>(bound));
     const auto planned = plan[plan.roots().front()];
     EXPECT_EQ(atoms(planned), 3);
@@ -208,14 +207,14 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     }
     const auto successors = [&](ygg::database::QueryView<> query)
     {
-        auto evaluator = ygg::database::bound::QueryEvaluator<ygg::database::DefaultColumnTypes>(query);
+        auto evaluator = ygg::database::bound::QueryEvaluator(query);
         for (size_t slot = 0; slot < inputs.size(); ++slot)
             evaluator.bind_slot(slot, inputs[slot]);
         const auto binding = evaluator.prepare({ 0 });
         auto bytes = std::vector<std::byte>();
         auto result = std::vector<std::vector<std::byte>>();
         evaluator.evaluate(binding,
-                           ygg::database::encode_row<ygg::database::DefaultColumnTypes, ygg::uint_t>(std::array { ygg::uint_t(1) }, bytes),
+                           ygg::database::encode_row<ygg::uint_t>(std::array { ygg::uint_t(1) }, bytes),
                            [&](std::span<const std::byte> row)
                            {
                                result.emplace_back(row.begin(), row.end());
@@ -226,14 +225,14 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     };
     EXPECT_FALSE(successors(root).empty());
     EXPECT_EQ(successors(planned), successors(root));
-    EXPECT_THROW((ygg::database::optimize<ygg::database::DefaultColumnTypes>(std::span<const ygg::database::QueryView<>>(roots),
+    EXPECT_THROW((ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots),
                                                                              std::span<const ygg::database::Evaluation>())),
                  std::invalid_argument);
 }
 
 TEST(DatabaseOptimization, StructureChoosesGenericJoinOnlyForCyclicBlocks)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
     const auto c = ygg::tests::qb::input(queries, 2, { z, x });
@@ -242,19 +241,19 @@ TEST(DatabaseOptimization, StructureChoosesGenericJoinOnlyForCyclicBlocks)
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(ygg::database::optimize(triangle)), 1);
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(ygg::database::optimize(path)), 0);
     // A measured input alone does not make the block measured.
-    ygg::database::Statistics<> partial;
+    ygg::database::Statistics partial;
     partial.inputs[0] = { 10, {} };
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(ygg::database::optimize(triangle, partial)), 1);
 }
 
 TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
     const auto c = ygg::tests::qb::input(queries, 2, { z });
     const auto root = ygg::tests::qb::join(queries, ygg::tests::qb::join(queries, a, b), c);
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 10000, { { x, 10000 }, { y, 10000 } } };
     statistics.inputs[1] = { 10000, { { y, 10000 }, { z, 10000 } } };
     statistics.inputs[2] = { 1, { { z, 1 } } };
@@ -265,7 +264,7 @@ TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
         ygg::visit(
             [&]<typename Concrete>(Concrete query)
             {
-                if constexpr (std::same_as<Concrete, ygg::database::QueryView<ygg::database::DefaultColumnTypes, ygg::database::QueryJoinTag>>)
+                if constexpr (std::same_as<Concrete, ygg::database::QueryView<ygg::database::QueryJoinTag>>)
                 {
                     std::set<size_t> slots;
                     for (const auto child : { query.get_lhs(), query.get_rhs() })
@@ -273,7 +272,7 @@ TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
                             ygg::visit(
                                 [&]<typename Leaf>(Leaf leaf)
                                 {
-                                    if constexpr (std::same_as<Leaf, ygg::database::QueryView<ygg::database::DefaultColumnTypes, ygg::database::QueryInputTag>>)
+                                    if constexpr (std::same_as<Leaf, ygg::database::QueryView<ygg::database::QueryInputTag>>)
                                         slots.insert(leaf.get_input_slot());
                                 },
                                 node.get_variant());
@@ -286,13 +285,13 @@ TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
 
 TEST(DatabaseOptimization, CostBasedPlanUsesGenericJoinWhereJoinsGrow)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
     const auto c = ygg::tests::qb::input(queries, 2, { z, x });
     const auto root = ygg::tests::qb::join(queries, ygg::tests::qb::join(queries, a, b), c);
     // Every pairwise join grows: 10^4 · 10^4 / 100 rows from inputs of 10^4 rows.
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 10000, { { x, 100 }, { y, 100 } } };
     statistics.inputs[1] = { 10000, { { y, 100 }, { z, 100 } } };
     statistics.inputs[2] = { 10000, { { z, 100 }, { x, 100 } } };
@@ -306,19 +305,19 @@ TEST(DatabaseOptimization, CostBasedPlanUsesGenericJoinWhereJoinsGrow)
 
 TEST(DatabaseOptimization, NullaryGenericJoinHasOneRow)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto root = ygg::tests::qb::generic_join(queries, {}, {});
-    for (const auto& plan : { ygg::database::optimize(root), ygg::database::optimize(root, ygg::database::Statistics<> { 4, {}, {} }) })
+    for (const auto& plan : { ygg::database::optimize(root), ygg::database::optimize(root, ygg::database::Statistics { 4, {}, {} }) })
     {
-        ygg::database::QueryEvaluator<> evaluator(plan);
-        evaluator.evaluate(std::array<ygg::database::BorrowedRelationView<>, 0> {});
+        ygg::database::QueryEvaluator evaluator(plan);
+        evaluator.evaluate(std::array<ygg::database::BorrowedRelationView, 0> {});
         EXPECT_EQ(evaluator.get_result().size(), 1);
     }
 }
 
 TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVariables)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { x, y });
     const auto edges = ygg::tests::qb::input(queries, 2, { y, z });
@@ -341,10 +340,10 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
     inputs[1].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     inputs[2].insert(std::tuple { ygg::uint_t(0), ygg::uint_t(2) });
     const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]) };
-    const auto statistics = ygg::database::collect_statistics<ygg::database::DefaultColumnTypes>(refs);
+    const auto statistics = ygg::database::collect_statistics(refs);
     const auto unmeasured = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots));
     const auto measured = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), statistics);
-    ygg::database::QueryEvaluator<> reference(ygg::database::compile(roots));
+    ygg::database::QueryEvaluator reference(ygg::database::compile(roots));
     reference.evaluate(refs);
     EXPECT_EQ(reference.get_result(0).size(), 1);
     EXPECT_EQ(reference.get_result(1).size(), 1);
@@ -352,8 +351,8 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
     for (const auto* chosen : { &unmeasured, &measured })
     {
         EXPECT_EQ(chosen->roots()[8], chosen->roots()[9]);
-        ygg::database::QueryEvaluator<> full(*chosen);
-        ygg::database::incremental::QueryEvaluator<> incremental(*chosen);
+        ygg::database::QueryEvaluator full(*chosen);
+        ygg::database::incremental::QueryEvaluator incremental(*chosen);
         full.evaluate(refs);
         incremental.initialize(refs);
         for (size_t root = 0; root < roots.size(); ++root)
@@ -363,7 +362,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
             EXPECT_TRUE(std::ranges::equal(full.get_result(root).columns().span(), roots[root].columns()));
         }
     }
-    ygg::database::incremental::QueryEvaluator<> incremental(measured);
+    ygg::database::incremental::QueryEvaluator incremental(measured);
     incremental.initialize(refs);
     std::mt19937 random(1597);
     for (size_t iteration = 0; iteration < 35; ++iteration)
@@ -412,7 +411,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
 
 TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { x, y });
     const auto c = ygg::tests::qb::input(queries, 2, { y, z });
@@ -493,14 +492,14 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
         const auto baseline = ygg::database::compile({ root });
         SCOPED_TRACE(expression);
         SCOPED_TRACE(ygg::database::explain(baseline));
-        const auto statistics = ygg::database::collect_statistics<ygg::database::DefaultColumnTypes>(refs);
+        const auto statistics = ygg::database::collect_statistics(refs);
         const auto unmeasured = ygg::database::optimize(root);
         const auto measured = ygg::database::optimize(root, statistics);
-        ygg::database::QueryEvaluator<> reference(baseline);
+        ygg::database::QueryEvaluator reference(baseline);
         reference.evaluate(refs);
         for (const auto* optimized : { &unmeasured, &measured })
         {
-            ygg::database::QueryEvaluator<> evaluator(*optimized);
+            ygg::database::QueryEvaluator evaluator(*optimized);
             evaluator.evaluate(refs);
             EXPECT_TRUE(std::ranges::equal(evaluator.get_result().columns().span(), root.columns()));
             EXPECT_EQ(rows(evaluator.get_result()), rows(reference.get_result()));
@@ -510,7 +509,7 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
 
 TEST(DatabaseOptimization, BothModesPreserveFactoredUnionsAndFilteredDifferences)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { x, y });
     const auto c = ygg::tests::qb::input(queries, 2, { y, z });
@@ -531,11 +530,11 @@ TEST(DatabaseOptimization, BothModesPreserveFactoredUnionsAndFilteredDifferences
     cr.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(3) });
     cr.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(2) });
     const auto inputs = std::array { borrow(ar), borrow(br), borrow(cr) };
-    const auto statistics = ygg::database::collect_statistics<ygg::database::DefaultColumnTypes>(inputs);
+    const auto statistics = ygg::database::collect_statistics(inputs);
     const auto original = ygg::database::compile(roots);
     const auto unmeasured = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots));
     const auto measured = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), statistics);
-    ygg::database::QueryEvaluator<> reference(original);
+    ygg::database::QueryEvaluator reference(original);
     reference.evaluate(inputs);
     EXPECT_EQ(rows(reference.get_result(0)), rows(reference.get_result(1)));
     EXPECT_EQ(reference.get_result(2).size(), 1);
@@ -544,8 +543,8 @@ TEST(DatabaseOptimization, BothModesPreserveFactoredUnionsAndFilteredDifferences
     EXPECT_EQ(rows(reference.get_result(5)), rows(ar));
     for (const auto* chosen : { &unmeasured, &measured })
     {
-        ygg::database::QueryEvaluator<> full(*chosen);
-        ygg::database::incremental::QueryEvaluator<> incremental(*chosen);
+        ygg::database::QueryEvaluator full(*chosen);
+        ygg::database::incremental::QueryEvaluator incremental(*chosen);
         full.evaluate(inputs);
         incremental.initialize(inputs);
         for (size_t root = 0; root < roots.size(); ++root)

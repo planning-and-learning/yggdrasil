@@ -21,18 +21,17 @@ namespace ygg::database::incremental
 {
 namespace detail
 {
-template<ColumnTypes Values, typename Tag>
+template<typename Tag>
 struct NodeRules;
 }
 
 /// Actual set changes with one ordered schema. Added and removed rows are
 /// disjoint. The caller guarantees additions were absent and removals present.
 /// Exchanging the two inputs to update() reverses the change.
-template<ColumnTypes Values = DefaultColumnTypes>
 struct Delta
 {
-    Builder<Relation<Values>> added;
-    Builder<Relation<Values>> removed;
+    Builder<Relation> added;
+    Builder<Relation> removed;
 
     explicit Delta(std::span<const ColumnLayout> columns) : added(columns), removed(columns) {}
     explicit Delta(std::span<const Index<Column>> columns) : added(columns), removed(columns) {}
@@ -44,52 +43,48 @@ struct Delta
         removed.clear();
     }
     /// The (added, removed) change.
-    std::pair<const Builder<Relation<Values>>&, const Builder<Relation<Values>>&> change() const noexcept { return { added, removed }; }
+    std::pair<const Builder<Relation>&, const Builder<Relation>&> change() const noexcept { return { added, removed }; }
     size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
 };
 
 /// An actual set change of one input: disjoint (added, removed) relations, read with std::get.
-template<typename C, typename Values>
+template<typename C>
 concept RelationChange = requires(const C& change) {
-    { std::get<0>(change) } -> RelationViewConcept<Values>;
-    { std::get<1>(change) } -> RelationViewConcept<Values>;
+    { std::get<0>(change) } -> RelationViewConcept;
+    { std::get<1>(change) } -> RelationViewConcept;
 };
 
 /// The exact changes of a query's inputs by slot: f(slot).added and f(slot).removed are relation views, the rows added to
 /// and removed from input slot `slot`.
-template<typename F, typename Values>
+template<typename F>
 concept SlotChanges = std::invocable<const F&, size_t> && requires(const F& change, size_t slot) {
-    { change(slot).added } -> RelationViewConcept<Values>;
-    { change(slot).removed } -> RelationViewConcept<Values>;
+    { change(slot).added } -> RelationViewConcept;
+    { change(slot).removed } -> RelationViewConcept;
 };
 
 /// Sized random-access changes, one per input.
-template<typename R, typename Values>
+template<typename R>
 concept RelationDeltaRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
-                             && RelationChange<std::ranges::range_reference_t<const R>, Values>;
+                             && RelationChange<std::ranges::range_reference_t<const R>>;
 
 namespace detail
 {
-template<ColumnTypes Values, RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+template<RelationViewConcept A, RelationViewConcept R>
 void require_delta(const A& added, const R& removed, std::span<const ColumnLayout> columns)
 {
     database::detail::require_plan_columns(added.columns().span(), columns);
     database::detail::require_plan_columns(removed.columns().span(), columns);
     for (size_t i = 0; i < added.size(); ++i)
-        if (removed.contains(Row<Values>(added.row(i), added.columns().span())))
+        if (removed.contains(Row(added.row(i), added.columns().span())))
             throw std::invalid_argument("Incremental evaluation: added and removed rows overlap.");
 }
 
 /// Results and deltas exist only after a complete initialize or update.
-inline void require_initialized(bool initialized)
-{
-    if (!initialized)
-        throw std::logic_error("Incremental evaluation: initialize before use.");
-}
+void require_initialized(bool initialized);
 
 /// Inputs are borrowed during a call and must not be the evaluator's own result or delta.
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void require_unaliased(const V& input, const Builder<Relation<Values>>& result, const Delta<Values>& delta)
+template<RelationViewConcept V>
+void require_unaliased(const V& input, const Builder<Relation>& result, const Delta& delta)
 {
     const auto* address = input.get_storage_address();
     if (address == result.get_storage_address() || address == delta.added.get_storage_address() || address == delta.removed.get_storage_address())
@@ -97,28 +92,16 @@ void require_unaliased(const V& input, const Builder<Relation<Values>>& result, 
 }
 
 /// A change of an input with the given columns is disjoint and borrows no evaluator storage.
-template<ColumnTypes Values, RelationChange<Values> C>
-void require_change(const C& change, std::span<const ColumnLayout> columns, const Builder<Relation<Values>>& result, const Delta<Values>& delta)
+template<RelationChange C>
+void require_change(const C& change, std::span<const ColumnLayout> columns, const Builder<Relation>& result, const Delta& delta)
 {
-    require_delta<Values>(std::get<0>(change), std::get<1>(change), columns);
+    require_delta(std::get<0>(change), std::get<1>(change), columns);
     require_unaliased(std::get<0>(change), result, delta);
     require_unaliased(std::get<1>(change), result, delta);
 }
 
 /// Applies an exact delta of the result: removed rows are present, added rows absent.
-template<ColumnTypes Values>
-void apply_delta(const Delta<Values>& delta, Builder<Relation<Values>>& result)
-{
-    const auto columns = result.columns().span();
-    for (size_t i = 0; i < delta.removed.size(); ++i)
-    {
-        const auto position = result.find(Row<Values>(delta.removed.row(i), columns));
-        assert(position);
-        result.erase(*position);
-    }
-    for (size_t i = 0; i < delta.added.size(); ++i)
-        result.insert(Row<Values>(delta.added.row(i), columns));
-}
+void apply_delta(const Delta& delta, Builder<Relation>& result);
 }  // namespace detail
 
 }  // namespace ygg::database::incremental

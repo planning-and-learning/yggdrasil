@@ -30,7 +30,6 @@ namespace ygg::database
 /// per evaluator (or borrow one from UniqueObjectPool); never share it between
 /// concurrent or reentrant calls. All buffers retain their capacity. Inputs
 /// and their borrowed schemas must not refer to these scratch buffers.
-template<ColumnTypes Values = DefaultColumnTypes>
 struct Workspace
 {
     std::vector<ColumnLayout> columns;
@@ -60,29 +59,29 @@ struct JoinReuse
 /// Keeps columns in the requested order and eliminates duplicate result rows.
 /// Output overloads replace rows, retain capacity, and require a matching
 /// schema and storage distinct from every input (including renamed views).
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, const ProjectionPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept V>
+void project(const V& input, const ProjectionPlan& plan, Builder<Relation>& out, Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out, Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out, Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<Values>>& out);
+template<RelationViewConcept V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<Values>>& out);
+template<RelationViewConcept V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> project(const V& input, Builder<Columns<Values>> columns);
+template<RelationViewConcept V>
+Builder<Relation> project(const V& input, Builder<Columns> columns);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> project(const V& input, std::span<const Index<Column>> columns);
+template<RelationViewConcept V>
+Builder<Relation> project(const V& input, std::span<const Index<Column>> columns);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> project(const V& input, std::initializer_list<Index<Column>> columns);
+template<RelationViewConcept V>
+Builder<Relation> project(const V& input, std::initializer_list<Index<Column>> columns);
 
 /// Replace ordered columns and rows, invalidating the destination's canonical
 /// index. Self-assignment is supported. Storage identity is preserved, and
@@ -91,100 +90,100 @@ Builder<Relation<Values>> project(const V& input, std::initializer_list<Index<Co
 /// it may relabel columns.
 /// Borrowed destination rows and schema spans are invalidated. An insertion
 /// failure may leave partial output. Schema namespaces belong to publication.
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>>& assign(Builder<Relation<Values>>& destination, const V& source);
+template<RelationViewConcept V>
+Builder<Relation>& assign(Builder<Relation>& destination, const V& source);
 
 /// The predicate receives a typed row borrowing the input and its schema. It must not mutate
 /// inputs or output. A throwing predicate can leave a partial output result.
-template<ColumnTypes Values, RelationViewConcept<Values> V, typename Predicate>
-    requires std::predicate<Predicate&, Row<Values>>
-void select(const V& input, Predicate predicate, Builder<Relation<Values>>& out);
+template<RelationViewConcept V, typename Predicate>
+    requires std::predicate<Predicate&, Row>
+void select(const V& input, Predicate predicate, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, typename Predicate>
-    requires std::predicate<Predicate&, Row<Values>>
-Builder<Relation<Values>> select(const V& input, Predicate predicate);
+template<RelationViewConcept V, typename Predicate>
+    requires std::predicate<Predicate&, Row>
+Builder<Relation> select(const V& input, Predicate predicate);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation<Values>>& out);
+template<RelationViewConcept V>
+void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs);
+template<RelationViewConcept V>
+Builder<Relation> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, ColumnValueFor<Values> T>
-void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation<Values>>& out);
+template<RelationViewConcept V, ColumnValue T>
+void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, ColumnValueFor<Values> T>
-Builder<Relation<Values>> select_equal_value(const V& input, Index<Column> column, const T& value);
+template<RelationViewConcept V, ColumnValue T>
+Builder<Relation> select_equal_value(const V& input, Index<Column> column, const T& value);
 
 /// Natural join: match common labels and return lhs columns followed by
 /// rhs-only columns. Disjoint schemas produce the Cartesian product.
 /// Hashes the smaller input, retaining only hashes and row indices in the
 /// transient index. Collisions are resolved by comparing the actual values.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept L, RelationViewConcept R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace);
 
 /// Reuses an index on either input instead of rebuilding the smaller side.
 /// The index must match that input's storage and the plan's ordered field slices.
 /// Result row order is unspecified, as for the other relational operations.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+template<RelationViewConcept L, RelationViewConcept R>
 void join(const L& lhs,
           const R& rhs,
-          const JoinPlan<Values>& plan,
-          const JoinIndex<Values>& index,
-          Builder<Relation<Values>>& out,
-          Workspace<Values>& workspace);
+          const JoinPlan& plan,
+          const JoinIndex& index,
+          Builder<Relation>& out,
+          Workspace& workspace);
 
 /// Reuses the one marked input, or the smaller input when both are marked.
 /// With neither marked, uses an ordinary transient index. Empty inputs and
 /// Cartesian products do not create cached indexes.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+template<RelationViewConcept L, RelationViewConcept R>
 void join(const L& lhs,
           const R& rhs,
-          const JoinPlan<Values>& plan,
-          JoinIndexCache<Values>& cache,
+          const JoinPlan& plan,
+          JoinIndexCache& cache,
           JoinReuse reuse,
-          Builder<Relation<Values>>& out,
-          Workspace<Values>& workspace);
+          Builder<Relation>& out,
+          Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept L, RelationViewConcept R>
+void join(const L& lhs, const R& rhs, Builder<Relation>& out, Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, Builder<Relation<Values>>& out);
+template<RelationViewConcept L, RelationViewConcept R>
+void join(const L& lhs, const R& rhs, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> join(const L& lhs, const R& rhs);
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> join(const L& lhs, const R& rhs);
 
 /// Union and difference require identical ordered schemas. Project one input
 /// first to align a differently ordered schema. The trailing underscore avoids
 /// the C++ keyword union.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void union_(const L& lhs, const R& rhs, Builder<Relation<Values>>& out);
+template<RelationViewConcept L, RelationViewConcept R>
+void union_(const L& lhs, const R& rhs, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> union_(const L& lhs, const R& rhs);
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> union_(const L& lhs, const R& rhs);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void difference(const L& lhs, const R& rhs, Builder<Relation<Values>>& out);
+template<RelationViewConcept L, RelationViewConcept R>
+void difference(const L& lhs, const R& rhs, Builder<Relation>& out);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> difference(const L& lhs, const R& rhs);
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> difference(const L& lhs, const R& rhs);
 
 /// Semijoin lhs ⋉ rhs: the lhs rows with a match in rhs on the plan's keys. Without shared columns, lhs if rhs is
 /// nonempty. Hashes rhs.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void semijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept L, RelationViewConcept R>
+void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> semijoin(const L& lhs, const R& rhs);
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> semijoin(const L& lhs, const R& rhs);
 
 /// Antijoin lhs ▷ rhs: the lhs rows without a match in rhs on the plan's keys. Without shared columns, lhs if rhs is
 /// empty. Hashes rhs.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void antijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace);
+template<RelationViewConcept L, RelationViewConcept R>
+void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> antijoin(const L& lhs, const R& rhs);
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> antijoin(const L& lhs, const R& rhs);
 
 }  // namespace ygg::database
 

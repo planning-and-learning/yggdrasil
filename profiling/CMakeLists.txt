@@ -33,7 +33,7 @@ target_include_directories(
         "${PROJECT_SOURCE_DIR}/include"
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
-target_link_libraries(database_incremental_benchmark PRIVATE benchmark::benchmark_main Threads::Threads)
+target_link_libraries(database_incremental_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Threads::Threads)
 
 add_executable(database_distance_benchmark "database/distance.cpp")
 target_compile_features(database_distance_benchmark PRIVATE cxx_std_20)
@@ -43,7 +43,7 @@ target_include_directories(
         "${PROJECT_SOURCE_DIR}/include"
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
-target_link_libraries(database_distance_benchmark PRIVATE benchmark::benchmark_main Boost::heap Threads::Threads)
+target_link_libraries(database_distance_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Boost::heap Threads::Threads)
 
 add_executable(database_query_benchmark "database/query.cpp")
 target_compile_features(database_query_benchmark PRIVATE cxx_std_20)
@@ -51,10 +51,11 @@ target_include_directories(database_query_benchmark PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
     "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
-target_link_libraries(database_query_benchmark PRIVATE benchmark::benchmark_main Boost::heap Threads::Threads)
+target_link_libraries(database_query_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Boost::heap Threads::Threads)
 
 # A plain executable, optimized even in Debug builds so its timings mean something.
 add_executable(must_pass_sokoban "database/must_pass_sokoban.cpp")
+target_link_libraries(must_pass_sokoban PRIVATE yggdrasil::database)
 target_compile_features(must_pass_sokoban PRIVATE cxx_std_20)
 target_compile_options(must_pass_sokoban PRIVATE -O2 -DNDEBUG)
 target_include_directories(must_pass_sokoban PRIVATE

@@ -33,18 +33,7 @@ namespace ygg::database
 class BackwardFrontier
 {
 public:
-    void start(std::span<const uint_t> targets)
-    {
-        m_level.clear();
-        m_frontier.clear();
-        for (const auto target : targets)
-        {
-            level_slot(target) = 0;
-            m_frontier.push_back(target);
-        }
-        m_depth = 0;
-        m_exhausted = false;
-    }
+    void start(std::span<const uint_t> targets);
 
     /// Advances one level; returns the number of vertices found.
     template<PredecessorOracle Predecessors, DistanceHeuristic H>

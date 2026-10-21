@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryRenameTag>>>(m, "QueryRenameIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QueryRenameTag>>>(m, "QueryRenameIndex");
 
     {
         using V = QueryData<ygg::database::QueryRenameTag>;
@@ -25,7 +25,7 @@ void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryRenameTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QueryRenameTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_join(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryJoinTag>>>(m, "QueryJoinIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QueryJoinTag>>>(m, "QueryJoinIndex");
 
     {
         using V = QueryData<ygg::database::QueryJoinTag>;
@@ -26,7 +26,7 @@ void bind_query_join(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryJoinTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QueryJoinTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

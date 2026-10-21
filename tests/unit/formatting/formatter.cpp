@@ -46,15 +46,16 @@ TEST(YggdrasilTests, CommonToStringUsesFmtFormatting) { EXPECT_EQ(ygg::to_string
 TEST(YggdrasilTests, DatabaseQueryPlanFormatterPreservesExplanation)
 {
     using Column = ygg::Index<database::Column>;
-    auto repository = qb::repository<>();
-    const std::array<database::ColumnLayout, 2> columns { database::ColumnLayout { Column(3), 5, 0, 8 }, database::ColumnLayout { Column(8), 1, 8, 4 } };
+    auto repository = qb::repository();
+    const std::array<database::ColumnLayout, 2> columns { database::ColumnLayout { Column(3), database::column_type<double>, 0, 8 },
+                                                          database::ColumnLayout { Column(8), database::column_type<std::int32_t>, 8, 4 } };
     const auto input = qb::input(repository, 7, columns);
     const auto nullary = qb::input(repository, 2, std::initializer_list<Column> {});
     const auto join = qb::generic_join(repository, { input, nullary }, { Column(3), Column(8) }, { Column(8), Column(3) });
     const auto plan = ygg::database::compile({ join, input });
-    const std::string expected = "0: input() columns=[3:5,8:1] slot=7\n"
+    const std::string expected = "0: input() columns=[3:6,8:2] slot=7\n"
                                  "1: input() columns=[] slot=2\n"
-                                 "2: generic_join(0,1) columns=[8:1,3:5] variables=[3,8]\n"
+                                 "2: generic_join(0,1) columns=[8:2,3:6] variables=[3,8]\n"
                                  "roots=[2,0]\n";
     EXPECT_EQ(fmt::format("{}", plan), expected);
     EXPECT_EQ(ygg::to_string(plan), expected);
@@ -66,7 +67,7 @@ TEST(YggdrasilTests, DatabaseQueryPlanFormatterPreservesExplanation)
 
 TEST(YggdrasilTests, DatabaseQueryPlanFormatterHandlesEmptyPlans)
 {
-    const database::QueryPlan<> plan;
+    const database::QueryPlan plan;
     EXPECT_EQ(fmt::format("{}", plan), "roots=[]\n");
     EXPECT_EQ(database::explain(plan), "roots=[]\n");
 }

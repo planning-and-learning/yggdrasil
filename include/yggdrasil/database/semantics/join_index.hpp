@@ -23,7 +23,6 @@ namespace ygg::database
 /// Indexed inputs must share one RelationPoolFactory; directly constructed inputs
 /// may be used as unindexed probes. Rows stay unchanged until the index is destroyed.
 /// Stores their factory-local identity; no row pointers or column labels are retained.
-template<ColumnTypes Values = DefaultColumnTypes>
 class JoinIndex
 {
 private:
@@ -32,10 +31,10 @@ private:
     UnorderedMultiMap<hash_t, size_t> m_index;
 
 public:
-    template<RelationViewConcept<Values> V>
+    template<RelationViewConcept V>
     JoinIndex(const V& build, std::span<const ColumnSlice> keys);
 
-    template<RelationViewConcept<Values> V>
+    template<RelationViewConcept V>
     bool matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept;
     const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
 
@@ -46,17 +45,16 @@ public:
 /// All indexed inputs must come from the same RelationPoolFactory.
 /// Indexed rows must remain stationary and unchanged. Clear before any source
 /// is mutated, destroyed, moved, or reused. No schemas or views are retained.
-template<ColumnTypes Values = DefaultColumnTypes>
 class JoinIndexCache
 {
 private:
-    UnorderedSet<JoinIndex<Values>> m_indexes;
+    UnorderedSet<JoinIndex> m_indexes;
 
 public:
     /// Hits borrow the lookup key and allocate nothing. Returned references
     /// remain valid until an insertion or clear().
-    template<RelationViewConcept<Values> V>
-    const JoinIndex<Values>& get_or_create(const V& relation, std::span<const ColumnSlice> keys);
+    template<RelationViewConcept V>
+    const JoinIndex& get_or_create(const V& relation, std::span<const ColumnSlice> keys);
 
     size_t size() const noexcept { return m_indexes.size(); }
     void clear() noexcept { m_indexes.clear(); }

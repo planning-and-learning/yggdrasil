@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_empty(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryEmptyTag>>>(m, "QueryEmptyIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QueryEmptyTag>>>(m, "QueryEmptyIndex");
 
     {
         using V = QueryData<ygg::database::QueryEmptyTag>;
@@ -21,7 +21,7 @@ void bind_query_empty(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryEmptyTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QueryEmptyTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

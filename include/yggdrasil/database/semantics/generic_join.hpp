@@ -16,11 +16,10 @@ namespace ygg::database
 {
 /// Prepared full natural join. Variable order controls execution; output order
 /// independently preserves the caller's schema. Projection is a separate operator.
-template<ColumnTypes Values = DefaultColumnTypes>
 class GenericJoinPlan
 {
     cista::offset::vector<cista::offset::vector<ColumnLayout>> m_inputs;
-    Builder<Columns<Values>> m_output;
+    Builder<Columns> m_output;
     cista::offset::vector<Index<Column>> m_order;
     cista::offset::vector<cista::offset::vector<ColumnSlice>> m_keys;
     cista::offset::vector<cista::offset::vector<size_t>> m_occurrences;
@@ -41,7 +40,7 @@ public:
         std::vector<ColumnLayout> combined;
         for (const auto& input : inputs)
         {
-            validate_columns<Values>(input);
+            validate_columns(input);
             for (const auto column : input)
             {
                 const auto found = std::ranges::find(combined, column.label, &ColumnLayout::label);
@@ -124,12 +123,7 @@ struct GenericJoinWork
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
 inline thread_local GenericJoinWork generic_join_work;
 #endif
-inline void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept
-{
-#ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
-    ++(generic_join_work.*member);
-#endif
-}
+void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept;
 
 struct GenericJoinKey
 {
@@ -149,53 +143,11 @@ struct GenericJoinTrie
         return found == children.end() ? nullptr : found->second.get();
     }
 
-    bool contains(std::span<const std::byte> row, std::span<const ColumnSlice> keys) const
-    {
-        const auto* node = this;
-        for (const auto key : keys)
-        {
-            node = node->find(row.subspan(key.offset, key.size));
-            if (!node)
-                return false;
-        }
-        return node->rows != 0;
-    }
+    bool contains(std::span<const std::byte> row, std::span<const ColumnSlice> keys) const;
 
-    bool insert(std::span<const std::byte> row, std::span<const ColumnSlice> keys)
-    {
-        if (keys.empty())
-        {
-            const bool inserted = rows == 0;
-            rows = 1;
-            return inserted;
-        }
-        const auto value = row.subspan(keys.front().offset, keys.front().size);
-        auto found = children.find(std::make_tuple(value));
-        if (found == children.end())
-            found = children.emplace(GenericJoinKey { { value.begin(), value.end() } }, std::make_unique<GenericJoinTrie>()).first;
-        if (!found->second->insert(row, keys.subspan(1)))
-            return false;
-        ++rows;
-        return true;
-    }
+    bool insert(std::span<const std::byte> row, std::span<const ColumnSlice> keys);
 
-    bool erase(std::span<const std::byte> row, std::span<const ColumnSlice> keys)
-    {
-        if (keys.empty())
-        {
-            const bool erased = rows != 0;
-            rows = 0;
-            return erased;
-        }
-        const auto value = row.subspan(keys.front().offset, keys.front().size);
-        const auto found = children.find(std::make_tuple(value));
-        if (found == children.end() || !found->second->erase(row, keys.subspan(1)))
-            return false;
-        --rows;
-        if (found->second->rows == 0)
-            children.erase(found);
-        return true;
-    }
+    bool erase(std::span<const std::byte> row, std::span<const ColumnSlice> keys);
 
     void clear()
     {
@@ -215,61 +167,23 @@ struct GenericJoinTrie
 
 namespace incremental
 {
-template<ColumnTypes Values = DefaultColumnTypes>
 class GenericJoinEvaluator;
 }
 
 /// Sequential scratch and hash tries for one prepared plan. Owns indexed bytes;
 /// sources need only remain valid during the call. Moving preserves usability.
-template<ColumnTypes Values = DefaultColumnTypes>
 class GenericJoinWorkspace
 {
-    GenericJoinPlan<Values> m_plan;
+    GenericJoinPlan m_plan;
     std::vector<detail::GenericJoinTrie> m_tries;
     std::vector<const detail::GenericJoinTrie*> m_cursors;
     std::vector<std::byte> m_row;
 
-    void enumerate(size_t depth, Builder<Relation<Values>>& out)
-    {
-        detail::count_generic_join_work(&detail::GenericJoinWork::prefixes);
-        if (depth == m_plan.variable_order().size())
-        {
-            out.insert(Row<Values>(m_row, m_plan.output_columns().span()));
-            return;
-        }
-        const auto count = m_plan.input_count();
-        const auto* current = m_cursors.data() + depth * count;
-        auto* next = m_cursors.data() + (depth + 1) * count;
-        const auto inputs = m_plan.variable_inputs(depth);
-        const auto source = *std::ranges::min_element(inputs, {}, [&](size_t input) { return current[input]->children.size(); });
-        for (const auto& [key, child] : current[source]->children)
-        {
-            detail::count_generic_join_work(&detail::GenericJoinWork::candidate_keys);
-            std::copy_n(current, count, next);
-            bool present = true;
-            for (const auto input : inputs)
-            {
-                if (input != source)
-                    detail::count_generic_join_work(&detail::GenericJoinWork::probes);
-                next[input] = input == source ? child.get() : current[input]->find(key.bytes);
-                if (!next[input])
-                {
-                    present = false;
-                    break;
-                }
-            }
-            if (present)
-            {
-                const auto output = m_plan.output_position(depth);
-                std::ranges::copy(key.bytes, m_row.begin() + output.offset);
-                enumerate(depth + 1, out);
-            }
-        }
-    }
+    void enumerate(size_t depth, Builder<Relation>& out);
 
     /// Appends the full assignments over the tries returned by root(input).
     template<std::invocable<size_t> Root>
-    void append(Builder<Relation<Values>>& out, Root&& root)
+    void append(Builder<Relation>& out, Root&& root)
     {
         for (size_t input = 0; input < m_tries.size(); ++input)
         {
@@ -280,21 +194,21 @@ class GenericJoinWorkspace
         }
         enumerate(0, out);
     }
-    void append(Builder<Relation<Values>>& out)
+    void append(Builder<Relation>& out)
     {
         append(out, [&](size_t input) -> const auto& { return m_tries[input]; });
     }
     /// Appends the assignments that read the replacement trie for the replaced input.
-    void append(Builder<Relation<Values>>& out, size_t replaced, const detail::GenericJoinTrie& replacement)
+    void append(Builder<Relation>& out, size_t replaced, const detail::GenericJoinTrie& replacement)
     {
         append(out, [&](size_t input) -> const auto& { return input == replaced ? replacement : m_tries[input]; });
     }
     detail::GenericJoinTrie& trie(size_t input) { return m_tries.at(input); }
 
-    friend class incremental::GenericJoinEvaluator<Values>;
+    friend class incremental::GenericJoinEvaluator;
 
 public:
-    explicit GenericJoinWorkspace(const GenericJoinPlan<Values>& plan) :
+    explicit GenericJoinWorkspace(const GenericJoinPlan& plan) :
         m_plan(plan),
         m_tries(plan.input_count()),
         m_cursors((plan.variable_order().size() + 1) * plan.input_count()),
@@ -302,11 +216,11 @@ public:
     {
     }
 
-    bool matches(const GenericJoinPlan<Values>& plan) const { return m_plan.matches(plan); }
+    bool matches(const GenericJoinPlan& plan) const { return m_plan.matches(plan); }
 
     /// Indexes the inputs, which match the plan, and appends their join to out.
-    template<RelationViewRange<Values> R>
-    void append_join(const R& inputs, Builder<Relation<Values>>& out)
+    template<RelationViewRange R>
+    void append_join(const R& inputs, Builder<Relation>& out)
     {
         for (size_t input = 0; input < m_plan.input_count(); ++input)
         {
@@ -331,11 +245,11 @@ public:
 /// time, iterating the smallest distinct prefix extension and probing the rest.
 /// https://arxiv.org/abs/1310.3314. Hash costs are expected; no ordering is required.
 /// Output replaces its rows; schema/alias/plan errors precede mutation.
-template<ColumnTypes Values, RelationViewRange<Values> R>
+template<RelationViewRange R>
 void generic_join(const R& inputs,
-                  const GenericJoinPlan<Values>& plan,
-                  Builder<Relation<Values>>& out,
-                  GenericJoinWorkspace<Values>& workspace)
+                  const GenericJoinPlan& plan,
+                  Builder<Relation>& out,
+                  GenericJoinWorkspace& workspace)
 {
     if (std::ranges::size(inputs) != plan.input_count() || !workspace.matches(plan))
         throw std::invalid_argument("Generic join: inputs or workspace do not match the plan.");

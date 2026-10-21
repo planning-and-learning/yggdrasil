@@ -26,7 +26,6 @@ namespace ygg::database
 {
 /// Borrows canonical bytes and a validated schema. Both must outlive this row.
 /// Construction is constant-time; public byte insertion validates encodings.
-template<ColumnTypes Values>
 class Row
 {
     std::span<const std::byte> m_bytes;
@@ -43,13 +42,13 @@ public:
     size_t size() const noexcept { return m_columns.size(); }
     bool empty() const noexcept { return m_columns.empty(); }
 
-    template<ColumnValueFor<Values> T>
+    template<ColumnValue T>
     T get(size_t position) const
     {
-        return detail::read_column<Values, T>(m_bytes, m_columns, position);
+        return detail::read_column<T>(m_bytes, m_columns, position);
     }
     /// Decodes every column as T into the reusable buffer, which the result borrows.
-    template<ColumnValueFor<Values> T>
+    template<ColumnValue T>
     std::span<const T> get_all(std::vector<T>& buffer) const
     {
         buffer.clear();
@@ -57,14 +56,14 @@ public:
             buffer.push_back(get<T>(position));
         return buffer;
     }
-    template<ColumnValueFor<Values> T>
+    template<ColumnValue T>
     T get(Index<Column> column) const
     {
         return get<T>(column_index(m_columns, column));
     }
 
-    /// Calls visitor with the value at `position`, decoded as its column's type.
-    template<InvocableWithEach<Values> Visitor>
+    /// Calls visitor with the value at `position`, decoded as its column's type, which must be one of Values.
+    template<ColumnTypes Values, InvocableWithEach<Values> Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
         if (position >= size())
@@ -76,7 +75,7 @@ public:
 };
 
 /// Encode a row whose columns all hold T into the reusable buffer, which the result borrows.
-template<ColumnTypes Values, ColumnValueFor<Values> T, std::ranges::sized_range R>
+template<ColumnValue T, std::ranges::sized_range R>
     requires std::convertible_to<std::ranges::range_reference_t<const R&>, T>
 std::span<const std::byte> encode_row(const R& values, std::vector<std::byte>& buffer)
 {
@@ -92,53 +91,31 @@ std::span<const std::byte> encode_row(const R& values, std::vector<std::byte>& b
 
 /// Encode a complete typed row using an already validated schema. The fixed-size
 /// result lives on the stack; its arity and each value type must match the schema.
-template<ColumnTypes Values, ColumnValueFor<Values>... Ts>
+template<ColumnValue... Ts>
 std::array<std::byte, (ColumnCodec<Ts>::size + ... + size_t { 0 })> encode_row(const std::tuple<Ts...>& values, std::span<const ColumnLayout> columns)
 {
     if (columns.size() != sizeof...(Ts))
         throw std::invalid_argument("Relation: row arity does not match its schema.");
     std::array<std::byte, (ColumnCodec<Ts>::size + ... + size_t { 0 })> bytes {};
     size_t position = 0;
-    std::apply([&](const Ts&... value) { (detail::write_column<Values>(bytes, columns, position++, value), ...); }, values);
+    std::apply([&](const Ts&... value) { (detail::write_column<Ts>(bytes, columns, position++, value), ...); }, values);
     return bytes;
 }
 
-namespace detail
-{
-template<typename C, ColumnValue T>
-T resolve_column(T value, const C&)
-{
-    return value;
-}
-
-template<typename C, typename Tag>
-    requires ColumnValue<Index<Tag>>
-auto resolve_column(Index<Tag> value, const C& context)
-{
-    if constexpr (ViewConcept<Index<Tag>, C>)
-        return make_view(value, context);
-    else
-        return value;
-}
-
-/// The type resolve_column() returns for a column value of type T in context C, with C first for MapTypeListSecondT.
-template<typename C, typename T>
-using ResolvedColumn = ViewOrValue<T, C>;
-}  // namespace detail
 }  // namespace ygg::database
 
 namespace ygg
 {
-/// Contextual row access resolves index values through the borrowed context;
-/// scalar values remain values. The row descriptor itself is retained by value.
-template<database::ColumnTypes Values, typename C>
-class View<database::Row<Values>, C>
+/// A row with its context. Index values stay raw: a relation's values may be owned by any repository, so callers
+/// resolve them in their owner. The row descriptor itself is retained by value.
+template<typename C>
+class View<database::Row, C>
 {
-    database::Row<Values> m_handle;
+    database::Row m_handle;
     const C* m_context;
 
 public:
-    View(database::Row<Values> handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
+    View(database::Row handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
     const auto& get_handle() const noexcept { return m_handle; }
     const auto& get_data() const noexcept { return m_handle; }
     const C& get_context() const noexcept { return *m_context; }
@@ -147,24 +124,21 @@ public:
     size_t size() const noexcept { return m_handle.size(); }
     bool empty() const noexcept { return m_handle.empty(); }
 
-    template<database::ColumnValueFor<Values> T>
-    auto get(size_t position) const
+    template<database::ColumnValue T>
+    T get(size_t position) const
     {
-        return database::detail::resolve_column(m_handle.template get<T>(position), *m_context);
+        return m_handle.template get<T>(position);
     }
-    template<database::ColumnValueFor<Values> T>
-    auto get(Index<database::Column> column) const
+    template<database::ColumnValue T>
+    T get(Index<database::Column> column) const
     {
         return get<T>(database::column_index(columns(), column));
     }
 
-    /// Calls visitor with the value at `position`, resolved through the context.
-    template<InvocableWithEach<MapTypeListSecondT<database::detail::ResolvedColumn, C, Values>> Visitor>
+    template<database::ColumnTypes Values, InvocableWithEach<Values> Visitor>
     auto visit(size_t position, Visitor&& visitor) const
     {
-        return m_handle.visit(position,
-                              [&](auto value)
-                              { return std::invoke(std::forward<Visitor>(visitor), database::detail::resolve_column(value, *m_context)); });
+        return m_handle.template visit<Values>(position, std::forward<Visitor>(visitor));
     }
 };
 }  // namespace ygg

@@ -20,7 +20,6 @@ namespace ygg::database
 {
 /// Copies share one identity sequence. Repositories whose views are compared
 /// or hashed together must come from the same factory.
-template<ColumnTypes Values>
 class QueryRepositoryFactory
 {
     std::shared_ptr<size_t> m_next_index = std::make_shared<size_t>(0);
@@ -33,32 +32,31 @@ class QueryRepositoryFactory
     }
 
 public:
-    [[nodiscard]] QueryRepository<Values> create();
-    [[nodiscard]] std::shared_ptr<QueryRepository<Values>> create_shared();
+    [[nodiscard]] QueryRepository create();
+    [[nodiscard]] std::shared_ptr<QueryRepository> create_shared();
 };
 
 /// Interns typed query records. Records are prepared by prepare_for_insert
 /// The erased query record followed by one concrete record per constructor tag.
-template<ColumnTypes Values>
-using QuerySymbolTypes = ConcatTypeListsT<TypeList<Query<Values>>, MapTypeListSecondT<Query, Values, QueryConstructorTags>>;
+using QuerySymbolTypes = ConcatTypeListsT<TypeList<Query<>>, MapTypeListT<Query, QueryConstructorTags>>;
 
 /// (query_construction.hpp) before insertion; children precede their parents.
-template<ColumnTypes Values>
 class QueryRepository
 {
-    friend class QueryRepositoryFactory<Values>;
+    friend class QueryRepositoryFactory;
 
 public:
-    using SymbolTypes = QuerySymbolTypes<Values>;
+    using SymbolTypes = QuerySymbolTypes;
 
 private:
-    ApplyTypeListT<formalism::SymbolRepository, QuerySymbolTypes<Values>> m_symbols;
-    QueryRepositoryFactory<Values> m_factory;
+    ApplyTypeListT<formalism::SymbolRepository, QuerySymbolTypes> m_symbols;
+    QueryRepositoryFactory m_factory;
     size_t m_index;
 
-    QueryRepository(size_t index, QueryRepositoryFactory<Values> factory) : m_factory(std::move(factory)), m_index(index) {}
+    QueryRepository(size_t index, QueryRepositoryFactory factory);
 
 public:
+    ~QueryRepository();
     QueryRepository(const QueryRepository&) = delete;
     QueryRepository& operator=(const QueryRepository&) = delete;
     QueryRepository(QueryRepository&&) = delete;
@@ -68,7 +66,7 @@ public:
     auto get_factory() const noexcept { return m_factory; }
     friend const QueryRepository& get_repository(const QueryRepository& repository) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
-    size_t size() const noexcept { return m_symbols.template local_size<Query<Values>>(); }
+    size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
@@ -104,17 +102,22 @@ public:
     }
 };
 
-template<ColumnTypes Values>
-QueryRepository<Values> QueryRepositoryFactory<Values>::create()
-{
-    return QueryRepository<Values>(next_index(), *this);
-}
-
-template<ColumnTypes Values>
-std::shared_ptr<QueryRepository<Values>> QueryRepositoryFactory<Values>::create_shared()
-{
-    return std::shared_ptr<QueryRepository<Values>>(new QueryRepository<Values>(next_index(), *this));
-}
 }  // namespace ygg::database
+
+// The symbol storage of every query record type is instantiated in the database library (docs/TEMPLATE_RULES.md, rule 9).
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryInputTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryEmptyTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryJoinTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryProjectTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryRenameTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySelectEqualTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySelectValueTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryUnionTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryDifferenceTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryDistanceTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryGenericJoinTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySemijoinTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAntijoinTag>, false>;
 
 #endif

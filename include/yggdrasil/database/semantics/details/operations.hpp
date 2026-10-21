@@ -28,55 +28,35 @@ namespace ygg::database
 namespace detail
 {
 /// Copy canonical fields verbatim; plans resolve their byte slices before evaluation.
-inline void append_fields(std::vector<std::byte>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields)
-{
-    for (const auto field : fields)
-    {
-        const auto bytes = input.subspan(field.offset, field.size);
-        output.insert(output.end(), bytes.begin(), bytes.end());
-    }
-}
+void append_fields(std::vector<std::byte>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields);
 
-template<ColumnTypes Values>
-void prepare_output(Builder<Relation<Values>>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs)
-{
-    if (!std::ranges::equal(out.columns().span(), columns))
-        throw std::invalid_argument("Relational operation: output schema does not match.");
-    for (const auto* input : inputs)
-        if (input == out.get_storage_address())
-            throw std::invalid_argument("Relational operation: output aliases an input.");
-    out.clear();
-}
+void prepare_output(Builder<Relation>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs);
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+template<RelationViewConcept L, RelationViewConcept R>
 void require_same_columns(const L& lhs, const R& rhs)
 {
     if (!std::ranges::equal(lhs.columns().span(), rhs.columns().span()))
         throw std::invalid_argument("Relational operation: input schemas must have the same column order.");
 }
 
-inline void require_plan_columns(std::span<const ColumnLayout> actual, std::span<const ColumnLayout> expected)
-{
-    if (!std::ranges::equal(actual, expected))
-        throw std::invalid_argument("Relational operation: input schema does not match prepared plan.");
-}
+void require_plan_columns(std::span<const ColumnLayout> actual, std::span<const ColumnLayout> expected);
 }  // namespace detail
 
 namespace detail
 {
-template<ColumnTypes Values, RelationViewConcept<Values> V>
+template<RelationViewConcept V>
 void project_rows(const V& input,
                   std::span<const ColumnLayout> columns,
                   std::span<const ColumnSlice> positions,
-                  Builder<Relation<Values>>& out,
-                  Workspace<Values>& workspace)
+                  Builder<Relation>& out,
+                  Workspace& workspace)
 {
     detail::prepare_output(out, columns, { input.get_storage_address() });
 
     if (positions.empty())
     {
         if (!input.empty())
-            out.insert(Row<Values>({}, columns));
+            out.insert(Row({}, columns));
         return;
     }
 
@@ -87,50 +67,50 @@ void project_rows(const V& input,
         const auto source = input.row(i);
         row.clear();
         append_fields(row, source, positions);
-        out.insert(Row<Values>(row, columns));
+        out.insert(Row(row, columns));
     }
 }
 
 }  // namespace detail
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, const ProjectionPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept V>
+void project(const V& input, const ProjectionPlan& plan, Builder<Relation>& out, Workspace& workspace)
 {
     detail::require_plan_columns(input.columns().span(), plan.input_columns().span());
     detail::project_rows(input, plan.output_columns().span(), plan.positions(), out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out, Workspace& workspace)
 {
     detail::projection_positions(input.columns().span(), columns, workspace.columns, workspace.lhs_keys);
     detail::project_rows(input, workspace.columns, workspace.lhs_keys, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out, Workspace& workspace)
 {
     project(input, std::span<const Index<Column>>(columns), out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation<Values>>& out)
+template<RelationViewConcept V>
+void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out)
 {
-    auto workspace = Workspace<Values>();
+    auto workspace = Workspace();
     project(input, columns, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation<Values>>& out)
+template<RelationViewConcept V>
+void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out)
 {
     project(input, std::span<const Index<Column>>(columns), out);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> project(const V& input, Builder<Columns<Values>> columns)
+template<RelationViewConcept V>
+Builder<Relation> project(const V& input, Builder<Columns> columns)
 {
-    auto out = Builder<Relation<Values>>(std::move(columns));
-    auto workspace = Workspace<Values>();
+    auto out = Builder<Relation>(std::move(columns));
+    auto workspace = Workspace();
     const auto input_columns = input.columns().span();
     for (const auto& column : out.columns())
     {
@@ -143,34 +123,34 @@ Builder<Relation<Values>> project(const V& input, Builder<Columns<Values>> colum
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> project(const V& input, std::span<const Index<Column>> columns)
+template<RelationViewConcept V>
+Builder<Relation> project(const V& input, std::span<const Index<Column>> columns)
 {
-    auto workspace = Workspace<Values>();
+    auto workspace = Workspace();
     detail::projection_positions(input.columns().span(), columns, workspace.columns, workspace.lhs_keys);
-    auto out = Builder<Relation<Values>>(workspace.columns);
+    auto out = Builder<Relation>(workspace.columns);
     detail::project_rows(input, workspace.columns, workspace.lhs_keys, out, workspace);
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> project(const V& input, std::initializer_list<Index<Column>> columns)
+template<RelationViewConcept V>
+Builder<Relation> project(const V& input, std::initializer_list<Index<Column>> columns)
 {
-    return project<Values>(input, std::span<const Index<Column>>(columns));
+    return project(input, std::span<const Index<Column>>(columns));
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, typename Predicate>
-    requires std::predicate<Predicate&, Row<Values>>
-void select(const V& input, Predicate predicate, Builder<Relation<Values>>& out)
+template<RelationViewConcept V, typename Predicate>
+    requires std::predicate<Predicate&, Row>
+void select(const V& input, Predicate predicate, Builder<Relation>& out)
 {
     detail::prepare_output(out, input.columns().span(), { input.get_storage_address() });
     for (size_t i = 0; i < input.size(); ++i)
-        if (std::invoke(predicate, Row<Values>(input.row(i), input.columns().span())))
-            out.insert(Row<Values>(input.row(i), input.columns().span()));
+        if (std::invoke(predicate, Row(input.row(i), input.columns().span())))
+            out.insert(Row(input.row(i), input.columns().span()));
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>>& assign(Builder<Relation<Values>>& destination, const V& source)
+template<RelationViewConcept V>
+Builder<Relation>& assign(Builder<Relation>& destination, const V& source)
 {
     if (destination.get_storage_address() == source.get_storage_address())
     {
@@ -179,21 +159,21 @@ Builder<Relation<Values>>& assign(Builder<Relation<Values>>& destination, const 
     }
     destination.initialize(source.columns().span());
     for (size_t i = 0; i < source.size(); ++i)
-        destination.insert(Row<Values>(source.row(i), source.columns().span()));
+        destination.insert(Row(source.row(i), source.columns().span()));
     return destination;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, typename Predicate>
-    requires std::predicate<Predicate&, Row<Values>>
-Builder<Relation<Values>> select(const V& input, Predicate predicate)
+template<RelationViewConcept V, typename Predicate>
+    requires std::predicate<Predicate&, Row>
+Builder<Relation> select(const V& input, Predicate predicate)
 {
-    auto out = Builder<Relation<Values>>(input.columns().span());
+    auto out = Builder<Relation>(input.columns().span());
     select(input, std::move(predicate), out);
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation<Values>>& out)
+template<RelationViewConcept V>
+void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation>& out)
 {
     const auto& left = input.columns().span()[input.column_index(lhs)];
     const auto& right = input.columns().span()[input.column_index(rhs)];
@@ -201,33 +181,33 @@ void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, 
         throw std::invalid_argument("Relational operation: selected columns must have the same type.");
     select(
         input,
-        [=](Row<Values> row) { return std::ranges::equal(row.bytes().subspan(left.offset, left.size), row.bytes().subspan(right.offset, right.size)); },
+        [=](Row row) { return std::ranges::equal(row.bytes().subspan(left.offset, left.size), row.bytes().subspan(right.offset, right.size)); },
         out);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V>
-Builder<Relation<Values>> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs)
+template<RelationViewConcept V>
+Builder<Relation> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs)
 {
-    auto out = Builder<Relation<Values>>(input.columns().span());
+    auto out = Builder<Relation>(input.columns().span());
     select_equal_columns(input, lhs, rhs, out);
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, ColumnValueFor<Values> T>
-void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation<Values>>& out)
+template<RelationViewConcept V, ColumnValue T>
+void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation>& out)
 {
     const auto& field = input.columns().span()[input.column_index(column)];
-    if (field.type != column_type<Values, T>)
+    if (field.type != column_type<T>)
         throw std::invalid_argument("Relational operation: selected value has an incompatible column type.");
     auto encoded = std::array<std::byte, ColumnCodec<T>::size> {};
     ColumnCodec<T>::encode(value, encoded);
-    select(input, [=](Row<Values> row) { return std::ranges::equal(row.bytes().subspan(field.offset, field.size), encoded); }, out);
+    select(input, [=](Row row) { return std::ranges::equal(row.bytes().subspan(field.offset, field.size), encoded); }, out);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> V, ColumnValueFor<Values> T>
-Builder<Relation<Values>> select_equal_value(const V& input, Index<Column> column, const T& value)
+template<RelationViewConcept V, ColumnValue T>
+Builder<Relation> select_equal_value(const V& input, Index<Column> column, const T& value)
 {
-    auto out = Builder<Relation<Values>>(input.columns().span());
+    auto out = Builder<Relation>(input.columns().span());
     select_equal_value(input, column, value, out);
     return out;
 }
@@ -236,7 +216,7 @@ namespace detail
 {
 /// Appends joined rows. Lookup values are row positions in the selected build
 /// input for a key hash; actual key equality resolves hash collisions.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R, std::unsigned_integral Position>
+template<RelationViewConcept L, RelationViewConcept R, std::unsigned_integral Position>
 void join_rows(const L& lhs,
                const R& rhs,
                std::span<const ColumnLayout> columns,
@@ -245,8 +225,8 @@ void join_rows(const L& lhs,
                std::span<const ColumnSlice> rhs_payload,
                bool build_left,
                const UnorderedMultiMap<hash_t, Position>& index,
-               Builder<Relation<Values>>& out,
-               Workspace<Values>& workspace)
+               Builder<Relation>& out,
+               Workspace& workspace)
 {
     if (lhs.empty() || rhs.empty())
         return;
@@ -257,7 +237,7 @@ void join_rows(const L& lhs,
     {
         row.assign(left.begin(), left.end());
         append_fields(row, right, rhs_payload);
-        out.insert(Row<Values>(row, columns));
+        out.insert(Row(row, columns));
     };
 
     if (lhs_keys.empty())
@@ -268,8 +248,8 @@ void join_rows(const L& lhs,
         return;
     }
 
-    const auto probe_rows = [&](const RelationViewConcept<Values> auto& build,
-                                const RelationViewConcept<Values> auto& probe,
+    const auto probe_rows = [&](const RelationViewConcept auto& build,
+                                const RelationViewConcept auto& probe,
                                 std::span<const ColumnSlice> build_keys,
                                 std::span<const ColumnSlice> probe_keys)
     {
@@ -293,37 +273,37 @@ void join_rows(const L& lhs,
         probe_rows(rhs, lhs, rhs_keys, lhs_keys);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+template<RelationViewConcept L, RelationViewConcept R>
 void join_rows(const L& lhs,
                const R& rhs,
                std::span<const ColumnLayout> columns,
                std::span<const ColumnSlice> lhs_keys,
                std::span<const ColumnSlice> rhs_keys,
                std::span<const ColumnSlice> rhs_payload,
-               Builder<Relation<Values>>& out,
-               Workspace<Values>& workspace)
+               Builder<Relation>& out,
+               Workspace& workspace)
 {
     prepare_output(out, columns, { lhs.get_storage_address(), rhs.get_storage_address() });
     const bool build_left = lhs.size() <= rhs.size();
     if (!lhs_keys.empty() && !lhs.empty() && !rhs.empty())
     {
         if (build_left)
-            build_join_index<Values>(lhs, lhs_keys, workspace.join_index);
+            build_join_index(lhs, lhs_keys, workspace.join_index);
         else
-            build_join_index<Values>(rhs, rhs_keys, workspace.join_index);
+            build_join_index(rhs, rhs_keys, workspace.join_index);
     }
     join_rows(lhs, rhs, columns, lhs_keys, rhs_keys, rhs_payload, build_left, workspace.join_index, out, workspace);
 }
 
 }  // namespace detail
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+template<RelationViewConcept L, RelationViewConcept R>
 void join(const L& lhs,
           const R& rhs,
-          const JoinPlan<Values>& plan,
-          const JoinIndex<Values>& index,
-          Builder<Relation<Values>>& out,
-          Workspace<Values>& workspace)
+          const JoinPlan& plan,
+          const JoinIndex& index,
+          Builder<Relation>& out,
+          Workspace& workspace)
 {
     detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
@@ -334,22 +314,22 @@ void join(const L& lhs,
     detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, index.index(), out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept L, RelationViewConcept R>
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
 {
     detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
     detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
+template<RelationViewConcept L, RelationViewConcept R>
 void join(const L& lhs,
           const R& rhs,
-          const JoinPlan<Values>& plan,
-          JoinIndexCache<Values>& cache,
+          const JoinPlan& plan,
+          JoinIndexCache& cache,
           JoinReuse reuse,
-          Builder<Relation<Values>>& out,
-          Workspace<Values>& workspace)
+          Builder<Relation>& out,
+          Workspace& workspace)
 {
     if (!reuse.lhs && !reuse.rhs)
         return join(lhs, rhs, plan, out, workspace);
@@ -369,63 +349,63 @@ void join(const L& lhs,
     detail::join_rows(lhs, rhs, plan.output_columns().span(), plan.lhs_keys(), plan.rhs_keys(), plan.rhs_payload(), build_left, *index, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept L, RelationViewConcept R>
+void join(const L& lhs, const R& rhs, Builder<Relation>& out, Workspace& workspace)
 {
     detail::join_positions(lhs.columns().span(), rhs.columns().span(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
     detail::join_rows(lhs, rhs, workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void join(const L& lhs, const R& rhs, Builder<Relation<Values>>& out)
+template<RelationViewConcept L, RelationViewConcept R>
+void join(const L& lhs, const R& rhs, Builder<Relation>& out)
 {
-    auto workspace = Workspace<Values>();
+    auto workspace = Workspace();
     join(lhs, rhs, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> join(const L& lhs, const R& rhs)
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> join(const L& lhs, const R& rhs)
 {
-    auto workspace = Workspace<Values>();
+    auto workspace = Workspace();
     detail::join_positions(lhs.columns().span(), rhs.columns().span(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
-    auto out = Builder<Relation<Values>>(workspace.columns);
+    auto out = Builder<Relation>(workspace.columns);
     detail::join_rows(lhs, rhs, workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload, out, workspace);
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void union_(const L& lhs, const R& rhs, Builder<Relation<Values>>& out)
+template<RelationViewConcept L, RelationViewConcept R>
+void union_(const L& lhs, const R& rhs, Builder<Relation>& out)
 {
-    detail::require_same_columns<Values>(lhs, rhs);
+    detail::require_same_columns(lhs, rhs);
     detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     for (size_t i = 0; i < lhs.size(); ++i)
-        out.insert(Row<Values>(lhs.row(i), lhs.columns().span()));
+        out.insert(Row(lhs.row(i), lhs.columns().span()));
     for (size_t i = 0; i < rhs.size(); ++i)
-        out.insert(Row<Values>(rhs.row(i), rhs.columns().span()));
+        out.insert(Row(rhs.row(i), rhs.columns().span()));
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> union_(const L& lhs, const R& rhs)
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> union_(const L& lhs, const R& rhs)
 {
-    auto out = Builder<Relation<Values>>(lhs.columns().span());
+    auto out = Builder<Relation>(lhs.columns().span());
     union_(lhs, rhs, out);
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void difference(const L& lhs, const R& rhs, Builder<Relation<Values>>& out)
+template<RelationViewConcept L, RelationViewConcept R>
+void difference(const L& lhs, const R& rhs, Builder<Relation>& out)
 {
-    detail::require_same_columns<Values>(lhs, rhs);
+    detail::require_same_columns(lhs, rhs);
     detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
     for (size_t i = 0; i < lhs.size(); ++i)
-        if (!rhs.contains(Row<Values>(lhs.row(i), lhs.columns().span())))
-            out.insert(Row<Values>(lhs.row(i), lhs.columns().span()));
+        if (!rhs.contains(Row(lhs.row(i), lhs.columns().span())))
+            out.insert(Row(lhs.row(i), lhs.columns().span()));
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> difference(const L& lhs, const R& rhs)
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> difference(const L& lhs, const R& rhs)
 {
-    auto out = Builder<Relation<Values>>(lhs.columns().span());
+    auto out = Builder<Relation>(lhs.columns().span());
     difference(lhs, rhs, out);
     return out;
 }
@@ -433,8 +413,8 @@ Builder<Relation<Values>> difference(const L& lhs, const R& rhs)
 namespace detail
 {
 /// Keeps the lhs rows whose match in rhs on the plan's keys exists (`matching`) or does not.
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void filter_matches(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, bool matching, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept L, RelationViewConcept R>
+void filter_matches(const L& lhs, const R& rhs, const JoinPlan& plan, bool matching, Builder<Relation>& out, Workspace& workspace)
 {
     require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
@@ -442,7 +422,7 @@ void filter_matches(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, bo
     const auto lhs_keys = plan.lhs_keys();
     const auto rhs_keys = plan.rhs_keys();
     if (!lhs_keys.empty() && !rhs.empty())
-        build_join_index<Values>(rhs, rhs_keys, workspace.join_index);
+        build_join_index(rhs, rhs_keys, workspace.join_index);
     const auto matched = [&](std::span<const std::byte> row)
     {
         if (rhs.empty() || lhs_keys.empty())
@@ -454,37 +434,37 @@ void filter_matches(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, bo
     };
     for (size_t i = 0; i < lhs.size(); ++i)
         if (matched(lhs.row(i)) == matching)
-            out.insert(Row<Values>(lhs.row(i), lhs.columns().span()));
+            out.insert(Row(lhs.row(i), lhs.columns().span()));
 }
 }  // namespace detail
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void semijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept L, RelationViewConcept R>
+void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
 {
     detail::filter_matches(lhs, rhs, plan, true, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> semijoin(const L& lhs, const R& rhs)
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> semijoin(const L& lhs, const R& rhs)
 {
-    auto workspace = Workspace<Values>();
-    auto out = Builder<Relation<Values>>(lhs.columns().span());
-    semijoin(lhs, rhs, JoinPlan<Values>(lhs.columns().span(), rhs.columns().span()), out, workspace);
+    auto workspace = Workspace();
+    auto out = Builder<Relation>(lhs.columns().span());
+    semijoin(lhs, rhs, JoinPlan(lhs.columns().span(), rhs.columns().span()), out, workspace);
     return out;
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-void antijoin(const L& lhs, const R& rhs, const JoinPlan<Values>& plan, Builder<Relation<Values>>& out, Workspace<Values>& workspace)
+template<RelationViewConcept L, RelationViewConcept R>
+void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
 {
     detail::filter_matches(lhs, rhs, plan, false, out, workspace);
 }
 
-template<ColumnTypes Values, RelationViewConcept<Values> L, RelationViewConcept<Values> R>
-Builder<Relation<Values>> antijoin(const L& lhs, const R& rhs)
+template<RelationViewConcept L, RelationViewConcept R>
+Builder<Relation> antijoin(const L& lhs, const R& rhs)
 {
-    auto workspace = Workspace<Values>();
-    auto out = Builder<Relation<Values>>(lhs.columns().span());
-    antijoin(lhs, rhs, JoinPlan<Values>(lhs.columns().span(), rhs.columns().span()), out, workspace);
+    auto workspace = Workspace();
+    auto out = Builder<Relation>(lhs.columns().span());
+    antijoin(lhs, rhs, JoinPlan(lhs.columns().span(), rhs.columns().span()), out, workspace);
     return out;
 }
 

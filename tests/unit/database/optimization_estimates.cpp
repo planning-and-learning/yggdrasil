@@ -13,7 +13,7 @@ const Column x(0), y(1), z(2);
 
 // Exercises System R estimation independently of planning: the same conjunction
 // must have one estimate whatever its join and filter association.
-auto estimate(ygg::database::QueryView<> root, const ygg::database::Statistics<>& statistics)
+auto estimate(ygg::database::QueryView<> root, const ygg::database::Statistics& statistics)
 {
     std::map<PlanId, ygg::database::detail::Estimate> estimates;
     for (const auto query : ygg::database::reachable(std::span<const ygg::database::QueryView<>>(&root, 1)))
@@ -35,11 +35,11 @@ void same_estimate(const auto& lhs, const auto& rhs)
 
 TEST(DatabaseOptimizationEstimates, JoinAndFilterAssociationHaveOneNormalizedEstimate)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
     const auto c = ygg::tests::qb::input(queries, 2, { x, z });
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 100, { { x, 10 }, { y, 20 } } };
     statistics.inputs[1] = { 200, { { y, 20 }, { z, 10 } } };
     statistics.inputs[2] = { 50, { { x, 10 }, { z, 10 } } };
@@ -66,9 +66,9 @@ TEST(DatabaseOptimizationEstimates, JoinAndFilterAssociationHaveOneNormalizedEst
 
 TEST(DatabaseOptimizationEstimates, EqualityAndConstantPredicatesAreIdempotentAndDetectConflicts)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto input = ygg::tests::qb::input(queries, 0, { x, y, z });
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 1000, { { x, 10 }, { y, 20 }, { z, 25 } } };
     const auto equal = ygg::tests::qb::select_equal(queries, input, x, y);
     EXPECT_NEAR(estimate(equal, statistics).rows, 50, 1e-9);
@@ -98,10 +98,10 @@ TEST(DatabaseOptimizationEstimates, EqualityAndConstantPredicatesAreIdempotentAn
 
 TEST(DatabaseOptimizationEstimates, ProjectionCreatesAnIndependentScopeForHiddenColumns)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 100, { { x, 10 }, { y, 20 } } };
     statistics.inputs[1] = { 200, { { y, 20 }, { z, 10 } } };
 
@@ -122,11 +122,11 @@ TEST(DatabaseOptimizationEstimates, ProjectionCreatesAnIndependentScopeForHidden
 
 TEST(DatabaseOptimizationEstimates, ObservationsOverrideDerivedEstimates)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 3, { x, y });
     const auto b = ygg::tests::qb::input(queries, 8, { y, z });
     const auto join = ygg::tests::qb::join(queries, a, b);
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[3] = { 100, {} };
     statistics.inputs[8] = { 200, {} };
     EXPECT_NEAR(estimate(join, statistics).rows, 100, 1e-9);
@@ -143,10 +143,10 @@ TEST(DatabaseOptimizationEstimates, ObservationsOverrideDerivedEstimates)
 
 TEST(DatabaseOptimizationEstimates, BoundedDomainsCapDistinctCounts)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 1000, {} };
     statistics.inputs[1] = { 1000, {} };
     EXPECT_NEAR(estimate(ygg::tests::qb::join(queries, a, b), statistics).rows, 1000, 1e-9);
@@ -158,7 +158,7 @@ TEST(DatabaseOptimizationEstimates, BoundedDomainsCapDistinctCounts)
 
 TEST(DatabaseOptimizationEstimates, FactorIdentitySeparatesInputsAndQueries)
 {
-    ygg::Builder<ygg::database::Columns<>> columns;
+    ygg::Builder<ygg::database::Columns> columns;
     columns.push_back<ygg::uint_t>(x);
     const ygg::database::RelationStatistics statistics { 10, { { x, 2 } } };
     const auto input = ygg::database::detail::factor(statistics, columns.span(), ygg::database::detail::InputFactorIdentity { 7 });
@@ -175,10 +175,10 @@ namespace
 {
 TEST(DatabaseOptimizationEstimates, SemijoinAndAntijoinPartitionTheirLhs)
 {
-    auto queries = ygg::tests::qb::repository<>();
+    auto queries = ygg::tests::qb::repository();
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { y, z });
-    ygg::database::Statistics<> statistics;
+    ygg::database::Statistics statistics;
     statistics.inputs[0] = { 100, { { x, 10 }, { y, 20 } } };
     statistics.inputs[1] = { 200, { { y, 20 }, { z, 10 } } };
     const auto semijoin = estimate(ygg::tests::qb::semijoin(queries, a, b), statistics);

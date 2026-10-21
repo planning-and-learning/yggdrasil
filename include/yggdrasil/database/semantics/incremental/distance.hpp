@@ -35,8 +35,6 @@ namespace ygg::database::incremental
 /// mutation requires initialize().
 /// Results and deltas are borrowed until the next mutation. Tuple IDs are retained
 /// until initialize(), so memory follows historical vertices and peak source count.
-template<ColumnTypes Values = DefaultColumnTypes>
-    requires ColumnValueFor<uint_t, Values>
 class DistanceEvaluator
 {
     static constexpr uint_t infinity = database::detail::distance_infinity;
@@ -55,7 +53,7 @@ class DistanceEvaluator
         std::vector<size_t> supports;
     };
 
-    DistancePlan<Values> m_plan;
+    DistancePlan m_plan;
     database::detail::DistanceGraph m_graph;
     UnorderedMultiMap<uint_t, uint_t> m_reverse;
     std::vector<SourceState> m_sources;
@@ -63,8 +61,8 @@ class DistanceEvaluator
     std::vector<size_t> m_source_slots;
     std::vector<uint_t> m_targets;
     std::vector<Flag> m_target_flags;
-    Builder<Relation<Values>> m_result;
-    Delta<Values> m_delta;
+    Builder<Relation> m_result;
+    Delta m_delta;
     bool m_initialized = false;
 
     // One scratch area serves all source trees sequentially.
@@ -96,86 +94,34 @@ class DistanceEvaluator
     void repair(SourceState& state);
     void clear_changes();
     /// Throws unless the changes describe actual set changes of the current inputs.
-    template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
+    template<RelationChange S, RelationChange E, RelationChange T>
     void require_actual(const S& sources, const E& edges, const T& targets) const;
     /// Applies changes that are known to be valid.
-    template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
+    template<RelationChange S, RelationChange E, RelationChange T>
     void apply(const S& sources, const E& edges, const T& targets);
 
-    friend struct detail::NodeRules<Values, QueryDistanceTag>;
+    friend struct detail::NodeRules<QueryDistanceTag>;
 
 public:
-    explicit DistanceEvaluator(DistancePlan<Values> plan);
+    explicit DistanceEvaluator(DistancePlan plan);
 
     /// Replace all inputs, retaining buffers, and clear the last output delta.
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+    template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
     void initialize(const S& sources, const E& edges, const T& targets);
 
     /// Publish only the net result change of this complete batch.
-    template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
+    template<RelationChange S, RelationChange E, RelationChange T>
     void update(const S& sources, const E& edges, const T& targets);
 
-    const Builder<Relation<Values>>& get_result() const&;
-    const Builder<Relation<Values>>& get_result() const&& = delete;
-    const Delta<Values>& get_delta() const&;
-    const Delta<Values>& get_delta() const&& = delete;
+    const Builder<Relation>& get_result() const&;
+    const Builder<Relation>& get_result() const&& = delete;
+    const Delta& get_delta() const&;
+    const Delta& get_delta() const&& = delete;
     /// Retained storage, including inactive reusable source arrays; excludes the plan.
     size_t memory_usage() const noexcept;
 };
 
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-DistanceEvaluator<Values>::DistanceEvaluator(DistancePlan<Values> plan) :
-    m_plan(std::move(plan)),
-    m_graph(m_plan.tuple_size()),
-    m_result(m_plan.output_columns().span()),
-    m_delta(m_plan.output_columns().span())
-{
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-uint_t DistanceEvaluator<Values>::require_vertex(std::span<const std::byte> row) const
-{
-    const auto vertex = m_graph.vertices.find(row);
-    if (!vertex)
-        throw std::invalid_argument("Incremental distance: removed vertex is absent.");
-    return *vertex;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-bool DistanceEvaluator<Values>::is_source(uint_t vertex) const noexcept
-{
-    return vertex < m_source_slots.size() && m_source_slots[vertex] != absent;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-bool DistanceEvaluator<Values>::is_target(uint_t vertex) const noexcept
-{
-    return vertex < m_target_flags.size() && m_target_flags[vertex] == Flag::SET;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::resize_vertices()
-{
-    const auto size = m_graph.vertices.size();
-    m_source_slots.resize(size, absent);
-    m_target_flags.resize(size, Flag::CLEAR);
-    m_repair->resize(size);
-    m_changed_flags.resize(size, Flag::CLEAR);
-    for (size_t i = 0; i < m_active_sources; ++i)
-    {
-        m_sources[i].distances.resize(size, infinity);
-        m_sources[i].supports.resize(size, 0);
-    }
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-auto DistanceEvaluator<Values>::add_source(uint_t root) -> SourceState&
+inline auto DistanceEvaluator::add_source(uint_t root) -> SourceState&
 {
     if (m_active_sources == m_sources.size())
         m_sources.emplace_back();
@@ -193,156 +139,8 @@ auto DistanceEvaluator<Values>::add_source(uint_t root) -> SourceState&
     return state;
 }
 
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::remove_source(uint_t root)
-{
-    const auto position = m_source_slots[root];
-    assert(position < m_active_sources);
-    --m_active_sources;
-    if (position != m_active_sources)
-    {
-        std::swap(m_sources[position], m_sources[m_active_sources]);
-        m_source_slots[m_sources[position].root] = position;
-    }
-    m_source_slots[root] = absent;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::insert_result(uint_t source, uint_t target, uint_t length)
-{
-    if (length == infinity)
-        return;
-    const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_plan, m_row);
-    m_result.insert(row);
-    m_delta.added.insert(row);
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::remove_result(uint_t source, uint_t target, uint_t length)
-{
-    if (length == infinity)
-        return;
-    const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_plan, m_row);
-    const auto position = m_result.find(row);
-    assert(position);
-    m_delta.removed.insert(row);
-    m_result.erase(*position);
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::set_distance(SourceState& state, uint_t vertex, uint_t length)
-{
-    if (m_changed_flags[vertex] == Flag::CLEAR)
-    {
-        m_changed_flags[vertex] = Flag::SET;
-        m_changed.emplace_back(vertex, state.distances[vertex]);
-    }
-    state.distances[vertex] = length;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-uint_t DistanceEvaluator<Values>::successor_distance(uint_t distance) noexcept
-{
-    return distance == infinity ? infinity : distance + 1;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::update_edge(SourceState& state, uint_t from, uint_t to, std::optional<uint_t> before, std::optional<uint_t> after)
-{
-    // Presence is separate from infinity: deleting an unreachable edge still removes it from SP.
-    auto& supports = state.supports[to];
-    if (before && successor_distance(*before) <= state.distances[to])
-    {
-        assert(supports != 0);
-        --supports;
-    }
-    if (after && successor_distance(*after) <= state.distances[to])
-        ++supports;
-    m_repair->set_edge(from, to, after ? successor_distance(*after) : infinity, state.distances[to]);
-    m_repair->schedule(to, state.distances[to], supports);
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::rebuild_incoming(SourceState& state, uint_t vertex)
-{
-    assert(m_repair->settled(vertex));
-    auto& supports = state.supports[vertex];
-    supports = vertex == state.root ? 1 : 0;
-    for (const auto from : m_reverse.values(vertex))
-    {
-        detail::count_distance_work(&detail::DistanceWork::incoming_edges);
-        const auto candidate = successor_distance(state.distances[from]);
-        if (candidate <= state.distances[vertex])
-            ++supports;
-        m_repair->set_edge(from, vertex, candidate, state.distances[vertex]);
-    }
-    m_repair->schedule(vertex, state.distances[vertex], supports);
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::repair(SourceState& state)
-{
-    assert(m_repair->empty());
-    // Figure 4: seed the entire mixed batch before extracting any inconsistent vertex.
-    for (const auto& [from, to] : m_edges_removed)
-        update_edge(state, from, to, state.distances[from], std::nullopt);
-    for (const auto& [from, to] : m_edges_added)
-        update_edge(state, from, to, std::nullopt, state.distances[from]);
-
-    while (m_repair->scheduled())
-    {
-        const auto [key, vertex] = m_repair->pop();
-        detail::count_distance_work(&detail::DistanceWork::processed_vertices);
-        const auto before = state.distances[vertex];
-        const auto after = key < before ? key : infinity;
-        set_distance(state, vertex, after);
-        if (key < before)
-            state.supports[vertex] = m_repair->accept_improvement(vertex, key);
-        else
-            rebuild_incoming(state, vertex);
-        for (const auto to : m_graph.outgoing.values(vertex))
-        {
-            detail::count_distance_work(&detail::DistanceWork::outgoing_edges);
-            update_edge(state, vertex, to, before, after);
-        }
-    }
-    assert(m_repair->empty());
-    for (const auto& [target, before] : m_changed)
-    {
-        m_changed_flags[target] = Flag::CLEAR;
-        if (is_target(target) && before != state.distances[target])
-        {
-            remove_result(state.root, target, before);
-            insert_result(state.root, target, state.distances[target]);
-        }
-    }
-    m_changed.clear();
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-void DistanceEvaluator<Values>::clear_changes()
-{
-    m_sources_added.clear();
-    m_sources_removed.clear();
-    m_targets_added.clear();
-    m_targets_removed.clear();
-    m_edges_added.clear();
-    m_edges_removed.clear();
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
-void DistanceEvaluator<Values>::initialize(const S& sources, const E& edges, const T& targets)
+template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
+void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& targets)
 {
     database::detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
     database::detail::require_plan_columns(edges.columns().span(), m_plan.edge_columns().span());
@@ -389,10 +187,8 @@ void DistanceEvaluator<Values>::initialize(const S& sources, const E& edges, con
     m_initialized = true;
 }
 
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
-void DistanceEvaluator<Values>::update(const S& sources, const E& edges, const T& targets)
+template<RelationChange S, RelationChange E, RelationChange T>
+void DistanceEvaluator::update(const S& sources, const E& edges, const T& targets)
 {
     detail::require_initialized(m_initialized);
     detail::require_change(sources, m_plan.source_columns().span(), m_result, m_delta);
@@ -402,10 +198,8 @@ void DistanceEvaluator<Values>::update(const S& sources, const E& edges, const T
     apply(sources, edges, targets);
 }
 
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
-void DistanceEvaluator<Values>::require_actual(const S& sources, const E& edges, const T& targets) const
+template<RelationChange S, RelationChange E, RelationChange T>
+void DistanceEvaluator::require_actual(const S& sources, const E& edges, const T& targets) const
 {
     const auto& [sources_added, sources_removed] = sources;
     const auto& [edges_added, edges_removed] = edges;
@@ -437,10 +231,8 @@ void DistanceEvaluator<Values>::require_actual(const S& sources, const E& edges,
             throw std::invalid_argument("Incremental distance: added edge is already present.");
 }
 
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
-void DistanceEvaluator<Values>::apply(const S& sources, const E& edges, const T& targets)
+template<RelationChange S, RelationChange E, RelationChange T>
+void DistanceEvaluator::apply(const S& sources, const E& edges, const T& targets)
 {
     const auto& [sources_added, sources_removed] = sources;
     const auto& [edges_added, edges_removed] = edges;
@@ -540,67 +332,21 @@ void DistanceEvaluator<Values>::apply(const S& sources, const E& edges, const T&
     m_initialized = true;
 }
 
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-const Builder<Relation<Values>>& DistanceEvaluator<Values>::get_result() const&
-{
-    detail::require_initialized(m_initialized);
-    return m_result;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-const Delta<Values>& DistanceEvaluator<Values>::get_delta() const&
-{
-    detail::require_initialized(m_initialized);
-    return m_delta;
-}
-
-template<ColumnTypes Values>
-    requires ColumnValueFor<uint_t, Values>
-size_t DistanceEvaluator<Values>::memory_usage() const noexcept
-{
-    size_t bytes =
-        m_graph.memory_usage() + m_reverse.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + (m_repair ? m_repair->memory_usage() : 0);
-    bytes += m_sources.capacity() * sizeof(SourceState) + m_source_slots.capacity() * sizeof(size_t);
-    for (const auto& source : m_sources)
-        bytes += source.distances.capacity() * sizeof(uint_t) + source.supports.capacity() * sizeof(size_t);
-    bytes += (m_targets.capacity() + m_queue.capacity() + m_sources_added.capacity() + m_sources_removed.capacity() + m_targets_added.capacity()
-              + m_targets_removed.capacity())
-             * sizeof(uint_t);
-    bytes += (m_changed.capacity() + m_edges_added.capacity() + m_edges_removed.capacity()) * sizeof(std::pair<uint_t, uint_t>);
-    bytes += (m_target_flags.capacity() + m_changed_flags.capacity()) * sizeof(Flag) + m_row.capacity();
-    return bytes;
-}
-
 /// Maintains the smallest distance between any source and target. Wraps DistanceEvaluator
 /// and counts its result rows per distance value, so deleting the minimum reveals the next one.
-template<ColumnTypes Values = DefaultColumnTypes>
-    requires ColumnValueFor<uint_t, Values>
 class SourceMinDistance
 {
     size_t m_position;  ///< The distance column follows the edge columns.
-    DistanceEvaluator<Values> m_evaluator;
+    DistanceEvaluator m_evaluator;
     std::vector<size_t> m_counts;
 
-    void count(const Builder<Relation<Values>>& rows, bool add)
-    {
-        const auto columns = rows.columns().span();
-        for (size_t i = 0; i < rows.size(); ++i)
-        {
-            const auto distance = Row<Values>(rows.row(i), columns).template get<uint_t>(m_position);
-            if (distance >= m_counts.size())
-                m_counts.resize(distance + 1, 0);
-            assert(add || m_counts[distance] > 0);
-            m_counts[distance] = add ? m_counts[distance] + 1 : m_counts[distance] - 1;
-        }
-    }
+    void count(const Builder<Relation>& rows, bool add);
 
 public:
-    explicit SourceMinDistance(DistancePlan<Values> plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}
+    explicit SourceMinDistance(DistancePlan plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}
 
     /// Replace all inputs, retaining buffers.
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> E, RelationViewConcept<Values> T>
+    template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
     void initialize(const S& sources, const E& edges, const T& targets)
     {
         m_evaluator.initialize(sources, edges, targets);
@@ -609,7 +355,7 @@ public:
     }
 
     /// Apply one complete batch of input changes, as DistanceEvaluator::update.
-    template<RelationChange<Values> S, RelationChange<Values> E, RelationChange<Values> T>
+    template<RelationChange S, RelationChange E, RelationChange T>
     void update(const S& sources, const E& edges, const T& targets)
     {
         m_evaluator.update(sources, edges, targets);

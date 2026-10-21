@@ -16,9 +16,9 @@
 
 namespace ygg::database
 {
-template<typename V, typename Values>
-concept ColumnsViewConcept = ColumnTypes<Values> && requires(const V& columns, size_t index, Index<Column> column) {
-    { columns.get_index() } -> std::same_as<Index<Columns<Values>>>;
+template<typename V>
+concept ColumnsViewConcept = requires(const V& columns, size_t index, Index<Column> column) {
+    { columns.get_index() } -> std::same_as<Index<Columns>>;
     { columns.span() } -> std::same_as<std::span<const ColumnLayout>>;
     { columns.data() } -> std::same_as<const ColumnLayout*>;
     { columns.size() } -> std::same_as<size_t>;
@@ -32,10 +32,10 @@ concept ColumnsViewConcept = ColumnTypes<Values> && requires(const V& columns, s
 namespace ygg
 {
 /// Schema accessors shared by the index, data, and builder views of columns.
-template<database::ColumnTypes Values, typename V>
-class ViewMixin<database::Columns<Values>, V>
+template<typename V>
+class ViewMixin<database::Columns, V>
 {
-    const Data<database::Columns<Values>>& record() const noexcept { return static_cast<const V&>(*this).get_record(); }
+    const Data<database::Columns>& record() const noexcept { return static_cast<const V&>(*this).get_record(); }
 
 public:
     std::span<const database::ColumnLayout> span() const noexcept { return { record().values.data(), record().values.size() }; }
@@ -48,17 +48,21 @@ public:
     size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
     size_t row_size() const noexcept { return database::row_size(span()); }
 
-    template<database::ColumnValueFor<Values> T>
+    template<database::ColumnValue T>
     T get(std::span<const std::byte> bytes, Index<database::Column> column) const
     {
-        return database::detail::read_column<Values, T>(bytes, span(), column_index(column));
+        return database::detail::read_column<T>(bytes, span(), column_index(column));
     }
-    template<database::ColumnValueFor<Values> T>
+    template<database::ColumnValue T>
     void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
     {
-        database::detail::write_column<Values>(bytes, span(), column_index(column), value);
+        database::detail::write_column<T>(bytes, span(), column_index(column), value);
     }
-    void validate_row(std::span<const std::byte> bytes) const { database::validate_row<Values>(bytes, span()); }
+    template<database::ColumnTypes Values>
+    void validate_row(std::span<const std::byte> bytes) const
+    {
+        database::validate_row<Values>(bytes, span());
+    }
 };
 }  // namespace ygg
 

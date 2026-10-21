@@ -17,18 +17,17 @@ namespace ygg::database::incremental
 /// All removals precede insertions, so full-join deltas are exact and disjoint.
 /// This is incremental evaluation, not a dynamic worst-case optimality claim.
 /// Invalid changes preserve state; mutation failures require initialize().
-template<ColumnTypes Values>
 class GenericJoinEvaluator
 {
-    GenericJoinPlan<Values> m_plan;
-    GenericJoinWorkspace<Values> m_workspace;
+    GenericJoinPlan m_plan;
+    GenericJoinWorkspace m_workspace;
     database::detail::GenericJoinTrie m_changed;
-    Builder<Relation<Values>> m_result;
-    Delta<Values> m_delta;
+    Builder<Relation> m_result;
+    Delta m_delta;
     bool m_initialized = false;
 
     /// Applies changes that are known to be valid.
-    template<RelationDeltaRange<Values> R>
+    template<RelationDeltaRange R>
     void apply(const R& changes)
     {
         m_initialized = false;
@@ -58,10 +57,10 @@ class GenericJoinEvaluator
         m_initialized = true;
     }
 
-    friend struct detail::NodeRules<Values, QueryGenericJoinTag>;
+    friend struct detail::NodeRules<QueryGenericJoinTag>;
 
 public:
-    explicit GenericJoinEvaluator(GenericJoinPlan<Values> plan) :
+    explicit GenericJoinEvaluator(GenericJoinPlan plan) :
         m_plan(std::move(plan)),
         m_workspace(m_plan),
         m_result(m_plan.output_columns().span()),
@@ -69,7 +68,7 @@ public:
     {
     }
 
-    template<RelationViewRange<Values> R>
+    template<RelationViewRange R>
     void initialize(const R& inputs)
     {
         if (std::ranges::size(inputs) != m_plan.input_count())
@@ -89,7 +88,7 @@ public:
     /// Actual changes per input occurrence; swap added/removed in every slot to undo.
     /// Borrowed inputs must not alias this evaluator's result or previous delta;
     /// changes are validated before any mutation.
-    template<RelationDeltaRange<Values> R>
+    template<RelationDeltaRange R>
     void update(const R& changes)
     {
         detail::require_initialized(m_initialized);
@@ -113,18 +112,18 @@ public:
         apply(changes);
     }
 
-    const Builder<Relation<Values>>& get_result() const&
+    const Builder<Relation>& get_result() const&
     {
         detail::require_initialized(m_initialized);
         return m_result;
     }
-    const Builder<Relation<Values>>& get_result() const&& = delete;
-    const Delta<Values>& get_delta() const&
+    const Builder<Relation>& get_result() const&& = delete;
+    const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);
         return m_delta;
     }
-    const Delta<Values>& get_delta() const&& = delete;
+    const Delta& get_delta() const&& = delete;
     size_t memory_usage() const noexcept { return m_workspace.memory_usage() + m_changed.memory_usage() + m_result.memory_usage() + m_delta.memory_usage(); }
 };
 }  // namespace ygg::database::incremental

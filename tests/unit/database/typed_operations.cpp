@@ -18,7 +18,7 @@ namespace ygg::tests
 namespace
 {
 using ColumnIndex = Index<database::Column>;
-using RelationBuilder = Builder<database::Relation<>>;
+using RelationBuilder = Builder<database::Relation>;
 
 void expect_same_rows(const RelationBuilder& actual, const RelationBuilder& expected)
 {
@@ -27,7 +27,7 @@ void expect_same_rows(const RelationBuilder& actual, const RelationBuilder& expe
         EXPECT_TRUE(actual.contains(expected[i]));
 }
 
-void apply_changes(RelationBuilder& input, const database::incremental::Delta<>& delta, bool undo = false)
+void apply_changes(RelationBuilder& input, const database::incremental::Delta& delta, bool undo = false)
 {
     const auto& removed = undo ? delta.added : delta.removed;
     const auto& added = undo ? delta.removed : delta.added;
@@ -37,7 +37,7 @@ void apply_changes(RelationBuilder& input, const database::incremental::Delta<>&
         input.insert(added[i]);
 }
 
-void expect_delta(const database::incremental::Delta<>& actual, const RelationBuilder& before, const RelationBuilder& after)
+void expect_delta(const database::incremental::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
     RelationBuilder added(after.columns().span());
     RelationBuilder removed(before.columns().span());
@@ -50,7 +50,7 @@ void expect_delta(const database::incremental::Delta<>& actual, const RelationBu
 
 TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedChanges)
 {
-    Builder<database::Columns<>> columns;
+    Builder<database::Columns> columns;
     columns.push_back<uint_t>(ColumnIndex(1));
     columns.push_back<double>(ColumnIndex(2));
     columns.push_back<bool>(ColumnIndex(3));
@@ -59,9 +59,9 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     input.insert(std::tuple { uint_t(2), 1.5, true });
     input.insert(std::tuple { uint_t(3), 2.5, false });
 
-    const database::ProjectionPlan<> plan(columns.span(), { ColumnIndex(3), ColumnIndex(2) });
-    database::incremental::ProjectionEvaluator<> evaluator(plan);
-    database::Workspace<> workspace;
+    const database::ProjectionPlan plan(columns.span(), { ColumnIndex(3), ColumnIndex(2) });
+    database::incremental::ProjectionEvaluator evaluator(plan);
+    database::Workspace workspace;
     evaluator.initialize(input, workspace);
     RelationBuilder initial(plan.output_columns().span());
     database::project(input, plan, initial, workspace);
@@ -70,7 +70,7 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     EXPECT_EQ(initial.columns()[1].offset, database::ColumnCodec<bool>::size);
     EXPECT_TRUE(initial.contains(std::tuple { true, 1.5 }));
 
-    database::incremental::Delta<> changes(columns.span());
+    database::incremental::Delta changes(columns.span());
     changes.removed.insert(std::tuple { uint_t(1), 1.5, true });
     changes.removed.insert(std::tuple { uint_t(2), 1.5, true });
     changes.added.insert(std::tuple { uint_t(4), 1.5, true });
@@ -93,11 +93,11 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
 
 TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexes)
 {
-    Builder<database::Columns<>> left_columns;
+    Builder<database::Columns> left_columns;
     left_columns.push_back<uint_t>(ColumnIndex(1));
     left_columns.push_back<double>(ColumnIndex(2));
     left_columns.push_back<bool>(ColumnIndex(3));
-    Builder<database::Columns<>> right_columns;
+    Builder<database::Columns> right_columns;
     right_columns.push_back<bool>(ColumnIndex(3));
     right_columns.push_back<uint_t>(ColumnIndex(1));
     right_columns.push_back<double>(ColumnIndex(4));
@@ -109,17 +109,17 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
     right.insert(std::tuple { true, uint_t(1), 10.0 });
     right.insert(std::tuple { false, uint_t(2), 20.0 });
     right.insert(std::tuple { true, uint_t(3), 30.0 });
-    const database::JoinPlan<> plan(left_columns.span(), right_columns.span());
-    database::incremental::JoinEvaluator<> evaluator(plan);
-    database::Workspace<> workspace;
+    const database::JoinPlan plan(left_columns.span(), right_columns.span());
+    database::incremental::JoinEvaluator evaluator(plan);
+    database::Workspace workspace;
     evaluator.initialize(left, right, workspace);
     RelationBuilder initial(plan.output_columns().span());
     database::join(left, right, plan, initial, workspace);
     expect_same_rows(evaluator.get_result(), initial);
     ASSERT_EQ(initial.size(), 3);
 
-    database::incremental::Delta<> left_changes(left_columns.span());
-    database::incremental::Delta<> right_changes(right_columns.span());
+    database::incremental::Delta left_changes(left_columns.span());
+    database::incremental::Delta right_changes(right_columns.span());
     left_changes.removed.insert(std::tuple { uint_t(1), 1.5, true });
     left_changes.added.insert(std::tuple { uint_t(1), 1.75, true });
     left_changes.added.insert(std::tuple { uint_t(4), 4.5, false });
@@ -149,7 +149,7 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
 
 TEST(YggdrasilTests, DatabaseTypedConstantSelectionUsesCanonicalFloatEquality)
 {
-    Builder<database::Columns<>> columns;
+    Builder<database::Columns> columns;
     columns.push_back<double>(ColumnIndex(1));
     columns.push_back<uint_t>(ColumnIndex(2));
     RelationBuilder input(columns.span());
@@ -171,10 +171,10 @@ TEST(YggdrasilTests, DatabaseTypedConstantSelectionUsesCanonicalFloatEquality)
 
 TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResults)
 {
-    Builder<database::Columns<>> columns;
+    Builder<database::Columns> columns;
     columns.push_back<uint_t>(ColumnIndex(1));
     columns.push_back<double>(ColumnIndex(2));
-    Builder<database::Columns<>> incompatible;
+    Builder<database::Columns> incompatible;
     incompatible.push_back<double>(ColumnIndex(1));
     incompatible.push_back<double>(ColumnIndex(2));
     RelationBuilder input(columns.span());
@@ -183,7 +183,7 @@ TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResu
     input.insert(std::tuple { uint_t(1), 1.5 });
     wrong.insert(std::tuple { 1.0, 1.5 });
     output.insert(std::tuple { uint_t(99), 9.5 });
-    database::Workspace<> workspace;
+    database::Workspace workspace;
     EXPECT_THROW(database::join(input, wrong, output, workspace), std::invalid_argument);
     EXPECT_THROW(database::union_(input, wrong, output), std::invalid_argument);
     EXPECT_THROW(database::difference(input, wrong, output), std::invalid_argument);
@@ -192,8 +192,8 @@ TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResu
     ASSERT_EQ(output.size(), 1);
     EXPECT_TRUE(output.contains(std::tuple { uint_t(99), 9.5 }));
 
-    const database::ProjectionPlan<> plan(columns.span(), { ColumnIndex(1) });
-    database::incremental::ProjectionEvaluator<> evaluator(plan);
+    const database::ProjectionPlan plan(columns.span(), { ColumnIndex(1) });
+    database::incremental::ProjectionEvaluator evaluator(plan);
     evaluator.initialize(input, workspace);
     RelationBuilder empty_wrong(incompatible.span());
     EXPECT_THROW(evaluator.update(std::tie(wrong, empty_wrong), workspace), std::invalid_argument);
@@ -206,12 +206,12 @@ TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResu
 
 TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
 {
-    database::RelationRepositoryFactory<> factory;
+    database::RelationRepositoryFactory factory;
     auto repository = factory.create();
-    database::JoinIndexCache<> cache;
-    Builder<database::Columns<>> unsigned_columns;
+    database::JoinIndexCache cache;
+    Builder<database::Columns> unsigned_columns;
     unsigned_columns.push_back<std::uint64_t>(ColumnIndex(1));
-    Builder<database::Columns<>> float_columns;
+    Builder<database::Columns> float_columns;
     float_columns.push_back<double>(ColumnIndex(1));
     RelationBuilder unsigned_input(unsigned_columns.span());
     RelationBuilder float_input(float_columns.span());
@@ -220,8 +220,8 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     const auto unsigned_view = database::insert(repository, unsigned_input).first;
     const auto float_view = database::insert(repository, float_input).first;
     ASSERT_EQ(unsigned_view.get_storage_index(), float_view.get_storage_index());
-    const database::ProjectionPlan<> unsigned_key(unsigned_columns.span(), { ColumnIndex(1) });
-    const database::ProjectionPlan<> float_key(float_columns.span(), { ColumnIndex(1) });
+    const database::ProjectionPlan unsigned_key(unsigned_columns.span(), { ColumnIndex(1) });
+    const database::ProjectionPlan float_key(float_columns.span(), { ColumnIndex(1) });
     cache.get_or_create(unsigned_view, unsigned_key.positions());
     cache.get_or_create(float_view, float_key.positions());
     EXPECT_EQ(cache.size(), 2);
@@ -230,10 +230,10 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     cache.get_or_create(renamed, unsigned_key.positions());
     EXPECT_EQ(cache.size(), 2);
 
-    Builder<database::Columns<>> before_columns;
+    Builder<database::Columns> before_columns;
     before_columns.push_back<bool>(ColumnIndex(2));
     before_columns.push_back<uint_t>(ColumnIndex(1));
-    Builder<database::Columns<>> after_columns;
+    Builder<database::Columns> after_columns;
     after_columns.push_back<uint_t>(ColumnIndex(1));
     after_columns.push_back<bool>(ColumnIndex(2));
     RelationBuilder before(before_columns.span());
@@ -243,8 +243,8 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     const auto before_view = database::insert(repository, before).first;
     const auto after_view = database::insert(repository, after).first;
     ASSERT_EQ(before_view.get_storage_index(), after_view.get_storage_index());
-    const database::ProjectionPlan<> before_key(before_columns.span(), { ColumnIndex(1) });
-    const database::ProjectionPlan<> after_key(after_columns.span(), { ColumnIndex(1) });
+    const database::ProjectionPlan before_key(before_columns.span(), { ColumnIndex(1) });
+    const database::ProjectionPlan after_key(after_columns.span(), { ColumnIndex(1) });
     cache.get_or_create(before_view, before_key.positions());
     cache.get_or_create(after_view, after_key.positions());
     EXPECT_EQ(cache.size(), 4);

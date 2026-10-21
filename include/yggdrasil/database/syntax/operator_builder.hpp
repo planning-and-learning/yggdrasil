@@ -17,31 +17,30 @@ namespace ygg::database
 {
 
 /// Constructs queries in a repository: checkout, fill, insert_query.
-template<ColumnTypes Values>
 class OperatorBuilder
 {
-    QueryRepository<Values>* m_repository;
-    QueryBuilder<Values>* m_builder;
+    QueryRepository* m_repository;
+    QueryBuilder* m_builder;
 
 public:
-    OperatorBuilder(QueryRepository<Values>& repository, QueryBuilder<Values>& builder) : m_repository(&repository), m_builder(&builder) {}
+    OperatorBuilder(QueryRepository& repository, QueryBuilder& builder) : m_repository(&repository), m_builder(&builder) {}
 
-    QueryRepository<Values>& repository() noexcept { return *m_repository; }
-    QueryBuilder<Values>& builder() noexcept { return *m_builder; }
+    QueryRepository& repository() noexcept { return *m_repository; }
+    QueryBuilder& builder() noexcept { return *m_builder; }
 
-    template<class Tag, std::invocable<Data<Query<Values, Tag>>&> Fill>
-    QueryView<Values> make(Fill&& fill)
+    template<class Tag, std::invocable<Data<Query<Tag>>&> Fill>
+    QueryView<> make(Fill&& fill)
     {
-        auto data = checkout<Query<Values, Tag>>(*m_builder);
+        auto data = checkout<Query<Tag>>(*m_builder);
         fill(*data);
         return insert_query(*m_repository, *m_builder, *data);
     }
-    QueryView<Values> empty(std::span<const ColumnLayout> columns)
+    QueryView<> empty(std::span<const ColumnLayout> columns)
     {
         return make<QueryEmptyTag>([&](auto& data) { data.columns.set(columns.begin(), columns.end()); });
     }
     template<class Tag>
-    QueryView<Values> binary(QueryView<Values> lhs, QueryView<Values> rhs)
+    QueryView<> binary(QueryView<> lhs, QueryView<> rhs)
     {
         return make<Tag>(
             [&](auto& data)
@@ -51,7 +50,7 @@ public:
             });
     }
     template<class Tag>
-    QueryView<Values> relabel(QueryView<Values> arg, std::span<const Index<Column>> labels)
+    QueryView<> relabel(QueryView<> arg, std::span<const Index<Column>> labels)
     {
         return make<Tag>(
             [&](auto& data)
@@ -60,21 +59,21 @@ public:
                 data.labels.set(labels.begin(), labels.end());
             });
     }
-    QueryView<Values> join(QueryView<Values> lhs, QueryView<Values> rhs) { return binary<QueryJoinTag>(lhs, rhs); }
+    QueryView<> join(QueryView<> lhs, QueryView<> rhs) { return binary<QueryJoinTag>(lhs, rhs); }
     /// The source's operation over schema-identical children of this repository.
-    QueryView<Values> clone(QueryView<Values> source, std::span<const QueryView<Values>> children)
+    QueryView<> clone(QueryView<> source, std::span<const QueryView<>> children)
     {
         return detail::clone_query(source, children, *m_repository, *m_builder);
     }
     /// Keeps the query's columns with the given labels, in that order.
-    QueryView<Values> project(QueryView<Values> query, std::span<const Index<Column>> labels)
+    QueryView<> project(QueryView<> query, std::span<const Index<Column>> labels)
     {
         if (std::ranges::equal(column_labels(query.columns()), labels))
             return query;
         return relabel<QueryProjectTag>(query, labels);
     }
     /// Keeps the query's columns whose labels occur in the sorted set, in schema order.
-    QueryView<Values> restrict(QueryView<Values> query, std::span<const Index<Column>> keep)
+    QueryView<> restrict(QueryView<> query, std::span<const Index<Column>> keep)
     {
         std::vector<Index<Column>> labels;
         for (const auto& column : query.columns())
@@ -83,17 +82,7 @@ public:
         return project(query, labels);
     }
     /// Generic Join over the atoms; the variable order is also the output order.
-    QueryView<Values> generic_join(std::span<const QueryView<Values>> atoms, std::span<const Index<Column>> order)
-    {
-        return make<QueryGenericJoinTag>(
-            [&](auto& data)
-            {
-                for (const auto atom : atoms)
-                    data.inputs.push_back(atom.get_index());
-                data.variable_order.set(order.begin(), order.end());
-                data.output_order.set(order.begin(), order.end());
-            });
-    }
+    QueryView<> generic_join(std::span<const QueryView<>> atoms, std::span<const Index<Column>> order);
 };
 
 }  // namespace ygg::database

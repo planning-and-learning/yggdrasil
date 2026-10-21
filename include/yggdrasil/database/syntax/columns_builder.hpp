@@ -16,8 +16,7 @@
 
 namespace ygg::database
 {
-/// Validate labels, registered types, and contiguous packed offsets.
-template<ColumnTypes Values>
+/// Validate unique labels and nonempty, contiguously packed columns.
 void validate_columns(std::span<const ColumnLayout> columns);
 size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column);
 bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept;
@@ -30,9 +29,9 @@ void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout
 
 namespace detail
 {
-template<ColumnTypes Values, ColumnValueFor<Values> T>
+template<ColumnValue T>
 T read_column(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns, size_t position);
-template<ColumnTypes Values, ColumnValueFor<Values> T>
+template<ColumnValue T>
 void write_column(std::span<std::byte> bytes, std::span<const ColumnLayout> columns, size_t position, T value);
 }  // namespace detail
 }  // namespace ygg::database
@@ -41,24 +40,24 @@ namespace ygg
 {
 /// Owns a validated typed schema. Changing it clears its canonical index and
 /// retains column storage. Row byte width is independent of logical arity.
-template<database::ColumnTypes Values>
-struct Builder<database::Columns<Values>>
+template<>
+struct Builder<database::Columns>
 {
 private:
-    Data<database::Columns<Values>> m_data;
+    Data<database::Columns> m_data;
 
 public:
     Builder() = default;
     explicit Builder(std::span<const database::ColumnLayout> columns);
     Builder(std::initializer_list<database::ColumnLayout> columns);
-    /// Labels alone select the first registered type for every column.
+    /// Labels alone give every column type uint_t; use assign<T> for another type.
     explicit Builder(std::span<const Index<database::Column>> columns);
     Builder(std::initializer_list<Index<database::Column>> columns);
 
     auto& get_data() noexcept { return m_data; }
     const auto& get_data() const noexcept { return m_data; }
     auto get_index() const noexcept { return m_data.index; }
-    void set_index(Index<database::Columns<Values>> index) noexcept { m_data.index = index; }
+    void set_index(Index<database::Columns> index) noexcept { m_data.index = index; }
 
     std::span<const database::ColumnLayout> span() const& noexcept { return { m_data.values.data(), m_data.values.size() }; }
     std::span<const database::ColumnLayout> span() const&& = delete;
@@ -72,13 +71,15 @@ public:
     size_t row_size() const noexcept { return database::row_size(span()); }
     size_t memory_usage() const noexcept { return m_data.values.allocated_size_ * sizeof(database::ColumnLayout); }
 
-    template<database::ColumnValueFor<Values> T>
+    template<database::ColumnValue T>
     void push_back(Index<database::Column> column);
-    /// Appends a column of the registered type ordinal.
-    void push_back(Index<database::Column> column, size_t type);
+    /// Appends a column of the given type id and byte width.
+    void push_back(Index<database::Column> column, database::ColumnTypeId type, size_t size);
     void assign(std::span<const database::ColumnLayout> columns);
     void assign(std::initializer_list<database::ColumnLayout> columns);
+    template<database::ColumnValue T = uint_t>
     void assign(std::span<const Index<database::Column>> columns);
+    template<database::ColumnValue T = uint_t>
     void assign(std::initializer_list<Index<database::Column>> columns);
     void initialize(std::span<const database::ColumnLayout> columns) { assign(columns); }
     void initialize(std::initializer_list<database::ColumnLayout> columns) { assign(columns); }
@@ -89,17 +90,21 @@ public:
     void rename(std::initializer_list<Index<database::Column>> columns) { rename(std::span<const Index<database::Column>>(columns)); }
     void clear() noexcept { m_data.clear(); }
 
-    template<database::ColumnValueFor<Values> T>
+    template<database::ColumnValue T>
     T get(std::span<const std::byte> bytes, Index<database::Column> column) const
     {
-        return database::detail::read_column<Values, T>(bytes, span(), column_index(column));
+        return database::detail::read_column<T>(bytes, span(), column_index(column));
     }
-    template<database::ColumnValueFor<Values> T>
+    template<database::ColumnValue T>
     void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
     {
-        database::detail::write_column<Values>(bytes, span(), column_index(column), value);
+        database::detail::write_column<T>(bytes, span(), column_index(column), value);
     }
-    void validate_row(std::span<const std::byte> bytes) const { database::validate_row<Values>(bytes, span()); }
+    template<database::ColumnTypes Values>
+    void validate_row(std::span<const std::byte> bytes) const
+    {
+        database::validate_row<Values>(bytes, span());
+    }
 
     auto cista_members() noexcept { return std::tie(m_data); }
     auto cista_members() const noexcept { return std::tie(m_data); }

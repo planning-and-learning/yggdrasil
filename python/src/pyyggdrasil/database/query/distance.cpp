@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_distance(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QueryDistanceTag>>>(m, "QueryDistanceIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QueryDistanceTag>>>(m, "QueryDistanceIndex");
 
     {
         using V = QueryData<ygg::database::QueryDistanceTag>;
@@ -30,7 +30,7 @@ void bind_query_distance(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QueryDistanceTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QueryDistanceTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python

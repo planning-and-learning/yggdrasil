@@ -49,30 +49,29 @@ namespace ygg::database::incremental
 /// Contract: H is consistent in every state while the targets stay unchanged (DistanceHeuristic).
 ///
 /// Inputs and changes are borrowed during bind() and update() only.
-template<ColumnTypes Values, DistanceHeuristic H = BlindDistanceHeuristic>
-    requires ColumnValueFor<uint_t, Values>
+template<DistanceHeuristic H = BlindDistanceHeuristic>
 class MinDistance
 {
 public:
     /// Edges given by a query over inputs. `edges` has the plan's edge columns; `static_slots` marks its inputs that
     /// never change after the first bind().
-    MinDistance(QueryView<Values> edges, const DistancePlan<Values>& plan, const std::vector<bool>& static_slots = {}) :
-        MinDistance(incremental::bound::QueryEvaluator<Values>(database::detail::checked_edges(edges, plan), static_slots), plan)
+    MinDistance(QueryView<> edges, const DistancePlan& plan, const std::vector<bool>& static_slots = {}) :
+        MinDistance(incremental::bound::QueryEvaluator(database::detail::checked_edges(edges, plan), static_slots), plan)
     {
     }
 
     /// Edges given as a relation with the plan's edge columns, bound by bind_edges().
-    explicit MinDistance(const DistancePlan<Values>& plan, bool static_edges = false) :
-        MinDistance(database::detail::relation_edges<incremental::bound::QueryEvaluator<Values>>(plan, static_edges), plan)
+    explicit MinDistance(const DistancePlan& plan, bool static_edges = false) :
+        MinDistance(database::detail::relation_edges<incremental::bound::QueryEvaluator>(plan, static_edges), plan)
     {
     }
 
     size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
-    const Builder<Relation<Values>>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
+    const Builder<Relation>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
 
     /// Binds every input as a new baseline: input(slot) returns slot's relation view (see
     /// incremental::bound::QueryEvaluator::initialize). The stored search is discarded.
-    template<SlotRelations<Values> Input>
+    template<SlotRelations Input>
     void initialize(const Input& input)
     {
         m_reset_pending = true;
@@ -82,7 +81,7 @@ public:
 
     /// Diffs the current inputs against the bound ones: input(slot) returns slot's relation view (see
     /// incremental::bound::QueryEvaluator::bind).
-    template<SlotRelations<Values> Input>
+    template<SlotRelations Input>
     void bind(const Input& input, const std::vector<bool>& maybe_changed = {})
     {
         auto& evaluator = m_edges.evaluator();
@@ -98,7 +97,7 @@ public:
 
     /// Applies exact changes to bound inputs instead of diffing them: for each slot marked in `changed`, change(slot)
     /// has relation views `added` (rows not in the slot) and `removed` (rows in it).
-    template<SlotChanges<Values> Change>
+    template<SlotChanges Change>
     void update(const Change& change, const std::vector<bool>& changed)
     {
         if (changed.size() > input_count())
@@ -117,7 +116,7 @@ public:
     }
 
     /// Binds the edge relation of a relation-edged instance; unchanged edges are not compared.
-    template<RelationViewConcept<Values> E>
+    template<RelationViewConcept E>
     void bind_edges(const E& edges, bool maybe_changed = true)
     {
         m_edges_changed.assign(1, maybe_changed);
@@ -126,7 +125,7 @@ public:
 
     /// Sets the targets; different targets discard the stored search. Callers that know the targets are unchanged
     /// need not call it again.
-    template<RelationViewConcept<Values> T>
+    template<RelationViewConcept T>
     void set_targets(const T& targets)
     {
         database::detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
@@ -139,7 +138,7 @@ public:
 
     /// The minimum distance over the edges of the bound inputs to the targets set last. H must stay the same function
     /// while the targets are unchanged.
-    template<RelationViewConcept<Values> S>
+    template<RelationViewConcept S>
     uint_t min_distance(const S& sources, const H& heuristic)
     {
         if (!m_edges.evaluator().bound() || !m_targets_set)
@@ -165,7 +164,7 @@ public:
     }
 
     /// set_targets(targets), then min_distance(sources, heuristic).
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
+    template<RelationViewConcept S, RelationViewConcept T>
     uint_t min_distance(const S& sources, const T& targets, const H& heuristic = {})
     {
         set_targets(targets);
@@ -175,9 +174,9 @@ public:
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    using Edges = database::detail::EdgeQuery<incremental::bound::QueryEvaluator<Values>, Values>;
+    using Edges = database::detail::EdgeQuery<incremental::bound::QueryEvaluator>;
 
-    MinDistance(incremental::bound::QueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
+    MinDistance(incremental::bound::QueryEvaluator edges, const DistancePlan& plan) :
         m_plan(plan),
         m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
         m_tree(plan.tuple_size()),
@@ -187,7 +186,7 @@ private:
     {
     }
 
-    DistancePlan<Values> m_plan;
+    DistancePlan m_plan;
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;
@@ -235,7 +234,7 @@ private:
             m_added.add(from, to);
     }
 
-    template<RelationViewConcept<Values> A, RelationViewConcept<Values> R>
+    template<RelationViewConcept A, RelationViewConcept R>
     void seed(size_t slot, const A& added, const R& removed)
     {
         if (!m_reset_pending && !m_edges.evaluator().seed(slot, added, removed, [&](std::span<const std::byte> edge) { record_added(edge); }))

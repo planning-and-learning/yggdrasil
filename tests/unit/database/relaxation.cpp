@@ -17,24 +17,24 @@
 namespace
 {
 using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation<>>;
+using Relation = ygg::Builder<ygg::database::Relation>;
 using View = ygg::database::QueryView<>;
 namespace qb = ygg::tests::qb;
 const Column x(0), y(1), z(2);
 
-ygg::database::BorrowedRelationView<> borrow(const Relation& relation)
+ygg::database::BorrowedRelationView borrow(const Relation& relation)
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
 }
 
 /// Evaluates a query over the given inputs.
 Relation evaluate(View query, const std::vector<const Relation*>& inputs)
 {
-    auto bindings = std::vector<ygg::database::BorrowedRelationView<>>();
+    auto bindings = std::vector<ygg::database::BorrowedRelationView>();
     for (const auto* input : inputs)
         bindings.push_back(borrow(*input));
-    auto evaluator = ygg::database::QueryEvaluator<>(ygg::database::compile({ query }));
+    auto evaluator = ygg::database::QueryEvaluator(ygg::database::compile({ query }));
     evaluator.evaluate(bindings);
     auto result = Relation(evaluator.get_result().columns().span());
     ygg::database::assign(result, evaluator.get_result());
@@ -43,20 +43,20 @@ Relation evaluate(View query, const std::vector<const Relation*>& inputs)
 
 struct Relaxed
 {
-    ygg::database::QueryRepository<> repository = qb::repository<>();
-    ygg::database::Relaxation<> relaxation;
+    ygg::database::QueryRepository repository = qb::repository();
+    ygg::database::Relaxation relaxation;
 };
 
 std::unique_ptr<Relaxed> relax(std::span<const View> roots, const std::array<bool, 4>& known)
 {
     auto result = std::make_unique<Relaxed>();
-    result->relaxation = ygg::database::relax(roots, [&](size_t slot) { return known[slot]; }, result->repository, qb::builder<ygg::database::DefaultColumnTypes>());
+    result->relaxation = ygg::database::relax(roots, [&](size_t slot) { return known[slot]; }, result->repository, qb::builder());
     return result;
 }
 std::unique_ptr<Relaxed> relax(View query, const std::array<bool, 4>& known) { return relax(std::span<const View>(&query, 1), known); }
 
 /// Q(I) ⊆ Q̂(I) × U^(free labels): Q's rows projected onto Q̂'s labels are rows of Q̂.
-void expect_superset(View query, const ygg::database::Relaxation<>& relaxation, size_t root, const std::array<Relation, 4>& inputs)
+void expect_superset(View query, const ygg::database::Relaxation& relaxation, size_t root, const std::array<Relation, 4>& inputs)
 {
     const auto& relaxed_query = relaxation.queries[root];
     if (!relaxed_query)
@@ -69,14 +69,14 @@ void expect_superset(View query, const ygg::database::Relaxation<>& relaxation, 
     const auto labels = ygg::database::column_labels(relaxed_query->columns());
     for (const auto& column : relaxed_query->columns())
         EXPECT_TRUE(ygg::database::contains_column(query.columns(), column.label));
-    const auto projected = ygg::database::project<ygg::database::DefaultColumnTypes>(full, std::span<const Column>(labels));
+    const auto projected = ygg::database::project(full, std::span<const Column>(labels));
     for (size_t i = 0; i < projected.size(); ++i)
         EXPECT_TRUE(relaxed.contains(projected.row(i)));
 }
 
 TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
 {
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const auto a = qb::input(queries, 0, { x, y });
     const auto b = qb::input(queries, 1, { x, y });
     const auto c = qb::input(queries, 2, { y, z });
@@ -189,7 +189,7 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
 
 TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
 {
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const auto known_edges = qb::input(queries, 0, { x, y });
     const auto unknown = qb::input(queries, 1, { y, z });
     const auto blocked = qb::input(queries, 2, { x, y });
@@ -225,7 +225,7 @@ TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
 {
     // π_{x,y}((E(x,y) ⋈ I(u,v)) ▷ I(y,u)): I(u,v) shares nothing needed, and the antijoin filters on u, which is
     // eliminated, so the relaxation is E with I(u,v) reduced to an existence test, without a product.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const Column u(3), v(4);
     const auto edges = qb::input(queries, 0, { x, y });
     const auto identity = qb::input(queries, 1, { u, v });
@@ -255,7 +255,7 @@ TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
 
 TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
 {
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const auto a = qb::input(queries, 0, { x, y });
     const auto c = qb::input(queries, 2, { y, z });
     const auto joined = qb::join(queries, a, c);
@@ -267,7 +267,7 @@ TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
     inputs[0].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     inputs[2].insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
     const auto plan = ygg::database::compile({ *relaxed->relaxation.queries[0], *relaxed->relaxation.queries[1] });
-    auto evaluator = ygg::database::QueryEvaluator<>(plan);
+    auto evaluator = ygg::database::QueryEvaluator(plan);
     evaluator.evaluate(std::array { borrow(inputs[0]), borrow(inputs[2]) });
     EXPECT_EQ(evaluator.get_result(0).size(), 1);
     EXPECT_EQ(evaluator.get_result(1).size(), 1);
@@ -276,7 +276,7 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
 {
     // π_{x,y}(E(x,y) ⋈ I(u,v)) with y bound: I(u,v) is an existence test, so each predecessor x is emitted once, not
     // once per row of I.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const Column u(3), v(4);
     const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::input(queries, 1, { u, v })), { x, y });
     constexpr auto objects = ygg::uint_t(50);
@@ -287,17 +287,17 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
         edges.insert(std::tuple { o, ygg::uint_t(0) });
         identity.insert(std::tuple { o, o });
     }
-    auto evaluator = ygg::database::bound::QueryEvaluator<ygg::database::DefaultColumnTypes>(query);
+    auto evaluator = ygg::database::bound::QueryEvaluator(query);
     evaluator.bind_slot(0, edges);
     evaluator.bind_slot(1, identity);
     const auto predecessors = evaluator.prepare({ 1 });
     auto bytes = std::vector<std::byte>();
     auto emitted = std::vector<ygg::uint_t>();
     evaluator.evaluate(predecessors,
-                       ygg::database::encode_row<ygg::database::DefaultColumnTypes, ygg::uint_t>(std::array { ygg::uint_t(0) }, bytes),
+                       ygg::database::encode_row<ygg::uint_t>(std::array { ygg::uint_t(0) }, bytes),
                        [&](std::span<const std::byte> row)
                        {
-                           emitted.push_back(ygg::database::Row<ygg::database::DefaultColumnTypes>(row, evaluator.columns()).get<ygg::uint_t>(0));
+                           emitted.push_back(ygg::database::Row(row, evaluator.columns()).get<ygg::uint_t>(0));
                            return true;
                        });
     std::ranges::sort(emitted);
@@ -311,17 +311,17 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
 /// `limit` rows.
 std::vector<ygg::uint_t> bound_successors(View query, const std::vector<const Relation*>& inputs, size_t limit = std::numeric_limits<size_t>::max())
 {
-    auto evaluator = ygg::database::bound::QueryEvaluator<ygg::database::DefaultColumnTypes>(query);
+    auto evaluator = ygg::database::bound::QueryEvaluator(query);
     for (size_t slot = 0; slot < inputs.size(); ++slot)
         evaluator.bind_slot(slot, *inputs[slot]);
     const auto successors = evaluator.prepare({ 0 });
     auto bytes = std::vector<std::byte>();
     auto emitted = std::vector<ygg::uint_t>();
     evaluator.evaluate(successors,
-                       ygg::database::encode_row<ygg::database::DefaultColumnTypes, ygg::uint_t>(std::array { ygg::uint_t(0) }, bytes),
+                       ygg::database::encode_row<ygg::uint_t>(std::array { ygg::uint_t(0) }, bytes),
                        [&](std::span<const std::byte> row)
                        {
-                           emitted.push_back(ygg::database::Row<ygg::database::DefaultColumnTypes>(row, evaluator.columns()).get<ygg::uint_t>(1));
+                           emitted.push_back(ygg::database::Row(row, evaluator.columns()).get<ygg::uint_t>(1));
                            return emitted.size() < limit;
                        });
     return emitted;
@@ -331,7 +331,7 @@ TEST(DatabaseRelaxation, VariablesReadByLaterFiltersAreNotExistenceTests)
 {
     // E(0, y) has 10 rows and I(u, v) 3, so I is planned first and binds u, which only a later filter reads. A
     // step that stopped at I's first row would lose the other rows.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const Column u(3), v(4);
     const auto edges = qb::input(queries, 0, { x, y });
     const auto identity = qb::input(queries, 1, { u, v });
@@ -363,7 +363,7 @@ TEST(DatabaseRelaxation, ExistenceStepsSkipRowsTheirOwnFiltersReject)
 {
     // π_{x,y}(E(x,y) ⋈ σ_{u=7} I(u,v)): I is an existence test whose first rows fail u = 7. It must still find a
     // matching row, and only one: (7, 0) and (7, 1) both match.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const Column u(3), v(4);
     const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::select_value(queries, qb::input(queries, 1, { u, v }), u, ygg::uint_t(7))), { x, y });
     auto e = Relation({ x, y });
@@ -380,7 +380,7 @@ TEST(DatabaseRelaxation, StopInsideAnExistenceStepEndsTheEvaluation)
 {
     // E(0, y) has 5 rows and I(u, v) 50, so E is planned first and I is an existence test inside it. on_row stops at
     // the first row; the stop must not end only the existence step.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const Column u(3), v(4);
     const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::input(queries, 1, { u, v })), { x, y });
     auto e = Relation({ x, y });
@@ -396,7 +396,7 @@ TEST(DatabaseRelaxation, StopInsideAnExistenceStepEndsTheEvaluation)
 TEST(DatabaseRelaxation, SharedSubqueriesKeepTheRequestedColumnOrder)
 {
     // π_y σ_{x=0} R relaxes R with the labels (y, x) first; the root R must still get R's relaxation as (x, y).
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const auto r = qb::input(queries, 0, { x, y });
     const auto roots = std::array { qb::project(queries, qb::select_value(queries, r, x, ygg::uint_t(0)), { y }), r };
     const auto relaxed = relax(roots, { true, true, true, true });
@@ -434,7 +434,7 @@ std::array<Relation, 4> sample_inputs()
 TEST(DatabaseRelaxation, MixedSubtrahendsKeepTheirKnownPart)
 {
     // A subtrahend is under-approximated: its known part is subtracted, its unknown part is not.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const auto a = qb::input(queries, 0, { x, y });
     const auto b = qb::input(queries, 1, { x, y });
     const auto c = qb::input(queries, 2, { x, y });
@@ -450,7 +450,7 @@ TEST(DatabaseRelaxation, NestedSubtrahendsFlipPolarityTwice)
 {
     // A \ (B \ π_{x,y}(C ⋈ E)) with E unknown: the inner subtrahend is over-approximated by C, so the outer one is
     // under-approximated by B \ C. With C unknown too, nothing of the outer subtrahend is certain.
-    auto queries = qb::repository<>();
+    auto queries = qb::repository();
     const auto a = qb::input(queries, 0, { x, y });
     const auto b = qb::input(queries, 1, { x, y });
     const auto c = qb::input(queries, 2, { x, y });

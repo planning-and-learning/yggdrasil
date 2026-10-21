@@ -15,12 +15,12 @@
 
 namespace ygg
 {
-template<database::ColumnTypes Values, typename Tag>
-class View<Index<database::Query<Values, Tag>>, database::QueryRepository<Values>> :
-    public IndexViewBase<database::Query<Values, Tag>, database::QueryRepository<Values>>
+template<typename Tag>
+class View<Index<database::Query<Tag>>, database::QueryRepository> :
+    public IndexViewBase<database::Query<Tag>, database::QueryRepository>
 {
 public:
-    using IndexViewBase<database::Query<Values, Tag>, database::QueryRepository<Values>>::IndexViewBase;
+    using IndexViewBase<database::Query<Tag>, database::QueryRepository>::IndexViewBase;
 
     auto get_variant() const
         requires std::same_as<Tag, void>
@@ -132,7 +132,7 @@ public:
     auto get_inputs() const
         requires std::same_as<Tag, database::QueryGenericJoinTag>
     {
-        return std::span<const Index<database::Query<Values>>>(this->get_data().inputs.data(), this->get_data().inputs.size());
+        return std::span<const Index<database::Query<>>>(this->get_data().inputs.data(), this->get_data().inputs.size());
     }
     auto get_variable_order() const
         requires std::same_as<Tag, database::QueryGenericJoinTag>
@@ -149,14 +149,14 @@ public:
 
 namespace ygg::database
 {
-/// Calls f(QueryView<Values>) for every operand of a query, in operand order.
-template<ColumnTypes Values, typename Tag, std::invocable<QueryView<Values>> F>
-void for_each_child(QueryView<Values, Tag> view, F&& f)
+/// Calls f(QueryView<>) for every operand of a query, in operand order.
+template<typename Tag, std::invocable<QueryView<>> F>
+void for_each_child(QueryView<Tag> view, F&& f)
 {
     if constexpr (std::same_as<Tag, void>)
         ygg::visit([&](auto concrete) { for_each_child(concrete, f); }, view.get_variant());
     else
-        ygg::for_each_child<TypeList<Query<Values>>>(view, f);
+        ygg::for_each_child<TypeList<Query<>>>(view, f);
 }
 }  // namespace ygg::database
 

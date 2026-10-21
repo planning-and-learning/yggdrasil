@@ -46,28 +46,27 @@ struct MinDistanceStatistics : AStarCounters
 ///
 /// Nothing but compiled plans and static inputs is kept across calls; incremental::MinDistance keeps the search tree
 /// and updates it from input changes. Inputs are borrowed during min_distance() only.
-template<ColumnTypes Values, DistanceHeuristic H = BlindDistanceHeuristic>
-    requires ColumnValueFor<uint_t, Values>
+template<DistanceHeuristic H = BlindDistanceHeuristic>
 class MinDistance
 {
 public:
     /// Edges given by a query over inputs. `edges` has the plan's edge columns; `static_slots` marks its inputs that
     /// never change, which are then read on the first call only.
-    MinDistance(QueryView<Values> edges, const DistancePlan<Values>& plan, const std::vector<bool>& static_slots = {}) :
-        MinDistance(bound::QueryEvaluator<Values>(detail::checked_edges(edges, plan), static_slots), plan)
+    MinDistance(QueryView<> edges, const DistancePlan& plan, const std::vector<bool>& static_slots = {}) :
+        MinDistance(bound::QueryEvaluator(detail::checked_edges(edges, plan), static_slots), plan)
     {
     }
 
     /// Edges given as a relation with the plan's edge columns.
-    explicit MinDistance(const DistancePlan<Values>& plan, bool static_edges = false) :
-        MinDistance(detail::relation_edges<bound::QueryEvaluator<Values>>(plan, static_edges), plan)
+    explicit MinDistance(const DistancePlan& plan, bool static_edges = false) :
+        MinDistance(detail::relation_edges<bound::QueryEvaluator>(plan, static_edges), plan)
     {
     }
 
     size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
 
     /// The minimum distance over the edges of the inputs: input(slot) returns slot's relation view.
-    template<SlotRelations<Values> Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
+    template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T>
     uint_t min_distance(const Input& input, const S& sources, const T& targets, const H& heuristic = {})
     {
         detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
@@ -84,7 +83,7 @@ public:
     }
 
     /// The minimum distance over an edge relation (for the relation constructor).
-    template<RelationViewConcept<Values> E, RelationViewConcept<Values> S, RelationViewConcept<Values> T>
+    template<RelationViewConcept E, RelationViewConcept S, RelationViewConcept T>
     uint_t min_distance_edges(const E& edges, const S& sources, const T& targets, const H& heuristic = {})
     {
         return min_distance([&](size_t) -> const E& { return edges; }, sources, targets, heuristic);
@@ -93,9 +92,9 @@ public:
     const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    using Edges = detail::EdgeQuery<bound::QueryEvaluator<Values>, Values>;
+    using Edges = detail::EdgeQuery<bound::QueryEvaluator>;
 
-    MinDistance(bound::QueryEvaluator<Values> edges, const DistancePlan<Values>& plan) :
+    MinDistance(bound::QueryEvaluator edges, const DistancePlan& plan) :
         m_plan(plan),
         m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
         m_tree(plan.tuple_size()),
@@ -104,7 +103,7 @@ private:
     {
     }
 
-    DistancePlan<Values> m_plan;
+    DistancePlan m_plan;
     Edges m_edges;
     SearchTree m_tree;
     BackwardFrontier m_backward;

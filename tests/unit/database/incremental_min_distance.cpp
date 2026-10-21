@@ -18,13 +18,13 @@ namespace
 {
 using Values = ygg::database::DefaultColumnTypes;
 using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation<Values>>;
-using View = ygg::database::BorrowedRelationView<Values>;
+using Relation = ygg::Builder<ygg::database::Relation>;
+using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 
 View borrow(const Relation& relation)
 {
-    static const auto context = ygg::database::RelationRepositoryFactory<Values> {}.create();
+    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
 }
 
@@ -40,7 +40,7 @@ std::vector<uint_t> decode(std::span<const std::byte> bytes, std::span<const ygg
 {
     std::vector<uint_t> values;
     for (size_t c = 0; c < columns.size(); ++c)
-        values.push_back(ygg::database::Row<Values>(bytes, columns).get<uint_t>(c));
+        values.push_back(ygg::database::Row(bytes, columns).get<uint_t>(c));
     return values;
 }
 
@@ -88,7 +88,7 @@ std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const 
 /// (blind and with a consistent heuristic) against ygg::database::min_distance over the fully evaluated edges.
 /// `maximal` are inputs whose edges include those of every state.
 template<typename Mutate>
-void check_sequence(ygg::database::QueryView<Values> edges,
+void check_sequence(ygg::database::QueryView<> edges,
                     const std::vector<Relation>& maximal,
                     std::vector<Relation>& inputs,
                     std::vector<bool> static_slots,
@@ -98,11 +98,11 @@ void check_sequence(ygg::database::QueryView<Values> edges,
                     Mutate&& mutate)
 {
     const auto k = sources.arity();
-    const auto plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::incremental::MinDistance<Values>(edges, plan, static_slots);
-    auto guided = ygg::database::incremental::MinDistance<Values, HalfDistance>(edges, plan, static_slots);
+    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
+    auto blind = ygg::database::incremental::MinDistance(edges, plan, static_slots);
+    auto guided = ygg::database::incremental::MinDistance<HalfDistance>(edges, plan, static_slots);
     // Fed the exact changes of its inputs (update()) instead of diffing them (bind()).
-    auto exact = ygg::database::incremental::MinDistance<Values, HalfDistance>(edges, plan, static_slots);
+    auto exact = ygg::database::incremental::MinDistance<HalfDistance>(edges, plan, static_slots);
     auto previous = std::vector<Relation>();
     struct Change
     {
@@ -110,14 +110,14 @@ void check_sequence(ygg::database::QueryView<Values> edges,
         Relation removed;
     };
     auto changes = std::vector<Change>();
-    auto evaluator = ygg::database::QueryEvaluator<Values>(ygg::database::compile({ edges }));
+    auto evaluator = ygg::database::QueryEvaluator(ygg::database::compile({ edges }));
     evaluator.evaluate(borrow_all(maximal));
     auto supergraph = Relation(evaluator.get_result().columns().span());
     for (size_t i = 0; i < evaluator.get_result().size(); ++i)
         supergraph.insert(evaluator.get_result().row(i));
     auto heuristic = HalfDistance {};
     heuristic.columns = sources.columns().span();
-    auto workspace = ygg::database::DistanceWorkspace<Values>(plan);
+    auto workspace = ygg::database::DistanceWorkspace(plan);
     auto result = Relation(plan.output_columns().span());
     auto checked = size_t(0);
     for (size_t step = 0; step < steps; ++step)
@@ -182,7 +182,7 @@ class DatabaseIncrementalMinDistance : public testing::TestWithParam<unsigned>
 
 TEST_P(DatabaseIncrementalMinDistance, SingleColumnEdgesUnderChanges)
 {
-    auto repository = ygg::tests::qb::repository<Values>();
+    auto repository = ygg::tests::qb::repository();
     const auto edges = ygg::tests::qb::input(repository, 0, { x, y });
     auto inputs = std::vector<Relation>();
     inputs.emplace_back(std::initializer_list<Column> { x, y });
@@ -221,7 +221,7 @@ TEST_P(DatabaseIncrementalMinDistance, SingleColumnEdgesUnderChanges)
 
 TEST_P(DatabaseIncrementalMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
 {
-    auto repository = ygg::tests::qb::repository<Values>();
+    auto repository = ygg::tests::qb::repository();
     namespace qb = ygg::tests::qb;
     // Slots: 0 moves (x, y), 1 free cells (x), 2 blocked pairs (x, y), 3 static steps (x, y), 4 static identity (x, y).
     const auto moves = qb::input(repository, 0, { x, y });
@@ -235,7 +235,7 @@ TEST_P(DatabaseIncrementalMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDiff
                                    { a, b, a2, b2 });
     const auto variable_order = std::array { a, b, a2, b2 };
     const auto inputs_of_second = std::array { qb::rename(repository, steps, { b, b2 }), qb::rename(repository, identity, { a, a2 }) };
-    const auto second = qb::project(repository, qb::generic_join(repository, std::span<const ygg::database::QueryView<Values>>(inputs_of_second), std::span<const Column>(variable_order)), { a, b, a2, b2 });
+    const auto second = qb::project(repository, qb::generic_join(repository, std::span<const ygg::database::QueryView<>>(inputs_of_second), std::span<const Column>(variable_order)), { a, b, a2, b2 });
     const auto teleport = qb::project(
         repository,
         qb::join(repository, qb::select_value(repository, qb::rename(repository, moves, { a, a2 }), a, uint_t(0)), qb::rename(repository, identity, { b, b2 })),
@@ -303,16 +303,16 @@ TEST_P(DatabaseIncrementalMinDistance, RelationEdgesUnderChanges)
     auto edges = Relation({ x, y });
     auto sources = Relation({ x });
     auto targets = Relation({ y });
-    const auto plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns().span(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::incremental::MinDistance<Values>(plan);
-    auto guided = ygg::database::incremental::MinDistance<Values, HalfDistance>(plan);
+    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), Column(99));
+    auto blind = ygg::database::incremental::MinDistance(plan);
+    auto guided = ygg::database::incremental::MinDistance<HalfDistance>(plan);
     auto complete = Relation({ x, y });
     for (uint_t v = 0; v < n; ++v)
         for (uint_t w = 0; w < n; ++w)
             complete.insert(std::tuple { v, w });
     auto heuristic = HalfDistance {};
     heuristic.columns = sources.columns().span();
-    auto workspace = ygg::database::DistanceWorkspace<Values>(plan);
+    auto workspace = ygg::database::DistanceWorkspace(plan);
     auto result = Relation(plan.output_columns().span());
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return uint_t(random() % n); };
@@ -351,13 +351,13 @@ INSTANTIATE_TEST_SUITE_P(Seeds, DatabaseIncrementalMinDistance, testing::Range(1
 TEST(DatabaseIncrementalBoundEvaluation, VersionChangesOnlyWhenRowsCanBeRemoved)
 {
     namespace qb = ygg::tests::qb;
-    auto repository = qb::repository<Values>();
+    auto repository = qb::repository();
     // E(x, y) without the edges into N(y).
     const auto edges = qb::antijoin(repository, qb::input(repository, 0, { x, y }), qb::rename(repository, qb::input(repository, 1, { x }), { y }));
     auto e = Relation({ x, y });
     auto n = Relation({ x });
     e.insert(std::tuple { uint_t(0), uint_t(1) });
-    auto evaluator = ygg::database::incremental::bound::QueryEvaluator<Values>(edges);
+    auto evaluator = ygg::database::incremental::bound::QueryEvaluator(edges);
     evaluator.initialize([&](size_t slot) { return borrow(slot == 0 ? e : n); });
     auto e_added = Relation({ x, y });
     auto e_removed = Relation({ x, y });
@@ -396,11 +396,11 @@ struct SlotChange
 /// Edges E0(x, y) ∪ E1(x, y) over slots 0 and 1, from source 0 to target 2.
 struct TwoSlotEdges
 {
-    ygg::database::QueryRepository<Values> repository = ygg::tests::qb::repository<Values>();
-    ygg::database::QueryView<Values> edges = ygg::tests::qb::union_(repository, ygg::tests::qb::input(repository, 0, { x, y }), ygg::tests::qb::input(repository, 1, { x, y }));
+    ygg::database::QueryRepository repository = ygg::tests::qb::repository();
+    ygg::database::QueryView<> edges = ygg::tests::qb::union_(repository, ygg::tests::qb::input(repository, 0, { x, y }), ygg::tests::qb::input(repository, 1, { x, y }));
     Relation sources = Relation({ x });
     Relation targets = Relation({ y });
-    ygg::database::DistancePlan<Values> plan = ygg::database::DistancePlan<Values>(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
+    ygg::database::DistancePlan plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
     std::vector<Relation> inputs;
 
     TwoSlotEdges()
@@ -426,7 +426,7 @@ TEST(DatabaseIncrementalMinDistanceContract, InitializeDiscardsTheSearchWithUnch
     for (const auto via_update : { false, true })
     {
         SCOPED_TRACE(via_update);
-        auto search = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+        auto search = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
         graph.inputs[0].clear();
         graph.inputs[0].insert(std::tuple { uint_t(0), uint_t(1) });
         graph.inputs[0].insert(std::tuple { uint_t(1), uint_t(2) });
@@ -456,14 +456,14 @@ TEST(DatabaseIncrementalMinDistanceContract, UpdateRejectsStaticUnboundAndOutOfR
     changes[2].added.insert(std::tuple { uint_t(1), uint_t(1) });
     const auto change = [&](size_t slot) -> const SlotChange& { return changes[slot]; };
 
-    auto unbound = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+    auto unbound = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
     EXPECT_THROW(unbound.update(change, { false, true }), std::invalid_argument);
 
-    auto with_static = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan, { false, true });
+    auto with_static = ygg::database::incremental::MinDistance(graph.edges, graph.plan, { false, true });
     with_static.initialize(graph.input());
     EXPECT_THROW(with_static.update(change, { false, true }), std::invalid_argument);
 
-    auto search = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+    auto search = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
     search.initialize(graph.input());
     EXPECT_THROW(search.update(change, { false, false, true }), std::invalid_argument);
     EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
@@ -472,7 +472,7 @@ TEST(DatabaseIncrementalMinDistanceContract, UpdateRejectsStaticUnboundAndOutOfR
 TEST(DatabaseIncrementalMinDistanceContract, DistancesStayExactAfterAThrowingUpdate)
 {
     auto graph = TwoSlotEdges();
-    auto search = ygg::database::incremental::MinDistance<Values>(graph.edges, graph.plan);
+    auto search = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
     search.initialize(graph.input());
     ASSERT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
     // Slot 0 gains the shortcut 0 -> 2 before slot 1's change throws: its removed row is absent.
@@ -486,11 +486,11 @@ TEST(DatabaseIncrementalMinDistanceContract, DistancesStayExactAfterAThrowingUpd
 TEST(DatabaseIncrementalBoundEvaluation, FailedChangesLeaveTheInputUnchanged)
 {
     namespace qb = ygg::tests::qb;
-    auto repository = qb::repository<Values>();
+    auto repository = qb::repository();
     auto e = Relation({ x, y });
     e.insert(std::tuple { uint_t(0), uint_t(1) });
     e.insert(std::tuple { uint_t(0), uint_t(2) });
-    auto evaluator = ygg::database::incremental::bound::QueryEvaluator<Values>(qb::input(repository, 0, { x, y }));
+    auto evaluator = ygg::database::incremental::bound::QueryEvaluator(qb::input(repository, 0, { x, y }));
     evaluator.initialize([&](size_t) { return borrow(e); });
     const auto successors = evaluator.prepare({ 0 });
     const auto count = [&]
@@ -498,7 +498,7 @@ TEST(DatabaseIncrementalBoundEvaluation, FailedChangesLeaveTheInputUnchanged)
         auto bytes = std::vector<std::byte>();
         auto rows = size_t(0);
         evaluator.evaluate(successors,
-                           ygg::database::encode_row<Values, uint_t>(std::array { uint_t(0) }, bytes),
+                           ygg::database::encode_row<uint_t>(std::array { uint_t(0) }, bytes),
                            [&](std::span<const std::byte>)
                            {
                                ++rows;

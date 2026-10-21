@@ -23,14 +23,13 @@ namespace ygg::database
 /// targets the key and a vertex. Probes have one column, the objects tested; a vertex contains a probe object if one of
 /// its columns of the probe's type holds it. Field types must agree by position, independently of column labels. The
 /// output has the key columns followed by the probe column.
-template<ColumnTypes Values = DefaultColumnTypes>
 class MustPassPlan
 {
-    Builder<Columns<Values>> m_sources;
-    Builder<Columns<Values>> m_edges;
-    Builder<Columns<Values>> m_targets;
-    Builder<Columns<Values>> m_probes;
-    Builder<Columns<Values>> m_output;
+    Builder<Columns> m_sources;
+    Builder<Columns> m_edges;
+    Builder<Columns> m_targets;
+    Builder<Columns> m_probes;
+    Builder<Columns> m_output;
     size_t m_keys = 0;
 
 public:
@@ -59,8 +58,8 @@ public:
         if (probe_positions().empty())
             throw std::invalid_argument("Must-pass: no vertex column has the probes' field type.");
         for (size_t i = 0; i < keys; ++i)
-            m_output.push_back(m_sources[i].label, m_sources[i].type);
-        m_output.push_back(m_probes[0].label, m_probes[0].type);
+            m_output.push_back(m_sources[i].label, m_sources[i].type, m_sources[i].size);
+        m_output.push_back(m_probes[0].label, m_probes[0].type, m_probes[0].size);
     }
 
     auto source_columns() const& noexcept { return make_view(m_sources, *this); }

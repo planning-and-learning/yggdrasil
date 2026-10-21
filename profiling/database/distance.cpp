@@ -20,11 +20,11 @@ namespace
 {
 using Values = TypeList<uint_t>;
 using ColumnIndex = Index<database::Column>;
-using RelationBuilder = Builder<database::Relation<Values>>;
+using RelationBuilder = Builder<database::Relation>;
 
-Builder<database::Columns<Values>> columns(size_t arity, uint_t first_label)
+Builder<database::Columns> columns(size_t arity, uint_t first_label)
 {
-    Builder<database::Columns<Values>> result;
+    Builder<database::Columns> result;
     for (size_t i = 0; i < arity; ++i)
         result.push_back<uint_t>(ColumnIndex(first_label + static_cast<uint_t>(i)));
     return result;
@@ -69,7 +69,7 @@ struct Trace
     RelationBuilder edges;
     RelationBuilder changed_edges;
     RelationBuilder targets;
-    database::incremental::Delta<Values> edge_change;
+    database::incremental::Delta edge_change;
     RelationBuilder no_sources;
     RelationBuilder no_targets;
 
@@ -170,7 +170,7 @@ bool equal_rows(const RelationBuilder& actual, const RelationBuilder& expected)
     return true;
 }
 
-bool equal_delta(const database::incremental::Delta<Values>& actual, const RelationBuilder& before, const RelationBuilder& after)
+bool equal_delta(const database::incremental::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
     size_t added = 0, removed = 0;
     for (size_t i = 0; i < after.size(); ++i)
@@ -198,12 +198,12 @@ void distance_changes(benchmark::State& state)
     const auto source_count = static_cast<uint_t>(state.range(2));
     const auto changed = static_cast<uint_t>(state.range(3));
     Trace trace(arity, vertices, source_count, changed, Kind);
-    const database::DistancePlan<Values> plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
-    database::DistanceWorkspace<Values> workspace(plan);
+    const database::DistancePlan plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
+    database::DistanceWorkspace workspace(plan);
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::DistanceEvaluator<Values>(plan);
+            return database::incremental::DistanceEvaluator(plan);
         else
             return RelationBuilder(plan.output_columns().span());
     }();
@@ -225,8 +225,8 @@ void distance_changes(benchmark::State& state)
     };
 
     // Preparation, exact result/delta checks, and warmup are outside the timed loop.
-    auto before = database::distance<Values>(trace.sources, trace.edges, trace.targets, plan);
-    auto after = database::distance<Values>(trace.sources, trace.changed_edges, trace.targets, plan);
+    auto before = database::distance(trace.sources, trace.edges, trace.targets, plan);
+    auto after = database::distance(trace.sources, trace.changed_edges, trace.targets, plan);
     update(true);
     if (!equal_rows(result(), after))
     {
@@ -280,12 +280,12 @@ template<bool Incremental>
 void distance_initialize_warm(benchmark::State& state)
 {
     Trace trace(static_cast<size_t>(state.range(0)), static_cast<uint_t>(state.range(1)), static_cast<uint_t>(state.range(2)), 0);
-    const database::DistancePlan<Values> plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
-    database::DistanceWorkspace<Values> workspace(plan);
+    const database::DistancePlan plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
+    database::DistanceWorkspace workspace(plan);
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::DistanceEvaluator<Values>(plan);
+            return database::incremental::DistanceEvaluator(plan);
         else
             return RelationBuilder(plan.output_columns().span());
     }();
@@ -303,7 +303,7 @@ void distance_initialize_warm(benchmark::State& state)
         else
             return evaluation;
     };
-    auto reference = database::distance<Values>(trace.sources, trace.edges, trace.targets, plan);
+    auto reference = database::distance(trace.sources, trace.edges, trace.targets, plan);
     for (size_t i = 0; i < 8; ++i)
         initialize();
     if (!equal_rows(result(), reference))

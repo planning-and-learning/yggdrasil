@@ -27,11 +27,10 @@ namespace ygg::database
 {
 /// Raw read-only row access shared by builders and contextual Builder/Data/Index views.
 /// Contextual indexing and iteration may resolve stored elements into semantic views.
-template<typename V, typename Values>
+template<typename V>
 concept RelationViewConcept =
-    ColumnTypes<Values>
-    && requires(const std::remove_reference_t<V>& view, size_t i, Index<Column> column, std::span<const std::byte> row, Row<Values> typed_row) {
-           { view.columns() } -> ColumnsViewConcept<Values>;
+    requires(const std::remove_reference_t<V>& view, size_t i, Index<Column> column, std::span<const std::byte> row, Row typed_row) {
+           { view.columns() } -> ColumnsViewConcept;
            { view.arity() } -> std::same_as<size_t>;
            { view.size() } -> std::same_as<size_t>;
            { view.empty() } -> std::same_as<bool>;
@@ -44,17 +43,17 @@ concept RelationViewConcept =
        };
 
 /// Sized random-access inputs whose elements, possibly references, are relation views.
-template<typename R, typename Values>
+template<typename R>
 concept RelationViewRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
-                            && RelationViewConcept<std::ranges::range_reference_t<const R>, Values>;
+                            && RelationViewConcept<std::ranges::range_reference_t<const R>>;
 
 /// A row consumer: called with the bytes of each row; returning false stops the enumeration.
 template<typename F>
 concept RowPredicate = std::predicate<const F&, std::span<const std::byte>>;
 
 /// The inputs of a query by slot: f(slot) returns the relation view bound to input slot `slot`.
-template<typename F, typename Values>
-concept SlotRelations = std::invocable<const F&, size_t> && RelationViewConcept<std::invoke_result_t<const F&, size_t>, Values>;
+template<typename F>
+concept SlotRelations = std::invocable<const F&, size_t> && RelationViewConcept<std::invoke_result_t<const F&, size_t>>;
 
 }  // namespace ygg::database
 
@@ -73,7 +72,7 @@ struct RowAt
 
 /// Keeps the lightweight relation view alive, independently of the range expression.
 /// Comparing or subtracting iterators requires that they belong to the same sequence.
-template<ColumnTypes Values, RelationViewConcept<Values> V>
+template<RelationViewConcept V>
     requires std::copyable<V> && requires(const V& view, size_t position) { view[position]; }
 class RelationIterator
 {
@@ -139,11 +138,11 @@ public:
 
 namespace ygg
 {
-template<database::ColumnTypes Values, typename C>
-class View<Builder<database::Relation<Values>>, C> : public BuilderViewBase<database::Relation<Values>, C>
+template<typename C>
+class View<Builder<database::Relation>, C> : public BuilderViewBase<database::Relation, C>
 {
 public:
-    using BuilderViewBase<database::Relation<Values>, C>::BuilderViewBase;
+    using BuilderViewBase<database::Relation, C>::BuilderViewBase;
 
     auto get_index() const noexcept { return this->get_handle().get_index(); }
     auto columns() const noexcept { return make_view(this->get_handle().columns(), this->get_context()); }
@@ -154,21 +153,21 @@ public:
     size_t get_storage_index() const noexcept { return this->get_handle().get_storage_index(); }
     size_t column_index(Index<database::Column> column) const { return this->get_handle().column_index(column); }
     std::span<const std::byte> row(size_t index) const noexcept { return this->get_handle().row(index); }
-    auto operator[](size_t index) const noexcept { return make_view(database::Row<Values>(row(index), columns().span()), this->get_repository()); }
+    auto operator[](size_t index) const noexcept { return make_view(database::Row(row(index), columns().span()), this->get_repository()); }
     auto at(size_t index) const
     {
         if (index >= size())
             throw std::out_of_range("Relation: row index out of range.");
         return (*this)[index];
     }
-    auto begin() const noexcept { return database::detail::RelationIterator<Values, View>(*this, 0); }
-    auto end() const noexcept { return database::detail::RelationIterator<Values, View>(*this, size()); }
+    auto begin() const noexcept { return database::detail::RelationIterator<View>(*this, 0); }
+    auto end() const noexcept { return database::detail::RelationIterator<View>(*this, size()); }
     auto cbegin() const noexcept { return begin(); }
     auto cend() const noexcept { return end(); }
 
     bool contains(std::span<const std::byte> row) const { return this->get_handle().contains(row); }
-    bool contains(database::Row<Values> row) const { return this->get_handle().contains(row); }
-    template<database::ColumnValueFor<Values>... Ts>
+    bool contains(database::Row row) const { return this->get_handle().contains(row); }
+    template<database::ColumnValue... Ts>
     bool contains(const std::tuple<Ts...>& values) const
     {
         return this->get_handle().contains(values);
@@ -180,15 +179,15 @@ namespace ygg
 {
 /// Read access to an interned relation record, shared by its index and data views.
 /// The builder view is specialized separately, since it reads the builder directly.
-template<database::ColumnTypes Values, typename V>
-class ViewMixin<database::Relation<Values>, V>
+template<typename V>
+class ViewMixin<database::Relation, V>
 {
     const V& self() const noexcept { return static_cast<const V&>(*this); }
-    const Data<database::Relation<Values>>& record() const noexcept { return self().get_record(); }
+    const Data<database::Relation>& record() const noexcept { return self().get_record(); }
     bool contains_canonical(std::span<const std::byte> row) const
     {
         const auto index = self().get_repository().get_row_repository().find(row);
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow<Values>>(*index));
+        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow>(*index));
     }
 
 public:
@@ -196,7 +195,7 @@ public:
     size_t arity() const noexcept { return columns().size(); }
     size_t size() const noexcept { return row_indices().size(); }
     bool empty() const noexcept { return row_indices().empty(); }
-    std::span<const Index<database::RelationRow<Values>>> row_indices() const noexcept
+    std::span<const Index<database::RelationRow>> row_indices() const noexcept
     {
         return self().get_repository().get_row_set_repository()[record().row_set_index.get_value()];
     }
@@ -211,7 +210,7 @@ public:
     }
 
     /// Rows resolve indices the owning repository can view; others stay raw for the caller to resolve.
-    auto operator[](size_t index) const noexcept { return make_view(database::Row<Values>(row(index), columns().span()), self().get_repository()); }
+    auto operator[](size_t index) const noexcept { return make_view(database::Row(row(index), columns().span()), self().get_repository()); }
 
     auto at(size_t index) const
     {
@@ -220,40 +219,41 @@ public:
         return (*this)[index];
     }
 
-    auto begin() const noexcept { return database::detail::RelationIterator<Values, V>(self(), 0); }
-    auto end() const noexcept { return database::detail::RelationIterator<Values, V>(self(), size()); }
+    auto begin() const noexcept { return database::detail::RelationIterator<V>(self(), 0); }
+    auto end() const noexcept { return database::detail::RelationIterator<V>(self(), size()); }
     auto cbegin() const noexcept { return begin(); }
     auto cend() const noexcept { return end(); }
 
     bool contains(std::span<const std::byte> row) const
     {
-        database::validate_row<Values>(row, columns().span());
+        if (row.size() != columns().row_size())
+            throw std::invalid_argument("Relation: row byte width does not match its schema.");
         return contains_canonical(row);
     }
 
-    bool contains(database::Row<Values> row) const
+    bool contains(database::Row row) const
     {
         if (!std::ranges::equal(row.columns(), columns().span()))
             throw std::invalid_argument("Relation: row schema does not match.");
         return contains_canonical(row.bytes());
     }
 
-    template<database::ColumnValueFor<Values>... Ts>
+    template<database::ColumnValue... Ts>
     bool contains(const std::tuple<Ts...>& values) const
     {
-        return contains_canonical(database::encode_row<Values>(values, columns().span()));
+        return contains_canonical(database::encode_row(values, columns().span()));
     }
 };
 }  // namespace ygg
 
 namespace std::ranges
 {
-template<ygg::database::ColumnTypes Values, typename C>
-inline constexpr bool enable_borrowed_range<ygg::View<ygg::Builder<ygg::database::Relation<Values>>, C>> = true;
-template<ygg::database::ColumnTypes Values, typename C>
-inline constexpr bool enable_borrowed_range<ygg::View<ygg::Data<ygg::database::Relation<Values>>, C>> = true;
-template<ygg::database::ColumnTypes Values, typename C>
-inline constexpr bool enable_borrowed_range<ygg::View<ygg::Index<ygg::database::Relation<Values>>, C>> = true;
+template<typename C>
+inline constexpr bool enable_borrowed_range<ygg::View<ygg::Builder<ygg::database::Relation>, C>> = true;
+template<typename C>
+inline constexpr bool enable_borrowed_range<ygg::View<ygg::Data<ygg::database::Relation>, C>> = true;
+template<typename C>
+inline constexpr bool enable_borrowed_range<ygg::View<ygg::Index<ygg::database::Relation>, C>> = true;
 }
 
 #endif

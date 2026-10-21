@@ -72,16 +72,16 @@ struct MustPassStatistics : AStarCounters
 /// paths too.
 ///
 /// Nothing but compiled plans and static inputs is kept across calls. Inputs are borrowed during must_pass() only.
-template<ColumnTypes Values = DefaultColumnTypes, DistanceHeuristic H = BlindDistanceHeuristic>
+template<DistanceHeuristic H = BlindDistanceHeuristic>
 class MustPass
 {
 public:
     /// Edges given by a query over inputs with the plan's edge columns; `static_slots` marks its inputs that never
     /// change, which are then read on the first call only.
-    MustPass(QueryView<Values> edges, const MustPassPlan<Values>& plan, const std::vector<bool>& static_slots = {}) :
+    MustPass(QueryView<> edges, const MustPassPlan& plan, const std::vector<bool>& static_slots = {}) :
         m_plan(plan),
         m_probe_positions(plan.probe_positions()),
-        m_edges(bound::QueryEvaluator<Values>(checked(edges, plan), static_slots), plan.edge_columns().span(), plan.keys(), plan.arity()),
+        m_edges(bound::QueryEvaluator(checked(edges, plan), static_slots), plan.edge_columns().span(), plan.keys(), plan.arity()),
         m_keys(std::max<size_t>(plan.key_size(), 1)),
         m_probes(plan.probe_size()),
         m_starts(plan.vertex_size()),
@@ -94,12 +94,12 @@ public:
     }
 
     size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
-    const MustPassPlan<Values>& plan() const noexcept { return m_plan; }
+    const MustPassPlan& plan() const noexcept { return m_plan; }
 
     /// Appends to `out`, which has the plan's output columns, the must-pass probe objects of every key of the sources and
     /// targets over the edges of the inputs: input(slot) returns slot's relation view.
-    template<SlotRelations<Values> Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T, RelationViewConcept<Values> P>
-    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, Builder<Relation<Values>>& out, H& heuristic)
+    template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T, RelationViewConcept P>
+    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, Builder<Relation>& out, H& heuristic)
     {
         m_heuristic = &heuristic;
         detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
@@ -118,9 +118,9 @@ public:
                 verify(sources, targets, key, out);
     }
 
-    template<SlotRelations<Values> Input, RelationViewConcept<Values> S, RelationViewConcept<Values> T, RelationViewConcept<Values> P>
+    template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T, RelationViewConcept P>
         requires std::default_initializable<H>
-    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, Builder<Relation<Values>>& out)
+    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, Builder<Relation>& out)
     {
         auto heuristic = H {};
         must_pass(input, sources, targets, probes, out, heuristic);
@@ -139,7 +139,7 @@ private:
         std::span<const std::byte> row(size_t i) const { return (*set)[ids[i]]; }
     };
 
-    using Edges = detail::EdgeQuery<bound::QueryEvaluator<Values>, Values>;
+    using Edges = detail::EdgeQuery<bound::QueryEvaluator>;
 
     /// The current key's edges (Edges::Keyed, evaluated on demand as in MinDistance) without the vertices containing
     /// the excluded probe object: the oracle of AStar and BackwardFrontier.
@@ -193,7 +193,7 @@ private:
         MustPass* m_owner;
     };
 
-    static QueryView<Values> checked(QueryView<Values> edges, const MustPassPlan<Values>& plan)
+    static QueryView<> checked(QueryView<> edges, const MustPassPlan& plan)
     {
         detail::require_plan_columns(edges.columns(), plan.edge_columns().span());
         return edges;
@@ -203,7 +203,7 @@ private:
     std::span<const std::byte> vertex_of(std::span<const std::byte> row) const noexcept { return row.subspan(m_plan.key_size(), m_plan.vertex_size()); }
 
     /// The row positions of the sources and targets of each key; keys are numbered by their first source.
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
+    template<RelationViewConcept S, RelationViewConcept T>
     void group(const S& sources, const T& targets)
     {
         const auto keyed = m_plan.key_size() > 0;
@@ -286,8 +286,8 @@ private:
         return reachable;
     }
 
-    template<RelationViewConcept<Values> S, RelationViewConcept<Values> T>
-    void verify(const S& sources, const T& targets, uint_t key, Builder<Relation<Values>>& out)
+    template<RelationViewConcept S, RelationViewConcept T>
+    void verify(const S& sources, const T& targets, uint_t key, Builder<Relation>& out)
     {
         const auto key_bytes = key_of(sources.row(m_key_sources[key].front()));
         m_key = key_bytes;
@@ -324,7 +324,7 @@ private:
             }
     }
 
-    MustPassPlan<Values> m_plan;
+    MustPassPlan m_plan;
     std::vector<size_t> m_probe_positions;
     Edges m_edges;
     RawArraySet<std::byte> m_keys;    ///< Interned key bytes; unused without key columns.

@@ -15,45 +15,45 @@
 
 namespace ygg::database
 {
-template<ColumnTypes Values, typename Tag>
-constexpr const char* query_operation_name(QueryView<Values, Tag>)
+template<typename Tag>
+constexpr const char* query_operation_name(QueryView<Tag>)
 {
-    using Concrete = QueryView<Values, Tag>;
-    if constexpr (std::same_as<Concrete, QueryView<Values, QueryInputTag>>)
+    using Concrete = QueryView<Tag>;
+    if constexpr (std::same_as<Concrete, QueryView<QueryInputTag>>)
         return "input";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryEmptyTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryEmptyTag>>)
         return "empty";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryJoinTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryJoinTag>>)
         return "hash_join";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryProjectTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryProjectTag>>)
         return "project";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryRenameTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryRenameTag>>)
         return "rename";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectEqualTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QuerySelectEqualTag>>)
         return "select_equal";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySelectValueTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QuerySelectValueTag>>)
         return "select_value";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryUnionTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryUnionTag>>)
         return "union";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryDifferenceTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryDifferenceTag>>)
         return "difference";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryDistanceTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryDistanceTag>>)
         return "distance";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QuerySemijoinTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QuerySemijoinTag>>)
         return "semijoin";
-    else if constexpr (std::same_as<Concrete, QueryView<Values, QueryAntijoinTag>>)
+    else if constexpr (std::same_as<Concrete, QueryView<QueryAntijoinTag>>)
         return "antijoin";
     else
     {
-        static_assert(std::same_as<Concrete, QueryView<Values, QueryGenericJoinTag>>);
+        static_assert(std::same_as<Concrete, QueryView<QueryGenericJoinTag>>);
         return "generic_join";
     }
 }
 
 namespace detail
 {
-template<typename OutputIt, ColumnTypes Values>
-OutputIt format_query_plan(OutputIt out, const QueryPlan<Values>& plan)
+template<typename OutputIt>
+OutputIt format_query_plan(OutputIt out, const QueryPlan& plan)
 {
     // Plain values, so explanations do not depend on the optional public formatters.
     const auto value = [](auto index) { return index.get_value(); };
@@ -62,40 +62,34 @@ OutputIt format_query_plan(OutputIt out, const QueryPlan<Values>& plan)
             [&]<typename Concrete>(Concrete operation)
             {
                 std::vector<uint_t> children;
-                for_each_child(operation, [&](QueryView<Values> child) { children.push_back(child.get_index().get_value()); });
+                for_each_child(operation, [&](QueryView<> child) { children.push_back(child.get_index().get_value()); });
                 const auto columns = operation.columns()
                                      | std::views::transform([](const ColumnLayout& column) { return fmt::format("{}:{}", column.label.get_value(), column.type); });
                 out = fmt::format_to(out, "{}: {}({}) columns=[{}]", id, query_operation_name(operation), fmt::join(children, ","), fmt::join(columns, ","));
-                if constexpr (std::same_as<Concrete, QueryView<Values, QueryInputTag>>)
+                if constexpr (std::same_as<Concrete, QueryView<QueryInputTag>>)
                     out = fmt::format_to(out, " slot={}", operation.get_input_slot());
-                if constexpr (std::same_as<Concrete, QueryView<Values, QueryGenericJoinTag>>)
+                if constexpr (std::same_as<Concrete, QueryView<QueryGenericJoinTag>>)
                     out = fmt::format_to(out, " variables=[{}]", fmt::join(operation.get_variable_order() | std::views::transform(value), ","));
                 out = fmt::format_to(out, "\n");
             },
-            plan[Index<Query<Values>>(to_uint_t(id))].get_variant());
+            plan[Index<Query<>>(to_uint_t(id))].get_variant());
     return fmt::format_to(out, "roots=[{}]\n", fmt::join(plan.roots() | std::views::transform(value), ","));
 }
 }  // namespace detail
 
-template<ColumnTypes Values>
-std::string explain(const QueryPlan<Values>& plan)
-{
-    fmt::memory_buffer out;
-    detail::format_query_plan(std::back_inserter(out), plan);
-    return fmt::to_string(out);
-}
+std::string explain(const QueryPlan& plan);
 }  // namespace ygg::database
 
 #if YGG_ENABLE_FMT_FORMATTERS
 namespace fmt
 {
-template<ygg::database::ColumnTypes Values>
-struct formatter<ygg::database::QueryPlan<Values>, char>
+template<>
+struct formatter<ygg::database::QueryPlan, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ygg::database::QueryPlan<Values>& plan, FormatContext& ctx) const
+    auto format(const ygg::database::QueryPlan& plan, FormatContext& ctx) const
     {
         return ygg::database::detail::format_query_plan(ctx.out(), plan);
     }

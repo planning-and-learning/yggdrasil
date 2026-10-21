@@ -5,7 +5,7 @@ namespace yggdrasil::database_python
 void bind_query_select_equal(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<Values, ygg::database::QuerySelectEqualTag>>>(m, "QuerySelectEqualIndex");
+    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QuerySelectEqualTag>>>(m, "QuerySelectEqualIndex");
 
     {
         using V = QueryData<ygg::database::QuerySelectEqualTag>;
@@ -28,7 +28,7 @@ void bind_query_select_equal(nb::module_& m, QueryRepositoryBinding& repository)
         ygg::add_hash(cls);
     }
 
-    ygg::bind_insert<ygg::database::Query<Values, ygg::database::QuerySelectEqualTag>>(repository);
+    ygg::bind_insert<ygg::database::Query<ygg::database::QuerySelectEqualTag>>(repository);
 }
 
 }  // namespace yggdrasil::database_python
