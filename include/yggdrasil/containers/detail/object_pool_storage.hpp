@@ -19,10 +19,11 @@
 #define YGG_CONTAINERS_DETAIL_OBJECT_POOL_STORAGE_HPP_
 
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/core/config.hpp"
 
 #include <cassert>
 #include <cstddef>
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -46,12 +47,8 @@ private:
         const auto required = m_storage.size() + 1;
         if (m_free.capacity() < required)
             m_free.reserve(next_capacity(m_free, required));
-        if (m_storage.capacity() < required)
-            m_storage.reserve(next_capacity(m_storage, required));
 
-        auto entry = std::make_unique<Entry>();
-        auto* result = entry.get();
-        m_storage.push_back(std::move(entry));
+        auto* result = &m_storage.emplace_back();
         assert(m_free.capacity() >= m_storage.size());
         return result;
     }
@@ -99,7 +96,7 @@ public:
     }
 
 private:
-    std::vector<std::unique_ptr<Entry>> m_storage;
+    SegmentedVector<Entry, 8, false, uint_t> m_storage;
     std::vector<Entry*> m_free;
     [[no_unique_address]] mutable Mutex<ThreadSafe> m_mutex;
 };

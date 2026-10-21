@@ -89,6 +89,27 @@ void store_size(Size<ThreadSafe>& target, size_t value) noexcept
         target = value;
 }
 
+template<bool ThreadSafe, typename T>
+using Pointer = std::conditional_t<ThreadSafe, std::atomic<T*>, T*>;
+
+template<bool ThreadSafe, typename T>
+T* load_pointer(const Pointer<ThreadSafe, T>& value) noexcept
+{
+    if constexpr (ThreadSafe)
+        return value.load(std::memory_order_acquire);
+    else
+        return value;
+}
+
+template<bool ThreadSafe, typename T>
+void store_pointer(Pointer<ThreadSafe, T>& target, T* value) noexcept
+{
+    if constexpr (ThreadSafe)
+        target.store(value, std::memory_order_release);
+    else
+        target = value;
+}
+
 }  // namespace ygg::detail
 
 #endif

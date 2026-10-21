@@ -25,6 +25,7 @@
 #include <atomic>
 #include <cassert>
 #include <compare>
+#include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <limits>
@@ -33,7 +34,6 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace ygg
 {
@@ -42,173 +42,40 @@ namespace ygg
 /// Clear, resize shrink, pop_back, iteration, memory inspection, move,
 /// destruction, and mutation of published elements require quiescence or
 /// external locking.
-template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false>
+/// Index bounds the number of addressable elements and hence the number of segment slots kept inline.
+template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false, std::unsigned_integral Index = size_t>
 class SegmentedVector
 {
 private:
-    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize>;
+    using Layout = detail::GeometricSegmentLayout<FirstSegmentSize, Index>;
 
-    struct Segment
+    static_assert(Layout::max_segments > 0);
+
+    T* segment(size_t index) const noexcept { return detail::load_pointer<ThreadSafe, T>(m_segments[index]); }
+
+    T* element(size_t pos) const noexcept
     {
-        T* data = nullptr;
-        size_t capacity = 0;
-        size_t size = 0;
-
-        explicit Segment(size_t capacity_) :
-            data(static_cast<T*>(::operator new(capacity_ * sizeof(T), std::align_val_t { alignof(T) }))),
-            capacity(capacity_),
-            size(0)
-        {
-        }
-
-        Segment(const Segment&) = delete;
-        Segment& operator=(const Segment&) = delete;
-
-        Segment(Segment&& other) noexcept : data(other.data), capacity(other.capacity), size(other.size)
-        {
-            other.data = nullptr;
-            other.capacity = 0;
-            other.size = 0;
-        }
-
-        Segment& operator=(Segment&& other) noexcept
-        {
-            if (this == &other)
-                return *this;
-
-            destroy_all();
-            deallocate();
-
-            data = other.data;
-            capacity = other.capacity;
-            size = other.size;
-
-            other.data = nullptr;
-            other.capacity = 0;
-            other.size = 0;
-
-            return *this;
-        }
-
-        ~Segment()
-        {
-            destroy_all();
-            deallocate();
-        }
-
-        void destroy_at(size_t pos) noexcept(std::is_nothrow_destructible_v<T>)
-        {
-            std::destroy_at(data + pos);
-            --size;
-        }
-
-        void destroy_all() noexcept(std::is_nothrow_destructible_v<T>)
-        {
-            for (size_t i = 0; i < size; ++i)
-                std::destroy_at(data + i);
-            size = 0;
-        }
-
-        void deallocate() noexcept
-        {
-            if (data)
-                ::operator delete(data, std::align_val_t { alignof(T) });
-        }
-    };
-
-    class ConcurrentSegments
-    {
-    public:
-        ConcurrentSegments()
-        {
-            for (auto& segment : m_published)
-                segment.store(nullptr, std::memory_order_relaxed);
-        }
-
-        ConcurrentSegments(const ConcurrentSegments&) = delete;
-        ConcurrentSegments& operator=(const ConcurrentSegments&) = delete;
-
-        ConcurrentSegments(ConcurrentSegments&& other) noexcept : ConcurrentSegments()
-        {
-            m_owned = std::move(other.m_owned);
-            const auto count = m_owned.size();
-            for (size_t i = 0; i < count; ++i)
-                m_published[i].store(m_owned[i].get(), std::memory_order_relaxed);
-            m_size.store(count, std::memory_order_relaxed);
-            other.m_size.store(0, std::memory_order_relaxed);
-        }
-
-        ConcurrentSegments& operator=(ConcurrentSegments&& other) noexcept
-        {
-            if (this == &other)
-                return *this;
-            this->~ConcurrentSegments();
-            std::construct_at(this, std::move(other));
-            return *this;
-        }
-
-        void emplace_back(size_t capacity)
-        {
-            const auto index = size();
-            assert(index < Layout::max_segments);
-            m_owned.push_back(std::make_unique<Segment>(capacity));
-            m_published[index].store(m_owned.back().get(), std::memory_order_release);
-            m_size.store(index + 1, std::memory_order_release);
-        }
-
-        Segment& operator[](size_t index) noexcept
-        {
-            auto* segment = m_published[index].load(std::memory_order_acquire);
-            assert(segment);
-            return *segment;
-        }
-
-        const Segment& operator[](size_t index) const noexcept
-        {
-            const auto* segment = m_published[index].load(std::memory_order_acquire);
-            assert(segment);
-            return *segment;
-        }
-
-        Segment& at(size_t index)
-        {
-            if (index >= size())
-                throw std::out_of_range("SegmentedVector segment index");
-            return (*this)[index];
-        }
-
-        const Segment& at(size_t index) const
-        {
-            if (index >= size())
-                throw std::out_of_range("SegmentedVector segment index");
-            return (*this)[index];
-        }
-
-        bool empty() const noexcept { return size() == 0; }
-        size_t size() const noexcept { return m_size.load(std::memory_order_acquire); }
-
-    private:
-        std::vector<std::unique_ptr<Segment>> m_owned;
-        std::array<std::atomic<Segment*>, Layout::max_segments> m_published;
-        std::atomic_size_t m_size { 0 };
-    };
-
-    using Segments = std::conditional_t<ThreadSafe, ConcurrentSegments, std::vector<Segment>>;
+        assert(pos <= std::numeric_limits<Index>::max());
+        const auto index = Layout::segment_index(static_cast<Index>(pos));
+        return segment(index) + Layout::segment_offset(static_cast<Index>(pos), index);
+    }
 
     void resize_to_fit(size_t n)
     {
         auto capacity = detail::load_size<ThreadSafe>(m_capacity);
         while (capacity < n)
         {
-            const auto segment = m_segments.size();
-            if (segment >= Layout::max_segments)
+            const auto index = m_num_segments;
+            if (index >= Layout::max_segments)
                 throw std::length_error("SegmentedVector: segment is too large.");
 
-            const auto new_segment_size = Layout::segment_capacity(segment);
+            const auto new_segment_size = Layout::segment_capacity(index);
             if (new_segment_size > std::numeric_limits<size_t>::max() - capacity || new_segment_size > std::numeric_limits<size_t>::max() / sizeof(T))
                 throw std::length_error("SegmentedVector: segment is too large.");
 
-            m_segments.emplace_back(new_segment_size);
+            auto* data = static_cast<T*>(::operator new(new_segment_size * sizeof(T), std::align_val_t { alignof(T) }));
+            detail::store_pointer<ThreadSafe, T>(m_segments[index], data);
+            m_num_segments = index + 1;
             capacity += new_segment_size;
             detail::store_size<ThreadSafe>(m_capacity, capacity);
         }
@@ -221,13 +88,9 @@ private:
             throw std::length_error("SegmentedVector: size is too large.");
         resize_to_fit(size + 1);
 
-        const auto index = Layout::segment_index(size);
-        const auto offset = Layout::segment_offset(size, index);
-        auto* element = std::construct_at(m_segments[index].data + offset, std::forward<Args>(args)...);
-
-        ++m_segments[index].size;
+        auto* result = std::construct_at(element(size), std::forward<Args>(args)...);
         detail::store_size<ThreadSafe>(m_size, size + 1);
-        return *element;
+        return *result;
     }
 
     template<typename... Args>
@@ -250,13 +113,14 @@ private:
         ensure_not_empty();
         const auto size = detail::load_size<ThreadSafe>(m_size) - 1;
         detail::store_size<ThreadSafe>(m_size, size);
-        destroy_at_unlocked(size);
+        std::destroy_at(element(size));
     }
 
-    void destroy_at_unlocked(size_t pos)
+    /// Destroys the elements in [new_size, old_size), last first.
+    void destroy_tail(size_t new_size, size_t old_size) noexcept(std::is_nothrow_destructible_v<T>)
     {
-        const auto index = Layout::segment_index(pos);
-        m_segments[index].destroy_at(Layout::segment_offset(pos, index));
+        while (old_size > new_size)
+            std::destroy_at(element(--old_size));
     }
 
     template<typename Construct>
@@ -269,11 +133,7 @@ private:
         if (new_size < old_size)
         {
             detail::store_size<ThreadSafe>(m_size, new_size);
-            for (auto size = old_size; size > new_size;)
-            {
-                --size;
-                destroy_at_unlocked(size);
-            }
+            destroy_tail(new_size, old_size);
             return;
         }
 
@@ -282,23 +142,41 @@ private:
         try
         {
             for (; size < new_size; ++size)
-            {
-                const auto index = Layout::segment_index(size);
-                const auto offset = Layout::segment_offset(size, index);
-                construct(m_segments[index].data + offset);
-                ++m_segments[index].size;
-            }
+                construct(element(size));
         }
         catch (...)
         {
-            while (size > old_size)
-            {
-                --size;
-                destroy_at_unlocked(size);
-            }
+            destroy_tail(old_size, size);
             throw;
         }
         detail::store_size<ThreadSafe>(m_size, new_size);
+    }
+
+    void release() noexcept
+    {
+        destroy_tail(0, detail::load_size<ThreadSafe>(m_size));
+        for (size_t i = 0; i < m_num_segments; ++i)
+        {
+            ::operator delete(segment(i), std::align_val_t { alignof(T) });
+            detail::store_pointer<ThreadSafe, T>(m_segments[i], nullptr);
+        }
+        m_num_segments = 0;
+        detail::store_size<ThreadSafe>(m_capacity, 0);
+        detail::store_size<ThreadSafe>(m_size, 0);
+    }
+
+    void take(SegmentedVector& other) noexcept
+    {
+        for (size_t i = 0; i < other.m_num_segments; ++i)
+        {
+            detail::store_pointer<ThreadSafe, T>(m_segments[i], other.segment(i));
+            detail::store_pointer<ThreadSafe, T>(other.m_segments[i], nullptr);
+        }
+        m_num_segments = std::exchange(other.m_num_segments, 0);
+        detail::store_size<ThreadSafe>(m_capacity, other.capacity());
+        detail::store_size<ThreadSafe>(m_size, other.size());
+        detail::store_size<ThreadSafe>(other.m_capacity, 0);
+        detail::store_size<ThreadSafe>(other.m_size, 0);
     }
 
 public:
@@ -310,27 +188,22 @@ public:
 
     static constexpr bool thread_safe = ThreadSafe;
 
-    SegmentedVector() : m_segments(), m_capacity(0), m_size(0) {}
+    SegmentedVector() : m_segments {}, m_num_segments(0), m_capacity(0), m_size(0) {}
 
     SegmentedVector(const SegmentedVector&) = delete;
     SegmentedVector& operator=(const SegmentedVector&) = delete;
-    SegmentedVector(SegmentedVector&& other) noexcept : m_segments(std::move(other.m_segments)), m_capacity(other.capacity()), m_size(other.size())
-    {
-        detail::store_size<ThreadSafe>(other.m_capacity, 0);
-        detail::store_size<ThreadSafe>(other.m_size, 0);
-    }
+    SegmentedVector(SegmentedVector&& other) noexcept : SegmentedVector() { take(other); }
 
     SegmentedVector& operator=(SegmentedVector&& other) noexcept
     {
         if (this == &other)
             return *this;
-        m_segments = std::move(other.m_segments);
-        detail::store_size<ThreadSafe>(m_capacity, other.capacity());
-        detail::store_size<ThreadSafe>(m_size, other.size());
-        detail::store_size<ThreadSafe>(other.m_capacity, 0);
-        detail::store_size<ThreadSafe>(other.m_size, 0);
+        release();
+        take(other);
         return *this;
     }
+
+    ~SegmentedVector() { release(); }
 
     template<typename Vector>
     class BasicIterator
@@ -426,9 +299,9 @@ public:
 
     void clear() noexcept(std::is_nothrow_destructible_v<T>)
     {
-        for (size_t i = 0; i < m_segments.size(); ++i)
-            m_segments[i].destroy_all();
+        const auto size = detail::load_size<ThreadSafe>(m_size);
         detail::store_size<ThreadSafe>(m_size, 0);
+        destroy_tail(0, size);
     }
 
     template<typename... Args>
@@ -482,39 +355,27 @@ public:
     const T& operator[](size_t pos) const
     {
         assert(pos < size());
-
-        const auto index = Layout::segment_index(pos);
-        const auto offset = Layout::segment_offset(pos, index);
-        return m_segments[index].data[offset];
+        return *element(pos);
     }
 
     T& operator[](size_t pos)
     {
         assert(pos < size());
-
-        const auto index = Layout::segment_index(pos);
-        const auto offset = Layout::segment_offset(pos, index);
-        return m_segments[index].data[offset];
+        return *element(pos);
     }
 
     const T& at(size_t pos) const
     {
         if (pos >= size())
             throw std::out_of_range("SegmentedVector::at");
-
-        const auto index = Layout::segment_index(pos);
-        const auto offset = Layout::segment_offset(pos, index);
-        return m_segments.at(index).data[offset];
+        return *element(pos);
     }
 
     T& at(size_t pos)
     {
         if (pos >= size())
             throw std::out_of_range("SegmentedVector::at");
-
-        const auto index = Layout::segment_index(pos);
-        const auto offset = Layout::segment_offset(pos, index);
-        return m_segments.at(index).data[offset];
+        return *element(pos);
     }
 
     const T& front() const
@@ -548,13 +409,7 @@ public:
     const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
     const_iterator cend() const noexcept { return const_iterator(*this, size()); }
 
-    size_t memory_usage() const noexcept
-    {
-        size_t bytes = 0;
-        for (size_t i = 0; i < m_segments.size(); ++i)
-            bytes += m_segments[i].capacity * sizeof(T);
-        return bytes;
-    }
+    size_t memory_usage() const noexcept { return capacity() * sizeof(T); }
 
     size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
     size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
@@ -569,7 +424,8 @@ private:
 
     // Segments grow geometrically, i.e., FirstSegmentSize, 2*FirstSegmentSize,
     // 4*FirstSegmentSize, ...
-    Segments m_segments;
+    std::array<detail::Pointer<ThreadSafe, T>, Layout::max_segments> m_segments;
+    size_t m_num_segments;
     detail::Size<ThreadSafe> m_capacity;
     detail::Size<ThreadSafe> m_size;
     [[no_unique_address]] detail::Mutex<ThreadSafe> m_writer_mutex;

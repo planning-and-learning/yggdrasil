@@ -39,8 +39,9 @@
 namespace ygg::formalism
 {
 
-/// The write API (insert_local*, create_local_with_hash) is defined in detail/basic_symbol_repository_impl.hpp, which
-/// needs cista/serialization.h for serialized symbols; sources that instantiate the repository include it.
+/// Construction, value lookup (find_local*), and the write API (insert_local*, create_local_with_hash) are defined in
+/// detail/basic_symbol_repository_impl.hpp, which needs cista/serialization.h for serialized symbols; sources that
+/// instantiate the repository include it.
 template<typename T, bool ThreadSafe = false>
 class BasicSymbolRepository
 {
@@ -174,46 +175,12 @@ public:
         requires ThreadSafe
     = delete;
 
-    void clear() noexcept { clear_slot(); }
+    void clear() noexcept;
 
-    size_t memory_usage() const noexcept { return m_slot.memory_usage(); }
+    size_t memory_usage() const noexcept;
 
     static size_t hash(const Data<T>& builder) noexcept;
 };
-
-template<typename T, bool ThreadSafe>
-BasicSymbolRepository<T, ThreadSafe>::BasicSymbolRepository(const BasicSymbolRepository* parent) : m_parent(parent), m_slot()
-{
-    clear_slot();
-}
-
-/// Defined out of class so that extern template declarations also cover the storage destructors.
-template<typename T, bool ThreadSafe>
-BasicSymbolRepository<T, ThreadSafe>::~BasicSymbolRepository() = default;
-
-template<typename T, bool ThreadSafe>
-std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
-{
-    const auto& container = m_slot.container;
-    assert(h == container.hash(builder));
-
-    if (auto index_or_nullopt = container.find_with_hash(builder, h))
-        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
-
-    return std::nullopt;
-}
-
-template<typename T, bool ThreadSafe>
-std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
-{
-    const auto& container = m_slot.container;
-    assert(h == container.hash(builder));
-
-    if (auto index_or_nullopt = container.find_unsafe_with_hash(builder, h))
-        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
-
-    return std::nullopt;
-}
 
 template<typename T, bool ThreadSafe>
 size_t BasicSymbolRepository<T, ThreadSafe>::hash(const Data<T>& builder) noexcept

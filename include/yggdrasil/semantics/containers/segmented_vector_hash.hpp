@@ -24,10 +24,10 @@
 namespace ygg
 {
 
-template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe>
-struct Hash<SegmentedVector<T, FirstSegmentSize, ThreadSafe>>
+template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe, std::unsigned_integral Index>
+struct Hash<SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>>
 {
-    hash_t operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& value) const
+    hash_t operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& value) const
         requires Hashable<T>
     {
         return ygg::hash_range(value);

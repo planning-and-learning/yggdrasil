@@ -18,7 +18,7 @@
 #ifndef YGG_CONTAINERS_TREE_BITSET_SET_HPP_
 #define YGG_CONTAINERS_TREE_BITSET_SET_HPP_
 
-#include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/detail/indexed_hash_set_impl.hpp"
 #include "yggdrasil/containers/tree_vector_set.hpp"
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/types_utils.hpp"

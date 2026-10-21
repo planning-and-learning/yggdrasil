@@ -24,10 +24,11 @@
 namespace ygg
 {
 
-template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe>
-struct Less<SegmentedVector<T, FirstSegmentSize, ThreadSafe>>
+template<typename T, std::size_t FirstSegmentSize, bool ThreadSafe, std::unsigned_integral Index>
+struct Less<SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>>
 {
-    bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& lhs, const SegmentedVector<T, FirstSegmentSize, ThreadSafe>& rhs) const
+    bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& lhs,
+                    const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& rhs) const
         requires OrderedByLess<T>
     {
         return less_range(lhs, rhs);

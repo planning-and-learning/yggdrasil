@@ -10,13 +10,13 @@
 #include "yggdrasil/buffer/buffer.hpp"
 #include "yggdrasil/containers/bit_packed_array_set.hpp"
 #include "yggdrasil/containers/block_array_set.hpp"
-#include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/detail/indexed_hash_set_impl.hpp"
 #include "yggdrasil/containers/vector.hpp"
+#include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_view.hpp"
 #include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 #include "yggdrasil/formalism/repository.hpp"
-#include "yggdrasil/core/types.hpp"
 
 #include "gtest/gtest.h"
 #include <algorithm>

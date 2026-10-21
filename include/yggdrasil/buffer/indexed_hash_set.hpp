@@ -20,7 +20,6 @@
 
 #include "yggdrasil/buffer/declarations.hpp"
 #include "yggdrasil/buffer/segmented_buffer.hpp"
-#include "yggdrasil/containers/detail/concurrency.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/types.hpp"
@@ -33,7 +32,7 @@
 #include <cassert>
 #include <cista/mode.h>
 #include <cstddef>
-#include <gtl/phmap.hpp>
+#include <gtl/phmap_utils.hpp>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -52,8 +51,9 @@ namespace ygg::buffer
 /// serialization buffer and arena. find_unsafe_with_hash additionally requires
 /// the documented caller-enforced quiescence.
 ///
-/// The write API (insertion and serialization) is defined in detail/indexed_hash_set_impl.hpp, which needs
-/// cista/serialization.h; sources that instantiate the set include it.
+/// Reads by index are defined here. The value-to-index lookup, construction, and the write API (insertion and
+/// serialization) are defined in detail/indexed_hash_set_impl.hpp, which needs cista/serialization.h; sources that
+/// instantiate the set include it.
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
@@ -62,11 +62,9 @@ template<typename Tag,
 class IndexedHashSet
 {
 private:
-    class IndexableHash;
-    class IndexableEqualTo;
+    class Lookup;
 
-    using VectorType = SegmentedVector<const Data<Tag>*, FirstSegmentSize, ThreadSafe>;
-    using SetType = ygg::detail::HashSetType<Index<Tag>, IndexableHash, IndexableEqualTo, ThreadSafe>;
+    using VectorType = SegmentedVector<const Data<Tag>*, FirstSegmentSize, ThreadSafe, uint_t>;
 
     template<::cista::mode Mode>
     const Data<Tag>* serialize(const Data<Tag>& element);
@@ -80,56 +78,28 @@ private:
 public:
     static constexpr bool thread_safe = ThreadSafe;
 
-    IndexedHashSet() :
-        m_storage(std::make_unique<VectorType>()),
-        m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)),
-        m_buf(nullptr),
-        m_arena(nullptr)
-    {
-    }
-    IndexedHashSet(::cista::buf<std::vector<uint8_t>>& buf, SegmentedBuffer& arena) :
-        m_storage(std::make_unique<VectorType>()),
-        m_set(0, IndexableHash(*m_storage), IndexableEqualTo(*m_storage)),
-        m_buf(&buf),
-        m_arena(&arena)
-    {
-    }
+    IndexedHashSet();
+    IndexedHashSet(::cista::buf<std::vector<uint8_t>>& buf, SegmentedBuffer& arena);
     IndexedHashSet(const IndexedHashSet& other) = delete;
     IndexedHashSet& operator=(const IndexedHashSet& other) = delete;
-    IndexedHashSet(IndexedHashSet&& other) = default;
-    IndexedHashSet& operator=(IndexedHashSet&& other) = default;
+    IndexedHashSet(IndexedHashSet&& other) noexcept;
+    IndexedHashSet& operator=(IndexedHashSet&& other) noexcept;
+    ~IndexedHashSet();
 
-    void clear() noexcept
-    {
-        if (!m_storage->empty())
-            m_set.clear();
-        m_storage->clear();
-    }
+    void clear() noexcept;
 
     static size_t hash(const Data<Tag>& element) noexcept(std::is_nothrow_default_constructible_v<H> && std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
     {
         return gtl::phmap_mix<sizeof(size_t)>()(H {}(element));
     }
 
-    std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const
-    {
-        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
-        assert(h == m_set.hash(element));
-
-        return ygg::detail::find_value_with_hash<ThreadSafe>(m_set, element, h);
-    }
+    std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const;
 
     /// Performs a prehashed lookup without a shard lock. Prior publication must
     /// happen-before the call, and the set must remain alive and unmodified for
     /// the whole call. Concurrent read-only calls are allowed. No runtime check
     /// enforces these preconditions; violating them is undefined behavior.
-    std::optional<Index<Tag>> find_unsafe_with_hash(const Data<Tag>& element, size_t h) const
-    {
-        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
-        assert(h == m_set.hash(element));
-
-        return ygg::detail::find_value_unsafe_with_hash<ThreadSafe>(m_set, element, h);
-    }
+    std::optional<Index<Tag>> find_unsafe_with_hash(const Data<Tag>& element, size_t h) const;
 
     std::optional<Index<Tag>> find(const Data<Tag>& element) const { return find_with_hash(element, IndexedHashSet::hash(element)); }
 
@@ -155,78 +125,23 @@ public:
     template<::cista::mode Mode = CISTA_MODE>
     std::pair<Index<Tag>, bool> insert(const Data<Tag>& element);
 
-    const Data<Tag>& operator[](Index<Tag> index) const noexcept { return *(*m_storage)[uint_t(index)]; }
+    const Data<Tag>& operator[](Index<Tag> index) const noexcept { return *m_storage[uint_t(index)]; }
 
-    const Data<Tag>& at(Index<Tag> index) const { return *m_storage->at(uint_t(index)); }
+    const Data<Tag>& at(Index<Tag> index) const { return *m_storage.at(uint_t(index)); }
 
-    const Data<Tag>& front() const { return *m_storage->front(); }
+    const Data<Tag>& front() const { return *m_storage.front(); }
 
-    const Data<Tag>& back() const { return *m_storage->back(); }
+    const Data<Tag>& back() const { return *m_storage.back(); }
 
-    size_t memory_usage() const noexcept
-    {
-        size_t bytes = 0;
-        bytes += m_storage ? m_storage->memory_usage() : 0;
-        bytes += ygg::detail::hash_set_memory_usage(m_set);
-        return bytes;
-    }
+    size_t memory_usage() const noexcept;
 
-    size_t size() const noexcept { return m_storage->size(); }
+    size_t size() const noexcept { return m_storage.size(); }
 
-    bool empty() const noexcept { return m_storage->empty(); }
+    bool empty() const noexcept { return m_storage.empty(); }
 
 private:
-    class IndexableHash
-    {
-    private:
-        const VectorType* m_storage;
-        H m_hash;
-
-    public:
-        using is_transparent = void;
-
-        IndexableHash() noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(nullptr) {}
-        explicit IndexableHash(const VectorType& storage) noexcept(std::is_nothrow_default_constructible_v<H>) : m_storage(&storage) {}
-
-        size_t operator()(Index<Tag> index) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
-        {
-            return m_hash(*(*m_storage)[uint_t(index)]);
-        }
-        size_t operator()(const Data<Tag>& element) const noexcept(std::is_nothrow_invocable_v<const H&, const Data<Tag>&>) { return m_hash(element); }
-    };
-
-    class IndexableEqualTo
-    {
-    private:
-        const VectorType* m_storage;
-        E m_equal_to;
-
-    public:
-        using is_transparent = void;
-
-        IndexableEqualTo() noexcept(std::is_nothrow_default_constructible_v<E>) : m_storage(nullptr), m_equal_to() {}
-        explicit IndexableEqualTo(const VectorType& storage) noexcept(std::is_nothrow_default_constructible_v<E>) : m_storage(&storage), m_equal_to() {}
-
-        bool operator()(Index<Tag> lhs, Index<Tag> rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
-        {
-            return m_equal_to(*(*m_storage)[uint_t(lhs)], *(*m_storage)[uint_t(rhs)]);
-        }
-        bool operator()(const Data<Tag>& lhs, Index<Tag> rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
-        {
-            return m_equal_to(lhs, *(*m_storage)[uint_t(rhs)]);
-        }
-        bool operator()(Index<Tag> lhs, const Data<Tag>& rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
-        {
-            return m_equal_to(*(*m_storage)[uint_t(lhs)], rhs);
-        }
-        bool operator()(const Data<Tag>& lhs, const Data<Tag>& rhs) const noexcept(std::is_nothrow_invocable_v<const E&, const Data<Tag>&, const Data<Tag>&>)
-        {
-            return m_equal_to(lhs, rhs);
-        }
-    };
-
-    std::unique_ptr<VectorType> m_storage;
-    SetType m_set;
+    VectorType m_storage;
+    std::unique_ptr<Lookup> m_lookup;
 
     ::cista::buf<std::vector<uint8_t>>* m_buf;
     SegmentedBuffer* m_arena;

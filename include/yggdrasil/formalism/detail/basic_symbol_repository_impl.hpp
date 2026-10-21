@@ -19,6 +19,7 @@
 #define YGG_FORMALISM_DETAIL_BASIC_SYMBOL_REPOSITORY_IMPL_HPP_
 
 #include "yggdrasil/buffer/detail/indexed_hash_set_impl.hpp"
+#include "yggdrasil/containers/detail/indexed_hash_set_impl.hpp"
 #include "yggdrasil/formalism/basic_symbol_repository.hpp"
 
 #include <cassert>
@@ -26,6 +27,45 @@
 
 namespace ygg::formalism
 {
+
+template<typename T, bool ThreadSafe>
+BasicSymbolRepository<T, ThreadSafe>::BasicSymbolRepository(const BasicSymbolRepository* parent) : m_parent(parent), m_slot()
+{ clear_slot(); }
+
+template<typename T, bool ThreadSafe>
+BasicSymbolRepository<T, ThreadSafe>::~BasicSymbolRepository() = default;
+
+template<typename T, bool ThreadSafe>
+void BasicSymbolRepository<T, ThreadSafe>::clear() noexcept
+{ clear_slot(); }
+
+template<typename T, bool ThreadSafe>
+size_t BasicSymbolRepository<T, ThreadSafe>::memory_usage() const noexcept
+{ return m_slot.memory_usage(); }
+
+template<typename T, bool ThreadSafe>
+std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
+{
+    const auto& container = m_slot.container;
+    assert(h == container.hash(builder));
+
+    if (auto index_or_nullopt = container.find_with_hash(builder, h))
+        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
+
+    return std::nullopt;
+}
+
+template<typename T, bool ThreadSafe>
+std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
+{
+    const auto& container = m_slot.container;
+    assert(h == container.hash(builder));
+
+    if (auto index_or_nullopt = container.find_unsafe_with_hash(builder, h))
+        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
+
+    return std::nullopt;
+}
 
 template<typename T, bool ThreadSafe>
 std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local(Data<T>& builder)

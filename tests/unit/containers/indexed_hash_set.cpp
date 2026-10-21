@@ -15,7 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/detail/indexed_hash_set_impl.hpp"
 
 #include <cstddef>
 #include <gtest/gtest.h>

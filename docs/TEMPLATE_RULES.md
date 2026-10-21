@@ -168,7 +168,7 @@ follows.
 19. **Split storage templates into a read header and a write impl.** When the
     write path of a widely included storage template (insertion,
     serialization) needs a dependency its read path does not, keep the class
-    and the read API (`find*`, `at`, `operator[]`, `size`, views) in
+    and the read API (`at`, `operator[]`, `size`, iteration, views) in
     `<name>.hpp` and define the whole write API (`insert*`, `create*`,
     `complete_miss*`, `append*`, `serialize`) in `detail/<name>_impl.hpp`.
     Split along this boundary, not along the individual functions that need
@@ -177,6 +177,15 @@ follows.
     lists include the impl, `<PROJECT>_HEADER_INSTANTIATION` builds include
     it in the `#else` branch of the extern list, and code that interns types
     nobody else instantiates adds explicit instantiations in one source.
+    When a member only serves the write side (the value-to-index hash table
+    of an interning set), declare its class in the header, define it in the
+    impl and hold it by `std::unique_ptr`: the read header then never
+    instantiates it. Value lookup (`find*`), construction, destruction,
+    `clear` and memory accounting go to the impl with it. Hold what reads
+    need by value, so the indirection moves off the read path. Define these
+    members out of class: functions defined in the class body are implicitly
+    inline, and an extern template declaration does not stop their
+    instantiation in the includer.
 
 ## Process
 
@@ -225,6 +234,7 @@ follows.
 | 13 | the TUs that grew with the row above (tyr search and heuristics +35 to +72 MB, runir `ps/ext/program_executor.cpp` +196 MB) | with frequent collections the same TUs are unchanged or lighter (gbfs_lazy 1206 MB to 1169 MB, program_executor 3276 MB to 3288 MB including its new explicit instantiations); the rise is GC timing |
 | 5 | gtl patch (`src/gtl/settings-struct.patch`): `raw_hash_set` keeps growth_left, hasher, key_equal and allocator in a struct with `[[no_unique_address]]` members instead of a `std::tuple`, which every record type's hash set instantiated anew (std::tuple and its traits were 31% of the instantiation time of the 18 heaviest downstream TUs); same layout | summed memory loki 82.8 GB to 77.5 GB (TUs above 1 GiB 11 to 5), tyr 206.4 GB to 188.4 GB (median 885 MB to 784 MB, above 1 GiB 90 to 70), runir 228.8 GB to 203.1 GB (max 3.89 GB to 3.40 GB, above 1 GiB 109 to 83); CPU -6 to -8%; no TU heavier |
 | 18 | records list their identifying members as member pointers, `static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::a, &Data::b> {}; }`, instead of returning `std::tie(a, b)`; `Hash`, `EqualTo` and `Less` fold over the pointers, so no tuple, `std::tie` or `std::apply` is instantiated per record type (a static function, not a type alias: a class template is still incomplete while its own aliases are instantiated) | tyr's 107 records converted: summed memory 188.4 GB to 176.7 GB, median 784 MB to 701 MB, CPU -5%; one TU +36 MB |
+| 19 | yggdrasil `IndexedHashSet` (both) holds its element vector by value and its value-to-index table (`Lookup`: the gtl set and its functors) behind a `std::unique_ptr` to a class defined in `detail/indexed_hash_set_impl.hpp`; `BasicSymbolRepository` construction, `clear`, `memory_usage` and `find_local*` moved to its impl; with inline segment pointers in `SegmentedVector` and a segmented `ObjectPoolStorage` | summed memory loki 74.9 GB to 70.1 GB, tyr 180.3 GB to 156.5 GB (above 1 GiB 67 to 50, max 1.95 GB to 1.70 GB, median 565 MB to 483 MB), runir 198.1 GB to 169.2 GB (above 1 GiB 76 to 59, max 3.19 GB to 2.79 GB), yggdrasil 58.8 GB to 57.7 GB; CPU -4 to -16%; changes the container layout, so prebuilt downstream packages must be rebuilt |
 | 7 | runir `ConstructorRepositoryFactory::create` defined in `detail/constructor_repository_impl.hpp` (the class is extern but `create` was in the class body) | a TU that creates a repository 2.27 GB to 0.78 GB; with the projection change: 49 runir TUs -50 MB to -0.6 GB, summed -13.3 GB, none heavier than +6 MB |
 | 7 | runir `DenotationRepository` constructor, destructor and factory, and the ps `BasicRepositoryFactory::create`, defined in the library | callers no longer construct or destroy the symbol pools; needed for the macOS link of the incremental query test |
 | 4 | runir CNF translation asserted `==` on two `shared_ptr`s to the planning repository | completed the repository type in Debug builds only (GCC 13 CI error); compares `.get()` now |
