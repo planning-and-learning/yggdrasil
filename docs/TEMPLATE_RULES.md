@@ -179,13 +179,34 @@ follows.
     nobody else instantiates adds explicit instantiations in one source.
     When a member only serves the write side (the value-to-index hash table
     of an interning set), declare its class in the header, define it in the
-    impl and hold it by `std::unique_ptr`: the read header then never
-    instantiates it. Value lookup (`find*`), construction, destruction,
+    impl and hold it by an owning raw pointer that the impl creates and
+    deletes: the read header then never instantiates it. Not by
+    `std::unique_ptr` in a template instantiated per record type: it
+    instantiates `unique_ptr`, `__uniq_ptr_impl` and a `std::tuple` for every
+    element type. Value lookup (`find*`), construction, destruction,
     `clear` and memory accounting go to the impl with it. Hold what reads
     need by value, so the indirection moves off the read path. Define these
     members out of class: functions defined in the class body are implicitly
     inline, and an extern template declaration does not stop their
     instantiation in the includer.
+
+20. **Keep `std::tuple` and `std::unique_ptr` out of per-type code.** A
+    `std::tuple` of N types instantiates N levels of `_Tuple_impl` and the
+    constraint traits of its constructors, and `std::unique_ptr` stores its
+    pointer in a `std::tuple`. In code instantiated for every record type or
+    over long type lists, hold an owned object by raw pointer and keep the
+    ownership in the out-of-class special members (rule 19), keep one object
+    per type in flat bases (`struct Slots : Slot<Ts>... {}`, listed in reverse
+    to keep `std::tuple`'s destruction order: pooled objects may own handles
+    into the pools of later types), and list record fields as member pointers
+    (`static constexpr auto cista_members() noexcept { return
+    ygg::Members<&Data::index, &Data::a> {}; }`; our cista fork folds over a
+    static `cista_members()` that returns such a pack) so that serialization,
+    hashing, child visits and `clear()` fold over the pointers
+    (`ygg::for_each_member`, `ygg::clear_members`) instead of `std::tie` and
+    `std::apply`. A `cista_members()` that returns `std::tie` in a non-template
+    record compiles in every includer. Find such costs with clang's
+    `-ftime-trace` over the heaviest TUs, summed by template name.
 
 ## Process
 
@@ -235,6 +256,7 @@ follows.
 | 5 | gtl patch (`src/gtl/settings-struct.patch`): `raw_hash_set` keeps growth_left, hasher, key_equal and allocator in a struct with `[[no_unique_address]]` members instead of a `std::tuple`, which every record type's hash set instantiated anew (std::tuple and its traits were 31% of the instantiation time of the 18 heaviest downstream TUs); same layout | summed memory loki 82.8 GB to 77.5 GB (TUs above 1 GiB 11 to 5), tyr 206.4 GB to 188.4 GB (median 885 MB to 784 MB, above 1 GiB 90 to 70), runir 228.8 GB to 203.1 GB (max 3.89 GB to 3.40 GB, above 1 GiB 109 to 83); CPU -6 to -8%; no TU heavier |
 | 18 | records list their identifying members as member pointers, `static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::a, &Data::b> {}; }`, instead of returning `std::tie(a, b)`; `Hash`, `EqualTo` and `Less` fold over the pointers, so no tuple, `std::tie` or `std::apply` is instantiated per record type (a static function, not a type alias: a class template is still incomplete while its own aliases are instantiated) | tyr's 107 records converted: summed memory 188.4 GB to 176.7 GB, median 784 MB to 701 MB, CPU -5%; one TU +36 MB |
 | 19 | yggdrasil `IndexedHashSet` (both) holds its element vector by value and its value-to-index table (`Lookup`: the gtl set and its functors) behind a `std::unique_ptr` to a class defined in `detail/indexed_hash_set_impl.hpp`; `BasicSymbolRepository` construction, `clear`, `memory_usage` and `find_local*` moved to its impl; with inline segment pointers in `SegmentedVector` and a segmented `ObjectPoolStorage` | summed memory loki 74.9 GB to 70.1 GB, tyr 180.3 GB to 156.5 GB (above 1 GiB 67 to 50, max 1.95 GB to 1.70 GB, median 565 MB to 483 MB), runir 198.1 GB to 169.2 GB (above 1 GiB 76 to 59, max 3.19 GB to 2.79 GB), yggdrasil 58.8 GB to 57.7 GB; CPU -4 to -16%; changes the container layout, so prebuilt downstream packages must be rebuilt |
+| 19 | yggdrasil `IndexedHashSet` (both) holds its `Lookup` by an owning raw pointer instead of `std::unique_ptr` (clang time traces of the heaviest TUs: `unique_ptr`, `__uniq_ptr_*` and their `std::tuple` were about 12% of runir's front end, nearly all from `IndexedHashSet`) | summed memory loki 69.0 GB to 65.8 GB (above 1 GiB 3 to 1), tyr 152.5 GB to 141.1 GB (median 579 MB to 525 MB, above 1 GiB 46 to 30, max 1.66 GB to 1.54 GB), runir 164.5 GB to 143.8 GB (median 672 MB to 545 MB, above 1 GiB 60 to 48), yggdrasil 53.2 GB to 52.8 GB; peak at -j32 tyr 41.6 GB to 37.5 GB; CPU -4 to -9%; no TU more than 20 MB heavier |
 | 7 | runir `ConstructorRepositoryFactory::create` defined in `detail/constructor_repository_impl.hpp` (the class is extern but `create` was in the class body) | a TU that creates a repository 2.27 GB to 0.78 GB; with the projection change: 49 runir TUs -50 MB to -0.6 GB, summed -13.3 GB, none heavier than +6 MB |
 | 7 | runir `DenotationRepository` constructor, destructor and factory, and the ps `BasicRepositoryFactory::create`, defined in the library | callers no longer construct or destroy the symbol pools; needed for the macOS link of the incremental query test |
 | 4 | runir CNF translation asserted `==` on two `shared_ptr`s to the planning repository | completed the repository type in Debug builds only (GCC 13 CI error); compares `.get()` now |
@@ -265,3 +287,5 @@ follows.
 | 7 | 28 non-template member functions of 8 lines or more (search, generic join, plans, cost model) defined out of class in the library; codecs and row accessors stay inline for the hot paths | database TUs summed 25.1 GB to 24.6 GB, max 1.23 GB to 1.15 GB, but 7 more library sources at about 0.5 GB each: library 12.7 GB to 16.3 GB |
 | 11 | the 33 `yggdrasil::database` sources compiled as 5 unity batches of 8 | library 16.3 GB to 3.8 GB, 140 s to 39 s, heaviest 1.0 GB; with the previous rows the whole yggdrasil build goes from 61.8 GB summed, max 2.41 GB, 9 TUs above 1 GiB, 67 s at -j16 to 59.7 GB, 1.15 GB, 2, 45 s |
 | 8 | the shared `yggdrasil::database` library compiled with `-fno-semantic-interposition` | incremental distance with dense ties 5.5 µs (header-only) to 12.1 µs (library) back to 4.7 µs: without it, `successor_distance`, `contains_edge` and the work counters were PLT calls inside the library |
+| 20 | yggdrasil `BuilderStorage` keeps one pool per type in flat bases (reversed) instead of `std::tuple<UniqueObjectPool<Data<Ts>>...>`; the first version listed the bases in type order and crashed a loki test with `free(): invalid pointer` at destruction | summed memory tyr 141.1 GB to 138.7 GB (above 1 GiB 30 to 28), runir 143.8 GB to 142.3 GB, loki and yggdrasil -0.3%; peak at -j32 tyr 37.5 GB to 35.6 GB, runir 67.3 GB to 64.0 GB; CPU +2 to +3% in tyr and runir in two runs |
+| 20 | records return their fields from a static `cista_members()` as `ygg::Members<&Data::index, ...>` instead of `std::tie` (254 classes in the four repositories; four tyr rule class templates keep `cista_members()`); the cista fork folds over the pointers in `for_each_field` and `for_each_ptr_field` and builds a tuple only in `to_tuple`; same type hash | summed memory yggdrasil 52.6 GB to 50.6 GB, loki 65.5 GB to 60.6 GB (median 346 MB to 308 MB), tyr 138.7 GB to 128.8 GB (median 509 MB to 480 MB, above 1 GiB 28 to 21, max 1.51 GB to 1.42 GB), runir 142.3 GB to 134.0 GB (above 1 GiB 47 to 43); CPU -4 to -12%; peak at -j32 loki 16.6 GB to 14.4 GB, tyr 35.6 GB to 32.3 GB; one TU +33 MB |
