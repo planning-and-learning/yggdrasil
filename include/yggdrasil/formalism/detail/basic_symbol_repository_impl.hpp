@@ -27,7 +27,24 @@
 namespace ygg::formalism
 {
 
-/// Inserting serialized symbols needs cista/serialization.h, so only instantiating sources include this definition.
+template<typename T, bool ThreadSafe>
+std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local(Data<T>& builder)
+{
+    return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder));
+}
+
+template<typename T, bool ThreadSafe>
+std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_with_hash(Data<T>& builder, size_t h)
+{
+    if (const auto index = find_local_with_hash(builder, h))
+    {
+        builder.index = *index;
+        return { *index, false };
+    }
+
+    return create_local_with_hash(builder, h);
+}
+
 template<typename T, bool ThreadSafe>
 std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::create_local_with_hash(Data<T>& builder, size_t h)
 {

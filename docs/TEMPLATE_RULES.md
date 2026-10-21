@@ -165,16 +165,18 @@ follows.
     gone, the code is no longer a template: move its definitions into the
     library (rule 8), or every includer compiles them (rule 4).
 
-19. **Split definitions by the dependencies they need.** When some member
-    definitions of a widely included template need a heavy dependency the
-    rest of the class does not (serialization, I/O, threading runtimes,
-    formatting), define exactly those in `detail/<name>_impl.hpp` and keep the
-    class and everything else in `<name>.hpp`. Sources that explicitly
-    instantiate the template include the impl next to their instantiation
-    lists, `<PROJECT>_HEADER_INSTANTIATION` builds include it in the `#else`
-    branch of the extern list, and code that interns types nobody else
-    instantiates adds explicit instantiations in one source. Readers then never
-    pay for the writers' dependencies.
+19. **Split storage templates into a read header and a write impl.** When the
+    write path of a widely included storage template (insertion,
+    serialization) needs a dependency its read path does not, keep the class
+    and the read API (`find*`, `at`, `operator[]`, `size`, views) in
+    `<name>.hpp` and define the whole write API (`insert*`, `create*`,
+    `complete_miss*`, `append*`, `serialize`) in `detail/<name>_impl.hpp`.
+    Split along this boundary, not along the individual functions that need
+    the dependency, and only when the measured difference is large. The class
+    comment names the impl header. Sources with the explicit instantiation
+    lists include the impl, `<PROJECT>_HEADER_INSTANTIATION` builds include
+    it in the `#else` branch of the extern list, and code that interns types
+    nobody else instantiates adds explicit instantiations in one source.
 
 ## Process
 
@@ -219,7 +221,7 @@ follows.
 | 5 | a standalone scan of all 1192 public headers (clang, one TU each) | three headers did not compile on their own: tyr `datalog/ground/workspaces/rule.hpp` and `datalog/statistics/program.hpp` (missing includes), runir `dl/family_traits.hpp` (include cycle with `declarations.hpp`) |
 | 5 | yggdrasil `SpinSharedMutex` and `SpinMutex` (`core/spin_mutex.hpp`) implement oneTBB's `spin_rw_mutex` and `spin_mutex` algorithms with `<atomic>` and compiler builtins instead of including the oneTBB headers, whose backoff pulls in `<immintrin.h>` (116 MB) and `<thread>` (74 MB); same state words, sizes and alignments | `formalism/symbol_repository.hpp` 396 MB to 293 MB on its own; summed memory yggdrasil 64.2 GB to 57.9 GB, loki 105.9 GB to 92.2 GB (no TU heavier) |
 | 1, 8 | tyr headers that only take `ygg::ExecutionContext&` include `yggdrasil/execution/declarations.hpp` instead of `execution/onetbb.hpp` (`task_arena`, 215 MB on its own); `execute_model` is defined in `src/datalog/solver_impl.hpp` and instantiated next to `compute_model`; with the row above | summed memory tyr 236.1 GB to 214.1 GB (TUs above 1 GiB 136 to 94), runir 256.4 GB to 237.5 GB (median 1.23 GB to 1.10 GB); 24 tyr TUs that create an `ExecutionContext` grew 21-36 MB because `onetbb.hpp` now comes after the tyr headers (first include: back to the old cost); `ground/solver.cpp` +54 MB for the `execute_model` instantiations |
-| 19, 5 | cista fork: `hashing.h` without the `std::chrono` specializations (moved to `hashing_chrono.h`, included by `serialization.h`), so `cista/containers/variant.h` no longer pulls in `<chrono>` (`<format>`, `<locale>`, `<sstream>`); yggdrasil `buffer/declarations.hpp` includes `cista/targets/buf.h` instead of `cista/serialization.h`, and `buffer::IndexedHashSet::serialize` and `BasicSymbolRepository::create_local_with_hash` are defined in `detail/*_impl.hpp`, included by the instantiating sources | `formalism/symbol_repository.hpp` 293 MB to 197 MB, `database/semantics/relation_repository.hpp` 341 MB to 268 MB on their own; summed memory yggdrasil 57.9 GB to 55.6 GB, loki 92.2 GB to 82.8 GB, tyr 214.1 GB to 206.4 GB, runir 237.5 GB to 228.8 GB; CPU time -3 to -14% |
+| 19, 5 | cista fork: `hashing.h` without the `std::chrono` specializations (moved to `hashing_chrono.h`, included by `serialization.h`), so `cista/containers/variant.h` no longer pulls in `<chrono>` (`<format>`, `<locale>`, `<sstream>`); yggdrasil `buffer/declarations.hpp` includes `cista/targets/buf.h` instead of `cista/serialization.h`, and the write APIs of `buffer::IndexedHashSet` and `BasicSymbolRepository` are defined in `detail/*_impl.hpp`, included by the instantiating sources (moving the whole write API instead of only the functions that serialize: no change in loki, tyr or runir) | `formalism/symbol_repository.hpp` 293 MB to 197 MB, `database/semantics/relation_repository.hpp` 341 MB to 268 MB on their own; summed memory yggdrasil 57.9 GB to 55.6 GB, loki 92.2 GB to 82.8 GB, tyr 214.1 GB to 206.4 GB, runir 237.5 GB to 228.8 GB; CPU time -3 to -14% |
 | 13 | the TUs that grew with the row above (tyr search and heuristics +35 to +72 MB, runir `ps/ext/program_executor.cpp` +196 MB) | with frequent collections the same TUs are unchanged or lighter (gbfs_lazy 1206 MB to 1169 MB, program_executor 3276 MB to 3288 MB including its new explicit instantiations); the rise is GC timing |
 | 7 | runir `ConstructorRepositoryFactory::create` defined in `detail/constructor_repository_impl.hpp` (the class is extern but `create` was in the class body) | a TU that creates a repository 2.27 GB to 0.78 GB; with the projection change: 49 runir TUs -50 MB to -0.6 GB, summed -13.3 GB, none heavier than +6 MB |
 | 7 | runir `DenotationRepository` constructor, destructor and factory, and the ps `BasicRepositoryFactory::create`, defined in the library | callers no longer construct or destroy the symbol pools; needed for the macOS link of the incremental query test |

@@ -51,6 +51,9 @@ namespace ygg::buffer
 /// quiescence. Each ThreadSafe instance requires exclusive use of its supplied
 /// serialization buffer and arena. find_unsafe_with_hash additionally requires
 /// the documented caller-enforced quiescence.
+///
+/// The write API (insertion and serialization) is defined in detail/indexed_hash_set_impl.hpp, which needs
+/// cista/serialization.h; sources that instantiate the set include it.
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
@@ -65,27 +68,14 @@ private:
     using VectorType = SegmentedVector<const Data<Tag>*, FirstSegmentSize, ThreadSafe>;
     using SetType = ygg::detail::HashSetType<Index<Tag>, IndexableHash, IndexableEqualTo, ThreadSafe>;
 
-    /// Defined in detail/indexed_hash_set_impl.hpp, which needs cista/serialization.h.
     template<::cista::mode Mode>
     const Data<Tag>* serialize(const Data<Tag>& element);
 
     template<::cista::mode Mode, typename Factory>
-    Index<Tag> append_new_with_index(Factory&& factory)
-    {
-        if (!m_buf || !m_arena)
-            throw std::logic_error("Buffer IndexedHashSet requires a buffer and "
-                                   "arena before insertion.");
-
-        return Index<Tag>(static_cast<uint_t>(m_storage->emplace_back_with_index(
-            [&](size_t index) { return serialize<Mode>(std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index)))); },
-            std::numeric_limits<uint_t>::max())));
-    }
+    Index<Tag> append_new_with_index(Factory&& factory);
 
     template<::cista::mode Mode>
-    Index<Tag> append_new(const Data<Tag>& element)
-    {
-        return append_new_with_index<Mode>([&](Index<Tag>) -> const Data<Tag>& { return element; });
-    }
+    Index<Tag> append_new(const Data<Tag>& element);
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
@@ -148,52 +138,22 @@ public:
     bool contains(const Data<Tag>& element) const { return find(element).has_value(); }
 
     template<::cista::mode Mode = CISTA_MODE>
-    std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element)
-    {
-        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
-        assert(h == m_set.hash(element));
-
-        return ygg::detail::find_or_lazy_insert_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new<Mode>(element); });
-    }
+    std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element);
 
     /// Rechecks a caller-observed miss and returns the canonical stored index.
     template<::cista::mode Mode = CISTA_MODE>
-    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element)
-    {
-        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
-        assert(h == m_set.hash(element));
-
-        return ygg::detail::complete_miss_value_with_hash<ThreadSafe>(m_set, element, h, [&] { return append_new<Mode>(element); });
-    }
+    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element);
 
     /// Runs the factory inside the insertion transaction with the reserved local index.
     /// The result must preserve the key's identity, and the factory must not access this set.
     template<::cista::mode Mode = CISTA_MODE, typename Factory>
-    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element, Factory&& factory)
-    {
-        assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
-        assert(h == m_set.hash(element));
-
-        return ygg::detail::complete_miss_value_with_hash<ThreadSafe>(m_set,
-                                                                      element,
-                                                                      h,
-                                                                      [&] { return append_new_with_index<Mode>(std::forward<Factory>(factory)); });
-    }
+    std::pair<Index<Tag>, bool> complete_miss_with_hash(size_t h, const Data<Tag>& element, Factory&& factory);
 
     template<::cista::mode Mode = CISTA_MODE>
-    Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element)
-    {
-        const auto [index, inserted] = complete_miss_with_hash<Mode>(h, element);
-        if (!inserted)
-            throw std::logic_error("buffer::IndexedHashSet::insert_new_with_hash requires an absent key.");
-        return index;
-    }
+    Index<Tag> insert_new_with_hash(size_t h, const Data<Tag>& element);
 
     template<::cista::mode Mode = CISTA_MODE>
-    std::pair<Index<Tag>, bool> insert(const Data<Tag>& element)
-    {
-        return insert_with_hash<Mode>(IndexedHashSet::hash(element), element);
-    }
+    std::pair<Index<Tag>, bool> insert(const Data<Tag>& element);
 
     const Data<Tag>& operator[](Index<Tag> index) const noexcept { return *(*m_storage)[uint_t(index)]; }
 

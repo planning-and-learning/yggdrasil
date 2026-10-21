@@ -39,6 +39,8 @@
 namespace ygg::formalism
 {
 
+/// The write API (insert_local*, create_local_with_hash) is defined in detail/basic_symbol_repository_impl.hpp, which
+/// needs cista/serialization.h for serialized symbols; sources that instantiate the repository include it.
 template<typename T, bool ThreadSafe = false>
 class BasicSymbolRepository
 {
@@ -112,7 +114,7 @@ public:
 
     std::pair<Index<T>, bool> insert_local_with_hash(Data<T>& builder, size_t h);
 
-    std::pair<Index<T>, bool> insert_local(Data<T>& builder) { return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
+    std::pair<Index<T>, bool> insert_local(Data<T>& builder);
 
     /// Completes a hierarchy-wide miss by rechecking this layer before publishing
     /// storage.
@@ -211,18 +213,6 @@ std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_unsafe_
         return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
 
     return std::nullopt;
-}
-
-template<typename T, bool ThreadSafe>
-std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_with_hash(Data<T>& builder, size_t h)
-{
-    if (const auto index = find_local_with_hash(builder, h))
-    {
-        builder.index = *index;
-        return { *index, false };
-    }
-
-    return create_local_with_hash(builder, h);
 }
 
 template<typename T, bool ThreadSafe>
