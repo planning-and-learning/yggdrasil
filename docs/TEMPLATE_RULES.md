@@ -52,6 +52,8 @@ follows.
    headers such as `tyr/planning/planning.hpp`. This includes the formatter
    headers of every type that is formatted (`tyr/planning/formatter.hpp`,
    `yggdrasil/formatting/cista_formatters.hpp`).
+   Measure third-party headers on their own before including them from a
+   widely used header; a small utility can carry a large include tree.
 6. **Pimpl only at high-level entities** (heuristics, state repositories,
    executors), never in views, repositories, interning or evaluation.
 
@@ -77,7 +79,10 @@ follows.
    so that build mode has no include cycle. Build it once after moving
    definitions. An `extern template` declaration of a
    class instantiates the class definition in every includer, so long extern
-   lists or externs over heavy classes cost more than they save.
+   lists or externs over heavy classes cost more than they save. Compile a
+   shared library with `-fno-semantic-interposition` (GCC): otherwise calls
+   between its own exported functions go through the PLT and are not inlined,
+   so small hot functions moved out of headers become calls.
 9. **Make extern lists opt-in when the definitions must stay visible.** Put
    `extern template` declarations for widely shared instantiations (such as
    `BasicSymbolRepository<T>` of every symbol type) in a separate
@@ -150,12 +155,37 @@ follows.
     instantiation, with the shared contract concepts in a `detail` header;
     tests keep the contracts on light types.
 
+18. **Template on what the code depends on, not on what it passes along.** A
+    parameter that only forwards to other templates multiplies every
+    instantiation by its values and keeps the code out of the library. When
+    the data is uniform (encoded bytes, indices) and only typed access needs
+    the type, give the type its own identity (a constant of its codec or
+    traits, not its position in a list) and keep the type list at the edges
+    that turn a runtime type back into a value type. Once the parameter is
+    gone, the code is no longer a template: move its definitions into the
+    library (rule 8), or every includer compiles them (rule 4).
+
+19. **Split definitions by the dependencies they need.** When some member
+    definitions of a widely included template need a heavy dependency the
+    rest of the class does not (serialization, I/O, threading runtimes,
+    formatting), define exactly those in `detail/<name>_impl.hpp` and keep the
+    class and everything else in `<name>.hpp`. Sources that explicitly
+    instantiate the template include the impl next to their instantiation
+    lists, `<PROJECT>_HEADER_INSTANTIATION` builds include it in the `#else`
+    branch of the extern list, and code that interns types nobody else
+    instantiates adds explicit instantiations in one source. Readers then never
+    pay for the writers' dependencies.
+
 ## Process
 
 13. **Measure before and after.** Use the standalone cost of a header
     (`-fsyntax-only` of a TU that only includes it), the cost of a single API
     call (the TU's includes plus that call, at `-fsyntax-only` and at `-O3`),
-    and a full instrumented build logging the max RSS per TU.
+    and a full instrumented build logging the max RSS per TU. GCC's peak RSS
+    also depends on when its garbage collector runs, which moves single TUs by
+    up to about 200 MB without any change in live memory; check a surprising
+    rise with `--param ggc-min-expand=10 --param ggc-min-heapsize=32768`
+    before and after.
 14. **Keep only what wins in the full build.** A smaller standalone header
     often does not shrink its includers, which may instantiate the same code
     anyway. Revert changes that do not lower the max or summed memory of the
@@ -187,6 +217,10 @@ follows.
 | 4 | runir Ext execution storage reads the entry module's register counts from its data instead of a non-dependent `get_registers<...>()` call | `ps/ext/execution_storage.hpp` 2.13 GB to 1.79 GB on its own; executors unchanged (they use the views anyway) |
 | 4 | loki `detail::copy` declared with explicit types and defined in `src/semantic/translator.cpp` instead of two inline non-template functions | `semantic/translator/copy_translator.hpp` 1.27 GB to 1.00 GB on its own (6 sources and 2 tests) |
 | 5 | a standalone scan of all 1192 public headers (clang, one TU each) | three headers did not compile on their own: tyr `datalog/ground/workspaces/rule.hpp` and `datalog/statistics/program.hpp` (missing includes), runir `dl/family_traits.hpp` (include cycle with `declarations.hpp`) |
+| 5 | yggdrasil `SpinSharedMutex` and `SpinMutex` (`core/spin_mutex.hpp`) implement oneTBB's `spin_rw_mutex` and `spin_mutex` algorithms with `<atomic>` and compiler builtins instead of including the oneTBB headers, whose backoff pulls in `<immintrin.h>` (116 MB) and `<thread>` (74 MB); same state words, sizes and alignments | `formalism/symbol_repository.hpp` 396 MB to 293 MB on its own; summed memory yggdrasil 64.2 GB to 57.9 GB, loki 105.9 GB to 92.2 GB (no TU heavier) |
+| 1, 8 | tyr headers that only take `ygg::ExecutionContext&` include `yggdrasil/execution/declarations.hpp` instead of `execution/onetbb.hpp` (`task_arena`, 215 MB on its own); `execute_model` is defined in `src/datalog/solver_impl.hpp` and instantiated next to `compute_model`; with the row above | summed memory tyr 236.1 GB to 214.1 GB (TUs above 1 GiB 136 to 94), runir 256.4 GB to 237.5 GB (median 1.23 GB to 1.10 GB); 24 tyr TUs that create an `ExecutionContext` grew 21-36 MB because `onetbb.hpp` now comes after the tyr headers (first include: back to the old cost); `ground/solver.cpp` +54 MB for the `execute_model` instantiations |
+| 19, 5 | cista fork: `hashing.h` without the `std::chrono` specializations (moved to `hashing_chrono.h`, included by `serialization.h`), so `cista/containers/variant.h` no longer pulls in `<chrono>` (`<format>`, `<locale>`, `<sstream>`); yggdrasil `buffer/declarations.hpp` includes `cista/targets/buf.h` instead of `cista/serialization.h`, and `buffer::IndexedHashSet::serialize` and `BasicSymbolRepository::create_local_with_hash` are defined in `detail/*_impl.hpp`, included by the instantiating sources | `formalism/symbol_repository.hpp` 293 MB to 197 MB, `database/semantics/relation_repository.hpp` 341 MB to 268 MB on their own; summed memory yggdrasil 57.9 GB to 55.6 GB, loki 92.2 GB to 82.8 GB, tyr 214.1 GB to 206.4 GB, runir 237.5 GB to 228.8 GB; CPU time -3 to -14% |
+| 13 | the TUs that grew with the row above (tyr search and heuristics +35 to +72 MB, runir `ps/ext/program_executor.cpp` +196 MB) | with frequent collections the same TUs are unchanged or lighter (gbfs_lazy 1206 MB to 1169 MB, program_executor 3276 MB to 3288 MB including its new explicit instantiations); the rise is GC timing |
 | 7 | runir `ConstructorRepositoryFactory::create` defined in `detail/constructor_repository_impl.hpp` (the class is extern but `create` was in the class body) | a TU that creates a repository 2.27 GB to 0.78 GB; with the projection change: 49 runir TUs -50 MB to -0.6 GB, summed -13.3 GB, none heavier than +6 MB |
 | 7 | runir `DenotationRepository` constructor, destructor and factory, and the ps `BasicRepositoryFactory::create`, defined in the library | callers no longer construct or destroy the symbol pools; needed for the macOS link of the incremental query test |
 | 4 | runir CNF translation asserted `==` on two `shared_ptr`s to the planning repository | completed the repository type in Debug builds only (GCC 13 CI error); compares `.get()` now |
@@ -212,3 +246,8 @@ follows.
 | 14 | the same with each family's source split into optimizer and statistics halves (rule 11) | runir peak 26.6 GB to 26.9 GB and wall 333 s to 359 s, pyrunir peak 28.6 GB to 30.0 GB; reverted: new library sources raise the peak while other heavy TUs compile |
 | 11 | runir family traits, query evaluation and query allocation tests split along their test groups | heaviest TU 4.7 GB to 4.2 GB, but peak at -j12 24.6/26.0 GB before and 25.7/26.4 GB after, same wall time; reverted |
 | 11 | runir symbol storage sources kept per repository and family | merging three costs as much as the parts (44-57 s, 4-5 GB) |
+| 18 | yggdrasil database engine without the `ColumnTypes Values` parameter (360 templates); column layouts store `ColumnCodec<T>::id`, the list remains only in `visit_column_type` and `validate_row`; definitions still in headers | query test 2.41 GB to 1.55 GB and 34 s to 18 s (it instantiated the engine for three lists), other database TUs -8% to +44%: median 622 MB to 879 MB, headers on their own 0.45-0.65 GB to 0.57-0.95 GB, since the now non-template inline code compiles in every includer (rule 4); the definitions belong in the library |
+| 18, 8, 7, 9 | the same engine compiled once in `yggdrasil::database` (133 definitions in `src/database`), `QueryRepository` and `RelationRepository` constructors and destructors out of class, their symbol storage instantiated in the library with extern lists in the main headers, `Builder<Relation>` moves and destructor out of class | 36 database TUs: max 2.41 GB to 1.23 GB, above 1 GiB 8 to 3, summed 29.8 GB to 25.1 GB, wall 371 s to 246 s; the library adds 26 sources (12.7 GB, max 0.88 GB), and test builds a second, instrumented copy for the two work-counting tests (another 12.7 GB) |
+| 7 | 28 non-template member functions of 8 lines or more (search, generic join, plans, cost model) defined out of class in the library; codecs and row accessors stay inline for the hot paths | database TUs summed 25.1 GB to 24.6 GB, max 1.23 GB to 1.15 GB, but 7 more library sources at about 0.5 GB each: library 12.7 GB to 16.3 GB |
+| 11 | the 33 `yggdrasil::database` sources compiled as 5 unity batches of 8 | library 16.3 GB to 3.8 GB, 140 s to 39 s, heaviest 1.0 GB; with the previous rows the whole yggdrasil build goes from 61.8 GB summed, max 2.41 GB, 9 TUs above 1 GiB, 67 s at -j16 to 59.7 GB, 1.15 GB, 2, 45 s |
+| 8 | the shared `yggdrasil::database` library compiled with `-fno-semantic-interposition` | incremental distance with dense ties 5.5 µs (header-only) to 12.1 µs (library) back to 4.7 µs: without it, `successor_distance`, `contains_edge` and the work counters were PLT calls inside the library |
