@@ -71,7 +71,8 @@
       "kind": "archive",
       "version": "2.9.3",
       "urls": [
-        "https://users.cecs.anu.edu.au/~bdm/nauty/nauty2_9_3.tar.gz"
+        "https://users.cecs.anu.edu.au/~bdm/nauty/nauty2_9_3.tar.gz",
+        "https://pallini.di.uniroma1.it/nauty2_9_3.tar.gz"
       ],
       "sha256": "9fc4edae04f88a0f5883985be3b39cf7f898fd6cc96e96b9ee25452743cc1b5b"
     },

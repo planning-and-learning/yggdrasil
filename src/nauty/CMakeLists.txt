@@ -26,6 +26,9 @@ if(NOT Nauty_FOUND)
         nauty
         URL ${YGGDRASIL_NAUTY_URLS}
         URL_HASH SHA256=${YGGDRASIL_NAUTY_SHA256}
+        # The mirror's certificate chains to Let's Encrypt's ISRG Root YR, which not every CA store trusts yet.
+        # URL_HASH still ensures the exact archive.
+        TLS_VERIFY OFF
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         PREFIX ${CMAKE_BINARY_DIR}/nauty
         STAMP_DIR ${CMAKE_BINARY_DIR}/nauty/stamp/${YGGDRASIL_NAUTY_VERSION}
