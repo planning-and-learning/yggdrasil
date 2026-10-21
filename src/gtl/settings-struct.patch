@@ -1,0 +1,83 @@
+diff --git a/include/gtl/phmap.hpp b/include/gtl/phmap.hpp
+index 19e97c4..18a3a13 100644
+--- a/include/gtl/phmap.hpp
++++ b/include/gtl/phmap.hpp
+@@ -32,6 +32,10 @@
+ // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
++//
++// Modified by the Yggdrasil project on 2026-10-21:
++// raw_hash_set stores growth_left, hasher, key_equal and allocator in a struct with [[no_unique_address]]
++// members instead of a std::tuple, which every distinct hasher and key_equal instantiated anew.
+ // ---------------------------------------------------------------------------
+ 
+ // ---------------------------------------------------------------------------
+@@ -1721,7 +1725,7 @@ public:
+                           const key_equal&      eq     = key_equal(),
+                           const allocator_type& alloc  = allocator_type())
+         : ctrl_(EmptyGroup<std_alloc_t>())
+-        , settings_(0, hashfn, eq, alloc) {
++        , settings_{ 0, hashfn, eq, alloc } {
+         if (bucket_cnt) {
+             size_t new_capacity = NormalizeCapacity(bucket_cnt);
+             reset_growth_left(new_capacity);
+@@ -1862,7 +1866,7 @@ public:
+         , slots_(nullptr)
+         , size_(0)
+         , capacity_(0)
+-        , settings_(0, that.hash_ref(), that.eq_ref(), a) {
++        , settings_{ 0, that.hash_ref(), that.eq_ref(), a } {
+         if (a == that.alloc_ref()) {
+             std::swap(ctrl_, that.ctrl_);
+             std::swap(slots_, that.slots_);
+@@ -2949,9 +2953,9 @@ private:
+ 
+     void reset_growth_left(size_t new_capacity) { growth_left() = CapacityToGrowth(new_capacity) - size_; }
+ 
+-    size_t& growth_left() { return std::get<0>(settings_); }
++    size_t& growth_left() { return settings_.growth_left; }
+ 
+-    const size_t& growth_left() const { return std::get<0>(settings_); }
++    const size_t& growth_left() const { return settings_.growth_left; }
+ 
+     template<size_t N,
+              template<class, class, class, class>
+@@ -2992,12 +2996,12 @@ private:
+     // -------------------------------------------------------------------------
+     bool is_small() const { return capacity_ < Group::kWidth - 1; }
+ 
+-    hasher&               hash_ref() { return std::get<1>(settings_); }
+-    const hasher&         hash_ref() const { return std::get<1>(settings_); }
+-    key_equal&            eq_ref() { return std::get<2>(settings_); }
+-    const key_equal&      eq_ref() const { return std::get<2>(settings_); }
+-    allocator_type&       alloc_ref() { return std::get<3>(settings_); }
+-    const allocator_type& alloc_ref() const { return std::get<3>(settings_); }
++    hasher&               hash_ref() { return settings_.hash; }
++    const hasher&         hash_ref() const { return settings_.hash; }
++    key_equal&            eq_ref() { return settings_.eq; }
++    const key_equal&      eq_ref() const { return settings_.eq; }
++    allocator_type&       alloc_ref() { return settings_.alloc; }
++    const allocator_type& alloc_ref() const { return settings_.alloc; }
+ 
+     // TODO(alkis): Investigate removing some of these fields:
+     // - ctrl/slots can be derived from each other
+@@ -3007,10 +3011,14 @@ private:
+     slot_type* slots_    = nullptr;                   // [capacity * slot_type]
+     size_t     size_     = 0;                         // number of full slots
+     size_t     capacity_ = 0;                         // total number of slots
+-    std::tuple<size_t /* growth_left */, hasher, key_equal, allocator_type> settings_{ 0,
+-                                                                                       hasher{},
+-                                                                                       key_equal{},
+-                                                                                       allocator_type{} };
++    struct Settings
++    {
++        size_t growth_left = 0;
++        [[no_unique_address]] hasher hash {};
++        [[no_unique_address]] key_equal eq {};
++        [[no_unique_address]] allocator_type alloc {};
++    };
++    Settings settings_ {};
+ };
+ 
+ // --------------------------------------------------------------------------
