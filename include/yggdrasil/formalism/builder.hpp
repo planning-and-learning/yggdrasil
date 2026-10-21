@@ -15,16 +15,42 @@
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types.hpp"
 
-#include <tuple>
-
 namespace ygg::formalism
 {
+namespace detail
+{
+template<typename T>
+struct BuilderSlot
+{
+    UniqueObjectPool<Data<T>> pool;
+};
+
+template<typename List>
+struct BuilderSlots;
 
 template<typename... Ts>
-class BuilderStorage
+struct BuilderSlots<TypeList<Ts...>> : BuilderSlot<Ts>...
 {
-    std::tuple<UniqueObjectPool<Data<Ts>>...> m_data;
+};
 
+template<typename Reversed, typename... Ts>
+struct ReverseTypes
+{
+    using type = Reversed;
+};
+
+template<typename... Reversed, typename T, typename... Ts>
+struct ReverseTypes<TypeList<Reversed...>, T, Ts...> : ReverseTypes<TypeList<T, Reversed...>, Ts...>
+{
+};
+}  // namespace detail
+
+/// One pool per type, held in flat bases: a std::tuple over many types instantiates a recursive
+/// _Tuple_impl chain and its constructor constraints. The bases are listed in reverse, so pools are
+/// destroyed in type order as in std::tuple: pooled objects may own handles into pools of later types.
+template<typename... Ts>
+class BuilderStorage : private detail::BuilderSlots<typename detail::ReverseTypes<TypeList<>, Ts...>::type>
+{
 public:
     using Types = TypeList<Ts...>;
 
@@ -39,7 +65,7 @@ public:
         requires(Types::template contains<T>)
     [[nodiscard]] auto get_builder()
     {
-        return std::get<UniqueObjectPool<Data<T>>>(m_data).get_or_allocate();
+        return static_cast<detail::BuilderSlot<T>&>(*this).pool.get_or_allocate();
     }
 
     /// Clear pooled data once, retaining its reusable buffers.
