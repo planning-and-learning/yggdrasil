@@ -84,7 +84,7 @@ struct FixedUintMixin
     explicit constexpr operator value_type() const noexcept { return m_value; }
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&FixedUintMixin::m_value> {}; }
-    static constexpr auto identifying_members() noexcept { return Members<&FixedUintMixin::m_value> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&FixedUintMixin::m_value> {}; }
 };
 
 }  // namespace ygg

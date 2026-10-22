@@ -54,7 +54,7 @@ struct TreeBitsetIndex
     friend bool operator==(const TreeBitsetIndex&, const TreeBitsetIndex&) = default;
     friend auto operator<=>(const TreeBitsetIndex&, const TreeBitsetIndex&) = default;
 
-    static constexpr auto identifying_members() noexcept { return Members<&TreeBitsetIndex::root, &TreeBitsetIndex::size> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&TreeBitsetIndex::root, &TreeBitsetIndex::size> {}; }
 };
 
 /// Toggles the bits in `mask` of the block at `position`.

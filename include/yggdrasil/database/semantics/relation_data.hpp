@@ -42,7 +42,7 @@ struct Data<database::Relation>
     }
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
-    static constexpr auto identifying_members() noexcept { return Members<&Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
     void clear() noexcept
     {
         ygg::clear_members(*this);

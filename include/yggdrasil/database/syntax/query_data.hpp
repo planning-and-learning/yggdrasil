@@ -43,7 +43,7 @@ struct Data<database::Query<>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::variant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::variant> {}; }
     void clear() noexcept
     {
@@ -61,7 +61,7 @@ struct Data<database::Query<database::QueryInputTag>>
     Data() = default;
     Data(size_t input_slot_, std::span<const database::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::input_slot, &Data::columns> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::input_slot, &Data::columns> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::input_slot, &Data::columns> {}; }
     void clear() noexcept
     {
@@ -78,7 +78,7 @@ struct Data<database::Query<database::QueryEmptyTag>>
     Data() = default;
     explicit Data(std::span<const database::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::columns> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::columns> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::columns> {}; }
     void clear() noexcept
     {
@@ -103,7 +103,7 @@ struct Data<database::Query<Tag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::lhs, &Data::rhs> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::lhs, &Data::rhs> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::lhs, &Data::rhs, &Data::plan> {}; }
     void clear() noexcept
     {
@@ -127,7 +127,7 @@ struct Data<database::Query<Tag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::lhs, &Data::rhs> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::lhs, &Data::rhs> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::lhs, &Data::rhs, &Data::columns> {}; }
     void clear() noexcept
     {
@@ -150,7 +150,7 @@ struct Data<database::Query<database::QueryProjectTag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::labels> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::labels> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::arg, &Data::labels, &Data::plan> {}; }
     void clear() noexcept
     {
@@ -173,7 +173,7 @@ struct Data<database::Query<database::QueryRenameTag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::labels> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::labels> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::arg, &Data::labels, &Data::columns> {}; }
     void clear() noexcept
     {
@@ -205,7 +205,7 @@ struct Data<database::Query<database::QuerySelectEqualTag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::lhs_column, &Data::rhs_column> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::lhs_column, &Data::rhs_column> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::arg, &Data::lhs_column, &Data::rhs_column, &Data::columns, &Data::lhs_position, &Data::rhs_position> {}; }
     void clear() noexcept
     {
@@ -239,7 +239,7 @@ struct Data<database::Query<database::QuerySelectValueTag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::arg, &Data::column, &Data::constant> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::column, &Data::constant> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::arg, &Data::column, &Data::constant, &Data::constant_type, &Data::columns, &Data::column_position> {}; }
     void clear() noexcept
     {
@@ -274,7 +274,7 @@ struct Data<database::Query<database::QueryDistanceTag>>
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::sources, &Data::edges, &Data::targets, &Data::distance_column> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::sources, &Data::edges, &Data::targets, &Data::distance_column> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::sources, &Data::edges, &Data::targets, &Data::distance_column, &Data::plan> {}; }
     void clear() noexcept
     {
@@ -313,7 +313,7 @@ struct Data<database::Query<database::QueryGenericJoinTag>>
         output_order.set(output_order_.begin(), output_order_.end());
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::inputs, &Data::variable_order, &Data::output_order> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::inputs, &Data::variable_order, &Data::output_order> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::inputs, &Data::variable_order, &Data::output_order, &Data::plan> {}; }
     void clear() noexcept
     {

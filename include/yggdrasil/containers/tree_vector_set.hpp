@@ -93,7 +93,7 @@ struct Data<detail::TreeVectorLeaf<T>>
     Data(T value_) : value(std::move(value_)) {}
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::value> {}; }
-    static constexpr auto identifying_members() noexcept { return Members<&Data::value> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
     void clear() noexcept
     {
         ygg::clear_members(*this);
@@ -110,7 +110,7 @@ struct Data<detail::TreeVectorNode<T, Arity>>
     explicit Data(const std::array<uint_t, Arity>& children_) : children(children_) {}
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::children> {}; }
-    static constexpr auto identifying_members() noexcept { return Members<&Data::children> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::children> {}; }
     void clear() noexcept
     {
         ygg::clear_members(*this);
@@ -127,7 +127,7 @@ struct TreeVectorIndex
     friend bool operator==(const TreeVectorIndex&, const TreeVectorIndex&) = default;
     friend auto operator<=>(const TreeVectorIndex&, const TreeVectorIndex&) = default;
 
-    static constexpr auto identifying_members() noexcept { return Members<&TreeVectorIndex::root, &TreeVectorIndex::size> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&TreeVectorIndex::root, &TreeVectorIndex::size> {}; }
 };
 
 /// Overwrites the value at `position`.

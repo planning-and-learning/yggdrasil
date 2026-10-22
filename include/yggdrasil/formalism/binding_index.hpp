@@ -36,7 +36,7 @@ struct Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
     Index<RelationTag> relation;
     Index<ygg::formalism::Row> row;
 
-    static constexpr auto identifying_members() noexcept { return Members<&Index::relation, &Index::row> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Index::relation, &Index::row> {}; }
 };
 }  // namespace ygg
 

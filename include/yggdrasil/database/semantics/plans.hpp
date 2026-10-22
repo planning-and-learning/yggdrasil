@@ -26,7 +26,7 @@ struct ColumnSlice
     size_t size;
 
     bool operator==(const ColumnSlice&) const = default;
-    static constexpr auto identifying_members() noexcept { return Members<&ColumnSlice::type, &ColumnSlice::offset, &ColumnSlice::size> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&ColumnSlice::type, &ColumnSlice::offset, &ColumnSlice::size> {}; }
     static constexpr auto cista_members() noexcept { return ygg::Members<&ColumnSlice::type, &ColumnSlice::offset, &ColumnSlice::size> {}; }
 };
 

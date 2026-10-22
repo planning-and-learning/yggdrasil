@@ -40,7 +40,7 @@ template<typename T>
 struct Less;
 
 /// The members that identify a record, as member pointers:
-/// `static constexpr auto identifying_members() noexcept { return Members<&Data::a, &Data::b> {}; }`.
+/// `static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::a, &Data::b> {}; }`.
 template<auto... Ms>
 struct Members
 {
@@ -59,7 +59,7 @@ template<typename T>
 concept MemberIdentified = requires { T::identifying_members(); } && detail::is_members_v<decltype(T::identifying_members())>;
 
 /// @brief T lists all its fields as member pointers, which cista and yggdrasil iterate without a tuple:
-/// `static constexpr auto cista_members() noexcept { return Members<&Data::index, &Data::a> {}; }`.
+/// `static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::a> {}; }`.
 template<typename T>
 concept MemberListed = requires { T::cista_members(); } && detail::is_members_v<decltype(T::cista_members())>;
 
