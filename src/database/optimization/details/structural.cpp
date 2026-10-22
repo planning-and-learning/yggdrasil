@@ -65,7 +65,8 @@ QueryView<> yannakakis(const JoinBlock& block, std::span<const std::optional<siz
             root = atom;
     std::vector<size_t> preorder { root };
     for (size_t position = 0; position < preorder.size(); ++position)
-        preorder.insert(preorder.end(), children[preorder[position]].begin(), children[preorder[position]].end());
+        for (const auto child : children[preorder[position]])
+            preorder.push_back(child);
 
     auto relations = block.atoms;
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)

@@ -18,7 +18,7 @@ void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
                     ygg::visit_type_id(type,
                                        [&]<typename T>(std::type_identity<T>)
                                        {
-                                           T converted;
+                                           T converted {};
                                            if (!nb::try_cast(value, converted))
                                                throw nb::type_error("Query selection: value does not match the column type.");
                                            new (self) V(arg, column, converted);
