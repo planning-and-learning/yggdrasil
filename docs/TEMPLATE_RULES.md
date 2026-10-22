@@ -163,7 +163,12 @@ follows.
     traits, not its position in a list) and keep the type list at the edges
     that turn a runtime type back into a value type. Once the parameter is
     gone, the code is no longer a template: move its definitions into the
-    library (rule 8), or every includer compiles them (rule 4).
+    library (rule 8), or every includer compiles them (rule 4). The parameter
+    also deferred checking: expressions that no longer depend on a template
+    parameter are checked where they are written, so they need complete types
+    there (an include, a deduced parameter such as the repository type, or a
+    library definition), and a recursive structure must define a type before
+    the members that hold it by value.
 
 19. **Split storage templates into a read header and a write impl.** When the
     write path of a widely included storage template (insertion,
@@ -299,3 +304,5 @@ follows.
 | 11 | runir `evaluation_ext.cpp`, `evaluation_uns.cpp` and `ps/ext/program_executor.cpp` split into ground and lifted sources (probes: the direct evaluator and the incremental engine share most of their instantiations, a ground or lifted half does not) | halves 1.62-1.80 GB against 2.00-2.21 GB, runir max 2.21 GB to 1.94 GB, but summed 124.9 GB to 128.7 GB, CPU +3%, peak at -j32 56.2/62.9/62.9 GB to 69.3/66.5/62.7 GB in three runs each; reverted |
 | 11 | tyr `lmcut.cpp` and `rpg_{ff,add,max}.cpp` split into ground and lifted sources, each including only its kind's RPG header (probes) | lmcut 1.35 GB to 1.06 + 1.25 GB, rpg_ff 1.25 GB to 0.99 + 1.17 GB: the lifted half keeps 90-95%, so the max drops about 0.1 GB for about 1 GB more summed memory; not applied |
 | 1, 7 | yggdrasil `GenericJoinPlan` and `DistancePlan` in their own headers (`generic_join_plan.hpp`, `distance_plan.hpp`) without the evaluators, `GenericJoinPlan`'s constructor and `matches` in the library, `must_pass_plan.hpp` without the unused `relation_view.hpp`; runir's query and numerical data headers include only the plans | `generic_join.hpp` alone 238 MB, `plans.hpp` 155 MB; runir summed 124.9 GB to 123.8 GB, CPU -2%; other repositories unchanged |
+| 18 | runir: sketches and classifiers moved to the Ext DL constructor set (made the union of all three), a capability check per language in the shared AST translation, then the Base and Uns DL instantiations (evaluation, symbol storage, Spirit rules, AST parsers) and the Ext and Uns grammar and CNF storage deleted | runir summed 123.8 GB to 107.6 GB, CPU 22.1 to 18.6 min, wall 94 s to 69 s, peak at -j32 58.4 GB to 35.9 GB, largest link 2.31 GB to 1.18 GB |
+| 18, 4, 8 | runir DL `Family` template parameter removed (scripted, 296 files) | first version 107.6 GB to 109.6 GB: generation grammar and CNF types took the union constructor set (their symbol storage sources +0.32 GB each), and the query translator, query construction and others became non-template code in headers; generation grammars back on the Base set 108.2 GB; translator and query construction defined in the library 108.1 GB, max 2.13 GB, peak at -j32 33.3 GB, wall 69 s; with the renames 108.1 GB, peak 30.0 GB |
