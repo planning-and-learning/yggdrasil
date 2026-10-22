@@ -73,6 +73,14 @@ else()
         set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} -flto=auto")
     elseif(
         YGGDRASIL_ENABLE_LTO
+        AND APPLE
+        AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    )
+        # ld64's LTO drops weak explicit instantiations that nothing inside a dylib calls. libyggdrasil_database
+        # instantiates the query and relation symbol storage that only its includers call (template rule 9).
+        message(STATUS "Skipping LTO on Apple: ld64 does not export unused explicit instantiations under LTO")
+    elseif(
+        YGGDRASIL_ENABLE_LTO
         AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     )
         # ThinLTO reduces release compile and link costs compared with full LTO.
