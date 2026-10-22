@@ -111,7 +111,7 @@ Data<Binding> make_binding(Index<Relation> relation = Index<Relation>(0))
     using Object = formalism::Object<typename Binding::object_tag>;
     auto objects = IndexList<Object> {};
     objects.resize(4);
-    return Data<Binding>(relation, 4, std::move(objects));
+    return Data<Binding>(relation, std::move(objects));
 }
 
 template<typename Binding>

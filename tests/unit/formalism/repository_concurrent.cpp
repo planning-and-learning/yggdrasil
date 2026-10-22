@@ -121,7 +121,7 @@ Data<Binding<ObjectTag>> make_binding(Index<ConcurrentRelation> relation, uint_t
     auto objects = IndexList<Object> {};
     for (uint_t i = 0; i < 4; ++i)
         objects.push_back(Index<Object>((key + i * 997U) & 4095U));
-    return Data<Binding<ObjectTag>>(relation, 4, std::move(objects));
+    return Data<Binding<ObjectTag>>(relation, std::move(objects));
 }
 
 template<typename ObjectTag>
@@ -392,7 +392,7 @@ Data<Binding<ConcurrentPackedObjectTag>> make_packed_binding(Index<ConcurrentRel
         objects.push_back(Index<Object>((key >> (i * 3U)) & 7U));
     if (!valid)
         objects.back() = Index<Object>(8);
-    return Data<Binding<ConcurrentPackedObjectTag>>(relation, 4, std::move(objects));
+    return Data<Binding<ConcurrentPackedObjectTag>>(relation, std::move(objects));
 }
 
 TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSerializedSymbols)
@@ -511,7 +511,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     objects.push_back(Index<Object>(0));
     objects.push_back(Index<Object>(1));
     objects.push_back(Index<Object>(2));
-    const auto wrong = Data<Binding<ObjectTag>>(relation, 3, std::move(objects));
+    const auto wrong = Data<Binding<ObjectTag>>(relation, std::move(objects));
     static_assert(!noexcept(repository.find(wrong)));
 
     EXPECT_THROW(repository.find(wrong), std::invalid_argument);
@@ -651,7 +651,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     invalid_objects.push_back(Index<Object>(1));
     invalid_objects.push_back(Index<Object>(2));
     invalid_objects.push_back(Index<Object>(8));
-    auto invalid = Data<Binding<ObjectTag>>(relation, 4, std::move(invalid_objects));
+    auto invalid = Data<Binding<ObjectTag>>(relation, std::move(invalid_objects));
     EXPECT_THROW(repository.insert(invalid), std::out_of_range);
     EXPECT_EQ(repository.size(relation), 0);
     repository.clear();
@@ -660,7 +660,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     auto valid_objects = IndexList<Object> {};
     for (uint_t value = 0; value < 4; ++value)
         valid_objects.push_back(Index<Object>(value));
-    const auto [view, created] = repository.insert(Data<Binding<ObjectTag>>(relation, 4, std::move(valid_objects)));
+    const auto [view, created] = repository.insert(Data<Binding<ObjectTag>>(relation, std::move(valid_objects)));
     EXPECT_TRUE(created);
     EXPECT_EQ(view.get_index().row, Index<formalism::Row>(0));
 
@@ -669,7 +669,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     auto reused_objects = IndexList<Object> {};
     for (uint_t value = 4; value < 8; ++value)
         reused_objects.push_back(Index<Object>(value));
-    const auto [reused, reused_created] = repository.insert(Data<Binding<ObjectTag>>(relation, 4, std::move(reused_objects)));
+    const auto [reused, reused_created] = repository.insert(Data<Binding<ObjectTag>>(relation, std::move(reused_objects)));
     EXPECT_TRUE(reused_created);
     EXPECT_EQ(reused.get_index().row, Index<formalism::Row>(0));
 }

@@ -531,7 +531,7 @@ TEST(YggdrasilTests, CommonInterningAcceptsRelationBindingsWithoutSymbolIdentity
     using Object = formalism::Object<RepositoryTypesObjectTag>;
     auto objects = IndexList<Object>();
     objects.push_back(Index<Object>(3));
-    auto data = Data<ContractBinding>(Index<RepositoryTypesRelation>(0), 1, std::move(objects));
+    auto data = Data<ContractBinding>(Index<RepositoryTypesRelation>(0), std::move(objects));
     const auto [first, created] = formalism::insert(repository, data);
     EXPECT_TRUE(created);
     const auto [duplicate, duplicate_created] = formalism::insert(repository, data);
@@ -577,7 +577,7 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesFactoryLocalRepository
 
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
-    const auto data = ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects);
+    const auto data = ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), objects);
 
     const auto [first, first_created] = first_repository.insert(data);
     const auto [second, second_created] = second_repository.insert(data);
@@ -603,7 +603,7 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesFactoryLocalRepository
     EXPECT_FALSE(ygg::Less<> {}(second.get_key(), first.get_key()));
 
     objects[0] = ygg::Index<Object>(1);
-    const auto [larger, larger_created] = second_repository.insert(ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects));
+    const auto [larger, larger_created] = second_repository.insert(ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), objects));
     ASSERT_TRUE(larger_created);
     EXPECT_TRUE(ygg::Less<> {}(first.get_key(), larger.get_key()));
 }
@@ -673,19 +673,6 @@ TEST(YggdrasilTests, CommonBorrowedBindingViewReadsWithoutPublishingAndMateriali
     data.objects[0] = Index<Object>(7);
     EXPECT_EQ(objects[0].get_index(), Index<Object>(7));
     EXPECT_EQ(published.get_objects()[0].get_index(), Index<Object>(2));
-}
-
-TEST(YggdrasilTests, CommonRelationBindingDataValidatesArity)
-{
-    using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
-
-    auto objects = ygg::IndexList<Object> {};
-    objects.push_back(ygg::Index<Object>(0));
-    objects.push_back(ygg::Index<Object>(1));
-
-    EXPECT_NO_THROW((ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 2, objects)));
-    EXPECT_THROW((ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 1, objects)), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonBasicSymbolRepositorySynchronizesScratchIdentityOnEveryInsertionPath)
@@ -928,7 +915,7 @@ TEST(YggdrasilTests, CommonBasicRelationRepositoryFrontLocalIsChecked)
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
     objects.push_back(ygg::Index<Object>(1));
-    const auto data = ygg::Data<Binding>(relation, 2, objects);
+    const auto data = ygg::Data<Binding>(relation, objects);
     const auto [row, created] = repository.insert_local(data);
 
     EXPECT_TRUE(created);
@@ -954,7 +941,7 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
     objects.push_back(ygg::Index<Object>(1));
-    const auto data = ygg::Data<Binding>(relation, 2, objects);
+    const auto data = ygg::Data<Binding>(relation, objects);
 
     EXPECT_EQ(root.find(data), std::nullopt);
     EXPECT_THROW(root[missing], std::out_of_range);
@@ -998,7 +985,7 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     auto child_objects = ygg::IndexList<Object> {};
     child_objects.push_back(ygg::Index<Object>(1));
     child_objects.push_back(ygg::Index<Object>(0));
-    const auto child_data = ygg::Data<Binding>(relation, 2, child_objects);
+    const auto child_data = ygg::Data<Binding>(relation, child_objects);
     const auto [local_view, local_created] = child.insert(child_data);
 
     EXPECT_TRUE(local_created);
@@ -1023,13 +1010,13 @@ TEST(YggdrasilTests, CommonRelationRepositoryRejectsWrongArityWithoutMutation)
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
     objects.push_back(ygg::Index<Object>(1));
-    const auto data = ygg::Data<Binding>(relation, 2, std::move(objects));
+    const auto data = ygg::Data<Binding>(relation, std::move(objects));
     const auto [view, created] = repository.insert(data);
     ASSERT_TRUE(created);
 
     auto wrong_objects = ygg::IndexList<Object> {};
     wrong_objects.push_back(ygg::Index<Object>(0));
-    const auto wrong = ygg::Data<Binding>(relation, 1, std::move(wrong_objects));
+    const auto wrong = ygg::Data<Binding>(relation, std::move(wrong_objects));
     static_assert(!noexcept(repository.find_with_hash(wrong, Repository::hash(wrong))));
     static_assert(!noexcept(repository.find(wrong)));
 
@@ -1059,7 +1046,7 @@ TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
     objects.push_back(ygg::Index<Object>(1));
-    const auto data = ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), 2, objects);
+    const auto data = ygg::Data<Binding>(ygg::Index<RepositoryTypesRelation>(0), objects);
     repository.insert(data);
 
     const auto symbol_memory_usage = repository.memory_usage<RepositoryTypesElement>();
@@ -1094,7 +1081,7 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
     objects.push_back(ygg::Index<Object>(3));
-    const auto data = ygg::Data<Binding>(relation, 2, objects);
+    const auto data = ygg::Data<Binding>(relation, objects);
 
     EXPECT_EQ(root.memory_usage<Binding>(), 0);
 
@@ -1110,7 +1097,7 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 
     objects[0] = ygg::Index<Object>(4);
     objects[1] = ygg::Index<Object>(0);
-    const auto wider_data = ygg::Data<Binding>(relation, 2, objects);
+    const auto wider_data = ygg::Data<Binding>(relation, objects);
 
     EXPECT_THROW(root.insert(wider_data), std::out_of_range);
     EXPECT_EQ(root.size(relation), 1);
@@ -1121,7 +1108,7 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 
     auto inherited_width_child = factory.create(2, &root);
     objects[0] = ygg::Index<Object>(3);
-    const auto inherited_width_data = ygg::Data<Binding>(relation, 2, objects);
+    const auto inherited_width_data = ygg::Data<Binding>(relation, objects);
     const auto [inherited_width_view, inherited_width_created] = inherited_width_child.insert(inherited_width_data);
     EXPECT_TRUE(inherited_width_created);
     EXPECT_EQ(inherited_width_child[inherited_width_view.get_index()][0], ygg::Index<Object>(3));
@@ -1466,7 +1453,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
     objects.push_back(ygg::Index<Object>(1));
-    const auto data = ygg::Data<Binding>(relation, 2, objects);
+    const auto data = ygg::Data<Binding>(relation, objects);
     const auto [view, created] = repository.insert(data);
 
     EXPECT_TRUE(created);
@@ -1555,13 +1542,13 @@ void check_relation_membership()
     auto objects = IndexList<Object> {};
     objects.push_back(Index<Object>(0));
     auto root = Repository(0);
-    const auto root_view = root.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    const auto root_view = root.insert(Data<ContractBinding>(relation, objects)).first;
     auto child = Repository(1, &root);
     objects[0] = Index<Object>(1);
-    const auto child_view = child.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    const auto child_view = child.insert(Data<ContractBinding>(relation, objects)).first;
     auto grandchild = Repository(2, &child);
     objects[0] = Index<Object>(2);
-    const auto local_view = grandchild.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    const auto local_view = grandchild.insert(Data<ContractBinding>(relation, objects)).first;
 
     EXPECT_TRUE(grandchild.contains(root_view));
     EXPECT_TRUE(formalism::contains(grandchild, root_view));
@@ -1590,7 +1577,7 @@ void check_relation_membership()
     auto unrelated = Repository(0);
     EXPECT_FALSE(grandchild.contains(BindingView(root_view.get_index(), unrelated)));
     objects[0] = Index<Object>(0);
-    const auto unrelated_view = unrelated.insert(Data<ContractBinding>(relation, 1, objects)).first;
+    const auto unrelated_view = unrelated.insert(Data<ContractBinding>(relation, objects)).first;
     EXPECT_TRUE(grandchild.contains(unrelated_view.get_index()));
     EXPECT_FALSE(grandchild.contains(unrelated_view));
     EXPECT_FALSE(formalism::contains(grandchild, unrelated_view));
