@@ -189,11 +189,15 @@ follows.
     `std::unique_ptr` in a template instantiated per record type: it
     instantiates `unique_ptr`, `__uniq_ptr_impl` and a `std::tuple` for every
     element type. Value lookup (`find*`), construction, destruction,
-    `clear` and memory accounting go to the impl with it. Hold what reads
-    need by value, so the indirection moves off the read path. Define these
-    members out of class: functions defined in the class body are implicitly
-    inline, and an extern template declaration does not stop their
-    instantiation in the includer.
+    `clear` and memory accounting go to the impl with it. A container keeps
+    its element storage behind the same pointer, so reads and writes share
+    one indirection; it holds by value only what inline reads need, a view of
+    the storage (`detail::SegmentedRows`: the segment table's and the size's
+    addresses), whose type does not depend on the storage template. Apply
+    this in the containers only: their holders (repositories, tree sets) keep
+    them by value. Define these members out of class: functions defined in
+    the class body are implicitly inline, and an extern template declaration
+    does not stop their instantiation in the includer.
 
 20. **Keep `std::tuple` and `std::unique_ptr` out of per-type code.** A
     `std::tuple` of N types instantiates N levels of `_Tuple_impl` and the
@@ -306,3 +310,4 @@ follows.
 | 1, 7 | yggdrasil `GenericJoinPlan` and `DistancePlan` in their own headers (`generic_join_plan.hpp`, `distance_plan.hpp`) without the evaluators, `GenericJoinPlan`'s constructor and `matches` in the library, `must_pass_plan.hpp` without the unused `relation_view.hpp`; runir's query and numerical data headers include only the plans | `generic_join.hpp` alone 238 MB, `plans.hpp` 155 MB; runir summed 124.9 GB to 123.8 GB, CPU -2%; other repositories unchanged |
 | 18 | runir: sketches and classifiers moved to the Ext DL constructor set (made the union of all three), a capability check per language in the shared AST translation, then the Base and Uns DL instantiations (evaluation, symbol storage, Spirit rules, AST parsers) and the Ext and Uns grammar and CNF storage deleted | runir summed 123.8 GB to 107.6 GB, CPU 22.1 to 18.6 min, wall 94 s to 69 s, peak at -j32 58.4 GB to 35.9 GB, largest link 2.31 GB to 1.18 GB |
 | 18, 4, 8 | runir DL `Family` template parameter removed (scripted, 296 files) | first version 107.6 GB to 109.6 GB: generation grammar and CNF types took the union constructor set (their symbol storage sources +0.32 GB each), and the query translator, query construction and others became non-template code in headers; generation grammars back on the Base set 108.2 GB; translator and query construction defined in the library 108.1 GB, max 2.13 GB, peak at -j32 33.3 GB, wall 69 s; with the renames 108.1 GB, peak 30.0 GB |
+| 19, 20 | yggdrasil `IndexedHashSet` and `buffer::IndexedHashSet` hold their `SegmentedVector` behind the lookup's pointer and read through `detail::SegmentedRows`; `SegmentedVector`'s segment table holds untyped pointers, so it is one type per segment layout instead of one `std::array` per element type | summed memory tyr 123.5 GB to 119.2 GB (median 437 MB to 409 MB, above 1 GiB 16 to 15), runir 107.9 GB to 105.0 GB (median 426 MB to 403 MB), loki 60.5 GB to 60.0 GB; largest drops 0.07 GB (tyr) and 0.10 GB (runir); tyr A* blind and FF on 27 HTG tasks, lifted and ground: identical expansions and costs, stable cases within 5%, peak RSS geomean 0.98 to 1.005 |

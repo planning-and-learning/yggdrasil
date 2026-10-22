@@ -19,6 +19,7 @@
 #define YGG_CONTAINERS_SEGMENTED_VECTOR_HPP_
 
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/detail/segmented_rows.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
 
 #include <array>
@@ -51,7 +52,7 @@ private:
 
     static_assert(Layout::max_segments > 0);
 
-    T* segment(size_t index) const noexcept { return detail::load_pointer<ThreadSafe, T>(m_segments[index]); }
+    T* segment(size_t index) const noexcept { return static_cast<T*>(detail::load_pointer<ThreadSafe, void>(m_segments[index])); }
 
     T* element(size_t pos) const noexcept
     {
@@ -74,7 +75,7 @@ private:
                 throw std::length_error("SegmentedVector: segment is too large.");
 
             auto* data = static_cast<T*>(::operator new(new_segment_size * sizeof(T), std::align_val_t { alignof(T) }));
-            detail::store_pointer<ThreadSafe, T>(m_segments[index], data);
+            detail::store_pointer<ThreadSafe, void>(m_segments[index], data);
             m_num_segments = index + 1;
             capacity += new_segment_size;
             detail::store_size<ThreadSafe>(m_capacity, capacity);
@@ -158,7 +159,7 @@ private:
         for (size_t i = 0; i < m_num_segments; ++i)
         {
             ::operator delete(segment(i), std::align_val_t { alignof(T) });
-            detail::store_pointer<ThreadSafe, T>(m_segments[i], nullptr);
+            detail::store_pointer<ThreadSafe, void>(m_segments[i], nullptr);
         }
         m_num_segments = 0;
         detail::store_size<ThreadSafe>(m_capacity, 0);
@@ -169,8 +170,8 @@ private:
     {
         for (size_t i = 0; i < other.m_num_segments; ++i)
         {
-            detail::store_pointer<ThreadSafe, T>(m_segments[i], other.segment(i));
-            detail::store_pointer<ThreadSafe, T>(other.m_segments[i], nullptr);
+            detail::store_pointer<ThreadSafe, void>(m_segments[i], other.segment(i));
+            detail::store_pointer<ThreadSafe, void>(other.m_segments[i], nullptr);
         }
         m_num_segments = std::exchange(other.m_num_segments, 0);
         detail::store_size<ThreadSafe>(m_capacity, other.capacity());
@@ -411,6 +412,9 @@ public:
 
     size_t memory_usage() const noexcept { return capacity() * sizeof(T); }
 
+    /// Reads the elements in place; valid while this vector neither moves nor is destroyed.
+    detail::SegmentedRows<T, FirstSegmentSize, ThreadSafe, Index> rows() const noexcept { return { m_segments.data(), &m_size }; }
+
     size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
     size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
     bool empty() const noexcept { return size() == 0; }
@@ -423,8 +427,8 @@ private:
     }
 
     // Segments grow geometrically, i.e., FirstSegmentSize, 2*FirstSegmentSize,
-    // 4*FirstSegmentSize, ...
-    std::array<detail::Pointer<ThreadSafe, T>, Layout::max_segments> m_segments;
+    // 4*FirstSegmentSize, ... Untyped, so the table type is shared by all element types.
+    std::array<detail::Pointer<ThreadSafe, void>, Layout::max_segments> m_segments;
     size_t m_num_segments;
     detail::Size<ThreadSafe> m_capacity;
     detail::Size<ThreadSafe> m_size;

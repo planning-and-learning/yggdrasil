@@ -18,7 +18,7 @@
 #ifndef YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 #define YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 
-#include "yggdrasil/containers/segmented_vector.hpp"
+#include "yggdrasil/containers/detail/segmented_rows.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -41,8 +41,8 @@ namespace ygg
 /// quiescence. find_unsafe_with_hash additionally requires the documented
 /// caller-enforced quiescence.
 ///
-/// Reads by index are defined here. The value-to-index lookup, construction, and the write API are defined in
-/// detail/indexed_hash_set_impl.hpp; sources that instantiate the set include it.
+/// Reads by index are defined here. The elements, the value-to-index lookup, construction, and the write API live behind
+/// one pointer and are defined in detail/indexed_hash_set_impl.hpp; sources that instantiate the set include it.
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
@@ -51,9 +51,9 @@ template<typename Tag,
 class IndexedHashSet
 {
 private:
-    class Lookup;
+    class Store;
 
-    using VectorType = SegmentedVector<Data<Tag>, FirstSegmentSize, ThreadSafe, uint_t>;
+    using Rows = detail::SegmentedRows<Data<Tag>, FirstSegmentSize, ThreadSafe, uint_t>;
 
     template<typename Factory>
     Index<Tag> append_new_with_index(Factory&& factory);
@@ -105,23 +105,23 @@ public:
 
     std::pair<Index<Tag>, bool> insert(const Data<Tag>& element) { return insert_with_hash(IndexedHashSet::hash(element), element); }
 
-    const Data<Tag>& operator[](Index<Tag> index) const noexcept { return m_storage[uint_t(index)]; }
+    const Data<Tag>& operator[](Index<Tag> index) const noexcept { return m_rows[uint_t(index)]; }
 
-    const Data<Tag>& at(Index<Tag> index) const { return m_storage.at(uint_t(index)); }
+    const Data<Tag>& at(Index<Tag> index) const { return m_rows.at(uint_t(index)); }
 
-    const Data<Tag>& front() const { return m_storage.front(); }
+    const Data<Tag>& front() const { return m_rows.front(); }
 
-    const Data<Tag>& back() const { return m_storage.back(); }
+    const Data<Tag>& back() const { return m_rows.back(); }
 
     size_t memory_usage() const noexcept;
 
-    size_t size() const noexcept { return m_storage.size(); }
+    size_t size() const noexcept { return m_rows.size(); }
 
-    bool empty() const noexcept { return m_storage.empty(); }
+    bool empty() const noexcept { return m_rows.empty(); }
 
 private:
-    VectorType m_storage;
-    Lookup* m_lookup;  ///< Owned. std::unique_ptr would instantiate its tuple machinery for every element type.
+    Store* m_store;  ///< Owned. std::unique_ptr would instantiate its tuple machinery for every element type.
+    Rows m_rows;     ///< Reads the elements that m_store owns.
 };
 }  // namespace ygg
 
