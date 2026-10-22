@@ -24,7 +24,7 @@
     "cista": {
       "kind": "git",
       "repository": "https://github.com/drexlerd/cista.git",
-      "revision": "afacd0dac628d375a8f05324dcb9a573a70e5a90"
+      "revision": "204a06917e45713ffce061c8bae8f4cff1fc9e9b"
     },
     "fmt": {
       "kind": "git",

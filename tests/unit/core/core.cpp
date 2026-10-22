@@ -22,6 +22,8 @@
 
 #include <array>
 #include <chrono>
+#include <cista/containers/string.h>
+#include <cista/containers/variant.h>
 #include <cista/containers/vector.h>
 #include <concepts>
 #include <gtest/gtest.h>
@@ -187,6 +189,12 @@ TEST(YggdrasilTests, CommonCoreUmbrellaExposesLightweightHelpers)
     auto optional = ::cista::optional<int> { 7 };
     ygg::clear(optional);
     EXPECT_FALSE(optional.has_value());
+
+    auto variant = ::cista::offset::variant<int, ::cista::offset::string> { ::cista::offset::string { "a string long enough to live on the heap" } };
+    ygg::clear(variant);
+    EXPECT_FALSE(variant.valid());
+    ygg::clear(variant);
+    EXPECT_FALSE(variant.valid());
 
     static_assert(Identifiable<CoreConceptFixture>);
     static_assert(InputRangeOf<std::vector<int>, int>);

@@ -23,8 +23,6 @@
 #include "yggdrasil/core/types.hpp"
 
 #include <cista/containers/optional.h>
-#include <cista/containers/variant.h>
-#include <new>
 #include <optional>
 #include <ranges>
 #include <type_traits>
@@ -33,53 +31,12 @@
 namespace ygg
 {
 template<typename T>
-struct is_cista_variant_helper : std::false_type
-{
-};
-
-template<typename... Ts>
-struct is_cista_variant_helper<::cista::offset::variant<Ts...>> : std::true_type
-{
-};
-
-template<typename T>
-concept CistaVariantConcept = is_cista_variant_helper<T>::value;
-
-template<typename T>
-struct is_optional_variant_helper : std::false_type
-{
-};
-
-template<typename T>
-struct is_optional_variant_helper<::cista::optional<T>> : std::true_type
-{
-};
-
-template<typename T>
-concept CistaOptionalConcept = is_optional_variant_helper<std::remove_cvref_t<T>>::value;
-
-template<typename T>
 void clear(T& element)
 {
     if constexpr (Clearable<T>)
         element.clear();
-    else if constexpr (CistaVariantConcept<T>)
-    {
-        static_assert(std::is_default_constructible_v<T>, "Cannot clear variant: not default constructible.");
-        // hard reset to default alternative.
-        element.destruct();
-        new (&element) T {};
-    }
-    else if constexpr (CistaOptionalConcept<T>)
-        element = std::nullopt;
-    else if constexpr (std::is_default_constructible_v<T> && std::is_assignable_v<T&, T&&>)
-        element = T {};
-    else if constexpr (std::is_default_constructible_v<T> && std::is_move_constructible_v<T> && std::is_swappable_v<T>)
-    {
-        T tmp {};
-        using std::swap;
-        swap(element, tmp);
-    }
+    else if constexpr (std::is_nothrow_default_constructible_v<T> && std::is_assignable_v<T&, T&&>)
+        element = T {};  // noexcept: the temporary does not allocate in practice.
     else
         static_assert(dependent_false<T>::value, "Cannot clear T.");
 }
