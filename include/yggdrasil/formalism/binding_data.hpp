@@ -23,7 +23,6 @@
 #include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 
-#include <stdexcept>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -38,11 +37,7 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
     IndexList<ygg::formalism::Object<ObjectTag>> objects;
 
     Data() = default;
-    Data(Index<RelationTag> relation_, size_t arity, IndexList<ygg::formalism::Object<ObjectTag>> objects_) : relation(relation_), objects(std::move(objects_))
-    {
-        if (objects.size() != arity)
-            throw std::invalid_argument("RelationBinding object count does not match relation arity.");
-    }
+    Data(Index<RelationTag> relation_, IndexList<ygg::formalism::Object<ObjectTag>> objects_) : relation(relation_), objects(std::move(objects_)) {}
     // Python constructor
     template<typename C>
     Data(::ygg::View<Index<RelationTag>, C> relation_, const std::vector<::ygg::View<Index<ygg::formalism::Object<ObjectTag>>, C>>& objects_) :
@@ -58,7 +53,7 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
     Data& operator=(Data&& other) = default;
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
-    static constexpr auto identifying_members() noexcept { return Members<&Data::relation, &Data::objects> {}; }
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
     void clear() noexcept
     {
         ygg::clear_members(*this);
