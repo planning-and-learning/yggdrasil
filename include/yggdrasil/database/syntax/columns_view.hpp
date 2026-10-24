@@ -35,18 +35,18 @@ namespace ygg
 template<typename V>
 class ViewMixin<database::Columns, V>
 {
-    const Data<database::Columns>& record() const noexcept { return static_cast<const V&>(*this).get_record(); }
+    [[nodiscard]] const Data<database::Columns>& record() const noexcept { return static_cast<const V&>(*this).get_record(); }
 
 public:
-    std::span<const database::ColumnLayout> span() const noexcept { return { record().values.data(), record().values.size() }; }
-    auto begin() const noexcept { return span().begin(); }
-    auto end() const noexcept { return span().end(); }
-    const database::ColumnLayout* data() const noexcept { return span().data(); }
-    size_t size() const noexcept { return span().size(); }
-    bool empty() const noexcept { return span().empty(); }
+    [[nodiscard]] std::span<const database::ColumnLayout> span() const noexcept { return { record().values.data(), record().values.size() }; }
+    [[nodiscard]] auto begin() const noexcept { return span().begin(); }
+    [[nodiscard]] auto end() const noexcept { return span().end(); }
+    [[nodiscard]] const database::ColumnLayout* data() const noexcept { return span().data(); }
+    [[nodiscard]] size_t size() const noexcept { return span().size(); }
+    [[nodiscard]] bool empty() const noexcept { return span().empty(); }
     const database::ColumnLayout& operator[](size_t index) const noexcept { return span()[index]; }
-    size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
-    size_t row_size() const noexcept { return database::row_size(span()); }
+    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
+    [[nodiscard]] size_t row_size() const noexcept { return database::row_size(span()); }
 
     template<ygg::ByteCodable T>
     T get(std::span<const std::byte> bytes, Index<database::Column> column) const

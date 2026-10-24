@@ -45,9 +45,9 @@ public:
         m_nodes.clear();
     }
 
-    size_t size() const noexcept { return m_nodes.size(); }
-    std::optional<uint_t> find(std::span<const std::byte> vertex) const { return m_vertices.find(vertex); }
-    std::span<const std::byte> vertex(uint_t id) const { return m_vertices[id]; }
+    [[nodiscard]] size_t size() const noexcept { return m_nodes.size(); }
+    [[nodiscard]] std::optional<uint_t> find(std::span<const std::byte> vertex) const { return m_vertices.find(vertex); }
+    [[nodiscard]] std::span<const std::byte> vertex(uint_t id) const { return m_vertices[id]; }
 
     /// The stored index of a vertex, inserting it with its heuristic estimate as learned distance. The estimate is
     /// computed only on insertion.
@@ -63,13 +63,13 @@ public:
     }
     /// The learned distance of a vertex: its stored value, or the heuristic's estimate if it is not stored.
     template<DistanceHeuristic H>
-    uint_t value(std::span<const std::byte> vertex, const H& heuristic) const
+    [[nodiscard]] uint_t value(std::span<const std::byte> vertex, const H& heuristic) const
     {
         const auto stored = m_vertices.find(vertex);
         return stored ? learned(*stored) : heuristic.estimate(vertex);
     }
 
-    uint_t learned(uint_t id) const noexcept { return m_nodes[id].learned; }
+    [[nodiscard]] uint_t learned(uint_t id) const noexcept { return m_nodes[id].learned; }
     /// Raises the learned distance to a bound a search established (Generalized Adaptive A*).
     void learn(uint_t id, uint_t bound) noexcept { m_nodes[id].learned = std::max(m_nodes[id].learned, bound); }
     /// Lowers the learned distance and drops the next pointer, after edges were added.
@@ -78,7 +78,7 @@ public:
         m_nodes[id].learned = bound;
         set_next(id, none);
     }
-    uint_t next(uint_t id) const noexcept { return m_nodes[id].next; }
+    [[nodiscard]] uint_t next(uint_t id) const noexcept { return m_nodes[id].next; }
     void link(uint_t from, uint_t to) noexcept { set_next(from, to); }
 
     /// Starts a new search: chain checks of earlier searches are forgotten.

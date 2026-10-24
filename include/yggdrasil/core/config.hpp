@@ -82,6 +82,15 @@ inline uint_t to_uint_t(size_t value)
     return static_cast<uint_t>(value);
 }
 
+/// std::isnan, also in constant evaluation, where std::isnan is constexpr only from C++23:
+/// every value but NaN lies within [-infinity, infinity].
+template<std::floating_point T>
+constexpr bool is_nan(T value) noexcept
+{
+    constexpr auto infinity = std::numeric_limits<T>::infinity();
+    return !(value >= -infinity && value <= infinity);
+}
+
 template<typename T>
 struct FloatTolerance
 {

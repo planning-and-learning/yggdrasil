@@ -28,7 +28,7 @@ class DpccpEnumerator
     std::span<const std::uint64_t> m_adjacency;
     Callback* m_emit;
 
-    std::uint64_t neighbors(std::uint64_t vertices) const
+    [[nodiscard]] std::uint64_t neighbors(std::uint64_t vertices) const
     {
         std::uint64_t result = 0;
         bit::for_each_set_bit(vertices, [&](size_t vertex) { result |= m_adjacency[vertex]; });

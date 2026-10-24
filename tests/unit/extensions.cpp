@@ -35,11 +35,14 @@ namespace ygg
 namespace ygg::tests
 {
 
+namespace
+{
 struct AdaptersUint : ygg::FixedUintMixin<AdaptersUint>
 {
     using Base = ygg::FixedUintMixin<AdaptersUint>;
     using Base::Base;
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonAdaptersUmbrellaHeaderExposesPublicSurfaces)
 {

@@ -80,9 +80,7 @@ void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) 
 }
 }
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool GenericJoinTrie::contains(std::span<const std::byte> row, std::span<const ColumnSlice> keys) const
 {
@@ -96,11 +94,8 @@ bool GenericJoinTrie::contains(std::span<const std::byte> row, std::span<const C
     return node->rows != 0;
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool GenericJoinTrie::insert(std::span<const std::byte> row, std::span<const ColumnSlice> keys)
 {
@@ -120,11 +115,8 @@ bool GenericJoinTrie::insert(std::span<const std::byte> row, std::span<const Col
     return true;
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool GenericJoinTrie::erase(std::span<const std::byte> row, std::span<const ColumnSlice> keys)
 {
@@ -142,7 +134,6 @@ bool GenericJoinTrie::erase(std::span<const std::byte> row, std::span<const Colu
     if (found->second->rows == 0)
         children.erase(found);
     return true;
-}
 }
 }
 

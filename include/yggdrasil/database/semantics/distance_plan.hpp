@@ -30,16 +30,16 @@ public:
                  std::span<const ColumnLayout> targets,
                  Index<Column> distance_column);
 
-    auto source_columns() const& noexcept { return make_view(m_sources, *this); }
-    auto source_columns() const&& = delete;
-    auto edge_columns() const& noexcept { return make_view(m_edges, *this); }
-    auto edge_columns() const&& = delete;
-    auto target_columns() const& noexcept { return make_view(m_targets, *this); }
-    auto target_columns() const&& = delete;
-    auto output_columns() const& noexcept { return make_view(m_output, *this); }
-    auto output_columns() const&& = delete;
-    size_t tuple_size() const noexcept { return m_sources.row_size(); }
-    size_t arity() const noexcept { return m_sources.size(); }
+    [[nodiscard]] auto source_columns() const& noexcept { return make_view(m_sources, *this); }
+    [[nodiscard]] auto source_columns() const&& = delete;
+    [[nodiscard]] auto edge_columns() const& noexcept { return make_view(m_edges, *this); }
+    [[nodiscard]] auto edge_columns() const&& = delete;
+    [[nodiscard]] auto target_columns() const& noexcept { return make_view(m_targets, *this); }
+    [[nodiscard]] auto target_columns() const&& = delete;
+    [[nodiscard]] auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    [[nodiscard]] auto output_columns() const&& = delete;
+    [[nodiscard]] size_t tuple_size() const noexcept { return m_sources.row_size(); }
+    [[nodiscard]] size_t arity() const noexcept { return m_sources.size(); }
     static constexpr auto cista_members() noexcept
     { return ygg::Members<&DistancePlan::m_sources, &DistancePlan::m_edges, &DistancePlan::m_targets, &DistancePlan::m_output> {}; }
 };

@@ -26,7 +26,6 @@
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <nanobind/nanobind.h>
-#include <nanobind/operators.h>
 #include <nanobind/stl/string.h>
 #include <string>
 
@@ -50,11 +49,23 @@ nb::class_<V>& add_comparison(nb::class_<V>& cls)
     cls.attr("__hash__") = nb::none();
 
     return cls  //
-        .def(nb::self == nb::self)
-        .def(nb::self < nb::self)
-        .def(nb::self <= nb::self)
-        .def(nb::self > nb::self)
-        .def(nb::self >= nb::self);
+        .def(
+            "__eq__",
+            [](const V& lhs, const V& rhs) { return lhs == rhs; },
+            nb::is_operator())
+        .def(
+            "__lt__",
+            [](const V& lhs, const V& rhs) { return lhs < rhs; },
+            nb::is_operator())
+        .def(
+            "__le__",
+            [](const V& lhs, const V& rhs) { return lhs <= rhs; },
+            nb::is_operator())
+        .def(
+            "__gt__",
+            [](const V& lhs, const V& rhs) { return lhs > rhs; },
+            nb::is_operator())
+        .def("__ge__", [](const V& lhs, const V& rhs) { return lhs >= rhs; }, nb::is_operator());
 }
 
 template<typename V>

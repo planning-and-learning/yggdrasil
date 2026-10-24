@@ -19,10 +19,13 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct Number : boost::spirit::x3::position_tagged
 {
     int value = 0;
 };
+}  // namespace
 
 }  // namespace ygg::tests
 
@@ -33,10 +36,13 @@ namespace ygg::tests
 
 using Handler = diagnostics::ErrorHandler<std::string::const_iterator>;
 
+namespace
+{
 struct NumberRule : diagnostics::ErrorHandlerBase
 {
 };
 auto number() { return boost::spirit::x3::rule<NumberRule, Number> { "number" } = ('(' > boost::spirit::x3::int_) > ')'; }
+}  // namespace
 
 TEST(YggdrasilX3Diagnostics, GrammarSuccessTagsAstWithItsSourceRange)
 {

@@ -15,9 +15,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/python/type_casters.hpp"
+#include "type_casters.hpp"
 
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/python/type_casters.hpp"
 
 #include <cista/containers/array.h>
 #include <cista/containers/optional.h>

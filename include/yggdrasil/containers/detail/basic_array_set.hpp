@@ -112,7 +112,7 @@ private:
 protected:
     explicit BasicArraySet(std::unique_ptr<pool_type> pool) : m_pool(std::move(pool)), m_set(0, IndexableHash(*m_pool), IndexableEqualTo(*m_pool)) {}
 
-    const pool_type& storage() const noexcept { return *m_pool; }
+    [[nodiscard]] const pool_type& storage() const noexcept { return *m_pool; }
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
@@ -126,7 +126,7 @@ public:
 
     static size_t hash(std::span<const value_type> element) noexcept { return gtl::phmap_mix<sizeof(size_t)>()(hash_range(element)); }
 
-    std::optional<index_type> find_with_hash(std::span<const value_type> element, size_t h) const
+    [[nodiscard]] std::optional<index_type> find_with_hash(std::span<const value_type> element, size_t h) const
     {
         ensure_fits(element);
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
@@ -139,7 +139,7 @@ public:
     /// happen-before the call, and the set must remain alive and unmodified for
     /// the whole call. Concurrent read-only calls are allowed. No runtime check
     /// enforces these preconditions; violating them is undefined behavior.
-    std::optional<index_type> find_unsafe_with_hash(std::span<const value_type> element, size_t h) const
+    [[nodiscard]] std::optional<index_type> find_unsafe_with_hash(std::span<const value_type> element, size_t h) const
     {
         ensure_fits(element);
         assert(h == hash(element) && "The given hash does not match container internal's hash.");
@@ -148,9 +148,9 @@ public:
         return find_value_unsafe_with_hash<ThreadSafe>(m_set, element, h);
     }
 
-    std::optional<index_type> find(std::span<const value_type> element) const { return find_with_hash(element, hash(element)); }
+    [[nodiscard]] std::optional<index_type> find(std::span<const value_type> element) const { return find_with_hash(element, hash(element)); }
 
-    bool contains_with_hash(std::span<const value_type> element, size_t h) const { return find_with_hash(element, h).has_value(); }
+    [[nodiscard]] bool contains_with_hash(std::span<const value_type> element, size_t h) const { return find_with_hash(element, h).has_value(); }
 
     std::pair<index_type, bool> insert_with_hash(size_t h, std::span<const value_type> element)
     {
@@ -181,7 +181,7 @@ public:
 
     std::pair<index_type, bool> insert(std::span<const value_type> element) { return insert_with_hash(hash(element), element); }
 
-    bool contains(std::span<const value_type> element) const
+    [[nodiscard]] bool contains(std::span<const value_type> element) const
     {
         if constexpr (ThreadSafe)
             return find(element).has_value();
@@ -193,26 +193,26 @@ public:
     }
 
     ConstArrayView operator[](index_type index) const { return std::as_const(*m_pool)[index]; }
-    ConstArrayView at(index_type index) const { return std::as_const(*m_pool).at(index); }
+    [[nodiscard]] ConstArrayView at(index_type index) const { return std::as_const(*m_pool).at(index); }
 
-    ConstArrayView front() const
+    [[nodiscard]] ConstArrayView front() const
     {
         ensure_not_empty();
         return (*this)[0];
     }
 
-    ConstArrayView back() const
+    [[nodiscard]] ConstArrayView back() const
     {
         ensure_not_empty();
         return (*this)[size() - 1];
     }
 
-    size_t size() const noexcept { return m_pool->size(); }
-    size_t capacity() const noexcept { return m_pool->capacity(); }
-    bool empty() const noexcept { return m_pool->empty(); }
-    size_t length() const noexcept { return m_pool->length(); }
-    size_t memory_usage() const noexcept { return m_pool->memory_usage() + hash_set_memory_usage(m_set); }
-    const auto& segments() const noexcept { return m_pool->segments(); }
+    [[nodiscard]] size_t size() const noexcept { return m_pool->size(); }
+    [[nodiscard]] size_t capacity() const noexcept { return m_pool->capacity(); }
+    [[nodiscard]] bool empty() const noexcept { return m_pool->empty(); }
+    [[nodiscard]] size_t length() const noexcept { return m_pool->length(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_pool->memory_usage() + hash_set_memory_usage(m_set); }
+    [[nodiscard]] const auto& segments() const noexcept { return m_pool->segments(); }
 
 private:
     std::unique_ptr<pool_type> m_pool;

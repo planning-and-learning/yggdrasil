@@ -112,19 +112,20 @@ public:
         apply(changes);
     }
 
-    const Builder<Relation>& get_result() const&
+    [[nodiscard]] const Builder<Relation>& get_result() const&
     {
         detail::require_initialized(m_initialized);
         return m_result;
     }
-    const Builder<Relation>& get_result() const&& = delete;
-    const Delta& get_delta() const&
+    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);
         return m_delta;
     }
-    const Delta& get_delta() const&& = delete;
-    size_t memory_usage() const noexcept { return m_workspace.memory_usage() + m_changed.memory_usage() + m_result.memory_usage() + m_delta.memory_usage(); }
+    [[nodiscard]] const Delta& get_delta() const&& = delete;
+    [[nodiscard]] size_t memory_usage() const noexcept
+    { return m_workspace.memory_usage() + m_changed.memory_usage() + m_result.memory_usage() + m_delta.memory_usage(); }
 };
 }  // namespace ygg::database::incremental
 

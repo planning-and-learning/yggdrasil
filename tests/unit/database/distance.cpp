@@ -38,7 +38,7 @@ Results rows(const V& input)
     for (size_t i = 0; i < input.size(); ++i)
     {
         const database::Row row(input.row(i), input.columns().span());
-        result.insert({ row.get<uint_t>(size_t(0)), row.get<uint_t>(size_t(1)), row.get<uint_t>(size_t(2)) });
+        result.insert({ row.get<uint_t>(static_cast<size_t>(0)), row.get<uint_t>(static_cast<size_t>(1)), row.get<uint_t>(static_cast<size_t>(2)) });
     }
     return result;
 }
@@ -195,8 +195,8 @@ TEST(YggdrasilTests, DatabaseDistanceValidatesSchemasBeforeClearingOutput)
     EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()), std::logic_error);
     evaluator.initialize(sources, edges, targets);
     EXPECT_THROW(evaluator.update(std::tie(wrong, source_delta.removed), edge_delta.change(), target_delta.change()), std::invalid_argument);
-    source_delta.added.insert(std::tuple { uint_t(2) });
-    source_delta.removed.insert(std::tuple { uint_t(2) });
+    source_delta.added.insert(std::tuple { static_cast<uint_t>(2) });
+    source_delta.removed.insert(std::tuple { static_cast<uint_t>(2) });
     EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()), std::invalid_argument);
     EXPECT_EQ(rows(evaluator.get_result()), rows(output));
     source_delta.clear();
@@ -221,11 +221,11 @@ TEST(YggdrasilTests, DatabaseDistanceRejectsChangesThatAreNotActualSetChanges)
             de.clear();
             dt.clear();
             if (input == 0)
-                (removing ? ds.removed : ds.added).insert(std::tuple { uint_t(removing ? 7 : 1) });
+                (removing ? ds.removed : ds.added).insert(std::tuple { static_cast<uint_t>(removing ? 7 : 1) });
             else if (input == 1)
-                (removing ? de.removed : de.added).insert(std::tuple { uint_t(1), uint_t(removing ? 7 : 2) });
+                (removing ? de.removed : de.added).insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(removing ? 7 : 2) });
             else
-                (removing ? dt.removed : dt.added).insert(std::tuple { uint_t(removing ? 7 : 2) });
+                (removing ? dt.removed : dt.added).insert(std::tuple { static_cast<uint_t>(removing ? 7 : 2) });
             // Invalid changes are rejected before mutation, so the previous evaluation remains.
             EXPECT_THROW(evaluator.update(ds.change(), de.change(), dt.change()), std::invalid_argument);
             EXPECT_EQ(rows(evaluator.get_result()), (Results { { 1, 2, 1 } }));
@@ -247,21 +247,21 @@ TEST(YggdrasilTests, DatabaseDistanceRepairsAlternateShortestPathsAndDisconnects
     database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     const Results initial { { 0, 3, 2 }, { 0, 4, 3 } };
     EXPECT_EQ(rows(evaluator.get_result()), initial);
-    de.removed.insert(std::tuple { uint_t(0), uint_t(1) });
+    de.removed.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
     evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, initial, initial);
     de.clear();
-    de.removed.insert(std::tuple { uint_t(0), uint_t(2) });
+    de.removed.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(2) });
     evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, initial, {});
     de.clear();
-    de.added.insert(std::tuple { uint_t(0), uint_t(4) });
+    de.added.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(4) });
     evaluator.update(ds.change(), de.change(), dt.change());
     const Results repaired { { 0, 3, 3 }, { 0, 4, 1 } };
     expect_delta(evaluator, {}, repaired);
     de.clear();
-    de.removed.insert(std::tuple { uint_t(0), uint_t(4) });
-    de.added.insert(std::tuple { uint_t(0), uint_t(2) });
+    de.removed.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(4) });
+    de.added.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(2) });
     evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, repaired, initial);
 }
@@ -384,10 +384,10 @@ TEST(YggdrasilTests, DatabaseDistanceMixedTupleTypesShareCanonicalVertices)
         return result;
     };
     Builder<database::Relation> sources(schema(11, 1)), edges(schema(1, 2)), targets(schema(21, 1));
-    sources.insert(std::tuple { uint_t(7), -0.0, true });
-    edges.insert(std::tuple { uint_t(7), +0.0, true, uint_t(8), 1.5, false });
-    targets.insert(std::tuple { uint_t(7), +0.0, true });
-    targets.insert(std::tuple { uint_t(8), 1.5, false });
+    sources.insert(std::tuple { static_cast<uint_t>(7), -0.0, true });
+    edges.insert(std::tuple { static_cast<uint_t>(7), +0.0, true, static_cast<uint_t>(8), 1.5, false });
+    targets.insert(std::tuple { static_cast<uint_t>(7), +0.0, true });
+    targets.insert(std::tuple { static_cast<uint_t>(8), 1.5, false });
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(99));
     EXPECT_EQ(plan.arity(), 3);
     EXPECT_EQ(plan.tuple_size(), sizeof(uint_t) + sizeof(double) + 1);
@@ -474,9 +474,9 @@ TEST(YggdrasilTests, DatabaseDistanceGrowsTheSharedDictionaryAndResetsToASmaller
     ds.clear();
     de.clear();
     dt.clear();
-    ds.added.insert(std::tuple { uint_t(3) });
-    de.added.insert(std::tuple { uint_t(3), uint_t(2) });
-    dt.added.insert(std::tuple { uint_t(2) });
+    ds.added.insert(std::tuple { static_cast<uint_t>(3) });
+    de.added.insert(std::tuple { static_cast<uint_t>(3), static_cast<uint_t>(2) });
+    dt.added.insert(std::tuple { static_cast<uint_t>(2) });
     evaluator.update(ds.change(), de.change(), dt.change());
     expect_delta(evaluator, smaller, Results { { 2, 2, 0 }, { 2, 3, 1 }, { 3, 2, 1 }, { 3, 3, 0 } });
 }
@@ -560,10 +560,10 @@ TEST(YggdrasilTests, DatabaseDistanceRandomBatchesAndUndoMatchIndependentPairwis
             for (size_t i = 0; i < 1 + step % 7; ++i)
             {
                 if (step % 3 == 0)
-                    toggle(source_set, uint_t(random() % universe));
-                toggle(edge_set, std::pair { uint_t(random() % universe), uint_t(random() % universe) });
+                    toggle(source_set, static_cast<uint_t>(random() % universe));
+                toggle(edge_set, std::pair { static_cast<uint_t>(random() % universe), static_cast<uint_t>(random() % universe) });
                 if (step % 2 == 0)
-                    toggle(target_set, uint_t(random() % universe));
+                    toggle(target_set, static_cast<uint_t>(random() % universe));
             }
             changes(ds, old_sources, source_set);
             changes(de, old_edges, edge_set);

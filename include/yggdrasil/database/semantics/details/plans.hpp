@@ -13,10 +13,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace ygg::database
-{
-
-namespace detail
+namespace ygg::database::detail
 {
 /// Prepared plans and workspaces retain their slices in Cista and standard vectors.
 template<typename Buffer>
@@ -74,8 +71,6 @@ void join_positions(std::span<const ColumnLayout> lhs,
         }
     }
 }
-}  // namespace detail
-
-}  // namespace ygg::database
+}  // namespace ygg::database::detail
 
 #endif

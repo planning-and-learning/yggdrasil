@@ -24,8 +24,8 @@ class ContextStorage
 
 public:
     explicit ContextStorage(const C& context) noexcept : m_context(&context) {}
-    const C& get() const noexcept { return *m_context; }
-    const C& deref() const noexcept { return *m_context; }
+    [[nodiscard]] const C& get() const noexcept { return *m_context; }
+    [[nodiscard]] const C& deref() const noexcept { return *m_context; }
 };
 
 template<typename R>
@@ -35,8 +35,8 @@ class ContextStorage<std::shared_ptr<R>>
 
 public:
     explicit ContextStorage(std::shared_ptr<R> context) noexcept : m_context(std::move(context)) {}
-    const std::shared_ptr<R>& get() const noexcept { return m_context; }
-    const R& deref() const noexcept { return *m_context; }
+    [[nodiscard]] const std::shared_ptr<R>& get() const noexcept { return m_context; }
+    [[nodiscard]] const R& deref() const noexcept { return *m_context; }
 };
 
 /// Views borrow their record; records with stores_view_by_value_v are copied, so views of
@@ -48,8 +48,8 @@ class DataStorage
 
 public:
     explicit DataStorage(const Data<T>& data) noexcept : m_data(&data) {}
-    const Data<T>& get() const noexcept { return *m_data; }
-    const Data<T>& record() const noexcept { return *m_data; }
+    [[nodiscard]] const Data<T>& get() const noexcept { return *m_data; }
+    [[nodiscard]] const Data<T>& record() const noexcept { return *m_data; }
 };
 
 template<typename T>
@@ -59,8 +59,8 @@ class DataStorage<T, true>
 
 public:
     explicit DataStorage(const Data<T>& data) noexcept(std::is_nothrow_copy_constructible_v<Data<T>>) : m_data(data) {}
-    const Data<T>& get() const noexcept { return m_data; }
-    const Data<T>& record() const noexcept { return m_data; }
+    [[nodiscard]] const Data<T>& get() const noexcept { return m_data; }
+    [[nodiscard]] const Data<T>& record() const noexcept { return m_data; }
 };
 
 /// Views borrow the mutable builder; a builder that owns a record exposes it as the view's record.
@@ -71,8 +71,8 @@ class BuilderStorage
 
 public:
     explicit BuilderStorage(const Builder<T>& builder) noexcept : m_builder(&builder) {}
-    const Builder<T>& get() const noexcept { return *m_builder; }
-    decltype(auto) record() const noexcept
+    [[nodiscard]] const Builder<T>& get() const noexcept { return *m_builder; }
+    [[nodiscard]] decltype(auto) record() const noexcept
         requires requires(const Builder<T>& builder) { builder.get_data(); }
     { return m_builder->get_data(); }
 };
@@ -108,23 +108,23 @@ private:
 public:
     IndexViewBase(Index<T> handle, detail::ContextArg<C> context) noexcept : m_handle(handle), m_context(std::move(context)) {}
 
-    const C& get_context() const noexcept { return m_context.get(); }
+    [[nodiscard]] const C& get_context() const noexcept { return m_context.get(); }
     /// The repository that owns the viewed records, whether the context is borrowed or shared.
-    decltype(auto) get_repository() const noexcept
+    [[nodiscard]] decltype(auto) get_repository() const noexcept
         requires detail::HasRepository<C>
     { return detail::owning_repository(m_context.deref()); }
-    const Index<T>& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] const Index<T>& get_handle() const noexcept { return m_handle; }
     /// The record, resolved through the repository that owns it.
-    decltype(auto) get_data() const
+    [[nodiscard]] decltype(auto) get_data() const
         requires requires(const IndexViewBase& view) { view.get_repository()[view.m_handle]; }
     { return get_repository()[m_handle]; }
     /// The record, shared with the data and builder views of the same type.
-    decltype(auto) get_record() const
+    [[nodiscard]] decltype(auto) get_record() const
         requires requires(const IndexViewBase& view) { view.get_data(); }
     { return get_data(); }
-    Index<T> get_index() const noexcept { return m_handle; }
+    [[nodiscard]] Index<T> get_index() const noexcept { return m_handle; }
     /// Records compare by index within their owning repository.
-    auto identifying_members() const noexcept
+    [[nodiscard]] auto identifying_members() const noexcept
         requires requires(const IndexViewBase& view) { view.get_repository().get_index(); }
     { return std::make_tuple(m_handle, get_repository().get_index()); }
 };
@@ -145,26 +145,26 @@ public:
     {
     }
 
-    const Data<T>& get_data() const noexcept { return m_handle.get(); }
-    const Data<T>& get_record() const noexcept { return m_handle.record(); }
-    const C& get_context() const noexcept { return m_context.get(); }
+    [[nodiscard]] const Data<T>& get_data() const noexcept { return m_handle.get(); }
+    [[nodiscard]] const Data<T>& get_record() const noexcept { return m_handle.record(); }
+    [[nodiscard]] const C& get_context() const noexcept { return m_context.get(); }
     /// The repository that owns the viewed records, whether the context is borrowed or shared.
-    decltype(auto) get_repository() const noexcept
+    [[nodiscard]] decltype(auto) get_repository() const noexcept
         requires detail::HasRepository<C>
     { return detail::owning_repository(m_context.deref()); }
-    const Data<T>& get_handle() const noexcept { return get_data(); }
+    [[nodiscard]] const Data<T>& get_handle() const noexcept { return get_data(); }
     /// The record's own index, for records that store one.
-    auto get_index() const noexcept
+    [[nodiscard]] auto get_index() const noexcept
         requires requires(const Data<T>& data) { data.index; }
     { return get_data().index; }
     /// Records compare structurally within their owning repository.
-    auto identifying_members() const noexcept
+    [[nodiscard]] auto identifying_members() const noexcept
         requires FunctionIdentified<Data<T>> && requires(const DataViewBase& view) {
             view.get_data().identifying_members();
             view.get_repository().get_index();
         }
     { return std::tuple_cat(get_data().identifying_members(), std::make_tuple(get_repository().get_index())); }
-    auto identifying_members() const noexcept
+    [[nodiscard]] auto identifying_members() const noexcept
         requires MemberIdentified<Data<T>> && requires(const DataViewBase& view) { view.get_repository().get_index(); }
     {
         return []<auto... Ms>(const auto& data, auto index, Members<Ms...>)
@@ -183,19 +183,19 @@ private:
 public:
     BuilderViewBase(const Builder<T>& handle, detail::ContextArg<C> context) noexcept : m_handle(handle), m_context(std::move(context)) {}
 
-    const Builder<T>& get_data() const noexcept { return m_handle.get(); }
+    [[nodiscard]] const Builder<T>& get_data() const noexcept { return m_handle.get(); }
     /// The builder's record, for builders that own one.
-    decltype(auto) get_record() const noexcept
+    [[nodiscard]] decltype(auto) get_record() const noexcept
         requires requires(const detail::BuilderStorage<T>& storage) { storage.record(); }
     { return m_handle.record(); }
-    const C& get_context() const noexcept { return m_context.get(); }
+    [[nodiscard]] const C& get_context() const noexcept { return m_context.get(); }
     /// The repository that owns the viewed records, whether the context is borrowed or shared.
-    decltype(auto) get_repository() const noexcept
+    [[nodiscard]] decltype(auto) get_repository() const noexcept
         requires detail::HasRepository<C>
     { return detail::owning_repository(m_context.deref()); }
-    const Builder<T>& get_handle() const noexcept { return m_handle.get(); }
+    [[nodiscard]] const Builder<T>& get_handle() const noexcept { return m_handle.get(); }
     /// The record's own index, for builders whose record stores one.
-    auto get_index() const noexcept
+    [[nodiscard]] auto get_index() const noexcept
         requires requires(const BuilderViewBase& view) { view.get_record().index; }
     { return get_record().index; }
 };

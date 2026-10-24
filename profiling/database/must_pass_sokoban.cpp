@@ -83,7 +83,7 @@ struct Task
 
     uint_t id(const std::string& name)
     {
-        const auto [it, added] = ids.emplace(name, uint_t(names.size()));
+        const auto [it, added] = ids.emplace(name, static_cast<uint_t>(names.size()));
         if (added)
             names.push_back(name);
         return it->second;
@@ -146,7 +146,7 @@ struct PushDistance
     }
     /// Backward breadth-first pushes to the box's goal: a push from `from` to `to` in direction d needs a cell before
     /// `from` in direction d; blocked cells hold neither the box nor the agent.
-    std::vector<uint_t> distances(uint_t b, uint_t excluded) const
+    [[nodiscard]] std::vector<uint_t> distances(uint_t b, uint_t excluded) const
     {
         static const bool no_agent_cell = std::getenv("NO_AGENT_CELL") != nullptr;
         auto blocked = std::vector<bool>(task->names.size(), false);
@@ -179,7 +179,7 @@ struct PushDistance
     }
     void exclude(std::span<const std::byte> key, std::span<const std::byte> object)
     {
-        auto b = uint_t(0), x = uint_t(0);
+        auto b = static_cast<uint_t>(0), x = static_cast<uint_t>(0);
         std::memcpy(&b, key.data(), sizeof(b));
         if (object.empty())
             pushes[b] = base[b];
@@ -189,7 +189,7 @@ struct PushDistance
             pushes[b] = distances(b, x);
         }
     }
-    uint_t estimate(std::span<const std::byte> key_and_vertex) const
+    [[nodiscard]] uint_t estimate(std::span<const std::byte> key_and_vertex) const
     {
         auto values = std::array<uint_t, 3> {};
         std::memcpy(values.data(), key_and_vertex.data(), sizeof(values));
@@ -312,7 +312,7 @@ int run(std::span<char*> args)
         auto evaluator = ygg::database::bound::QueryEvaluator(projected);
         evaluator.bind(slot_input);
         const auto by_key = evaluator.prepare({ 0 });
-        auto rows = size_t(0), loops = size_t(0);
+        auto rows = static_cast<size_t>(0), loops = static_cast<size_t>(0);
         const auto start = std::chrono::steady_clock::now();
         auto bytes = std::vector<std::byte>();
         for (size_t r = 0; r < unfinished.size(); ++r)
@@ -337,7 +337,7 @@ int run(std::span<char*> args)
         const auto start = std::chrono::steady_clock::now();
         auto evaluator = ygg::database::QueryEvaluator(ygg::database::optimize(projected));
         const auto compiled = seconds_since(start);
-        auto loops = size_t(0);
+        auto loops = static_cast<size_t>(0);
         const auto evaluated = std::chrono::steady_clock::now();
         evaluator.evaluate(views);
         const auto& result = evaluator.get_result();
@@ -377,7 +377,7 @@ int run(std::span<char*> args)
                task.at.size(),
                unfinished.size(),
                task.locations.size(),
-               total / double(repeats),
+               total / static_cast<double>(repeats),
                statistics.keys,
                statistics.vertices,
                statistics.edges,

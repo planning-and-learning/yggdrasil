@@ -34,15 +34,15 @@ private:
 public:
     View(const Optional& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return *m_handle; }
 
-    bool has_value() const noexcept { return m_handle->has_value(); }
+    [[nodiscard]] bool has_value() const noexcept { return m_handle->has_value(); }
 
     explicit operator bool() const noexcept { return m_handle->has_value(); }
 
-    decltype(auto) value() const
+    [[nodiscard]] decltype(auto) value() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(**m_handle, *m_context);

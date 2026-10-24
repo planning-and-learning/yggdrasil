@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/syntax/details/columns.hpp"
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void validate_column_labels(std::span<const Index<Column>> columns)
 {
@@ -17,18 +15,14 @@ void validate_column_labels(std::span<const Index<Column>> columns)
             throw std::invalid_argument("Columns: duplicate column label.");
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 std::span<const std::byte> column_bytes(std::span<const std::byte> bytes, const ColumnLayout& column)
 {
     if (column.offset > bytes.size() || column.size > bytes.size() - column.offset)
         throw std::invalid_argument("Columns: row is too short for the requested field.");
     return bytes.subspan(column.offset, column.size);
-}
 }
 }
 
@@ -72,9 +66,7 @@ void validate_columns(std::span<const ColumnLayout> columns)
 }
 }
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void validate_relabel(std::span<const ColumnLayout> previous, std::span<const ColumnLayout> next)
 {
@@ -83,11 +75,8 @@ void validate_relabel(std::span<const ColumnLayout> previous, std::span<const Co
         throw std::invalid_argument("Columns: relabeling must keep the arity and column types.");
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void assign_columns(Data<Columns>& data, std::span<const ColumnLayout> columns)
 {
@@ -103,7 +92,6 @@ void assign_columns(Data<Columns>& data, std::span<const ColumnLayout> columns)
     else
         values.set(columns.begin(), columns.end());
     ygg::clear(data.index);
-}
 }
 }
 

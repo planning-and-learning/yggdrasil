@@ -29,7 +29,7 @@ class CountingMemoryResource final : public std::pmr::memory_resource
         m_upstream.deallocate(pointer, bytes, alignment);
         m_bytes -= bytes;
     }
-    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override { return this == &other; }
+    [[nodiscard]] bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override { return this == &other; }
 
 public:
     explicit CountingMemoryResource(std::pmr::memory_resource& upstream = *std::pmr::new_delete_resource()) noexcept : m_upstream(upstream) {}
@@ -41,7 +41,7 @@ public:
     CountingMemoryResource& operator=(CountingMemoryResource&&) = delete;
     ~CountingMemoryResource() override = default;
 
-    size_t memory_usage() const noexcept { return m_bytes; }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_bytes; }
 };
 }  // namespace ygg
 

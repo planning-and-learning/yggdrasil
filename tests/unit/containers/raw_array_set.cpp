@@ -51,6 +51,8 @@ static_assert(!std::is_copy_constructible_v<DefaultRawArraySet>);
 static_assert(std::is_move_constructible_v<ConcurrentRawArraySet>);
 static_assert(std::is_move_assignable_v<ConcurrentRawArraySet>);
 
+namespace
+{
 struct RawArraySetCountingElement
 {
     int value;
@@ -58,6 +60,7 @@ struct RawArraySetCountingElement
 
     friend bool operator==(const RawArraySetCountingElement&, const RawArraySetCountingElement&) = default;
 };
+}  // namespace
 
 }  // namespace ygg::tests
 
@@ -86,8 +89,8 @@ TEST(YggdrasilTests, CommonRawArraySetRejectsWrongLengthInputs)
     const auto too_long = std::array<int, 4> { 1, 2, 3, 4 };
 
     EXPECT_THROW(set.insert(too_short), std::invalid_argument);
-    EXPECT_THROW(set.find(too_short), std::invalid_argument);
-    EXPECT_THROW(set.contains(too_long), std::invalid_argument);
+    EXPECT_THROW((void) set.find(too_short), std::invalid_argument);
+    EXPECT_THROW((void) set.contains(too_long), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonRawArraySetStoresFixedLengthArrays)
@@ -122,7 +125,7 @@ TEST(YggdrasilTests, CommonRawArraySetStoresFixedLengthArrays)
     EXPECT_TRUE(std::ranges::equal(set[1], second));
     EXPECT_TRUE(std::ranges::equal(set.at(1), second));
     EXPECT_TRUE(std::ranges::equal(set[2], third));
-    EXPECT_THROW(set.at(3), std::out_of_range);
+    EXPECT_THROW((void) set.at(3), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawArraySetEmptyAccessThrows)
@@ -130,10 +133,10 @@ TEST(YggdrasilTests, CommonRawArraySetEmptyAccessThrows)
     auto set = ygg::RawArraySet<int, 2>(3);
     const auto& const_set = set;
 
-    EXPECT_THROW(set.front(), std::out_of_range);
-    EXPECT_THROW(const_set.front(), std::out_of_range);
-    EXPECT_THROW(set.back(), std::out_of_range);
-    EXPECT_THROW(const_set.back(), std::out_of_range);
+    EXPECT_THROW((void) set.front(), std::out_of_range);
+    EXPECT_THROW((void) const_set.front(), std::out_of_range);
+    EXPECT_THROW((void) set.back(), std::out_of_range);
+    EXPECT_THROW((void) const_set.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawArraySetStoresSingleZeroLengthArray)
@@ -308,7 +311,7 @@ TEST(YggdrasilTests, CommonRawArraySetMoveKeepsHashFunctorsBoundToStorage)
 }
 
 template<bool ThreadSafe>
-void check_decoded_raw_array_ranges()
+static void check_decoded_raw_array_ranges()
 {
     using BlockView = BasicBlockArrayView<const uint_t, bit::ForwardingBlockCoder<uint_t>>;
     using PackedView = BasicBitPackedArrayView<uint_t, bit::ForwardingBlockCoder<uint_t>>;
@@ -330,7 +333,7 @@ void check_decoded_raw_array_ranges()
     EXPECT_EQ(set.find(blocks), 0);
     EXPECT_TRUE(std::ranges::equal(set[0], values));
     EXPECT_THROW(set.insert(BlockView(values.data(), 2)), std::invalid_argument);
-    EXPECT_THROW(set.find(BlockView(values.data(), 2)), std::invalid_argument);
+    EXPECT_THROW((void) set.find(BlockView(values.data(), 2)), std::invalid_argument);
     EXPECT_EQ(set.size(), 1);
     set.clear();
     set.clear();
@@ -352,7 +355,7 @@ TEST(YggdrasilTests, CommonRawArraySetAcceptsDecodedRanges)
 }
 
 template<bool ThreadSafe>
-void test_raw_array_set_failed_range()
+static void test_raw_array_set_failed_range()
 {
     const auto values = std::array { 11, 12, 13 };
     // The first traversal hashes, the second fills the unpublished row.
@@ -388,10 +391,10 @@ void test_raw_array_set_failed_range()
         reads = 0;
         EXPECT_THROW(set.insert(row), std::runtime_error);
         reads = 0;
-        EXPECT_THROW(set.contains(row), std::runtime_error);
+        EXPECT_THROW((void) set.contains(row), std::runtime_error);
         throw_at = 0;
         reads = 0;
-        EXPECT_THROW(set.find(row), std::runtime_error);
+        EXPECT_THROW((void) set.find(row), std::runtime_error);
         EXPECT_EQ(set.size(), 1);
         EXPECT_EQ(set[0].data(), first);
         EXPECT_TRUE(std::ranges::equal(set[0], values));
@@ -411,7 +414,7 @@ TEST(YggdrasilTests, CommonRawArraySetRangeExceptionsLeaveNoPublishedPlaceholder
 }
 
 template<bool ThreadSafe>
-void test_raw_array_set_populated_fill_failure()
+static void test_raw_array_set_populated_fill_failure()
 {
     const auto first = std::array { 11, 12, 13 };
     const auto second = std::array { 21, 22, 23 };
@@ -451,7 +454,7 @@ TEST(YggdrasilTests, CommonRawArraySetFailedFillPreservesExistingIndexZero)
 }
 
 template<bool ThreadSafe>
-void test_raw_array_set_proxy_range()
+static void test_raw_array_set_proxy_range()
 {
     auto values = std::vector<bool> { true, false, true };
     const auto row = std::ranges::subrange(values.begin(), values.end());

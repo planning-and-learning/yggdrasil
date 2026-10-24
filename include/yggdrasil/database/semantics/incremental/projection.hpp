@@ -56,13 +56,13 @@ public:
     template<RelationChange C>
     void update(const C& change, Workspace& workspace);
 
-    const Builder<Relation>& get_result() const&;
-    const Builder<Relation>& get_result() const&& = delete;
-    const Delta& get_delta() const&;
-    const Delta& get_delta() const&& = delete;
+    [[nodiscard]] const Builder<Relation>& get_result() const&;
+    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const Delta& get_delta() const&;
+    [[nodiscard]] const Delta& get_delta() const&& = delete;
 
     /// Retained working storage; excludes the immutable plan and caller workspace.
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 };
 
 template<RelationViewConcept V>

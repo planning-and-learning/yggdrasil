@@ -57,13 +57,13 @@ TEST(YggdrasilTests, CommonBitPackedArrayViewAtChecksBounds)
     EXPECT_EQ(view.at(1), 5);
     EXPECT_EQ(const_view.at(1), 5);
     EXPECT_THROW(view.at(2), std::out_of_range);
-    EXPECT_THROW(const_view.at(2), std::out_of_range);
+    EXPECT_THROW((void) const_view.at(2), std::out_of_range);
 
     auto invalid_view = ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2, 3, 0);
     const auto invalid_const_view = ygg::BasicBitPackedArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2, 3, 0);
 
     EXPECT_THROW(invalid_view.at(0), std::logic_error);
-    EXPECT_THROW(invalid_const_view.at(0), std::logic_error);
+    EXPECT_THROW((void) invalid_const_view.at(0), std::logic_error);
     EXPECT_THROW((invalid_view = std::span<const uint8_t>(storage)), std::logic_error);
     EXPECT_EQ(invalid_view.end() - invalid_view.begin(), 2);
     EXPECT_EQ(invalid_const_view.end() - invalid_const_view.begin(), 2);
@@ -86,17 +86,17 @@ TEST(YggdrasilTests, CommonBitPackedArrayViewFrontBackCheckEmptyAndInvalidViews)
     const auto empty_const_view = ygg::BasicBitPackedArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 0, 3, 0);
 
     EXPECT_THROW(empty_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_const_view.front(), std::out_of_range);
+    EXPECT_THROW((void) empty_const_view.front(), std::out_of_range);
     EXPECT_THROW(empty_view.back(), std::out_of_range);
-    EXPECT_THROW(empty_const_view.back(), std::out_of_range);
+    EXPECT_THROW((void) empty_const_view.back(), std::out_of_range);
 
     auto invalid_view = ygg::BasicBitPackedArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2, 3, 0);
     const auto invalid_const_view = ygg::BasicBitPackedArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2, 3, 0);
 
     EXPECT_THROW(invalid_view.front(), std::logic_error);
-    EXPECT_THROW(invalid_const_view.front(), std::logic_error);
+    EXPECT_THROW((void) invalid_const_view.front(), std::logic_error);
     EXPECT_THROW(invalid_view.back(), std::logic_error);
-    EXPECT_THROW(invalid_const_view.back(), std::logic_error);
+    EXPECT_THROW((void) invalid_const_view.back(), std::logic_error);
 }
 
 TEST(YggdrasilTests, CommonBitPackedArrayRejectsInvalidWidths)
@@ -333,7 +333,7 @@ TEST(YggdrasilTests, CommonBitPackedArrayPoolAtChecksBounds)
     EXPECT_EQ(pool.at(0), (std::vector<uint8_t> { 1, 6 }));
     EXPECT_EQ(const_pool.at(0), (std::vector<uint8_t> { 1, 6 }));
     EXPECT_THROW(pool.at(1), std::out_of_range);
-    EXPECT_THROW(const_pool.at(1), std::out_of_range);
+    EXPECT_THROW((void) const_pool.at(1), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonBitPackedArrayPool)

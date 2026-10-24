@@ -59,11 +59,11 @@ struct Index
 
     static constexpr Index max() noexcept { return Index(MAX); }
 
-    constexpr bool is_max() const noexcept { return value == MAX; }
+    [[nodiscard]] constexpr bool is_max() const noexcept { return value == MAX; }
 
     explicit constexpr operator value_type() const noexcept { return value; }
 
-    constexpr value_type get_value() const noexcept { return value; }
+    [[nodiscard]] constexpr value_type get_value() const noexcept { return value; }
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Index::value> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Index::value> {}; }

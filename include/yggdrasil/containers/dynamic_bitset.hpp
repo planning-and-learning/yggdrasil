@@ -165,7 +165,7 @@ public:
         blocks()[n - 1] &= last_mask(m_num_bits);
     }
 
-    bool trailing_bits_zero() const noexcept
+    [[nodiscard]] bool trailing_bits_zero() const noexcept
     {
         const size_t n = num_blocks(m_num_bits);
         if (n == 0)
@@ -179,14 +179,14 @@ public:
      * Accessors
      */
 
-    bool test(size_t pos) const noexcept
+    [[nodiscard]] bool test(size_t pos) const noexcept
     {
         assert(pos < m_num_bits);
 
         return (blocks()[block_index(pos)] & (U { 1 } << block_pos(pos))) != U { 0 };
     }
 
-    bool at(size_t pos) const
+    [[nodiscard]] bool at(size_t pos) const
     {
         ensure_storage();
         if (pos >= m_num_bits)
@@ -215,7 +215,7 @@ public:
         return (*this)[pos];
     }
 
-    size_t count() const noexcept
+    [[nodiscard]] size_t count() const noexcept
     {
         assert(trailing_bits_zero());
 
@@ -230,7 +230,7 @@ public:
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
-    size_t count_intersection(const BitsetSpan<OtherBlock>& other) const
+    [[nodiscard]] size_t count_intersection(const BitsetSpan<OtherBlock>& other) const
     {
         check_same_size(other);
         assert(trailing_bits_zero());
@@ -241,18 +241,18 @@ public:
         return result;
     }
 
-    size_t count_zeros() const noexcept
+    [[nodiscard]] size_t count_zeros() const noexcept
     {
         assert(trailing_bits_zero());
 
         return m_num_bits - count();
     }
 
-    size_t size() const noexcept { return m_num_bits; }
+    [[nodiscard]] size_t size() const noexcept { return m_num_bits; }
 
-    bool empty() const noexcept { return m_num_bits == 0; }
+    [[nodiscard]] bool empty() const noexcept { return m_num_bits == 0; }
 
-    bool any() const noexcept
+    [[nodiscard]] bool any() const noexcept
     {
         assert(trailing_bits_zero());
 
@@ -263,9 +263,9 @@ public:
         return false;
     }
 
-    bool none() const noexcept { return !any(); }
+    [[nodiscard]] bool none() const noexcept { return !any(); }
 
-    bool all() const noexcept
+    [[nodiscard]] bool all() const noexcept
     {
         assert(trailing_bits_zero());
 
@@ -282,7 +282,7 @@ public:
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
-    bool intersects(const BitsetSpan<OtherBlock>& other) const
+    [[nodiscard]] bool intersects(const BitsetSpan<OtherBlock>& other) const
     {
         check_same_size(other);
         assert(trailing_bits_zero());
@@ -298,7 +298,7 @@ public:
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
-    bool is_subset_of(const BitsetSpan<OtherBlock>& other) const
+    [[nodiscard]] bool is_subset_of(const BitsetSpan<OtherBlock>& other) const
     {
         check_same_size(other);
         assert(trailing_bits_zero());
@@ -314,7 +314,7 @@ public:
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
-    bool is_proper_subset_of(const BitsetSpan<OtherBlock>& other) const
+    [[nodiscard]] bool is_proper_subset_of(const BitsetSpan<OtherBlock>& other) const
     {
         check_same_size(other);
         assert(trailing_bits_zero());
@@ -334,12 +334,12 @@ public:
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
-    bool is_superset_of(const BitsetSpan<OtherBlock>& other) const
+    [[nodiscard]] bool is_superset_of(const BitsetSpan<OtherBlock>& other) const
     { return other.is_subset_of(*this); }
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
-    bool is_proper_superset_of(const BitsetSpan<OtherBlock>& other) const
+    [[nodiscard]] bool is_proper_superset_of(const BitsetSpan<OtherBlock>& other) const
     { return other.is_proper_subset_of(*this); }
 
     /**
@@ -366,7 +366,6 @@ public:
     void set() noexcept
         requires(!std::is_const_v<Block>)
     {
-        const size_t n = num_blocks(m_num_bits);
         std::ranges::fill(blocks(), full_mask());
 
         clear_trailing_bits();
@@ -382,10 +381,7 @@ public:
 
     void reset() noexcept
         requires(!std::is_const_v<Block>)
-    {
-        const size_t n = num_blocks(m_num_bits);
-        std::ranges::fill(blocks(), U { 0 });
-    }
+    { std::ranges::fill(blocks(), U { 0 }); }
 
     void flip(size_t pos) noexcept
         requires(!std::is_const_v<Block>)
@@ -409,7 +405,7 @@ public:
      * Iterators
      */
 
-    size_t find_first() const noexcept
+    [[nodiscard]] size_t find_first() const noexcept
     {
         assert(trailing_bits_zero());
 
@@ -427,7 +423,7 @@ public:
         return npos;
     }
 
-    size_t find_next(size_t pos) const noexcept
+    [[nodiscard]] size_t find_next(size_t pos) const noexcept
     {
         assert(trailing_bits_zero());
 
@@ -456,7 +452,7 @@ public:
         }
     }
 
-    size_t find_first_zero() const noexcept
+    [[nodiscard]] size_t find_first_zero() const noexcept
     {
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
@@ -476,7 +472,7 @@ public:
         return npos;
     }
 
-    size_t find_next_zero(size_t pos) const noexcept
+    [[nodiscard]] size_t find_next_zero(size_t pos) const noexcept
     {
         if (pos >= m_num_bits)
             return npos;
@@ -614,12 +610,12 @@ public:
         requires(!std::is_const_v<Block>)
     { return { m_data, num_blocks(m_num_bits) }; }
 
-    std::span<const U> blocks() const noexcept { return { m_data, num_blocks(m_num_bits) }; }
+    [[nodiscard]] std::span<const U> blocks() const noexcept { return { m_data, num_blocks(m_num_bits) }; }
     U* data() noexcept
         requires(!std::is_const_v<Block>)
     { return m_data; }
-    const U* data() const noexcept { return m_data; }
-    size_t num_bits() const noexcept { return m_num_bits; }
+    [[nodiscard]] const U* data() const noexcept { return m_data; }
+    [[nodiscard]] size_t num_bits() const noexcept { return m_num_bits; }
 
 private:
     template<std::unsigned_integral OtherBlock>
@@ -703,8 +699,8 @@ public:
 
     SetBitIndices() noexcept = default;
     explicit SetBitIndices(Bitset bits) noexcept : m_bits(bits) {}
-    Iterator begin() const noexcept { return Iterator(m_bits, m_bits.find_first()); }
-    std::default_sentinel_t end() const noexcept { return {}; }
+    [[nodiscard]] Iterator begin() const noexcept { return Iterator(m_bits, m_bits.find_first()); }
+    [[nodiscard]] std::default_sentinel_t end() const noexcept { return {}; }
 };
 
 template<std::unsigned_integral Block>

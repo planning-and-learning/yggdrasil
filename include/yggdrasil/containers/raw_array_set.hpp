@@ -34,7 +34,7 @@ private:
 public:
     explicit RawArraySet(size_t array_size) : Base(std::make_unique<pool_type>(array_size)) {}
 
-    size_t array_size() const noexcept { return Base::storage().array_size(); }
+    [[nodiscard]] size_t array_size() const noexcept { return Base::storage().array_size(); }
 
     /// Move the last row into index and remove its old slot, retaining capacity.
     /// Invalidates the erased and moved rows' indices and borrowed spans.

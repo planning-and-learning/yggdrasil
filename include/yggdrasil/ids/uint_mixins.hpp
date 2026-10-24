@@ -42,7 +42,7 @@ struct FixedUintMixin
 
     static constexpr Derived max() noexcept { return Derived(MAX); }
 
-    constexpr bool is_max() const noexcept { return m_value == MAX; }
+    [[nodiscard]] constexpr bool is_max() const noexcept { return m_value == MAX; }
 
     // ----------------------------------------------------
     // Arithmetic with integral types
@@ -76,8 +76,8 @@ struct FixedUintMixin
         return tmp;
     }
 
-    constexpr value_type value() const noexcept { return m_value; }
-    constexpr value_type get_value() const noexcept { return m_value; }
+    [[nodiscard]] constexpr value_type value() const noexcept { return m_value; }
+    [[nodiscard]] constexpr value_type get_value() const noexcept { return m_value; }
 
     explicit constexpr operator value_type() const noexcept { return m_value; }
 

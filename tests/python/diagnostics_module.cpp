@@ -16,8 +16,6 @@
  */
 
 // Only nanobind's module macro, which clang-tidy does not check (plumbcheck.yml).
-#include <nanobind/nanobind.h>
-
-void bind_diagnostics_test(nanobind::module_& m);
+#include "diagnostics.hpp"
 
 NB_MODULE(yggdrasil_diagnostics_test, m) { bind_diagnostics_test(m); }

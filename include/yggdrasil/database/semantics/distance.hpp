@@ -31,9 +31,9 @@ struct DistanceGraph
     uint_t insert_vertex(std::span<const std::byte> tuple);
     /// Inserts both endpoint tuples of an edge row; returns their IDs.
     std::pair<uint_t, uint_t> insert_endpoints(std::span<const std::byte> edge);
-    bool contains_edge(uint_t from, uint_t to) const;
+    [[nodiscard]] bool contains_edge(uint_t from, uint_t to) const;
     void clear();
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 };
 }  // namespace detail
 
@@ -51,11 +51,11 @@ public:
     explicit DistanceWorkspace(const DistancePlan& plan);
 
     /// Whether the workspace serves the plan's vertex byte width.
-    bool matches(const DistancePlan& plan) const noexcept;
+    [[nodiscard]] bool matches(const DistancePlan& plan) const noexcept;
     /// Appends the distances of the inputs, which match the plan, to out.
     template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
     void append_distances(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& out);
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 };
 
 /// Exact directed unit-edge distances for every reachable source/target pair.

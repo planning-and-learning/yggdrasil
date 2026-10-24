@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/syntax/query.hpp"
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 QueryView<> clone_query(QueryView<> source, std::span<const QueryView<>> children, QueryRepository& destination, QueryBuilder& builder)
 {
@@ -29,7 +27,6 @@ QueryView<> clone_query(QueryView<> source, std::span<const QueryView<>> childre
             return insert_query(destination, builder, data);
         },
         source.get_variant());
-}
 }
 }
 

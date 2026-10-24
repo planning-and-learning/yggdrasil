@@ -28,6 +28,8 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct SharedPoolValue
 {
     int value = 0;
@@ -55,6 +57,7 @@ struct BlockingSharedPoolValue
         release.wait();
     }
 };
+}  // namespace
 
 static_assert(!std::is_move_constructible_v<ygg::SharedObjectPool<SharedPoolValue>>);
 static_assert(!std::is_move_assignable_v<ygg::SharedObjectPool<SharedPoolValue>>);
@@ -68,7 +71,7 @@ static_assert(!CanInitializeSharedPool<ygg::SharedObjectPool<SharedPoolValue>, s
 static_assert(!CanInitializeSharedPool<ygg::SharedObjectPool<int>, int>);
 
 template<bool ThreadSafe>
-void expect_shared_pool_grows_and_reuses_across_capacity_boundaries()
+static void expect_shared_pool_grows_and_reuses_across_capacity_boundaries()
 {
     constexpr size_t count = 65;
     auto pool = ygg::SharedObjectPool<SharedPoolValue, ThreadSafe>();
@@ -103,7 +106,7 @@ void expect_shared_pool_grows_and_reuses_across_capacity_boundaries()
 }
 
 template<bool ThreadSafe>
-void expect_shared_pool_recovers_from_failed_initialization()
+static void expect_shared_pool_recovers_from_failed_initialization()
 {
     auto pool = ygg::SharedObjectPool<ThrowingSharedPoolValue, ThreadSafe>();
 
@@ -271,6 +274,8 @@ TEST(YggdrasilTests, CommonThreadSafeSharedObjectPoolInitializesOutsideLock)
     EXPECT_EQ(pool.free_size(), 2);
 }
 
+namespace
+{
 template<bool ThreadSafe>
 struct ReleasingSharedPoolValue
 {
@@ -294,9 +299,10 @@ struct ReleasingSharedPoolValue
         buffer.clear();
     }
 };
+}  // namespace
 
 template<bool ThreadSafe>
-void expect_shared_pool_release_hook_waits_for_final_owner_and_releases_children()
+static void expect_shared_pool_release_hook_waits_for_final_owner_and_releases_children()
 {
     auto releases = 0;
     auto pool = ygg::SharedObjectPool<ReleasingSharedPoolValue<ThreadSafe>, ThreadSafe>();

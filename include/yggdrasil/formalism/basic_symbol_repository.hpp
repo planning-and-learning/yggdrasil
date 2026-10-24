@@ -61,7 +61,7 @@ private:
         static size_t hash(const Data<U>& builder) noexcept { return Container::hash(builder); }
 
         void clear() noexcept { container.clear(); }
-        size_t memory_usage() const noexcept { return container.memory_usage(); }
+        [[nodiscard]] size_t memory_usage() const noexcept { return container.memory_usage(); }
     };
 
     template<typename U>
@@ -84,7 +84,8 @@ private:
             arena->clear();
         }
 
-        size_t memory_usage() const noexcept { return (arena ? arena->capacity() : 0) + (buffer ? buffer->buf_.capacity() : 0) + container.memory_usage(); }
+        [[nodiscard]] size_t memory_usage() const noexcept
+        { return (arena ? arena->capacity() : 0) + (buffer ? buffer->buf_.capacity() : 0) + container.memory_usage(); }
     };
 
     const BasicSymbolRepository* m_parent;
@@ -105,14 +106,15 @@ public:
      * knows the context.
      */
 
-    std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept;
+    [[nodiscard]] std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept;
 
     /// Performs a local lookup without locking the underlying hash shard. The
     /// underlying collection's unsafe publication, lifetime, and immutability
     /// preconditions apply.
-    std::optional<Index<T>> find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept;
+    [[nodiscard]] std::optional<Index<T>> find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept;
 
-    std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
+    [[nodiscard]] std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept
+    { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
     std::pair<Index<T>, bool> insert_local_with_hash(Data<T>& builder, size_t h);
 
@@ -123,35 +125,36 @@ public:
     std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h);
 
     /// Unchecked, like std::vector::operator[]: index must be local (asserted in Debug).
-    const Data<T>& local(Index<T> index) const noexcept
+    [[nodiscard]] const Data<T>& local(Index<T> index) const noexcept
     {
         assert(is_local(index));
         return m_slot.container[Index<T>(index.value - m_slot.parent_size)];
     }
 
-    const Data<T>& at_local(Index<T> index) const
+    [[nodiscard]] const Data<T>& at_local(Index<T> index) const
     {
         if (!is_local(index))
             throw std::out_of_range("Symbol index not found in local repository.");
         return local(index);
     }
 
-    const Data<T>& front_local() const
+    [[nodiscard]] const Data<T>& front_local() const
     {
         if (m_slot.container.empty())
             throw std::out_of_range("Symbol index not found in local repository.");
         return m_slot.container.front();
     }
 
-    size_t local_size() const noexcept { return m_slot.container.size(); }
+    [[nodiscard]] size_t local_size() const noexcept { return m_slot.container.size(); }
 
-    size_t size() const noexcept { return m_slot.parent_size + m_slot.container.size(); }
+    [[nodiscard]] size_t size() const noexcept { return m_slot.parent_size + m_slot.container.size(); }
 
-    size_t parent_size() const noexcept { return m_slot.parent_size; }
+    [[nodiscard]] size_t parent_size() const noexcept { return m_slot.parent_size; }
 
-    bool is_local(Index<T> index) const noexcept { return index != Index<T>::max() && ygg::uint_t(index) >= m_slot.parent_size && ygg::uint_t(index) < size(); }
+    [[nodiscard]] bool is_local(Index<T> index) const noexcept
+    { return index != Index<T>::max() && ygg::uint_t(index) >= m_slot.parent_size && ygg::uint_t(index) < size(); }
 
-    bool exists_parent_mutation() const noexcept
+    [[nodiscard]] bool exists_parent_mutation() const noexcept
     {
         if (!m_parent)
             return false;
@@ -183,7 +186,7 @@ public:
 
     void clear() noexcept;
 
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 
     static size_t hash(const Data<T>& builder) noexcept;
 };

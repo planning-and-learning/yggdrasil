@@ -44,6 +44,8 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct ComparatorContext
 {
 };
@@ -53,8 +55,9 @@ struct IdentifiableComparatorValue
     int first;
     int second;
 
-    auto identifying_members() const noexcept { return std::tie(first, second); }
+    [[nodiscard]] auto identifying_members() const noexcept { return std::tie(first, second); }
 };
+}  // namespace
 
 template<typename T>
 concept OrderedByAllCommonPredicates = ygg::LessFor<ygg::Less<T>, T> && ygg::LessFor<ygg::LessEqual<T>, T> && ygg::LessFor<ygg::Greater<T>, T>
@@ -451,9 +454,12 @@ TEST(YggdrasilTests, CommonCistaLessAdaptersOrderPairAndNestedArrayViews)
     EXPECT_TRUE(ygg::Less<ArrayView> {}(ArrayView(lhs, context), ArrayView(rhs, context)));
 }
 
+namespace
+{
 struct UnsupportedLessValue
 {
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonLessCapabilitiesRejectUnsupportedNestedValues)
 {
@@ -494,10 +500,13 @@ TEST(YggdrasilTests, CommonLessRangeUsesValuesRatherThanProxyReferenceTypes)
     EXPECT_TRUE(ygg::less_range(low, std::array { false, true }));
 }
 
+namespace
+{
 struct ThrowingComparisonValue
 {
     friend bool operator<(const ThrowingComparisonValue&, const ThrowingComparisonValue&) { throw std::runtime_error("comparison"); }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonOrderingPropagatesUserOperationFailures)
 {

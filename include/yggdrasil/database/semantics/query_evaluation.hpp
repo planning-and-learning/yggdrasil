@@ -44,7 +44,7 @@ struct QueryDistanceWorkspace
 {
     DistanceWorkspace workspace;
     explicit QueryDistanceWorkspace(const DistancePlan& plan) : workspace(plan) {}
-    size_t memory_usage() const noexcept { return workspace.memory_usage(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return workspace.memory_usage(); }
 };
 
 /// Operators whose result is a function of the operands' results alone.
@@ -164,7 +164,7 @@ public:
         }
         m_ready = true;
     }
-    const Builder<Relation>& get_result(size_t root = 0) const&
+    [[nodiscard]] const Builder<Relation>& get_result(size_t root = 0) const&
     {
         if (!m_ready)
             throw std::logic_error("Query: evaluate before reading results.");
@@ -172,9 +172,9 @@ public:
             throw std::out_of_range("Query: invalid root.");
         return m_nodes.at(m_plan.roots()[root].get_value()).result;
     }
-    const Builder<Relation>& get_result(size_t = 0) const&& = delete;
+    [[nodiscard]] const Builder<Relation>& get_result(size_t = 0) const&& = delete;
     /// Retained runtime storage; excludes the immutable query plan.
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 };
 }  // namespace ygg::database
 #endif

@@ -108,7 +108,7 @@ TEST(YggdrasilTests, CommonDynamicBitsetAtChecksBounds)
     EXPECT_EQ(const_bitset.data(), blocks.data());
 
     EXPECT_THROW(bitset.at(8), std::out_of_range);
-    EXPECT_THROW(const_bitset.at(8), std::out_of_range);
+    EXPECT_THROW((void) const_bitset.at(8), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonDynamicBitsetAtRejectsInvalidNonEmptySpan)
@@ -117,13 +117,13 @@ TEST(YggdrasilTests, CommonDynamicBitsetAtRejectsInvalidNonEmptySpan)
     const auto const_bitset = ygg::BitsetSpan<const uint64_t>(nullptr, 1);
 
     EXPECT_THROW(bitset.at(0), std::logic_error);
-    EXPECT_THROW(const_bitset.at(0), std::logic_error);
+    EXPECT_THROW((void) const_bitset.at(0), std::logic_error);
 
     auto empty_bitset = ygg::BitsetSpan<uint64_t>(nullptr, 0);
     const auto empty_const_bitset = ygg::BitsetSpan<const uint64_t>(nullptr, 0);
 
     EXPECT_THROW(empty_bitset.at(0), std::out_of_range);
-    EXPECT_THROW(empty_const_bitset.at(0), std::out_of_range);
+    EXPECT_THROW((void) empty_const_bitset.at(0), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonDynamicBitsetFindNextHandlesSentinelAndEndPositions)
@@ -156,12 +156,12 @@ TEST(YggdrasilTests, CommonDynamicBitsetRejectsMismatchedSpanSizes)
     auto rhs = ygg::BitsetSpan<uint64_t>(rhs_blocks.data(), 9);
 
     EXPECT_FALSE(lhs == rhs);
-    EXPECT_THROW(lhs.intersects(rhs), std::invalid_argument);
-    EXPECT_THROW(lhs.count_intersection(rhs), std::invalid_argument);
-    EXPECT_THROW(lhs.is_subset_of(rhs), std::invalid_argument);
-    EXPECT_THROW(lhs.is_proper_subset_of(rhs), std::invalid_argument);
-    EXPECT_THROW(lhs.is_superset_of(rhs), std::invalid_argument);
-    EXPECT_THROW(lhs.is_proper_superset_of(rhs), std::invalid_argument);
+    EXPECT_THROW((void) lhs.intersects(rhs), std::invalid_argument);
+    EXPECT_THROW((void) lhs.count_intersection(rhs), std::invalid_argument);
+    EXPECT_THROW((void) lhs.is_subset_of(rhs), std::invalid_argument);
+    EXPECT_THROW((void) lhs.is_proper_subset_of(rhs), std::invalid_argument);
+    EXPECT_THROW((void) lhs.is_superset_of(rhs), std::invalid_argument);
+    EXPECT_THROW((void) lhs.is_proper_superset_of(rhs), std::invalid_argument);
     EXPECT_THROW(lhs.copy_from(rhs), std::invalid_argument);
     EXPECT_THROW(lhs.diff_from(rhs), std::invalid_argument);
     EXPECT_THROW(lhs &= rhs, std::invalid_argument);

@@ -74,16 +74,16 @@ struct RelationContext
 
 struct AliasFreeRelationView
 {
-    const Builder<database::Columns>& columns() const;
-    size_t arity() const;
-    size_t size() const;
-    bool empty() const;
-    const void* get_storage_address() const;
-    size_t get_storage_index() const;
-    size_t column_index(ColumnIndex) const;
-    std::span<const std::byte> row(size_t) const;
-    bool contains(std::span<const std::byte>) const;
-    bool contains(database::Row) const;
+    [[nodiscard]] const Builder<database::Columns>& columns() const;
+    [[nodiscard]] size_t arity() const;
+    [[nodiscard]] size_t size() const;
+    [[nodiscard]] bool empty() const;
+    [[nodiscard]] const void* get_storage_address() const;
+    [[nodiscard]] size_t get_storage_index() const;
+    [[nodiscard]] size_t column_index(ColumnIndex) const;
+    [[nodiscard]] std::span<const std::byte> row(size_t) const;
+    [[nodiscard]] bool contains(std::span<const std::byte>) const;
+    [[nodiscard]] bool contains(database::Row) const;
 };
 
 struct MutableRelationView : AliasFreeRelationView
@@ -379,8 +379,8 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
     {
         EXPECT_TRUE(view.contains(cells(4, 400)));
         EXPECT_FALSE(view.contains(cells(4, 401)));
-        EXPECT_THROW(view.contains(cells(4)), std::invalid_argument);
-        EXPECT_THROW(view.at(view.size()), std::out_of_range);
+        EXPECT_THROW((void) view.contains(cells(4)), std::invalid_argument);
+        EXPECT_THROW((void) view.at(view.size()), std::out_of_range);
     };
     check_access(right_data_view);
     check_access(right_index_view);
@@ -804,7 +804,7 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
         // Rows of interned relations name values owned elsewhere; callers resolve them explicitly.
         EXPECT_EQ(resolve_in(view[0].template get<uint_t>(size_t { 0 }), entities), first);
         EXPECT_EQ(resolve_in(view.at(0).template get<uint_t>(size_t { 1 }), entities), second);
-        EXPECT_THROW(view.at(1), std::out_of_range);
+        EXPECT_THROW((void) view.at(1), std::out_of_range);
         size_t count = 0;
         for (auto objects : view)
         {
@@ -910,9 +910,9 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
         EXPECT_DOUBLE_EQ(row.template get<double>(ColumnIndex(9)), 1.25);
         EXPECT_TRUE(row.template get<bool>(ColumnIndex(2)));
         EXPECT_EQ(resolve_in(row.template get<uint_t>(ColumnIndex(7)), entities), entity);
-        EXPECT_THROW(row.template get<double>(ColumnIndex(4)), std::invalid_argument);
-        EXPECT_THROW(row.template get<uint_t>(ColumnIndex(99)), std::out_of_range);
-        EXPECT_THROW(row.template get<uint_t>(size_t { 4 }), std::out_of_range);
+        EXPECT_THROW((void) row.template get<double>(ColumnIndex(4)), std::invalid_argument);
+        EXPECT_THROW((void) row.template get<uint_t>(ColumnIndex(99)), std::out_of_range);
+        EXPECT_THROW((void) row.template get<uint_t>(size_t { 4 }), std::out_of_range);
         EXPECT_TRUE(row.visit(3,
                               [&](auto value)
                               {
@@ -985,7 +985,7 @@ TEST(YggdrasilTests, DatabaseFloatingPointRowsInternCanonicalNaNsAndSignedZero)
     EXPECT_NO_THROW(columns.validate_row(database::encode_row(std::tuple { first_nan, true }, columns.span())));
     const auto truncated = std::span<const std::byte>(invalid).first(invalid.size() - 1);
     EXPECT_THROW(builder.insert(truncated), std::invalid_argument);
-    EXPECT_THROW(builder.contains(truncated), std::invalid_argument);
+    EXPECT_THROW((void) builder.contains(truncated), std::invalid_argument);
     EXPECT_EQ(builder.get_index(), canonical);
     EXPECT_EQ(builder.size(), 2);
 }

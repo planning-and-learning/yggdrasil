@@ -80,7 +80,7 @@ class UnionNormalFormBuilder
         for (const auto& column : child)
         {
             const auto found = std::ranges::find(parent, column.label, &ColumnLayout::label);
-            result.push_back(found != parent.end() ? mapping[size_t(found - parent.begin())] : fresh(column));
+            result.push_back(found != parent.end() ? mapping[static_cast<size_t>(found - parent.begin())] : fresh(column));
         }
         return result;
     }
@@ -99,7 +99,7 @@ public:
     {
         m_result.variables.push_back(QueryVariable { m_result.frame_size, column.size });
         m_result.frame_size += column.size;
-        return uint32_t(m_result.variables.size() - 1);
+        return static_cast<uint32_t>(m_result.variables.size() - 1);
     }
 
     /// `mapping` holds the variable of each of the query's columns, by position.

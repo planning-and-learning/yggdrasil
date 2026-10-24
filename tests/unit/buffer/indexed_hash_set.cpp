@@ -43,9 +43,9 @@ struct Data<tests::BufferIndexedHashSetTag>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::symbol, &Data::arity> {}; }
 };
 
-inline bool is_canonical(const Data<tests::BufferIndexedHashSetTag>&) { return true; }
+static inline bool is_canonical(const Data<tests::BufferIndexedHashSetTag>&) { return true; }
 
-inline void canonicalize(Data<tests::BufferIndexedHashSetTag>&) {}
+static inline void canonicalize(Data<tests::BufferIndexedHashSetTag>&) {}
 }  // namespace ygg
 
 namespace ygg::tests
@@ -60,8 +60,8 @@ TEST(YggdrasilTests, BufferIndexedHashSetDefaultConstructionSupportsReadOnlyQuer
     EXPECT_EQ(repository.size(), 0);
     EXPECT_FALSE(repository.contains(element));
     EXPECT_EQ(repository.find(element), std::nullopt);
-    EXPECT_THROW(repository.front(), std::out_of_range);
-    EXPECT_THROW(repository.back(), std::out_of_range);
+    EXPECT_THROW((void) repository.front(), std::out_of_range);
+    EXPECT_THROW((void) repository.back(), std::out_of_range);
     EXPECT_THROW(repository.insert(element), std::logic_error);
 }
 
@@ -119,7 +119,7 @@ TEST(YggdrasilTests, BufferIndexedHashSetStoresSerializedCanonicalData)
     EXPECT_EQ(repository.at(first_index).symbol, builder.symbol);
     EXPECT_EQ(repository.front().symbol, builder.symbol);
     EXPECT_EQ(repository.back().symbol, builder.symbol);
-    EXPECT_THROW(repository.at(Index<BufferIndexedHashSetTag>(1)), std::out_of_range);
+    EXPECT_THROW((void) repository.at(Index<BufferIndexedHashSetTag>(1)), std::out_of_range);
     EXPECT_TRUE(repository.contains(builder));
     EXPECT_EQ(repository.find(builder), first_index);
 
@@ -139,7 +139,7 @@ TEST(YggdrasilTests, BufferIndexedHashSetStoresSerializedCanonicalData)
     EXPECT_EQ(repository.at(second_index).symbol, builder.symbol);
     EXPECT_EQ(repository.front().symbol, 10);
     EXPECT_EQ(repository.back().symbol, builder.symbol);
-    EXPECT_THROW(repository.at(Index<BufferIndexedHashSetTag>(2)), std::out_of_range);
+    EXPECT_THROW((void) repository.at(Index<BufferIndexedHashSetTag>(2)), std::out_of_range);
 
     builder.index.value = 1;
     builder.symbol = 11;

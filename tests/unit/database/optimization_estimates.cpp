@@ -52,9 +52,10 @@ TEST(DatabaseOptimizationEstimates, JoinAndFilterAssociationHaveOneNormalizedEst
     same_estimate(expected, estimate(right, statistics));
     same_estimate(expected, estimate(reordered, statistics));
 
-    const auto above = ygg::tests::qb::select_value(queries, left, x, ygg::uint_t(7));
-    const auto below = ygg::tests::qb::join(queries, ygg::tests::qb::join(queries, ygg::tests::qb::select_value(queries, a, x, ygg::uint_t(7)), b), c);
-    const auto repeated = ygg::tests::qb::select_value(queries, below, x, ygg::uint_t(7));
+    const auto above = ygg::tests::qb::select_value(queries, left, x, static_cast<ygg::uint_t>(7));
+    const auto below =
+        ygg::tests::qb::join(queries, ygg::tests::qb::join(queries, ygg::tests::qb::select_value(queries, a, x, static_cast<ygg::uint_t>(7)), b), c);
+    const auto repeated = ygg::tests::qb::select_value(queries, below, x, static_cast<ygg::uint_t>(7));
     EXPECT_NEAR(estimate(above, statistics).rows, 50, 1e-9);
     same_estimate(estimate(above, statistics), estimate(below, statistics));
     same_estimate(estimate(above, statistics), estimate(repeated, statistics));
@@ -79,9 +80,9 @@ TEST(DatabaseOptimizationEstimates, EqualityAndConstantPredicatesAreIdempotentAn
     EXPECT_NEAR(estimate(transitive, statistics).rows, 2, 1e-9);
     same_estimate(estimate(transitive, statistics), estimate(ygg::tests::qb::select_equal(queries, transitive, z, x), statistics));
 
-    const auto selected = ygg::tests::qb::select_value(queries, equal, x, ygg::uint_t(7));
-    same_estimate(estimate(selected, statistics), estimate(ygg::tests::qb::select_value(queries, selected, y, ygg::uint_t(7)), statistics));
-    const auto conflict = estimate(ygg::tests::qb::select_value(queries, selected, y, ygg::uint_t(8)), statistics);
+    const auto selected = ygg::tests::qb::select_value(queries, equal, x, static_cast<ygg::uint_t>(7));
+    same_estimate(estimate(selected, statistics), estimate(ygg::tests::qb::select_value(queries, selected, y, static_cast<ygg::uint_t>(7)), statistics));
+    const auto conflict = estimate(ygg::tests::qb::select_value(queries, selected, y, static_cast<ygg::uint_t>(8)), statistics);
     EXPECT_EQ(conflict.rows, 0);
     for (const auto& [column, count] : conflict.distinct)
         EXPECT_EQ(count, 0);

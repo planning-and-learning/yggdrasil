@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/semantics/incremental/query.hpp"
 
-namespace ygg::database::incremental
-{
-namespace detail
+namespace ygg::database::incremental::detail
 {
 void QueryValue::set(std::span<const std::byte> bytes, bool present)
 {
@@ -23,6 +21,5 @@ void QueryValue::set(std::span<const std::byte> bytes, bool present)
         delta.removed.insert(row);
         result.erase(*position);
     }
-}
 }
 }

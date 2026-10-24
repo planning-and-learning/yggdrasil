@@ -151,10 +151,10 @@ TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
     std::array<Relation, 3> inputs { Relation({ x, y }), Relation({ y, z }), Relation({ z, w }) };
     for (ygg::uint_t i = 0; i < 10; ++i)
     {
-        inputs[0].insert(std::tuple { i, ygg::uint_t(0) });
-        inputs[1].insert(std::tuple { ygg::uint_t(0), i });
-        inputs[2].insert(std::tuple { i, ygg::uint_t(i % 2) });
-        inputs[2].insert(std::tuple { i + 100, ygg::uint_t(0) });  // dangling
+        inputs[0].insert(std::tuple { i, static_cast<ygg::uint_t>(0) });
+        inputs[1].insert(std::tuple { static_cast<ygg::uint_t>(0), i });
+        inputs[2].insert(std::tuple { i, (i % 2) });
+        inputs[2].insert(std::tuple { i + 100, static_cast<ygg::uint_t>(0) });  // dangling
     }
     const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]) };
     const auto plan = ygg::database::optimize(root);
@@ -215,7 +215,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
         auto bytes = std::vector<std::byte>();
         auto result = std::vector<std::vector<std::byte>>();
         evaluator.evaluate(binding,
-                           ygg::database::encode_row<ygg::uint_t>(std::array { ygg::uint_t(1) }, bytes),
+                           ygg::database::encode_row<ygg::uint_t>(std::array { static_cast<ygg::uint_t>(1) }, bytes),
                            [&](std::span<const std::byte> row)
                            {
                                result.emplace_back(row.begin(), row.end());
@@ -323,7 +323,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
     const auto edges = ygg::tests::qb::input(queries, 2, { y, z });
     const auto projection = ygg::tests::qb::project(queries, a, { x });
     const auto renamed = ygg::tests::qb::rename(queries, a, { y, x });
-    const auto selected = ygg::tests::qb::select_value(queries, renamed, y, ygg::uint_t(1));
+    const auto selected = ygg::tests::qb::select_value(queries, renamed, y, static_cast<ygg::uint_t>(1));
     const auto roots = std::array { ygg::tests::qb::join(queries, projection, edges),
                                     ygg::tests::qb::project(queries, ygg::tests::qb::difference(queries, a, b), { x }),
                                     ygg::tests::qb::difference(queries, projection, ygg::tests::qb::project(queries, b, { x })),
@@ -335,10 +335,10 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
                                     ygg::tests::qb::project(queries, a, { x }),
                                     ygg::tests::qb::project(queries, a, { x }) };
     std::array<Relation, 3> inputs { Relation({ x, y }), Relation({ x, y }), Relation({ y, z }) };
-    inputs[0].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    inputs[0].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(3) });
-    inputs[1].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    inputs[2].insert(std::tuple { ygg::uint_t(0), ygg::uint_t(2) });
+    inputs[0].insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    inputs[0].insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(3) });
+    inputs[1].insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    inputs[2].insert(std::tuple { static_cast<ygg::uint_t>(0), static_cast<ygg::uint_t>(2) });
     const auto refs = std::array { borrow(inputs[0]), borrow(inputs[1]), borrow(inputs[2]) };
     const auto statistics = ygg::database::collect_statistics(refs);
     const auto unmeasured = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots));
@@ -467,7 +467,7 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
                     break;
                 case 4:
                     if (!columns.empty())
-                        root = ygg::tests::qb::select_value(queries, root, columns[random() % columns.size()], ygg::uint_t(random() % 4));
+                        root = ygg::tests::qb::select_value(queries, root, columns[random() % columns.size()], static_cast<ygg::uint_t>(random() % 4));
                     break;
                 case 5:
                     root = ygg::tests::qb::union_(queries, root, peer(root));
@@ -518,8 +518,10 @@ TEST(DatabaseOptimization, BothModesPreserveFactoredUnionsAndFilteredDifferences
     const auto a = ygg::tests::qb::input(queries, 0, { x, y });
     const auto b = ygg::tests::qb::input(queries, 1, { x, y });
     const auto c = ygg::tests::qb::input(queries, 2, { y, z });
-    const auto selected_difference =
-        ygg::tests::qb::select_value(queries, ygg::tests::qb::rename(queries, ygg::tests::qb::difference(queries, a, b), { y, x }), y, ygg::uint_t(1));
+    const auto selected_difference = ygg::tests::qb::select_value(queries,
+                                                                  ygg::tests::qb::rename(queries, ygg::tests::qb::difference(queries, a, b), { y, x }),
+                                                                  y,
+                                                                  static_cast<ygg::uint_t>(1));
     const auto roots =
         std::array { ygg::tests::qb::union_(queries, ygg::tests::qb::join(queries, a, c), ygg::tests::qb::join(queries, b, c)),
                      ygg::tests::qb::join(queries, ygg::tests::qb::union_(queries, a, b), c),
@@ -528,12 +530,12 @@ TEST(DatabaseOptimization, BothModesPreserveFactoredUnionsAndFilteredDifferences
                      ygg::tests::qb::union_(queries, a, ygg::tests::qb::join(queries, a, b)),
                      ygg::tests::qb::join(queries, a, ygg::tests::qb::union_(queries, a, b)) };
     Relation ar({ x, y }), br({ x, y }), cr({ y, z });
-    ar.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
-    ar.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    br.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    br.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(2) });
-    cr.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(3) });
-    cr.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(2) });
+    ar.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(1) });
+    ar.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    br.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    br.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(2) });
+    cr.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(3) });
+    cr.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(2) });
     const auto inputs = std::array { borrow(ar), borrow(br), borrow(cr) };
     const auto statistics = ygg::database::collect_statistics(inputs);
     const auto original = ygg::database::compile(roots);

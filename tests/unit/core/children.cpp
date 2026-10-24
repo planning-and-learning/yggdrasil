@@ -13,6 +13,8 @@ struct Node;
 struct Store;
 
 /// A plain struct holding children, like a pair of feature references.
+namespace
+{
 struct LeafPair
 {
     Index<Leaf> first;
@@ -20,6 +22,7 @@ struct LeafPair
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&LeafPair::first, &LeafPair::second> {}; }
 };
+}  // namespace
 }  // namespace ygg::tests::children
 
 namespace ygg
@@ -47,7 +50,7 @@ struct Store
     std::vector<Data<Node>> nodes;
 
     template<typename T>
-    const Store& get_canonical_context(Index<T>) const noexcept
+    [[nodiscard]] const Store& get_canonical_context(Index<T>) const noexcept
     { return *this; }
 };
 }  // namespace ygg::tests::children
@@ -61,8 +64,8 @@ struct View<Index<tests::children::Leaf>, tests::children::Store>
     const tests::children::Store* store;
 
     View(Index<tests::children::Leaf> handle_, const tests::children::Store& store_) : handle(handle_), store(&store_) {}
-    Index<tests::children::Leaf> get_index() const noexcept { return handle; }
-    const tests::children::Store& get_context() const noexcept { return *store; }
+    [[nodiscard]] Index<tests::children::Leaf> get_index() const noexcept { return handle; }
+    [[nodiscard]] const tests::children::Store& get_context() const noexcept { return *store; }
 };
 
 template<>
@@ -72,9 +75,9 @@ struct View<Index<tests::children::Node>, tests::children::Store>
     const tests::children::Store* store;
 
     View(Index<tests::children::Node> handle_, const tests::children::Store& store_) : handle(handle_), store(&store_) {}
-    Index<tests::children::Node> get_index() const noexcept { return handle; }
-    const tests::children::Store& get_context() const noexcept { return *store; }
-    const Data<tests::children::Node>& get_data() const { return store->nodes.at(handle.get_value()); }
+    [[nodiscard]] Index<tests::children::Node> get_index() const noexcept { return handle; }
+    [[nodiscard]] const tests::children::Store& get_context() const noexcept { return *store; }
+    [[nodiscard]] const Data<tests::children::Node>& get_data() const { return store->nodes.at(handle.get_value()); }
 };
 }  // namespace ygg
 

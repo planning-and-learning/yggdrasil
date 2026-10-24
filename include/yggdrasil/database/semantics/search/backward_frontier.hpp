@@ -64,14 +64,14 @@ public:
         return m_frontier.size();
     }
 
-    bool exhausted() const noexcept { return m_exhausted; }
-    size_t frontier_size() const noexcept { return m_frontier.size(); }
+    [[nodiscard]] bool exhausted() const noexcept { return m_exhausted; }
+    [[nodiscard]] size_t frontier_size() const noexcept { return m_frontier.size(); }
     /// The distance of a found vertex, or none: exact on the edges of the search that found it, a lower bound after
     /// edges are removed.
-    uint_t level(uint_t id) const noexcept { return id < m_level.size() ? m_level[id] : none; }
+    [[nodiscard]] uint_t level(uint_t id) const noexcept { return id < m_level.size() ? m_level[id] : none; }
     /// A lower bound on any vertex's distance: its level if found, otherwise one beyond the last level, or infinity
     /// once the frontier is exhausted.
-    uint_t bound(std::optional<uint_t> id) const noexcept
+    [[nodiscard]] uint_t bound(std::optional<uint_t> id) const noexcept
     {
         if (id && level(*id) != none)
             return level(*id);

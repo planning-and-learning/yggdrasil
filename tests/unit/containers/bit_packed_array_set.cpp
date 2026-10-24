@@ -47,8 +47,8 @@ TEST(YggdrasilTests, CommonBitPackedArraySetOutOfRange)
 
     // 3 elements are too much for a pool that stores arrays of length 2.
     EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
-    EXPECT_THROW(set.find(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
-    EXPECT_THROW(set.contains(std::vector<ygg::uint_t>({ 1 })), std::invalid_argument);
+    EXPECT_THROW((void) set.find(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
+    EXPECT_THROW((void) set.contains(std::vector<ygg::uint_t>({ 1 })), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonBitPackedArraySetDeduplicatesZeroLengthArrays)
@@ -100,8 +100,8 @@ TEST(YggdrasilTests, CommonBitPackedArraySetEmptyAccessThrows)
 {
     auto set = ygg::BitPackedArraySet<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(2, 3);
 
-    EXPECT_THROW(set.front(), std::out_of_range);
-    EXPECT_THROW(set.back(), std::out_of_range);
+    EXPECT_THROW((void) set.front(), std::out_of_range);
+    EXPECT_THROW((void) set.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonBitPackedArraySetPreservesLookupAcrossMoves)
@@ -154,7 +154,7 @@ TEST(YggdrasilTests, CommonBitPackedArraySet)
             }
         }
 
-        EXPECT_THROW(set.at(set.size()), std::out_of_range);
+        EXPECT_THROW((void) set.at(set.size()), std::out_of_range);
 
         const auto first = std::array<uint8_t, 2> { 0, 0 };
         const auto last = std::array<uint8_t, 2> { 3, 3 };

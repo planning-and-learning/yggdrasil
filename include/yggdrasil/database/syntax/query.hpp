@@ -46,12 +46,12 @@ public:
     {
     }
 
-    size_t node_count() const noexcept { return m_repository->size(); }
-    size_t root_count() const noexcept { return m_roots.size(); }
-    std::span<const QueryIndex> roots() const& noexcept { return m_roots; }
-    std::span<const QueryIndex> roots() const&& = delete;
-    const QueryRepository& get_repository() const& noexcept { return *m_repository; }
-    const QueryRepository& get_repository() const&& = delete;
+    [[nodiscard]] size_t node_count() const noexcept { return m_repository->size(); }
+    [[nodiscard]] size_t root_count() const noexcept { return m_roots.size(); }
+    [[nodiscard]] std::span<const QueryIndex> roots() const& noexcept { return m_roots; }
+    [[nodiscard]] std::span<const QueryIndex> roots() const&& = delete;
+    [[nodiscard]] const QueryRepository& get_repository() const& noexcept { return *m_repository; }
+    [[nodiscard]] const QueryRepository& get_repository() const&& = delete;
     QueryView<> operator[](QueryIndex id) const&
     {
         if (id.get_value() >= node_count())

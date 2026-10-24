@@ -54,21 +54,21 @@ public:
     Builder(std::initializer_list<Index<database::Column>> columns);
 
     auto& get_data() noexcept { return m_data; }
-    const auto& get_data() const noexcept { return m_data; }
-    auto get_index() const noexcept { return m_data.index; }
+    [[nodiscard]] const auto& get_data() const noexcept { return m_data; }
+    [[nodiscard]] auto get_index() const noexcept { return m_data.index; }
     void set_index(Index<database::Columns> index) noexcept { m_data.index = index; }
 
-    std::span<const database::ColumnLayout> span() const& noexcept { return { m_data.values.data(), m_data.values.size() }; }
-    std::span<const database::ColumnLayout> span() const&& = delete;
-    auto begin() const noexcept { return m_data.values.begin(); }
-    auto end() const noexcept { return m_data.values.end(); }
-    const database::ColumnLayout* data() const noexcept { return m_data.values.data(); }
-    size_t size() const noexcept { return m_data.values.size(); }
-    bool empty() const noexcept { return m_data.values.empty(); }
+    [[nodiscard]] std::span<const database::ColumnLayout> span() const& noexcept { return { m_data.values.data(), m_data.values.size() }; }
+    [[nodiscard]] std::span<const database::ColumnLayout> span() const&& = delete;
+    [[nodiscard]] auto begin() const noexcept { return m_data.values.begin(); }
+    [[nodiscard]] auto end() const noexcept { return m_data.values.end(); }
+    [[nodiscard]] const database::ColumnLayout* data() const noexcept { return m_data.values.data(); }
+    [[nodiscard]] size_t size() const noexcept { return m_data.values.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_data.values.empty(); }
     const database::ColumnLayout& operator[](size_t index) const noexcept { return m_data.values[index]; }
-    size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
-    size_t row_size() const noexcept { return database::row_size(span()); }
-    size_t memory_usage() const noexcept { return m_data.values.allocated_size_ * sizeof(database::ColumnLayout); }
+    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
+    [[nodiscard]] size_t row_size() const noexcept { return database::row_size(span()); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_data.values.allocated_size_ * sizeof(database::ColumnLayout); }
 
     template<ygg::ByteCodable T>
     void push_back(Index<database::Column> column);
@@ -89,7 +89,7 @@ public:
     void clear() noexcept { m_data.clear(); }
 
     template<ygg::ByteCodable T>
-    T get(std::span<const std::byte> bytes, Index<database::Column> column) const
+    [[nodiscard]] T get(std::span<const std::byte> bytes, Index<database::Column> column) const
     { return database::detail::read_column<T>(bytes, span(), column_index(column)); }
     template<ygg::ByteCodable T>
     void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const

@@ -42,6 +42,8 @@ void comparison_parent_adl_probe(const T&);
 namespace comparison_fixture
 {
 
+namespace
+{
 struct Value : ygg::comparison::Mixin<Value>
 {
     int value;
@@ -50,6 +52,7 @@ struct Value : ygg::comparison::Mixin<Value>
 
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Value::value> {}; }
 };
+}  // namespace
 
 template<typename T>
 concept FindsParentYggByAdl = requires(const T& value) { comparison_parent_adl_probe(value); };
@@ -59,6 +62,8 @@ concept FindsParentYggByAdl = requires(const T& value) { comparison_parent_adl_p
 namespace ygg
 {
 
+namespace
+{
 struct ComparisonOwnedValue
 {
     int value;
@@ -67,6 +72,7 @@ struct ComparisonOwnedValue
 
     static constexpr auto identifying_members() noexcept { return ygg::Members<&ComparisonOwnedValue::value> {}; }
 };
+}  // namespace
 
 }  // namespace ygg
 
@@ -76,10 +82,13 @@ namespace ygg::tests
 struct ComparisonTag;
 using ComparisonIndex = ygg::Index<ComparisonTag>;
 
+namespace
+{
 struct ComparisonUint : ygg::FixedUintMixin<ComparisonUint>
 {
     using FixedUintMixin::FixedUintMixin;
 };
+}  // namespace
 
 static_assert(comparison_fixture::Value(1) == comparison_fixture::Value(1));
 static_assert(comparison_fixture::Value(1) != comparison_fixture::Value(2));
@@ -156,10 +165,13 @@ TEST(YggdrasilTests, CommonFloatingPointComparisonPreservesRuntimeNaNSemantics)
     }
 }
 
+namespace
+{
 struct ThrowingIdentifiableComparison : ygg::comparison::Mixin<ThrowingIdentifiableComparison>
 {
-    auto identifying_members() const -> std::tuple<int> { throw std::runtime_error("identity"); }
+    [[nodiscard]] auto identifying_members() const -> std::tuple<int> { throw std::runtime_error("identity"); }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonComparisonMixinPropagatesIdentityFailures)
 {
@@ -169,6 +181,8 @@ TEST(YggdrasilTests, CommonComparisonMixinPropagatesIdentityFailures)
 }
 
 /// A class template, so the member pointers are formed while the class is still being instantiated.
+namespace
+{
 template<typename Tag>
 struct ListedRecord
 {
@@ -184,7 +198,7 @@ struct TiedRecord
     int name;
     double weight;
 
-    auto identifying_members() const noexcept { return std::tie(name, weight); }
+    [[nodiscard]] auto identifying_members() const noexcept { return std::tie(name, weight); }
 };
 
 struct EmptyListedRecord
@@ -193,6 +207,7 @@ struct EmptyListedRecord
 
     static constexpr auto identifying_members() noexcept { return ygg::Members<> {}; }
 };
+}  // namespace
 
 TEST(YggdrasilTests, MemberListsIdentifyLikeTiedMembers)
 {

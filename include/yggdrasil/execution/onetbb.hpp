@@ -60,11 +60,11 @@ public:
 
     static uint_t get_max_num_threads() noexcept { return static_cast<uint_t>(oneapi::tbb::info::default_concurrency()); }
 
-    uint_t get_num_threads() const noexcept { return m_num_threads; }
+    [[nodiscard]] uint_t get_num_threads() const noexcept { return m_num_threads; }
 
     oneapi::tbb::task_arena& arena() noexcept { return m_arena; }
 
-    const oneapi::tbb::task_arena& arena() const noexcept { return m_arena; }
+    [[nodiscard]] const oneapi::tbb::task_arena& arena() const noexcept { return m_arena; }
 
 private:
     uint_t m_num_threads;

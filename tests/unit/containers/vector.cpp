@@ -29,6 +29,8 @@
 
 namespace ygg::tests
 {
+namespace
+{
 struct VectorViewElement
 {
     int value;
@@ -37,6 +39,7 @@ struct VectorViewContext
 {
     bool fail;
 };
+}  // namespace
 }
 
 namespace ygg
@@ -51,9 +54,9 @@ struct View<tests::VectorViewElement, tests::VectorViewContext>
         if (context.fail)
             throw std::runtime_error("view construction");
     }
-    const auto& get_data() const { return *element; }
-    const auto& get_handle() const { return *element; }
-    const auto& get_context() const { return *context; }
+    [[nodiscard]] const auto& get_data() const { return *element; }
+    [[nodiscard]] const auto& get_handle() const { return *element; }
+    [[nodiscard]] const auto& get_context() const { return *context; }
 };
 }
 
@@ -95,7 +98,7 @@ TEST(YggdrasilTests, CommonVector)
     const auto dim0 = 2;
     const auto dim1 = 3;
     const auto dim2 = 4;
-    auto vec = std::vector<uint64_t>(std::size_t { 2 } * 3 * 4, uint64_t(0));
+    auto vec = std::vector<uint64_t>(std::size_t { 2 } * 3 * 4, static_cast<uint64_t>(0));
 
     auto mdspan = ygg::MDSpan<uint64_t, 3>(vec.data(), std::array<size_t, 3> { dim0, dim1, dim2 });
     auto empty_mdspan = ygg::MDSpan<uint64_t, 3>();
@@ -155,7 +158,7 @@ TEST(YggdrasilTests, CommonVector)
     EXPECT_EQ(const_mdspan.at(0).at(2).at(0), 5);
     EXPECT_EQ(const_mdspan(0, 2).data(), &const_mdspan(0, 2, 0));
     EXPECT_EQ(const_mdspan.at(0, 2).data(), &const_mdspan(0, 2, 0));
-    EXPECT_THROW(const_mdspan.at(2), std::out_of_range);
+    EXPECT_THROW((void) const_mdspan.at(2), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonCistaVectorViewPreservesContextualIteratorAndExceptionContracts)
@@ -172,8 +175,8 @@ TEST(YggdrasilTests, CommonCistaVectorViewPreservesContextualIteratorAndExceptio
     static_assert(!noexcept(view[0]));
     static_assert(!noexcept(*view.begin()));
     EXPECT_THROW(view[0], std::runtime_error);
-    EXPECT_THROW(view.front(), std::runtime_error);
-    EXPECT_THROW(view.back(), std::runtime_error);
+    EXPECT_THROW((void) view.front(), std::runtime_error);
+    EXPECT_THROW((void) view.back(), std::runtime_error);
     EXPECT_THROW(*view.begin(), std::runtime_error);
     EXPECT_THROW(view.begin()[0], std::runtime_error);
 }

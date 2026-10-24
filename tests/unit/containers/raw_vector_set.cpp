@@ -42,6 +42,8 @@ static_assert(!std::is_copy_constructible_v<DefaultRawVectorSet>);
 static_assert(std::is_move_constructible_v<ConcurrentRawVectorSet>);
 static_assert(std::is_move_assignable_v<ConcurrentRawVectorSet>);
 
+namespace
+{
 struct RawVectorSetCountingElement
 {
     int value;
@@ -49,6 +51,7 @@ struct RawVectorSetCountingElement
 
     friend bool operator==(const RawVectorSetCountingElement&, const RawVectorSetCountingElement&) = default;
 };
+}  // namespace
 
 }  // namespace ygg::tests
 
@@ -88,10 +91,10 @@ TEST(YggdrasilTests, CommonRawVectorSetEmptyAccessThrows)
     auto set = ygg::RawVectorSet<uint8_t, int, 32>();
     const auto& const_set = set;
 
-    EXPECT_THROW(set.front(), std::out_of_range);
-    EXPECT_THROW(const_set.front(), std::out_of_range);
-    EXPECT_THROW(set.back(), std::out_of_range);
-    EXPECT_THROW(const_set.back(), std::out_of_range);
+    EXPECT_THROW((void) set.front(), std::out_of_range);
+    EXPECT_THROW((void) const_set.front(), std::out_of_range);
+    EXPECT_THROW((void) set.back(), std::out_of_range);
+    EXPECT_THROW((void) const_set.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawVectorSetStoresVariableLengthVectors)
@@ -134,8 +137,8 @@ TEST(YggdrasilTests, CommonRawVectorSetStoresVariableLengthVectors)
     EXPECT_EQ(std::vector<int>(third_view.begin(), third_view.end()), std::vector<int>(third.begin(), third.end()));
 
     const auto& const_set = set;
-    EXPECT_THROW(set.at(3), std::out_of_range);
-    EXPECT_THROW(const_set.at(3), std::out_of_range);
+    EXPECT_THROW((void) set.at(3), std::out_of_range);
+    EXPECT_THROW((void) const_set.at(3), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawVectorSetClearKeepsContainerReusable)

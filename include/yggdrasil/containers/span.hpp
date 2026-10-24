@@ -31,12 +31,12 @@ class View<std::span<T, Extent>, C>
 
 public:
     View(Span handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
-    const Span& get_handle() const noexcept { return m_handle; }
-    std::span<const Element, Extent> get_data() const noexcept { return m_handle; }
-    const C& get_context() const noexcept { return *m_context; }
-    size_t size() const noexcept { return m_handle.size(); }
-    bool empty() const noexcept { return m_handle.empty(); }
-    const Element* data() const noexcept { return m_handle.data(); }
+    [[nodiscard]] const Span& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] std::span<const Element, Extent> get_data() const noexcept { return m_handle; }
+    [[nodiscard]] const C& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] size_t size() const noexcept { return m_handle.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_handle.empty(); }
+    [[nodiscard]] const Element* data() const noexcept { return m_handle.data(); }
 
     decltype(auto) operator[](size_t index) const
     {
@@ -46,14 +46,14 @@ public:
         else
             return std::as_const(m_handle[index]);
     }
-    decltype(auto) at(size_t index) const
+    [[nodiscard]] decltype(auto) at(size_t index) const
     {
         if (index >= size())
             throw std::out_of_range("Span view: index out of range.");
         return (*this)[index];
     }
-    decltype(auto) front() const { return (*this)[0]; }
-    decltype(auto) back() const { return (*this)[size() - 1]; }
+    [[nodiscard]] decltype(auto) front() const { return (*this)[0]; }
+    [[nodiscard]] decltype(auto) back() const { return (*this)[size() - 1]; }
 
     class const_iterator
     {
@@ -61,7 +61,7 @@ public:
         const C* m_context = nullptr;
         size_t m_position = 0;
 
-        bool same_range(const const_iterator& other) const noexcept
+        [[nodiscard]] bool same_range(const const_iterator& other) const noexcept
         { return m_elements.data() == other.m_elements.data() && m_elements.size() == other.m_elements.size() && m_context == other.m_context; }
 
     public:
@@ -143,10 +143,10 @@ public:
         }
     };
 
-    const_iterator begin() const noexcept { return { m_handle, *m_context, 0 }; }
-    const_iterator end() const noexcept { return { m_handle, *m_context, size() }; }
-    const_iterator cbegin() const noexcept { return begin(); }
-    const_iterator cend() const noexcept { return end(); }
+    [[nodiscard]] const_iterator begin() const noexcept { return { m_handle, *m_context, 0 }; }
+    [[nodiscard]] const_iterator end() const noexcept { return { m_handle, *m_context, size() }; }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 };
 }  // namespace ygg
 

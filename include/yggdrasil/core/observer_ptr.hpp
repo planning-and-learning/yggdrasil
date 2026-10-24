@@ -46,7 +46,7 @@ public:
      */
 
     T* get() noexcept { return ptr; }
-    const T* get() const noexcept { return ptr; }
+    [[nodiscard]] const T* get() const noexcept { return ptr; }
 
     T& operator*() { return *ptr; }
     T* operator->() { return ptr; }

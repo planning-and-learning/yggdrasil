@@ -47,9 +47,12 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct HashContext
 {
 };
+}  // namespace
 
 // Golden values pin scalar hashing and xxHash64 byte hashing across standard libraries and compilers.
 TEST(YggdrasilTests, CommonHashValuesMatchDefinedAlgorithms)
@@ -221,7 +224,7 @@ TEST(YggdrasilTests, CommonHashRangePreservesElementHashSemantics)
     {
         uint32_t value;
 
-        auto identifying_members() const noexcept { return std::tuple(value % 10); }
+        [[nodiscard]] auto identifying_members() const noexcept { return std::tuple(value % 10); }
         bool operator==(const ModuloValue& other) const noexcept { return value % 10 == other.value % 10; }
     };
     static_assert(std::has_unique_object_representations_v<ModuloValue>);
@@ -488,26 +491,29 @@ TEST(YggdrasilTests, CommonCistaHashAdaptersHashPairAndNestedArrayViews)
     EXPECT_NE(ygg::Hash<ArrayView> {}(ArrayView(lhs, context)), ygg::Hash<ArrayView> {}(ArrayView(different, context)));
 }
 
+namespace
+{
 struct HashThrowingDataRange
 {
     std::span<const unsigned> values;
     bool throw_on_size;
 
-    auto begin() const noexcept { return values.begin(); }
-    auto end() const noexcept { return values.end(); }
-    size_t size() const
+    [[nodiscard]] auto begin() const noexcept { return values.begin(); }
+    [[nodiscard]] auto end() const noexcept { return values.end(); }
+    [[nodiscard]] size_t size() const
     {
         if (throw_on_size)
             throw std::runtime_error("range size");
         return values.size();
     }
-    const unsigned* data() const
+    [[nodiscard]] const unsigned* data() const
     {
         if (!throw_on_size)
             throw std::runtime_error("range data");
         return values.data();
     }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonHashRangePropagatesTraversalErrors)
 {
@@ -539,10 +545,13 @@ TEST(YggdrasilTests, CommonHashRangePropagatesTraversalErrors)
     static_assert(noexcept(ygg::Hash<unsigned> {}(1U)));
 }
 
+namespace
+{
 struct HashThrowingCoder : bit::ForwardingBlockCoder<unsigned>
 {
     static unsigned decode(unsigned) { throw std::runtime_error("decode"); }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
 {
@@ -571,9 +580,12 @@ TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
     EXPECT_THROW(ygg::Hash<> {}(record), std::runtime_error);
 }
 
+namespace
+{
 struct UnsupportedHashValue
 {
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonHashCapabilitiesRejectUnsupportedNestedValues)
 {

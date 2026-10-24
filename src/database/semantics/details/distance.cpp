@@ -7,9 +7,7 @@
 
 #include <span>
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 uint_t DistanceGraph::insert_vertex(std::span<const std::byte> tuple)
 {
@@ -23,11 +21,8 @@ uint_t DistanceGraph::insert_vertex(std::span<const std::byte> tuple)
     return vertices.insert(tuple);
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 std::pair<uint_t, uint_t> DistanceGraph::insert_endpoints(std::span<const std::byte> edge)
 {
@@ -35,11 +30,8 @@ std::pair<uint_t, uint_t> DistanceGraph::insert_endpoints(std::span<const std::b
     return { from, insert_vertex(edge.subspan(vertices.array_size())) };
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool DistanceGraph::contains_edge(uint_t from, uint_t to) const
 {
@@ -49,11 +41,8 @@ bool DistanceGraph::contains_edge(uint_t from, uint_t to) const
     return false;
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void DistanceGraph::clear()
 {
@@ -61,11 +50,8 @@ void DistanceGraph::clear()
     vertices.clear();
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void breadth_first_search(const DistanceGraph& graph, uint_t root, std::vector<uint_t>& distances, std::vector<uint_t>& queue)
 {
@@ -86,11 +72,8 @@ void breadth_first_search(const DistanceGraph& graph, uint_t root, std::vector<u
     }
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t length, const DistancePlan& plan, std::vector<std::byte>& row)
 {
@@ -101,7 +84,6 @@ Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t
     std::ranges::copy(graph.vertices[to], std::span(row).subspan(tuple_size).begin());
     ByteCodec<uint_t>::encode(length, std::span(row).subspan(2 * tuple_size));
     return Row(row, plan.output_columns().span());
-}
 }
 }
 

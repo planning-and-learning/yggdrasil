@@ -29,9 +29,9 @@ struct QueryValue
     Builder<Relation> result;
     Delta delta;
     explicit QueryValue(std::span<const ColumnLayout> columns) : result(columns), delta(columns) {}
-    const auto& get_result() const noexcept { return result; }
-    const auto& get_delta() const noexcept { return delta; }
-    size_t memory_usage() const noexcept { return result.memory_usage() + delta.memory_usage(); }
+    [[nodiscard]] const auto& get_result() const noexcept { return result; }
+    [[nodiscard]] const auto& get_delta() const noexcept { return delta; }
+    [[nodiscard]] size_t memory_usage() const noexcept { return result.memory_usage() + delta.memory_usage(); }
 
     void set(std::span<const std::byte> bytes, bool present);
 };
@@ -215,16 +215,16 @@ class QueryEvaluator
     template<typename>
     friend struct detail::NodeRules;
 
-    const Builder<Relation>& result(NodeId id) const
+    [[nodiscard]] const Builder<Relation>& result(NodeId id) const
     {
         return std::visit([](const auto& node) -> const Builder<Relation>& { return node.state.get_result(); }, m_nodes[id.get_value()]);
     }
-    const Builder<Relation>& result(QueryView<> query) const { return result(query.get_index()); }
-    const Delta& delta(NodeId id) const
+    [[nodiscard]] const Builder<Relation>& result(QueryView<> query) const { return result(query.get_index()); }
+    [[nodiscard]] const Delta& delta(NodeId id) const
     {
         return std::visit([](const auto& node) -> const Delta& { return node.state.get_delta(); }, m_nodes[id.get_value()]);
     }
-    const Delta& delta(QueryView<> query) const { return delta(query.get_index()); }
+    [[nodiscard]] const Delta& delta(QueryView<> query) const { return delta(query.get_index()); }
     bool is_internal(const void* address) const { return std::ranges::find(m_storage_addresses, address) != m_storage_addresses.end(); }
 
 public:
@@ -288,24 +288,24 @@ public:
                        m_plan[NodeId(to_uint_t(i))].get_variant());
         m_initialized = true;
     }
-    const Builder<Relation>& get_result(size_t root = 0) const&
+    [[nodiscard]] const Builder<Relation>& get_result(size_t root = 0) const&
     {
         detail::require_initialized(m_initialized);
         if (root >= m_plan.root_count())
             throw std::out_of_range("Incremental query: invalid root.");
         return result(m_plan.roots()[root]);
     }
-    const Builder<Relation>& get_result(size_t = 0) const&& = delete;
-    const Delta& get_delta(size_t root = 0) const&
+    [[nodiscard]] const Builder<Relation>& get_result(size_t = 0) const&& = delete;
+    [[nodiscard]] const Delta& get_delta(size_t root = 0) const&
     {
         detail::require_initialized(m_initialized);
         if (root >= m_plan.root_count())
             throw std::out_of_range("Incremental query: invalid root.");
         return delta(m_plan.roots()[root]);
     }
-    const Delta& get_delta(size_t = 0) const&& = delete;
+    [[nodiscard]] const Delta& get_delta(size_t = 0) const&& = delete;
     /// Retained runtime storage; excludes the immutable query plan.
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t result = m_workspace.memory_usage() + m_storage_addresses.capacity() * sizeof(const void*);
         // get_if rather than std::visit, which throws for a valueless variant; nodes are never valueless.

@@ -35,13 +35,13 @@ public:
     Row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns) noexcept : m_bytes(bytes), m_columns(columns)
     { assert(bytes.size() == row_size(columns)); }
 
-    std::span<const std::byte> bytes() const noexcept { return m_bytes; }
-    std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
-    size_t size() const noexcept { return m_columns.size(); }
-    bool empty() const noexcept { return m_columns.empty(); }
+    [[nodiscard]] std::span<const std::byte> bytes() const noexcept { return m_bytes; }
+    [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
+    [[nodiscard]] size_t size() const noexcept { return m_columns.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_columns.empty(); }
 
     template<ByteCodable T>
-    T get(size_t position) const
+    [[nodiscard]] T get(size_t position) const
     { return detail::read_column<T>(m_bytes, m_columns, position); }
     /// Decodes every column as T into the reusable buffer, which the result borrows.
     template<ByteCodable T>
@@ -53,7 +53,7 @@ public:
         return buffer;
     }
     template<ByteCodable T>
-    T get(Index<Column> column) const
+    [[nodiscard]] T get(Index<Column> column) const
     { return get<T>(column_index(m_columns, column)); }
 
     /// Calls visitor with the value at `position`, decoded as its column's type.
@@ -109,19 +109,19 @@ class View<database::Row, C>
 
 public:
     View(database::Row handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
-    const auto& get_handle() const noexcept { return m_handle; }
-    const auto& get_data() const noexcept { return m_handle; }
-    const C& get_context() const noexcept { return *m_context; }
-    std::span<const std::byte> bytes() const noexcept { return m_handle.bytes(); }
-    std::span<const database::ColumnLayout> columns() const noexcept { return m_handle.columns(); }
-    size_t size() const noexcept { return m_handle.size(); }
-    bool empty() const noexcept { return m_handle.empty(); }
+    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
+    [[nodiscard]] const C& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] std::span<const std::byte> bytes() const noexcept { return m_handle.bytes(); }
+    [[nodiscard]] std::span<const database::ColumnLayout> columns() const noexcept { return m_handle.columns(); }
+    [[nodiscard]] size_t size() const noexcept { return m_handle.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_handle.empty(); }
 
     template<ygg::ByteCodable T>
-    T get(size_t position) const
+    [[nodiscard]] T get(size_t position) const
     { return m_handle.template get<T>(position); }
     template<ygg::ByteCodable T>
-    T get(Index<database::Column> column) const
+    [[nodiscard]] T get(Index<database::Column> column) const
     { return get<T>(database::column_index(columns(), column)); }
 
     template<typename Visitor>

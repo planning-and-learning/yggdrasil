@@ -130,19 +130,19 @@ public:
         return ConstView(std::launder(reinterpret_cast<const T*>(m_storage.data_at(array_index))), m_array_size);
     }
 
-    ConstView at(size_t array_index) const
+    [[nodiscard]] ConstView at(size_t array_index) const
     {
         ensure_index(array_index);
         return (*this)[array_index];
     }
 
-    ConstView front() const
+    [[nodiscard]] ConstView front() const
     {
         ensure_not_empty();
         return (*this)[0];
     }
 
-    ConstView back() const
+    [[nodiscard]] ConstView back() const
     {
         ensure_not_empty();
         return (*this)[size() - 1];
@@ -170,11 +170,11 @@ public:
         detail::store_size<ThreadSafe>(m_size, 0);
     }
 
-    size_t memory_usage() const noexcept { return m_storage.memory_usage(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_storage.memory_usage(); }
 
-    size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
-    bool empty() const noexcept { return size() == 0; }
-    size_t array_size() const noexcept { return m_array_size; }
+    [[nodiscard]] size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
+    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
+    [[nodiscard]] size_t array_size() const noexcept { return m_array_size; }
 
 private:
     template<typename Fill>
@@ -187,7 +187,7 @@ private:
                                              [&]
                                              {
                                                  const auto index = detail::load_size<ThreadSafe>(m_size);
-                                                 if (index == std::numeric_limits<size_t>::max() || index > std::numeric_limits<uint_t>::max())
+                                                 if (index > std::numeric_limits<uint_t>::max())
                                                      throw std::length_error("RawArrayPool: index is too large.");
 
                                                  if (m_array_size_bytes > 0)

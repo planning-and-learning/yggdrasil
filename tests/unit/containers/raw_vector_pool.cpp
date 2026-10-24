@@ -36,10 +36,13 @@ namespace ygg::tests
 using DefaultRawVectorPool = RawVectorPool<uint8_t, int, 32>;
 using ConcurrentRawVectorPool = RawVectorPool<uint8_t, int, 32, true>;
 
+namespace
+{
 struct alignas(64) OverAlignedValue
 {
     int value;
 };
+}  // namespace
 
 static_assert(!DefaultRawVectorPool::thread_safe);
 static_assert(ConcurrentRawVectorPool::thread_safe);
@@ -112,10 +115,10 @@ TEST(YggdrasilTests, CommonRawVectorPoolEmptyAccessThrows)
     auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
     const auto& const_pool = pool;
 
-    EXPECT_THROW(pool.front(), std::out_of_range);
-    EXPECT_THROW(const_pool.front(), std::out_of_range);
-    EXPECT_THROW(pool.back(), std::out_of_range);
-    EXPECT_THROW(const_pool.back(), std::out_of_range);
+    EXPECT_THROW((void) pool.front(), std::out_of_range);
+    EXPECT_THROW((void) const_pool.front(), std::out_of_range);
+    EXPECT_THROW((void) pool.back(), std::out_of_range);
+    EXPECT_THROW((void) const_pool.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolAtChecksBounds)
@@ -126,8 +129,8 @@ TEST(YggdrasilTests, CommonRawVectorPoolAtChecksBounds)
 
     EXPECT_EQ(pool.at(index)[1], 2);
     EXPECT_EQ(const_pool.at(index)[1], 2);
-    EXPECT_THROW(pool.at(1), std::out_of_range);
-    EXPECT_THROW(const_pool.at(1), std::out_of_range);
+    EXPECT_THROW((void) pool.at(1), std::out_of_range);
+    EXPECT_THROW((void) const_pool.at(1), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawVectorPoolClearKeepsCapacityReusable)
@@ -183,7 +186,7 @@ TEST(YggdrasilTests, CommonRawVectorPoolPreservesOverAlignment)
 }
 
 template<bool ThreadSafe>
-void test_raw_vector_pool_move()
+static void test_raw_vector_pool_move()
 {
     using Pool = ygg::RawVectorPool<uint8_t, int, 16, ThreadSafe>;
     const auto first = std::array<int, 2> { 1, 2 };

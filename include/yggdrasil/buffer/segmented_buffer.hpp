@@ -190,12 +190,12 @@ public:
         m_size = 0;
     }
 
-    size_t num_segments() const { return m_segments.size(); }
-    size_t size() const { return m_size; }
-    bool empty() const noexcept { return m_size == 0; }
-    size_t capacity() const { return m_capacity; }
+    [[nodiscard]] size_t num_segments() const { return m_segments.size(); }
+    [[nodiscard]] size_t size() const { return m_size; }
+    [[nodiscard]] bool empty() const noexcept { return m_size == 0; }
+    [[nodiscard]] size_t capacity() const { return m_capacity; }
 
-    size_t remaining_in_current_segment() const
+    [[nodiscard]] size_t remaining_in_current_segment() const
     {
         if (m_cur_seg >= m_segments.size())
         {

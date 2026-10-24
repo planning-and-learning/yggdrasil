@@ -61,27 +61,27 @@ public:
         m_output.push_back(m_probes[0].label, m_probes[0].type);
     }
 
-    auto source_columns() const& noexcept { return make_view(m_sources, *this); }
-    auto source_columns() const&& = delete;
-    auto edge_columns() const& noexcept { return make_view(m_edges, *this); }
-    auto edge_columns() const&& = delete;
-    auto target_columns() const& noexcept { return make_view(m_targets, *this); }
-    auto target_columns() const&& = delete;
-    auto probe_columns() const& noexcept { return make_view(m_probes, *this); }
-    auto probe_columns() const&& = delete;
-    auto output_columns() const& noexcept { return make_view(m_output, *this); }
-    auto output_columns() const&& = delete;
-    size_t keys() const noexcept { return m_keys; }
+    [[nodiscard]] auto source_columns() const& noexcept { return make_view(m_sources, *this); }
+    [[nodiscard]] auto source_columns() const&& = delete;
+    [[nodiscard]] auto edge_columns() const& noexcept { return make_view(m_edges, *this); }
+    [[nodiscard]] auto edge_columns() const&& = delete;
+    [[nodiscard]] auto target_columns() const& noexcept { return make_view(m_targets, *this); }
+    [[nodiscard]] auto target_columns() const&& = delete;
+    [[nodiscard]] auto probe_columns() const& noexcept { return make_view(m_probes, *this); }
+    [[nodiscard]] auto probe_columns() const&& = delete;
+    [[nodiscard]] auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    [[nodiscard]] auto output_columns() const&& = delete;
+    [[nodiscard]] size_t keys() const noexcept { return m_keys; }
     /// k, the columns of a vertex.
-    size_t arity() const noexcept { return m_sources.size() - m_keys; }
+    [[nodiscard]] size_t arity() const noexcept { return m_sources.size() - m_keys; }
     /// The bytes of a key, which precede a vertex in every row.
-    size_t key_size() const noexcept { return m_keys == 0 ? 0 : m_sources[m_keys].offset; }
-    size_t vertex_size() const noexcept { return m_sources.row_size() - key_size(); }
-    size_t probe_size() const noexcept { return m_probes.row_size(); }
+    [[nodiscard]] size_t key_size() const noexcept { return m_keys == 0 ? 0 : m_sources[m_keys].offset; }
+    [[nodiscard]] size_t vertex_size() const noexcept { return m_sources.row_size() - key_size(); }
+    [[nodiscard]] size_t probe_size() const noexcept { return m_probes.row_size(); }
     /// Where an edge row's target vertex starts.
-    size_t edge_target_offset() const noexcept { return m_edges[m_keys + arity()].offset; }
+    [[nodiscard]] size_t edge_target_offset() const noexcept { return m_edges[m_keys + arity()].offset; }
     /// The byte offsets, within a vertex, of its columns of the probes' type.
-    std::vector<size_t> probe_positions() const
+    [[nodiscard]] std::vector<size_t> probe_positions() const
     {
         auto result = std::vector<size_t>();
         for (size_t i = m_keys; i < m_sources.size(); ++i)

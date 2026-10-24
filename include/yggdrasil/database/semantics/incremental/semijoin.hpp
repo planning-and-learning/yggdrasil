@@ -35,8 +35,8 @@ class SemijoinEvaluator
     Delta m_delta;
     bool m_initialized = false;
 
-    bool matched(std::span<const std::byte> lhs_row) const;
-    bool kept(std::span<const std::byte> lhs_row) const { return matched(lhs_row) != m_anti; }
+    [[nodiscard]] bool matched(std::span<const std::byte> lhs_row) const;
+    [[nodiscard]] bool kept(std::span<const std::byte> lhs_row) const { return matched(lhs_row) != m_anti; }
 
     /// Records the change of a row of the current L against the result before this update.
     void reconcile(std::span<const std::byte> lhs_row)
@@ -146,20 +146,20 @@ public:
         apply(lhs, rhs);
     }
 
-    const Builder<Relation>& get_result() const&
+    [[nodiscard]] const Builder<Relation>& get_result() const&
     {
         detail::require_initialized(m_initialized);
         return m_result;
     }
-    const Builder<Relation>& get_result() const&& = delete;
-    const Delta& get_delta() const&
+    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);
         return m_delta;
     }
-    const Delta& get_delta() const&& = delete;
+    [[nodiscard]] const Delta& get_delta() const&& = delete;
 
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         return m_lhs.memory_usage() + m_rhs.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + m_lhs_index.memory_usage()
                + m_rhs_index.memory_usage();

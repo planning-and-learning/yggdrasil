@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/semantics/details/plans.hpp"
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void append_column(std::vector<ColumnLayout>& output, ColumnLayout column)
 {
@@ -15,7 +13,6 @@ void append_column(std::vector<ColumnLayout>& output, ColumnLayout column)
     if (column.size > std::numeric_limits<size_t>::max() - column.offset)
         throw std::overflow_error("Relational operation: row size overflow.");
     output.push_back(column);
-}
 }
 }
 

@@ -48,11 +48,11 @@ public:
     ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns);
     ProjectionPlan(std::initializer_list<Index<Column>> input, std::initializer_list<Index<Column>> columns);
 
-    auto input_columns() const& noexcept { return make_view(m_input, *this); }
-    auto input_columns() const&& = delete;
-    auto output_columns() const& noexcept { return make_view(m_output, *this); }
-    auto output_columns() const&& = delete;
-    std::span<const ColumnSlice> positions() const noexcept { return { m_positions.data(), m_positions.size() }; }
+    [[nodiscard]] auto input_columns() const& noexcept { return make_view(m_input, *this); }
+    [[nodiscard]] auto input_columns() const&& = delete;
+    [[nodiscard]] auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    [[nodiscard]] auto output_columns() const&& = delete;
+    [[nodiscard]] std::span<const ColumnSlice> positions() const noexcept { return { m_positions.data(), m_positions.size() }; }
 
     static constexpr auto cista_members() noexcept
     { return ygg::Members<&ProjectionPlan::m_input, &ProjectionPlan::m_output, &ProjectionPlan::m_positions> {}; }
@@ -78,15 +78,15 @@ public:
     JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs);
     JoinPlan(std::initializer_list<Index<Column>> lhs, std::initializer_list<Index<Column>> rhs);
 
-    auto lhs_columns() const& noexcept { return make_view(m_lhs, *this); }
-    auto lhs_columns() const&& = delete;
-    auto rhs_columns() const& noexcept { return make_view(m_rhs, *this); }
-    auto rhs_columns() const&& = delete;
-    auto output_columns() const& noexcept { return make_view(m_output, *this); }
-    auto output_columns() const&& = delete;
-    std::span<const ColumnSlice> lhs_keys() const noexcept { return { m_lhs_keys.data(), m_lhs_keys.size() }; }
-    std::span<const ColumnSlice> rhs_keys() const noexcept { return { m_rhs_keys.data(), m_rhs_keys.size() }; }
-    std::span<const ColumnSlice> rhs_payload() const noexcept { return { m_rhs_payload.data(), m_rhs_payload.size() }; }
+    [[nodiscard]] auto lhs_columns() const& noexcept { return make_view(m_lhs, *this); }
+    [[nodiscard]] auto lhs_columns() const&& = delete;
+    [[nodiscard]] auto rhs_columns() const& noexcept { return make_view(m_rhs, *this); }
+    [[nodiscard]] auto rhs_columns() const&& = delete;
+    [[nodiscard]] auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    [[nodiscard]] auto output_columns() const&& = delete;
+    [[nodiscard]] std::span<const ColumnSlice> lhs_keys() const noexcept { return { m_lhs_keys.data(), m_lhs_keys.size() }; }
+    [[nodiscard]] std::span<const ColumnSlice> rhs_keys() const noexcept { return { m_rhs_keys.data(), m_rhs_keys.size() }; }
+    [[nodiscard]] std::span<const ColumnSlice> rhs_payload() const noexcept { return { m_rhs_payload.data(), m_rhs_payload.size() }; }
 
     static constexpr auto cista_members() noexcept
     { return ygg::Members<&JoinPlan::m_lhs, &JoinPlan::m_rhs, &JoinPlan::m_output, &JoinPlan::m_lhs_keys, &JoinPlan::m_rhs_keys, &JoinPlan::m_rhs_payload> {}; }

@@ -92,19 +92,19 @@ public:
     static size_t hash(const Data<Tag>& element) noexcept(std::is_nothrow_default_constructible_v<H> && std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
     { return gtl::phmap_mix<sizeof(size_t)>()(H {}(element)); }
 
-    std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const;
+    [[nodiscard]] std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const;
 
     /// Performs a prehashed lookup without a shard lock. Prior publication must
     /// happen-before the call, and the set must remain alive and unmodified for
     /// the whole call. Concurrent read-only calls are allowed. No runtime check
     /// enforces these preconditions; violating them is undefined behavior.
-    std::optional<Index<Tag>> find_unsafe_with_hash(const Data<Tag>& element, size_t h) const;
+    [[nodiscard]] std::optional<Index<Tag>> find_unsafe_with_hash(const Data<Tag>& element, size_t h) const;
 
-    std::optional<Index<Tag>> find(const Data<Tag>& element) const { return find_with_hash(element, IndexedHashSet::hash(element)); }
+    [[nodiscard]] std::optional<Index<Tag>> find(const Data<Tag>& element) const { return find_with_hash(element, IndexedHashSet::hash(element)); }
 
-    bool contains_with_hash(const Data<Tag>& element, size_t h) const { return find_with_hash(element, h).has_value(); }
+    [[nodiscard]] bool contains_with_hash(const Data<Tag>& element, size_t h) const { return find_with_hash(element, h).has_value(); }
 
-    bool contains(const Data<Tag>& element) const { return find(element).has_value(); }
+    [[nodiscard]] bool contains(const Data<Tag>& element) const { return find(element).has_value(); }
 
     template<::cista::mode Mode = CISTA_MODE>
     std::pair<Index<Tag>, bool> insert_with_hash(size_t h, const Data<Tag>& element);
@@ -126,17 +126,17 @@ public:
 
     const Data<Tag>& operator[](Index<Tag> index) const noexcept { return *m_rows[uint_t(index)]; }
 
-    const Data<Tag>& at(Index<Tag> index) const { return *m_rows.at(uint_t(index)); }
+    [[nodiscard]] const Data<Tag>& at(Index<Tag> index) const { return *m_rows.at(uint_t(index)); }
 
-    const Data<Tag>& front() const { return *m_rows.front(); }
+    [[nodiscard]] const Data<Tag>& front() const { return *m_rows.front(); }
 
-    const Data<Tag>& back() const { return *m_rows.back(); }
+    [[nodiscard]] const Data<Tag>& back() const { return *m_rows.back(); }
 
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 
-    size_t size() const noexcept { return m_rows.size(); }
+    [[nodiscard]] size_t size() const noexcept { return m_rows.size(); }
 
-    bool empty() const noexcept { return m_rows.empty(); }
+    [[nodiscard]] bool empty() const noexcept { return m_rows.empty(); }
 
 private:
     Store* m_store;  ///< Owned. std::unique_ptr would instantiate its tuple machinery for every element type.

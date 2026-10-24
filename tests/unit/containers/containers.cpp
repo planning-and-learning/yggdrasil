@@ -89,16 +89,16 @@ TEST(YggdrasilTests, CommonArrayViewFrontBackPropagateEmptyViewErrors)
     const auto empty_block_data = BlockView(block_storage.data(), 0);
     const auto empty_block_view = ygg::View<BlockView, int>(empty_block_data, context);
 
-    EXPECT_THROW(empty_block_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_block_view.back(), std::out_of_range);
+    EXPECT_THROW((void) empty_block_view.front(), std::out_of_range);
+    EXPECT_THROW((void) empty_block_view.back(), std::out_of_range);
 
     auto bit_storage = std::array<unsigned, 1> { 0 };
     using BitPackedView = ygg::BasicBitPackedArrayView<unsigned, ygg::bit::ForwardingBlockCoder<unsigned>>;
     const auto empty_bit_data = BitPackedView(bit_storage.data(), 0, 2, 0);
     const auto empty_bit_view = ygg::View<BitPackedView, int>(empty_bit_data, context);
 
-    EXPECT_THROW(empty_bit_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_bit_view.back(), std::out_of_range);
+    EXPECT_THROW((void) empty_bit_view.front(), std::out_of_range);
+    EXPECT_THROW((void) empty_bit_view.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CistaArrayAndPairViewsCompose)
@@ -195,6 +195,8 @@ TEST(YggdrasilTests, CommonContainersUmbrellaHeaderCompiles)
     EXPECT_EQ(variant_view.get<unsigned>(), 7U);
 }
 
+namespace
+{
 struct ArrayThrowingDecodeCoder : bit::ForwardingBlockCoder<unsigned>
 {
     static unsigned decode(unsigned) { throw std::runtime_error("array decode"); }
@@ -209,6 +211,7 @@ struct ArrayConvertingCoder : bit::ForwardingBlockCoder<unsigned>
 {
     static ArrayThrowingDecodeConversion decode(unsigned) noexcept { return {}; }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonDecodedArrayViewsPropagateDecodeAndConversionErrors)
 {
@@ -230,8 +233,8 @@ TEST(YggdrasilTests, CommonDecodedArrayViewsPropagateDecodeAndConversionErrors)
             EXPECT_THROW(view.begin()[0], std::runtime_error);
             EXPECT_THROW(raw[0], std::runtime_error);
             EXPECT_THROW(view[0], std::runtime_error);
-            EXPECT_THROW(view.front(), std::runtime_error);
-            EXPECT_THROW(view.back(), std::runtime_error);
+            EXPECT_THROW((void) view.front(), std::runtime_error);
+            EXPECT_THROW((void) view.back(), std::runtime_error);
         };
         check_view(block);
         check_view(packed);

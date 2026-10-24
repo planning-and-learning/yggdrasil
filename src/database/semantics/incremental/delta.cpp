@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 
-namespace ygg::database::incremental
-{
-namespace detail
+namespace ygg::database::incremental::detail
 {
 void require_initialized(bool initialized)
 {
@@ -15,11 +13,8 @@ void require_initialized(bool initialized)
         throw std::logic_error("Incremental evaluation: initialize before use.");
 }
 }
-}
 
-namespace ygg::database::incremental
-{
-namespace detail
+namespace ygg::database::incremental::detail
 {
 void apply_delta(const Delta& delta, Builder<Relation>& result)
 {
@@ -32,6 +27,5 @@ void apply_delta(const Delta& delta, Builder<Relation>& result)
     }
     for (size_t i = 0; i < delta.added.size(); ++i)
         result.insert(Row(delta.added.row(i), columns));
-}
 }
 }

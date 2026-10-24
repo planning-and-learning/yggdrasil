@@ -83,13 +83,18 @@ TEST(YggdrasilTests, CommonAtomicPackedAccessRejectsInvalidRanges)
 }
 #endif
 
+namespace
+{
 struct CoreConceptFixture
 {
-    auto identifying_members() const noexcept { return 0; }
+    [[nodiscard]] auto identifying_members() const noexcept { return 0; }
 };
+}  // namespace
 
 struct CoreTypeUtilsTag;
 
+namespace
+{
 struct CoreTypeUtilsData
 {
     CoreTypeUtilsData() = default;
@@ -98,6 +103,7 @@ struct CoreTypeUtilsData
     int value {};
     static constexpr auto identifying_members() noexcept { return ygg::Members<&CoreTypeUtilsData::value> {}; }
 };
+}  // namespace
 
 }  // namespace ygg::tests
 
@@ -114,12 +120,15 @@ struct Data<tests::CoreTypeUtilsTag> : tests::CoreTypeUtilsData
 namespace ygg::tests
 {
 
+namespace
+{
 struct CoreTypeUtilsContext
 {
     std::vector<ygg::Data<CoreTypeUtilsTag>> data;
 
     const ygg::Data<CoreTypeUtilsTag>& operator[](ygg::Index<CoreTypeUtilsTag> index) const { return data.at(index.get_value()); }
 };
+}  // namespace
 
 template<typename Range, typename List>
 concept CanExtendCoreRange = requires(const Range& range, List& list) { ygg::extend(range, list); };
@@ -127,6 +136,8 @@ concept CanExtendCoreRange = requires(const Range& range, List& list) { ygg::ext
 template<typename Range, typename List>
 concept CanSetCoreRange = requires(const Range& range, List& list) { ygg::set(range, list); };
 
+namespace
+{
 struct MutableAppendValue
 {
 };
@@ -135,6 +146,7 @@ struct MutableAppendList
     void clear();
 };
 void append(MutableAppendValue&, MutableAppendList&);
+}  // namespace
 
 static_assert(!CanExtendCoreRange<std::span<MutableAppendValue>, MutableAppendList>);
 static_assert(!CanSetCoreRange<std::span<MutableAppendValue>, MutableAppendList>);

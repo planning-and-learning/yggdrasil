@@ -14,14 +14,17 @@
 
 namespace ygg::tests
 {
+namespace
+{
 struct SpanValue
 {
     int value;
 };
 struct ThrowingSpanContext
 {
-    const ThrowingSpanContext& get_canonical_context(const SpanValue&) const { throw std::out_of_range("missing value"); }
+    [[nodiscard]] const ThrowingSpanContext& get_canonical_context(const SpanValue&) const { throw std::out_of_range("missing value"); }
 };
+}  // namespace
 }
 
 namespace ygg
@@ -34,9 +37,9 @@ class View<tests::SpanValue, tests::ThrowingSpanContext>
 
 public:
     View(const tests::SpanValue& handle, const tests::ThrowingSpanContext& context) noexcept : m_handle(&handle), m_context(&context) {}
-    const auto& get_handle() const noexcept { return *m_handle; }
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
 };
 }
 
@@ -56,7 +59,7 @@ TEST(YggdrasilTests, SpanViewBorrowsElementsAndOwnsTemporarySpanHandles)
     EXPECT_EQ(view.front(), 2);
     EXPECT_EQ(view.back(), 6);
     EXPECT_EQ(view.at(1), 4);
-    EXPECT_THROW(view.at(3), std::out_of_range);
+    EXPECT_THROW((void) view.at(3), std::out_of_range);
     EXPECT_EQ(view.data(), values.data());
     values[1] = 9;
     EXPECT_EQ(view[1], 9);
@@ -78,7 +81,7 @@ TEST(YggdrasilTests, SpanViewBorrowsElementsAndOwnsTemporarySpanHandles)
     EXPECT_TRUE(empty.empty());
     EXPECT_EQ(empty.begin(), empty.end());
     EXPECT_EQ(empty.end() - empty.begin(), 0);
-    EXPECT_THROW(empty.at(0), std::out_of_range);
+    EXPECT_THROW((void) empty.at(0), std::out_of_range);
 }
 
 TEST(YggdrasilTests, SpanViewPropagatesCanonicalLookupErrors)

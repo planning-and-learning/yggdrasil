@@ -53,7 +53,7 @@ struct HalfDistance
     std::map<std::vector<uint_t>, uint_t> distances;
     std::span<const ygg::database::ColumnLayout> columns;
 
-    uint_t estimate(std::span<const std::byte> vertex) const
+    [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const
     {
         const auto found = distances.find(decode(vertex, columns));
         return found == distances.end() ? std::numeric_limits<uint_t>::max() : found->second / 2;
@@ -77,8 +77,8 @@ std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const 
         for (size_t i = 0; i < edges.size(); ++i)
         {
             const auto edge = decode(edges.row(i), edges.columns().span());
-            const auto from = std::vector<uint_t>(edge.begin(), edge.begin() + long(k));
-            const auto to = std::vector<uint_t>(edge.begin() + long(k), edge.end());
+            const auto from = std::vector<uint_t>(edge.begin(), edge.begin() + static_cast<long>(k));
+            const auto to = std::vector<uint_t>(edge.begin() + static_cast<long>(k), edge.end());
             if (std::ranges::find(frontier, to) != frontier.end() && result.emplace(from, level).second)
                 next.push_back(from);
         }
@@ -113,7 +113,7 @@ void check_sequence(ygg::database::QueryView<> edges,
     heuristic.columns = sources.columns().span();
     auto workspace = ygg::database::DistanceWorkspace(plan);
     auto result = Relation(plan.output_columns().span());
-    auto checked = size_t(0);
+    auto checked = static_cast<size_t>(0);
     for (size_t step = 0; step < steps; ++step)
     {
         mutate(step);
@@ -150,7 +150,7 @@ TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
     auto sources = Relation({ x });
     auto targets = Relation({ y });
     auto random = std::mt19937(GetParam());
-    const auto vertex = [&] { return uint_t(random() % 12); };
+    const auto vertex = [&] { return static_cast<uint_t>(random() % 12); };
     auto maximal = std::vector<Relation>();
     maximal.emplace_back(std::initializer_list<Column> { x, y });
     for (uint_t v = 0; v < 12; ++v)
@@ -207,10 +207,11 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
         qb::project(repository,
                     qb::generic_join(repository, std::span<const ygg::database::QueryView<>>(inputs_of_second), std::span<const Column>(variable_order)),
                     { a, b, a2, b2 });
-    const auto teleport = qb::project(
-        repository,
-        qb::join(repository, qb::select_value(repository, qb::rename(repository, moves, { a, a2 }), a, uint_t(0)), qb::rename(repository, identity, { b, b2 })),
-        { a, b, a2, b2 });
+    const auto teleport = qb::project(repository,
+                                      qb::join(repository,
+                                               qb::select_value(repository, qb::rename(repository, moves, { a, a2 }), a, static_cast<uint_t>(0)),
+                                               qb::rename(repository, identity, { b, b2 })),
+                                      { a, b, a2, b2 });
     const auto all = qb::union_(repository, qb::union_(repository, first, second), teleport);
     // Safe-range negation: no edge may enter a blocked pair, nor end on equal coordinates.
     const auto diagonal = qb::select_equal(repository, all, a2, b2);
@@ -224,14 +225,14 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
     {
         inputs[1].insert(std::tuple { v });
         for (uint_t w = 0; w < n; w += 2)
-            inputs[0].insert(std::tuple { v, uint_t((v + w + 1) % n) });
+            inputs[0].insert(std::tuple { v, ((v + w + 1) % n) });
         inputs[4].insert(std::tuple { v, v });
-        inputs[3].insert(std::tuple { v, uint_t((v + 1) % n) });
+        inputs[3].insert(std::tuple { v, ((v + 1) % n) });
     }
     auto sources = Relation({ a, b });
     auto targets = Relation({ a2, b2 });
     auto random = std::mt19937(GetParam());
-    const auto value = [&] { return uint_t(random() % n); };
+    const auto value = [&] { return static_cast<uint_t>(random() % n); };
     const auto toggle = [](Relation& relation, auto row)
     {
         if (relation.contains(row))
@@ -247,7 +248,7 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
         maximal[1].insert(std::tuple { v });
         for (uint_t w = 0; w < n; ++w)
             maximal[0].insert(std::tuple { v, w });
-        maximal[3].insert(std::tuple { v, uint_t((v + 1) % n) });
+        maximal[3].insert(std::tuple { v, ((v + 1) % n) });
         maximal[4].insert(std::tuple { v, v });
     }
     check_sequence(edges,
@@ -292,7 +293,7 @@ TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
     auto workspace = ygg::database::DistanceWorkspace(plan);
     auto result = Relation(plan.output_columns().span());
     auto random = std::mt19937(GetParam());
-    const auto vertex = [&] { return uint_t(random() % n); };
+    const auto vertex = [&] { return static_cast<uint_t>(random() % n); };
     for (size_t step = 0; step < 300; ++step)
     {
         if (step % 25 == 0)
@@ -331,7 +332,7 @@ struct ListGraph
 
     static uint_t id(std::span<const std::byte> vertex)
     {
-        auto value = uint_t(0);
+        auto value = static_cast<uint_t>(0);
         std::memcpy(&value, vertex.data(), sizeof(value));
         return value;
     }
@@ -361,8 +362,8 @@ struct ListVertices
 {
     std::vector<ListGraph::Bytes> rows;
 
-    size_t size() const noexcept { return rows.size(); }
-    std::span<const std::byte> row(size_t i) const { return rows[i]; }
+    [[nodiscard]] size_t size() const noexcept { return rows.size(); }
+    [[nodiscard]] std::span<const std::byte> row(size_t i) const { return rows[i]; }
 };
 
 /// AStar::path() visits a shortest path from a source to a target, whether the search ends at a target or on a stored
@@ -370,9 +371,9 @@ struct ListVertices
 TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
 {
     auto rng = std::mt19937(GetParam());
-    const auto n = uint_t(40);
-    auto paths = size_t(0);
-    auto chains = size_t(0);  // Paths that end on a stored chain.
+    const auto n = static_cast<uint_t>(40);
+    auto paths = static_cast<size_t>(0);
+    auto chains = static_cast<size_t>(0);  // Paths that end on a stored chain.
     auto heuristic = ygg::database::BlindDistanceHeuristic {};
     auto tree = ygg::database::SearchTree(sizeof(uint_t));
     auto backward = ygg::database::BackwardFrontier {};
@@ -382,8 +383,8 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
         for (size_t e = 0; e < 70; ++e)
         {
-            const auto u = uint_t(rng() % n);
-            const auto v = uint_t(rng() % n);
+            const auto u = static_cast<uint_t>(rng() % n);
+            const auto v = static_cast<uint_t>(rng() % n);
             if (u != v && std::ranges::find(graph.out[u], v) == graph.out[u].end())
             {
                 graph.out[u].push_back(v);
@@ -394,13 +395,13 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         auto targets = ygg::database::VertexSet(sizeof(uint_t));
         for (size_t i = 0; i < 2; ++i)
         {
-            sources.rows.push_back(ListGraph::bytes(uint_t(rng() % n)));
-            targets.insert(std::span<const std::byte>(ListGraph::bytes(uint_t(rng() % n))));
+            sources.rows.push_back(ListGraph::bytes(static_cast<uint_t>(rng() % n)));
+            targets.insert(std::span<const std::byte>(ListGraph::bytes(static_cast<uint_t>(rng() % n))));
         }
         tree.clear();
         auto ids = std::vector<uint_t>();
         for (size_t i = 0; i < targets.size(); ++i)
-            ids.push_back(tree.ensure(targets[uint_t(i)], heuristic));
+            ids.push_back(tree.ensure(targets[static_cast<uint_t>(i)], heuristic));
         backward.start(ids);
         auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0);
         const auto distance = search.run(sources);
@@ -412,7 +413,7 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         // then the stored chain from where it ended to a target.
         const auto is_source = [&](uint_t v) { return std::ranges::any_of(sources.rows, [&](const auto& row) { return ListGraph::id(row) == v; }); };
         const auto edge = [&](uint_t u, uint_t v) { return graph.edge_exists(ListGraph::bytes(u), ListGraph::bytes(v)); };
-        const auto source = size_t(std::ranges::find_if(path, is_source) - path.begin());
+        const auto source = static_cast<size_t>(std::ranges::find_if(path, is_source) - path.begin());
         ASSERT_LT(source, path.size()) << "trial " << trial;
         ASSERT_EQ(path.size(), distance + 1) << "trial " << trial;
         for (size_t i = 0; i < source; ++i)

@@ -58,11 +58,14 @@ struct RepositoryTypesPackedObjectTag;
 struct RepositoryTypesBuilderOther;
 struct RepositoryTypesCheckout;
 
+namespace
+{
 struct RepositoryTypesContext
 {
-    const RepositoryTypesContext& get_canonical_context(const RepositoryTypesElement&) const noexcept;
-    size_t get_index() const noexcept { return 0; }
+    [[nodiscard]] const RepositoryTypesContext& get_canonical_context(const RepositoryTypesElement&) const noexcept;
+    [[nodiscard]] size_t get_index() const noexcept { return 0; }
 };
+}  // namespace
 
 }  // namespace ygg::tests
 
@@ -153,6 +156,8 @@ namespace ygg::tests
 template<typename T>
 concept HasWidth = requires(const T& value) { value.width(); };
 
+namespace
+{
 struct RepositoryTypesRepository
 {
     using object_tag = RepositoryTypesObjectTag;
@@ -161,7 +166,7 @@ struct RepositoryTypesRepository
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
 
     std::vector<ygg::Index<Object>> operator[](ygg::Index<Binding>) const { return {}; }
-    size_t get_index() const noexcept { return 0; }
+    [[nodiscard]] size_t get_index() const noexcept { return 0; }
 };
 
 inline const RepositoryTypesRepository& get_repository(const RepositoryTypesContext&) noexcept
@@ -169,6 +174,7 @@ inline const RepositoryTypesRepository& get_repository(const RepositoryTypesCont
     static const auto repository = RepositoryTypesRepository();
     return repository;
 }
+}  // namespace
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles)
 {
@@ -326,6 +332,8 @@ static_assert(!CanUseUnsupportedRelation<ContractConcurrentRelations, Repository
 static_assert(!CanUseUnsupportedRelation<ContractRepository, RepositoryTypesElement>);
 static_assert(!ViewConcept<Index<formalism::RelationBinding<RepositoryTypesElement, RepositoryTypesObjectTag>>, ContractRepository>);
 
+namespace
+{
 struct AdlViewContext
 {
     const Data<RepositoryTypesElement>* data;
@@ -336,12 +344,16 @@ struct AdlViewContext
 
 const AdlViewContext& get_canonical_context(Index<RepositoryTypesElement>, const AdlViewContext& context YGG_LIFETIMEBOUND) noexcept
 { return context.owner ? *context.owner : context; }
+}  // namespace
 
+namespace
+{
 struct WrongAdlViewContext
 {
     const Data<RepositoryTypesElement>& operator[](Index<RepositoryTypesElement>) const;
 };
 int get_canonical_context(Index<RepositoryTypesElement>, const WrongAdlViewContext&);
+}  // namespace
 
 template<typename Context>
 concept CanMakeElementView = requires(const Context& context, Index<RepositoryTypesElement> index) { make_view(index, context); };
@@ -374,14 +386,19 @@ TEST(YggdrasilTests, CommonIndexedViewPreservesLookupHandleAndOwner)
     EXPECT_EQ(std::get<1>(view.identifying_members()), repository.get_index());
 }
 
+namespace
+{
 struct WrongRelationObjectRows
 {
     using object_tag = RepositoryTypesObjectTag;
     using RelationTypes = TypeList<RepositoryTypesRelation>;
     std::vector<Index<formalism::Object<RepositoryTypesPackedObjectTag>>> operator[](Index<ContractBinding>) const;
 };
+}  // namespace
 static_assert(!formalism::RelationRepositoryFor<WrongRelationObjectRows, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 
+namespace
+{
 struct AliasFreeRelationRows
 {
     using RelationTypes = TypeList<RepositoryTypesRelation>;
@@ -400,6 +417,7 @@ struct MutableRelationContext
 {
     friend const AliasFreeRelationRows& get_repository(MutableRelationContext&);
 };
+}  // namespace
 
 static_assert(formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(formalism::RelationRepositoryFor<const AliasFreeRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
@@ -411,7 +429,7 @@ static_assert(!formalism::RelationContextFor<MutableRelationContext&, Repository
 static_assert(!formalism::RelationRepositoryFor<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 
 template<typename Relations>
-void expect_binding_access_for_each_relation_type()
+static void expect_binding_access_for_each_relation_type()
 {
     using ObjectTag = typename Relations::object_tag;
     using ObjectIndex = Index<formalism::Object<ObjectTag>>;
@@ -453,6 +471,8 @@ TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
         formalism::ConcurrentRelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
 }
 
+namespace
+{
 struct PreparedRepository
 {
     ContractSymbols symbols;
@@ -474,7 +494,10 @@ void prepare_for_insert(PreparedRepository& repository, Data<RepositoryTypesElem
     ++repository.preparation_count;
     data.value %= 10;
 }
+}  // namespace
 
+namespace
+{
 struct MissingPreparationRepository
 {
     std::pair<View<Index<RepositoryTypesElement>, MissingPreparationRepository>, bool> insert(Data<RepositoryTypesElement>&);
@@ -484,13 +507,17 @@ struct WrongPreparationRepository
     std::pair<View<Index<RepositoryTypesElement>, WrongPreparationRepository>, bool> insert(Data<RepositoryTypesElement>&);
 };
 int prepare_for_insert(WrongPreparationRepository&, Data<RepositoryTypesElement>&);
+}  // namespace
+namespace
+{
 struct WrongInterningResultRepository
 {
     Index<RepositoryTypesElement> insert(Data<RepositoryTypesElement>&);
 };
 void prepare_for_insert(WrongInterningResultRepository&, Data<RepositoryTypesElement>&);
+}  // namespace
 
-void prepare_for_insert(ContractRepository&, Data<ContractBinding>&) noexcept {}
+static void prepare_for_insert(ContractRepository&, Data<ContractBinding>&) noexcept {}
 
 template<typename Repository, typename T>
 concept CanPrepareAndIntern = requires(Repository& repository, Data<T>& data) { formalism::insert(repository, data); };
@@ -617,10 +644,13 @@ static_assert(formalism::RelationBindingViewConcept<PublishedContractBindingView
 static_assert(formalism::RelationBindingViewConcept<const PublishedContractBindingView&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(formalism::RelationBindingViewConcept<BorrowedContractBindingView&&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 
+namespace
+{
 struct MutableBindingView : PublishedContractBindingView
 {
     std::pair<Index<RepositoryTypesRelation>, std::span<const Index<formalism::Object<RepositoryTypesObjectTag>>>> get_key();
 };
+}  // namespace
 static_assert(!formalism::RelationBindingViewConcept<MutableBindingView&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
 static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesElement, RepositoryTypesObjectTag>);
@@ -735,7 +765,7 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositoryFrontLocalIsChecked)
 {
     auto repository = ygg::formalism::BasicSymbolRepository<RepositoryTypesElement>();
 
-    EXPECT_THROW(repository.front_local(), std::out_of_range);
+    EXPECT_THROW((void) repository.front_local(), std::out_of_range);
     EXPECT_EQ(repository.memory_usage(), 0);
 
     auto data = ygg::Data<RepositoryTypesElement> {};
@@ -749,7 +779,7 @@ TEST(YggdrasilTests, CommonBasicSymbolRepositoryFrontLocalIsChecked)
     EXPECT_GT(memory_usage, 0);
 
     repository.clear();
-    EXPECT_THROW(repository.front_local(), std::out_of_range);
+    EXPECT_THROW((void) repository.front_local(), std::out_of_range);
     EXPECT_EQ(repository.memory_usage(), memory_usage);
 }
 
@@ -842,8 +872,8 @@ TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
     EXPECT_EQ(root.find_with_hash(data, hash), std::nullopt);
     EXPECT_EQ(root.find(data), std::nullopt);
     EXPECT_THROW(root[missing], std::out_of_range);
-    EXPECT_THROW(root.front<RepositoryTypesElement>(), std::out_of_range);
-    EXPECT_THROW(root.get_canonical_context(missing), std::out_of_range);
+    EXPECT_THROW((void) root.front<RepositoryTypesElement>(), std::out_of_range);
+    EXPECT_THROW((void) root.get_canonical_context(missing), std::out_of_range);
 
     const auto [view, created] = root.insert(data);
 
@@ -907,7 +937,7 @@ TEST(YggdrasilTests, CommonBasicRelationRepositoryFrontLocalIsChecked)
     auto repository = Repository();
     const auto relation = ygg::Index<RepositoryTypesRelation>(0);
 
-    EXPECT_THROW(repository.front_local(relation), std::out_of_range);
+    EXPECT_THROW((void) repository.front_local(relation), std::out_of_range);
 
     auto objects = ygg::IndexList<Object> {};
     objects.push_back(ygg::Index<Object>(0));
@@ -920,7 +950,7 @@ TEST(YggdrasilTests, CommonBasicRelationRepositoryFrontLocalIsChecked)
     EXPECT_EQ(repository.front_local(relation).size(), 2);
 
     repository.clear();
-    EXPECT_THROW(repository.front_local(relation), std::out_of_range);
+    EXPECT_THROW((void) repository.front_local(relation), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
@@ -942,8 +972,8 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
 
     EXPECT_EQ(root.find(data), std::nullopt);
     EXPECT_THROW(root[missing], std::out_of_range);
-    EXPECT_THROW(root.front(relation), std::out_of_range);
-    EXPECT_THROW(root.get_canonical_context(missing), std::out_of_range);
+    EXPECT_THROW((void) root.front(relation), std::out_of_range);
+    EXPECT_THROW((void) root.get_canonical_context(missing), std::out_of_range);
 
     const auto [view, created] = root.insert(data);
 
@@ -1017,8 +1047,8 @@ TEST(YggdrasilTests, CommonRelationRepositoryRejectsWrongArityWithoutMutation)
     static_assert(!noexcept(repository.find_with_hash(wrong, Repository::hash(wrong))));
     static_assert(!noexcept(repository.find(wrong)));
 
-    EXPECT_THROW(repository.find_with_hash(wrong, Repository::hash(wrong)), std::invalid_argument);
-    EXPECT_THROW(repository.find(wrong), std::invalid_argument);
+    EXPECT_THROW((void) repository.find_with_hash(wrong, Repository::hash(wrong)), std::invalid_argument);
+    EXPECT_THROW((void) repository.find(wrong), std::invalid_argument);
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
     EXPECT_EQ(repository.size(relation), 1);
     EXPECT_EQ(repository[view.get_index()].size(), 2);
@@ -1156,11 +1186,14 @@ template<typename Range>
 concept CanMakeRandomAccessBindingRange =
     requires { typename formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, Range>; };
 
+namespace
+{
 struct MutableOnlyBindingRows
 {
     Index<formalism::Row>* begin();
     Index<formalism::Row>* end();
 };
+}  // namespace
 
 using NonCommonBindingRows = std::ranges::subrange<std::counted_iterator<const Index<formalism::Row>*>, std::default_sentinel_t>;
 static_assert(std::ranges::random_access_range<MutableOnlyBindingRows>);
@@ -1177,6 +1210,8 @@ static_assert(!CanMakeRandomAccessBindingRange<std::forward_list<Index<formalism
 static_assert(CanMakeForwardBindingRange<std::vector<Index<formalism::Row>>&>);
 static_assert(CanMakeRandomAccessBindingRange<const std::vector<Index<formalism::Row>>&>);
 
+namespace
+{
 struct ThrowingBindingRows
 {
     enum class Failure : std::uint8_t
@@ -1189,25 +1224,26 @@ struct ThrowingBindingRows
     Failure failure = Failure::NONE;
     std::array<Index<formalism::Row>, 1> rows { Index<formalism::Row>(2) };
 
-    const Index<formalism::Row>* begin() const
+    [[nodiscard]] const Index<formalism::Row>* begin() const
     {
         if (failure == Failure::BEGIN)
             throw std::runtime_error("begin");
         return rows.data();
     }
-    const Index<formalism::Row>* end() const
+    [[nodiscard]] const Index<formalism::Row>* end() const
     {
         if (failure == Failure::END)
             throw std::runtime_error("end");
         return std::to_address(rows.end());
     }
-    size_t size() const
+    [[nodiscard]] size_t size() const
     {
         if (failure == Failure::SIZE)
             throw std::runtime_error("size");
         return rows.size();
     }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonRelationBindingRangeViewsPropagateRangeExceptions)
 {
@@ -1271,7 +1307,7 @@ TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
     const auto empty_forward_view = ygg::View<ForwardRange, RepositoryTypesContext>(empty_forward_range, context);
     EXPECT_TRUE(empty_forward_view.empty());
     EXPECT_EQ(empty_forward_view.size(), 0);
-    EXPECT_THROW(empty_forward_view.front(), std::out_of_range);
+    EXPECT_THROW((void) empty_forward_view.front(), std::out_of_range);
 
     using RandomAccessRange = ygg::formalism::RelationBindingsRandomAccessRange<RepositoryTypesRelation, RepositoryTypesObjectTag, Rows>;
     const auto random_access_range = RandomAccessRange { &relation, &rows };
@@ -1292,8 +1328,8 @@ TEST(YggdrasilTests, CommonRelationBindingRangeViewsExposeRows)
     const auto empty_random_access_view = ygg::View<RandomAccessRange, RepositoryTypesContext>(empty_random_access_range, context);
     EXPECT_TRUE(empty_random_access_view.empty());
     EXPECT_EQ(empty_random_access_view.size(), 0);
-    EXPECT_THROW(empty_random_access_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_random_access_view.back(), std::out_of_range);
+    EXPECT_THROW((void) empty_random_access_view.front(), std::out_of_range);
+    EXPECT_THROW((void) empty_random_access_view.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRelationBindingIteratorsPreserveUnderlyingTraversal)
@@ -1389,7 +1425,7 @@ TEST(YggdrasilTests, CommonRelationBindingIteratorsPreserveUnderlyingTraversal)
         EXPECT_TRUE(view.empty());
         EXPECT_EQ(view.begin(), view.end());
         EXPECT_EQ(std::ranges::distance(view), 0);
-        EXPECT_THROW(view.front(), std::out_of_range);
+        EXPECT_THROW((void) view.front(), std::out_of_range);
     };
     const auto empty_forward = ForwardRows {};
     const auto empty_bidirectional = BidirectionalRows {};
@@ -1409,8 +1445,8 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
     auto repository = Repository(0);
 
     EXPECT_THROW(repository[ygg::Index<RepositoryTypesElement>(0)], std::out_of_range);
-    EXPECT_THROW(repository.front<RepositoryTypesElement>(), std::out_of_range);
-    EXPECT_THROW(repository.get_canonical_context(ygg::Index<RepositoryTypesElement>(0)), std::out_of_range);
+    EXPECT_THROW((void) repository.front<RepositoryTypesElement>(), std::out_of_range);
+    EXPECT_THROW((void) repository.get_canonical_context(ygg::Index<RepositoryTypesElement>(0)), std::out_of_range);
     EXPECT_THROW(ygg::make_view(ygg::Index<RepositoryTypesElement>(0), repository), std::out_of_range);
 
     auto data = ygg::Data<RepositoryTypesElement> {};
@@ -1438,8 +1474,8 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
     const auto missing = ygg::Index<Binding> { relation, ygg::Index<ygg::formalism::Row>(0) };
 
     EXPECT_THROW(repository[missing], std::out_of_range);
-    EXPECT_THROW(repository.front(relation), std::out_of_range);
-    EXPECT_THROW(repository.get_canonical_context(missing), std::out_of_range);
+    EXPECT_THROW((void) repository.front(relation), std::out_of_range);
+    EXPECT_THROW((void) repository.get_canonical_context(missing), std::out_of_range);
     EXPECT_THROW(ygg::make_view(missing, repository), std::out_of_range);
     const auto rows = std::array { ygg::Index<ygg::formalism::Row>(0) };
     const auto bindings =
@@ -1467,7 +1503,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
 }
 
 template<typename Repository>
-Repository make_membership_repository(size_t index, const Repository* parent = nullptr)
+static Repository make_membership_repository(size_t index, const Repository* parent = nullptr)
 {
     if constexpr (std::constructible_from<Repository, size_t, const Repository*>)
         return Repository(index, parent);
@@ -1476,7 +1512,7 @@ Repository make_membership_repository(size_t index, const Repository* parent = n
 }
 
 template<typename Repository>
-void check_symbol_membership()
+static void check_symbol_membership()
 {
     using Handle = Index<RepositoryTypesElement>;
     using ElementView = View<Handle, Repository>;
@@ -1530,7 +1566,7 @@ TEST(YggdrasilTests, CommonSymbolMembershipChecksCanonicalOwnersAcrossLayers)
 }
 
 template<typename Repository>
-void check_relation_membership()
+static void check_relation_membership()
 {
     using Handle = Index<ContractBinding>;
     using BindingView = View<Handle, Repository>;

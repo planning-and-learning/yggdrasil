@@ -75,10 +75,10 @@ class GeometricByteStorage
 
         ~Segment() { free_storage(storage); }
 
-        size_t remaining() const noexcept { return capacity - used; }
+        [[nodiscard]] size_t remaining() const noexcept { return capacity - used; }
 
         /// The segment's bytes: subspans assert their bounds in Debug (YGGDRASIL_STDLIB_ASSERTIONS).
-        std::span<std::byte> bytes() const noexcept { return { storage, capacity }; }
+        [[nodiscard]] std::span<std::byte> bytes() const noexcept { return { storage, capacity }; }
 
         std::byte* allocate(size_t size) noexcept
         {
@@ -96,7 +96,7 @@ class GeometricByteStorage
     };
     using PublishedSegmentPointers = std::conditional_t<PublishSegments, std::array<std::byte*, Layout::max_segments>, NoPublishedSegments>;
 
-    size_t nominal_capacity(size_t segment) const
+    [[nodiscard]] size_t nominal_capacity(size_t segment) const
     {
         if (segment >= Layout::max_segments)
             throw std::length_error("GeometricByteStorage: segment is too large.");
@@ -107,7 +107,7 @@ class GeometricByteStorage
         return units * m_unit_size;
     }
 
-    size_t next_capacity(size_t needed) const
+    [[nodiscard]] size_t next_capacity(size_t needed) const
     {
         auto capacity = nominal_capacity(m_segments.size());
         if (capacity == 0)
@@ -215,7 +215,7 @@ private:
         }
     }
 
-    const std::byte* data(size_t segment) const noexcept
+    [[nodiscard]] const std::byte* data(size_t segment) const noexcept
     {
         if constexpr (PublishSegments)
         {
@@ -230,7 +230,8 @@ private:
 
     /// The bytes of the units the layout places in `segment` (a segment may hold more).
     std::span<std::byte> unit_bytes(size_t segment) noexcept { return { data(segment), Layout::segment_capacity(segment) * m_unit_size }; }
-    std::span<const std::byte> unit_bytes(size_t segment) const noexcept { return { data(segment), Layout::segment_capacity(segment) * m_unit_size }; }
+    [[nodiscard]] std::span<const std::byte> unit_bytes(size_t segment) const noexcept
+    { return { data(segment), Layout::segment_capacity(segment) * m_unit_size }; }
 
 public:
     std::byte* data_at(size_t unit_index) noexcept
@@ -239,7 +240,7 @@ public:
         return unit_bytes(segment).subspan(Layout::segment_offset(unit_index, segment) * m_unit_size, m_unit_size).data();
     }
 
-    const std::byte* data_at(size_t unit_index) const noexcept
+    [[nodiscard]] const std::byte* data_at(size_t unit_index) const noexcept
     {
         const auto segment = Layout::segment_index(unit_index);
         return unit_bytes(segment).subspan(Layout::segment_offset(unit_index, segment) * m_unit_size, m_unit_size).data();
@@ -264,7 +265,7 @@ public:
         m_current_segment = 0;
     }
 
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t bytes = 0;
         for (const auto& segment : m_segments)

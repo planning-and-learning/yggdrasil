@@ -16,10 +16,13 @@
 
 namespace ygg::tests
 {
+namespace
+{
 struct MultimapKey
 {
     int value;
 };
+}  // namespace
 }  // namespace ygg::tests
 
 namespace ygg

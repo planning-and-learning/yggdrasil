@@ -100,7 +100,7 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
                 filters.value.push_back(branch.value[i]);
             }
         for (size_t i = 0; i < branch.negations.size(); ++i)
-            if (pending_negation[i] && std::ranges::all_of(branch.negations[i].outer, [&](uint32_t var) { return bool(bound[var]); }))
+            if (pending_negation[i] && std::ranges::all_of(branch.negations[i].outer, [&](uint32_t var) { return static_cast<bool>(bound[var]); }))
             {
                 pending_negation[i] = false;
                 filters.negations.push_back(i);
@@ -144,7 +144,8 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
     for (auto s = plan.steps.size(); s-- > 0;)
     {
         auto& step = plan.steps[s];
-        step.exists = std::ranges::none_of(step.assign, [&](const std::pair<size_t, uint32_t>& assignment) { return bool(read[assignment.second]); });
+        step.exists =
+            std::ranges::none_of(step.assign, [&](const std::pair<size_t, uint32_t>& assignment) { return static_cast<bool>(read[assignment.second]); });
         for (const auto& pairs : { &step.key, &step.assign, &step.compare })
             for (const auto& [c, var] : *pairs)
                 read[var] = true;

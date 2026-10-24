@@ -60,7 +60,7 @@ class Planner
     }
     static bool joins(QueryView<> query) { return is<QueryJoinTag>(query) || is<QueryGenericJoinTag>(query); }
 
-    std::optional<QueryIndex> source(QueryView<> plan) const
+    [[nodiscard]] std::optional<QueryIndex> source(QueryView<> plan) const
     {
         const auto position = plan.get_index().get_value();
         return position < m_sources.size() ? m_sources[position] : std::nullopt;

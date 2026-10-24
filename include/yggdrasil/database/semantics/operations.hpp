@@ -40,7 +40,7 @@ struct Workspace
     UnorderedMultiMap<hash_t, size_t> join_index;
 
     /// Retained scratch storage.
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         return columns.capacity() * sizeof(ColumnLayout) + (lhs_keys.capacity() + rhs_keys.capacity() + rhs_payload.capacity()) * sizeof(ColumnSlice)
                + row.capacity() + join_index.memory_usage();

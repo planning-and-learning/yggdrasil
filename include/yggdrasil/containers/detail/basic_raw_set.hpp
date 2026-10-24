@@ -103,7 +103,7 @@ private:
 protected:
     explicit BasicRawSet(std::unique_ptr<pool_type> pool) : m_pool(std::move(pool)), m_set(0, IndexableHash(*m_pool), IndexableEqualTo(*m_pool)) {}
 
-    const pool_type& storage() const noexcept { return *m_pool; }
+    [[nodiscard]] const pool_type& storage() const noexcept { return *m_pool; }
 
     /// Used by fixed-array sets whose pool supports compact erasure.
     void erase_index(index_type index)
@@ -143,14 +143,14 @@ public:
     BasicRawSet& operator=(BasicRawSet&&) = default;
     ~BasicRawSet() = default;
 
-    std::optional<index_type> find(std::span<const value_type> value) const
+    [[nodiscard]] std::optional<index_type> find(std::span<const value_type> value) const
     {
         ensure_fits(value);
         const auto hash = m_set.hash(value);
         return find_value_with_hash<ThreadSafe>(m_set, value, hash);
     }
 
-    bool contains(std::span<const value_type> value) const { return find(value).has_value(); }
+    [[nodiscard]] bool contains(std::span<const value_type> value) const { return find(value).has_value(); }
 
     index_type insert(std::span<const value_type> value)
     {
@@ -160,7 +160,7 @@ public:
     }
 
     template<SizedForwardRangeOf<value_type> R>
-    std::optional<index_type> find(const R& value) const
+    [[nodiscard]] std::optional<index_type> find(const R& value) const
     {
         ensure_fits(value);
         const auto hash = m_set.hash(value);
@@ -168,7 +168,7 @@ public:
     }
 
     template<SizedForwardRangeOf<value_type> R>
-    bool contains(const R& value) const
+    [[nodiscard]] bool contains(const R& value) const
     { return find(value).has_value(); }
 
     template<SizedForwardRangeOf<value_type> R>
@@ -181,13 +181,13 @@ public:
     }
 
     ConstView operator[](index_type index) const noexcept { return (*m_pool)[index]; }
-    ConstView at(index_type index) const { return m_pool->at(index); }
-    ConstView front() const { return m_pool->front(); }
-    ConstView back() const { return m_pool->back(); }
+    [[nodiscard]] ConstView at(index_type index) const { return m_pool->at(index); }
+    [[nodiscard]] ConstView front() const { return m_pool->front(); }
+    [[nodiscard]] ConstView back() const { return m_pool->back(); }
 
-    size_t size() const noexcept { return m_pool->size(); }
-    bool empty() const noexcept { return m_pool->empty(); }
-    size_t memory_usage() const noexcept { return m_pool->memory_usage() + hash_set_memory_usage(m_set); }
+    [[nodiscard]] size_t size() const noexcept { return m_pool->size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_pool->empty(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_pool->memory_usage() + hash_set_memory_usage(m_set); }
 
     void clear() noexcept
     {

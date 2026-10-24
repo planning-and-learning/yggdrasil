@@ -105,28 +105,28 @@ public:
         return { std::launder(reinterpret_cast<const T*>(payload.data())), static_cast<size_t>(size) };
     }
 
-    ConstView at(uint_t index) const
+    [[nodiscard]] ConstView at(uint_t index) const
     {
         ensure_index(index);
         return (*this)[index];
     }
 
-    ConstView front() const
+    [[nodiscard]] ConstView front() const
     {
         ensure_not_empty();
         return (*this)[0];
     }
 
-    ConstView back() const
+    [[nodiscard]] ConstView back() const
     {
         ensure_not_empty();
         return (*this)[to_uint_t(size() - 1)];
     }
 
-    size_t memory_usage() const noexcept { return m_storage.memory_usage() + m_index.memory_usage(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_storage.memory_usage() + m_index.memory_usage(); }
 
-    size_t size() const noexcept { return m_index.size(); }
-    bool empty() const noexcept { return m_index.empty(); }
+    [[nodiscard]] size_t size() const noexcept { return m_index.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_index.empty(); }
 
     void clear() noexcept
     {

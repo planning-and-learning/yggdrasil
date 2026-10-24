@@ -67,13 +67,13 @@ public:
             mark(mark, branch, false);
     }
 
-    size_t input_count() const noexcept { return m_base.input_count(); }
-    std::span<const ColumnLayout> columns() const noexcept { return m_base.columns(); }
-    const Builder<Relation>& input(size_t slot) const { return m_base.input(slot); }
-    bool bound() const noexcept { return m_base.bound(); }
-    bool is_static(size_t slot) const noexcept { return m_base.is_static(slot); }
+    [[nodiscard]] size_t input_count() const noexcept { return m_base.input_count(); }
+    [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_base.columns(); }
+    [[nodiscard]] const Builder<Relation>& input(size_t slot) const { return m_base.input(slot); }
+    [[nodiscard]] bool bound() const noexcept { return m_base.bound(); }
+    [[nodiscard]] bool is_static(size_t slot) const noexcept { return m_base.is_static(slot); }
     /// Increases whenever a change can remove output rows (see the class comment).
-    uint64_t version() const noexcept { return m_version; }
+    [[nodiscard]] uint64_t version() const noexcept { return m_version; }
     size_t prepare(std::vector<size_t> positions) { return m_base.prepare(std::move(positions)); }
     template<RowPredicate OnRow>
     void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
@@ -116,7 +116,7 @@ public:
         return m_changed;
     }
     /// The change of a slot that the last bind() returned.
-    const InputChange& change(size_t slot) const { return m_changes.at(slot); }
+    [[nodiscard]] const InputChange& change(size_t slot) const { return m_changes.at(slot); }
 
     /// Applies an exact change to a bound, non-static slot: `removed` rows are in it, `added` rows are not. A change
     /// that throws leaves the slot and version() unchanged (bound::QueryEvaluator::replace).
@@ -205,7 +205,7 @@ private:
         {
             if (atom.slot != slot || rows.empty())
                 return true;
-            if (!std::ranges::all_of(atom.vars, [&](uint32_t var) { return bool(top_vars[var]); }))
+            if (!std::ranges::all_of(atom.vars, [&](uint32_t var) { return static_cast<bool>(top_vars[var]); }))
                 return false;
             const auto& plan = seed_plan(b, atom);
             for (size_t r = 0; r < rows.size(); ++r)

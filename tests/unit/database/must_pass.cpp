@@ -102,13 +102,13 @@ TEST(DatabaseMustPass, ObjectsOnEveryPathPerKey)
              std::tuple<uint_t, uint_t, uint_t>> { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 4 }, { 0, 3, 4 }, { 0, 4, 5 }, { 1, 1, 2 }, { 1, 2, 4 }, { 1, 3, 4 } })
         edges.insert(std::tuple { k, from, to });
     auto sources = Relation({ key, u });
-    sources.insert(std::tuple { uint_t(0), uint_t(1) });
-    sources.insert(std::tuple { uint_t(1), uint_t(1) });
-    sources.insert(std::tuple { uint_t(2), uint_t(1) });  // Key 2 has no edges and no targets.
+    sources.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
+    sources.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(1) });
+    sources.insert(std::tuple { static_cast<uint_t>(2), static_cast<uint_t>(1) });  // Key 2 has no edges and no targets.
     auto targets = Relation({ key, u });
-    targets.insert(std::tuple { uint_t(0), uint_t(5) });
-    targets.insert(std::tuple { uint_t(1), uint_t(4) });
-    targets.insert(std::tuple { uint_t(3), uint_t(4) });  // Key 3 has no sources.
+    targets.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(5) });
+    targets.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(4) });
+    targets.insert(std::tuple { static_cast<uint_t>(3), static_cast<uint_t>(4) });  // Key 3 has no sources.
     EXPECT_EQ(must_pass(edges, sources, targets), (Pairs { { 0, 1 }, { 0, 4 }, { 0, 5 }, { 1, 1 }, { 1, 2 }, { 1, 4 } }));
 }
 
@@ -117,29 +117,29 @@ TEST(DatabaseMustPass, SeveralSourcesAndTargets)
     // 1 -> 3, 2 -> 3, 3 -> 4, 3 -> 5: from {1, 2} to {4, 5} only 3 must be passed.
     auto edges = Relation({ key, u, v });
     for (const auto& [from, to] : std::vector<std::pair<uint_t, uint_t>> { { 1, 3 }, { 2, 3 }, { 3, 4 }, { 3, 5 } })
-        edges.insert(std::tuple { uint_t(0), from, to });
+        edges.insert(std::tuple { static_cast<uint_t>(0), from, to });
     auto sources = Relation({ key, u });
     auto targets = Relation({ key, u });
-    for (const auto vertex : { uint_t(1), uint_t(2) })
-        sources.insert(std::tuple { uint_t(0), vertex });
-    for (const auto vertex : { uint_t(4), uint_t(5) })
-        targets.insert(std::tuple { uint_t(0), vertex });
+    for (const auto vertex : { static_cast<uint_t>(1), static_cast<uint_t>(2) })
+        sources.insert(std::tuple { static_cast<uint_t>(0), vertex });
+    for (const auto vertex : { static_cast<uint_t>(4), static_cast<uint_t>(5) })
+        targets.insert(std::tuple { static_cast<uint_t>(0), vertex });
     EXPECT_EQ(must_pass(edges, sources, targets), (Pairs { { 0, 3 } }));
     // A source that is a target: the empty path passes nothing else.
-    targets.insert(std::tuple { uint_t(0), uint_t(1) });
+    targets.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
     sources.clear();
-    sources.insert(std::tuple { uint_t(0), uint_t(1) });
+    sources.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
     EXPECT_EQ(must_pass(edges, sources, targets), (Pairs { { 0, 1 } }));
 }
 
 TEST(DatabaseMustPass, UnreachableTargetsHaveNoMustPassVertices)
 {
     auto edges = Relation({ key, u, v });
-    edges.insert(std::tuple { uint_t(0), uint_t(1), uint_t(2) });
+    edges.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1), static_cast<uint_t>(2) });
     auto sources = Relation({ key, u });
-    sources.insert(std::tuple { uint_t(0), uint_t(1) });
+    sources.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
     auto targets = Relation({ key, u });
-    targets.insert(std::tuple { uint_t(0), uint_t(3) });
+    targets.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(3) });
     EXPECT_TRUE(must_pass(edges, sources, targets).empty());
 }
 
@@ -152,27 +152,27 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
     // Random keyed graphs over vertices of one and of two objects, against the definition: x must be passed iff a target
     // is reachable, but not without the vertices containing x. Only probed objects are reported.
     auto rng = std::mt19937(GetParam());
-    constexpr auto keys = uint_t(3);
-    constexpr auto objects = uint_t(5);
-    for (const auto k : { size_t(1), size_t(2) })
+    constexpr auto keys = static_cast<uint_t>(3);
+    constexpr auto objects = static_cast<uint_t>(5);
+    for (const auto k : { static_cast<size_t>(1), static_cast<size_t>(2) })
         for (size_t round = 0; round < 20; ++round)
         {
             const auto random_vertex = [&]
             {
                 auto vertex = Vertex();
                 for (size_t c = 0; c < k; ++c)
-                    vertex.push_back(uint_t(rng() % (k == 1 ? 9 : objects)));
+                    vertex.push_back(static_cast<uint_t>(rng() % (k == 1 ? 9 : objects)));
                 return vertex;
             };
             auto vertex_columns = std::vector<Column> { key };
             auto edge_columns = std::vector<Column> { key };
             for (size_t c = 0; c < k; ++c)
             {
-                vertex_columns.push_back(Column(ygg::uint_t(c)));
-                edge_columns.push_back(Column(ygg::uint_t(c)));
+                vertex_columns.push_back(Column(static_cast<ygg::uint_t>(c)));
+                edge_columns.push_back(Column(static_cast<ygg::uint_t>(c)));
             }
             for (size_t c = 0; c < k; ++c)
-                edge_columns.push_back(Column(ygg::uint_t(k + c)));
+                edge_columns.push_back(Column(static_cast<ygg::uint_t>(k + c)));
             auto edge_list = std::vector<std::tuple<uint_t, Vertex, Vertex>>();
             auto source_list = std::vector<std::pair<uint_t, Vertex>>();
             auto target_list = std::vector<std::pair<uint_t, Vertex>>();

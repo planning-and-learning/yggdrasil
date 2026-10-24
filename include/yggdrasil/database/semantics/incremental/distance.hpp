@@ -80,9 +80,9 @@ class DistanceEvaluator
     std::vector<std::pair<uint_t, uint_t>> m_edges_added;
     std::vector<std::pair<uint_t, uint_t>> m_edges_removed;
 
-    uint_t require_vertex(std::span<const std::byte> row) const;
-    bool is_source(uint_t vertex) const noexcept;
-    bool is_target(uint_t vertex) const noexcept;
+    [[nodiscard]] uint_t require_vertex(std::span<const std::byte> row) const;
+    [[nodiscard]] bool is_source(uint_t vertex) const noexcept;
+    [[nodiscard]] bool is_target(uint_t vertex) const noexcept;
     void resize_vertices();
     SourceState& add_source(uint_t root);
     void remove_source(uint_t root);
@@ -114,12 +114,12 @@ public:
     template<RelationChange S, RelationChange E, RelationChange T>
     void update(const S& sources, const E& edges, const T& targets);
 
-    const Builder<Relation>& get_result() const&;
-    const Builder<Relation>& get_result() const&& = delete;
-    const Delta& get_delta() const&;
-    const Delta& get_delta() const&& = delete;
+    [[nodiscard]] const Builder<Relation>& get_result() const&;
+    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const Delta& get_delta() const&;
+    [[nodiscard]] const Delta& get_delta() const&& = delete;
     /// Retained storage, including inactive reusable source arrays; excludes the plan.
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 };
 
 inline auto DistanceEvaluator::add_source(uint_t root) -> SourceState&
@@ -369,13 +369,13 @@ public:
     }
 
     /// uint_t's maximum if no target is reachable.
-    uint_t get_result() const noexcept
+    [[nodiscard]] uint_t get_result() const noexcept
     {
         const auto it = std::ranges::find_if(m_counts, [](size_t count) { return count > 0; });
         return it == m_counts.end() ? std::numeric_limits<uint_t>::max() : static_cast<uint_t>(it - m_counts.begin());
     }
 
-    size_t memory_usage() const noexcept { return m_evaluator.memory_usage() + m_counts.capacity() * sizeof(size_t); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_evaluator.memory_usage() + m_counts.capacity() * sizeof(size_t); }
 };
 
 }  // namespace ygg::database::incremental

@@ -63,7 +63,7 @@ public:
     {
     }
 
-    bool has_finished() const { return std::chrono::steady_clock::now() >= m_deadline; }
+    [[nodiscard]] bool has_finished() const { return std::chrono::steady_clock::now() >= m_deadline; }
 };
 
 }  // namespace ygg

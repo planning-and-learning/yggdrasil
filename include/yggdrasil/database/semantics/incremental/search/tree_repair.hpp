@@ -32,10 +32,10 @@ public:
         m_vertices.clear();
         m_edges.clear();
     }
-    bool empty() const noexcept { return m_edges.empty(); }
-    size_t size() const noexcept { return m_edges.size(); }
-    std::span<const std::byte> from(size_t i) const { return m_vertices[m_edges[i].first]; }
-    std::span<const std::byte> to(size_t i) const { return m_vertices[m_edges[i].second]; }
+    [[nodiscard]] bool empty() const noexcept { return m_edges.empty(); }
+    [[nodiscard]] size_t size() const noexcept { return m_edges.size(); }
+    [[nodiscard]] std::span<const std::byte> from(size_t i) const { return m_vertices[m_edges[i].first]; }
+    [[nodiscard]] std::span<const std::byte> to(size_t i) const { return m_vertices[m_edges[i].second]; }
 
 private:
     VertexSet m_vertices;
@@ -60,7 +60,7 @@ public:
         for (size_t i = 0; i < added.size(); ++i)
             if (const auto from = tree.find(added.from(i)); from && lowers(tree, *from, tree.value(added.to(i), heuristic)))
                 lower(tree, *from, tree.ensure(added.to(i), heuristic));
-        auto lowered = size_t(0);
+        auto lowered = static_cast<size_t>(0);
         while (!m_queue.empty())
         {
             std::ranges::pop_heap(m_queue, std::greater<> {});

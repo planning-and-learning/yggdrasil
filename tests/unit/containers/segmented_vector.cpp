@@ -106,7 +106,7 @@ TEST(CommonSegmentedVectorTest, EmplaceBackConstructsInPlaceAndReturnsReference)
 {
     ygg::SegmentedVector<std::string, 2> vector;
 
-    auto& first = vector.emplace_back(3, char(120));
+    auto& first = vector.emplace_back(3, static_cast<char>(120));
     first += "!";
     auto& second = vector.emplace_back("second");
 
@@ -205,9 +205,9 @@ TEST(CommonSegmentedVectorTest, EmptyAccessThrows)
     const auto& const_vector = vector;
 
     EXPECT_THROW(vector.front(), std::out_of_range);
-    EXPECT_THROW(const_vector.front(), std::out_of_range);
+    EXPECT_THROW((void) const_vector.front(), std::out_of_range);
     EXPECT_THROW(vector.back(), std::out_of_range);
-    EXPECT_THROW(const_vector.back(), std::out_of_range);
+    EXPECT_THROW((void) const_vector.back(), std::out_of_range);
     EXPECT_THROW(vector.pop_back(), std::out_of_range);
 }
 

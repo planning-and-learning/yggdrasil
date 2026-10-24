@@ -75,10 +75,10 @@ public:
     RelationRepository(RelationRepository&&) = delete;
     RelationRepository& operator=(RelationRepository&&) = delete;
 
-    size_t get_index() const noexcept { return m_index; }
-    auto get_factory() const noexcept { return m_factory; }
-    const auto& get_row_repository() const noexcept { return m_rows; }
-    const auto& get_row_set_repository() const noexcept { return m_row_sets; }
+    [[nodiscard]] size_t get_index() const noexcept { return m_index; }
+    [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
+    [[nodiscard]] const auto& get_row_repository() const noexcept { return m_rows; }
+    [[nodiscard]] const auto& get_row_set_repository() const noexcept { return m_row_sets; }
 
     /// Interns the view's rows as a sorted row set.
     template<RelationViewConcept V>
@@ -96,7 +96,7 @@ public:
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
-    std::optional<View<Index<Entity>, RelationRepository>> find(const Data<Entity>& data) const noexcept
+    [[nodiscard]] std::optional<View<Index<Entity>, RelationRepository>> find(const Data<Entity>& data) const noexcept
     {
         if (const auto index = m_symbols.template find_local<Entity>(data))
             return View<Index<Entity>, RelationRepository>(*index, *this);
@@ -132,14 +132,14 @@ public:
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
-    const RelationRepository& get_canonical_context(Index<Entity>) const noexcept
+    [[nodiscard]] const RelationRepository& get_canonical_context(Index<Entity>) const noexcept
     { return *this; }
-    size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
-    bool empty() const noexcept { return size() == 0; }
+    [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
+    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
-    View<Index<Columns>, RelationRepository> get_columns(Index<Columns> index) const noexcept { return { index, *this }; }
+    [[nodiscard]] View<Index<Columns>, RelationRepository> get_columns(Index<Columns> index) const noexcept { return { index, *this }; }
 
-    size_t get_storage_index(Index<RelationRowSet> row_set_index) const noexcept
+    [[nodiscard]] size_t get_storage_index(Index<RelationRowSet> row_set_index) const noexcept
     {
         assert(row_set_index.get_value() < m_storage_indices.size());
         return m_storage_indices[row_set_index.get_value()];

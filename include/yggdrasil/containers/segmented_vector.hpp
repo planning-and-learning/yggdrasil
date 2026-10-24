@@ -54,9 +54,9 @@ private:
 
     static_assert(Layout::max_segments > 0);
 
-    T* segment(size_t index) const noexcept { return static_cast<T*>(detail::load_pointer<ThreadSafe, void>(m_segments[index])); }
+    [[nodiscard]] T* segment(size_t index) const noexcept { return static_cast<T*>(detail::load_pointer<ThreadSafe, void>(m_segments[index])); }
 
-    T* element(size_t pos) const noexcept
+    [[nodiscard]] T* element(size_t pos) const noexcept
     {
         assert(pos <= std::numeric_limits<Index>::max());
         const auto index = Layout::segment_index(static_cast<Index>(pos));
@@ -363,7 +363,7 @@ public:
         return *element(pos);
     }
 
-    const T& at(size_t pos) const
+    [[nodiscard]] const T& at(size_t pos) const
     {
         if (pos >= size())
             throw std::out_of_range("SegmentedVector::at");
@@ -377,7 +377,7 @@ public:
         return *element(pos);
     }
 
-    const T& front() const
+    [[nodiscard]] const T& front() const
     {
         ensure_not_empty();
         return (*this)[0];
@@ -389,7 +389,7 @@ public:
         return (*this)[0];
     }
 
-    const T& back() const
+    [[nodiscard]] const T& back() const
     {
         ensure_not_empty();
         return (*this)[size() - 1];
@@ -403,19 +403,19 @@ public:
 
     iterator begin() noexcept { return iterator(*this, 0); }
     iterator end() noexcept { return iterator(*this, size()); }
-    const_iterator begin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator end() const noexcept { return const_iterator(*this, size()); }
-    const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator cend() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator cend() const noexcept { return const_iterator(*this, size()); }
 
-    size_t memory_usage() const noexcept { return capacity() * sizeof(T); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return capacity() * sizeof(T); }
 
     /// Reads the elements in place; valid while this vector neither moves nor is destroyed.
-    detail::SegmentedRows<T, FirstSegmentSize, ThreadSafe, Index> rows() const noexcept { return { m_segments.data(), &m_size }; }
+    [[nodiscard]] detail::SegmentedRows<T, FirstSegmentSize, ThreadSafe, Index> rows() const noexcept { return { m_segments.data(), &m_size }; }
 
-    size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
-    size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
-    bool empty() const noexcept { return size() == 0; }
+    [[nodiscard]] size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
+    [[nodiscard]] size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
+    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
 private:
     void ensure_not_empty() const

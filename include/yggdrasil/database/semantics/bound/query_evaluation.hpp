@@ -56,15 +56,15 @@ public:
         m_bound.assign(input_count(), false);
     }
 
-    size_t input_count() const noexcept { return m_query.input_columns.size(); }
-    std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
-    const Builder<Relation>& input(size_t slot) const { return *m_inputs.at(slot); }
-    bool bound() const noexcept { return std::ranges::find(m_bound, false) == m_bound.end(); }
+    [[nodiscard]] size_t input_count() const noexcept { return m_query.input_columns.size(); }
+    [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
+    [[nodiscard]] const Builder<Relation>& input(size_t slot) const { return *m_inputs.at(slot); }
+    [[nodiscard]] bool bound() const noexcept { return std::ranges::find(m_bound, false) == m_bound.end(); }
     /// Increases whenever an input changes.
-    uint64_t version() const noexcept { return m_version; }
+    [[nodiscard]] uint64_t version() const noexcept { return m_version; }
 
-    bool is_bound(size_t slot) const noexcept { return m_bound[slot]; }
-    bool is_static(size_t slot) const noexcept { return m_static[slot]; }
+    [[nodiscard]] bool is_bound(size_t slot) const noexcept { return m_bound[slot]; }
+    [[nodiscard]] bool is_static(size_t slot) const noexcept { return m_static[slot]; }
 
     /// Binds the current inputs: input(slot) returns slot's relation view. Static slots are read on the first bind
     /// only.
@@ -147,7 +147,7 @@ public:
             prepared.plans = plans(bound_variables(prepared.positions));
         for (const auto& plan : prepared.plans)
         {
-            auto offset = size_t(0);
+            auto offset = static_cast<size_t>(0);
             for (const auto position : prepared.positions)
             {
                 const auto size = m_columns[position].size;
@@ -159,7 +159,7 @@ public:
         }
     }
 
-    const UnionNormalForm& query() const noexcept { return m_query; }
+    [[nodiscard]] const UnionNormalForm& query() const noexcept { return m_query; }
 
     /// One plan per branch, with the variables marked in `bound` bound on arrival, for the current inputs' sizes.
     std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound);
@@ -223,7 +223,7 @@ private:
         return m_row;
     }
 
-    std::vector<bool> bound_variables(std::span<const size_t> positions) const
+    [[nodiscard]] std::vector<bool> bound_variables(std::span<const size_t> positions) const
     {
         auto bound = std::vector<bool>(m_query.variables.size(), false);
         for (const auto position : positions)

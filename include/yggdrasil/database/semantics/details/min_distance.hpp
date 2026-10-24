@@ -62,10 +62,10 @@ public:
     }
 
     Evaluator& evaluator() noexcept { return m_edges; }
-    const Evaluator& evaluator() const noexcept { return m_edges; }
-    size_t vertex_size() const noexcept { return m_vertex_size; }
+    [[nodiscard]] const Evaluator& evaluator() const noexcept { return m_edges; }
+    [[nodiscard]] size_t vertex_size() const noexcept { return m_vertex_size; }
     /// Where an edge row's target vertex starts.
-    size_t target_offset() const noexcept { return m_target_offset; }
+    [[nodiscard]] size_t target_offset() const noexcept { return m_target_offset; }
 
     template<RowPredicate OnVertex>
     void successors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
@@ -82,8 +82,8 @@ public:
     bool edge_exists(std::span<const std::byte> key, std::span<const std::byte> from, std::span<const std::byte> to)
     {
         std::ranges::copy(key, m_edge.begin());
-        std::ranges::copy(from, m_edge.begin() + long(m_key_size));
-        std::ranges::copy(to, m_edge.begin() + long(m_key_size + m_vertex_size));
+        std::ranges::copy(from, m_edge.begin() + static_cast<std::ptrdiff_t>(m_key_size));
+        std::ranges::copy(to, m_edge.begin() + static_cast<std::ptrdiff_t>(m_key_size + m_vertex_size));
         auto exists = false;
         m_edges.evaluate(m_check,
                          m_edge,
@@ -132,7 +132,7 @@ private:
         if (key.empty())
             return vertex;
         std::ranges::copy(key, m_bound.begin());
-        std::ranges::copy(vertex, m_bound.begin() + long(m_key_size));
+        std::ranges::copy(vertex, m_bound.begin() + static_cast<std::ptrdiff_t>(m_key_size));
         return m_bound;
     }
 
@@ -154,10 +154,10 @@ public:
     explicit TargetSet(size_t vertex_size) : m_vertices(vertex_size) {}
 
     template<VertexRange Targets>
-    bool same(const Targets& targets) const
+    [[nodiscard]] bool same(const Targets& targets) const
     {
         return targets.size() == m_vertices.size()
-               && std::ranges::all_of(std::views::iota(size_t(0), targets.size()), [&](size_t i) { return m_vertices.contains(targets.row(i)); });
+               && std::ranges::all_of(std::views::iota(static_cast<size_t>(0), targets.size()), [&](size_t i) { return m_vertices.contains(targets.row(i)); });
     }
     template<VertexRange Targets>
     void assign(const Targets& targets)
@@ -166,7 +166,7 @@ public:
         for (size_t i = 0; i < targets.size(); ++i)
             m_vertices.insert(targets.row(i));
     }
-    const VertexSet& vertices() const noexcept { return m_vertices; }
+    [[nodiscard]] const VertexSet& vertices() const noexcept { return m_vertices; }
 
     /// The targets' indices in the tree, stored with their estimates; valid until the next call.
     template<DistanceHeuristic H>
@@ -174,7 +174,7 @@ public:
     {
         m_ids.clear();
         for (size_t i = 0; i < m_vertices.size(); ++i)
-            m_ids.push_back(tree.ensure(m_vertices[uint_t(i)], heuristic));
+            m_ids.push_back(tree.ensure(m_vertices[static_cast<uint_t>(i)], heuristic));
         return m_ids;
     }
 

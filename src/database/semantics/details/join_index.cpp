@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/semantics/details/join_index.hpp"
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice> keys) noexcept
 {
@@ -17,11 +15,8 @@ hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice
     return hash.result();
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool join_keys_equal(std::span<const std::byte> lhs,
                      std::span<const ColumnSlice> lhs_keys,
@@ -34,17 +29,13 @@ bool join_keys_equal(std::span<const std::byte> lhs,
     return true;
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys)
 {
     for (const auto key : keys)
         if (std::ranges::none_of(columns, [&](const auto& column) { return column_slice(column) == key; }))
             throw std::out_of_range("JoinIndex: key does not identify a field in the relation schema.");
-}
 }
 }

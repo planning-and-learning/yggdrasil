@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/semantics/details/operations.hpp"
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void append_fields(std::vector<std::byte>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields)
 {
@@ -18,11 +16,8 @@ void append_fields(std::vector<std::byte>& output, std::span<const std::byte> in
     }
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare_output(Builder<Relation>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs)
 {
@@ -34,16 +29,12 @@ void prepare_output(Builder<Relation>& out, std::span<const ColumnLayout> column
     out.clear();
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void require_plan_columns(std::span<const ColumnLayout> actual, std::span<const ColumnLayout> expected)
 {
     if (!std::ranges::equal(actual, expected))
         throw std::invalid_argument("Relational operation: input schema does not match prepared plan.");
-}
 }
 }

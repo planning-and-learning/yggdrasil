@@ -36,7 +36,7 @@ void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) 
 struct GenericJoinKey
 {
     std::vector<std::byte> bytes;
-    auto identifying_members() const noexcept { return std::make_tuple(std::span<const std::byte>(bytes)); }
+    [[nodiscard]] auto identifying_members() const noexcept { return std::make_tuple(std::span<const std::byte>(bytes)); }
 };
 
 /// Hash-trie nodes own distinct canonical values; input row movement is irrelevant.
@@ -45,13 +45,13 @@ struct GenericJoinTrie
     UnorderedMap<GenericJoinKey, std::unique_ptr<GenericJoinTrie>> children;
     size_t rows = 0;
 
-    const GenericJoinTrie* find(std::span<const std::byte> value) const
+    [[nodiscard]] const GenericJoinTrie* find(std::span<const std::byte> value) const
     {
         const auto found = children.find(std::make_tuple(value));
         return found == children.end() ? nullptr : found->second.get();
     }
 
-    bool contains(std::span<const std::byte> row, std::span<const ColumnSlice> keys) const;
+    [[nodiscard]] bool contains(std::span<const std::byte> row, std::span<const ColumnSlice> keys) const;
 
     bool insert(std::span<const std::byte> row, std::span<const ColumnSlice> keys);
 
@@ -63,7 +63,7 @@ struct GenericJoinTrie
         rows = 0;
     }
 
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t result = children.capacity() * (sizeof(std::pair<const GenericJoinKey, std::unique_ptr<GenericJoinTrie>>) + sizeof(gtl::priv::ctrl_t));
         for (const auto& [key, child] : children)
@@ -124,7 +124,7 @@ public:
     {
     }
 
-    bool matches(const GenericJoinPlan& plan) const { return m_plan.matches(plan); }
+    [[nodiscard]] bool matches(const GenericJoinPlan& plan) const { return m_plan.matches(plan); }
 
     /// Indexes the inputs, which match the plan, and appends their join to out.
     template<RelationViewRange R>
@@ -140,7 +140,7 @@ public:
         append(out);
     }
 
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t result =
             m_tries.capacity() * sizeof(detail::GenericJoinTrie) + m_cursors.capacity() * sizeof(typename decltype(m_cursors)::value_type) + m_row.capacity();

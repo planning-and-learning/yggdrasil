@@ -48,7 +48,7 @@ private:
 public:
     BitPackedArraySet(size_t length, uint8_t width) : Base(std::make_unique<pool_type>(length, width)) {}
 
-    uint8_t width() const noexcept { return this->storage().width(); }
+    [[nodiscard]] uint8_t width() const noexcept { return this->storage().width(); }
 };
 
 }  // namespace ygg

@@ -63,7 +63,7 @@ public:
     {
     }
 
-    size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
+    [[nodiscard]] size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
 
     /// The minimum distance over the edges of the inputs: input(slot) returns slot's relation view.
     template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T>
@@ -89,7 +89,7 @@ public:
         return min_distance([&](size_t) -> const E& { return edges; }, sources, targets, heuristic);
     }
 
-    const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
+    [[nodiscard]] const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
     using Edges = detail::EdgeQuery<bound::QueryEvaluator>;

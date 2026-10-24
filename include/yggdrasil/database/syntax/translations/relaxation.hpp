@@ -99,7 +99,7 @@ private:
         // ponytail: linear in the number of inputs, which edge queries keep small.
         const auto found = std::ranges::find(m_slots, slot);
         if (found != m_slots.end())
-            return size_t(found - m_slots.begin());
+            return static_cast<size_t>(found - m_slots.begin());
         m_slots.push_back(slot);
         return m_slots.size() - 1;
     }

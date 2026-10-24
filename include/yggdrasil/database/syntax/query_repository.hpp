@@ -62,15 +62,15 @@ public:
     QueryRepository(QueryRepository&&) = delete;
     QueryRepository& operator=(QueryRepository&&) = delete;
 
-    size_t get_index() const noexcept { return m_index; }
-    auto get_factory() const noexcept { return m_factory; }
+    [[nodiscard]] size_t get_index() const noexcept { return m_index; }
+    [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
     friend const QueryRepository& get_repository(const QueryRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
-    size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
+    [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
-    size_t size() const noexcept
+    [[nodiscard]] size_t size() const noexcept
     { return m_symbols.template local_size<T>(); }
 
     template<typename T>

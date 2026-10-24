@@ -7,9 +7,7 @@
 
 #include <variant>
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool query_accepts(QueryView<QuerySelectEqualTag> selection, std::span<const std::byte> row)
 {
@@ -17,15 +15,11 @@ bool query_accepts(QueryView<QuerySelectEqualTag> selection, std::span<const std
     return std::ranges::equal(column_bytes(row, columns[selection.get_lhs_position()]), column_bytes(row, columns[selection.get_rhs_position()]));
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 bool query_accepts(QueryView<QuerySelectValueTag> selection, std::span<const std::byte> row)
 { return std::ranges::equal(column_bytes(row, selection.columns()[selection.get_position()]), selection.get_constant()); }
-}
 }
 
 namespace ygg::database

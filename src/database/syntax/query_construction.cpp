@@ -5,9 +5,7 @@
 
 #include "yggdrasil/database/syntax/query_construction.hpp"
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 std::span<const ColumnLayout> child_columns(Index<Query<>> child, const QueryRepository& repository)
 {
@@ -16,20 +14,14 @@ std::span<const ColumnLayout> child_columns(Index<Query<>> child, const QueryRep
     return QueryView<>(child, repository).columns();
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare(Data<Query<QueryProjectTag>>& data, const QueryRepository& repository)
 { data.plan = ProjectionPlan(child_columns(data.arg, repository), { data.labels.data(), data.labels.size() }); }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare(Data<Query<QueryRenameTag>>& data, const QueryRepository& repository)
 {
@@ -38,11 +30,8 @@ void prepare(Data<Query<QueryRenameTag>>& data, const QueryRepository& repositor
     data.columns.set(schema.begin(), schema.end());
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare(Data<Query<QuerySelectEqualTag>>& data, const QueryRepository& repository)
 {
@@ -54,11 +43,8 @@ void prepare(Data<Query<QuerySelectEqualTag>>& data, const QueryRepository& repo
     data.columns.set(schema.begin(), schema.end());
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare(Data<Query<QuerySelectValueTag>>& data, const QueryRepository& repository)
 {
@@ -71,11 +57,8 @@ void prepare(Data<Query<QuerySelectValueTag>>& data, const QueryRepository& repo
     data.columns.set(schema.begin(), schema.end());
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare(Data<Query<QueryDistanceTag>>& data, const QueryRepository& repository)
 {
@@ -85,11 +68,8 @@ void prepare(Data<Query<QueryDistanceTag>>& data, const QueryRepository& reposit
                              data.distance_column);
 }
 }
-}
 
-namespace ygg::database
-{
-namespace detail
+namespace ygg::database::detail
 {
 void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repository)
 {
@@ -105,7 +85,6 @@ void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repo
                 if (std::ranges::find(data.output_order, column.label) == data.output_order.end())
                     data.output_order.push_back(column.label);
     data.plan = GenericJoinPlan(schemas, { data.variable_order.data(), data.variable_order.size() }, { data.output_order.data(), data.output_order.size() });
-}
 }
 }
 

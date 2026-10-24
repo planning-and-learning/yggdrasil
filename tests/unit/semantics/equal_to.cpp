@@ -41,9 +41,12 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct EqualToContext
 {
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonEqualToAdaptersTreatFloatingPointNaNsAsEqual)
 {
@@ -377,6 +380,8 @@ TEST(YggdrasilTests, CommonEqualRangeComparesProxyValuesWithoutCopyingReferenceE
     EXPECT_TRUE(ygg::equal_range(lhs, rhs));
 }
 
+namespace
+{
 struct EqualToThrowingConversion
 {
     operator unsigned() const { throw std::runtime_error("decoded conversion"); }
@@ -386,6 +391,7 @@ struct EqualToConvertingCoder : bit::ForwardingBlockCoder<unsigned>
 {
     static EqualToThrowingConversion decode(unsigned) noexcept { return {}; }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonEqualToAdaptersPropagateNestedConversionErrors)
 {
@@ -415,9 +421,12 @@ TEST(YggdrasilTests, CommonEqualToAdaptersPropagateNestedConversionErrors)
     EXPECT_THROW(ygg::operator==(record, record), std::runtime_error);
 }
 
+namespace
+{
 struct UnsupportedEqualToValue
 {
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonEqualToCapabilitiesRejectUnsupportedNestedValues)
 {

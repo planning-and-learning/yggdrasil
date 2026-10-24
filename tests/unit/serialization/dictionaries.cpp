@@ -39,6 +39,8 @@ TEST(YggdrasilTests, DictionariesRegisteredInExecutableWorkInSharedLibrary)
     EXPECT_EQ(table_in_library(dictionaries), boost::json::parse(R"([{"value":4}])").as_array());
 }
 
+namespace
+{
 struct NestedEntity
 {
     int id;
@@ -60,6 +62,7 @@ void describe_fields(Archive& archive, std::type_identity<NestedEntity>)
     archive.field("absent", [](const NestedEntity& entity) -> decltype(auto) { return (entity.absent); });
     archive.field("numbers", [](const NestedEntity& entity) -> decltype(auto) { return (entity.numbers); });
 }
+}  // namespace
 
 TEST(YggdrasilTests, DictionariesSerializeNestedRangesAndOptionals)
 {
@@ -75,6 +78,8 @@ TEST(YggdrasilTests, DictionariesSerializeNestedRangesAndOptionals)
     EXPECT_EQ(dictionaries.table<DictionaryEntity>(), boost::json::parse(R"([{"value":1},{"value":2},{"value":3}])").as_array());
 }
 
+namespace
+{
 /// Serialized as its entity, like a bidirectional graph as its forward graph.
 struct EntityWrapper
 {
@@ -86,6 +91,7 @@ void describe_fields(Archive& archive, std::type_identity<EntityWrapper>)
 { describe_fields(archive, std::type_identity<DictionaryEntity> {}); }
 
 const DictionaryEntity& serialize_as(serialization::Dictionaries&, const EntityWrapper& wrapper) { return wrapper.entity; }
+}  // namespace
 
 TEST(YggdrasilTests, DictionariesSerializeTypesAsTheirReplacement)
 {

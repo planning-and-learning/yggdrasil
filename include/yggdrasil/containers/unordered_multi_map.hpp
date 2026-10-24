@@ -49,7 +49,7 @@ private:
             YGG_ASSUME(value.has_value());
             return *value;
         }
-        const Value& get() const noexcept
+        [[nodiscard]] const Value& get() const noexcept
         {
             YGG_ASSUME(value.has_value());
             return *value;
@@ -197,13 +197,13 @@ public:
     }
 
     /// Read-only range of values associated with key; empty for a missing key.
-    auto values(const Key& key) const&
+    [[nodiscard]] auto values(const Key& key) const&
     {
         const auto head = m_heads.find(key);
         return std::ranges::subrange(ValueIterator(m_entries, head == m_heads.end() ? npos : head->second), ValueIterator(m_entries, npos));
     }
 
-    auto values(const Key& key) const&& = delete;
+    [[nodiscard]] auto values(const Key& key) const&& = delete;
 
     void clear() noexcept
     {
@@ -226,11 +226,11 @@ public:
     void reserve_values(size_t count) { m_entries.reserve(count); }
 
     /// Retained entries and hash slots; excludes the container's fixed storage.
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     { return m_entries.capacity() * sizeof(Entry) + m_heads.capacity() * (sizeof(std::pair<const Key, size_t>) + sizeof(gtl::priv::ctrl_t)); }
 
-    size_t size() const noexcept { return m_size; }
-    bool empty() const noexcept { return m_size == 0; }
+    [[nodiscard]] size_t size() const noexcept { return m_size; }
+    [[nodiscard]] bool empty() const noexcept { return m_size == 0; }
 };
 
 }  // namespace ygg

@@ -24,6 +24,8 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct IndexedHashSetTestTag
 {
 };
@@ -39,6 +41,7 @@ struct IndexedHashSetCustomEqualTo
 
     bool operator()(const ygg::Data<IndexedHashSetTestTag>& lhs, const ygg::Data<IndexedHashSetTestTag>& rhs) const noexcept;
 };
+}  // namespace
 
 }  // namespace ygg::tests
 
@@ -53,9 +56,9 @@ struct Data<ygg::tests::IndexedHashSetTestTag>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
-inline bool is_canonical(const Data<ygg::tests::IndexedHashSetTestTag>&) { return true; }
+static inline bool is_canonical(const Data<ygg::tests::IndexedHashSetTestTag>&) { return true; }
 
-inline void canonicalize(Data<ygg::tests::IndexedHashSetTestTag>&) {}
+static inline void canonicalize(Data<ygg::tests::IndexedHashSetTestTag>&) {}
 
 }  // namespace ygg
 
@@ -122,8 +125,8 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_TRUE(set.empty());
     EXPECT_EQ(set.size(), 0);
     EXPECT_FALSE(set.contains(first));
-    EXPECT_THROW(set.front(), std::out_of_range);
-    EXPECT_THROW(set.back(), std::out_of_range);
+    EXPECT_THROW((void) set.front(), std::out_of_range);
+    EXPECT_THROW((void) set.back(), std::out_of_range);
 
     auto [first_index, inserted_first] = set.insert(first);
     EXPECT_TRUE(inserted_first);
@@ -134,7 +137,7 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_EQ(set.at(first_index).value, 1);
     EXPECT_EQ(set.front().value, 1);
     EXPECT_EQ(set.back().value, 1);
-    EXPECT_THROW(set.at(ygg::Index<IndexedHashSetTestTag>(1)), std::out_of_range);
+    EXPECT_THROW((void) set.at(ygg::Index<IndexedHashSetTestTag>(1)), std::out_of_range);
 
     auto [second_index, inserted_second] = set.insert(second);
     EXPECT_TRUE(inserted_second);
@@ -143,7 +146,7 @@ TEST(YggdrasilTests, CommonIndexedHashSetFindsAndContainsInsertedValues)
     EXPECT_EQ(set.at(second_index).value, 2);
     EXPECT_EQ(set.front().value, 1);
     EXPECT_EQ(set.back().value, 2);
-    EXPECT_THROW(set.at(ygg::Index<IndexedHashSetTestTag>(2)), std::out_of_range);
+    EXPECT_THROW((void) set.at(ygg::Index<IndexedHashSetTestTag>(2)), std::out_of_range);
 
     auto [duplicate_index, inserted_duplicate] = set.insert(first);
     EXPECT_FALSE(inserted_duplicate);

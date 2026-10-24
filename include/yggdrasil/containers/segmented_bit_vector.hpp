@@ -153,29 +153,29 @@ public:
     bool operator[](size_t pos) const noexcept { return m_pool[pos][0]; }
 
     reference at(size_t pos) { return m_pool.at(pos)[0]; }
-    bool at(size_t pos) const { return m_pool.at(pos)[0]; }
+    [[nodiscard]] bool at(size_t pos) const { return m_pool.at(pos)[0]; }
 
     reference front() { return at(0); }
-    bool front() const { return at(0); }
+    [[nodiscard]] bool front() const { return at(0); }
     reference back() { return at(size() - 1); }
-    bool back() const { return at(size() - 1); }
+    [[nodiscard]] bool back() const { return at(size() - 1); }
 
     iterator begin() noexcept { return iterator(*this, 0); }
     iterator end() noexcept { return iterator(*this, size()); }
-    const_iterator begin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator end() const noexcept { return const_iterator(*this, size()); }
-    const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator cend() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator cend() const noexcept { return const_iterator(*this, size()); }
 
     void push_back(bool value) { m_pool.push_back(std::span<const bool>(&value, 1)); }
     void pop_back() { m_pool.pop_back(); }
     void clear() noexcept { m_pool.clear(); }
     void resize(size_t size, bool value = false) { m_pool.resize(size, std::span<const bool>(&value, 1)); }
 
-    size_t size() const noexcept { return m_pool.size(); }
-    size_t capacity() const noexcept { return m_pool.capacity(); }
-    bool empty() const noexcept { return m_pool.empty(); }
-    size_t memory_usage() const noexcept { return m_pool.memory_usage(); }
+    [[nodiscard]] size_t size() const noexcept { return m_pool.size(); }
+    [[nodiscard]] size_t capacity() const noexcept { return m_pool.capacity(); }
+    [[nodiscard]] bool empty() const noexcept { return m_pool.empty(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_pool.memory_usage(); }
 
 private:
     Pool m_pool;

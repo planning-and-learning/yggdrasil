@@ -7,6 +7,8 @@
  * (at your option) any later version.
  */
 
+#include "diagnostics.hpp"
+
 #include "yggdrasil/python/diagnostics.hpp"
 
 namespace nb = nanobind;
@@ -23,7 +25,7 @@ public:
     {
     }
 
-    const ygg::diagnostics::Diagnostic& diagnostic() const noexcept { return m_diagnostic; }
+    [[nodiscard]] const ygg::diagnostics::Diagnostic& diagnostic() const noexcept { return m_diagnostic; }
 
 private:
     ygg::diagnostics::Diagnostic m_diagnostic;

@@ -58,7 +58,7 @@ public:
         m_heap.clear();
         m_pushes = 0;
     }
-    bool empty() const noexcept { return m_heap.empty(); }
+    [[nodiscard]] bool empty() const noexcept { return m_heap.empty(); }
     void push(uint_t f, uint_t g, uint_t index)
     {
         m_heap.push_back(Entry { f, g, m_pushes++, index });
@@ -184,7 +184,7 @@ public:
         return finish(infinity, std::nullopt);
     }
 
-    const AStarCounters& counters() const noexcept { return m_counters; }
+    [[nodiscard]] const AStarCounters& counters() const noexcept { return m_counters; }
 
     /// Calls on_vertex(v) for each vertex v of the path found by run(), which returned a finite distance: the generated
     /// vertices from a source to where the search ended, then the tree's next chain from there to a target.
@@ -221,7 +221,7 @@ private:
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
-    uint_t value(uint_t id) const noexcept
+    [[nodiscard]] uint_t value(uint_t id) const noexcept
     {
         const auto level = m_backward->level(id);
         return level == none ? m_tree->learned(id) : std::max(m_tree->learned(id), level);
@@ -235,10 +235,10 @@ private:
 
     /// Whether the exhausted backward frontier found no source.
     template<VertexRange Sources>
-    bool closed_off(const Sources& sources) const
+    [[nodiscard]] bool closed_off(const Sources& sources) const
     {
         return m_backward->exhausted()
-               && std::ranges::none_of(std::views::iota(size_t(0), sources.size()),
+               && std::ranges::none_of(std::views::iota(static_cast<size_t>(0), sources.size()),
                                        [&](size_t i) { return m_backward->level(m_tree->find(sources.row(i)).value_or(none)) != none; });
     }
 
@@ -311,7 +311,7 @@ private:
             m_storage->m_nodes.push_back(AStarStorage::Node { .h = std::max(estimate, bound), .h_learn = estimate, .stored = stored.value_or(none) });
             ++m_open;
         }
-        const auto index = found ? *found : uint_t(m_storage->m_nodes.size() - 1);
+        const auto index = found ? *found : static_cast<uint_t>(m_storage->m_nodes.size() - 1);
         node(index).g = cost;
         node(index).parent = from;
         enqueue(index);

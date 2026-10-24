@@ -104,7 +104,7 @@ private:
             return value == Block { 0 } ? ZERO : static_cast<uint_t>(m_leaves.insert(Data<Leaf> { value }).first);
     }
 
-    Block leaf_value(uint_t slot) const
+    [[nodiscard]] Block leaf_value(uint_t slot) const
     {
         if constexpr (inline_leaves)
             return std::bit_cast<Block>(slot);
@@ -194,7 +194,7 @@ private:
             uint_t offset;
             uint_t size;
 
-            bool contains(uint_t other_offset, uint_t other_size) const noexcept
+            [[nodiscard]] bool contains(uint_t other_offset, uint_t other_size) const noexcept
             { return offset <= other_offset && other_offset + other_size <= offset + size; }
         };
 
@@ -247,7 +247,7 @@ private:
     }
 
     /// Returns the number of blocks up to and including the last nonzero block of the subtree.
-    uint_t trimmed_size(uint_t root, uint_t size) const
+    [[nodiscard]] uint_t trimmed_size(uint_t root, uint_t size) const
     {
         auto offset = uint_t { 0 };
         while (root != zero(size))
@@ -352,11 +352,11 @@ public:
         m_leaves.clear();
     }
 
-    size_t memory_usage() const noexcept { return m_leaves.memory_usage() + m_nodes.memory_usage(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_leaves.memory_usage() + m_nodes.memory_usage(); }
 
-    size_t num_leaves() const noexcept { return m_leaves.size(); }
-    size_t num_nodes() const noexcept { return m_nodes.size(); }
-    bool empty() const noexcept { return m_leaves.empty() && m_nodes.empty(); }
+    [[nodiscard]] size_t num_leaves() const noexcept { return m_leaves.size(); }
+    [[nodiscard]] size_t num_nodes() const noexcept { return m_nodes.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_leaves.empty() && m_nodes.empty(); }
 
 private:
     [[no_unique_address]] LeafSet m_leaves;

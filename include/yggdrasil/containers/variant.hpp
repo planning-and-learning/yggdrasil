@@ -39,18 +39,18 @@ public:
 
     View(const Variant& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
-    const Variant& index_variant() const noexcept { return *m_handle; }
+    [[nodiscard]] const Variant& index_variant() const noexcept { return *m_handle; }
 
-    bool valid() const noexcept { return index_variant().valid(); }
+    [[nodiscard]] bool valid() const noexcept { return index_variant().valid(); }
 
     explicit operator bool() const noexcept { return valid(); }
 
     template<typename U>
-    bool is() const noexcept
+    [[nodiscard]] bool is() const noexcept
     { return cista::holds_alternative<U>(index_variant()); }
 
     template<typename U>
-    decltype(auto) get() const
+    [[nodiscard]] decltype(auto) get() const
     {
         if constexpr (ViewConcept<U, C>)
             return make_view(cista::get<U>(index_variant()), get_context());
@@ -77,9 +77,9 @@ public:
             index_variant());
     }
 
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return *m_handle; }
 
 private:
     const C* m_context;

@@ -255,7 +255,7 @@ public:
         return (*this)[pos];
     }
 
-    value_type at(size_t pos) const
+    [[nodiscard]] value_type at(size_t pos) const
     {
         ensure_index(pos);
         return (*this)[pos];
@@ -268,7 +268,7 @@ public:
         return (*this)[0];
     }
 
-    value_type front() const
+    [[nodiscard]] value_type front() const
     {
         ensure_not_empty();
         return (*this)[0];
@@ -281,7 +281,7 @@ public:
         return (*this)[size() - 1];
     }
 
-    value_type back() const
+    [[nodiscard]] value_type back() const
     {
         ensure_not_empty();
         return (*this)[size() - 1];
@@ -295,17 +295,17 @@ public:
         requires(!std::is_const_v<Block>)
     { return iterator(*this, size()); }
 
-    const_iterator begin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator end() const noexcept { return const_iterator(*this, size()); }
-    const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator cend() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator cend() const noexcept { return const_iterator(*this, size()); }
 
-    size_t size() const noexcept { return m_length; }
-    bool empty() const noexcept { return m_length == 0; }
+    [[nodiscard]] size_t size() const noexcept { return m_length; }
+    [[nodiscard]] bool empty() const noexcept { return m_length == 0; }
 
 private:
     /// The blocks, as a span: indexing asserts its bounds in Debug (YGGDRASIL_STDLIB_ASSERTIONS).
-    std::span<Block> blocks() const noexcept { return { m_data, m_length }; }
+    [[nodiscard]] std::span<Block> blocks() const noexcept { return { m_data, m_length }; }
 
     Block* m_data;
     size_t m_length;
@@ -385,7 +385,7 @@ private:
         return ArrayView(data, m_length, typename ArrayView::UncheckedTag {});
     }
 
-    ConstArrayView get_view(size_t index) const noexcept
+    [[nodiscard]] ConstArrayView get_view(size_t index) const noexcept
     {
         const size_t seg_idx = SegmentLayout::segment_index(index);
         const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
@@ -540,7 +540,7 @@ public:
         return (*this)[index];
     }
 
-    ConstArrayView at(size_t index) const
+    [[nodiscard]] ConstArrayView at(size_t index) const
     {
         ensure_index(index);
         return (*this)[index];
@@ -548,10 +548,10 @@ public:
 
     iterator begin() noexcept { return iterator(*this, 0); }
     iterator end() noexcept { return iterator(*this, size()); }
-    const_iterator begin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator end() const noexcept { return const_iterator(*this, size()); }
-    const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
-    const_iterator cend() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator(*this, size()); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return const_iterator(*this, 0); }
+    [[nodiscard]] const_iterator cend() const noexcept { return const_iterator(*this, size()); }
 
     size_t push_back(std::span<const value_type> elements)
     {
@@ -573,13 +573,13 @@ public:
         detail::with_lock<ThreadSafe>(m_writer_mutex, [&] { pop_back_unlocked(); });
     }
 
-    size_t length() const noexcept { return m_length; }
-    size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
-    size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
-    bool empty() const noexcept { return size() == 0; }
-    const auto& segments() const noexcept { return m_segments; }
+    [[nodiscard]] size_t length() const noexcept { return m_length; }
+    [[nodiscard]] size_t capacity() const noexcept { return detail::load_size<ThreadSafe>(m_capacity); }
+    [[nodiscard]] size_t size() const noexcept { return detail::load_size<ThreadSafe>(m_size); }
+    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
+    [[nodiscard]] const auto& segments() const noexcept { return m_segments; }
 
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t bytes = 0;
         for (size_t i = 0; i < m_segments.size(); ++i)

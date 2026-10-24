@@ -29,6 +29,8 @@ namespace ygg::tests
 {
 struct CanonicalizationTestTag;
 
+namespace
+{
 struct CanonicalizationContext
 {
     const std::vector<ygg::Data<CanonicalizationTestTag>>* data = nullptr;
@@ -37,6 +39,7 @@ struct CanonicalizationContext
     const ygg::Data<CanonicalizationTestTag>& operator[](ygg::Index<CanonicalizationTestTag> index) const;
     friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context YGG_LIFETIMEBOUND) noexcept { return context; }
 };
+}  // namespace
 }  // namespace ygg::tests
 
 namespace ygg
@@ -69,11 +72,14 @@ namespace ygg::tests
 const ygg::Data<CanonicalizationTestTag>& CanonicalizationContext::operator[](ygg::Index<CanonicalizationTestTag> index) const
 { return data->at(index.get_value()); }
 
+namespace
+{
 struct InvalidCanonicalizationContext
 {
 };
 int get_canonical_context(const ygg::Index<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&);
 int get_canonical_context(const ygg::Data<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&);
+}  // namespace
 
 namespace
 {

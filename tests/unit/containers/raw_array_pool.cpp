@@ -103,10 +103,10 @@ TEST(YggdrasilTests, CommonRawArrayPoolEmptyAccessThrows)
     auto pool = ygg::RawArrayPool<int, 2>(3);
     const auto& const_pool = pool;
 
-    EXPECT_THROW(pool.front(), std::out_of_range);
-    EXPECT_THROW(const_pool.front(), std::out_of_range);
-    EXPECT_THROW(pool.back(), std::out_of_range);
-    EXPECT_THROW(const_pool.back(), std::out_of_range);
+    EXPECT_THROW((void) pool.front(), std::out_of_range);
+    EXPECT_THROW((void) const_pool.front(), std::out_of_range);
+    EXPECT_THROW((void) pool.back(), std::out_of_range);
+    EXPECT_THROW((void) const_pool.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawArrayPoolAtChecksBounds)
@@ -118,8 +118,8 @@ TEST(YggdrasilTests, CommonRawArrayPoolAtChecksBounds)
 
     EXPECT_TRUE(std::ranges::equal(pool.at(0), first));
     EXPECT_TRUE(std::ranges::equal(const_pool.at(0), first));
-    EXPECT_THROW(pool.at(1), std::out_of_range);
-    EXPECT_THROW(const_pool.at(1), std::out_of_range);
+    EXPECT_THROW((void) pool.at(1), std::out_of_range);
+    EXPECT_THROW((void) const_pool.at(1), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRawArrayPoolStoresZeroLengthArrays)
@@ -288,7 +288,7 @@ TEST(YggdrasilTests, CommonRawArrayPoolEraseIgnoresUnpublishedSegment)
 }
 
 template<bool ThreadSafe>
-void test_raw_array_pool_move()
+static void test_raw_array_pool_move()
 {
     using Pool = ygg::RawArrayPool<int, 1, ThreadSafe>;
     const auto first = std::array<int, 2> { 1, 2 };
@@ -326,7 +326,7 @@ TEST(YggdrasilTests, CommonRawArrayPoolMovesLeaveSourcesReusable)
 }
 
 template<bool ThreadSafe>
-void test_raw_array_pool_failed_fill()
+static void test_raw_array_pool_failed_fill()
 {
     const auto values = std::array { 11, 12, 13 };
     // Fail in a fresh segment, at growth, and in already acquired capacity.
@@ -371,6 +371,8 @@ TEST(YggdrasilTests, CommonRawArrayPoolFailedRangeFillPreservesNextIndex)
     test_raw_array_pool_failed_fill<true>();
 }
 
+namespace
+{
 enum class PoolRangeOperation : std::uint8_t
 {
     None,
@@ -444,11 +446,12 @@ struct ThrowingPoolRange
         return values.size();
     }
 };
+}  // namespace
 
 static_assert(SizedForwardRangeOf<ThrowingPoolRange, int>);
 
 template<bool ThreadSafe>
-void test_raw_array_pool_throwing_operations()
+static void test_raw_array_pool_throwing_operations()
 {
     const auto values = std::array { 11, 12, 13 };
     const auto failures = std::array { std::pair { PoolRangeOperation::Begin, size_t { 0 } },     std::pair { PoolRangeOperation::End, size_t { 0 } },
@@ -476,23 +479,26 @@ TEST(YggdrasilTests, CommonRawArrayPoolTraversalExceptionsPreservePublication)
     test_raw_array_pool_throwing_operations<true>();
 }
 
+namespace
+{
 struct ThrowingPoolDataRange
 {
     std::span<const int> values;
     bool fail = true;
-    const int* begin() const { return values.data(); }
-    const int* end() const { return std::to_address(values.end()); }
-    size_t size() const { return values.size(); }
-    const int* data() const
+    [[nodiscard]] const int* begin() const { return values.data(); }
+    [[nodiscard]] const int* end() const { return std::to_address(values.end()); }
+    [[nodiscard]] size_t size() const { return values.size(); }
+    [[nodiscard]] const int* data() const
     {
         if (fail)
             throw std::runtime_error("range data failed");
         return values.data();
     }
 };
+}  // namespace
 
 template<bool ThreadSafe>
-void test_raw_array_pool_throwing_data()
+static void test_raw_array_pool_throwing_data()
 {
     const auto values = std::array { 11, 12, 13 };
     auto pool = RawArrayPool<int, 1, ThreadSafe>(values.size());
@@ -529,6 +535,8 @@ TEST(YggdrasilTests, CommonRawArrayStorageFailedFillPreservesEarlierSegmentSpace
     EXPECT_EQ(storage.memory_usage(), retained);
 }
 
+namespace
+{
 struct NoncopyablePoolValue
 {
     int value;
@@ -539,6 +547,7 @@ struct NoncopyablePoolValue
     NoncopyablePoolValue& operator=(NoncopyablePoolValue&&) = delete;
     ~NoncopyablePoolValue() = default;
 };
+}  // namespace
 
 static_assert(TriviallyCopyable<NoncopyablePoolValue>);
 static_assert(SizedForwardRangeOf<std::span<const NoncopyablePoolValue>, NoncopyablePoolValue>);

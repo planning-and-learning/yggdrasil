@@ -37,24 +37,27 @@
 // setup, warmup, and destruction of the retained evaluation objects.
 namespace allocation_tracking
 {
+namespace
+{
 struct Counts
 {
     size_t allocated = 0;
     size_t deallocated = 0;
 };
+}  // namespace
 
-bool& enabled() noexcept
+static bool& enabled() noexcept
 {
     thread_local bool value = false;
     return value;
 }
-Counts& counts() noexcept
+static Counts& counts() noexcept
 {
     thread_local Counts value;
     return value;
 }
 
-void* allocate(size_t bytes)
+static void* allocate(size_t bytes)
 {
     auto* result = std::malloc(bytes == 0 ? 1 : bytes);
     if (!result)
@@ -64,14 +67,14 @@ void* allocate(size_t bytes)
     return result;
 }
 
-void deallocate(void* pointer) noexcept
+static void deallocate(void* pointer) noexcept
 {
     if (pointer && enabled())
         ++counts().deallocated;
     std::free(pointer);
 }
 
-void* allocate_aligned(size_t bytes, size_t alignment)
+static void* allocate_aligned(size_t bytes, size_t alignment)
 {
     void* result = nullptr;
 #if defined(_MSC_VER)
@@ -89,7 +92,7 @@ void* allocate_aligned(size_t bytes, size_t alignment)
     return result;
 }
 
-void deallocate_aligned(void* pointer) noexcept
+static void deallocate_aligned(void* pointer) noexcept
 {
     if (pointer && enabled())
         ++counts().deallocated;
@@ -100,6 +103,8 @@ void deallocate_aligned(void* pointer) noexcept
 #endif
 }
 
+namespace
+{
 class Scope
 {
 public:
@@ -120,6 +125,7 @@ public:
         return counts();
     }
 };
+}  // namespace
 }  // namespace allocation_tracking
 
 void* operator new(size_t bytes) { return allocation_tracking::allocate(bytes); }
@@ -585,12 +591,12 @@ TEST(YggdrasilTests, UnorderedMultiMapWarmedRebuildsAllocateAndFreeNothing)
     bool valid = true;
     allocation_tracking::Scope measured;
     for (size_t repeat = 0; repeat < 4; ++repeat)
-        for (const auto count : { size_t(0), size_t(1), size_t(7), size_t(511), size_t(1024) })
+        for (const auto count : { static_cast<size_t>(0), static_cast<size_t>(1), static_cast<size_t>(7), static_cast<size_t>(511), static_cast<size_t>(1024) })
             for (const bool duplicates : { false, true })
             {
                 map.clear();
                 map.reserve(count);  // Includes reserve(0) on retained storage.
-                const auto key_count = duplicates ? std::min(count, size_t(17)) : count;
+                const auto key_count = duplicates ? std::min(count, static_cast<size_t>(17)) : count;
                 const auto offset = repeat * 2000;
                 for (size_t i = 0; i < count; ++i)
                     map.insert(offset + i % key_count, i);
@@ -814,7 +820,7 @@ struct IncrementalEvaluation
         return valid;
     }
 
-    size_t memory_usage() const
+    [[nodiscard]] size_t memory_usage() const
     { return joining.memory_usage() + projecting.memory_usage() + delta.memory_usage() + unchanged.memory_usage() + workspace.row.capacity() * sizeof(uint_t); }
 };
 }  // namespace
@@ -912,7 +918,7 @@ struct ChangingJoinEvaluation
         return valid;
     }
 
-    size_t memory_usage() const
+    [[nodiscard]] size_t memory_usage() const
     {
         return joining.memory_usage() + lhs_delta.memory_usage() + rhs_delta.memory_usage() + workspace.row.capacity() * sizeof(uint_t)
                + workspace.join_index.memory_usage();
@@ -942,12 +948,15 @@ TEST(YggdrasilTests, DatabaseWarmedChangingJoinReusesStorageAcrossNovelKeysAndCo
     EXPECT_EQ(evaluation.memory_usage(), retained_bytes);
 }
 
+namespace
+{
 struct AllocationRangeFillFailure
 {
 };
+}  // namespace
 
 template<bool ThreadSafe>
-void test_warmed_failed_range_insertion()
+static void test_warmed_failed_range_insertion()
 {
     auto set = RawArraySet<int, 1, ThreadSafe>(3);
     const auto values = std::array { 11, 12, 13 };
@@ -1020,8 +1029,8 @@ TEST(YggdrasilTests, DatabaseWarmedMixedWidthTuplesAndOperationsRetainStorage)
         right.clear();
         for (uint_t i = 0; i < 12; ++i)
         {
-            left.insert(std::tuple { generation + i, double(i % 4), i % 2 != 0 });
-            right.insert(std::tuple { double(i % 4), generation + i });
+            left.insert(std::tuple { generation + i, static_cast<double>(i % 4), i % 2 != 0 });
+            right.insert(std::tuple { static_cast<double>(i % 4), generation + i });
         }
         database::join(left, right, joining, joined, workspace);
         database::project(joined, projecting, projected, workspace);

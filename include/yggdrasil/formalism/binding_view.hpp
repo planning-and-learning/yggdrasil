@@ -136,11 +136,11 @@ class View<Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>, C> : 
 public:
     using IndexViewBase<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, C>::IndexViewBase;
 
-    auto get_relation() const { return ygg::make_view(this->get_handle().relation, this->get_context()); }
-    auto get_objects() const { return ygg::make_view(this->get_data(), this->get_context()); }
+    [[nodiscard]] auto get_relation() const { return ygg::make_view(this->get_handle().relation, this->get_context()); }
+    [[nodiscard]] auto get_objects() const { return ygg::make_view(this->get_data(), this->get_context()); }
     // Use the relation index rather than its view: view identity includes the repository,
     // while this key represents the logical binding across repositories.
-    auto get_key() const { return std::make_pair(this->get_handle().relation, this->get_data()); }
+    [[nodiscard]] auto get_key() const { return std::make_pair(this->get_handle().relation, this->get_data()); }
 };
 
 /// Borrows a complete binding without publishing a row identity. Data and context
@@ -148,15 +148,15 @@ public:
 template<typename RelationTag, typename ObjectTag, typename C>
 class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>
 {
-    auto objects() const noexcept
+    [[nodiscard]] auto objects() const noexcept
     { return std::span<const Index<formalism::Object<ObjectTag>>>(this->get_data().objects.data(), this->get_data().objects.size()); }
 
 public:
     using DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>::DataViewBase;
 
-    auto get_relation() const { return make_view(this->get_data().relation, this->get_context()); }
-    auto get_objects() const noexcept { return make_view(objects(), this->get_context()); }
-    auto get_key() const noexcept { return std::make_pair(this->get_data().relation, objects()); }
+    [[nodiscard]] auto get_relation() const { return make_view(this->get_data().relation, this->get_context()); }
+    [[nodiscard]] auto get_objects() const noexcept { return make_view(objects(), this->get_context()); }
+    [[nodiscard]] auto get_key() const noexcept { return std::make_pair(this->get_data().relation, objects()); }
 };
 
 template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
@@ -169,13 +169,13 @@ private:
 public:
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
-    bool empty() const { return std::ranges::begin(*get_data().rows) == std::ranges::end(*get_data().rows); }
+    [[nodiscard]] bool empty() const { return std::ranges::begin(*get_data().rows) == std::ranges::end(*get_data().rows); }
 
-    size_t size() const
+    [[nodiscard]] size_t size() const
         requires std::ranges::sized_range<const std::remove_reference_t<BindingRange>>
     { return std::ranges::size(*get_data().rows); }
 
-    decltype(auto) front() const
+    [[nodiscard]] decltype(auto) front() const
     {
         ensure_not_empty();
         auto it = std::ranges::begin(*get_data().rows);
@@ -185,13 +185,13 @@ public:
     using const_iterator =
         formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;
 
-    const_iterator begin() const { return const_iterator { *get_data().relation, std::ranges::begin(*get_data().rows), get_context() }; }
+    [[nodiscard]] const_iterator begin() const { return const_iterator { *get_data().relation, std::ranges::begin(*get_data().rows), get_context() }; }
 
-    const_iterator end() const { return const_iterator { *get_data().relation, std::ranges::end(*get_data().rows), get_context() }; }
+    [[nodiscard]] const_iterator end() const { return const_iterator { *get_data().relation, std::ranges::end(*get_data().rows), get_context() }; }
 
-    const auto& get_data() const noexcept { return m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
 
 private:
     void ensure_not_empty() const
@@ -214,18 +214,18 @@ private:
 public:
     View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
-    bool empty() const { return std::ranges::begin(*get_data().rows) == std::ranges::end(*get_data().rows); }
+    [[nodiscard]] bool empty() const { return std::ranges::begin(*get_data().rows) == std::ranges::end(*get_data().rows); }
 
-    size_t size() const { return std::ranges::size(*get_data().rows); }
+    [[nodiscard]] size_t size() const { return std::ranges::size(*get_data().rows); }
 
-    decltype(auto) front() const
+    [[nodiscard]] decltype(auto) front() const
     {
         ensure_not_empty();
         auto it = std::ranges::begin(*get_data().rows);
         return ygg::make_view(T { *get_data().relation, *it }, get_context());
     }
 
-    decltype(auto) back() const
+    [[nodiscard]] decltype(auto) back() const
     {
         ensure_not_empty();
         return ygg::make_view(T { *get_data().relation, std::views::all(*get_data().rows).back() }, get_context());
@@ -236,13 +236,13 @@ public:
     using const_iterator =
         formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;
 
-    const_iterator begin() const { return const_iterator { *get_data().relation, std::ranges::begin(*get_data().rows), get_context() }; }
+    [[nodiscard]] const_iterator begin() const { return const_iterator { *get_data().relation, std::ranges::begin(*get_data().rows), get_context() }; }
 
-    const_iterator end() const { return const_iterator { *get_data().relation, std::ranges::end(*get_data().rows), get_context() }; }
+    [[nodiscard]] const_iterator end() const { return const_iterator { *get_data().relation, std::ranges::end(*get_data().rows), get_context() }; }
 
-    const auto& get_data() const noexcept { return m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
 
 private:
     void ensure_not_empty() const

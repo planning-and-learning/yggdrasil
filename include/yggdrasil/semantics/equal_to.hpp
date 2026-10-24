@@ -19,10 +19,10 @@
 #define YGG_SEMANTICS_EQUAL_TO_HPP_
 
 #include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/core/config.hpp"
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <functional>
 #include <gtl/btree.hpp>
 #include <map>
@@ -73,8 +73,8 @@ struct EqualTo<T>
 {
     constexpr bool operator()(const T& lhs, const T& rhs) const noexcept
     {
-        bool lhs_nan = std::is_constant_evaluated() ? lhs != lhs : std::isnan(lhs);
-        bool rhs_nan = std::is_constant_evaluated() ? rhs != rhs : std::isnan(rhs);
+        const bool lhs_nan = ygg::is_nan(lhs);
+        const bool rhs_nan = ygg::is_nan(rhs);
 
         if (lhs_nan || rhs_nan)
             return lhs_nan && rhs_nan;

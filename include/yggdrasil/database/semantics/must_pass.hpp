@@ -94,8 +94,8 @@ public:
     {
     }
 
-    size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
-    const MustPassPlan& plan() const noexcept { return m_plan; }
+    [[nodiscard]] size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
+    [[nodiscard]] const MustPassPlan& plan() const noexcept { return m_plan; }
 
     /// Appends to `out`, which has the plan's output columns, the must-pass probe objects of every key of the sources and
     /// targets over the edges of the inputs: input(slot) returns slot's relation view.
@@ -127,7 +127,7 @@ public:
         must_pass(input, sources, targets, probes, out, heuristic);
     }
 
-    const MustPassStatistics& statistics() const noexcept { return m_statistics; }
+    [[nodiscard]] const MustPassStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
     /// Vertices of the current key by id, as a VertexRange.
@@ -136,8 +136,8 @@ private:
         const VertexSet* set = nullptr;
         std::span<const uint_t> ids;
 
-        size_t size() const noexcept { return ids.size(); }
-        std::span<const std::byte> row(size_t i) const { return (*set)[ids[i]]; }
+        [[nodiscard]] size_t size() const noexcept { return ids.size(); }
+        [[nodiscard]] std::span<const std::byte> row(size_t i) const { return (*set)[ids[i]]; }
     };
 
     using Edges = detail::EdgeQuery<bound::QueryEvaluator>;
@@ -186,7 +186,7 @@ private:
     public:
         explicit KeyedHeuristic(MustPass& owner) : m_owner(&owner) {}
 
-        uint_t estimate(std::span<const std::byte> vertex) const { return m_owner->estimate(vertex); }
+        [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const { return m_owner->estimate(vertex); }
 
     private:
         MustPass* m_owner;
@@ -198,8 +198,9 @@ private:
         return edges;
     }
 
-    std::span<const std::byte> key_of(std::span<const std::byte> row) const noexcept { return row.first(m_plan.key_size()); }
-    std::span<const std::byte> vertex_of(std::span<const std::byte> row) const noexcept { return row.subspan(m_plan.key_size(), m_plan.vertex_size()); }
+    [[nodiscard]] std::span<const std::byte> key_of(std::span<const std::byte> row) const noexcept { return row.first(m_plan.key_size()); }
+    [[nodiscard]] std::span<const std::byte> vertex_of(std::span<const std::byte> row) const noexcept
+    { return row.subspan(m_plan.key_size(), m_plan.vertex_size()); }
 
     /// The row positions of the sources and targets of each key; keys are numbered by their first source.
     template<RelationViewConcept S, RelationViewConcept T>
@@ -210,7 +211,7 @@ private:
         if (keyed)
             for (size_t r = 0; r < sources.size(); ++r)
                 m_keys.insert(key_of(sources.row(r)));
-        const auto keys = keyed ? m_keys.size() : size_t(1);
+        const auto keys = keyed ? m_keys.size() : static_cast<size_t>(1);
         m_key_sources.resize(keys);
         m_key_targets.resize(keys);
         for (size_t key = 0; key < keys; ++key)
@@ -244,21 +245,21 @@ private:
     {
         for (const auto position : m_probe_positions)
             if (const auto probe = m_probes.find(vertex.subspan(position, m_plan.probe_size())))
-                on_probe(uint_t(*probe));
+                on_probe(static_cast<uint_t>(*probe));
     }
-    bool contains(std::span<const std::byte> vertex, uint_t probe) const
+    [[nodiscard]] bool contains(std::span<const std::byte> vertex, uint_t probe) const
     {
         const auto object = m_probes[probe];
         return std::ranges::any_of(m_probe_positions,
                                    [&](size_t position) { return std::ranges::equal(vertex.subspan(position, m_plan.probe_size()), object); });
     }
     /// Whether the current search may visit a vertex: it does not contain the excluded probe object.
-    bool allowed(std::span<const std::byte> vertex) const { return m_excluded == none || !contains(vertex, m_excluded); }
+    [[nodiscard]] bool allowed(std::span<const std::byte> vertex) const { return m_excluded == none || !contains(vertex, m_excluded); }
 
     /// The heuristic's estimate of a vertex of the current key.
     uint_t estimate(std::span<const std::byte> vertex)
     {
-        std::ranges::copy(vertex, m_estimated.begin() + long(m_plan.key_size()));
+        std::ranges::copy(vertex, m_estimated.begin() + static_cast<std::ptrdiff_t>(m_plan.key_size()));
         return m_heuristic->estimate(m_estimated);
     }
 
@@ -322,12 +323,15 @@ private:
         m_row.assign(key_bytes.begin(), key_bytes.end());
         m_row.resize(m_plan.key_size() + m_plan.probe_size());
         const auto in_all = [&](const VertexSet& vertices, uint_t probe)
-        { return std::ranges::all_of(std::views::iota(uint_t(0), uint_t(vertices.size())), [&](uint_t id) { return contains(vertices[id], probe); }); };
+        {
+            return std::ranges::all_of(std::views::iota(static_cast<uint_t>(0), static_cast<uint_t>(vertices.size())),
+                                       [&](uint_t id) { return contains(vertices[id], probe); });
+        };
         for (const auto probe : m_candidates)
             // An object in every source or every target is passed trivially, as initial facts and goals are landmarks.
             if (in_all(m_starts, probe) || in_all(m_ends, probe) || (++m_statistics.removals, !search(probe, [](std::span<const std::byte>) {})))
             {
-                std::ranges::copy(m_probes[probe], m_row.begin() + long(m_plan.key_size()));
+                std::ranges::copy(m_probes[probe], m_row.begin() + static_cast<std::ptrdiff_t>(m_plan.key_size()));
                 out.insert(std::span<const std::byte>(m_row));
             }
     }

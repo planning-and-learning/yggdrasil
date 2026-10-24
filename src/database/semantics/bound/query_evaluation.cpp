@@ -34,7 +34,7 @@ bool QueryEvaluator::bind_atom(const ConjunctiveAtom& atom, std::span<const std:
     for (size_t c = 0; c < atom.vars.size(); ++c)
     {
         const auto bytes = database::detail::column_bytes(row, columns[c]);
-        if (size_t(std::ranges::find(atom.vars, atom.vars[c]) - atom.vars.begin()) == c)
+        if (static_cast<size_t>(std::ranges::find(atom.vars, atom.vars[c]) - atom.vars.begin()) == c)
             std::ranges::copy(bytes, variable(atom.vars[c]).begin());
         else if (!std::ranges::equal(bytes, variable(atom.vars[c])))
             return false;

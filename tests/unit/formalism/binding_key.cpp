@@ -19,7 +19,7 @@ struct StoredBinding
     int relation;
     std::vector<int> objects;
 
-    auto get_key() const noexcept { return std::make_pair(relation, std::span<const int>(objects)); }
+    [[nodiscard]] auto get_key() const noexcept { return std::make_pair(relation, std::span<const int>(objects)); }
 };
 
 /// A row whose first arity objects spell a stored binding, like a rule binding that extends an action binding.
@@ -29,7 +29,7 @@ struct PrefixBinding
     std::vector<int> row;
     size_t arity;
 
-    auto get_key() const noexcept
+    [[nodiscard]] auto get_key() const noexcept
     { return std::make_pair(relation, std::views::take(row, static_cast<std::ranges::range_difference_t<decltype(row)>>(arity))); }
 };
 

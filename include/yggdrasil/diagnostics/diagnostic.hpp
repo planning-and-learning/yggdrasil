@@ -36,9 +36,9 @@ public:
             throw std::invalid_argument("tab_width must be at least 1");
     }
 
-    const std::string& text() const noexcept { return m_text; }
-    const std::string& filename() const noexcept { return m_filename; }
-    int tab_width() const noexcept { return m_tab_width; }
+    [[nodiscard]] const std::string& text() const noexcept { return m_text; }
+    [[nodiscard]] const std::string& filename() const noexcept { return m_filename; }
+    [[nodiscard]] int tab_width() const noexcept { return m_tab_width; }
 
 private:
     std::string m_text;
@@ -56,12 +56,12 @@ public:
             throw std::invalid_argument("source span must satisfy 0 <= begin <= end <= source size");
     }
 
-    const std::shared_ptr<const Source>& source() const noexcept { return m_source; }
-    std::size_t begin() const noexcept { return m_begin; }
-    std::size_t end() const noexcept { return m_end; }
+    [[nodiscard]] const std::shared_ptr<const Source>& source() const noexcept { return m_source; }
+    [[nodiscard]] std::size_t begin() const noexcept { return m_begin; }
+    [[nodiscard]] std::size_t end() const noexcept { return m_end; }
 
     /// One-based line, recognizing LF, CRLF, and CR line endings.
-    std::size_t line() const noexcept
+    [[nodiscard]] std::size_t line() const noexcept
     {
         const auto& text = m_source->text();
         auto result = std::size_t { 1 };
@@ -72,7 +72,7 @@ public:
     }
 
     /// One-based byte column, not a Unicode display column. Tabs count as one byte.
-    std::size_t column() const noexcept
+    [[nodiscard]] std::size_t column() const noexcept
     {
         if (m_begin == 0)
             return 1;

@@ -99,7 +99,8 @@ public:
         /// The collected fields; the archive is done.
         boost::json::object take_fields() && { return std::move(m_fields); }
 
-        bool accepts(std::string_view name) const { return !*m_selected_fields || std::ranges::find(**m_selected_fields, name) != (*m_selected_fields)->end(); }
+        [[nodiscard]] bool accepts(std::string_view name) const
+        { return !*m_selected_fields || std::ranges::find(**m_selected_fields, name) != (*m_selected_fields)->end(); }
 
         template<typename T>
         void field(std::string_view name, const T& value)

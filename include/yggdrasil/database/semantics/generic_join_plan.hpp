@@ -32,26 +32,26 @@ public:
                     std::span<const Index<Column>> variable_order,
                     std::span<const Index<Column>> output_order);
 
-    size_t input_count() const noexcept { return m_inputs.size(); }
-    std::span<const ColumnLayout> input_columns(size_t input) const
+    [[nodiscard]] size_t input_count() const noexcept { return m_inputs.size(); }
+    [[nodiscard]] std::span<const ColumnLayout> input_columns(size_t input) const
     {
         const auto& columns = m_inputs.at(input);
         return { columns.data(), columns.size() };
     }
-    const auto& output_columns() const& noexcept { return m_output; }
-    const auto& output_columns() const&& = delete;
-    std::span<const Index<Column>> variable_order() const noexcept { return { m_order.data(), m_order.size() }; }
-    std::span<const ColumnSlice> input_keys(size_t input) const
+    [[nodiscard]] const auto& output_columns() const& noexcept { return m_output; }
+    [[nodiscard]] const auto& output_columns() const&& = delete;
+    [[nodiscard]] std::span<const Index<Column>> variable_order() const noexcept { return { m_order.data(), m_order.size() }; }
+    [[nodiscard]] std::span<const ColumnSlice> input_keys(size_t input) const
     {
         const auto& keys = m_keys.at(input);
         return { keys.data(), keys.size() };
     }
-    std::span<const size_t> variable_inputs(size_t depth) const
+    [[nodiscard]] std::span<const size_t> variable_inputs(size_t depth) const
     {
         const auto& occurrences = m_occurrences.at(depth);
         return { occurrences.data(), occurrences.size() };
     }
-    ColumnSlice output_position(size_t depth) const { return m_output_positions.at(depth); }
+    [[nodiscard]] ColumnSlice output_position(size_t depth) const { return m_output_positions.at(depth); }
 
     static constexpr auto cista_members() noexcept
     {
@@ -63,7 +63,7 @@ public:
                             &GenericJoinPlan::m_output_positions> {};
     }
 
-    bool matches(const GenericJoinPlan& other) const;
+    [[nodiscard]] bool matches(const GenericJoinPlan& other) const;
 };
 }  // namespace ygg::database
 

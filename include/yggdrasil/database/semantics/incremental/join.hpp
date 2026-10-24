@@ -108,13 +108,13 @@ public:
     template<RelationChange L, RelationChange R>
     void update(const L& lhs, const R& rhs, Workspace& workspace);
 
-    const Builder<Relation>& get_result() const&;
-    const Builder<Relation>& get_result() const&& = delete;
-    const Delta& get_delta() const&;
-    const Delta& get_delta() const&& = delete;
+    [[nodiscard]] const Builder<Relation>& get_result() const&;
+    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const Delta& get_delta() const&;
+    [[nodiscard]] const Delta& get_delta() const&& = delete;
 
     /// Retained inputs, result, delta and indexes; excludes plan and caller workspace.
-    size_t memory_usage() const noexcept;
+    [[nodiscard]] size_t memory_usage() const noexcept;
 };
 
 template<RelationViewConcept L, RelationViewConcept R>

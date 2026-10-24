@@ -10,9 +10,7 @@ namespace ygg::database::bound
 UnionNormalForm union_normal_form(QueryView<> query) { return detail::UnionNormalFormBuilder {}.build(query); }
 }
 
-namespace ygg::database::bound
-{
-namespace detail
+namespace ygg::database::bound::detail
 {
 std::vector<ConjunctiveBranch> UnionNormalFormBuilder::product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs)
 {
@@ -29,11 +27,8 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::product(const std::vector
     return result;
 }
 }
-}
 
-namespace ygg::database::bound
-{
-namespace detail
+namespace ygg::database::bound::detail
 {
 std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query, std::span<const uint32_t> mapping)
 {
@@ -132,6 +127,5 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
             }
         },
         query.get_variant());
-}
 }
 }

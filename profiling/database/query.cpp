@@ -44,7 +44,7 @@ struct Triangle
             for (uint_t i = 1; i <= count; ++i)
                 changed[input].insert(std::tuple { i, i });
             added[input].insert(std::tuple { count, count });
-            removed[input].insert(std::tuple { uint_t(0), uint_t(0) });
+            removed[input].insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(0) });
         }
         return join(join(input(0), input(1)), input(2));
     }

@@ -28,6 +28,8 @@
 namespace ygg::tests
 {
 
+namespace
+{
 struct UniquePoolValue
 {
     int value = 0;
@@ -55,6 +57,7 @@ struct BlockingUniquePoolValue
         release.wait();
     }
 };
+}  // namespace
 
 static_assert(!std::is_move_constructible_v<ygg::UniqueObjectPool<UniquePoolValue>>);
 static_assert(!std::is_move_assignable_v<ygg::UniqueObjectPool<UniquePoolValue>>);
@@ -68,7 +71,7 @@ static_assert(!CanInitializeUniquePool<ygg::UniqueObjectPool<UniquePoolValue>, s
 static_assert(!CanInitializeUniquePool<ygg::UniqueObjectPool<int>, int>);
 
 template<bool ThreadSafe>
-void expect_unique_pool_grows_and_reuses_across_capacity_boundaries()
+static void expect_unique_pool_grows_and_reuses_across_capacity_boundaries()
 {
     constexpr size_t count = 65;
     auto pool = ygg::UniqueObjectPool<UniquePoolValue, ThreadSafe>();
@@ -103,7 +106,7 @@ void expect_unique_pool_grows_and_reuses_across_capacity_boundaries()
 }
 
 template<bool ThreadSafe>
-void expect_unique_pool_recovers_from_failed_initialization()
+static void expect_unique_pool_recovers_from_failed_initialization()
 {
     auto pool = ygg::UniqueObjectPool<ThrowingUniquePoolValue, ThreadSafe>();
 
@@ -263,6 +266,8 @@ TEST(YggdrasilTests, CommonThreadSafeUniqueObjectPoolInitializesOutsideLock)
     EXPECT_EQ(pool.free_size(), 2);
 }
 
+namespace
+{
 template<bool ThreadSafe>
 struct ReleasingUniquePoolValue
 {
@@ -286,9 +291,10 @@ struct ReleasingUniquePoolValue
         buffer.clear();
     }
 };
+}  // namespace
 
 template<bool ThreadSafe>
-void expect_unique_pool_release_hook_preserves_buffers_and_releases_children()
+static void expect_unique_pool_release_hook_preserves_buffers_and_releases_children()
 {
     auto releases = 0;
     auto pool = ygg::UniqueObjectPool<ReleasingUniquePoolValue<ThreadSafe>, ThreadSafe>();

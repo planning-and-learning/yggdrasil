@@ -41,11 +41,12 @@ public:
             PyErr_Clear();
             return false;
         }
-        value = String(std::string_view(str, (size_t) size));  // owning copy
+        value = String(std::string_view(str, static_cast<size_t>(size)));  // owning copy
         return true;
     }
 
-    static handle from_cpp(const String& s, rv_policy, cleanup_list*) noexcept { return PyUnicode_FromStringAndSize(s.data(), (Py_ssize_t) s.size()); }
+    static handle from_cpp(const String& s, rv_policy, cleanup_list*) noexcept
+    { return PyUnicode_FromStringAndSize(s.data(), static_cast<Py_ssize_t>(s.size())); }
 };
 
 NAMESPACE_END(detail)

@@ -54,7 +54,7 @@ private:
     const RelationRepositoryBase* m_root;
     size_t m_index;
 
-    const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
+    [[nodiscard]] const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 
 public:
     using object_tag = ObjectTag;
@@ -67,7 +67,7 @@ public:
 private:
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    const RelationRepositoryBase* find_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const noexcept
+    [[nodiscard]] const RelationRepositoryBase* find_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const noexcept
     {
         const auto* current = this;
         while (current != nullptr)
@@ -87,8 +87,8 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    std::optional<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>> find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder,
-                                                                                                size_t h) const
+    [[nodiscard]] std::optional<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>>
+    find_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         const auto relation = builder.relation;
 
@@ -111,7 +111,7 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    std::optional<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const
+    [[nodiscard]] std::optional<::ygg::View<Index<RelationBinding<T, ObjectTag>>, Repository>> find(const Data<RelationBinding<T, ObjectTag>>& builder) const
     { return find_with_hash(builder, RelationRepositoryBase::hash(builder)); }
 
     template<typename T>
@@ -143,17 +143,17 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    auto front(Index<T> g) const
+    [[nodiscard]] auto front(Index<T> g) const
     { return (*this)[Index<RelationBinding<T, ObjectTag>> { g, Index<Row>(0) }]; }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    size_t size(Index<T> g) const noexcept
+    [[nodiscard]] size_t size(Index<T> g) const noexcept
     { return get<T>().size(g); }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    const Repository& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const
+    [[nodiscard]] const Repository& get_canonical_context(Index<RelationBinding<T, ObjectTag>> index) const
     {
         if (const auto* owner = find_canonical_context(index))
             return owner->repository();
@@ -162,12 +162,12 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    bool contains(Index<RelationBinding<T, ObjectTag>> index) const noexcept
+    [[nodiscard]] bool contains(Index<RelationBinding<T, ObjectTag>> index) const noexcept
     { return find_canonical_context(index) != nullptr; }
 
     template<typename T, typename C>
         requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
-    bool contains(const ::ygg::View<Index<T>, C>& view) const
+    [[nodiscard]] bool contains(const ::ygg::View<Index<T>, C>& view) const
     { return ::ygg::formalism::contains(repository(), view); }
 
     /**
@@ -182,18 +182,18 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    const BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() const noexcept
+    [[nodiscard]] const BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() const noexcept
     { return static_cast<const BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this); }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+    [[nodiscard]] auto find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     { return get<T>().find_local_with_hash(builder, h); }
 
     /// Forwards the unsafe local-only lookup without traversing ancestors.
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    auto find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+    [[nodiscard]] auto find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     { return get<T>().find_local_unsafe_with_hash(builder, h); }
 
     template<typename T>
@@ -218,7 +218,7 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    auto at_local(Index<RelationBinding<T, ObjectTag>> index) const
+    [[nodiscard]] auto at_local(Index<RelationBinding<T, ObjectTag>> index) const
     { return get<T>().at_local(index); }
 
     template<typename T>
@@ -238,17 +238,17 @@ public:
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
+    [[nodiscard]] bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
     { return get<T>().is_local(index); }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    bool exists_parent_mutation(Index<T> g) const noexcept
+    [[nodiscard]] bool exists_parent_mutation(Index<T> g) const noexcept
     { return get<T>().exists_parent_mutation(g); }
 
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     { return get<T>().memory_usage(); }
 
     /**
@@ -272,9 +272,10 @@ public:
     RelationRepositoryBase(RelationRepositoryBase&&) = delete;
     RelationRepositoryBase& operator=(RelationRepositoryBase&&) = delete;
 
-    const auto& get_index() const noexcept { return m_index; }
-    const Repository& get_root() const noexcept { return m_root->repository(); }
-    std::uint8_t get_object_index_width() const noexcept { return this->template get<typename FirstType<Ts...>::type>().get_object_index_width(); }
+    [[nodiscard]] const auto& get_index() const noexcept { return m_index; }
+    [[nodiscard]] const Repository& get_root() const noexcept { return m_root->repository(); }
+    [[nodiscard]] std::uint8_t get_object_index_width() const noexcept
+    { return this->template get<typename FirstType<Ts...>::type>().get_object_index_width(); }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 

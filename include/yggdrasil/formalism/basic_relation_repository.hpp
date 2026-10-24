@@ -122,7 +122,7 @@ private:
     {
     public:
         Slot* find(ygg::uint_t gi) noexcept { return find_in(*this, gi); }
-        const Slot* find(ygg::uint_t gi) const noexcept { return find_in(*this, gi); }
+        [[nodiscard]] const Slot* find(ygg::uint_t gi) const noexcept { return find_in(*this, gi); }
 
         Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
         {
@@ -154,7 +154,7 @@ private:
                 function(slot);
         }
 
-        size_t memory_usage() const noexcept { return m_forward.capacity() * sizeof(ygg::uint_t) + m_slots.capacity() * sizeof(Slot); }
+        [[nodiscard]] size_t memory_usage() const noexcept { return m_forward.capacity() * sizeof(ygg::uint_t) + m_slots.capacity() * sizeof(Slot); }
 
     private:
         template<typename Self>
@@ -190,7 +190,7 @@ private:
         };
 
         // The slots are reached through atomic pointers, so const members find them mutable too.
-        Slot* lookup(ygg::uint_t gi) const noexcept
+        [[nodiscard]] Slot* lookup(ygg::uint_t gi) const noexcept
         {
             const auto [segment_index, offset] = locate(gi);
             const auto* segment = m_segments[segment_index].load(std::memory_order_acquire);
@@ -262,7 +262,7 @@ private:
         ConcurrentSlotDirectory& operator=(ConcurrentSlotDirectory&&) = delete;
 
         Slot* find(ygg::uint_t gi) noexcept { return lookup(gi); }
-        const Slot* find(ygg::uint_t gi) const noexcept { return lookup(gi); }
+        [[nodiscard]] const Slot* find(ygg::uint_t gi) const noexcept { return lookup(gi); }
 
         Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
         {
@@ -295,7 +295,7 @@ private:
             visit_slots([&](Slot& slot) { function(std::as_const(slot)); });
         }
 
-        size_t memory_usage() const noexcept
+        [[nodiscard]] size_t memory_usage() const noexcept
         {
             size_t bytes = 0;
             for_each([&](const Slot&) { bytes += sizeof(Slot); });
@@ -337,7 +337,7 @@ private:
             });
     }
 
-    const Slot* find_slot(Index<T> g) const noexcept { return g == Index<T>::max() ? nullptr : m_slots.find(ygg::uint_t(g)); }
+    [[nodiscard]] const Slot* find_slot(Index<T> g) const noexcept { return g == Index<T>::max() ? nullptr : m_slots.find(ygg::uint_t(g)); }
 
     Slot* find_slot(Index<T> g) noexcept { return g == Index<T>::max() ? nullptr : m_slots.find(ygg::uint_t(g)); }
 
@@ -355,7 +355,7 @@ public:
      * Handle-producing methods return raw handles because the caller already knows the context.
      */
 
-    std::optional<Index<Row>> find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+    [[nodiscard]] std::optional<Index<Row>> find_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         const auto g = builder.relation;
 
@@ -372,7 +372,7 @@ public:
     /// Performs a local lookup without locking the underlying hash shard. The
     /// underlying collection's unsafe publication, lifetime, and immutability
     /// preconditions apply.
-    std::optional<Index<Row>> find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
+    [[nodiscard]] std::optional<Index<Row>> find_local_unsafe_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
     {
         const auto g = builder.relation;
 
@@ -386,7 +386,7 @@ public:
         return std::nullopt;
     }
 
-    std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
+    [[nodiscard]] std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
     { return find_local_with_hash(builder, BasicRelationRepository::hash(builder)); }
 
     std::pair<Index<Row>, bool> insert_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
@@ -408,7 +408,7 @@ public:
         return { Index<Row>(slot.parent_size + row), created };
     }
 
-    ConstViewType at_local(Index<RelationBinding<T, ObjectTag>> index) const
+    [[nodiscard]] ConstViewType at_local(Index<RelationBinding<T, ObjectTag>> index) const
     {
         const auto& [g, row] = index;
 
@@ -419,7 +419,7 @@ public:
         return slot->container[row.value - slot->parent_size];
     }
 
-    ConstViewType front_local(Index<T> g) const
+    [[nodiscard]] ConstViewType front_local(Index<T> g) const
     {
         const auto* slot = find_slot(g);
         if (!slot || slot->container.empty())
@@ -427,13 +427,13 @@ public:
         return slot->container.front();
     }
 
-    size_t local_size(Index<T> g) const noexcept
+    [[nodiscard]] size_t local_size(Index<T> g) const noexcept
     {
         const auto* slot = find_slot(g);
         return slot ? slot->container.size() : 0;
     }
 
-    size_t size(Index<T> g) const noexcept
+    [[nodiscard]] size_t size(Index<T> g) const noexcept
     {
         const auto* slot = find_slot(g);
         if (!slot)
@@ -442,13 +442,13 @@ public:
         return slot->parent_size + slot->container.size();
     }
 
-    size_t parent_size(Index<T> g) const noexcept
+    [[nodiscard]] size_t parent_size(Index<T> g) const noexcept
     {
         const auto* slot = find_slot(g);
         return slot ? slot->parent_size : (m_parent ? m_parent->size(g) : 0);
     }
 
-    bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
+    [[nodiscard]] bool is_local(Index<RelationBinding<T, ObjectTag>> index) const noexcept
     {
         const auto& [g, row] = index;
         if (g == Index<T>::max() || row == Index<Row>::max())
@@ -461,7 +461,7 @@ public:
         return ygg::uint_t(row) >= slot->parent_size && ygg::uint_t(row) < slot->parent_size + slot->container.size();
     }
 
-    bool exists_parent_mutation(Index<T> g) const noexcept
+    [[nodiscard]] bool exists_parent_mutation(Index<T> g) const noexcept
     {
         if (!m_parent)
             return false;
@@ -508,14 +508,14 @@ public:
     void clear() noexcept { clear_slots(); }
 
     /// @brief Retained dynamic storage owned by this repository layer.
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t bytes = m_slots.memory_usage();
         m_slots.for_each([&](const Slot& slot) { bytes += slot.container.memory_usage(); });
         return bytes;
     }
 
-    std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
+    [[nodiscard]] std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
 
     static size_t hash(const Data<RelationBinding<T, ObjectTag>>& builder) noexcept { return container_type::hash(builder.objects); }
 };

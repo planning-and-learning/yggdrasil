@@ -44,8 +44,8 @@ private:
 public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
-    size_t size() const noexcept { return get_data().size(); }
-    bool empty() const noexcept { return get_data().empty(); }
+    [[nodiscard]] size_t size() const noexcept { return get_data().size(); }
+    [[nodiscard]] bool empty() const noexcept { return get_data().empty(); }
 
     decltype(auto) operator[](size_t i) const
     {
@@ -55,7 +55,7 @@ public:
             return get_data()[i];
     }
 
-    decltype(auto) at(size_t i) const
+    [[nodiscard]] decltype(auto) at(size_t i) const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().at(i), get_context());
@@ -63,7 +63,7 @@ public:
             return get_data().at(i);
     }
 
-    decltype(auto) front() const
+    [[nodiscard]] decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().front(), get_context());
@@ -71,7 +71,7 @@ public:
             return get_data().front();
     }
 
-    decltype(auto) back() const
+    [[nodiscard]] decltype(auto) back() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().back(), get_context());
@@ -169,20 +169,20 @@ public:
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr <=> rhs.ptr; }
     };
 
-    const_iterator begin() const noexcept { return const_iterator { elements().begin(), get_context() }; }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator { elements().begin(), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { elements().end(), get_context() }; }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator { elements().end(), get_context() }; }
 
-    const_iterator cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
 
-    const_iterator cend() const noexcept { return end(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return *m_handle; }
 
 private:
-    std::span<const T> elements() const noexcept { return { get_data().data(), get_data().size() }; }
+    [[nodiscard]] std::span<const T> elements() const noexcept { return { get_data().data(), get_data().size() }; }
 
     const C* m_context;
     const Container* m_handle;
@@ -227,7 +227,7 @@ private:
     friend class MDSpan;
 
     /// The elements, row-major and contiguous: indexing and slicing assert their bounds in Debug.
-    std::span<T> elements() const noexcept { return { m_data, size() }; }
+    [[nodiscard]] std::span<T> elements() const noexcept { return { m_data, size() }; }
 
     // internal ctor used by slicing
     MDSpan(T* data, const std::array<size_t, Rank>& shapes, const std::array<size_t, Rank>& strides) noexcept :
@@ -285,7 +285,7 @@ public:
         return (*this)[pos];
     }
 
-    auto at(size_t pos) const
+    [[nodiscard]] auto at(size_t pos) const
         requires(Rank > 1)
     {
         ensure_index_in_bounds(0, pos);
@@ -299,7 +299,7 @@ public:
         return (*this)[pos];
     }
 
-    const T& at(size_t pos) const
+    [[nodiscard]] const T& at(size_t pos) const
         requires(Rank == 1)
     {
         ensure_index_in_bounds(0, pos);
@@ -323,7 +323,7 @@ public:
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
-    const T& at(Idx... idx) const
+    [[nodiscard]] const T& at(Idx... idx) const
     { return elements()[offset_checked(idx...)]; }
 
     // Prefix indexing: returns a lower-rank span
@@ -356,29 +356,29 @@ public:
 
     template<typename... Idx>
         requires(sizeof...(Idx) < Rank)
-    auto at(Idx... idx) const
+    [[nodiscard]] auto at(Idx... idx) const
     {
         constexpr size_t K = sizeof...(Idx);
         const size_t off = offset_prefix_checked(idx...);
         return MDSpan<const T, Rank - K>(elements().subspan(off).data(), tail_k<K>(m_shapes), tail_k<K>(m_strides));
     }
 
-    const std::array<size_t, Rank>& shapes() const noexcept { return m_shapes; }
-    const std::array<size_t, Rank>& strides() const noexcept { return m_strides; }
-    const std::array<size_t, Rank>& stride() const noexcept { return strides(); }
+    [[nodiscard]] const std::array<size_t, Rank>& shapes() const noexcept { return m_shapes; }
+    [[nodiscard]] const std::array<size_t, Rank>& strides() const noexcept { return m_strides; }
+    [[nodiscard]] const std::array<size_t, Rank>& stride() const noexcept { return strides(); }
 
     T* data() noexcept { return m_data; }
-    const T* data() const noexcept { return m_data; }
+    [[nodiscard]] const T* data() const noexcept { return m_data; }
 
     T* begin() noexcept { return m_data; }
-    const T* begin() const noexcept { return m_data; }
-    const T* cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const T* begin() const noexcept { return m_data; }
+    [[nodiscard]] const T* cbegin() const noexcept { return begin(); }
 
     T* end() noexcept { return std::to_address(elements().end()); }
-    const T* end() const noexcept { return std::to_address(elements().end()); }
-    const T* cend() const noexcept { return end(); }
+    [[nodiscard]] const T* end() const noexcept { return std::to_address(elements().end()); }
+    [[nodiscard]] const T* cend() const noexcept { return end(); }
 
-    size_t size() const noexcept
+    [[nodiscard]] size_t size() const noexcept
     {
         size_t n = 1;
         for (size_t i = 0; i < Rank; ++i)
@@ -386,7 +386,7 @@ public:
         return n;
     }
 
-    bool empty() const noexcept { return size() == 0; }
+    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
 private:
     void ensure_index_in_bounds(size_t dimension, size_t idx) const
@@ -414,7 +414,7 @@ private:
     }
 
     template<typename... Idx>
-    size_t offset(Idx... idx) const noexcept
+    [[nodiscard]] size_t offset(Idx... idx) const noexcept
     {
         assert_indices_in_bounds(idx...);
 
@@ -425,7 +425,7 @@ private:
     }
 
     template<typename... Idx>
-    size_t offset_checked(Idx... idx) const
+    [[nodiscard]] size_t offset_checked(Idx... idx) const
     {
         ensure_indices_in_bounds(idx...);
 
@@ -436,11 +436,11 @@ private:
     }
 
     template<typename... Idx>
-    size_t offset_prefix(Idx... idx) const noexcept
+    [[nodiscard]] size_t offset_prefix(Idx... idx) const noexcept
     { return offset(idx...); }
 
     template<typename... Idx>
-    size_t offset_prefix_checked(Idx... idx) const
+    [[nodiscard]] size_t offset_prefix_checked(Idx... idx) const
     { return offset_checked(idx...); }
 
 private:

@@ -120,13 +120,13 @@ TEST(YggdrasilTests, CommonBlockArrayViewAtChecksBounds)
     EXPECT_EQ(view.at(1), 7);
     EXPECT_EQ(const_view.at(1), 7);
     EXPECT_THROW(view.at(2), std::out_of_range);
-    EXPECT_THROW(const_view.at(2), std::out_of_range);
+    EXPECT_THROW((void) const_view.at(2), std::out_of_range);
 
     auto invalid_view = ygg::BasicBlockArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2);
     const auto invalid_const_view = ygg::BasicBlockArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2);
 
     EXPECT_THROW(invalid_view.at(0), std::logic_error);
-    EXPECT_THROW(invalid_const_view.at(0), std::logic_error);
+    EXPECT_THROW((void) invalid_const_view.at(0), std::logic_error);
     EXPECT_THROW((invalid_view = std::span<const uint8_t>(storage)), std::logic_error);
     EXPECT_EQ(invalid_view.end() - invalid_view.begin(), 2);
     EXPECT_EQ(invalid_const_view.end() - invalid_const_view.begin(), 2);
@@ -147,17 +147,17 @@ TEST(YggdrasilTests, CommonBlockArrayViewFrontBackCheckEmptyAndInvalidViews)
     const auto empty_const_view = ygg::BasicBlockArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(storage.data(), 0);
 
     EXPECT_THROW(empty_view.front(), std::out_of_range);
-    EXPECT_THROW(empty_const_view.front(), std::out_of_range);
+    EXPECT_THROW((void) empty_const_view.front(), std::out_of_range);
     EXPECT_THROW(empty_view.back(), std::out_of_range);
-    EXPECT_THROW(empty_const_view.back(), std::out_of_range);
+    EXPECT_THROW((void) empty_const_view.back(), std::out_of_range);
 
     auto invalid_view = ygg::BasicBlockArrayView<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2);
     const auto invalid_const_view = ygg::BasicBlockArrayView<const uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>>(nullptr, 2);
 
     EXPECT_THROW(invalid_view.front(), std::logic_error);
-    EXPECT_THROW(invalid_const_view.front(), std::logic_error);
+    EXPECT_THROW((void) invalid_const_view.front(), std::logic_error);
     EXPECT_THROW(invalid_view.back(), std::logic_error);
-    EXPECT_THROW(invalid_const_view.back(), std::logic_error);
+    EXPECT_THROW((void) invalid_const_view.back(), std::logic_error);
 }
 
 TEST(YggdrasilTests, CommonBlockArrayPoolReturnsInsertedIndex)
@@ -193,7 +193,7 @@ TEST(YggdrasilTests, CommonBlockArrayPoolAtChecksBounds)
     EXPECT_EQ(pool.at(0), (std::vector<uint8_t> { 1, 5 }));
     EXPECT_EQ(const_pool.at(0), (std::vector<uint8_t> { 1, 5 }));
     EXPECT_THROW(pool.at(1), std::out_of_range);
-    EXPECT_THROW(const_pool.at(1), std::out_of_range);
+    EXPECT_THROW((void) const_pool.at(1), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonBlockArrayPoolStoresZeroLengthArrays)
@@ -215,16 +215,16 @@ TEST(YggdrasilTests, CommonBlockArraySetOutOfRange)
 
     // 3 elements are too much for a pool that stores arrays of length 2.
     EXPECT_THROW(set.insert(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
-    EXPECT_THROW(set.find(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
-    EXPECT_THROW(set.contains(std::vector<ygg::uint_t>({ 1 })), std::invalid_argument);
+    EXPECT_THROW((void) set.find(std::vector<ygg::uint_t>({ 1, 1, 1 })), std::invalid_argument);
+    EXPECT_THROW((void) set.contains(std::vector<ygg::uint_t>({ 1 })), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonBlockArraySetEmptyAccessThrows)
 {
     auto set = BlockArraySet<uint8_t, ygg::bit::ForwardingBlockCoder<uint8_t>, 1>(2);
 
-    EXPECT_THROW(set.front(), std::out_of_range);
-    EXPECT_THROW(set.back(), std::out_of_range);
+    EXPECT_THROW((void) set.front(), std::out_of_range);
+    EXPECT_THROW((void) set.back(), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonBlockArraySetPreservesLookupAcrossMoves)
@@ -322,7 +322,7 @@ TEST(YggdrasilTests, CommonBlockArraySet)
             }
         }
 
-        EXPECT_THROW(set.at(set.size()), std::out_of_range);
+        EXPECT_THROW((void) set.at(set.size()), std::out_of_range);
 
         const auto first = std::array<uint8_t, 2> { 0, 0 };
         const auto last = std::array<uint8_t, 2> { 3, 3 };

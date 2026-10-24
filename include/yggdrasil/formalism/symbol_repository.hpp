@@ -50,7 +50,7 @@ private:
     const SymbolRepositoryBase* m_parent;
     const SymbolRepositoryBase* m_root;
 
-    const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
+    [[nodiscard]] const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
@@ -60,7 +60,7 @@ public:
 private:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const SymbolRepositoryBase* find_canonical_context(Index<T> index) const noexcept
+    [[nodiscard]] const SymbolRepositoryBase* find_canonical_context(Index<T> index) const noexcept
     {
         const auto* current = this;
         while (current != nullptr)
@@ -81,7 +81,7 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::optional<::ygg::View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
+    [[nodiscard]] std::optional<::ygg::View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
     {
         if (auto index_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
             return ::ygg::View<Index<T>, Repository>(*index_or_nullopt, repository());
@@ -100,7 +100,7 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::optional<::ygg::View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
+    [[nodiscard]] std::optional<::ygg::View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
     { return find_with_hash(builder, SymbolRepositoryBase::hash(builder)); }
 
     template<typename T>
@@ -133,17 +133,17 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const Data<T>& front() const
+    [[nodiscard]] const Data<T>& front() const
     { return (*this)[Index<T>(0)]; }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    size_t size() const noexcept
+    [[nodiscard]] size_t size() const noexcept
     { return get<T>().size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const Repository& get_canonical_context(Index<T> index) const
+    [[nodiscard]] const Repository& get_canonical_context(Index<T> index) const
     {
         if (const auto* owner = find_canonical_context(index))
             return owner->repository();
@@ -152,12 +152,12 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    bool contains(Index<T> index) const noexcept
+    [[nodiscard]] bool contains(Index<T> index) const noexcept
     { return find_canonical_context(index) != nullptr; }
 
     template<typename T, typename C>
         requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
-    bool contains(const ::ygg::View<Index<T>, C>& view) const
+    [[nodiscard]] bool contains(const ::ygg::View<Index<T>, C>& view) const
     { return ::ygg::formalism::contains(repository(), view); }
 
     /**
@@ -173,23 +173,23 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const BasicSymbolRepository<T, ThreadSafe>& get() const noexcept
+    [[nodiscard]] const BasicSymbolRepository<T, ThreadSafe>& get() const noexcept
     { return static_cast<const BasicSymbolRepository<T, ThreadSafe>&>(*this); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
+    [[nodiscard]] auto find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
     { return get<T>().find_local_with_hash(builder, h); }
 
     /// Forwards the unsafe local-only lookup without traversing ancestors.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
+    [[nodiscard]] auto find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
     { return get<T>().find_local_unsafe_with_hash(builder, h); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto find_local(const Data<T>& builder) const noexcept
+    [[nodiscard]] auto find_local(const Data<T>& builder) const noexcept
     { return get<T>().find_local(builder); }
 
     template<typename T>
@@ -209,12 +209,12 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const Data<T>& local(Index<T> index) const noexcept
+    [[nodiscard]] const Data<T>& local(Index<T> index) const noexcept
     { return get<T>().local(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const Data<T>& at_local(Index<T> index) const
+    [[nodiscard]] const Data<T>& at_local(Index<T> index) const
     { return get<T>().at_local(index); }
 
     template<typename T>
@@ -224,27 +224,27 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    size_t local_size() const noexcept
+    [[nodiscard]] size_t local_size() const noexcept
     { return get<T>().local_size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    size_t parent_size() const noexcept
+    [[nodiscard]] size_t parent_size() const noexcept
     { return get<T>().parent_size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    bool is_local(Index<T> index) const noexcept
+    [[nodiscard]] bool is_local(Index<T> index) const noexcept
     { return get<T>().is_local(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    bool exists_parent_mutation() const noexcept
+    [[nodiscard]] bool exists_parent_mutation() const noexcept
     { return get<T>().exists_parent_mutation(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    size_t memory_usage() const noexcept
+    [[nodiscard]] size_t memory_usage() const noexcept
     { return get<T>().memory_usage(); }
 
     /**
@@ -265,7 +265,7 @@ public:
     SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;
     SymbolRepositoryBase& operator=(SymbolRepositoryBase&&) = delete;
 
-    const Repository& get_root() const noexcept { return m_root->repository(); }
+    [[nodiscard]] const Repository& get_root() const noexcept { return m_root->repository(); }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 

@@ -59,19 +59,19 @@ public:
     Builder& operator=(Builder&&) noexcept;
     ~Builder();
 
-    Index<database::Relation> get_index() const noexcept { return m_index; }
+    [[nodiscard]] Index<database::Relation> get_index() const noexcept { return m_index; }
     void set_index(Index<database::Relation> index) noexcept { m_index = index; }
     /// Factory-local identity, stable across clear/initialize/rename.
-    size_t get_storage_index() const noexcept { return m_storage_index; }
-    const Builder<database::Columns>& columns() const& noexcept { return m_columns; }
-    const Builder<database::Columns>& columns() const&& = delete;
-    size_t arity() const noexcept { return m_columns.size(); }
-    size_t size() const noexcept { return m_rows.size(); }
-    bool empty() const noexcept { return m_rows.empty(); }
-    size_t memory_usage() const noexcept { return m_columns.memory_usage() + m_rows.memory_usage(); }
-    const auto& storage() const noexcept { return m_rows; }
-    const void* get_storage_address() const noexcept { return &m_rows; }
-    size_t column_index(Index<database::Column> column) const { return m_columns.column_index(column); }
+    [[nodiscard]] size_t get_storage_index() const noexcept { return m_storage_index; }
+    [[nodiscard]] const Builder<database::Columns>& columns() const& noexcept { return m_columns; }
+    [[nodiscard]] const Builder<database::Columns>& columns() const&& = delete;
+    [[nodiscard]] size_t arity() const noexcept { return m_columns.size(); }
+    [[nodiscard]] size_t size() const noexcept { return m_rows.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_rows.empty(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_columns.memory_usage() + m_rows.memory_usage(); }
+    [[nodiscard]] const auto& storage() const noexcept { return m_rows; }
+    [[nodiscard]] const void* get_storage_address() const noexcept { return &m_rows; }
+    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return m_columns.column_index(column); }
 
     /// Raw bytes are checked for width and canonical encoding before mutation.
     uint_t insert(std::span<const std::byte> row);
@@ -84,25 +84,25 @@ public:
         return insert(database::Row(bytes, m_columns.span()));
     }
 
-    std::optional<uint_t> find(std::span<const std::byte> row) const;
-    std::optional<uint_t> find(database::Row row) const;
+    [[nodiscard]] std::optional<uint_t> find(std::span<const std::byte> row) const;
+    [[nodiscard]] std::optional<uint_t> find(database::Row row) const;
     template<ygg::ByteCodable... Ts>
-    std::optional<uint_t> find(const std::tuple<Ts...>& values) const
+    [[nodiscard]] std::optional<uint_t> find(const std::tuple<Ts...>& values) const
     {
         const auto bytes = database::encode_row(values, m_columns.span());
         return m_rows.find(bytes);
     }
-    bool contains(std::span<const std::byte> row) const { return find(row).has_value(); }
-    bool contains(database::Row row) const { return find(row).has_value(); }
+    [[nodiscard]] bool contains(std::span<const std::byte> row) const { return find(row).has_value(); }
+    [[nodiscard]] bool contains(database::Row row) const { return find(row).has_value(); }
     template<ygg::ByteCodable... Ts>
-    bool contains(const std::tuple<Ts...>& values) const
+    [[nodiscard]] bool contains(const std::tuple<Ts...>& values) const
     { return find(values).has_value(); }
 
     /// Invalidates the erased and moved rows' positions and borrowed rows.
     void erase(size_t index);
-    std::span<const std::byte> row(size_t index) const noexcept;
+    [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept;
     database::Row operator[](size_t index) const noexcept { return { row(index), m_columns.span() }; }
-    database::Row at(size_t index) const;
+    [[nodiscard]] database::Row at(size_t index) const;
     void clear() noexcept;
     void rename(std::span<const Index<database::Column>> columns);
     void rename(std::span<const database::ColumnLayout> columns);
@@ -111,7 +111,7 @@ public:
     void initialize(std::span<const Index<database::Column>> columns);
     void initialize(std::initializer_list<Index<database::Column>> columns);
 
-    auto identifying_members() const noexcept
+    [[nodiscard]] auto identifying_members() const noexcept
     {
         return std::make_tuple(columns().span(), std::views::iota(size_t { 0 }, size()) | std::views::transform([this](size_t i) { return row(i); }));
     }

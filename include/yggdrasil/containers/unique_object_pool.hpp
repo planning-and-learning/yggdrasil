@@ -71,7 +71,7 @@ public:
         return *this;
     }
 
-    UniqueObjectPoolPtr clone() const
+    [[nodiscard]] UniqueObjectPoolPtr clone() const
         requires std::is_copy_assignable_v<T>
     {
         if (m_pool && m_entry)
@@ -104,7 +104,7 @@ public:
         return m_entry;
     }
 
-    T* get() const noexcept { return m_entry; }
+    [[nodiscard]] T* get() const noexcept { return m_entry; }
 
     explicit operator bool() const noexcept { return m_entry != nullptr; }
 };

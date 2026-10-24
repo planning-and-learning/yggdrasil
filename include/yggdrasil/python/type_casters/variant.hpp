@@ -107,9 +107,9 @@ struct type_caster<::cista::offset::variant<Ts...>>
 
     bool from_python(handle src, uint32_t flags, cleanup_list* cleanup) noexcept
     {
-        if (flags & (uint32_t) cast_flags::convert)
+        if (flags & static_cast<uint32_t>(cast_flags::convert))
         {
-            if ((try_variant<Ts>(src, flags & ~(uint32_t) cast_flags::convert, cleanup) || ...))
+            if ((try_variant<Ts>(src, flags & ~static_cast<uint32_t>(cast_flags::convert), cleanup) || ...))
             {
                 return true;
             }

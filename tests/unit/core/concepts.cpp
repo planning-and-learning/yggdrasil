@@ -33,6 +33,8 @@
 
 namespace ygg::tests
 {
+namespace
+{
 template<bool Copy, bool Dereference, bool Increment>
 struct RangeContractIterator
 {
@@ -65,17 +67,17 @@ template<bool Copy = true, bool Dereference = true, bool Increment = true, bool 
 struct RangeContractFixture
 {
     using Iterator = RangeContractIterator<Copy, Dereference, Increment>;
-    Iterator begin() const noexcept { return {}; }
-    Iterator end() const noexcept { return {}; }
-    size_t size() const noexcept(Size) { return 0; }
+    [[nodiscard]] Iterator begin() const noexcept { return {}; }
+    [[nodiscard]] Iterator end() const noexcept { return {}; }
+    [[nodiscard]] size_t size() const noexcept(Size) { return 0; }
 };
 
 struct ThrowingRangeData
 {
-    const int* begin() const noexcept { return nullptr; }
-    const int* end() const noexcept { return nullptr; }
-    size_t size() const noexcept { return 0; }
-    const int* data() const { return nullptr; }
+    [[nodiscard]] const int* begin() const noexcept { return nullptr; }
+    [[nodiscard]] const int* end() const noexcept { return nullptr; }
+    [[nodiscard]] size_t size() const noexcept { return 0; }
+    [[nodiscard]] const int* data() const { return nullptr; }
 };
 
 struct MutableOnlyRange
@@ -84,6 +86,7 @@ struct MutableOnlyRange
     const int* end();
     size_t size();
 };
+}  // namespace
 
 static_assert(std::ranges::forward_range<MutableOnlyRange&>);
 static_assert(!SizedForwardRangeOf<MutableOnlyRange, int>);
@@ -120,9 +123,12 @@ struct MutableViewHandle;
 struct CopiedContextViewHandle;
 struct CopiedHandleViewHandle;
 struct ViewContractContext;
+namespace
+{
 struct MissingViewLookupContext
 {
 };
+}  // namespace
 }
 
 namespace ygg
@@ -143,26 +149,26 @@ struct View<tests::MutableViewHandle, tests::ViewContractContext>
 {
     View(const tests::MutableViewHandle&, const tests::ViewContractContext&);
     const int& get_data();
-    const tests::ViewContractContext& get_context() const;
-    const tests::MutableViewHandle& get_handle() const;
+    [[nodiscard]] const tests::ViewContractContext& get_context() const;
+    [[nodiscard]] const tests::MutableViewHandle& get_handle() const;
 };
 
 template<>
 struct View<tests::CopiedContextViewHandle, tests::ViewContractContext>
 {
     View(const tests::CopiedContextViewHandle&, const tests::ViewContractContext&);
-    const int& get_data() const;
-    tests::ViewContractContext get_context() const;
-    const tests::CopiedContextViewHandle& get_handle() const;
+    [[nodiscard]] const int& get_data() const;
+    [[nodiscard]] tests::ViewContractContext get_context() const;
+    [[nodiscard]] const tests::CopiedContextViewHandle& get_handle() const;
 };
 
 template<>
 struct View<tests::CopiedHandleViewHandle, tests::ViewContractContext>
 {
     View(const tests::CopiedHandleViewHandle&, const tests::ViewContractContext&);
-    const int& get_data() const;
-    const tests::ViewContractContext& get_context() const;
-    tests::CopiedHandleViewHandle get_handle() const;
+    [[nodiscard]] const int& get_data() const;
+    [[nodiscard]] const tests::ViewContractContext& get_context() const;
+    [[nodiscard]] tests::CopiedHandleViewHandle get_handle() const;
 };
 }
 
@@ -191,9 +197,11 @@ static_assert(!ViewConcept<MutableViewHandle, ViewContractContext>);
 static_assert(!ViewConcept<CopiedContextViewHandle, ViewContractContext>);
 static_assert(!ViewConcept<CopiedHandleViewHandle, ViewContractContext>);
 
+namespace
+{
 struct IdentifiableConceptFixture
 {
-    auto identifying_members() const noexcept { return 0; }
+    [[nodiscard]] auto identifying_members() const noexcept { return 0; }
 };
 
 struct NonIdentifiableConceptFixture
@@ -229,6 +237,7 @@ struct ValidLessFixture
 {
     bool operator()(int, int) const { return false; }
 };
+}  // namespace
 
 TEST(YggdrasilTests, CommonConceptsHeaderExposesReusableConcepts)
 {
@@ -260,14 +269,17 @@ TEST(YggdrasilTests, CommonConceptsHeaderExposesReusableConcepts)
     SUCCEED();
 }
 
+namespace
+{
 struct UnsupportedSemanticValue
 {
 };
 struct UnsupportedIdentifiableValue
 {
     UnsupportedSemanticValue value;
-    auto identifying_members() const { return std::tie(value); }
+    [[nodiscard]] auto identifying_members() const { return std::tie(value); }
 };
+}  // namespace
 
 static_assert(!Hashable<UnsupportedSemanticValue>);
 static_assert(!EqualityComparableByEqualTo<UnsupportedSemanticValue>);

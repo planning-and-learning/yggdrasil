@@ -35,7 +35,7 @@ concept DistanceHeuristic = requires(const H& h, std::span<const std::byte> vert
 /// The zero estimate: breadth-first order.
 struct BlindDistanceHeuristic
 {
-    uint_t estimate(std::span<const std::byte>) const noexcept { return 0; }
+    [[nodiscard]] uint_t estimate(std::span<const std::byte>) const noexcept { return 0; }
 };
 
 /// A random-access sequence of vertices: size() of them, row(i) the bytes of the i-th (e.g. a relation view).

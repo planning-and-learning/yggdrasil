@@ -81,7 +81,7 @@ TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
     const auto projected = ygg::tests::qb::project(repository, a, { x });
     const auto renamed = ygg::tests::qb::rename(repository, a, { y, z });
     const auto equal = ygg::tests::qb::select_equal(repository, a, x, y);
-    const auto selected = ygg::tests::qb::select_value(repository, a, x, ygg::uint_t(7));
+    const auto selected = ygg::tests::qb::select_value(repository, a, x, static_cast<ygg::uint_t>(7));
     const auto united = ygg::tests::qb::union_(repository, a, empty);
     const auto difference = ygg::tests::qb::difference(repository, a, empty);
     const auto targets = ygg::tests::qb::project(repository, b, { z });
@@ -148,7 +148,7 @@ TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
     const auto generic = insert(ygg::Data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>(std::vector { a, b }, std::array { y, x, z }));
     EXPECT_TRUE(std::ranges::equal(ygg::database::column_labels(generic.columns()), std::array { x, y, z }));
 
-    auto mismatched = ygg::Data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a, x, std::int32_t(7));
+    auto mismatched = ygg::Data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a, x, static_cast<std::int32_t>(7));
     EXPECT_EQ(mismatched.constant_type, (ygg::type_id<std::int32_t>) );
     EXPECT_THROW(static_cast<void>(ygg::database::insert(repository, mismatched)), std::invalid_argument);
 }
@@ -184,10 +184,10 @@ TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)
         EXPECT_EQ(plan[plan.roots()[1]].columns()[0].label, z);
     }
     Relation input({ x, y });
-    input.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
-    input.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(4) });
+    input.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(3) });
+    input.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(4) });
     ygg::database::QueryEvaluator evaluator(plan);
-    EXPECT_THROW(evaluator.get_result(), std::logic_error);
+    EXPECT_THROW((void) evaluator.get_result(), std::logic_error);
     evaluator.evaluate(std::array { borrow(input) });
     EXPECT_EQ(evaluator.get_result(0).size(), 1);
     EXPECT_EQ(evaluator.get_result(1).columns()[0].label, z);
@@ -209,7 +209,7 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
                                     projection,
                                     ygg::tests::qb::rename(repository, projection, { z }),
                                     ygg::tests::qb::select_equal(repository, a, x, y),
-                                    ygg::tests::qb::select_value(repository, a, x, ygg::uint_t(1)),
+                                    ygg::tests::qb::select_value(repository, a, x, static_cast<ygg::uint_t>(1)),
                                     ygg::tests::qb::union_(repository, a, b),
                                     ygg::tests::qb::difference(repository, a, b),
                                     ygg::tests::qb::join(repository, a, a),
@@ -221,11 +221,11 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
     ygg::database::QueryEvaluator full(plan);
     ygg::database::incremental::QueryEvaluator incremental(plan);
     Relation first({ x, y }), second({ x, y }), third({ y, z });
-    first.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
-    first.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(2) });
-    second.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
-    third.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(5) });
-    third.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(6) });
+    first.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(1) });
+    first.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(2) });
+    second.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(1) });
+    third.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(5) });
+    third.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(6) });
     const auto inputs = std::array { borrow(first), borrow(second), borrow(third) };
     incremental.initialize(inputs);
     const auto compare = [&]
@@ -239,11 +239,11 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
     };
     compare();
     Delta da(first.columns().span()), dbb(second.columns().span()), dc(third.columns().span());
-    da.removed.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
-    da.added.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    dbb.removed.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
-    dbb.added.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    dc.added.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(7) });
+    da.removed.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(1) });
+    da.added.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    dbb.removed.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(1) });
+    dbb.added.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    dc.added.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(7) });
     const auto changes = std::array { std::pair { borrow(da.added), borrow(da.removed) },
                                       std::pair { borrow(dbb.added), borrow(dbb.removed) },
                                       std::pair { borrow(dc.added), borrow(dc.removed) } };
@@ -290,8 +290,8 @@ TEST(DatabaseQuery, MixedTypesConstantsAndDistanceComposition)
     EXPECT_EQ(selected_view.get_data().column_position, 1);
     EXPECT_EQ(selected.get_index(), ygg::tests::qb::select_value(mixed, input, y, 0.0).get_index());
     TypedRelation relation(schema.span());
-    relation.insert(std::tuple { std::uint32_t(4), 0.0 });
-    relation.insert(std::tuple { std::uint32_t(5), 2.0 });
+    relation.insert(std::tuple { static_cast<std::uint32_t>(4), 0.0 });
+    relation.insert(std::tuple { static_cast<std::uint32_t>(5), 2.0 });
     ygg::database::QueryEvaluator evaluator(ygg::database::compile({ ygg::tests::qb::project(mixed, selected, { y, x }) }));
     evaluator.evaluate(std::array { borrow(relation) });
     EXPECT_TRUE(evaluator.get_result().contains(std::tuple { 0.0, std::uint32_t(4) }));
@@ -301,12 +301,12 @@ TEST(DatabaseQuery, MixedTypesConstantsAndDistanceComposition)
     const auto edges = ygg::tests::qb::input(graph, 1, { x, y });
     const auto targets = ygg::tests::qb::input(graph, 2, { z });
     const auto distance = ygg::tests::qb::distance(graph, sources, edges, targets, d);
-    const auto plan = ygg::database::compile({ distance, ygg::tests::qb::select_value(graph, distance, d, ygg::uint_t(2)) });
+    const auto plan = ygg::database::compile({ distance, ygg::tests::qb::select_value(graph, distance, d, static_cast<ygg::uint_t>(2)) });
     Relation s({ x }), e({ x, y }), t({ z });
-    s.insert(std::tuple { ygg::uint_t(1) });
-    e.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    e.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
-    t.insert(std::tuple { ygg::uint_t(3) });
+    s.insert(std::tuple { static_cast<ygg::uint_t>(1) });
+    e.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    e.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(3) });
+    t.insert(std::tuple { static_cast<ygg::uint_t>(3) });
     const auto inputs = std::array { borrow(s), borrow(e), borrow(t) };
     ygg::database::QueryEvaluator full(plan);
     ygg::database::incremental::QueryEvaluator incremental(plan);
@@ -315,7 +315,7 @@ TEST(DatabaseQuery, MixedTypesConstantsAndDistanceComposition)
     EXPECT_EQ(rows(full.get_result()), rows(incremental.get_result()));
     ASSERT_TRUE(incremental.get_result(1).contains(std::tuple { ygg::uint_t(1), ygg::uint_t(3), ygg::uint_t(2) }));
     Delta ds(s.columns().span()), de(e.columns().span()), dt(t.columns().span());
-    de.added.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(3) });
+    de.added.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(3) });
     incremental.update(std::array { std::pair { borrow(ds.added), borrow(ds.removed) },
                                     std::pair { borrow(de.added), borrow(de.removed) },
                                     std::pair { borrow(dt.added), borrow(dt.removed) } });
@@ -370,7 +370,7 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
                                     ygg::tests::qb::difference(repository, project_a, project_b),
                                     ygg::tests::qb::join(repository, project_a, project_b),
                                     ygg::tests::qb::select_equal(repository, u, x, y),
-                                    ygg::tests::qb::select_value(repository, difference, x, ygg::uint_t(1)),
+                                    ygg::tests::qb::select_value(repository, difference, x, static_cast<ygg::uint_t>(1)),
                                     ygg::tests::qb::project(repository, ygg::tests::qb::join(repository, a, edges), {}),
                                     ygg::tests::qb::join(repository, ready, project_union),
                                     ygg::tests::qb::rename(repository, project_union, { z }),
@@ -458,16 +458,16 @@ TEST(DatabaseQuery, GenericJoinPlanExecutesInBothModesAndPrunesAlternatives)
     ygg::database::QueryEvaluator full(plan);
     ygg::database::incremental::QueryEvaluator incremental(plan);
     Relation ar({ x, y }), br({ y, z }), cr({ z, x });
-    ar.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
-    br.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
-    cr.insert(std::tuple { ygg::uint_t(3), ygg::uint_t(1) });
+    ar.insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
+    br.insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(3) });
+    cr.insert(std::tuple { static_cast<ygg::uint_t>(3), static_cast<ygg::uint_t>(1) });
     const auto inputs = std::array { borrow(ar), borrow(br), borrow(cr) };
     full.evaluate(inputs);
     incremental.initialize(inputs);
     ASSERT_EQ(incremental.get_result().size(), 1);
     EXPECT_EQ(rows(full.get_result()), rows(incremental.get_result()));
     Delta da(ar.columns().span()), dbb(br.columns().span()), dc(cr.columns().span());
-    dc.removed.insert(std::tuple { ygg::uint_t(3), ygg::uint_t(1) });
+    dc.removed.insert(std::tuple { static_cast<ygg::uint_t>(3), static_cast<ygg::uint_t>(1) });
     incremental.update(std::array { std::pair { borrow(da.added), borrow(da.removed) },
                                     std::pair { borrow(dbb.added), borrow(dbb.removed) },
                                     std::pair { borrow(dc.added), borrow(dc.removed) } });

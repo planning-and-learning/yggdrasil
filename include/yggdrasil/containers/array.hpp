@@ -47,8 +47,8 @@ private:
 public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(&handle) {}
 
-    size_t size() const noexcept { return get_data().size(); }
-    bool empty() const noexcept { return get_data().empty(); }
+    [[nodiscard]] size_t size() const noexcept { return get_data().size(); }
+    [[nodiscard]] bool empty() const noexcept { return get_data().empty(); }
 
     decltype(auto) operator[](size_t i) const
     {
@@ -58,7 +58,7 @@ public:
             return get_data()[i];
     }
 
-    decltype(auto) at(size_t i) const
+    [[nodiscard]] decltype(auto) at(size_t i) const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().at(i), get_context());
@@ -66,7 +66,7 @@ public:
             return get_data().at(i);
     }
 
-    decltype(auto) front() const
+    [[nodiscard]] decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().front(), get_context());
@@ -74,7 +74,7 @@ public:
             return get_data().front();
     }
 
-    decltype(auto) back() const
+    [[nodiscard]] decltype(auto) back() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().back(), get_context());
@@ -170,17 +170,17 @@ public:
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
-    const_iterator begin() const noexcept { return const_iterator { std::span<const T>(get_data()).begin(), get_context() }; }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator { std::span<const T>(get_data()).begin(), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { std::span<const T>(get_data()).end(), get_context() }; }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator { std::span<const T>(get_data()).end(), get_context() }; }
 
-    const_iterator cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
 
-    const_iterator cend() const noexcept { return end(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
-    const auto& get_data() const noexcept { return *m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return *m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return *m_handle; }
 
 private:
     const C* m_context;
@@ -197,8 +197,8 @@ private:
 public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
-    size_t size() const noexcept { return get_data().size(); }
-    bool empty() const noexcept { return get_data().empty(); }
+    [[nodiscard]] size_t size() const noexcept { return get_data().size(); }
+    [[nodiscard]] bool empty() const noexcept { return get_data().empty(); }
 
     decltype(auto) operator[](size_t i) const
     {
@@ -208,7 +208,7 @@ public:
             return get_data()[i];
     }
 
-    decltype(auto) at(size_t i) const
+    [[nodiscard]] decltype(auto) at(size_t i) const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().at(i), get_context());
@@ -216,7 +216,7 @@ public:
             return get_data().at(i);
     }
 
-    decltype(auto) front() const
+    [[nodiscard]] decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().front(), get_context());
@@ -224,7 +224,7 @@ public:
             return get_data().front();
     }
 
-    decltype(auto) back() const
+    [[nodiscard]] decltype(auto) back() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().back(), get_context());
@@ -320,17 +320,17 @@ public:
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
-    const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
 
-    const_iterator cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
 
-    const_iterator cend() const noexcept { return end(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
-    const auto& get_data() const noexcept { return m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
 
 private:
     const C* m_context;
@@ -347,8 +347,8 @@ private:
 public:
     View(const Container& handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
 
-    size_t size() const noexcept { return get_data().size(); }
-    bool empty() const noexcept { return get_data().empty(); }
+    [[nodiscard]] size_t size() const noexcept { return get_data().size(); }
+    [[nodiscard]] bool empty() const noexcept { return get_data().empty(); }
 
     decltype(auto) operator[](size_t i) const
     {
@@ -358,7 +358,7 @@ public:
             return get_data()[i];
     }
 
-    decltype(auto) at(size_t i) const
+    [[nodiscard]] decltype(auto) at(size_t i) const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().at(i), get_context());
@@ -366,7 +366,7 @@ public:
             return get_data().at(i);
     }
 
-    decltype(auto) front() const
+    [[nodiscard]] decltype(auto) front() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().front(), get_context());
@@ -374,7 +374,7 @@ public:
             return get_data().front();
     }
 
-    decltype(auto) back() const
+    [[nodiscard]] decltype(auto) back() const
     {
         if constexpr (ViewConcept<T, C>)
             return make_view(get_data().back(), get_context());
@@ -470,17 +470,17 @@ public:
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
-    const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
 
-    const_iterator cbegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return begin(); }
 
-    const_iterator cend() const noexcept { return end(); }
+    [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
-    const auto& get_data() const noexcept { return m_handle; }
-    const auto& get_context() const noexcept { return *m_context; }
-    const auto& get_handle() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
+    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
+    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
 
 private:
     const C* m_context;

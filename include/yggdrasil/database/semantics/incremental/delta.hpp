@@ -43,8 +43,8 @@ struct Delta
         removed.clear();
     }
     /// The (added, removed) change.
-    std::pair<const Builder<Relation>&, const Builder<Relation>&> change() const noexcept { return { added, removed }; }
-    size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
+    [[nodiscard]] std::pair<const Builder<Relation>&, const Builder<Relation>&> change() const noexcept { return { added, removed }; }
+    [[nodiscard]] size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
 };
 
 /// An actual set change of one input: disjoint (added, removed) relations, read with std::get.

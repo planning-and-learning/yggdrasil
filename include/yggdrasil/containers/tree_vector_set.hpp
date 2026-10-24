@@ -268,11 +268,11 @@ public:
         m_leaves.clear();
     }
 
-    size_t memory_usage() const noexcept { return m_leaves.memory_usage() + m_nodes.memory_usage(); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_leaves.memory_usage() + m_nodes.memory_usage(); }
 
-    size_t num_leaves() const noexcept { return m_leaves.size(); }
-    size_t num_nodes() const noexcept { return m_nodes.size(); }
-    bool empty() const noexcept { return m_leaves.empty() && m_nodes.empty(); }
+    [[nodiscard]] size_t num_leaves() const noexcept { return m_leaves.size(); }
+    [[nodiscard]] size_t num_nodes() const noexcept { return m_nodes.size(); }
+    [[nodiscard]] bool empty() const noexcept { return m_leaves.empty() && m_nodes.empty(); }
 
 private:
     [[no_unique_address]] LeafSet m_leaves;

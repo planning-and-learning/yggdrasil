@@ -36,9 +36,9 @@ public:
 
     template<RelationViewConcept V>
     bool matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept;
-    const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
+    [[nodiscard]] const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
 
-    auto identifying_members() const noexcept { return std::make_tuple(m_relation_index, std::span<const ColumnSlice>(m_keys)); }
+    [[nodiscard]] auto identifying_members() const noexcept { return std::make_tuple(m_relation_index, std::span<const ColumnSlice>(m_keys)); }
 };
 
 /// Shares indexes across renamed views and plans using the same ordered key slices.
@@ -56,7 +56,7 @@ public:
     template<RelationViewConcept V>
     const JoinIndex& get_or_create(const V& relation, std::span<const ColumnSlice> keys);
 
-    size_t size() const noexcept { return m_indexes.size(); }
+    [[nodiscard]] size_t size() const noexcept { return m_indexes.size(); }
     void clear() noexcept { m_indexes.clear(); }
 };
 

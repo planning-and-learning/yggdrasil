@@ -55,9 +55,9 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     columns.push_back<double>(ColumnIndex(2));
     columns.push_back<bool>(ColumnIndex(3));
     RelationBuilder input(columns.span());
-    input.insert(std::tuple { uint_t(1), 1.5, true });
-    input.insert(std::tuple { uint_t(2), 1.5, true });
-    input.insert(std::tuple { uint_t(3), 2.5, false });
+    input.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
+    input.insert(std::tuple { static_cast<uint_t>(2), 1.5, true });
+    input.insert(std::tuple { static_cast<uint_t>(3), 2.5, false });
 
     const database::ProjectionPlan plan(columns.span(), { ColumnIndex(3), ColumnIndex(2) });
     database::incremental::ProjectionEvaluator evaluator(plan);
@@ -71,10 +71,10 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     EXPECT_TRUE(initial.contains(std::tuple { true, 1.5 }));
 
     database::incremental::Delta changes(columns.span());
-    changes.removed.insert(std::tuple { uint_t(1), 1.5, true });
-    changes.removed.insert(std::tuple { uint_t(2), 1.5, true });
-    changes.added.insert(std::tuple { uint_t(4), 1.5, true });
-    changes.added.insert(std::tuple { uint_t(5), 3.5, false });
+    changes.removed.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
+    changes.removed.insert(std::tuple { static_cast<uint_t>(2), 1.5, true });
+    changes.added.insert(std::tuple { static_cast<uint_t>(4), 1.5, true });
+    changes.added.insert(std::tuple { static_cast<uint_t>(5), 3.5, false });
     evaluator.update(changes.change(), workspace);
     apply_changes(input, changes);
     RelationBuilder updated(plan.output_columns().span());
@@ -103,12 +103,12 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
     right_columns.push_back<double>(ColumnIndex(4));
     RelationBuilder left(left_columns.span());
     RelationBuilder right(right_columns.span());
-    left.insert(std::tuple { uint_t(1), 1.5, true });
-    left.insert(std::tuple { uint_t(2), 2.5, false });
-    left.insert(std::tuple { uint_t(3), 3.5, true });
-    right.insert(std::tuple { true, uint_t(1), 10.0 });
-    right.insert(std::tuple { false, uint_t(2), 20.0 });
-    right.insert(std::tuple { true, uint_t(3), 30.0 });
+    left.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
+    left.insert(std::tuple { static_cast<uint_t>(2), 2.5, false });
+    left.insert(std::tuple { static_cast<uint_t>(3), 3.5, true });
+    right.insert(std::tuple { true, static_cast<uint_t>(1), 10.0 });
+    right.insert(std::tuple { false, static_cast<uint_t>(2), 20.0 });
+    right.insert(std::tuple { true, static_cast<uint_t>(3), 30.0 });
     const database::JoinPlan plan(left_columns.span(), right_columns.span());
     database::incremental::JoinEvaluator evaluator(plan);
     database::Workspace workspace;
@@ -120,12 +120,12 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
 
     database::incremental::Delta left_changes(left_columns.span());
     database::incremental::Delta right_changes(right_columns.span());
-    left_changes.removed.insert(std::tuple { uint_t(1), 1.5, true });
-    left_changes.added.insert(std::tuple { uint_t(1), 1.75, true });
-    left_changes.added.insert(std::tuple { uint_t(4), 4.5, false });
-    right_changes.removed.insert(std::tuple { false, uint_t(2), 20.0 });
-    right_changes.added.insert(std::tuple { false, uint_t(2), 22.0 });
-    right_changes.added.insert(std::tuple { false, uint_t(4), 40.0 });
+    left_changes.removed.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
+    left_changes.added.insert(std::tuple { static_cast<uint_t>(1), 1.75, true });
+    left_changes.added.insert(std::tuple { static_cast<uint_t>(4), 4.5, false });
+    right_changes.removed.insert(std::tuple { false, static_cast<uint_t>(2), 20.0 });
+    right_changes.added.insert(std::tuple { false, static_cast<uint_t>(2), 22.0 });
+    right_changes.added.insert(std::tuple { false, static_cast<uint_t>(4), 40.0 });
     evaluator.update(left_changes.change(), right_changes.change(), workspace);
     apply_changes(left, left_changes);
     apply_changes(right, right_changes);
@@ -155,10 +155,10 @@ TEST(YggdrasilTests, DatabaseTypedConstantSelectionUsesCanonicalFloatEquality)
     RelationBuilder input(columns.span());
     const auto first_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000001 });
     const auto second_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000002 });
-    input.insert(std::tuple { 0.0, uint_t(1) });
-    input.insert(std::tuple { -0.0, uint_t(1) });
-    input.insert(std::tuple { first_nan, uint_t(2) });
-    input.insert(std::tuple { second_nan, uint_t(2) });
+    input.insert(std::tuple { 0.0, static_cast<uint_t>(1) });
+    input.insert(std::tuple { -0.0, static_cast<uint_t>(1) });
+    input.insert(std::tuple { first_nan, static_cast<uint_t>(2) });
+    input.insert(std::tuple { second_nan, static_cast<uint_t>(2) });
     ASSERT_EQ(input.size(), 2);
     RelationBuilder result(columns.span());
     database::select_equal_value(input, ColumnIndex(1), -0.0, result);
@@ -180,9 +180,9 @@ TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResu
     RelationBuilder input(columns.span());
     RelationBuilder wrong(incompatible.span());
     RelationBuilder output(columns.span());
-    input.insert(std::tuple { uint_t(1), 1.5 });
+    input.insert(std::tuple { static_cast<uint_t>(1), 1.5 });
     wrong.insert(std::tuple { 1.0, 1.5 });
-    output.insert(std::tuple { uint_t(99), 9.5 });
+    output.insert(std::tuple { static_cast<uint_t>(99), 9.5 });
     database::Workspace workspace;
     EXPECT_THROW(database::join(input, wrong, output, workspace), std::invalid_argument);
     EXPECT_THROW(database::union_(input, wrong, output), std::invalid_argument);
@@ -215,7 +215,7 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     float_columns.push_back<double>(ColumnIndex(1));
     RelationBuilder unsigned_input(unsigned_columns.span());
     RelationBuilder float_input(float_columns.span());
-    unsigned_input.insert(std::tuple { std::uint64_t(0) });
+    unsigned_input.insert(std::tuple { static_cast<std::uint64_t>(0) });
     float_input.insert(std::tuple { 0.0 });
     const auto unsigned_view = database::insert(repository, unsigned_input).first;
     const auto float_view = database::insert(repository, float_input).first;
@@ -238,8 +238,8 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     after_columns.push_back<bool>(ColumnIndex(2));
     RelationBuilder before(before_columns.span());
     RelationBuilder after(after_columns.span());
-    before.insert(std::tuple { false, uint_t(0) });
-    after.insert(std::tuple { uint_t(0), false });
+    before.insert(std::tuple { false, static_cast<uint_t>(0) });
+    after.insert(std::tuple { static_cast<uint_t>(0), false });
     const auto before_view = database::insert(repository, before).first;
     const auto after_view = database::insert(repository, after).first;
     ASSERT_EQ(before_view.get_storage_index(), after_view.get_storage_index());

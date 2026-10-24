@@ -148,10 +148,10 @@ public:
 
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
-    const PublishedRepository& get_canonical_context(Index<T>) const noexcept
+    [[nodiscard]] const PublishedRepository& get_canonical_context(Index<T>) const noexcept
     { return *this; }
 
-    size_t get_index() const noexcept { return 0; }
+    [[nodiscard]] size_t get_index() const noexcept { return 0; }
     friend const PublishedRepository& get_repository(const PublishedRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
@@ -510,7 +510,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     const auto wrong = Data<Binding<ObjectTag>>(relation, std::move(objects));
     static_assert(!noexcept(repository.find(wrong)));
 
-    EXPECT_THROW(repository.find(wrong), std::invalid_argument);
+    EXPECT_THROW((void) repository.find(wrong), std::invalid_argument);
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
     EXPECT_EQ(repository.size(relation), 1);
     EXPECT_EQ(view.get_data().size(), 4);

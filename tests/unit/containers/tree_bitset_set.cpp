@@ -213,7 +213,7 @@ TEST(YggdrasilTests, CommonTreeBitsetSetDeltaInsertAcrossPowerOfTwoSizes)
         {
             auto base_blocks = std::vector<Block>(from);
             for (uint_t i = 0; i < from; ++i)
-                base_blocks[i] = Block(i % 3 == 0 ? i + 1 : 0);
+                base_blocks[i] = static_cast<Block>(i % 3 == 0 ? i + 1 : 0);
             base_blocks.back() = 1;
             const auto base = set.insert(base_blocks);
 
@@ -394,7 +394,7 @@ void expect_random_delta_chains_match_full_insert()
     auto rng = std::mt19937_64 { 7 * Arity };
     auto set = TreeBitsetSet<TestBlock, 32, false, Arity> {};
 
-    for (const uint_t universe : { 1u, 3u, uint_t(Arity + 1), 200u, 5000u })
+    for (const uint_t universe : { 1u, 3u, static_cast<uint_t>(Arity + 1), 200u, 5000u })
     {
         for (size_t chain = 0; chain < 10; ++chain)
         {

@@ -45,7 +45,7 @@ private:
     const Pointer<ThreadSafe, void>* m_segments;
     const Size<ThreadSafe>* m_size;
 
-    const T* element(size_t pos) const noexcept
+    [[nodiscard]] const T* element(size_t pos) const noexcept
     {
         const auto index = Layout::segment_index(static_cast<Index>(pos));
         const auto* segment = static_cast<const T*>(load_pointer<ThreadSafe, void>(std::span(m_segments, Layout::max_segments)[index]));
@@ -68,27 +68,27 @@ public:
         return *element(pos);
     }
 
-    const T& at(size_t pos) const
+    [[nodiscard]] const T& at(size_t pos) const
     {
         if (pos >= size())
             throw std::out_of_range("SegmentedVector::at");
         return *element(pos);
     }
 
-    const T& front() const
+    [[nodiscard]] const T& front() const
     {
         ensure_not_empty();
         return *element(0);
     }
 
-    const T& back() const
+    [[nodiscard]] const T& back() const
     {
         ensure_not_empty();
         return *element(size() - 1);
     }
 
-    size_t size() const noexcept { return load_size<ThreadSafe>(*m_size); }
-    bool empty() const noexcept { return size() == 0; }
+    [[nodiscard]] size_t size() const noexcept { return load_size<ThreadSafe>(*m_size); }
+    [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 };
 
 }  // namespace ygg::detail

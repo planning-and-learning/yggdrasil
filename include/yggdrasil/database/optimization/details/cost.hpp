@@ -42,7 +42,7 @@ class CostBasedPlanner
     /// C_out of each subset's best plan and its left part; leaves cost nothing.
     UnorderedMap<std::uint64_t, Split> m_best;
 
-    std::vector<Index<Column>> labels(std::uint64_t subset) const
+    [[nodiscard]] std::vector<Index<Column>> labels(std::uint64_t subset) const
     {
         std::vector<Index<Column>> result;
         bit::for_each_set_bit(subset, [&](size_t atom) { result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end()); });
@@ -64,7 +64,7 @@ class CostBasedPlanner
         return it != m_estimates.end() ? it->second.rows : estimate(subset).rows;
     }
     /// Variables of the subset still needed outside it: output and join variables.
-    std::vector<Index<Column>> needed(std::uint64_t subset) const
+    [[nodiscard]] std::vector<Index<Column>> needed(std::uint64_t subset) const
     {
         std::vector<Index<Column>> result = m_required;
         for (size_t atom = 0; atom < m_variables.size(); ++atom)

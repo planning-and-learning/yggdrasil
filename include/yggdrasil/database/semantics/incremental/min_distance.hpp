@@ -66,8 +66,8 @@ public:
     {
     }
 
-    size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
-    const Builder<Relation>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
+    [[nodiscard]] size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
+    [[nodiscard]] const Builder<Relation>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
 
     /// Binds every input as a new baseline: input(slot) returns slot's relation view (see
     /// incremental::bound::QueryEvaluator::initialize). The stored search is discarded.
@@ -171,7 +171,7 @@ public:
         return min_distance(sources, heuristic);
     }
 
-    const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
+    [[nodiscard]] const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
     using Edges = database::detail::EdgeQuery<incremental::bound::QueryEvaluator>;

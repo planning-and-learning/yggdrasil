@@ -149,7 +149,7 @@ public:
             dec_ref_count();
     }
 
-    SharedObjectPoolPtr clone() const
+    [[nodiscard]] SharedObjectPoolPtr clone() const
         requires std::is_copy_assignable_v<T>
     {
         if (m_pool && m_entry)
@@ -176,9 +176,9 @@ public:
         return &m_entry->object;
     }
 
-    T* get() const noexcept { return m_entry ? &m_entry->object : nullptr; }
+    [[nodiscard]] T* get() const noexcept { return m_entry ? &m_entry->object : nullptr; }
 
-    size_t ref_count() const noexcept
+    [[nodiscard]] size_t ref_count() const noexcept
     {
         assert(m_entry);
         if constexpr (ThreadSafe)

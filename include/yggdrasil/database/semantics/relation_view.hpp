@@ -77,7 +77,7 @@ class RelationIterator
     std::optional<V> m_view;  ///< Empty only in a default-constructed iterator, which is never dereferenced.
     std::ptrdiff_t m_position = 0;
 
-    const V& view() const noexcept
+    [[nodiscard]] const V& view() const noexcept
     {
         YGG_ASSUME(m_view.has_value());
         return *m_view;
@@ -148,31 +148,31 @@ class View<Builder<database::Relation>, C> : public BuilderViewBase<database::Re
 public:
     using BuilderViewBase<database::Relation, C>::BuilderViewBase;
 
-    auto get_index() const noexcept { return this->get_handle().get_index(); }
-    auto columns() const noexcept { return make_view(this->get_handle().columns(), this->get_context()); }
-    size_t arity() const noexcept { return this->get_handle().arity(); }
-    size_t size() const noexcept { return this->get_handle().size(); }
-    bool empty() const noexcept { return this->get_handle().empty(); }
-    const void* get_storage_address() const noexcept { return this->get_handle().get_storage_address(); }
-    size_t get_storage_index() const noexcept { return this->get_handle().get_storage_index(); }
-    size_t column_index(Index<database::Column> column) const { return this->get_handle().column_index(column); }
-    std::span<const std::byte> row(size_t index) const noexcept { return this->get_handle().row(index); }
+    [[nodiscard]] auto get_index() const noexcept { return this->get_handle().get_index(); }
+    [[nodiscard]] auto columns() const noexcept { return make_view(this->get_handle().columns(), this->get_context()); }
+    [[nodiscard]] size_t arity() const noexcept { return this->get_handle().arity(); }
+    [[nodiscard]] size_t size() const noexcept { return this->get_handle().size(); }
+    [[nodiscard]] bool empty() const noexcept { return this->get_handle().empty(); }
+    [[nodiscard]] const void* get_storage_address() const noexcept { return this->get_handle().get_storage_address(); }
+    [[nodiscard]] size_t get_storage_index() const noexcept { return this->get_handle().get_storage_index(); }
+    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return this->get_handle().column_index(column); }
+    [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept { return this->get_handle().row(index); }
     auto operator[](size_t index) const noexcept { return make_view(database::Row(row(index), columns().span()), this->get_repository()); }
-    auto at(size_t index) const
+    [[nodiscard]] auto at(size_t index) const
     {
         if (index >= size())
             throw std::out_of_range("Relation: row index out of range.");
         return (*this)[index];
     }
-    auto begin() const noexcept { return database::detail::RelationIterator<View>(*this, 0); }
-    auto end() const noexcept { return database::detail::RelationIterator<View>(*this, size()); }
-    auto cbegin() const noexcept { return begin(); }
-    auto cend() const noexcept { return end(); }
+    [[nodiscard]] auto begin() const noexcept { return database::detail::RelationIterator<View>(*this, 0); }
+    [[nodiscard]] auto end() const noexcept { return database::detail::RelationIterator<View>(*this, size()); }
+    [[nodiscard]] auto cbegin() const noexcept { return begin(); }
+    [[nodiscard]] auto cend() const noexcept { return end(); }
 
-    bool contains(std::span<const std::byte> row) const { return this->get_handle().contains(row); }
-    bool contains(database::Row row) const { return this->get_handle().contains(row); }
+    [[nodiscard]] bool contains(std::span<const std::byte> row) const { return this->get_handle().contains(row); }
+    [[nodiscard]] bool contains(database::Row row) const { return this->get_handle().contains(row); }
     template<ygg::ByteCodable... Ts>
-    bool contains(const std::tuple<Ts...>& values) const
+    [[nodiscard]] bool contains(const std::tuple<Ts...>& values) const
     { return this->get_handle().contains(values); }
 };
 }  // namespace ygg
@@ -184,26 +184,26 @@ namespace ygg
 template<typename V>
 class ViewMixin<database::Relation, V>
 {
-    const V& self() const noexcept { return static_cast<const V&>(*this); }
-    const Data<database::Relation>& record() const noexcept { return self().get_record(); }
-    bool contains_canonical(std::span<const std::byte> row) const
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+    [[nodiscard]] const Data<database::Relation>& record() const noexcept { return self().get_record(); }
+    [[nodiscard]] bool contains_canonical(std::span<const std::byte> row) const
     {
         const auto index = self().get_repository().get_row_repository().find(row);
         return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow>(*index));
     }
 
 public:
-    auto columns() const noexcept { return self().get_repository().get_columns(record().columns_index); }
-    size_t arity() const noexcept { return columns().size(); }
-    size_t size() const noexcept { return row_indices().size(); }
-    bool empty() const noexcept { return row_indices().empty(); }
-    std::span<const Index<database::RelationRow>> row_indices() const noexcept
+    [[nodiscard]] auto columns() const noexcept { return self().get_repository().get_columns(record().columns_index); }
+    [[nodiscard]] size_t arity() const noexcept { return columns().size(); }
+    [[nodiscard]] size_t size() const noexcept { return row_indices().size(); }
+    [[nodiscard]] bool empty() const noexcept { return row_indices().empty(); }
+    [[nodiscard]] std::span<const Index<database::RelationRow>> row_indices() const noexcept
     { return self().get_repository().get_row_set_repository()[record().row_set_index.get_value()]; }
-    const void* get_storage_address() const noexcept { return row_indices().data(); }
-    size_t get_storage_index() const noexcept { return self().get_repository().get_storage_index(record().row_set_index); }
-    size_t column_index(Index<database::Column> column) const { return columns().column_index(column); }
+    [[nodiscard]] const void* get_storage_address() const noexcept { return row_indices().data(); }
+    [[nodiscard]] size_t get_storage_index() const noexcept { return self().get_repository().get_storage_index(record().row_set_index); }
+    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return columns().column_index(column); }
 
-    std::span<const std::byte> row(size_t index) const noexcept
+    [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept
     {
         assert(index < size());
         return self().get_repository().get_row_repository()[row_indices()[index].get_value()];
@@ -212,26 +212,26 @@ public:
     /// Rows resolve indices the owning repository can view; others stay raw for the caller to resolve.
     auto operator[](size_t index) const noexcept { return make_view(database::Row(row(index), columns().span()), self().get_repository()); }
 
-    auto at(size_t index) const
+    [[nodiscard]] auto at(size_t index) const
     {
         if (index >= size())
             throw std::out_of_range("Relation: row index out of range.");
         return (*this)[index];
     }
 
-    auto begin() const noexcept { return database::detail::RelationIterator<V>(self(), 0); }
-    auto end() const noexcept { return database::detail::RelationIterator<V>(self(), size()); }
-    auto cbegin() const noexcept { return begin(); }
-    auto cend() const noexcept { return end(); }
+    [[nodiscard]] auto begin() const noexcept { return database::detail::RelationIterator<V>(self(), 0); }
+    [[nodiscard]] auto end() const noexcept { return database::detail::RelationIterator<V>(self(), size()); }
+    [[nodiscard]] auto cbegin() const noexcept { return begin(); }
+    [[nodiscard]] auto cend() const noexcept { return end(); }
 
-    bool contains(std::span<const std::byte> row) const
+    [[nodiscard]] bool contains(std::span<const std::byte> row) const
     {
         if (row.size() != columns().row_size())
             throw std::invalid_argument("Relation: row byte width does not match its schema.");
         return contains_canonical(row);
     }
 
-    bool contains(database::Row row) const
+    [[nodiscard]] bool contains(database::Row row) const
     {
         if (!std::ranges::equal(row.columns(), columns().span()))
             throw std::invalid_argument("Relation: row schema does not match.");
@@ -239,7 +239,7 @@ public:
     }
 
     template<ygg::ByteCodable... Ts>
-    bool contains(const std::tuple<Ts...>& values) const
+    [[nodiscard]] bool contains(const std::tuple<Ts...>& values) const
     { return contains_canonical(database::encode_row(values, columns().span())); }
 };
 }  // namespace ygg
