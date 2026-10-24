@@ -33,12 +33,12 @@ def main() -> None:
                 "cmake_dir",
                 "cmake_dirs",
                 "cmake_prefix",
-                "include_dir",
-                "library_dirs",
-                "native_prefix",
                 "database",
                 "diagnostics",
                 "execution",
+                "include_dir",
+                "library_dirs",
+                "native_prefix",
                 "serialization",
             ]
             assert pyyggdrasil.__version__ != ""
