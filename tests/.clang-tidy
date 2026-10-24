@@ -1,9 +1,8 @@
-# Tests and benchmarks: literal values are the test data, fixed seeds keep runs
-# reproducible, checks of moved-from objects use them after the move, and values that
-# throw in their moves test exception safety (so moves may throw). The allocation test
-# replaces operator new with malloc, test types override methods to inject failures, and
-# benchmarks register themselves during static initialization. Tests read optionals with
-# value(), whose bad_optional_access fails the test: the check cannot see gtest's ASSERTs.
+# Tests: literal values are the test data, fixed seeds keep runs reproducible, checks of
+# moved-from objects use them after the move, and values that throw in their moves test
+# exception safety (so moves may throw). The allocation test replaces operator new with
+# malloc and frees what it allocates, and test types shadow methods to inject failures. Tests read optionals with value(), whose
+# bad_optional_access fails the test: the check cannot see gtest's ASSERTs.
 InheritParentConfig: true
 Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
@@ -13,8 +12,7 @@ Checks: >
   -performance-noexcept-move-constructor,
   -cppcoreguidelines-owning-memory,
   -cppcoreguidelines-no-malloc,
-  -bugprone-derived-method-shadowing-base-method,
-  -bugprone-throwing-static-initialization
+  -bugprone-derived-method-shadowing-base-method
 CheckOptions:
   bugprone-exception-escape.CheckMoveMemberFunctions: false
   bugprone-unchecked-optional-access.IgnoreValueCalls: true
