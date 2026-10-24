@@ -19,8 +19,8 @@
 #define YGG_CONTAINERS_DETAIL_BASIC_RAW_SET_HPP_
 
 #include "yggdrasil/containers/detail/concurrency.hpp"
-#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/concepts.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
@@ -63,9 +63,7 @@ private:
         size_t operator()(std::span<const value_type> value) const noexcept { return hash_range(value); }
         template<SizedForwardRangeOf<value_type> R>
         size_t operator()(const R& value) const
-        {
-            return hash_range(value);
-        }
+        { return hash_range(value); }
     };
 
     struct IndexableEqualTo
@@ -84,14 +82,10 @@ private:
 
         template<SizedForwardRangeOf<value_type> R>
         bool operator()(const R& lhs, index_type rhs) const
-        {
-            return equal_range(lhs, (*pool)[rhs]);
-        }
+        { return equal_range(lhs, (*pool)[rhs]); }
         template<SizedForwardRangeOf<value_type> R>
         bool operator()(index_type lhs, const R& rhs) const
-        {
-            return (*this)(rhs, lhs);
-        }
+        { return (*this)(rhs, lhs); }
     };
 
     using SetType = HashSetType<index_type, IndexableHash, IndexableEqualTo, ThreadSafe>;
@@ -147,6 +141,7 @@ public:
     BasicRawSet& operator=(const BasicRawSet&) = delete;
     BasicRawSet(BasicRawSet&&) = default;
     BasicRawSet& operator=(BasicRawSet&&) = default;
+    ~BasicRawSet() = default;
 
     std::optional<index_type> find(std::span<const value_type> value) const
     {
@@ -174,9 +169,7 @@ public:
 
     template<SizedForwardRangeOf<value_type> R>
     bool contains(const R& value) const
-    {
-        return find(value).has_value();
-    }
+    { return find(value).has_value(); }
 
     template<SizedForwardRangeOf<value_type> R>
         requires requires(pool_type& pool, const R& value) { pool.insert(value); }

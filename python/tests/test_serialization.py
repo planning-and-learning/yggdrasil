@@ -4,13 +4,14 @@ from types import MappingProxyType
 import pytest
 
 import pyyggdrasil
-import pyyggdrasil.serialization as serialization
+import pyyggdrasil.serialization.table
+from pyyggdrasil import serialization
 from pyyggdrasil.serialization.table import Row, render_table
 
 
 def test_serialization_submodule_is_public() -> None:
     assert serialization is pyyggdrasil.serialization
-    assert serialization.table.render_table is render_table
+    assert pyyggdrasil.serialization.table.render_table is render_table
 
 
 @pytest.mark.parametrize("aligned", [False, True])
@@ -43,7 +44,10 @@ def test_recursive_headers_keep_groups_together_and_lists_intact(aligned: bool) 
         {"name": "leave", "condition": {"extra": False}, "empty": {}},
     ]
 
-    lines = [[cell.strip() for cell in line.split("|")] for line in render_table(rows, prefix="A", aligned=aligned).splitlines()]
+    lines = [
+        [cell.strip() for cell in line.split("|")]
+        for line in render_table(rows, prefix="A", aligned=aligned).splitlines()
+    ]
 
     assert len(lines) == 5
     assert lines[0] == ["", "", "condition", "", "", "", "effect", ""]
@@ -83,7 +87,16 @@ def test_empty_singleton_and_ambiguous_lists() -> None:
         {"items": [None]},
     ]
     assert render_table(rows).splitlines() == [
-        "items", "[]", "[a]", "[a,b]", "[1,2.5,True]", '["a,b","c"]', '[""]', '[" a "]', '[["a","b"],["c"]]', "[null]",
+        "items",
+        "[]",
+        "[a]",
+        "[a,b]",
+        "[1,2.5,True]",
+        '["a,b","c"]',
+        '[""]',
+        '[" a "]',
+        '[["a","b"],["c"]]',
+        "[null]",
     ]
 
 

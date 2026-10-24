@@ -1,15 +1,7 @@
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
 
 import pytest
-
 from python import pyyggdrasil_build_backend as backend
-
-
-def _configure_and_install_dependencies() -> None:
-    configure = cast(Callable[[], None], getattr(backend, "_configure_and_install_dependencies"))
-    configure()
 
 
 def test_native_build_cleans_generated_prefix_and_rejects_dirty_custom_prefix(
@@ -34,7 +26,7 @@ def test_native_build_cleans_generated_prefix_and_rejects_dirty_custom_prefix(
     stale_stamp = backend.YGGDRASIL_BUILD_DIR / "valla/stamp"
     stale_stamp.mkdir(parents=True)
 
-    _configure_and_install_dependencies()
+    backend.configure_and_install_dependencies()
 
     assert not stale_header.exists()
     assert not stale_stamp.exists()
@@ -45,7 +37,7 @@ def test_native_build_cleans_generated_prefix_and_rejects_dirty_custom_prefix(
     monkeypatch.setenv("YGGDRASIL_NATIVE_PREFIX", str(custom_prefix))
 
     with pytest.raises(RuntimeError, match="must be empty"):
-        _configure_and_install_dependencies()
+        backend.configure_and_install_dependencies()
     assert (custom_prefix / "unrelated-file").is_file()
 
     monkeypatch.delenv("YGGDRASIL_NATIVE_PREFIX")
@@ -56,5 +48,5 @@ def test_native_build_cleans_generated_prefix_and_rejects_dirty_custom_prefix(
     backend.YGGDRASIL_BUILD_DIR.symlink_to(protected_dir, target_is_directory=True)
 
     with pytest.raises(RuntimeError, match="refusing to clean symlinked"):
-        _configure_and_install_dependencies()
+        backend.configure_and_install_dependencies()
     assert (protected_dir / "keep").is_file()

@@ -29,7 +29,7 @@ public:
     QueryBuilder& builder() noexcept { return *m_builder; }
 
     template<class Tag, std::invocable<Data<Query<Tag>>&> Fill>
-    QueryView<> make(Fill&& fill)
+    QueryView<> make(Fill fill)
     {
         auto data = checkout<Query<Tag>>(*m_builder);
         fill(*data);
@@ -61,10 +61,7 @@ public:
     }
     QueryView<> join(QueryView<> lhs, QueryView<> rhs) { return binary<QueryJoinTag>(lhs, rhs); }
     /// The source's operation over schema-identical children of this repository.
-    QueryView<> clone(QueryView<> source, std::span<const QueryView<>> children)
-    {
-        return detail::clone_query(source, children, *m_repository, *m_builder);
-    }
+    QueryView<> clone(QueryView<> source, std::span<const QueryView<>> children) { return detail::clone_query(source, children, *m_repository, *m_builder); }
     /// Keeps the query's columns with the given labels, in that order.
     QueryView<> project(QueryView<> query, std::span<const Index<Column>> labels)
     {

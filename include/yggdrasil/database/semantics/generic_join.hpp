@@ -25,9 +25,13 @@ struct GenericJoinWork
     size_t prefixes = 0;
 };
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
-inline thread_local GenericJoinWork generic_join_work;
+inline GenericJoinWork& generic_join_work() noexcept
+{
+    thread_local GenericJoinWork work;
+    return work;
+}
 #endif
-void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept;
+void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) noexcept;
 
 struct GenericJoinKey
 {
@@ -87,7 +91,7 @@ class GenericJoinWorkspace
 
     /// Appends the full assignments over the tries returned by root(input).
     template<std::invocable<size_t> Root>
-    void append(Builder<Relation>& out, Root&& root)
+    void append(Builder<Relation>& out, Root root)
     {
         for (size_t input = 0; input < m_tries.size(); ++input)
         {
@@ -138,7 +142,8 @@ public:
 
     size_t memory_usage() const noexcept
     {
-        size_t result = m_tries.capacity() * sizeof(detail::GenericJoinTrie) + m_cursors.capacity() * sizeof(m_cursors[0]) + m_row.capacity();
+        size_t result =
+            m_tries.capacity() * sizeof(detail::GenericJoinTrie) + m_cursors.capacity() * sizeof(typename decltype(m_cursors)::value_type) + m_row.capacity();
         for (const auto& trie : m_tries)
             result += trie.memory_usage();
         return result;
@@ -150,10 +155,7 @@ public:
 /// https://arxiv.org/abs/1310.3314. Hash costs are expected; no ordering is required.
 /// Output replaces its rows; schema/alias/plan errors precede mutation.
 template<RelationViewRange R>
-void generic_join(const R& inputs,
-                  const GenericJoinPlan& plan,
-                  Builder<Relation>& out,
-                  GenericJoinWorkspace& workspace)
+void generic_join(const R& inputs, const GenericJoinPlan& plan, Builder<Relation>& out, GenericJoinWorkspace& workspace)
 {
     if (std::ranges::size(inputs) != plan.input_count() || !workspace.matches(plan))
         throw std::invalid_argument("Generic join: inputs or workspace do not match the plan.");

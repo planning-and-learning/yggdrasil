@@ -90,7 +90,15 @@ public:
         return result;
     }
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&MustPassPlan::m_sources, &MustPassPlan::m_edges, &MustPassPlan::m_targets, &MustPassPlan::m_probes, &MustPassPlan::m_output, &MustPassPlan::m_keys> {}; }
+    static constexpr auto cista_members() noexcept
+    {
+        return ygg::Members<&MustPassPlan::m_sources,
+                            &MustPassPlan::m_edges,
+                            &MustPassPlan::m_targets,
+                            &MustPassPlan::m_probes,
+                            &MustPassPlan::m_output,
+                            &MustPassPlan::m_keys> {};
+    }
 };
 
 }  // namespace ygg::database

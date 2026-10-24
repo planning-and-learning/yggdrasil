@@ -41,9 +41,7 @@ struct EqualTo<View<::cista::array<T, N>, C>>
 {
     bool operator()(const View<::cista::array<T, N>, C>& lhs, const View<::cista::array<T, N>, C>& rhs) const
         requires EqualityComparableByEqualTo<std::ranges::range_value_t<const View<::cista::array<T, N>, C>>>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename T1, typename T2>
@@ -51,9 +49,7 @@ struct EqualTo<::cista::pair<T1, T2>>
 {
     constexpr bool operator()(const ::cista::pair<T1, T2>& lhs, const ::cista::pair<T1, T2>& rhs) const
         requires EqualityComparableByEqualTo<T1> && EqualityComparableByEqualTo<T2>
-    {
-        return EqualTo<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second);
-    }
+    { return EqualTo<std::remove_cvref_t<T1>> {}(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second); }
 };
 
 template<typename C, typename T1, typename T2>
@@ -64,9 +60,7 @@ struct EqualTo<View<::cista::pair<T1, T2>, C>>
             { lhs.get_first() } -> EqualityComparableByEqualTo;
             { lhs.get_second() } -> EqualityComparableByEqualTo;
         }
-    {
-        return EqualTo<ViewOrValue<T1, C>> {}(lhs.get_first(), rhs.get_first()) && EqualTo<ViewOrValue<T2, C>> {}(lhs.get_second(), rhs.get_second());
-    }
+    { return EqualTo<ViewOrValue<T1, C>> {}(lhs.get_first(), rhs.get_first()) && EqualTo<ViewOrValue<T2, C>> {}(lhs.get_second(), rhs.get_second()); }
 };
 
 template<>
@@ -81,9 +75,7 @@ struct EqualTo<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Al
     bool operator()(const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& lhs,
                     const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
@@ -93,9 +85,7 @@ struct EqualTo<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeTyp
                     const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>& rhs) const
         requires EqualityComparableByEqualTo<
             std::ranges::range_value_t<const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename... Ts>
@@ -114,10 +104,10 @@ struct EqualTo<::cista::offset::variant<Ts...>>
             return false;
 
         return lhs.apply(
-            [&]<typename L>(L&& l)
+            [&]<typename L>(const L& l)
             {
                 return rhs.apply(
-                    [&]<typename R>(R&& r)
+                    [&]<typename R>(const R& r)
                     {
                         if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
                             return EqualTo<std::remove_cvref_t<L>> {}(l, r);
@@ -143,10 +133,10 @@ struct EqualTo<View<::cista::offset::variant<Ts...>, C>>
             return false;
 
         return lhs.apply(
-            [&]<typename L>(L&& l)
+            [&]<typename L>(const L& l)
             {
                 return rhs.apply(
-                    [&]<typename R>(R&& r)
+                    [&]<typename R>(const R& r)
                     {
                         if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
                             return EqualTo<std::remove_cvref_t<L>> {}(l, r);

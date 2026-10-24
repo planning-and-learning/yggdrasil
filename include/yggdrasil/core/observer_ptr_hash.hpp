@@ -31,9 +31,7 @@ struct Hash<ObserverPtr<T>>
 {
     hash_t operator()(ObserverPtr<T> ptr) const
         requires Hashable<T>
-    {
-        return Hash<std::remove_cvref_t<T>> {}(*ptr);
-    }
+    { return Hash<std::remove_cvref_t<T>> {}(*ptr); }
 };
 
 }  // namespace ygg

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -26,7 +27,7 @@ namespace ygg::database
 struct Relaxation
 {
     std::vector<std::optional<QueryView<>>> queries;  ///< Per root; nullopt if nothing is constrained.
-    std::vector<size_t> slots;                              ///< The original input slot of each relaxed input, shared by all roots.
+    std::vector<size_t> slots;                        ///< The original input slot of each relaxed input, shared by all roots.
 };
 
 namespace detail
@@ -34,7 +35,7 @@ namespace detail
 
 /// Which side of R a relaxation bounds: the over-approximation R̂ contains every possible answer, the
 /// under-approximation Ř only certain ones (see relax() below). A subtrahend is bounded on the other side.
-enum class Polarity
+enum class Polarity : std::uint8_t
 {
     over,
     under
@@ -321,9 +322,7 @@ Relaxation relax(std::span<const QueryView<>> roots, Known&& known, QueryReposit
 /// The relaxation of one query; see the overload for several roots.
 template<std::predicate<size_t> Known>
 Relaxation relax(QueryView<> query, Known&& known, QueryRepository& repository, QueryBuilder& builder)
-{
-    return relax(std::span<const QueryView<>>(&query, 1), std::forward<Known>(known), repository, builder);
-}
+{ return relax(std::span<const QueryView<>>(&query, 1), std::forward<Known>(known), repository, builder); }
 
 }  // namespace ygg::database
 

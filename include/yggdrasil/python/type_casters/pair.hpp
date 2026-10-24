@@ -49,7 +49,7 @@ public:
     bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename T>
-    static handle from_cpp(T&& value, rv_policy policy, cleanup_list* cleanup) noexcept
+    static handle from_cpp(const T& value, rv_policy policy, cleanup_list* cleanup) noexcept
     {
         object o1 = steal(Caster1::from_cpp(value.get_first(), policy, cleanup));
         if (!o1.is_valid())

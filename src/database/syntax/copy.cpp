@@ -37,8 +37,5 @@ QueryPlan compile(std::span<const QueryView<>> roots)
 
 namespace ygg::database
 {
-QueryPlan compile(std::initializer_list<QueryView<>> roots)
-{
-    return compile(std::span<const QueryView<>>(roots));
-}
+QueryPlan compile(std::initializer_list<QueryView<>> roots) { return compile(std::span<const QueryView<>>(roots)); }
 }

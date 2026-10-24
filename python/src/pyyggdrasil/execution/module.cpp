@@ -24,7 +24,7 @@ void bind_execution_module_definitions(nb::module_& m)
             "Return this execution context for use in with statements.")
         .def(
             "__exit__",
-            [](ygg::ExecutionContext&, nb::object, nb::object, nb::object) { return false; },
+            [](ygg::ExecutionContext&, const nb::object&, const nb::object&, const nb::object&) { return false; },
             nb::arg("exc_type").none(),
             nb::arg("exc_value").none(),
             nb::arg("traceback").none(),

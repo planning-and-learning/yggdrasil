@@ -85,7 +85,8 @@ private:
     using Leaf = detail::TreeVectorLeaf<Block>;
     using Node = detail::TreeVectorNode<Block, Arity>;
     using Children = std::array<uint_t, Arity>;
-    using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
+    using LeafSet =
+        std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
     using Flip = TreeBitsetFlip<Block>;
 
@@ -152,7 +153,8 @@ private:
     class BaseCursor
     {
     public:
-        BaseCursor(const NodeSet& nodes, TreeBitsetIndex<Block> base) : m_nodes(nodes), m_base_size(base.size) { m_path[0] = Frame { base.root, 0, base.size }; }
+        BaseCursor(const NodeSet& nodes, TreeBitsetIndex<Block> base) : m_nodes(&nodes), m_base_size(base.size)
+        { m_path[0] = Frame { base.root, 0, base.size }; }
 
         /// Returns the subtree of the base that covers exactly [offset, offset + size), or nullopt if the base has
         /// no such subtree. Ranges inside all-zero subtrees, or beyond the base, are zero.
@@ -174,7 +176,7 @@ private:
                 if (frame.root == ZERO)
                     return zero(size);
 
-                const auto& node = m_nodes[Index<Node>(frame.root)];
+                const auto& node = (*m_nodes)[Index<Node>(frame.root)];
                 const auto k = (offset - frame.offset) / chunk(frame.size);
                 const auto child_offset = frame.offset + k * chunk(frame.size);
                 const auto child_blocks = child_size(frame.size, k);
@@ -191,10 +193,11 @@ private:
             uint_t offset;
             uint_t size;
 
-            bool contains(uint_t other_offset, uint_t other_size) const noexcept { return offset <= other_offset && other_offset + other_size <= offset + size; }
+            bool contains(uint_t other_offset, uint_t other_size) const noexcept
+            { return offset <= other_offset && other_offset + other_size <= offset + size; }
         };
 
-        const NodeSet& m_nodes;
+        const NodeSet* m_nodes;
         uint_t m_base_size;
         std::array<Frame, std::numeric_limits<uint_t>::digits + 2> m_path {};  // Bounded by the tree height.
         size_t m_depth = 0;
@@ -294,6 +297,7 @@ public:
     static constexpr size_t arity = Arity;
 
     TreeBitsetSet() = default;
+    ~TreeBitsetSet() = default;
     TreeBitsetSet(const TreeBitsetSet&) = delete;
     TreeBitsetSet& operator=(const TreeBitsetSet&) = delete;
     TreeBitsetSet(TreeBitsetSet&&) = default;
@@ -406,7 +410,7 @@ template<std::unsigned_integral Block, std::unsigned_integral BitsetBlock, typen
     requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
 void append_blocks(const boost::dynamic_bitset<BitsetBlock, Allocator>& bitset, std::vector<Block>& blocks)
 {
-    constexpr auto parts = sizeof(BitsetBlock) / sizeof(Block);
+    constexpr auto parts = std::numeric_limits<BitsetBlock>::digits / std::numeric_limits<Block>::digits;
     boost::to_block_range(bitset,
                           boost::make_function_output_iterator(
                               [&](BitsetBlock block)
@@ -429,7 +433,7 @@ template<std::unsigned_integral Block, std::unsigned_integral BitsetBlock, typen
     requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
 void assign_blocks(std::span<const Block> blocks, boost::dynamic_bitset<BitsetBlock, Allocator>& bitset)
 {
-    constexpr auto parts = sizeof(BitsetBlock) / sizeof(Block);
+    constexpr auto parts = std::numeric_limits<BitsetBlock>::digits / std::numeric_limits<Block>::digits;
     bitset.clear();
     for (size_t i = 0; i < blocks.size(); i += parts)
     {

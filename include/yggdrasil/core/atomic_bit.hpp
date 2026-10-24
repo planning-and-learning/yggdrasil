@@ -34,9 +34,7 @@ namespace ygg::bit
 
 template<std::unsigned_integral Block>
 Block atomic_load(const Block* block) noexcept
-{
-    return std::atomic_ref<Block>(*const_cast<Block*>(block)).load(std::memory_order_relaxed);
-}
+{ return std::atomic_ref<Block>(*const_cast<Block*>(block)).load(std::memory_order_relaxed); }
 
 template<std::unsigned_integral Block>
 void atomic_replace_bits(Block* block, Block mask, Block value) noexcept
@@ -112,7 +110,16 @@ public:
         return *this;
     }
 
-    atomic_int_reference& operator=(const atomic_int_reference& other) { return *this = static_cast<value_type>(other); }
+    atomic_int_reference(const atomic_int_reference&) = default;
+    ~atomic_int_reference() = default;
+    atomic_int_reference& operator=(const atomic_int_reference& other)
+    {
+        if (this != &other)
+            *this = static_cast<value_type>(other);
+        return *this;
+    }
+    atomic_int_reference(atomic_int_reference&&) = default;
+    atomic_int_reference& operator=(atomic_int_reference&& other) noexcept { return *this = static_cast<const atomic_int_reference&>(other); }
 
     operator value_type() const { return Coder::decode(atomic_read_int(m_word, m_offset, m_len)); }
 

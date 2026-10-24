@@ -9,10 +9,7 @@ void bind_query_join(nb::module_& m, QueryRepositoryBinding& repository)
 
     {
         using V = QueryData<ygg::database::QueryJoinTag>;
-        ygg::bind_data<V>(m, "QueryJoinData")
-            .def(nb::init<QueryView, QueryView>(), "lhs"_a, "rhs"_a)
-            .def_rw("lhs", &V::lhs)
-            .def_rw("rhs", &V::rhs);
+        ygg::bind_data<V>(m, "QueryJoinData").def(nb::init<QueryView, QueryView>(), "lhs"_a, "rhs"_a).def_rw("lhs", &V::lhs).def_rw("rhs", &V::rhs);
     }
 
     {

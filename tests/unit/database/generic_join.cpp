@@ -51,6 +51,7 @@ template<database::RelationViewRange R>
 database::GenericJoinPlan plan_for(const R& inputs, std::initializer_list<ColumnIndex> variables, std::initializer_list<ColumnIndex> output)
 {
     std::vector<std::vector<database::ColumnLayout>> schemas;
+    schemas.reserve(inputs.size());
     for (const auto& input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
     return database::GenericJoinPlan(schemas, { variables.begin(), variables.size() }, { output.begin(), output.size() });
@@ -120,9 +121,10 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
     std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
     const std::array output { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) };
     std::vector<std::vector<database::ColumnLayout>> schemas;
+    schemas.reserve(inputs.size());
     for (const auto input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
-    do
+    for (bool more = true; more; more = std::ranges::next_permutation(variables).found)
     {
         const database::GenericJoinPlan plan(schemas, variables, output);
         database::GenericJoinWorkspace workspace(plan);
@@ -134,7 +136,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
         database::generic_join(inputs, plan, result, workspace);
         expect_same(result, expected);
         EXPECT_GT(workspace.memory_usage(), 0);
-    } while (std::ranges::next_permutation(variables).found);
+    }
 }
 
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
@@ -159,18 +161,19 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
 
         const std::array inputs { borrow(r), borrow(s), borrow(t) };
         std::vector<std::vector<database::ColumnLayout>> schemas;
+        schemas.reserve(inputs.size());
         for (const auto input : inputs)
             schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
         std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
         const auto output = variables;
-        do
+        for (bool more = true; more; more = std::ranges::next_permutation(variables).found)
         {
             const database::GenericJoinPlan plan(schemas, variables, output);
             database::GenericJoinWorkspace workspace(plan);
             RelationBuilder result(plan.output_columns().span());
-            database::detail::generic_join_work = {};
+            database::detail::generic_join_work() = {};
             database::generic_join(inputs, plan, result, workspace);
-            const auto work = database::detail::generic_join_work;
+            const auto work = database::detail::generic_join_work();
             expect_same(result, expected);
             // This family has linear extension intersections in every order.
             // Counts cover traversal only; building the three tries reads 3n rows.
@@ -178,7 +181,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
             EXPECT_LE(work.candidate_keys, 3 * count);
             EXPECT_LE(work.probes, 3 * count);
             EXPECT_LE(work.prefixes, 3 * count + 1);
-        } while (std::ranges::next_permutation(variables).found);
+        }
     }
 }
 #endif

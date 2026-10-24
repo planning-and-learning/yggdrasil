@@ -50,9 +50,7 @@ struct FixedUintMixin
 
     template<std::integral T>
     friend constexpr Derived operator+(const FixedUintMixin& lhs, T rhs) noexcept
-    {
-        return Derived(lhs.m_value + rhs);
-    }
+    { return Derived(lhs.m_value + rhs); }
     template<std::integral T>
     friend constexpr Derived operator-(const FixedUintMixin& lhs, T rhs) noexcept
     {

@@ -5,27 +5,27 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_OPTIMIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_OPTIMIZATION_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/optimization/details/cost.hpp"
 #include "yggdrasil/database/optimization/details/estimation.hpp"
 #include "yggdrasil/database/optimization/details/join_block.hpp"
 #include "yggdrasil/database/optimization/details/normalization.hpp"
 #include "yggdrasil/database/optimization/details/structural.hpp"
 
-#include "yggdrasil/containers/associative_containers.hpp"
-
 #include <cassert>
 #include <concepts>
-#include <utility>
+#include <cstdint>
 #include <optional>
-#include <stdexcept>
 #include <span>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace ygg::database
 {
 /// How a root is evaluated: fully, by materializing it, or bound, by the bound evaluator with some columns given per
 /// call (bound::QueryEvaluator).
-enum class Evaluation
+enum class Evaluation : std::uint8_t
 {
     full,
     bound,

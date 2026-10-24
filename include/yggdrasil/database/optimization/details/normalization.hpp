@@ -215,11 +215,7 @@ class Normalizer
     }
 
 public:
-    Normalizer(QueryRepository& repository, QueryBuilder& builder, size_t source_size) :
-        m_build(repository, builder),
-        m_normalized(source_size)
-    {
-    }
+    Normalizer(QueryRepository& repository, QueryBuilder& builder, size_t source_size) : m_build(repository, builder), m_normalized(source_size) {}
 
     /// The normalized equivalent of a query of the source repository.
     QueryView<> operator()(QueryView<> source)

@@ -8,8 +8,8 @@
 
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/core/types_utils.hpp"
-#include "yggdrasil/database/syntax/columns.hpp"
 #include "yggdrasil/database/declarations.hpp"
+#include "yggdrasil/database/syntax/columns.hpp"
 #include "yggdrasil/database/syntax/row.hpp"
 
 #include <cassert>
@@ -42,7 +42,8 @@ private:
     Index<database::Relation> m_index;
     size_t m_storage_index = std::numeric_limits<size_t>::max();
     Builder<database::Columns> m_columns;
-    RawArraySet<std::byte, 64> m_rows;
+    static constexpr size_t first_segment_bytes = 64;
+    RawArraySet<std::byte, first_segment_bytes> m_rows;
 
     template<database::ColumnSchema Schema>
     void reinitialize(size_t width, Schema columns);
@@ -95,9 +96,7 @@ public:
     bool contains(database::Row row) const { return find(row).has_value(); }
     template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
-    {
-        return find(values).has_value();
-    }
+    { return find(values).has_value(); }
 
     /// Invalidates the erased and moved rows' positions and borrowed rows.
     void erase(size_t index);

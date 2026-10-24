@@ -108,6 +108,7 @@ def test_find_package_provides_helpers_and_target(tmp_path: Path) -> None:
         [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     assert "helpers contract OK" in result.stdout

@@ -50,9 +50,7 @@ struct SharedObjectPoolEntry
 
     template<typename... Args>
     void initialize(Args&&... args)
-    {
-        object.initialize(std::forward<Args>(args)...);
-    }
+    { object.initialize(std::forward<Args>(args)...); }
 };
 
 template<typename T, bool ThreadSafe = false>
@@ -223,6 +221,7 @@ public:
     SharedObjectPool& operator=(const SharedObjectPool& other) = delete;
     SharedObjectPool(SharedObjectPool&& other) = delete;
     SharedObjectPool& operator=(SharedObjectPool&& other) = delete;
+    ~SharedObjectPool() = default;
 
     [[nodiscard]] SharedObjectPoolPtr<T, ThreadSafe> get_or_allocate() { return SharedObjectPoolPtr<T, ThreadSafe>(this, m_storage.acquire()); }
 

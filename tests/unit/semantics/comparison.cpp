@@ -19,9 +19,9 @@
 
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/ids/uint_mixins.hpp"
+#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/serialization/cista_equal_to.hpp"
 #include "yggdrasil/serialization/cista_ordering.hpp"
-#include "yggdrasil/semantics/hash.hpp"
 
 #include <array>
 #include <cmath>

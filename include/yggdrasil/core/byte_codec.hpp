@@ -90,7 +90,7 @@ concept TypeIdVisitor = std::invocable<Visitor&, std::type_identity<std::uint32_
 
 /// Calls visitor with std::type_identity<T> for the type T of `id`; every call returns the same type.
 template<TypeIdVisitor Visitor>
-decltype(auto) visit_type_id(TypeId id, Visitor&& visitor)
+decltype(auto) visit_type_id(TypeId id, Visitor visitor)
 {
     using Result = std::invoke_result_t<Visitor&, std::type_identity<std::uint32_t>>;
     const auto call = [&]<typename T>(std::type_identity<T> type) -> Result
@@ -115,6 +115,8 @@ decltype(auto) visit_type_id(TypeId id, Visitor&& visitor)
             return call(std::type_identity<double> {});
         case TypeId::boolean:
             return call(std::type_identity<bool> {});
+        case TypeId::none:
+            break;
     }
     throw std::invalid_argument("visit_type_id: invalid type id.");
 }
@@ -138,6 +140,8 @@ constexpr std::size_t byte_size(TypeId id) noexcept
             return ByteCodec<double>::size;
         case TypeId::boolean:
             return ByteCodec<bool>::size;
+        case TypeId::none:
+            break;
     }
     return 0;
 }

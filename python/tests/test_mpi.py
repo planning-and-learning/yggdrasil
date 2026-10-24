@@ -36,24 +36,19 @@ def _check_distribution_compliance() -> None:
         "tomlplusplus/LICENSE",
     }
     actual_license_files = {
-        path.relative_to(license_dir).as_posix()
-        for path in license_dir.rglob("*")
-        if path.is_file()
+        path.relative_to(license_dir).as_posix() for path in license_dir.rglob("*") if path.is_file()
     }
     assert actual_license_files == expected_license_files
     assert (prefix / "share" / "CORRESPONDING_SOURCE.md").is_file()
     assert (prefix / "share" / "SOURCES.json").is_file()
-    assert "Modified by the Yggdrasil project on 2026-08-13" in (
-        prefix / "include" / "gtl" / "btree.hpp"
-    ).read_text(encoding="utf-8")
+    assert "Modified by the Yggdrasil project on 2026-08-13" in (prefix / "include" / "gtl" / "btree.hpp").read_text(
+        encoding="utf-8"
+    )
 
     distribution = importlib_metadata.distribution("pyyggdrasil")
     assert distribution.metadata["License-Expression"] == "GPL-3.0-or-later"
     assert distribution.metadata.get_all("License-File") == ["LICENSE"]
-    assert any(
-        str(path).endswith(".dist-info/licenses/LICENSE")
-        for path in distribution.files or ()
-    )
+    assert any(str(path).endswith(".dist-info/licenses/LICENSE") for path in distribution.files or ())
 
 
 def _run_smoke_test(root: Path) -> None:
@@ -74,8 +69,7 @@ def _run_smoke_test(root: Path) -> None:
     if platform.system() == "Linux":
         repaired_libraries = prefix.parent / "pyyggdrasil.libs"
         assert not any(
-            path.name.startswith(("libcap-", "libhwloc-", "libudev-"))
-            for path in repaired_libraries.glob("*")
+            path.name.startswith(("libcap-", "libhwloc-", "libudev-")) for path in repaired_libraries.glob("*")
         )
 
     source_dir = root / "src"

@@ -29,7 +29,7 @@ handle sequence_view_from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
     {
         Py_ssize_t index = 0;
 
-        for (auto&& value : src)
+        for (auto&& value : std::forward<T>(src))
         {
             handle h = Caster::from_cpp(forward_like_<T>(value), policy, cleanup);
 
@@ -65,9 +65,7 @@ public:
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
-    {
-        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
-    }
+    { return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup); }
 };
 
 template<std::unsigned_integral Block, ::ygg::bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
@@ -89,9 +87,7 @@ public:
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
-    {
-        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
-    }
+    { return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup); }
 };
 
 template<std::unsigned_integral Block, ::ygg::bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
@@ -113,9 +109,7 @@ public:
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
-    {
-        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
-    }
+    { return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup); }
 };
 
 template<typename Type, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>

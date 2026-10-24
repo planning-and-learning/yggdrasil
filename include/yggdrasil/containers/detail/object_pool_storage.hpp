@@ -59,6 +59,7 @@ public:
     ObjectPoolStorage& operator=(const ObjectPoolStorage&) = delete;
     ObjectPoolStorage(ObjectPoolStorage&&) = delete;
     ObjectPoolStorage& operator=(ObjectPoolStorage&&) = delete;
+    ~ObjectPoolStorage() = default;
 
     Entry* acquire()
     {
@@ -96,7 +97,8 @@ public:
     }
 
 private:
-    SegmentedVector<Entry, 8, false, uint_t> m_storage;
+    static constexpr size_t first_segment_size = 8;
+    SegmentedVector<Entry, first_segment_size, false, uint_t> m_storage;
     std::vector<Entry*> m_free;
     [[no_unique_address]] mutable Mutex<ThreadSafe> m_mutex;
 };

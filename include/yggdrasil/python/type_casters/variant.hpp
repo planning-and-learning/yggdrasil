@@ -37,9 +37,7 @@ public:
     using Cast = movable_cast_t<T>;
     template<typename T>
     static constexpr bool can_cast()
-    {
-        return true;
-    }
+    { return true; }
 
     // Views are not default-constructible, so the value is stored only once converted.
     std::optional<Value> value;
@@ -57,13 +55,9 @@ public:
     }
 
     static handle from_cpp(const Value* src, rv_policy policy, cleanup_list* cleanup) noexcept
-    {
-        return src ? from_cpp(*src, policy, cleanup) : none().release();
-    }
+    { return src ? from_cpp(*src, policy, cleanup) : none().release(); }
     static handle from_cpp(const Value& src, rv_policy policy, cleanup_list* cleanup) noexcept
-    {
-        return BaseCaster::from_cpp(static_cast<const Base&>(src), policy, cleanup);
-    }
+    { return BaseCaster::from_cpp(static_cast<const Base&>(src), policy, cleanup); }
 };
 
 // Adapted from nanobind/stl/variant.h
@@ -129,7 +123,11 @@ struct type_caster<::cista::offset::variant<Ts...>>
         if (!value.valid())
             return none().release();
 
-        return std::visit([&]<typename V>(V&& v) { return make_caster<V>::from_cpp(std::forward<V>(v), policy, cleanup); }, std::forward<T>(value));
+        // The static apply has no empty case, which valid() above has handled.
+        const auto index = value.index();
+        return std::remove_cvref_t<T>::apply([&]<typename V>(V&& v) { return make_caster<V>::from_cpp(std::forward<V>(v), policy, cleanup); },
+                                             index,
+                                             std::forward<T>(value));
     }
 };
 

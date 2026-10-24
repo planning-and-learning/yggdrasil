@@ -82,6 +82,7 @@ public:
     };
 
     UnorderedMultiMap() = default;
+    ~UnorderedMultiMap() = default;
     UnorderedMultiMap(const UnorderedMultiMap&) = delete;
     UnorderedMultiMap& operator=(const UnorderedMultiMap&) = delete;
     UnorderedMultiMap(UnorderedMultiMap&& other) noexcept(std::is_nothrow_move_constructible_v<UnorderedMap<Key, size_t>>) :
@@ -211,9 +212,7 @@ public:
 
     /// Retained entries and hash slots; excludes the container's fixed storage.
     size_t memory_usage() const noexcept
-    {
-        return m_entries.capacity() * sizeof(Entry) + m_heads.capacity() * (sizeof(std::pair<const Key, size_t>) + sizeof(gtl::priv::ctrl_t));
-    }
+    { return m_entries.capacity() * sizeof(Entry) + m_heads.capacity() * (sizeof(std::pair<const Key, size_t>) + sizeof(gtl::priv::ctrl_t)); }
 
     size_t size() const noexcept { return m_size; }
     bool empty() const noexcept { return m_size == 0; }

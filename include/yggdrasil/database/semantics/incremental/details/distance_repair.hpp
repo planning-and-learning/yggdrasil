@@ -35,9 +35,13 @@ struct DistanceWork
     size_t heap_pops = 0;
 };
 #ifdef YGG_DISTANCE_INSTRUMENTATION
-inline thread_local DistanceWork distance_work;
+inline DistanceWork& distance_work() noexcept
+{
+    thread_local DistanceWork work;
+    return work;
+}
 #endif
-void count_distance_work([[maybe_unused]] size_t DistanceWork::*member) noexcept;
+void count_distance_work([[maybe_unused]] size_t DistanceWork::* member) noexcept;
 
 /// Shared across source trees: every heap is empty between completed repairs.
 class DistanceRepairWorkspace

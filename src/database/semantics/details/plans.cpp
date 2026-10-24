@@ -31,10 +31,7 @@ void ProjectionPlan::compile(std::span<const Index<Column>> columns)
 
 namespace ygg::database
 {
-ProjectionPlan::ProjectionPlan(std::span<const ColumnLayout> input, std::span<const Index<Column>> columns) : m_input(input)
-{
-    compile(columns);
-}
+ProjectionPlan::ProjectionPlan(std::span<const ColumnLayout> input, std::span<const Index<Column>> columns) : m_input(input) { compile(columns); }
 }
 
 namespace ygg::database
@@ -57,18 +54,12 @@ void JoinPlan::compile()
 
 namespace ygg::database
 {
-JoinPlan::JoinPlan(std::span<const ColumnLayout> lhs, std::span<const ColumnLayout> rhs) : m_lhs(lhs), m_rhs(rhs)
-{
-    compile();
-}
+JoinPlan::JoinPlan(std::span<const ColumnLayout> lhs, std::span<const ColumnLayout> rhs) : m_lhs(lhs), m_rhs(rhs) { compile(); }
 }
 
 namespace ygg::database
 {
-ProjectionPlan::ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns) : m_input(input)
-{
-    compile(columns);
-}
+ProjectionPlan::ProjectionPlan(std::span<const Index<Column>> input, std::span<const Index<Column>> columns) : m_input(input) { compile(columns); }
 }
 
 namespace ygg::database
@@ -81,10 +72,7 @@ ProjectionPlan::ProjectionPlan(std::initializer_list<Index<Column>> input, std::
 
 namespace ygg::database
 {
-JoinPlan::JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs) : m_lhs(lhs), m_rhs(rhs)
-{
-    compile();
-}
+JoinPlan::JoinPlan(std::span<const Index<Column>> lhs, std::span<const Index<Column>> rhs) : m_lhs(lhs), m_rhs(rhs) { compile(); }
 }
 
 namespace ygg::database

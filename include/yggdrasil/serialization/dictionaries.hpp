@@ -81,27 +81,32 @@ private:
 public:
     class Archive
     {
-        Dictionaries& m_dictionaries;
-        const std::optional<std::vector<std::string>>& m_selected_fields;
+        Dictionaries* m_dictionaries;
+        const std::optional<std::vector<std::string>>* m_selected_fields;
+
+        boost::json::object m_fields;
 
     public:
-        boost::json::object fields;
-
         Archive(Dictionaries& dictionaries, const std::optional<std::vector<std::string>>& selected_fields) :
-            m_dictionaries(dictionaries), m_selected_fields(selected_fields)
-        {}
-
-        bool accepts(std::string_view name) const
+            m_dictionaries(&dictionaries),
+            m_selected_fields(&selected_fields)
         {
-            return !m_selected_fields || std::ranges::find(*m_selected_fields, name) != m_selected_fields->end();
         }
+
+        /// Stores an already converted value; callers check accepts(name) first.
+        void put(std::string_view name, boost::json::value value) { m_fields[name] = std::move(value); }
+
+        /// The collected fields; the archive is done.
+        boost::json::object take_fields() && { return std::move(m_fields); }
+
+        bool accepts(std::string_view name) const { return !*m_selected_fields || std::ranges::find(**m_selected_fields, name) != (*m_selected_fields)->end(); }
 
         template<typename T>
         void field(std::string_view name, const T& value)
         {
             // Filter before conversion: omitted fields must not collect descendants into other tables.
             if (accepts(name))
-                fields[name] = m_dictionaries.convert(value);
+                m_fields[name] = m_dictionaries->convert(value);
         }
 
         template<typename Variant>
@@ -115,7 +120,7 @@ public:
 
 private:
     template<typename T, typename Body>
-    boost::json::value collect(const T& value, Body&& body)
+    boost::json::value collect(const T& value, Body body)
     {
         if constexpr (Hashable<T>)
         {
@@ -151,11 +156,13 @@ public:
         else if constexpr (Described<T>)
         {
             auto result = boost::json::value {};
-            object(result, value, [&](auto& archive)
-            {
-                auto writer = FieldWriter {archive, value};
-                describe_fields(writer, std::type_identity<T> {});
-            });
+            object(result,
+                   value,
+                   [&](auto& archive)
+                   {
+                       auto writer = FieldWriter { &archive, &value };
+                       describe_fields(writer, std::type_identity<T> {});
+                   });
             return result;
         }
         else if constexpr (IsDescribedOptional<T>::value)
@@ -173,17 +180,18 @@ public:
     }
 
     template<typename T, typename Fields>
-    void object(boost::json::value& result, const T& value, Fields&& fields)
+    void object(boost::json::value& result, const T& value, Fields fields)
     {
-        result = collect(value, [&](const Table& table)
-        {
-            Archive archive(*this, table.fields);
-            if (table.project)
-                table.project(archive, std::addressof(value));
-            else
-                fields(archive);
-            return std::move(archive.fields);
-        });
+        result = collect(value,
+                         [&](const Table& table)
+                         {
+                             Archive archive(*this, table.fields);
+                             if (table.project)
+                                 table.project(archive, std::addressof(value));
+                             else
+                                 fields(archive);
+                             return std::move(archive).take_fields();
+                         });
     }
 
     template<Hashable T>
@@ -211,7 +219,7 @@ public:
         std::function<void(Archive&, const void*)> projection;
         if (project)
             projection = [project = std::move(project)](Archive& archive, const void* value) { project(archive, *static_cast<const T*>(value)); };
-        m_tables.push_back({std::move(name), std::move(prefix), {}, std::move(index), std::move(fields), std::move(projection)});
+        m_tables.push_back({ std::move(name), std::move(prefix), {}, std::move(index), std::move(fields), std::move(projection) });
         m_types.emplace(typeid(T).name(), position);
     }
 
@@ -220,8 +228,15 @@ public:
     {
         check_valid();
         m_started = true;
-        try { return convert(value); }
-        catch (...) { m_failed = true; throw; }
+        try
+        {
+            return convert(value);
+        }
+        catch (...)
+        {
+            m_failed = true;
+            throw;
+        }
     }
 
     template<typename T>
@@ -239,17 +254,14 @@ public:
         check_valid();
         boost::json::object result;
         for (const auto& table : m_tables)
-            result[table.name] = boost::json::object {{"prefix", table.prefix}, {"rows", table.rows}};
+            result[table.name] = boost::json::object { { "prefix", table.prefix }, { "rows", table.rows } };
         return result;
     }
-
 };
 
 template<Described T>
 void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const T& value, Dictionaries* dictionaries)
-{
-    result = dictionaries->convert(value);
-}
+{ result = dictionaries->convert(value); }
 
 }
 

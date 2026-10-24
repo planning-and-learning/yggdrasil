@@ -1,0 +1,5 @@
+# Bindings: nanobind takes ownership of objects returned as `new T` with
+# rv_policy::take_ownership; types that cannot move are created that way.
+InheritParentConfig: true
+Checks: >
+  -cppcoreguidelines-owning-memory

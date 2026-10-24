@@ -40,6 +40,7 @@ class Mutex<true>
 {
 public:
     Mutex() = default;
+    ~Mutex() = default;
     Mutex(const Mutex&) = delete;
     Mutex& operator=(const Mutex&) = delete;
 

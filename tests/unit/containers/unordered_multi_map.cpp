@@ -121,6 +121,9 @@ struct ThrowingValue
         if (fail)
             throw std::runtime_error("value construction failed");
     }
+    ThrowingValue& operator=(const ThrowingValue&) = delete;
+    ThrowingValue& operator=(ThrowingValue&&) = delete;
+    ~ThrowingValue() = default;
 };
 }  // namespace
 
@@ -169,7 +172,13 @@ TEST(YggdrasilTests, UnorderedMultiMapReconstructsValuesWithoutRequiringAssignme
 {
     struct Value
     {
-        const int value;
+        int value;
+        explicit Value(int value_) : value(value_) {}
+        Value(const Value&) = default;
+        Value(Value&&) = default;
+        Value& operator=(const Value&) = delete;  // not replaceable
+        Value& operator=(Value&&) = delete;
+        ~Value() = default;
         bool operator==(const Value&) const = default;
     };
     using Map = UnorderedMultiMap<int, Value>;
@@ -285,7 +294,7 @@ TEST(YggdrasilTests, UnorderedMultiMapReusesSlotsAcrossNovelKeys)
     constexpr int count = 64;
     // GTL needs headroom to clean tombstones without growing the key table.
     // A fixed warmup does not guarantee this across portable and SSE2 probing.
-    map.reserve(2 * count);
+    map.reserve(std::size_t { 2 } * count);
     for (int value = 0; value < count; ++value)
         map.insert(value, value);
     const auto retained = map.memory_usage();

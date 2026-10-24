@@ -26,7 +26,7 @@ template<typename Callback>
 class DpccpEnumerator
 {
     std::span<const std::uint64_t> m_adjacency;
-    Callback& m_emit;
+    Callback* m_emit;
 
     std::uint64_t neighbors(std::uint64_t vertices) const
     {
@@ -42,7 +42,7 @@ class DpccpEnumerator
         const auto next = neighbors(right) & ~excluded;
         // Ascending masks visit every subset before its supersets.
         for (auto subset = (-next) & next; subset; subset = (subset - next) & next)
-            if (!std::invoke(m_emit, left, right | subset))
+            if (!std::invoke(*m_emit, left, right | subset))
                 return false;
         for (auto subset = (-next) & next; subset; subset = (subset - next) & next)
             if (!expand_complement(left, right | subset, excluded | next))
@@ -59,7 +59,7 @@ class DpccpEnumerator
             const auto vertex = std::bit_width(rest) - 1;
             const auto right = std::uint64_t { 1 } << vertex;
             rest &= ~right;
-            if (!std::invoke(m_emit, left, right) || !expand_complement(left, right, excluded | (next & through(vertex))))
+            if (!std::invoke(*m_emit, left, right) || !expand_complement(left, right, excluded | (next & through(vertex))))
                 return false;
         }
         return true;
@@ -78,7 +78,7 @@ class DpccpEnumerator
     }
 
 public:
-    DpccpEnumerator(std::span<const std::uint64_t> adjacency, Callback& emit) : m_adjacency(adjacency), m_emit(emit) {}
+    DpccpEnumerator(std::span<const std::uint64_t> adjacency, Callback& emit) : m_adjacency(adjacency), m_emit(&emit) {}
 
     bool run()
     {
@@ -102,7 +102,7 @@ public:
 /// Vertex indices are mask bits; arbitrary numbering and disconnected graphs work.
 template<typename Callback>
     requires std::predicate<Callback&, std::uint64_t, std::uint64_t>
-bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callback&& emit)
+bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callback emit)
 {
     if (adjacency.size() > max_dpccp_vertices)
         throw std::invalid_argument("DPccp: at most 63 vertices are supported.");

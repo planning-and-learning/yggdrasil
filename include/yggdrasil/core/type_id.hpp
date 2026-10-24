@@ -14,6 +14,7 @@ namespace ygg
 /// The value types of byte-encoded storage. Values are fixed and never reused.
 enum class TypeId : std::uint8_t
 {
+    none = 0,  // no type (yet)
     uint32 = 1,
     int32 = 2,
     uint64 = 3,

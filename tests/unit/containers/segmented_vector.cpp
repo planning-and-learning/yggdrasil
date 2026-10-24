@@ -24,6 +24,10 @@ struct ResizeValue
     ResizeValue() { initialize(0); }
     explicit ResizeValue(int value_) { initialize(value_); }
     ResizeValue(const ResizeValue& other) { initialize(other.value); }
+    // Constructing from another value, by copy or move, is counted and may throw.
+    ResizeValue(ResizeValue&& other) { initialize(other.value); }
+    ResizeValue& operator=(const ResizeValue&) = default;
+    ResizeValue& operator=(ResizeValue&&) = default;
     ~ResizeValue() { --alive; }
 
 private:

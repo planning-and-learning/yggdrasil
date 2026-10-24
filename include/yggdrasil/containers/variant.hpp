@@ -22,6 +22,7 @@
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 
+#include <cassert>
 #include <cista/containers/variant.h>
 #include <type_traits>
 #include <utility>
@@ -46,9 +47,7 @@ public:
 
     template<typename U>
     bool is() const noexcept
-    {
-        return cista::holds_alternative<U>(index_variant());
-    }
+    { return cista::holds_alternative<U>(index_variant()); }
 
     template<typename U>
     decltype(auto) get() const
@@ -59,11 +58,13 @@ public:
             return cista::get<U>(index_variant());
     }
 
+    /// Requires valid() (asserted in Debug), like operator[] of a container.
     template<typename F>
     decltype(auto) apply(F&& f) const
     {
-        return std::visit(
-            [&]<typename Arg>(Arg&& arg) -> decltype(auto)
+        assert(valid());
+        return Variant::apply(
+            [&]<typename Arg>(const Arg& arg) -> decltype(auto)
             {
                 using U = std::decay_t<Arg>;
 
@@ -72,6 +73,7 @@ public:
                 else
                     return std::forward<F>(f)(arg);
             },
+            index_variant().index(),
             index_variant());
     }
 
@@ -86,15 +88,11 @@ private:
 
 template<typename Visitor, typename C, typename... T>
 constexpr auto visit(Visitor&& vis, View<::cista::offset::variant<T...>, C>&& v)
-{
-    return v.apply(std::forward<Visitor>(vis));
-}
+{ return std::move(v).apply(std::forward<Visitor>(vis)); }
 
 template<typename Visitor, typename C, typename... T>
-constexpr auto visit(Visitor&& vis, const View<::cista::offset::variant<T...>, C>& v)
-{
-    return v.apply(vis);
-}
+constexpr auto visit(Visitor vis, const View<::cista::offset::variant<T...>, C>& v)
+{ return v.apply(vis); }
 }  // namespace ygg
 namespace ygg
 {

@@ -366,6 +366,10 @@ TEST(YggdrasilTests, CommonEqualRangeComparesProxyValuesWithoutCopyingReferenceE
         int value;
         explicit Noncopyable(int value_) : value(value_) {}
         Noncopyable(const Noncopyable&) = delete;
+        Noncopyable& operator=(const Noncopyable&) = delete;
+        Noncopyable(Noncopyable&&) = delete;
+        Noncopyable& operator=(Noncopyable&&) = delete;
+        ~Noncopyable() = default;
         bool operator==(const Noncopyable&) const = default;
     };
     const auto lhs = std::array { Noncopyable(1), Noncopyable(2) };
@@ -403,7 +407,7 @@ TEST(YggdrasilTests, CommonEqualToAdaptersPropagateNestedConversionErrors)
 
     struct Record
     {
-        decltype(wrapped) values;
+        std::remove_const_t<decltype(wrapped)> values;
         static constexpr auto identifying_members() noexcept { return ygg::Members<&Record::values> {}; }
     };
     const auto record = Record { wrapped };

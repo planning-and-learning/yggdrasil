@@ -12,6 +12,7 @@
 
 #include "yggdrasil/containers/detail/geometric_byte_storage.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 
@@ -30,7 +31,7 @@ namespace ygg
 /// ThreadSafe permits concurrent insertion, size queries, and reads after
 /// publication was observed through size() or external synchronization.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<TriviallyCopyable T, size_t FirstSegmentSize = 1024, bool ThreadSafe = false>
+template<TriviallyCopyable T, size_t FirstSegmentSize = default_first_segment_bytes, bool ThreadSafe = false>
 class RawArrayPool
 {
 public:
@@ -70,6 +71,7 @@ public:
     {
     }
 
+    ~RawArrayPool() = default;
     RawArrayPool(const RawArrayPool&) = delete;
     RawArrayPool& operator=(const RawArrayPool&) = delete;
 
@@ -78,9 +80,7 @@ public:
         m_array_size_bytes(other.m_array_size_bytes),
         m_storage(std::move(other.m_storage)),
         m_size(other.size())
-    {
-        detail::store_size<ThreadSafe>(other.m_size, 0);
-    }
+    { detail::store_size<ThreadSafe>(other.m_size, 0); }
 
     RawArrayPool& operator=(RawArrayPool&& other) noexcept
     {
@@ -177,7 +177,7 @@ public:
 
 private:
     template<typename Fill>
-    uint_t insert_with(size_t size, Fill&& fill)
+    uint_t insert_with(size_t size, Fill fill)
     {
         if (size != m_array_size)
             throw std::invalid_argument("RawArrayPool: wrong number of elements.");

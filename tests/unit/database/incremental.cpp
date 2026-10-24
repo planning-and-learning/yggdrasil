@@ -34,14 +34,12 @@ Builder<database::Columns> columns_of(std::initializer_list<Index<database::Colu
 }
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{
-    return std::tuple { T(values)... };
-}
+{ return std::tuple { T(values)... }; }
 
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * ygg::ByteCodec<T>::size> result;
+    std::array<std::byte, N * ygg::ByteCodec<T>::size> result {};
     for (size_t i = 0; i < N; ++i)
         ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;
@@ -55,6 +53,7 @@ std::set<std::vector<T>> rows(const V& relation)
     {
         const auto row = database::Row(relation.row(i), relation.columns().span());
         std::vector<T> values;
+        values.reserve(row.size());
         for (size_t column = 0; column < row.size(); ++column)
             values.push_back(row.template get<T>(column));
         result.insert(std::move(values));

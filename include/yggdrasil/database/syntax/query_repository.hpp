@@ -64,16 +64,14 @@ public:
 
     size_t get_index() const noexcept { return m_index; }
     auto get_factory() const noexcept { return m_factory; }
-    friend const QueryRepository& get_repository(const QueryRepository& repository) noexcept { return repository; }
+    friend const QueryRepository& get_repository(const QueryRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
     size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     size_t size() const noexcept
-    {
-        return m_symbols.template local_size<T>();
-    }
+    { return m_symbols.template local_size<T>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
@@ -96,10 +94,7 @@ public:
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     const Data<T>& operator[](Index<T> index) const noexcept
-    {
-        assert(index.get_value() < size<T>());
-        return m_symbols.template at_local<T>(index);
-    }
+    { return m_symbols.template local<T>(index); }
 };
 
 }  // namespace ygg::database

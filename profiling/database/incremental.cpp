@@ -67,10 +67,10 @@ struct Trace
 {
     Builder<database::Relation> initial { ColumnIndex(1), ColumnIndex(2) };
     std::array<Transition, 6> transitions {};
-    const size_t rows;
-    const size_t changed_rows;
-    const size_t witnesses;
-    const bool changing_keys;
+    size_t rows;
+    size_t changed_rows;
+    size_t witnesses;
+    bool changing_keys;
 
     Trace(size_t rows, size_t changed_rows, size_t witnesses, bool changing_keys) :
         rows(rows),
@@ -127,8 +127,8 @@ struct JoinTrace
 {
     Trace lhs;
     Trace rhs;
-    const size_t rows;
-    const std::array<size_t, 6> transitions { 0, 1, 2, 3, 4, 5 };
+    size_t rows;
+    std::array<size_t, 6> transitions { 0, 1, 2, 3, 4, 5 };
 
     JoinTrace(size_t rows, size_t changed_rows, size_t witnesses) :
         lhs(rows, changed_rows, witnesses, true),

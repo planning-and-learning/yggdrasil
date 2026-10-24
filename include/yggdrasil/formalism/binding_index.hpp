@@ -48,8 +48,8 @@ template<typename RelationTag, typename ObjectTag, typename BindingRange>
              && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 struct RelationBindingsForwardRange
 {
-    const Index<RelationTag>& relation;
-    const std::remove_reference_t<BindingRange>& rows;
+    const Index<RelationTag>* relation;
+    const std::remove_reference_t<BindingRange>* rows;
 };
 
 template<typename RelationTag, typename ObjectTag, typename BindingRange>
@@ -58,8 +58,8 @@ template<typename RelationTag, typename ObjectTag, typename BindingRange>
              && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
 struct RelationBindingsRandomAccessRange
 {
-    const Index<RelationTag>& relation;
-    const std::remove_reference_t<BindingRange>& rows;
+    const Index<RelationTag>* relation;
+    const std::remove_reference_t<BindingRange>* rows;
 };
 }  // namespace ygg::formalism
 

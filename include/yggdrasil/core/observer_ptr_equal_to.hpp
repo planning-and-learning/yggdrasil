@@ -31,9 +31,7 @@ struct EqualTo<ObserverPtr<T>>
 {
     bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return EqualTo<std::remove_cvref_t<T>> {}(*lhs, *rhs);
-    }
+    { return EqualTo<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
 };
 
 }  // namespace ygg

@@ -38,9 +38,7 @@ namespace
 {
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{
-    return std::tuple { T(values)... };
-}
+{ return std::tuple { T(values)... }; }
 
 template<typename T>
 auto packed(std::span<const T> values)
@@ -70,8 +68,8 @@ using ColumnsIndexView = View<ColumnsIndex, Repository>;
 
 struct RelationContext
 {
-    const Repository& repository;
-    friend const Repository& get_repository(const RelationContext& context) noexcept { return context.repository; }
+    const Repository* repository;
+    friend const Repository& get_repository(const RelationContext& context) noexcept { return *context.repository; }
 };
 
 struct AliasFreeRelationView
@@ -394,7 +392,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
     database::join(left_builder_view, right_index_view, joined, workspace);
     expect_rows(joined, { { 4, 40, 400 } });
 
-    const RelationContext context { repository };
+    const RelationContext context { &repository };
     const auto contextual_index_view = make_view(right_view.get_index(), context);
     static_assert(database::RelationViewConcept<decltype(contextual_index_view)>);
     EXPECT_EQ(&contextual_index_view.get_context(), &context);
@@ -773,9 +771,7 @@ namespace
 /// Columns store indices as uint_t; their owner resolves them.
 template<typename Repository>
 auto resolve_in(uint_t value, const Repository& repository)
-{
-    return make_view(ColumnsIndex(value), repository);
-}
+{ return make_view(ColumnsIndex(value), repository); }
 }
 
 TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)

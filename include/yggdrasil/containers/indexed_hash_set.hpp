@@ -19,6 +19,7 @@
 #define YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 
 #include "yggdrasil/containers/detail/segmented_rows.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -46,7 +47,7 @@ namespace ygg
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
-         size_t FirstSegmentSize = 32,
+         size_t FirstSegmentSize = default_first_segment_size,
          bool ThreadSafe = false>
 class IndexedHashSet
 {
@@ -73,9 +74,7 @@ public:
     void clear() noexcept;
 
     static size_t hash(const Data<Tag>& element) noexcept(std::is_nothrow_default_constructible_v<H> && std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
-    {
-        return gtl::phmap_mix<sizeof(size_t)>()(H {}(element));
-    }
+    { return gtl::phmap_mix<sizeof(size_t)>()(H {}(element)); }
 
     std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const;
 

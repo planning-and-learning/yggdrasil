@@ -53,9 +53,7 @@ struct EqualTo
         requires requires {
             { lhs == rhs } -> std::convertible_to<bool>;
         }
-    {
-        return std::equal_to<T> {}(lhs, rhs);
-    }
+    { return std::equal_to<T> {}(lhs, rhs); }
 };
 
 template<>
@@ -66,9 +64,7 @@ struct EqualTo<void>
     template<typename T, typename U>
         requires EqualToFor<EqualTo<std::remove_cvref_t<T>>, T, U>
     constexpr bool operator()(const T& lhs, const U& rhs) const
-    {
-        return EqualTo<std::remove_cvref_t<T>> {}(lhs, rhs);
-    }
+    { return EqualTo<std::remove_cvref_t<T>> {}(lhs, rhs); }
 };
 
 template<std::floating_point T>
@@ -91,9 +87,7 @@ struct EqualTo<std::array<T, N>>
 {
     constexpr bool operator()(const std::array<T, N>& lhs, const std::array<T, N>& rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename T>
@@ -101,9 +95,7 @@ struct EqualTo<std::reference_wrapper<T>>
 {
     constexpr bool operator()(const std::reference_wrapper<T>& lhs, const std::reference_wrapper<T>& rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return EqualTo<std::remove_cvref_t<T>> {}(lhs.get(), rhs.get());
-    }
+    { return EqualTo<std::remove_cvref_t<T>> {}(lhs.get(), rhs.get()); }
 };
 
 template<typename Key, typename Compare, typename Allocator>
@@ -111,9 +103,7 @@ struct EqualTo<std::set<Key, Compare, Allocator>>
 {
     bool operator()(const std::set<Key, Compare, Allocator>& lhs, const std::set<Key, Compare, Allocator>& rhs) const
         requires EqualityComparableByEqualTo<Key>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
@@ -121,9 +111,7 @@ struct EqualTo<std::map<Key, T, Compare, Allocator>>
 {
     bool operator()(const std::map<Key, T, Compare, Allocator>& lhs, const std::map<Key, T, Compare, Allocator>& rhs) const
         requires EqualityComparableByEqualTo<Key> && EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename Key, typename Compare, typename Allocator>
@@ -131,9 +119,7 @@ struct EqualTo<gtl::btree_set<Key, Compare, Allocator>>
 {
     bool operator()(const gtl::btree_set<Key, Compare, Allocator>& lhs, const gtl::btree_set<Key, Compare, Allocator>& rhs) const
         requires EqualityComparableByEqualTo<Key>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
@@ -141,9 +127,7 @@ struct EqualTo<gtl::btree_map<Key, T, Compare, Allocator>>
 {
     bool operator()(const gtl::btree_map<Key, T, Compare, Allocator>& lhs, const gtl::btree_map<Key, T, Compare, Allocator>& rhs) const
         requires EqualityComparableByEqualTo<Key> && EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename T, typename Allocator>
@@ -151,9 +135,7 @@ struct EqualTo<std::vector<T, Allocator>>
 {
     constexpr bool operator()(const std::vector<T, Allocator>& lhs, const std::vector<T, Allocator>& rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<typename T1, typename T2>
@@ -161,9 +143,7 @@ struct EqualTo<std::pair<T1, T2>>
 {
     constexpr bool operator()(const std::pair<T1, T2>& lhs, const std::pair<T1, T2>& rhs) const
         requires EqualityComparableByEqualTo<T1> && EqualityComparableByEqualTo<T2>
-    {
-        return EqualTo<std::remove_cvref_t<T1>>()(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second);
-    }
+    { return EqualTo<std::remove_cvref_t<T1>>()(lhs.first, rhs.first) && EqualTo<std::remove_cvref_t<T2>> {}(lhs.second, rhs.second); }
 };
 
 template<typename... Ts>
@@ -224,9 +204,7 @@ struct EqualTo<std::span<T, Extent>>
 {
     constexpr bool operator()(const std::span<T, Extent>& lhs, const std::span<T, Extent>& rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 template<MemberIdentified T>
@@ -248,30 +226,22 @@ struct EqualTo<T>
 
     constexpr bool operator()(const T& lhs, const T& rhs) const
         requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
-    {
-        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(lhs.identifying_members(), rhs.identifying_members());
-    }
+    { return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(lhs.identifying_members(), rhs.identifying_members()); }
 
     template<SameAsIgnoringCvref<IdentifyingMembers<T>> U>
     constexpr bool operator()(const T& a, const U& v) const
         requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
-    {
-        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(a.identifying_members(), v);
-    }
+    { return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(a.identifying_members(), v); }
 
     template<SameAsIgnoringCvref<IdentifyingMembers<T>> U>
     constexpr bool operator()(const U& v, const T& b) const
         requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
-    {
-        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(v, b.identifying_members());
-    }
+    { return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(v, b.identifying_members()); }
 
     template<SameAsIgnoringCvref<IdentifyingMembers<T>> U, SameAsIgnoringCvref<IdentifyingMembers<T>> V>
     constexpr bool operator()(const U& u, const V& v) const
         requires EqualityComparableByEqualTo<IdentifyingMembers<T>>
-    {
-        return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(u, v);
-    }
+    { return EqualTo<std::remove_cvref_t<IdentifyingMembers<T>>> {}(u, v); }
 };
 
 template<std::ranges::input_range LhsRange, std::ranges::input_range RhsRange>
@@ -284,10 +254,12 @@ constexpr bool equal_range(LhsRange&& lhs, RhsRange&& rhs)
             return false;
     }
 
-    auto lhs_it = std::ranges::begin(lhs);
-    auto rhs_it = std::ranges::begin(rhs);
-    const auto lhs_end = std::ranges::end(lhs);
-    const auto rhs_end = std::ranges::end(rhs);
+    auto lhs_view = std::views::all(std::forward<LhsRange>(lhs));
+    auto rhs_view = std::views::all(std::forward<RhsRange>(rhs));
+    auto lhs_it = std::ranges::begin(lhs_view);
+    auto rhs_it = std::ranges::begin(rhs_view);
+    const auto lhs_end = std::ranges::end(lhs_view);
+    const auto rhs_end = std::ranges::end(rhs_view);
 
     for (; lhs_it != lhs_end && rhs_it != rhs_end; ++lhs_it, ++rhs_it)
     {

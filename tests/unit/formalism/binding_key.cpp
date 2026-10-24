@@ -29,7 +29,8 @@ struct PrefixBinding
     std::vector<int> row;
     size_t arity;
 
-    auto get_key() const noexcept { return std::make_pair(relation, std::views::take(row, arity)); }
+    auto get_key() const noexcept
+    { return std::make_pair(relation, std::views::take(row, static_cast<std::ranges::range_difference_t<decltype(row)>>(arity))); }
 };
 
 }

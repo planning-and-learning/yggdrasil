@@ -46,7 +46,7 @@ public:
 
     ClosedInterval() : m_interval(Interval::empty()) {}
     ClosedInterval(A lower, A upper) : m_interval(lower, upper) {}
-    ClosedInterval(Interval interval) : m_interval(interval) {}
+    ClosedInterval(const Interval& interval) : m_interval(interval) {}
 
     /**
      * Operators
@@ -64,36 +64,24 @@ public:
     friend bool operator!=(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept { return !(lhs == rhs); }
 
     friend ClosedInterval operator+(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept
-    {
-        return ClosedInterval(boost::numeric::operator+(lhs.get_interval(), rhs.get_interval()));
-    }
+    { return ClosedInterval(boost::numeric::operator+(lhs.get_interval(), rhs.get_interval())); }
 
     friend ClosedInterval operator-(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept
-    {
-        return ClosedInterval(boost::numeric::operator-(lhs.get_interval(), rhs.get_interval()));
-    }
+    { return ClosedInterval(boost::numeric::operator-(lhs.get_interval(), rhs.get_interval())); }
 
     friend ClosedInterval operator-(const ClosedInterval& el) noexcept { return ClosedInterval(boost::numeric::operator-(el.get_interval())); }
 
     friend ClosedInterval operator*(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept
-    {
-        return ClosedInterval(boost::numeric::operator*(lhs.get_interval(), rhs.get_interval()));
-    }
+    { return ClosedInterval(boost::numeric::operator*(lhs.get_interval(), rhs.get_interval())); }
 
     friend ClosedInterval operator/(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept
-    {
-        return ClosedInterval(boost::numeric::operator/(lhs.get_interval(), rhs.get_interval()));
-    }
+    { return ClosedInterval(boost::numeric::operator/(lhs.get_interval(), rhs.get_interval())); }
 
     friend ClosedInterval intersect(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept
-    {
-        return ClosedInterval(boost::numeric::intersect(lhs.m_interval, rhs.m_interval));
-    }
+    { return ClosedInterval(boost::numeric::intersect(lhs.m_interval, rhs.m_interval)); }
 
     friend ClosedInterval hull(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept
-    {
-        return ClosedInterval(boost::numeric::hull(lhs.m_interval, rhs.m_interval));
-    }
+    { return ClosedInterval(boost::numeric::hull(lhs.m_interval, rhs.m_interval)); }
 
     friend bool subset(const ClosedInterval& lhs, const ClosedInterval& rhs) noexcept { return boost::numeric::subset(lhs.m_interval, rhs.m_interval); }
 
@@ -124,7 +112,7 @@ private:
     Interval m_interval;
 };
 
-static_assert(sizeof(ClosedInterval<double>) == 16);
+static_assert(sizeof(ClosedInterval<double>) == 2 * sizeof(double));
 
 /**
  * Pretty printing

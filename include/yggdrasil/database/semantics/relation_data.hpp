@@ -37,16 +37,12 @@ struct Data<database::Relation>
         columns_index(),
         row_set_index(row_set_index_),
         schema_namespace(schema_namespace_)
-    {
-        set(columns_, columns_index);
-    }
+    { set(columns_, columns_index); }
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
+    static constexpr auto cista_members() noexcept
+    { return ygg::Members<&Data::index, &Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
-    void clear() noexcept
-    {
-        ygg::clear_members(*this);
-    }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 }  // namespace ygg
 

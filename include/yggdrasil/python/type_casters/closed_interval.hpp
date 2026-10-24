@@ -61,9 +61,9 @@ public:
         {
             value = Interval(*singleton, *singleton);
         }
-        else
+        else if (const auto* bounds = std::get_if<Bounds>(&*input))
         {
-            const auto& [lower, upper] = std::get<Bounds>(*input);
+            const auto& [lower, upper] = *bounds;
             value = Interval(lower, upper);
         }
         return true;

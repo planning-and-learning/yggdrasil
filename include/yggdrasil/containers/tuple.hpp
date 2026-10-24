@@ -50,22 +50,16 @@ struct visit_impl<0>
 {
     template<typename T, typename F>
     static bool visit(T&&, size_t, F&&) noexcept
-    {
-        return false;
-    }
+    { return false; }
 };
 
 template<typename F, typename... Ts>
 bool visit_at(std::tuple<Ts...> const& tup, size_t idx, F&& function)
-{
-    return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
-}
+{ return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function)); }
 
 template<typename F, typename... Ts>
 bool visit_at(std::tuple<Ts...>& tup, size_t idx, F&& function)
-{
-    return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function));
-}
+{ return visit_impl<sizeof...(Ts)>::visit(tup, idx, std::forward<F>(function)); }
 
 }  // namespace ygg
 

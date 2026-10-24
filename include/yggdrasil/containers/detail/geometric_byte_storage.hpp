@@ -35,7 +35,7 @@ class GeometricByteStorage
     {
         std::byte* storage;
         size_t capacity;
-        size_t used;
+        size_t used = 0;
 
         static std::byte* allocate_storage(size_t size)
         {
@@ -53,7 +53,7 @@ class GeometricByteStorage
                 ::operator delete(storage);
         }
 
-        explicit Segment(size_t capacity_) : storage(allocate_storage(capacity_)), capacity(capacity_), used(0) {}
+        explicit Segment(size_t capacity_) : storage(allocate_storage(capacity_)), capacity(capacity_) {}
 
         Segment(const Segment&) = delete;
         Segment& operator=(const Segment&) = delete;
@@ -147,6 +147,7 @@ public:
             static_cast<void>(nominal_capacity(0));
     }
 
+    ~GeometricByteStorage() = default;
     GeometricByteStorage(const GeometricByteStorage&) = delete;
     GeometricByteStorage& operator=(const GeometricByteStorage&) = delete;
 
@@ -154,9 +155,7 @@ public:
         m_segments(std::move(other.m_segments)),
         m_unit_size(other.m_unit_size),
         m_current_segment(std::exchange(other.m_current_segment, 0))
-    {
-        rebuild_publication();
-    }
+    { rebuild_publication(); }
 
     GeometricByteStorage& operator=(GeometricByteStorage&& other) noexcept
     {

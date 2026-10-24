@@ -47,15 +47,13 @@ concept VertexRange = requires(const R& range, size_t i) {
 
 /// Calls on_vertex(w) for each edge (v, w); stops when it returns false.
 template<typename O>
-concept SuccessorOracle = requires(O& oracle, std::span<const std::byte> vertex) {
-    oracle.successors(vertex, [](std::span<const std::byte>) { return true; });
-};
+concept SuccessorOracle =
+    requires(O& oracle, std::span<const std::byte> vertex) { oracle.successors(vertex, [](std::span<const std::byte>) { return true; }); };
 
 /// Calls on_vertex(u) for each edge (u, v); stops when it returns false.
 template<typename O>
-concept PredecessorOracle = requires(O& oracle, std::span<const std::byte> vertex) {
-    oracle.predecessors(vertex, [](std::span<const std::byte>) { return true; });
-};
+concept PredecessorOracle =
+    requires(O& oracle, std::span<const std::byte> vertex) { oracle.predecessors(vertex, [](std::span<const std::byte>) { return true; }); };
 
 /// Whether the edge (u, v) exists.
 template<typename O>

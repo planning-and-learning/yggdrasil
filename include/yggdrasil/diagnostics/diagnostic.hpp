@@ -41,9 +41,9 @@ public:
     int tab_width() const noexcept { return m_tab_width; }
 
 private:
-    const std::string m_text;
-    const std::string m_filename;
-    const int m_tab_width;
+    std::string m_text;
+    std::string m_filename;
+    int m_tab_width;
 };
 
 /// Zero-based byte range [begin, end); begin == end denotes a point, including EOF.

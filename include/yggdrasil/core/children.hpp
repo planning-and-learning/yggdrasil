@@ -64,7 +64,7 @@ void visit_child(const ::cista::offset::variant<Us...>& member, const C& context
 
 /// Calls f with each field of a struct whose cista_members() lists member pointers or returns a tuple.
 template<typename R, typename F>
-void for_each_cista_member(R& record, F&& f)
+void for_each_cista_member(R& record, F f)
 {
     if constexpr (MemberListed<std::remove_const_t<R>>)
         ygg::for_each_member(record, f);
@@ -114,7 +114,7 @@ void map_child(M& member, const C& context, F& f)
 
 /// Calls f(View<Index<U>, C>) for every child of view's record, in member order.
 template<typename Types, typename T, typename C, typename F>
-void for_each_child(View<Index<T>, C> view, F&& f)
+void for_each_child(View<Index<T>, C> view, F f)
 {
     detail::for_each_cista_member(view.get_data(), [&](const auto& member) { detail::visit_child<Types, T>(member, view.get_context(), f); });
 }
@@ -122,7 +122,7 @@ void for_each_child(View<Index<T>, C> view, F&& f)
 /// A copy of view's record with every child c replaced by f(c), a view of the same record type, in member order.
 /// The copy keeps derived members as they are; inserting it recomputes them.
 template<typename Types, typename T, typename C, typename F>
-Data<T> map_children(View<Index<T>, C> view, F&& f)
+Data<T> map_children(View<Index<T>, C> view, F f)
 {
     auto data = Data<T>(view.get_data());
     detail::for_each_cista_member(data, [&](auto& member) { detail::map_child<Types, T>(member, view.get_context(), f); });

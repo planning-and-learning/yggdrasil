@@ -9,6 +9,7 @@
 
 #include <benchmark/benchmark.h>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <tuple>
@@ -55,7 +56,7 @@ void insert_edge(RelationBuilder& relation, size_t arity, uint_t from, uint_t to
     relation.insert(std::span<const std::byte>(bytes));
 }
 
-enum class TraceKind
+enum class TraceKind : std::uint8_t
 {
     shortcuts,
     self_loops,
@@ -212,7 +213,10 @@ void distance_changes(benchmark::State& state)
     const auto update = [&](bool forward)
     {
         if constexpr (Incremental)
-            evaluation.update(std::tie(trace.no_sources, trace.no_sources), std::tie(forward ? trace.edge_change.added : trace.edge_change.removed, forward ? trace.edge_change.removed : trace.edge_change.added), std::tie(trace.no_targets, trace.no_targets));
+            evaluation.update(
+                std::tie(trace.no_sources, trace.no_sources),
+                std::tie(forward ? trace.edge_change.added : trace.edge_change.removed, forward ? trace.edge_change.removed : trace.edge_change.added),
+                std::tie(trace.no_targets, trace.no_targets));
         else
             database::distance(trace.sources, forward ? trace.changed_edges : trace.edges, trace.targets, plan, evaluation, workspace);
     };

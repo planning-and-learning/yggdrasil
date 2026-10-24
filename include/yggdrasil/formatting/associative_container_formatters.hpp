@@ -58,7 +58,7 @@ OutputIt format_elements(OutputIt out, const Range& value)
 }
 
 template<typename OutputIt, typename Range, typename Render>
-OutputIt format_sorted_elements(OutputIt out, const Range& value, Render&& render)
+OutputIt format_sorted_elements(OutputIt out, const Range& value, Render render)
 {
     auto elements = std::vector<std::string>();
     elements.reserve(value.size());

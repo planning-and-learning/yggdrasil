@@ -36,9 +36,7 @@ void intersect_inplace(UnorderedSet<T>& target, const UnorderedSet<T>& other)
 
 template<typename T>
 void union_inplace(UnorderedSet<T>& target, const UnorderedSet<T>& other)
-{
-    target.insert(other.begin(), other.end());
-}
+{ target.insert(other.begin(), other.end()); }
 }
 
 #endif

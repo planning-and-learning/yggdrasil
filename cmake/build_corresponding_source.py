@@ -69,10 +69,12 @@ def build_bundle(*, manifest: Path, sdist: Path, sources: Path, output: Path) ->
             shutil.copytree(source, upstream / name, symlinks=True, ignore=shutil.ignore_patterns(".git"))
 
         output.parent.mkdir(parents=True, exist_ok=True)
-        with output.open("wb") as compressed_file:
-            with gzip.GzipFile(filename="", mode="wb", fileobj=compressed_file, mtime=0) as compressed:
-                with tarfile.open(fileobj=compressed, mode="w") as archive:
-                    archive.add(bundle, arcname=bundle.name, filter=_normalize)
+        with (
+            output.open("wb") as compressed_file,
+            gzip.GzipFile(filename="", mode="wb", fileobj=compressed_file, mtime=0) as compressed,
+            tarfile.open(fileobj=compressed, mode="w") as archive,
+        ):
+            archive.add(bundle, arcname=bundle.name, filter=_normalize)
 
 
 def main() -> None:

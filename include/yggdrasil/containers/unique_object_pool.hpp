@@ -138,6 +138,7 @@ public:
     UniqueObjectPool& operator=(const UniqueObjectPool& other) = delete;
     UniqueObjectPool(UniqueObjectPool&& other) = delete;
     UniqueObjectPool& operator=(UniqueObjectPool&& other) = delete;
+    ~UniqueObjectPool() = default;
 
     [[nodiscard]] UniqueObjectPoolPtr<T, ThreadSafe> get_or_allocate() { return UniqueObjectPoolPtr<T, ThreadSafe>(this, m_storage.acquire()); }
 

@@ -23,30 +23,32 @@ struct FieldNames
     std::vector<std::string> names;
 
     template<typename Accessor>
-    void field(std::string_view name, Accessor) { names.emplace_back(name); }
+    void field(std::string_view name, Accessor)
+    { names.emplace_back(name); }
 
     template<typename Accessor>
-    void variant(Accessor) { names.emplace_back(detail::variant_field); }
+    void variant(Accessor)
+    { names.emplace_back(detail::variant_field); }
 };
 
 template<typename Archive, typename T>
 struct FieldWriter
 {
-    Archive& archive;
-    const T& value;
+    Archive* archive;
+    const T* value;
 
     template<typename Accessor>
     void field(std::string_view name, Accessor accessor)
     {
-        if (archive.accepts(name))
-            archive.field(name, std::invoke(accessor, value));
+        if (archive->accepts(name))
+            archive->field(name, std::invoke(accessor, *value));
     }
 
     template<typename Accessor>
     void variant(Accessor accessor)
     {
-        if (archive.accepts(detail::variant_field))
-            archive.variant(std::invoke(accessor, value));
+        if (archive->accepts(detail::variant_field))
+            archive->variant(std::invoke(accessor, *value));
     }
 };
 

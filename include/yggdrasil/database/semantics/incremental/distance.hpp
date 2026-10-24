@@ -6,9 +6,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_DISTANCE_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_DISTANCE_HPP_
 
-#include "yggdrasil/database/semantics/incremental/details/distance_repair.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
+#include "yggdrasil/database/semantics/incremental/details/distance_repair.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -216,7 +216,8 @@ void DistanceEvaluator::require_actual(const S& sources, const E& edges, const T
         {
             const auto vertex = m_graph.vertices.find(rows.row(i));
             if ((vertex && (this->*is_member)(*vertex)) != removing)
-                throw std::invalid_argument(removing ? "Incremental distance: removed vertex is absent." : "Incremental distance: added vertex is already present.");
+                throw std::invalid_argument(removing ? "Incremental distance: removed vertex is absent." :
+                                                       "Incremental distance: added vertex is already present.");
         }
     };
     require_members(sources_removed, &DistanceEvaluator::is_source, true);

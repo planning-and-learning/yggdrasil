@@ -37,7 +37,7 @@ RelationStatistics measure_relation(const Relation& relation)
 {
     RelationStatistics stats;
     stats.rows = static_cast<double>(relation.size());
-    const auto columns = relation.columns();
+    const auto& columns = relation.columns();
     for (const auto& column : columns.span())
         stats.distinct[column.label] = static_cast<double>(project(relation, { column.label }).size());
     return stats;

@@ -42,7 +42,6 @@ struct Data<profiling::TrivialSymbol>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
-
 template<>
 struct Data<profiling::SerializedSymbol>
 {
@@ -54,6 +53,7 @@ struct Data<profiling::SerializedSymbol>
     Data& operator=(const Data&) = delete;
     Data(Data&&) = default;
     Data& operator=(Data&&) = default;
+    ~Data() = default;
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::values> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
@@ -93,7 +93,11 @@ using BlockBinding = formalism::RelationBinding<Relation, BlockObjectTag>;
 using PackedBinding = formalism::RelationBinding<Relation, PackedObjectTag>;
 
 template<typename Repository>
-std::unique_ptr<Repository> repository;
+std::unique_ptr<Repository>& repository()
+{
+    static std::unique_ptr<Repository> value;
+    return value;
+}
 
 void set_key(Data<TrivialSymbol>& data, std::uint64_t key) noexcept { data.value = key; }
 
@@ -123,9 +127,7 @@ void set_key(Data<Binding>& data, std::uint64_t key) noexcept
 
 template<typename Repository>
 void set_up_empty(const benchmark::State&)
-{
-    repository<Repository> = std::make_unique<Repository>(0, nullptr, formalism::RelationRepositoryConfig(12));
-}
+{ repository<Repository>() = std::make_unique<Repository>(0, nullptr, formalism::RelationRepositoryConfig(12)); }
 
 template<typename Repository, typename Symbol>
 void set_up_symbol(const benchmark::State& state)
@@ -135,7 +137,7 @@ void set_up_symbol(const benchmark::State& state)
     for (std::uint64_t key = 0; key < kPrefill; ++key)
     {
         set_key(data, key);
-        repository<Repository>->insert(data);
+        repository<Repository>()->insert(data);
     }
 }
 
@@ -150,26 +152,25 @@ void set_up_relation(const benchmark::State& state)
         for (std::uint64_t key = 0; key < kPrefill; ++key)
         {
             set_key(data, key);
-            repository<Repository>->insert(data);
+            repository<Repository>()->insert(data);
         }
     }
 }
 
 template<typename Repository>
 void tear_down(const benchmark::State&)
-{
-    repository<Repository>.reset();
-}
+{ repository<Repository>().reset(); }
 
 template<typename Repository, typename Symbol>
 void report_symbol(benchmark::State& state, std::uint64_t created)
 {
-    const auto entries = repository<Repository>->template size<Symbol>();
-    const auto bytes = repository<Repository>->template memory_usage<Symbol>();
+    const auto entries = repository<Repository>()->template size<Symbol>();
+    const auto bytes = repository<Repository>()->template memory_usage<Symbol>();
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);
-    state.counters["bytes/entry"] = benchmark::Counter(entries ? static_cast<double>(bytes) / entries : 0.0, benchmark::Counter::kAvgThreads);
+    state.counters["bytes/entry"] =
+        benchmark::Counter(entries ? static_cast<double>(bytes) / static_cast<double>(entries) : 0.0, benchmark::Counter::kAvgThreads);
 }
 
 template<typename Repository, typename Binding>
@@ -178,12 +179,13 @@ void report_relation(benchmark::State& state, std::uint64_t created, bool per_th
     std::size_t entries = 0;
     const auto lanes = per_thread_lane ? state.threads() : 1;
     for (int lane = 0; lane < lanes; ++lane)
-        entries += repository<Repository>->size(Index<Relation>(static_cast<uint_t>(lane)));
-    const auto bytes = repository<Repository>->template memory_usage<Binding>();
+        entries += repository<Repository>()->size(Index<Relation>(static_cast<uint_t>(lane)));
+    const auto bytes = repository<Repository>()->template memory_usage<Binding>();
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);
-    state.counters["bytes/entry"] = benchmark::Counter(entries ? static_cast<double>(bytes) / entries : 0.0, benchmark::Counter::kAvgThreads);
+    state.counters["bytes/entry"] =
+        benchmark::Counter(entries ? static_cast<double>(bytes) / static_cast<double>(entries) : 0.0, benchmark::Counter::kAvgThreads);
 }
 
 template<typename Repository, typename Symbol>
@@ -195,7 +197,7 @@ void benchmark_symbol_find(benchmark::State& state)
     for (auto _ : state)
     {
         set_key(data, (operation++ * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1));
-        const auto found = repository<Repository>->find(data);
+        const auto found = repository<Repository>()->find(data);
         if (!found)
         {
             state.SkipWithError("prefilled symbol not found");
@@ -221,7 +223,7 @@ void benchmark_symbol_mixed(benchmark::State& state)
                                 (operation * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1);
         ++operation;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->insert(data);
+        const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
         checksum += view.get_index().get_value();
     }
@@ -242,7 +244,7 @@ void benchmark_symbol_insert(benchmark::State& state)
     {
         const auto key = static_cast<std::uint64_t>(state.thread_index()) + static_cast<std::uint64_t>(state.threads()) * operation++;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->insert(data);
+        const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
         checksum += view.get_index().get_value();
     }
@@ -262,7 +264,7 @@ void benchmark_relation_find(benchmark::State& state)
     for (auto _ : state)
     {
         set_key(data, (operation++ * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1));
-        const auto found = repository<Repository>->find(data);
+        const auto found = repository<Repository>()->find(data);
         if (!found)
         {
             state.SkipWithError("prefilled relation binding not found");
@@ -288,7 +290,7 @@ void benchmark_relation_mixed(benchmark::State& state)
                                 (operation * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1);
         ++operation;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->insert(data);
+        const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
         checksum += view.get_index().row.get_value();
     }
@@ -311,7 +313,7 @@ void benchmark_relation_insert(benchmark::State& state)
         const auto key =
             PerThreadLane ? operation++ : static_cast<std::uint64_t>(state.thread_index()) + static_cast<std::uint64_t>(state.threads()) * operation++;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>->insert(data);
+        const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
         checksum += view.get_index().row.get_value();
     }
@@ -323,15 +325,11 @@ void benchmark_relation_insert(benchmark::State& state)
 
 template<typename Repository>
 void configure_sequential(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations)
-{
-    benchmark->Iterations(iterations)->Threads(1)->UseRealTime();
-}
+{ benchmark->Iterations(iterations)->Threads(1)->UseRealTime(); }
 
 template<typename Repository>
 void configure_concurrent(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations)
-{
-    benchmark->Iterations(iterations)->ThreadRange(1, 8)->UseRealTime();
-}
+{ benchmark->Iterations(iterations)->ThreadRange(1, 8)->UseRealTime(); }
 
 template<typename Repository, typename Symbol>
 void register_symbol_benchmarks(const char* prefix, bool concurrent)

@@ -32,9 +32,7 @@ struct Less<BasicBitPackedArrayView<Block, Coder, ThreadSafe>>
 {
     bool operator()(const BasicBitPackedArrayView<Block, Coder, ThreadSafe>& lhs, const BasicBitPackedArrayView<Block, Coder, ThreadSafe>& rhs) const
         requires OrderedByLess<std::ranges::range_value_t<const BasicBitPackedArrayView<Block, Coder, ThreadSafe>>>
-    {
-        return less_range(lhs, rhs);
-    }
+    { return less_range(lhs, rhs); }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, bool ThreadSafe, typename C>
@@ -43,9 +41,7 @@ struct Less<View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>
     bool operator()(const View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>& lhs,
                     const View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>& rhs) const
         requires OrderedByLess<std::ranges::range_value_t<const View<BasicBitPackedArrayView<Block, Coder, ThreadSafe>, C>>>
-    {
-        return less_range(lhs, rhs);
-    }
+    { return less_range(lhs, rhs); }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder>
@@ -53,9 +49,7 @@ struct Less<BasicBlockArrayView<Block, Coder>>
 {
     bool operator()(const BasicBlockArrayView<Block, Coder>& lhs, const BasicBlockArrayView<Block, Coder>& rhs) const
         requires OrderedByLess<std::ranges::range_value_t<const BasicBlockArrayView<Block, Coder>>>
-    {
-        return less_range(lhs, rhs);
-    }
+    { return less_range(lhs, rhs); }
 };
 
 template<std::unsigned_integral Block, bit::BlockCoder<std::remove_const_t<Block>> Coder, typename C>
@@ -63,9 +57,7 @@ struct Less<View<BasicBlockArrayView<Block, Coder>, C>>
 {
     bool operator()(const View<BasicBlockArrayView<Block, Coder>, C>& lhs, const View<BasicBlockArrayView<Block, Coder>, C>& rhs) const
         requires OrderedByLess<std::ranges::range_value_t<const View<BasicBlockArrayView<Block, Coder>, C>>>
-    {
-        return less_range(lhs, rhs);
-    }
+    { return less_range(lhs, rhs); }
 };
 }
 

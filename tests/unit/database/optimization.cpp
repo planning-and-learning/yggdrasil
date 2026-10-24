@@ -3,10 +3,10 @@
 #include <array>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <string>
 #include <limits>
 #include <random>
 #include <set>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <yggdrasil/database/optimization/optimization.hpp>
@@ -36,6 +36,7 @@ const Column w(3), x(0), y(1), z(2);
 auto rows(const auto& relation)
 {
     std::vector<std::vector<std::byte>> result;
+    result.reserve(relation.size());
     for (size_t i = 0; i < relation.size(); ++i)
         result.emplace_back(relation.row(i).begin(), relation.row(i).end());
     std::ranges::sort(result);
@@ -85,8 +86,8 @@ TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmpty
     Relation two(columns.span()), four(columns.span()), empty(columns.span());
     two.insert(std::tuple { 0.0, 0.0 });
     two.insert(std::tuple { 0.0, 1.0 });
-    for (double i = 0; i < 4; ++i)
-        four.insert(std::tuple { i, 0.0 });
+    for (int i = 0; i < 4; ++i)
+        four.insert(std::tuple { static_cast<double>(i), 0.0 });
 
     auto accumulator = ygg::database::StatisticsAccumulator<std::string>();
     for (const auto* sample : { &two, &four, &empty })
@@ -97,9 +98,9 @@ TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmpty
     auto warnings = ygg::diagnostics::Warnings();
     const auto stats = accumulator.finish(warnings, [](const std::string& key) { return key; });
 
-    EXPECT_EQ(stats.at("sometimes").rows, 2);              // (2 + 4 + 0) / 3
+    EXPECT_EQ(stats.at("sometimes").rows, 2);                  // (2 + 4 + 0) / 3
     EXPECT_EQ(stats.at("sometimes").distinct.at(x), 5.0 / 3);  // (1 + 4 + 0) / 3
-    EXPECT_EQ(stats.at("sometimes").distinct.at(y), 1);    // (2 + 1 + 0) / 3, clamped into [1, rows]
+    EXPECT_EQ(stats.at("sometimes").distinct.at(y), 1);        // (2 + 1 + 0) / 3, clamped into [1, rows]
     EXPECT_EQ(stats.at("always").rows, 0);
     ASSERT_EQ(warnings.get().size(), 1);
     EXPECT_NE(warnings.get()[0].message.find("always was empty in all 3 samples"), std::string::npos);
@@ -160,6 +161,7 @@ TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(plan), 0);
     // Evaluate every operator of the plan as its own root.
     std::vector<ygg::database::QueryView<>> nodes;
+    nodes.reserve(plan.node_count());
     for (size_t position = 0; position < plan.node_count(); ++position)
         nodes.push_back(plan[PlanId(ygg::to_uint_t(position))]);
     ygg::database::QueryEvaluator evaluator(ygg::database::compile(std::span<const ygg::database::QueryView<>>(nodes)));
@@ -192,8 +194,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     };
     const auto roots = std::array { root };
     const auto bound = std::array { ygg::database::Evaluation::bound };
-    const auto plan = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots),
-                                                                                  std::span<const ygg::database::Evaluation>(bound));
+    const auto plan = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const ygg::database::Evaluation>(bound));
     const auto planned = plan[plan.roots().front()];
     EXPECT_EQ(atoms(planned), 3);
     const auto full = ygg::database::optimize(root);
@@ -225,8 +226,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     };
     EXPECT_FALSE(successors(root).empty());
     EXPECT_EQ(successors(planned), successors(root));
-    EXPECT_THROW((ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots),
-                                                                             std::span<const ygg::database::Evaluation>())),
+    EXPECT_THROW((ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const ygg::database::Evaluation>())),
                  std::invalid_argument);
 }
 
@@ -368,6 +368,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
     for (size_t iteration = 0; iteration < 35; ++iteration)
     {
         std::vector<decltype(rows(inputs[0]))> before;
+        before.reserve(roots.size());
         for (size_t root = 0; root < roots.size(); ++root)
             before.push_back(rows(incremental.get_result(root)));
         std::vector<Delta> deltas;
@@ -393,6 +394,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
                 }
         }
         std::vector<Change> changes;
+        changes.reserve(deltas.size());
         for (const auto& change : deltas)
             changes.push_back({ borrow(change.added), borrow(change.removed) });
         incremental.update(changes);
@@ -478,6 +480,9 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
                     break;
                 case 8:
                     root = ygg::tests::qb::antijoin(queries, root, leaves[random() % leaves.size()]);
+                    break;
+                default:
+                    ADD_FAILURE() << "random() % 9 is below 9";
                     break;
             }
         }

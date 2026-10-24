@@ -43,7 +43,7 @@ namespace ygg::tests
 namespace
 {
 template<typename Publish, typename Size, typename Read>
-auto publish_and_read(Publish&& publish, Size&& size, Read&& read)
+auto publish_and_read(Publish publish, Size size, Read read)
 {
     using Value = std::invoke_result_t<Read>;
 
@@ -149,7 +149,16 @@ struct BlockingValue
     {
     }
 
-    BlockingValue(const BlockingValue& other) : value(other.value), copies(other.copies), started(other.started), release(other.release)
+    // Constructing from another value, by copy or move, is counted and may block.
+    BlockingValue(const BlockingValue& other) noexcept : value(other.value), copies(other.copies), started(other.started), release(other.release)
+    { on_transfer(); }
+    BlockingValue(BlockingValue&& other) noexcept : value(other.value), copies(other.copies), started(other.started), release(other.release) { on_transfer(); }
+    BlockingValue& operator=(const BlockingValue&) = default;
+    BlockingValue& operator=(BlockingValue&&) = default;
+    ~BlockingValue() = default;
+
+private:
+    void on_transfer() noexcept
     {
         if (!copies || copies->fetch_add(1, std::memory_order_relaxed) != 1)
             return;

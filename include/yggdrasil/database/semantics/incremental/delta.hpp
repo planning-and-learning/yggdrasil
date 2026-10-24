@@ -64,8 +64,8 @@ concept SlotChanges = std::invocable<const F&, size_t> && requires(const F& chan
 
 /// Sized random-access changes, one per input.
 template<typename R>
-concept RelationDeltaRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
-                             && RelationChange<std::ranges::range_reference_t<const R>>;
+concept RelationDeltaRange =
+    std::ranges::random_access_range<const R> && std::ranges::sized_range<const R> && RelationChange<std::ranges::range_reference_t<const R>>;
 
 namespace detail
 {

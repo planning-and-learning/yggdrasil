@@ -7,10 +7,7 @@
 
 namespace ygg::database
 {
-RelationPool RelationPoolFactory::create_pool()
-{
-    return RelationPool(*this);
-}
+RelationPool RelationPoolFactory::create_pool() { return RelationPool(*this); }
 }
 
 namespace ygg::database

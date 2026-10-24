@@ -1,6 +1,6 @@
-#include "module.hpp"
-
 #include "yggdrasil/database/optimization/optimization.hpp"
+
+#include "module.hpp"
 #include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/python/type_casters.hpp"
@@ -51,7 +51,7 @@ void bind_database_optimization(nb::module_& m)
         .value("BOUND", Evaluation::bound);
     m.def(
         "optimize",
-        [](const Roots& roots, const Statistics& statistics, std::optional<std::vector<Evaluation>> evaluations)
+        [](const Roots& roots, const Statistics& statistics, const std::optional<std::vector<Evaluation>>& evaluations)
         {
             const auto modes = evaluations.value_or(std::vector<Evaluation>(roots.size(), Evaluation::full));
             return ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const Evaluation>(modes), statistics);

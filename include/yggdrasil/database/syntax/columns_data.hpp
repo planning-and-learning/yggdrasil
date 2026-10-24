@@ -26,7 +26,8 @@ struct ColumnLayout
     size_t offset;
     size_t size;
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&ColumnLayout::label, &ColumnLayout::type, &ColumnLayout::offset, &ColumnLayout::size> {}; }
+    static constexpr auto cista_members() noexcept
+    { return ygg::Members<&ColumnLayout::label, &ColumnLayout::type, &ColumnLayout::offset, &ColumnLayout::size> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
     friend bool operator==(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.label == rhs.label && lhs.type == rhs.type; }
     friend auto operator<=>(const ColumnLayout& lhs, const ColumnLayout& rhs) { return std::tie(lhs.label, lhs.type) <=> std::tie(rhs.label, rhs.type); }
@@ -46,10 +47,7 @@ struct Data<database::Columns>
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::values> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
-    void clear() noexcept
-    {
-        ygg::clear_members(*this);
-    }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 }  // namespace ygg
 

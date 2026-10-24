@@ -79,6 +79,9 @@ public:
     Store() : storage(), set(0, IndexableHash(*this), IndexableEqualTo(*this)) {}
     Store(const Store&) = delete;
     Store& operator=(const Store&) = delete;
+    Store(Store&&) = delete;
+    Store& operator=(Store&&) = delete;
+    ~Store() = default;
 
     SegmentedVector<Data<Tag>, FirstSegmentSize, ThreadSafe, uint_t> storage;
     SetType set;
@@ -109,9 +112,7 @@ auto IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::operator=(IndexedH
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::~IndexedHashSet()
-{
-    delete m_store;
-}
+{ delete m_store; }
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 void IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::clear() noexcept
@@ -127,9 +128,9 @@ template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t Fir
 template<typename Factory>
 Index<Tag> IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::append_new_with_index(Factory&& factory)
 {
-    return Index<Tag>(static_cast<uint_t>(m_store->storage.emplace_back_with_index([&](size_t index) -> decltype(auto)
-                                                                            { return std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index))); },
-                                                                            std::numeric_limits<uint_t>::max())));
+    return Index<Tag>(static_cast<uint_t>(m_store->storage.emplace_back_with_index(
+        [&](size_t index) -> decltype(auto) { return std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index))); },
+        std::numeric_limits<uint_t>::max())));
 }
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>

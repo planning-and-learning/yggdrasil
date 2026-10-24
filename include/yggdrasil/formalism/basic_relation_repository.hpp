@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/bit_packed_array_set.hpp"
 #include "yggdrasil/containers/block_array_set.hpp"
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
@@ -64,28 +65,24 @@ struct BlockArraySetStorage
 {
 private:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
-    using container_type = ygg::BlockArraySet<Block, Coder, 16, ThreadSafe>;
+    using container_type = ygg::BlockArraySet<Block, Coder, ::ygg::default_first_array_segment_size, ThreadSafe>;
 
 public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t)
-    {
-        return container_type<Block, Coder, ThreadSafe>(arity);
-    }
+    { return container_type<Block, Coder, ThreadSafe>(arity); }
 };
 
 struct BitPackedArraySetStorage
 {
 private:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
-    using container_type = ygg::BitPackedArraySet<Block, Coder, 16, ThreadSafe>;
+    using container_type = ygg::BitPackedArraySet<Block, Coder, ::ygg::default_first_array_segment_size, ThreadSafe>;
 
 public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t object_index_width)
-    {
-        return container_type<Block, Coder, ThreadSafe>(arity, object_index_width);
-    }
+    { return container_type<Block, Coder, ThreadSafe>(arity, object_index_width); }
 };
 
 template<typename ObjectTag>
@@ -103,9 +100,7 @@ private:
     using storage_type = typename RelationRepositoryTraits<ObjectTag>::storage_type;
 
     static auto make_container(size_t arity, std::uint8_t object_index_width)
-    {
-        return storage_type::template make<ygg::uint_t, IndexCoder<Index<Object<ObjectTag>>, ygg::uint_t>, ThreadSafe>(arity, object_index_width);
-    }
+    { return storage_type::template make<ygg::uint_t, IndexCoder<Index<Object<ObjectTag>>, ygg::uint_t>, ThreadSafe>(arity, object_index_width); }
 
     using internal_container_type = decltype(make_container(size_t {}, std::uint8_t {}));
 
@@ -126,14 +121,8 @@ private:
     class SequentialSlotDirectory
     {
     public:
-        Slot* find(ygg::uint_t gi) noexcept
-        {
-            if (gi >= m_forward.size() || m_forward[gi] == kInvalid)
-                return nullptr;
-            return &m_slots[m_forward[gi]];
-        }
-
-        const Slot* find(ygg::uint_t gi) const noexcept { return const_cast<SequentialSlotDirectory*>(this)->find(gi); }
+        Slot* find(ygg::uint_t gi) noexcept { return find_in(*this, gi); }
+        const Slot* find(ygg::uint_t gi) const noexcept { return find_in(*this, gi); }
 
         Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
         {
@@ -152,14 +141,14 @@ private:
         }
 
         template<typename F>
-        void for_each(F&& function)
+        void for_each(F function)
         {
             for (auto& slot : m_slots)
                 function(slot);
         }
 
         template<typename F>
-        void for_each(F&& function) const
+        void for_each(F function) const
         {
             for (const auto& slot : m_slots)
                 function(slot);
@@ -168,6 +157,15 @@ private:
         size_t memory_usage() const noexcept { return m_forward.capacity() * sizeof(ygg::uint_t) + m_slots.capacity() * sizeof(Slot); }
 
     private:
+        template<typename Self>
+        static auto* find_in(Self& self, ygg::uint_t gi) noexcept
+        {
+            using Result = decltype(&self.m_slots[0]);
+            if (gi >= self.m_forward.size() || self.m_forward[gi] == kInvalid)
+                return Result { nullptr };
+            return &self.m_slots[self.m_forward[gi]];
+        }
+
         std::vector<ygg::uint_t> m_forward;
         std::vector<Slot> m_slots;
     };
@@ -191,6 +189,28 @@ private:
             size_t size;
         };
 
+        // The slots are reached through atomic pointers, so const members find them mutable too.
+        Slot* lookup(ygg::uint_t gi) const noexcept
+        {
+            const auto [segment_index, offset] = locate(gi);
+            const auto* segment = m_segments[segment_index].load(std::memory_order_acquire);
+            return segment ? segment->entries[offset].load(std::memory_order_acquire) : nullptr;
+        }
+
+        template<typename F>
+        void visit_slots(F function) const
+        {
+            for (const auto& segment_ptr : m_segments)
+            {
+                const auto* segment = segment_ptr.load(std::memory_order_relaxed);
+                if (!segment)
+                    continue;
+                for (size_t i = 0; i < segment->size; ++i)
+                    if (auto* slot = segment->entries[i].load(std::memory_order_relaxed))
+                        function(*slot);
+            }
+        }
+
         static std::pair<size_t, size_t> locate(ygg::uint_t gi) noexcept
         {
             const auto segment = Layout::segment_index(gi);
@@ -198,9 +218,7 @@ private:
         }
 
         static constexpr size_t segment_size(size_t segment) noexcept
-        {
-            return segment + 1 == kNumSegments ? Layout::segment_offset(kMaxIndex, segment) + 1 : Layout::segment_capacity(segment);
-        }
+        { return segment + 1 == kNumSegments ? Layout::segment_offset(kMaxIndex, segment) + 1 : Layout::segment_capacity(segment); }
 
         Segment& get_or_create_segment(size_t index)
         {
@@ -229,12 +247,12 @@ private:
         {
             for (auto& segment_ptr : m_segments)
             {
-                auto* segment = segment_ptr.load(std::memory_order_relaxed);
+                // Each segment and slot was released from a unique_ptr when published.
+                const auto segment = std::unique_ptr<Segment>(segment_ptr.load(std::memory_order_relaxed));
                 if (!segment)
                     continue;
                 for (size_t i = 0; i < segment->size; ++i)
-                    delete segment->entries[i].load(std::memory_order_relaxed);
-                delete segment;
+                    std::unique_ptr<Slot>(segment->entries[i].load(std::memory_order_relaxed)).reset();
             }
         }
 
@@ -243,14 +261,8 @@ private:
         ConcurrentSlotDirectory(ConcurrentSlotDirectory&&) = delete;
         ConcurrentSlotDirectory& operator=(ConcurrentSlotDirectory&&) = delete;
 
-        Slot* find(ygg::uint_t gi) noexcept
-        {
-            const auto [segment_index, offset] = locate(gi);
-            const auto* segment = m_segments[segment_index].load(std::memory_order_acquire);
-            return segment ? segment->entries[offset].load(std::memory_order_acquire) : nullptr;
-        }
-
-        const Slot* find(ygg::uint_t gi) const noexcept { return const_cast<ConcurrentSlotDirectory*>(this)->find(gi); }
+        Slot* find(ygg::uint_t gi) noexcept { return lookup(gi); }
+        const Slot* find(ygg::uint_t gi) const noexcept { return lookup(gi); }
 
         Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
         {
@@ -272,23 +284,15 @@ private:
         }
 
         template<typename F>
-        void for_each(F&& function)
+        void for_each(F function)
         {
-            for (auto& segment_ptr : m_segments)
-            {
-                auto* segment = segment_ptr.load(std::memory_order_relaxed);
-                if (!segment)
-                    continue;
-                for (size_t i = 0; i < segment->size; ++i)
-                    if (auto* slot = segment->entries[i].load(std::memory_order_relaxed))
-                        function(*slot);
-            }
+            visit_slots([&](Slot& slot) { function(slot); });
         }
 
         template<typename F>
-        void for_each(F&& function) const
+        void for_each(F function) const
         {
-            const_cast<ConcurrentSlotDirectory*>(this)->for_each([&](Slot& slot) { function(std::as_const(slot)); });
+            visit_slots([&](Slot& slot) { function(std::as_const(slot)); });
         }
 
         size_t memory_usage() const noexcept
@@ -383,9 +387,7 @@ public:
     }
 
     std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
-    {
-        return find_local_with_hash(builder, BasicRelationRepository::hash(builder));
-    }
+    { return find_local_with_hash(builder, BasicRelationRepository::hash(builder)); }
 
     std::pair<Index<Row>, bool> insert_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
     {
@@ -396,9 +398,7 @@ public:
     }
 
     std::pair<Index<Row>, bool> insert_local(const Data<RelationBinding<T, ObjectTag>>& builder)
-    {
-        return insert_local_with_hash(builder, BasicRelationRepository::hash(builder));
-    }
+    { return insert_local_with_hash(builder, BasicRelationRepository::hash(builder)); }
 
     /// Completes a hierarchy-wide miss by rechecking this lane before publishing storage.
     std::pair<Index<Row>, bool> create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
@@ -488,6 +488,7 @@ public:
             throw std::invalid_argument("BasicRelationRepository: child object index width must not be smaller than its parent's.");
         clear_slots();
     }
+    ~BasicRelationRepository() = default;
     BasicRelationRepository(const BasicRelationRepository& other) = delete;
     BasicRelationRepository& operator=(const BasicRelationRepository& other) = delete;
     BasicRelationRepository(BasicRelationRepository&&) noexcept

@@ -26,6 +26,7 @@
 #include "yggdrasil/serialization/cista_hash.hpp"
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -71,10 +72,10 @@ TEST(YggdrasilTests, CommonHashValuesMatchDefinedAlgorithms)
 
 TEST(YggdrasilTests, CommonHashSupportsUnalignedByteRanges)
 {
-    alignas(uint64_t) const char storage[] = "_0123456789abcdef";
-    const auto text = std::string_view(storage + 1, sizeof(storage) - 2);
+    alignas(uint64_t) constexpr std::array<char, 17> storage { '_', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+    const auto text = std::string_view(storage.data(), storage.size()).substr(1);
 
-    ASSERT_NE(reinterpret_cast<uintptr_t>(text.data()) % alignof(uint64_t), 0);
+    ASSERT_NE(std::bit_cast<uintptr_t>(text.data()) % alignof(uint64_t), 0);
     EXPECT_EQ(ygg::Hash<std::string_view> {}(text), 0x5c5b90c34e376d0bULL);
 }
 
@@ -85,7 +86,7 @@ TEST(YggdrasilTests, CommonHashBytesMatchesXxHashReferenceAcrossBlockBoundaries)
         bytes[i] = static_cast<unsigned char>(i * 37);
 
     // Seed-zero results from the reference xxHash implementation, including unaligned input.
-    const auto cases = std::array<std::pair<size_t, ygg::hash_t>, 15> {{
+    const auto cases = std::array<std::pair<size_t, ygg::hash_t>, 15> { {
         { 0, 0xef46db3751d8e999ULL },
         { 1, 0x89ac406afd6cd3b7ULL },
         { 3, 0x614123b469e8f204ULL },
@@ -101,7 +102,7 @@ TEST(YggdrasilTests, CommonHashBytesMatchesXxHashReferenceAcrossBlockBoundaries)
         { 63, 0x70781206707beec8ULL },
         { 64, 0x6892b7f3d78396eeULL },
         { 65, 0x4948c637675f5150ULL },
-    }};
+    } };
     EXPECT_EQ(ygg::hashing::hash_bytes(nullptr, 0), 0xef46db3751d8e999ULL);
     for (const auto& [size, expected] : cases)
     {
@@ -563,7 +564,7 @@ TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
 
     struct Record
     {
-        decltype(wrapped) values;
+        std::remove_const_t<decltype(wrapped)> values;
         static constexpr auto identifying_members() noexcept { return ygg::Members<&Record::values> {}; }
     };
     const auto record = Record { wrapped };

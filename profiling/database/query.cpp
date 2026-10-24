@@ -4,12 +4,13 @@
  */
 #include "yggdrasil/database/semantics/incremental/query.hpp"
 
-#include "yggdrasil/database/semantics/generic_join.hpp"
 #include "yggdrasil/database/optimization/optimization.hpp"
+#include "yggdrasil/database/semantics/generic_join.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
 
 #include <array>
 #include <benchmark/benchmark.h>
+#include <cstdint>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -106,7 +107,7 @@ bool exact_delta(const database::incremental::Delta& delta, const Relation& befo
     return added == delta.added.size() && removed == delta.removed.size();
 }
 
-enum class Planning
+enum class Planning : std::uint8_t
 {
     original,
     structural,
@@ -213,6 +214,7 @@ void generic_join_full(benchmark::State& state)
     Triangle trace(static_cast<uint_t>(state.range(0)));
     const auto& input = trace.initial;
     std::vector<std::vector<database::ColumnLayout>> schemas;
+    schemas.reserve(trace.initial.size());
     for (const auto& value : trace.initial)
         schemas.emplace_back(value.columns().span().begin(), value.columns().span().end());
     const std::array order { Column(0), Column(1), Column(2) };

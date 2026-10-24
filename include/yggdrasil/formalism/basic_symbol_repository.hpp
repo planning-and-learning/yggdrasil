@@ -22,6 +22,7 @@
 #include "yggdrasil/buffer/indexed_hash_set.hpp"
 #include "yggdrasil/buffer/segmented_buffer.hpp"
 #include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
@@ -52,7 +53,7 @@ private:
     template<typename U>
     struct Slot<U, true>
     {
-        using Container = ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe>;
+        using Container = ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, ::ygg::default_first_segment_size, ThreadSafe>;
 
         Container container;
         size_t parent_size = 0;
@@ -68,7 +69,7 @@ private:
     {
         std::unique_ptr<ygg::buffer::SegmentedBuffer> arena;
         std::unique_ptr<ygg::buffer::Buffer> buffer;
-        using Container = ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe>;
+        using Container = ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, ::ygg::default_first_segment_size, ThreadSafe>;
 
         Container container;
         size_t parent_size = 0;
@@ -121,13 +122,18 @@ public:
     /// storage.
     std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h);
 
+    /// Unchecked, like std::vector::operator[]: index must be local (asserted in Debug).
+    const Data<T>& local(Index<T> index) const noexcept
+    {
+        assert(is_local(index));
+        return m_slot.container[Index<T>(index.value - m_slot.parent_size)];
+    }
+
     const Data<T>& at_local(Index<T> index) const
     {
-        const auto parent_size = m_slot.parent_size;
-        if (index.value < parent_size || index.value >= size())
+        if (!is_local(index))
             throw std::out_of_range("Symbol index not found in local repository.");
-
-        return m_slot.container[Index<T>(index.value - parent_size)];
+        return local(index);
     }
 
     const Data<T>& front_local() const
@@ -184,9 +190,7 @@ public:
 
 template<typename T, bool ThreadSafe>
 size_t BasicSymbolRepository<T, ThreadSafe>::hash(const Data<T>& builder) noexcept
-{
-    return Slot<T>::hash(builder);
-}
+{ return Slot<T>::hash(builder); }
 
 }  // namespace ygg::formalism
 

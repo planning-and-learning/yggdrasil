@@ -43,23 +43,31 @@ struct Counts
     size_t deallocated = 0;
 };
 
-thread_local bool enabled = false;
-thread_local Counts counts;
+bool& enabled() noexcept
+{
+    thread_local bool value = false;
+    return value;
+}
+Counts& counts() noexcept
+{
+    thread_local Counts value;
+    return value;
+}
 
 void* allocate(size_t bytes)
 {
     auto* result = std::malloc(bytes == 0 ? 1 : bytes);
     if (!result)
         throw std::bad_alloc();
-    if (enabled)
-        ++counts.allocated;
+    if (enabled())
+        ++counts().allocated;
     return result;
 }
 
 void deallocate(void* pointer) noexcept
 {
-    if (pointer && enabled)
-        ++counts.deallocated;
+    if (pointer && enabled())
+        ++counts().deallocated;
     std::free(pointer);
 }
 
@@ -76,15 +84,15 @@ void* allocate_aligned(size_t bytes, size_t alignment)
 #endif
     if (!result)
         throw std::bad_alloc();
-    if (enabled)
-        ++counts.allocated;
+    if (enabled())
+        ++counts().allocated;
     return result;
 }
 
 void deallocate_aligned(void* pointer) noexcept
 {
-    if (pointer && enabled)
-        ++counts.deallocated;
+    if (pointer && enabled())
+        ++counts().deallocated;
 #if defined(_MSC_VER)
     _aligned_free(pointer);
 #else
@@ -97,17 +105,19 @@ class Scope
 public:
     Scope()
     {
-        counts = {};
-        enabled = true;
+        counts() = {};
+        enabled() = true;
     }
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
-    ~Scope() { enabled = false; }
+    Scope(Scope&&) = delete;
+    Scope& operator=(Scope&&) = delete;
+    ~Scope() { enabled() = false; }
 
     Counts finish() noexcept
     {
-        enabled = false;
-        return counts;
+        enabled() = false;
+        return counts();
     }
 };
 }  // namespace allocation_tracking
@@ -190,14 +200,12 @@ Builder<database::Columns> columns_of(std::initializer_list<Index<database::Colu
 }
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{
-    return std::tuple { T(values)... };
-}
+{ return std::tuple { T(values)... }; }
 
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * ygg::ByteCodec<T>::size> result;
+    std::array<std::byte, N * ygg::ByteCodec<T>::size> result {};
     for (size_t i = 0; i < N; ++i)
         ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;
@@ -260,11 +268,11 @@ struct Evaluation
     Builder<database::Relation> only_left_keys { { ColumnIndex(1) } };
     Builder<database::Relation> exists;
     database::Workspace workspace;
-    const Builder<database::Columns> joined_columns { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
-    const std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
-    const std::array<ColumnIndex, 1> projected_columns { ColumnIndex(6) };
-    const std::span<const ColumnIndex> renamed_schema { std::span<const ColumnIndex>(renamed_columns) };
-    const std::span<const ColumnIndex> projected_schema { std::span<const ColumnIndex>(projected_columns) };
+    Builder<database::Columns> joined_columns { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
+    std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
+    std::array<ColumnIndex, 1> projected_columns { ColumnIndex(6) };
+    std::span<const ColumnIndex> renamed_schema { std::span<const ColumnIndex>(renamed_columns) };
+    std::span<const ColumnIndex> projected_schema { std::span<const ColumnIndex>(projected_columns) };
     Builder<database::Columns> retained_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
 
     bool evaluate(size_t left_size, size_t right_size, uint_t offset)
@@ -395,7 +403,7 @@ struct PreparedPooledEvaluation
     database::ProjectionPlan projecting_left_keys { left.columns(), { key_column } };
     database::ProjectionPlan projecting_right_keys { right.columns(), { key_column } };
     database::ProjectionPlan testing_existence { joining.output_columns(), {} };
-    const Builder<database::Columns> alternate_join_columns { ColumnIndex(7), ColumnIndex(8), ColumnIndex(9) };
+    Builder<database::Columns> alternate_join_columns { ColumnIndex(7), ColumnIndex(8), ColumnIndex(9) };
     database::RelationPool pool;
     database::Workspace workspace;
 
@@ -469,7 +477,7 @@ struct InterningEvaluation
     Builder<database::Columns> schema_builder;
     Data<database::Columns> schema_data;
     const std::array<ColumnIndex, 3> columns { ColumnIndex(11), ColumnIndex(12), ColumnIndex(13) };
-    const std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(21), ColumnIndex(22), ColumnIndex(23) };
+    std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(21), ColumnIndex(22), ColumnIndex(23) };
 
     bool evaluate(bool reverse, uint_t generation)
     {
@@ -807,9 +815,7 @@ struct IncrementalEvaluation
     }
 
     size_t memory_usage() const
-    {
-        return joining.memory_usage() + projecting.memory_usage() + delta.memory_usage() + unchanged.memory_usage() + workspace.row.capacity() * sizeof(uint_t);
-    }
+    { return joining.memory_usage() + projecting.memory_usage() + delta.memory_usage() + unchanged.memory_usage() + workspace.row.capacity() * sizeof(uint_t); }
 };
 }  // namespace
 
@@ -1132,11 +1138,11 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceEdgeRepairAndUndoRetainStorage)
     const auto cycle = [&]
     {
         evaluator.update(std::tie(no_sources, no_sources), change.change(), std::tie(no_targets, no_targets));
-        bool valid = evaluator.get_result().size() == 2 * vertices;
+        bool valid = evaluator.get_result().size() == std::size_t { 2 } * vertices;
         valid &= evaluator.get_result().contains(cells(0, 8, 1));
         valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
         evaluator.update(std::tie(no_sources, no_sources), std::tie(change.removed, change.added), std::tie(no_targets, no_targets));
-        valid &= evaluator.get_result().size() == 2 * vertices;
+        valid &= evaluator.get_result().size() == std::size_t { 2 } * vertices;
         valid &= evaluator.get_result().contains(cells(0, 8, 8));
         valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
         return valid;
@@ -1183,15 +1189,15 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
     const auto cycle = [&]
     {
         evaluator.update(std::tie(no_sources, no_sources), change.change(), std::tie(no_targets, no_targets));
-        bool valid = evaluator.get_result().size() == 4 * width;
+        bool valid = evaluator.get_result().size() == std::size_t { 4 } * width;
         valid &= evaluator.get_result().contains(cells(0, first_parent, 1));
         valid &= evaluator.get_result().contains(cells(3, first_child, 2));
-        valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
+        valid &= evaluator.get_delta().added.size() == std::size_t { 4 } * width && evaluator.get_delta().removed.size() == std::size_t { 4 } * width;
         evaluator.update(std::tie(no_sources, no_sources), std::tie(change.removed, change.added), std::tie(no_targets, no_targets));
-        valid &= evaluator.get_result().size() == 4 * width;
+        valid &= evaluator.get_result().size() == std::size_t { 4 } * width;
         valid &= evaluator.get_result().contains(cells(0, first_parent, first_parent));
         valid &= evaluator.get_result().contains(cells(3, first_child, first_parent - 2));
-        valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
+        valid &= evaluator.get_delta().added.size() == std::size_t { 4 } * width && evaluator.get_delta().removed.size() == std::size_t { 4 } * width;
         return valid;
     };
     for (size_t i = 0; i < 32; ++i)

@@ -149,6 +149,9 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
                 case 8:
                     root = qb::antijoin(queries, root, leaves[random() % leaves.size()]);
                     break;
+                default:
+                    ADD_FAILURE() << "no operation " << operation;
+                    break;
             }
         }
         SCOPED_TRACE(expression);
@@ -218,7 +221,8 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
     // A selection on an unconstrained column is dropped.
     const auto selected = relax(qb::select_value(queries, qb::join(queries, known_edges, unknown), z, ygg::uint_t(1)), both_known);
     ASSERT_TRUE(selected->relaxation.queries[0].has_value());
-    EXPECT_TRUE(ygg::database::is<ygg::database::QueryJoinTag>(*selected->relaxation.queries[0]) || ygg::database::is<ygg::database::QueryInputTag>(*selected->relaxation.queries[0]));
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryJoinTag>(*selected->relaxation.queries[0])
+                || ygg::database::is<ygg::database::QueryInputTag>(*selected->relaxation.queries[0]));
 }
 
 TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
@@ -351,7 +355,8 @@ TEST(DatabaseRelaxation, VariablesReadByLaterFiltersAreNotExistenceTests)
     EXPECT_EQ(successors, (std::vector<ygg::uint_t> { 5, 6, 7 }));
 
     // A later antijoin reads u as an outer variable; it rejects I's first row, u = 5. I binds u, so it may repeat rows.
-    const auto anti = qb::project(queries, qb::antijoin(queries, qb::join(queries, edges, identity), qb::rename(queries, qb::input(queries, 2, { x }), { u })), { x, y });
+    const auto anti =
+        qb::project(queries, qb::antijoin(queries, qb::join(queries, edges, identity), qb::rename(queries, qb::input(queries, 2, { x }), { u })), { x, y });
     successors = bound_successors(anti, { &e, &i, &blocked });
     std::ranges::sort(successors);
     const auto [first, last] = std::ranges::unique(successors);
@@ -365,13 +370,18 @@ TEST(DatabaseRelaxation, ExistenceStepsSkipRowsTheirOwnFiltersReject)
     // matching row, and only one: (7, 0) and (7, 1) both match.
     auto queries = qb::repository();
     const Column u(3), v(4);
-    const auto query = qb::project(queries, qb::join(queries, qb::input(queries, 0, { x, y }), qb::select_value(queries, qb::input(queries, 1, { u, v }), u, ygg::uint_t(7))), { x, y });
+    const auto query =
+        qb::project(queries,
+                    qb::join(queries, qb::input(queries, 0, { x, y }), qb::select_value(queries, qb::input(queries, 1, { u, v }), u, ygg::uint_t(7))),
+                    { x, y });
     auto e = Relation({ x, y });
     auto i = Relation({ u, v });
     for (ygg::uint_t w = 0; w < 10; ++w)
         e.insert(std::tuple { ygg::uint_t(0), w });
-    for (const auto& row : { std::tuple { ygg::uint_t(5), ygg::uint_t(0) }, std::tuple { ygg::uint_t(6), ygg::uint_t(0) },
-                             std::tuple { ygg::uint_t(7), ygg::uint_t(0) }, std::tuple { ygg::uint_t(7), ygg::uint_t(1) } })
+    for (const auto& row : { std::tuple { ygg::uint_t(5), ygg::uint_t(0) },
+                             std::tuple { ygg::uint_t(6), ygg::uint_t(0) },
+                             std::tuple { ygg::uint_t(7), ygg::uint_t(0) },
+                             std::tuple { ygg::uint_t(7), ygg::uint_t(1) } })
         i.insert(row);
     EXPECT_EQ(bound_successors(query, { &e, &i }).size(), 10);
 }

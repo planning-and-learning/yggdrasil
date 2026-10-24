@@ -43,10 +43,33 @@ jobs:
         env:
           PIP_NO_CACHE_DIR: 1
 
+      # The native dependencies take minutes to build; they are rebuilt only
+      # when their recipe changes, and the install packages them as they are.
+      - name: Cache native dependencies
+        id: deps
+        uses: actions/cache@v4
+        with:
+          path: dependencies-install
+          key: deps-${{ runner.os }}-Release-py${{ matrix.python-version }}-${{ hashFiles('src/**', 'cmake/**', 'docs/SOURCES.json') }}
+
+      - name: Build native dependencies
+        if: steps.deps.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install "nanobind-backend>=1.0"
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DYGGDRASIL_JOBS=2 \
+                -DCMAKE_INSTALL_PREFIX="$PWD/dependencies-install" \
+                -DCMAKE_INSTALL_LIBDIR=lib \
+                -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+                -S src -B dependencies-build
+          cmake --build dependencies-build --parallel 2
+          cmake --install dependencies-build
+
       - name: Build and install
         run: python -m pip install --no-cache-dir --verbose .[test]
         env:
           PIP_NO_CACHE_DIR: 1
+          YGGDRASIL_BUILD_NATIVE: "OFF"
 
       - name: Test
         run: python -m pytest python/tests

@@ -55,7 +55,6 @@ struct Data<tests::ConcurrentElement>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
-
 template<>
 struct Data<tests::ConcurrentSerializedElement>
 {
@@ -67,6 +66,7 @@ struct Data<tests::ConcurrentSerializedElement>
     Data& operator=(const Data&) = delete;
     Data(Data&&) = default;
     Data& operator=(Data&&) = default;
+    ~Data() = default;
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::values> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
@@ -90,7 +90,7 @@ namespace
 constexpr std::size_t kThreads = 8;
 
 template<typename Function>
-void run_threads(std::size_t count, Function&& function)
+void run_threads(std::size_t count, Function function)
 {
     auto start = std::barrier<>(static_cast<std::ptrdiff_t>(count));
     auto threads = std::vector<std::jthread> {};
@@ -144,19 +144,15 @@ public:
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
     const Data<T>& operator[](Index<T> index) const noexcept
-    {
-        return at_local(index);
-    }
+    { return local(index); }
 
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
     const PublishedRepository& get_canonical_context(Index<T>) const noexcept
-    {
-        return *this;
-    }
+    { return *this; }
 
     size_t get_index() const noexcept { return 0; }
-    friend const PublishedRepository& get_repository(const PublishedRepository& repository) noexcept { return repository; }
+    friend const PublishedRepository& get_repository(const PublishedRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 static_assert(formalism::SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);

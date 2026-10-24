@@ -7,31 +7,22 @@
 
 namespace ygg
 {
-Builder<database::Relation>::Builder(Builder<database::Columns> columns) : m_columns(std::move(columns)), m_rows(m_columns.row_size())
-{
-}
+Builder<database::Relation>::Builder(Builder<database::Columns> columns) : m_columns(std::move(columns)), m_rows(m_columns.row_size()) {}
 }
 
 namespace ygg
 {
-Builder<database::Relation>::Builder(std::span<const database::ColumnLayout> columns) : Builder(Builder<database::Columns>(columns))
-{
-}
+Builder<database::Relation>::Builder(std::span<const database::ColumnLayout> columns) : Builder(Builder<database::Columns>(columns)) {}
 }
 
 namespace ygg
 {
-Builder<database::Relation>::Builder(std::span<const Index<database::Column>> columns) : Builder(Builder<database::Columns>(columns))
-{
-}
+Builder<database::Relation>::Builder(std::span<const Index<database::Column>> columns) : Builder(Builder<database::Columns>(columns)) {}
 }
 
 namespace ygg
 {
-Builder<database::Relation>::Builder(std::initializer_list<Index<database::Column>> columns) :
-    Builder(std::span<const Index<database::Column>>(columns))
-{
-}
+Builder<database::Relation>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns)) {}
 }
 
 namespace ygg
@@ -148,17 +139,13 @@ void Builder<database::Relation>::initialize(std::span<const database::ColumnLay
 namespace ygg
 {
 void Builder<database::Relation>::initialize(std::span<const Index<database::Column>> columns)
-{
-    reinitialize(database::detail::label_row_size<>(columns), columns);
-}
+{ reinitialize(database::detail::label_row_size<>(columns), columns); }
 }
 
 namespace ygg
 {
 void Builder<database::Relation>::initialize(std::initializer_list<Index<database::Column>> columns)
-{
-    initialize(std::span<const Index<database::Column>>(columns));
-}
+{ initialize(std::span<const Index<database::Column>>(columns)); }
 }
 
 namespace ygg

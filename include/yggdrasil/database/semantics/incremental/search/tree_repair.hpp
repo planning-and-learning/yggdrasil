@@ -83,12 +83,9 @@ public:
 
 private:
     std::vector<std::pair<uint_t, uint_t>> m_queue;  ///< A min-heap of (learned, vertex).
-    std::vector<std::byte> m_vertex;                  ///< A copy of the lowered vertex: storing vertices may move them.
+    std::vector<std::byte> m_vertex;                 ///< A copy of the lowered vertex: storing vertices may move them.
 
-    static bool lowers(const SearchTree& tree, uint_t from, uint_t to_value) noexcept
-    {
-        return to_value != infinity && tree.learned(from) > to_value + 1;
-    }
+    static bool lowers(const SearchTree& tree, uint_t from, uint_t to_value) noexcept { return to_value != infinity && tree.learned(from) > to_value + 1; }
     void lower(SearchTree& tree, uint_t from, uint_t to)
     {
         tree.lower(from, tree.learned(to) + 1);

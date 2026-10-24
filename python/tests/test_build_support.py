@@ -9,15 +9,13 @@ import subprocess
 import sys
 import types
 import zipfile
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
 from unittest.mock import patch
 
 import pytest
 from scikit_build_core import build as scikit_build
 
-import pyyggdrasil.build_support as build_support
+from pyyggdrasil import build_support
 from pyyggdrasil.build_support import ProviderBackend
 
 
@@ -31,20 +29,12 @@ def _backend() -> ProviderBackend:
     )
 
 
-def _num_jobs(backend: ProviderBackend) -> int:
-    return cast(Callable[[], int], getattr(backend, "_num_jobs"))()
-
-
-def _prepare_native_build(backend: ProviderBackend) -> None:
-    cast(Callable[[], None], getattr(backend, "_prepare_native_build"))()
-
-
 def _fake_provider(name: str, prefix: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def native_prefix() -> Path:
         return prefix
 
     provider = types.ModuleType(name)
-    setattr(provider, "native_prefix", native_prefix)
+    monkeypatch.setattr(provider, "native_prefix", native_prefix, raising=False)
     monkeypatch.setitem(sys.modules, name, provider)
 
 
@@ -64,9 +54,9 @@ def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.M
     backend = _backend()
     monkeypatch.delenv("CONSUMER_JOBS", raising=False)
     monkeypatch.setattr(os, "cpu_count", lambda: 4)
-    assert _num_jobs(backend) == 4
+    assert backend.num_jobs() == 4
     monkeypatch.setenv("CONSUMER_JOBS", "6")
-    assert _num_jobs(backend) == 6
+    assert backend.num_jobs() == 6
 
     provider_prefix = tmp_path / provider_name
     provider_library = provider_prefix / "lib"
@@ -82,7 +72,7 @@ def test_jobs_and_native_build_environment(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("LD_LIBRARY_PATH", "/existing/ld")
     monkeypatch.setenv("DYLD_LIBRARY_PATH", "/existing/dyld")
 
-    _prepare_native_build(backend)
+    backend.prepare_native_build()
 
     assert os.environ["CMAKE_BUILD_PARALLEL_LEVEL"] == "6"
     assert os.environ["LD_LIBRARY_PATH"] == os.pathsep.join(
@@ -107,12 +97,14 @@ def test_num_jobs_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch) -> Non
     for value in ("0", "-1", "many"):
         monkeypatch.setenv("CONSUMER_JOBS", value)
         with pytest.raises(ValueError, match="positive integer"):
-            _num_jobs(backend)
+            backend.num_jobs()
 
 
 @pytest.mark.parametrize("private_root", ("_consumer", "_consumer.cpython-313-x86_64-linux-gnu"))
 @pytest.mark.parametrize("mode", ("wheel", "disabled_strip", "missing_strip", "editable"))
-def test_default_stub_rewriting_and_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, private_root: str, mode: str) -> None:
+def test_default_stub_rewriting_and_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, private_root: str, mode: str
+) -> None:
     backend = _backend()
     assert backend.rename_packages == ("consumer", "provider", "pyyggdrasil")
     assert ProviderBackend("consumer", ("pyyggdrasil",), rename_packages=()).rename_packages == ()
@@ -143,13 +135,13 @@ def test_default_stub_rewriting_and_publication(tmp_path: Path, monkeypatch: pyt
         Path(command[-1]).write_bytes(b"stripped library\n")
         return subprocess.CompletedProcess(command, 0)
 
-    monkeypatch.setattr(backend, "_prepare_native_build", lambda: None)
+    monkeypatch.setattr(backend, "prepare_native_build", lambda: None)
     monkeypatch.setattr(scikit_build, "build_editable" if mode == "editable" else "build_wheel", build)
     monkeypatch.setenv("CONSUMER_STRIP_WHEEL", "OFF" if mode == "disabled_strip" else "ON")
     with (
         patch.object(shutil, "which", return_value=None if mode == "missing_strip" else "/fake/strip"),
         patch.object(zipfile.ZipFile, "extractall", autospec=True, side_effect=zipfile.ZipFile.extractall) as extract,
-        patch.object(build_support, "_repack_wheel", wraps=getattr(build_support, "_repack_wheel")) as repack,
+        patch.object(build_support, "repack_wheel", wraps=build_support.repack_wheel) as repack,
         patch.object(subprocess, "run", side_effect=strip_library) as strip,
     ):
         hook = backend.build_editable if mode == "editable" else backend.build_wheel

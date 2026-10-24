@@ -1,0 +1,45 @@
+name: plumbcheck
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  plumbcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      # The native dependencies take minutes to build; they are rebuilt only
+      # when their recipe changes. They live outside the repository: the
+      # plumbcheck action checks it out again, which would delete them there.
+      - uses: actions/cache@v4
+        with:
+          path: ~/yggdrasil-deps
+          key: deps-${{ runner.os }}-${{ hashFiles('src/**', 'cmake/**', 'docs/SOURCES.json') }}
+      - uses: drexlerd/plumbcheck@e209ba689a4451b67181592f4a291e128b6208b1
+        with:
+          # clang-tidy needs compile_commands.json, pyright the package in
+          # .venv (its stubs are generated at install), and both the native
+          # dependencies.
+          prepare: |
+            DEPS="$HOME/yggdrasil-deps"
+            python -m pip install "nanobind-backend>=1.0"
+            PYTHON="$(python -c 'import sys; print(sys.executable)')"
+            if [ ! -d "$DEPS/lib" ]; then
+              cmake -S src -B "$RUNNER_TEMP/deps-build" -DCMAKE_BUILD_TYPE=Release \
+                    -DYGGDRASIL_JOBS=4 -DCMAKE_INSTALL_PREFIX="$DEPS" -DCMAKE_INSTALL_LIBDIR=lib \
+                    -DPython_EXECUTABLE="$PYTHON"
+              cmake --build "$RUNNER_TEMP/deps-build" --parallel 4
+              cmake --install "$RUNNER_TEMP/deps-build"
+            fi
+            cmake -S . -B build/plumbcheck -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                  -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_PROFILING=ON \
+                  -DYGGDRASIL_NATIVE_PREFIX="$DEPS" -DCMAKE_INSTALL_LIBDIR=lib \
+                  -DPython_EXECUTABLE="$PYTHON"
+            "$PYTHON" -m venv .venv
+            YGGDRASIL_BUILD_NATIVE=OFF YGGDRASIL_NATIVE_PREFIX="$DEPS" \
+              .venv/bin/python -m pip install --no-cache-dir ".[test]"

@@ -51,13 +51,11 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
     Data& operator=(const Data& other) = delete;
     Data(Data&& other) = default;
     Data& operator=(Data&& other) = default;
+    ~Data() = default;
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
-    void clear() noexcept
-    {
-        ygg::clear_members(*this);
-    }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
 }  // namespace ygg

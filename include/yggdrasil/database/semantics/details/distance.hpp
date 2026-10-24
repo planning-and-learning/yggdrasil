@@ -30,11 +30,7 @@ Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t
 }  // namespace detail
 
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
-void DistanceWorkspace::append_distances(const S& sources,
-                                                 const E& edges,
-                                                 const T& targets,
-                                                 const DistancePlan& plan,
-                                                 Builder<Relation>& out)
+void DistanceWorkspace::append_distances(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& out)
 {
     m_graph.clear();
     m_targets.clear();
@@ -63,12 +59,7 @@ void DistanceWorkspace::append_distances(const S& sources,
 }
 
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
-void distance(const S& sources,
-              const E& edges,
-              const T& targets,
-              const DistancePlan& plan,
-              Builder<Relation>& out,
-              DistanceWorkspace& workspace)
+void distance(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& out, DistanceWorkspace& workspace)
 {
     detail::require_plan_columns(sources.columns().span(), plan.source_columns().span());
     detail::require_plan_columns(edges.columns().span(), plan.edge_columns().span());
@@ -89,12 +80,7 @@ Builder<Relation> distance(const S& sources, const E& edges, const T& targets, c
 }
 
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
-uint_t min_distance(const S& sources,
-                    const E& edges,
-                    const T& targets,
-                    const DistancePlan& plan,
-                    Builder<Relation>& result,
-                    DistanceWorkspace& workspace)
+uint_t min_distance(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& result, DistanceWorkspace& workspace)
 {
     distance(sources, edges, targets, plan, result, workspace);
     const auto columns = result.columns().span();

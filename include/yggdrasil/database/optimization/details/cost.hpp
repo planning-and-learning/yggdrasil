@@ -111,10 +111,7 @@ class CostBasedPlanner
 
 public:
     template<std::invocable<QueryView<>> GetEstimate>
-    CostBasedPlanner(const JoinBlock& block, OperatorBuilder& build, GetEstimate&& estimate_of) :
-        m_block(&block),
-        m_build(&build),
-        m_required(block.required)
+    CostBasedPlanner(const JoinBlock& block, OperatorBuilder& build, GetEstimate estimate_of) : m_block(&block), m_build(&build), m_required(block.required)
     {
         for (size_t atom = 0; atom < block.atoms.size(); ++atom)
         {

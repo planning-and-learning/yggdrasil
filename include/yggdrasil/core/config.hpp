@@ -31,6 +31,17 @@
 #define YGG_NOINLINE [[gnu::noinline]]
 #endif
 
+/// Marks a parameter that the function's result refers to, so the compiler can warn when the result
+/// outlives a temporary argument (Clang); empty where the attribute is unknown.
+#if defined(__has_cpp_attribute)
+#if __has_cpp_attribute(clang::lifetimebound)
+#define YGG_LIFETIMEBOUND [[clang::lifetimebound]]
+#endif
+#endif
+#ifndef YGG_LIFETIMEBOUND
+#define YGG_LIFETIMEBOUND
+#endif
+
 #include "yggdrasil/core/dependent_false.hpp"
 
 #include <algorithm>
@@ -81,9 +92,7 @@ struct FloatTolerance<float_t>
     static_assert(rel_epsilon < static_cast<float_t>(1), "Relative float tolerance is too large.");
 
     static constexpr float_t tolerance(float_t lhs, float_t rhs) noexcept
-    {
-        return std::max(abs_epsilon, rel_epsilon * std::max(std::abs(lhs), std::abs(rhs)));
-    }
+    { return std::max(abs_epsilon, rel_epsilon * std::max(std::abs(lhs), std::abs(rhs))); }
 
     static constexpr float_t canonicalize(float_t value) noexcept
     {

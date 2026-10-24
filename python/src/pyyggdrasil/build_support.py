@@ -26,12 +26,11 @@ import zipfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Union
 
 from scikit_build_core import build as scikit_build
 
 # PEP 517 config_settings: keys map to a string or a list of strings.
-ConfigSettings = dict[str, Union[str, list[str]]]
+ConfigSettings = dict[str, str | list[str]]
 
 
 def _is_disabled(value: str) -> bool:
@@ -40,7 +39,7 @@ def _is_disabled(value: str) -> bool:
 
 def _is_native_library(path: Path) -> bool:
     name = path.name
-    return ".so" in name or name.endswith(".dylib") or name.endswith(".pyd")
+    return ".so" in name or name.endswith((".dylib", ".pyd"))
 
 
 def _strip_args() -> list[str]:
@@ -77,7 +76,7 @@ def _rewrite_record(wheel_root: Path) -> None:
         csv.writer(out).writerows(rows)
 
 
-def _repack_wheel(wheel_path: Path, wheel_root: Path) -> None:
+def repack_wheel(wheel_path: Path, wheel_root: Path) -> None:
     _rewrite_record(wheel_root)
     replacement_path = wheel_path.with_suffix(".tmp")
     with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
@@ -151,7 +150,7 @@ class ProviderBackend:
 
     # -- pre-build ---------------------------------------------------------
 
-    def _num_jobs(self) -> int:
+    def num_jobs(self) -> int:
         raw_jobs = os.environ.get(self.jobs_env, str(os.cpu_count() or 1))
         try:
             jobs = int(raw_jobs)
@@ -169,12 +168,12 @@ class ProviderBackend:
             prefixes.append(Path(native_prefix()).resolve())
         return prefixes
 
-    def _prepare_native_build(self) -> None:
+    def prepare_native_build(self) -> None:
         native_prefixes = self._native_prefixes()
         native_library_dirs = _native_library_dirs(native_prefixes)
         yggdrasil_prefix = native_prefixes[self.providers.index("pyyggdrasil")]
 
-        os.environ.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(self._num_jobs()))
+        os.environ.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(self.num_jobs()))
         _prepend_env_paths("LD_LIBRARY_PATH", native_library_dirs)
         _prepend_env_paths("DYLD_LIBRARY_PATH", native_library_dirs)
 
@@ -255,7 +254,7 @@ class ProviderBackend:
             if strip:
                 self._strip_native_libraries(wheel_root)
 
-            _repack_wheel(wheel_path, wheel_root)
+            repack_wheel(wheel_path, wheel_root)
 
     # -- PEP 517 hooks -------------------------------------------------------
 
@@ -265,7 +264,9 @@ class ProviderBackend:
     def get_requires_for_build_editable(self, config_settings: ConfigSettings | None = None) -> list[str]:
         return scikit_build.get_requires_for_build_editable(config_settings)
 
-    def prepare_metadata_for_build_wheel(self, metadata_directory: str, config_settings: ConfigSettings | None = None) -> str:
+    def prepare_metadata_for_build_wheel(
+        self, metadata_directory: str, config_settings: ConfigSettings | None = None
+    ) -> str:
         return scikit_build.prepare_metadata_for_build_wheel(metadata_directory, config_settings)
 
     def build_wheel(
@@ -274,7 +275,7 @@ class ProviderBackend:
         config_settings: ConfigSettings | None = None,
         metadata_directory: str | None = None,
     ) -> str:
-        self._prepare_native_build()
+        self.prepare_native_build()
         wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
         self._process_wheel(Path(wheel_directory) / wheel_filename)
         return wheel_filename
@@ -285,7 +286,7 @@ class ProviderBackend:
         config_settings: ConfigSettings | None = None,
         metadata_directory: str | None = None,
     ) -> str:
-        self._prepare_native_build()
+        self.prepare_native_build()
         wheel_filename = scikit_build.build_editable(wheel_directory, config_settings, metadata_directory)
         self._process_wheel(Path(wheel_directory) / wheel_filename, strip=False)
         return wheel_filename

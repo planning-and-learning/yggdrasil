@@ -424,10 +424,10 @@ projection must be passed by every original path too.
 ### Distance from Python
 
 Column labels are `ColumnIndex` values. Python evaluators and `distance` take
-`Relation` or `BorrowedRelation` inputs, or interned `RelationView` inputs when
-every input of the call is interned; to mix them, copy a view with
-`db.assign(db.Relation(), view)`. For vertices consisting of
-two integers:
+`BorrowedRelation` inputs, or interned `RelationView` inputs when every input of
+the call is interned. Wrap a `Relation` explicitly with `db.BorrowedRelation(relation)`;
+to mix them, copy a view with `db.assign(db.Relation(), view)`. For vertices
+consisting of two integers:
 
 ```python
 from pyyggdrasil import database as db
@@ -443,11 +443,12 @@ targets = db.Relation(columns(2, 3))
 targets.insert([10, 21])
 plan = db.DistancePlan(sources.columns(), edges.columns(), targets.columns(), db.ColumnIndex(4))
 
-result = db.distance(sources, edges, targets, plan)
+inputs = (db.BorrowedRelation(sources), db.BorrowedRelation(edges), db.BorrowedRelation(targets))
+result = db.distance(*inputs, plan)
 assert tuple(result[0]) == (10, 20, 10, 21, 1)
 
 evaluator = db.DistanceEvaluator(plan)
-evaluator.initialize(sources, edges, targets)
+evaluator.initialize(*inputs)
 assert tuple(evaluator.get_result()[0]) == (10, 20, 10, 21, 1)
 assert evaluator.get_delta().added.empty()
 ```
@@ -720,9 +721,10 @@ def insert(data):
 a = insert(db.QueryInputData(0, left.columns()))
 b = insert(db.QueryInputData(1, right.columns()))
 query = insert(db.QueryProjectData(insert(db.QueryJoinData(a, b)), [z, x]))
-optimized = db.optimize([query], db.collect_statistics([left, right]))
+inputs = [db.BorrowedRelation(left), db.BorrowedRelation(right)]
+optimized = db.optimize([query], db.collect_statistics(inputs))
 evaluator = db.QueryEvaluator(optimized)
-evaluator.evaluate([left, right])
+evaluator.evaluate(inputs)
 assert {tuple(row) for row in evaluator.get_result()} == {(3, 1)}
 independent = db.assign(db.Relation(), evaluator.get_result())
 print(optimized.explain())

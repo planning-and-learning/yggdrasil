@@ -12,12 +12,11 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Union
 
 from scikit_build_core import build as scikit_build
 
 # PEP 517 config_settings: keys map to a string or a list of strings.
-ConfigSettings = dict[str, Union[str, list[str]]]
+ConfigSettings = dict[str, str | list[str]]
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -49,7 +48,7 @@ def _is_disabled(value: str) -> bool:
     return value.upper() in {"0", "FALSE", "OFF", "NO"}
 
 
-def _configure_and_install_dependencies() -> None:
+def configure_and_install_dependencies() -> None:
     if _is_disabled(os.environ.get("YGGDRASIL_BUILD_NATIVE", "ON")):
         return
 
@@ -58,8 +57,10 @@ def _configure_and_install_dependencies() -> None:
         raise RuntimeError("cmake is required to build pyyggdrasil")
 
     native_prefix = _native_prefix()
-    if "YGGDRASIL_NATIVE_PREFIX" in os.environ and native_prefix.exists() and (
-        not native_prefix.is_dir() or any(native_prefix.iterdir())
+    if (
+        "YGGDRASIL_NATIVE_PREFIX" in os.environ
+        and native_prefix.exists()
+        and (not native_prefix.is_dir() or any(native_prefix.iterdir()))
     ):
         raise RuntimeError(
             "YGGDRASIL_NATIVE_PREFIX must be empty when YGGDRASIL_BUILD_NATIVE is enabled; "
@@ -102,7 +103,7 @@ def _prepend_cmake_args(*args: str) -> None:
 
 
 def _prepare_native_build() -> None:
-    _configure_and_install_dependencies()
+    configure_and_install_dependencies()
     os.environ.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(_num_jobs()))
     _prepend_cmake_args(
         f"-DYGGDRASIL_NATIVE_PREFIX={_native_prefix()}",
@@ -122,11 +123,8 @@ def _is_versioned_shared_object(name: str) -> bool:
 def _should_strip(path: Path) -> bool:
     name = path.name
     return (
-        name.endswith(".so")
+        name.endswith((".so", ".dylib", ".pyd", ".dll"))
         or _is_versioned_shared_object(name)
-        or name.endswith(".dylib")
-        or name.endswith(".pyd")
-        or name.endswith(".dll")
         or (path.parent.name == "bin" and name in {"hydra_pmi_proxy", "mpiexec"})
     )
 

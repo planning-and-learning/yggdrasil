@@ -37,7 +37,7 @@ public:
 
 }  // namespace
 
-NB_MODULE(yggdrasil_diagnostics_test, m)
+void bind_diagnostics_test(nanobind::module_& m)
 {
     const auto parser_error = ygg::bind_diagnostic_exception<ParserError>(m, "ParserError", PyExc_RuntimeError);
     ygg::bind_diagnostic_exception<SemanticError>(m, "SemanticError", parser_error);

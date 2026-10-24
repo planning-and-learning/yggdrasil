@@ -35,9 +35,7 @@ public:
 
     template<typename T>
     static handle from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
-    {
-        return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup);
-    }
+    { return sequence_view_from_cpp<Caster>(std::forward<T>(src), policy, cleanup); }
 };
 
 NAMESPACE_END(detail)

@@ -71,6 +71,9 @@ public:
     SpinMutex() noexcept = default;
     SpinMutex(const SpinMutex&) = delete;
     SpinMutex& operator=(const SpinMutex&) = delete;
+    SpinMutex(SpinMutex&&) = delete;
+    SpinMutex& operator=(SpinMutex&&) = delete;
+    ~SpinMutex() = default;
 
     void lock() noexcept
     {
@@ -100,6 +103,9 @@ public:
     SpinSharedMutex() noexcept = default;
     SpinSharedMutex(const SpinSharedMutex&) = delete;
     SpinSharedMutex& operator=(const SpinSharedMutex&) = delete;
+    SpinSharedMutex(SpinSharedMutex&&) = delete;
+    SpinSharedMutex& operator=(SpinSharedMutex&&) = delete;
+    ~SpinSharedMutex() = default;
 
     void lock() noexcept
     {

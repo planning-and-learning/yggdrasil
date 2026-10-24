@@ -60,6 +60,7 @@ public:
     // Handles point to the object pools, which stay at their heap addresses when this moves.
     RelationPool(RelationPool&&) noexcept = default;
     RelationPool& operator=(RelationPool&&) noexcept = default;
+    ~RelationPool() = default;
 
     [[nodiscard]] UniqueObjectPoolPtr<ygg::Builder<Relation>> get_or_allocate(std::span<const ColumnLayout> columns);
     /// Labels alone give every column type T.

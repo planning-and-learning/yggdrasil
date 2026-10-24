@@ -100,9 +100,7 @@ inline const boost::json::object& as_object(const boost::json::value& value, std
 }
 
 inline const boost::json::object& as_object(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_object(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_object(require_member(object, key, context), json_member_context(context, key)); }
 
 inline std::optional<std::reference_wrapper<const boost::json::object>>
 find_object(const boost::json::object& object, std::string_view key, std::string_view context)
@@ -122,9 +120,7 @@ inline const boost::json::array& as_array(const boost::json::value& value, std::
 }
 
 inline const boost::json::array& as_array(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_array(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_array(require_member(object, key, context), json_member_context(context, key)); }
 
 inline std::optional<std::reference_wrapper<const boost::json::array>>
 find_array(const boost::json::object& object, std::string_view key, std::string_view context)
@@ -144,9 +140,7 @@ inline std::string as_string(const boost::json::value& value, std::string_view c
 }
 
 inline std::string as_string(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_string(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_string(require_member(object, key, context), json_member_context(context, key)); }
 
 inline std::optional<std::string> find_string(const boost::json::object& object, std::string_view key, std::string_view context)
 {
@@ -164,9 +158,7 @@ inline bool as_bool(const boost::json::value& value, std::string_view context)
 }
 
 inline bool as_bool(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_bool(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_bool(require_member(object, key, context), json_member_context(context, key)); }
 
 inline std::optional<bool> find_bool(const boost::json::object& object, std::string_view key, std::string_view context)
 {
@@ -196,9 +188,7 @@ inline size_t as_size(const boost::json::value& value, std::string_view context)
 }
 
 inline size_t as_size(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_size(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_size(require_member(object, key, context), json_member_context(context, key)); }
 
 inline uint_t as_uint_t(const boost::json::value& value, std::string_view context)
 {
@@ -213,9 +203,7 @@ inline uint_t as_uint_t(const boost::json::value& value, std::string_view contex
 }
 
 inline uint_t as_uint_t(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_uint_t(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_uint_t(require_member(object, key, context), json_member_context(context, key)); }
 
 inline std::optional<size_t> find_size(const boost::json::object& object, std::string_view key, std::string_view context)
 {
@@ -248,9 +236,7 @@ inline double as_double(const boost::json::value& value, std::string_view contex
 }
 
 inline double as_double(const boost::json::object& object, std::string_view key, std::string_view context)
-{
-    return as_double(require_member(object, key, context), json_member_context(context, key));
-}
+{ return as_double(require_member(object, key, context), json_member_context(context, key)); }
 
 inline std::optional<double> find_double(const boost::json::object& object, std::string_view key, std::string_view context)
 {

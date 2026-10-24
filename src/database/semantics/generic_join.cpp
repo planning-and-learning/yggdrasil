@@ -66,16 +66,14 @@ GenericJoinPlan::GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inpu
 }
 
 bool GenericJoinPlan::matches(const GenericJoinPlan& other) const
-{
-    return m_inputs == other.m_inputs && m_order == other.m_order && std::ranges::equal(m_output.span(), other.m_output.span());
-}
+{ return m_inputs == other.m_inputs && m_order == other.m_order && std::ranges::equal(m_output.span(), other.m_output.span()); }
 
 namespace detail
 {
-void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept
+void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) noexcept
 {
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
-    ++(generic_join_work.*member);
+    ++(generic_join_work().*member);
 #endif
 }
 }

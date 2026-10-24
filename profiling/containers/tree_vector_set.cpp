@@ -44,17 +44,29 @@ using Vector = std::array<Value, kVectorSize>;
 using SequentialSet = TreeVectorSet<Value>;
 using ConcurrentSet = TreeVectorSet<Value, 32, true>;
 
-std::vector<Vector> corpus;
+std::vector<Vector>& corpus()
+{
+    static std::vector<Vector> value;
+    return value;
+}
 
 template<typename Set>
-std::unique_ptr<Set> tree_set;
+std::unique_ptr<Set>& tree_set()
+{
+    static std::unique_ptr<Set> value;
+    return value;
+}
 
 template<typename Set>
-std::vector<typename Set::index_type> handles;
+std::vector<typename Set::index_type>& handles()
+{
+    static std::vector<typename Set::index_type> value;
+    return value;
+}
 
 void make_corpus(size_t size)
 {
-    corpus.resize(size);
+    corpus().resize(size);
     auto current = Vector {};
     for (size_t position = 0; position < current.size(); ++position)
         current[position] = static_cast<Value>(position);
@@ -67,45 +79,45 @@ void make_corpus(size_t size)
             const auto position = (sequence * 17 + mutation * 7) % current.size();
             current[position] = static_cast<Value>((sequence * 31 + mutation * 13) & 1023U);
         }
-        corpus[sequence] = current;
+        corpus()[sequence] = current;
     }
 }
 
 template<typename Set>
 void set_up_insert(const benchmark::State& state)
 {
-    tree_set<Set> = std::make_unique<Set>();
+    tree_set<Set>() = std::make_unique<Set>();
     make_corpus(static_cast<size_t>(state.threads()) * static_cast<size_t>(kInsertIterations));
 }
 
 template<typename Set>
 void set_up_read(const benchmark::State& state)
 {
-    tree_set<Set> = std::make_unique<Set>();
+    tree_set<Set>() = std::make_unique<Set>();
     make_corpus(static_cast<size_t>(state.threads()) * kReadCorpusPerThread);
-    handles<Set>.clear();
-    handles<Set>.reserve(corpus.size());
-    for (const auto& values : corpus)
-        handles<Set>.push_back(tree_set<Set>->insert(values));
+    handles<Set>().clear();
+    handles<Set>().reserve(corpus().size());
+    for (const auto& values : corpus())
+        handles<Set>().push_back(tree_set<Set>()->insert(values));
 }
 
 template<typename Set>
 void set_up_mixed(const benchmark::State& state)
 {
-    tree_set<Set> = std::make_unique<Set>();
+    tree_set<Set>() = std::make_unique<Set>();
     make_corpus(kMixedPrefill + static_cast<size_t>(state.threads()) * kMixedInsertsPerThread);
-    handles<Set>.clear();
-    handles<Set>.reserve(kMixedPrefill);
+    handles<Set>().clear();
+    handles<Set>().reserve(kMixedPrefill);
     for (size_t i = 0; i < kMixedPrefill; ++i)
-        handles<Set>.push_back(tree_set<Set>->insert(corpus[i]));
+        handles<Set>().push_back(tree_set<Set>()->insert(corpus()[i]));
 }
 
 template<typename Set>
 void tear_down(const benchmark::State&)
 {
-    tree_set<Set>.reset();
-    handles<Set>.clear();
-    corpus.clear();
+    tree_set<Set>().reset();
+    handles<Set>().clear();
+    corpus().clear();
 }
 
 template<typename Set>
@@ -115,9 +127,9 @@ void report(benchmark::State& state)
     state.SetBytesProcessed(state.iterations() * static_cast<benchmark::IterationCount>(sizeof(Vector)));
     if constexpr (!Set::thread_safe)
     {
-        state.counters["bytes"] = static_cast<double>(tree_set<Set>->memory_usage());
-        state.counters["leaves"] = static_cast<double>(tree_set<Set>->num_leaves());
-        state.counters["nodes"] = static_cast<double>(tree_set<Set>->num_nodes());
+        state.counters["bytes"] = static_cast<double>(tree_set<Set>()->memory_usage());
+        state.counters["leaves"] = static_cast<double>(tree_set<Set>()->num_leaves());
+        state.counters["nodes"] = static_cast<double>(tree_set<Set>()->num_nodes());
     }
 }
 
@@ -127,7 +139,7 @@ void benchmark_insert(benchmark::State& state)
     auto position = static_cast<size_t>(state.thread_index()) * static_cast<size_t>(kInsertIterations);
     for (auto _ : state)
     {
-        auto index = tree_set<Set>->insert(corpus[position++]);
+        auto index = tree_set<Set>()->insert(corpus()[position++]);
         benchmark::DoNotOptimize(index);
     }
     report<Set>(state);
@@ -142,7 +154,7 @@ void benchmark_read(benchmark::State& state)
     for (auto _ : state)
     {
         const auto offset = static_cast<size_t>((operation++ * 11400714819323198485ULL) & (kReadCorpusPerThread - 1));
-        tree_set<Set>->read(handles<Set>[first + offset], output);
+        tree_set<Set>()->read(handles<Set>()[first + offset], output);
         benchmark::DoNotOptimize(output);
         benchmark::ClobberMemory();
     }
@@ -161,13 +173,13 @@ void benchmark_mixed(benchmark::State& state)
     {
         if ((operation + insert_phase) % kMixedInsertPeriod == 0)
         {
-            auto index = tree_set<Set>->insert(corpus[first_insert + inserted++]);
+            auto index = tree_set<Set>()->insert(corpus()[first_insert + inserted++]);
             benchmark::DoNotOptimize(index);
         }
         else
         {
             const auto offset = (operation * 11400714819323198485ULL + static_cast<size_t>(state.thread_index())) & (kMixedPrefill - 1);
-            tree_set<Set>->read(handles<Set>[offset], output);
+            tree_set<Set>()->read(handles<Set>()[offset], output);
             benchmark::DoNotOptimize(output);
             benchmark::ClobberMemory();
         }

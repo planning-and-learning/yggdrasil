@@ -171,12 +171,9 @@ TEST(YggdrasilTests, DatabaseDistanceValidatesSchemasBeforeClearingOutput)
     fill(sources, Vertices { 1 });
     fill(targets, Vertices { 1 });
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
-    EXPECT_THROW((database::DistancePlan(sources.columns().span(), sources.columns().span(), targets.columns().span(), ColumnIndex(3))),
-                 std::invalid_argument);
-    EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), edges.columns().span(), ColumnIndex(3))),
-                 std::invalid_argument);
-    EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(2))),
-                 std::invalid_argument);
+    EXPECT_THROW((database::DistancePlan(sources.columns().span(), sources.columns().span(), targets.columns().span(), ColumnIndex(3))), std::invalid_argument);
+    EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), edges.columns().span(), ColumnIndex(3))), std::invalid_argument);
+    EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(2))), std::invalid_argument);
     Builder<database::Columns> wrong_type;
     wrong_type.push_back<double>(ColumnIndex(20));
     EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), wrong_type.span(), ColumnIndex(3))), std::invalid_argument);
@@ -195,15 +192,12 @@ TEST(YggdrasilTests, DatabaseDistanceValidatesSchemasBeforeClearingOutput)
     database::incremental::Delta source_delta(sources.columns().span()), edge_delta(edges.columns().span()), target_delta(targets.columns().span());
     EXPECT_THROW((void) evaluator.get_result(), std::logic_error);
     EXPECT_THROW((void) evaluator.get_delta(), std::logic_error);
-    EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()),
-                 std::logic_error);
+    EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()), std::logic_error);
     evaluator.initialize(sources, edges, targets);
-    EXPECT_THROW(evaluator.update(std::tie(wrong, source_delta.removed), edge_delta.change(), target_delta.change()),
-                 std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::tie(wrong, source_delta.removed), edge_delta.change(), target_delta.change()), std::invalid_argument);
     source_delta.added.insert(std::tuple { uint_t(2) });
     source_delta.removed.insert(std::tuple { uint_t(2) });
-    EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()),
-                 std::invalid_argument);
+    EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()), std::invalid_argument);
     EXPECT_EQ(rows(evaluator.get_result()), rows(output));
     source_delta.clear();
     evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change());
@@ -292,9 +286,9 @@ TEST(YggdrasilTests, DatabaseDistanceMixedReplacementLeavesAnUnchangedChainUnpro
     for (const bool undo : { false, true })
     {
         SCOPED_TRACE(undo);
-        database::incremental::detail::distance_work = {};
+        database::incremental::detail::distance_work() = {};
         evaluator.update(ds.change(), std::tie(undo ? de.removed : de.added, undo ? de.added : de.removed), dt.change());
-        const auto work = database::incremental::detail::distance_work;
+        const auto work = database::incremental::detail::distance_work();
         expect_delta(evaluator, expected, expected);
         EXPECT_EQ(work.processed_vertices, 0);
         EXPECT_EQ(work.incoming_edges, 0);
@@ -331,9 +325,9 @@ TEST(YggdrasilTests, DatabaseDistanceEqualSupportsDoNotRescanDenseUnchangedNeigh
     for (const bool undo : { false, true })
     {
         SCOPED_TRACE(undo);
-        database::incremental::detail::distance_work = {};
+        database::incremental::detail::distance_work() = {};
         evaluator.update(ds.change(), std::tie(undo ? de.removed : de.added, undo ? de.added : de.removed), dt.change());
-        const auto work = database::incremental::detail::distance_work;
+        const auto work = database::incremental::detail::distance_work();
         expect_delta(evaluator, undo ? after : before, undo ? before : after);
         EXPECT_EQ(work.processed_vertices, undo ? 2 : 1);
         EXPECT_LE(work.incoming_edges + work.outgoing_edges, 4 * neighbors + 16);
@@ -614,13 +608,13 @@ TEST(YggdrasilTests, DatabaseMinDistanceAggregatesTheDistanceColumnFullAndIncrem
 
     // Each state changes sources, edges, or targets; the minimum moves up, down, to zero and to infinity.
     const std::vector<std::tuple<Vertices, Edges, Vertices>> states {
-        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },           // 3
-        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 0, 3 } }, { 3 } }, // shortcut: 1
-        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },           // deleting the minimum reveals 3
-        { { 0, 2 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },        // a closer source: 1
-        { { 0, 2 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3, 2 } },     // a target equal to a source: 0
-        { { 0 }, { { 1, 2 }, { 2, 3 } }, { 3 } },                     // unreachable: infinity
-        { {}, { { 1, 2 } }, { 2 } },                                  // no sources: infinity
+        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },            // 3
+        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 0, 3 } }, { 3 } },  // shortcut: 1
+        { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },            // deleting the minimum reveals 3
+        { { 0, 2 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },         // a closer source: 1
+        { { 0, 2 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3, 2 } },      // a target equal to a source: 0
+        { { 0 }, { { 1, 2 }, { 2, 3 } }, { 3 } },                      // unreachable: infinity
+        { {}, { { 1, 2 } }, { 2 } },                                   // no sources: infinity
     };
 
     Vertices before_sources, before_targets;

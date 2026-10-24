@@ -27,7 +27,7 @@ std::vector<size_t> input_slots(std::span<const QueryView<>> roots);
 /// each root. An input's slot s becomes slot_of(s).
 template<typename SlotOf>
     requires std::convertible_to<std::invoke_result_t<SlotOf&, size_t>, size_t>
-std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf&& slot_of, QueryRepository& destination, QueryBuilder& builder)
+std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf slot_of, QueryRepository& destination, QueryBuilder& builder)
 {
     if (roots.empty())
         return {};
@@ -59,18 +59,14 @@ std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf&& slot_
 template<typename SlotOf>
     requires std::convertible_to<std::invoke_result_t<SlotOf&, size_t>, size_t>
 QueryView<> copy(QueryView<> root, SlotOf&& slot_of, QueryRepository& destination, QueryBuilder& builder)
-{
-    return database::copy(std::span<const QueryView<>>(&root, 1), std::forward<SlotOf>(slot_of), destination, builder).front();
-}
+{ return database::copy(std::span<const QueryView<>>(&root, 1), std::forward<SlotOf>(slot_of), destination, builder).front(); }
 
 /// Copies the queries reachable from the roots into a fresh owning snapshot.
 QueryPlan compile(std::span<const QueryView<>> roots);
 
 template<std::ranges::contiguous_range R>
 auto compile(const R& roots)
-{
-    return compile(std::span<const std::ranges::range_value_t<R>>(roots));
-}
+{ return compile(std::span<const std::ranges::range_value_t<R>>(roots)); }
 
 QueryPlan compile(std::initializer_list<QueryView<>> roots);
 }  // namespace ygg::database

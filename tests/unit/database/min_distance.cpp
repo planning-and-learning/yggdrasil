@@ -32,6 +32,7 @@ View borrow(const Relation& relation)
 std::vector<View> borrow_all(const std::vector<Relation>& relations)
 {
     std::vector<View> views;
+    views.reserve(relations.size());
     for (const auto& relation : relations)
         views.push_back(borrow(relation));
     return views;
@@ -40,6 +41,7 @@ std::vector<View> borrow_all(const std::vector<Relation>& relations)
 std::vector<uint_t> decode(std::span<const std::byte> bytes, std::span<const ygg::database::ColumnLayout> columns)
 {
     std::vector<uint_t> values;
+    values.reserve(columns.size());
     for (size_t c = 0; c < columns.size(); ++c)
         values.push_back(ygg::database::Row(bytes, columns).get<uint_t>(c));
     return values;
@@ -92,11 +94,11 @@ template<typename Mutate>
 void check_sequence(ygg::database::QueryView<> edges,
                     const std::vector<Relation>& maximal,
                     std::vector<Relation>& inputs,
-                    std::vector<bool> static_slots,
+                    const std::vector<bool>& static_slots,
                     Relation& sources,
                     Relation& targets,
                     size_t steps,
-                    Mutate&& mutate)
+                    Mutate mutate)
 {
     const auto k = sources.arity();
     const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
@@ -348,14 +350,10 @@ struct ListGraph
     }
     template<typename OnVertex>
     void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
-    {
-        each(out[id(vertex)], on_vertex);
-    }
+    { each(out[id(vertex)], on_vertex); }
     template<typename OnVertex>
     void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
-    {
-        each(in[id(vertex)], on_vertex);
-    }
+    { each(in[id(vertex)], on_vertex); }
     bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return std::ranges::find(out[id(from)], id(to)) != out[id(from)].end(); }
 };
 

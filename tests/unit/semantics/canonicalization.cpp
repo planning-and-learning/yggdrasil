@@ -35,7 +35,7 @@ struct CanonicalizationContext
     std::vector<std::string> labels;
 
     const ygg::Data<CanonicalizationTestTag>& operator[](ygg::Index<CanonicalizationTestTag> index) const;
-    friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context) noexcept { return context; }
+    friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context YGG_LIFETIMEBOUND) noexcept { return context; }
 };
 }  // namespace ygg::tests
 
@@ -60,18 +60,14 @@ struct formatter<ygg::View<T, ygg::tests::CanonicalizationContext>, char>
 
     template<typename FormatContext>
     auto format(const ygg::View<T, ygg::tests::CanonicalizationContext>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", value.get_context().labels.at(value.get_data().value));
-    }
+    { return fmt::format_to(ctx.out(), "{}", value.get_context().labels.at(value.get_data().value)); }
 };
 }  // namespace fmt
 
 namespace ygg::tests
 {
 const ygg::Data<CanonicalizationTestTag>& CanonicalizationContext::operator[](ygg::Index<CanonicalizationTestTag> index) const
-{
-    return data->at(index.get_value());
-}
+{ return data->at(index.get_value()); }
 
 struct InvalidCanonicalizationContext
 {

@@ -29,7 +29,7 @@ namespace ygg::itertools
 
 /// Whether two sorted ranges have a common element; linear, without allocation.
 template<std::ranges::input_range R1, std::ranges::input_range R2>
-bool intersects(R1&& lhs, R2&& rhs)
+bool intersects(const R1& lhs, const R2& rhs)
 {
     auto first1 = std::ranges::begin(lhs);
     auto first2 = std::ranges::begin(rhs);
@@ -58,7 +58,7 @@ struct Workspace
 };
 
 template<class OuterRandomIt, class InnerRange = typename std::iterator_traits<OuterRandomIt>::value_type, class T = typename InnerRange::value_type, class F>
-void for_each_element(OuterRandomIt first, OuterRandomIt last, Workspace<T>& workspace, F&& callback)
+void for_each_element(OuterRandomIt first, OuterRandomIt last, Workspace<T>& workspace, F callback)
 {
     const std::size_t n = last - first;
 

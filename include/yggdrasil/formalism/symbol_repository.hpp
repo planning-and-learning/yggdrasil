@@ -101,9 +101,7 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     std::optional<::ygg::View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
-    {
-        return find_with_hash(builder, SymbolRepositoryBase::hash(builder));
-    }
+    { return find_with_hash(builder, SymbolRepositoryBase::hash(builder)); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
@@ -136,16 +134,12 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     const Data<T>& front() const
-    {
-        return (*this)[Index<T>(0)];
-    }
+    { return (*this)[Index<T>(0)]; }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     size_t size() const noexcept
-    {
-        return get<T>().size();
-    }
+    { return get<T>().size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
@@ -159,16 +153,12 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     bool contains(Index<T> index) const noexcept
-    {
-        return find_canonical_context(index) != nullptr;
-    }
+    { return find_canonical_context(index) != nullptr; }
 
     template<typename T, typename C>
         requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
     bool contains(const ::ygg::View<Index<T>, C>& view) const
-    {
-        return ::ygg::formalism::contains(repository(), view);
-    }
+    { return ::ygg::formalism::contains(repository(), view); }
 
     /**
      * Local methods access only the current repository layer.
@@ -179,108 +169,83 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     BasicSymbolRepository<T, ThreadSafe>& get() noexcept
-    {
-        return static_cast<BasicSymbolRepository<T, ThreadSafe>&>(*this);
-    }
+    { return static_cast<BasicSymbolRepository<T, ThreadSafe>&>(*this); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     const BasicSymbolRepository<T, ThreadSafe>& get() const noexcept
-    {
-        return static_cast<const BasicSymbolRepository<T, ThreadSafe>&>(*this);
-    }
+    { return static_cast<const BasicSymbolRepository<T, ThreadSafe>&>(*this); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     auto find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
-    {
-        return get<T>().find_local_with_hash(builder, h);
-    }
+    { return get<T>().find_local_with_hash(builder, h); }
 
     /// Forwards the unsafe local-only lookup without traversing ancestors.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     auto find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
-    {
-        return get<T>().find_local_unsafe_with_hash(builder, h);
-    }
+    { return get<T>().find_local_unsafe_with_hash(builder, h); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     auto find_local(const Data<T>& builder) const noexcept
-    {
-        return get<T>().find_local(builder);
-    }
+    { return get<T>().find_local(builder); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     auto insert_local_with_hash(Data<T>& builder, size_t h)
-    {
-        return get<T>().insert_local_with_hash(builder, h);
-    }
+    { return get<T>().insert_local_with_hash(builder, h); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
-    {
-        return get<T>().create_local_with_hash(builder, h);
-    }
+    { return get<T>().create_local_with_hash(builder, h); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     auto insert_local(Data<T>& builder)
-    {
-        return get<T>().insert_local(builder);
-    }
+    { return get<T>().insert_local(builder); }
+
+    template<typename T>
+        requires SupportsSymbol<SymbolRepositoryBase, T>
+    const Data<T>& local(Index<T> index) const noexcept
+    { return get<T>().local(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     const Data<T>& at_local(Index<T> index) const
-    {
-        return get<T>().at_local(index);
-    }
+    { return get<T>().at_local(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     const Data<T>& front_local() const
-    {
-        return get<T>().front_local();
-    }
+    { return get<T>().front_local(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     size_t local_size() const noexcept
-    {
-        return get<T>().local_size();
-    }
+    { return get<T>().local_size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     size_t parent_size() const noexcept
-    {
-        return get<T>().parent_size();
-    }
+    { return get<T>().parent_size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     bool is_local(Index<T> index) const noexcept
-    {
-        return get<T>().is_local(index);
-    }
+    { return get<T>().is_local(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     bool exists_parent_mutation() const noexcept
-    {
-        return get<T>().exists_parent_mutation();
-    }
+    { return get<T>().exists_parent_mutation(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     size_t memory_usage() const noexcept
-    {
-        return get<T>().memory_usage();
-    }
+    { return get<T>().memory_usage(); }
 
     /**
      * Common methods do not depend on lookup scope.
@@ -294,6 +259,7 @@ public:
     {
     }
 
+    ~SymbolRepositoryBase() = default;
     SymbolRepositoryBase(const SymbolRepositoryBase&) = delete;
     SymbolRepositoryBase& operator=(const SymbolRepositoryBase&) = delete;
     SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;
@@ -306,9 +272,7 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     static size_t hash(const Data<T>& builder) noexcept
-    {
-        return BasicSymbolRepository<T, ThreadSafe>::hash(builder);
-    }
+    { return BasicSymbolRepository<T, ThreadSafe>::hash(builder); }
 };
 
 template<typename... Ts>
@@ -319,7 +283,7 @@ class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, Ty
 public:
     SymbolRepository(const SymbolRepository* parent = nullptr) : Base(parent) {}
 
-    friend const SymbolRepository& get_repository(const SymbolRepository& repository) noexcept { return repository; }
+    friend const SymbolRepository& get_repository(const SymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 template<typename... Ts>
@@ -330,7 +294,7 @@ class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolR
 public:
     ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent = nullptr) : Base(parent) {}
 
-    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository) noexcept { return repository; }
+    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 }  // namespace ygg::formalism

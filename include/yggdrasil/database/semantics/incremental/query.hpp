@@ -121,14 +121,10 @@ struct NodeRules<QueryProjectTag>
     static State make(QueryView<QueryProjectTag> operation) { return State(operation.get_plan()); }
     template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
     static void initialize(State& state, QueryView<QueryProjectTag> operation, const Graph& graph, const R&, Workspace& workspace)
-    {
-        state.initialize(graph.result(operation.get_arg()), workspace);
-    }
+    { state.initialize(graph.result(operation.get_arg()), workspace); }
     template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
     static void update(State& state, QueryView<QueryProjectTag> operation, const Graph& graph, const R&, Workspace& workspace)
-    {
-        state.apply(graph.delta(operation.get_arg()).change(), workspace);
-    }
+    { state.apply(graph.delta(operation.get_arg()).change(), workspace); }
 };
 
 template<>
@@ -139,14 +135,10 @@ struct NodeRules<QueryJoinTag>
     static State make(QueryView<QueryJoinTag> operation) { return State(operation.get_plan()); }
     template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
     static void initialize(State& state, QueryView<QueryJoinTag> operation, const Graph& graph, const R&, Workspace& workspace)
-    {
-        state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()), workspace);
-    }
+    { state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()), workspace); }
     template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
     static void update(State& state, QueryView<QueryJoinTag> operation, const Graph& graph, const R&, Workspace& workspace)
-    {
-        state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change(), workspace);
-    }
+    { state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change(), workspace); }
 };
 
 template<typename Tag>
@@ -158,14 +150,10 @@ struct NodeRules<Tag>
     static State make(QueryView<Tag> operation) { return State(operation.get_plan(), std::same_as<Tag, QueryAntijoinTag>); }
     template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
     static void initialize(State& state, QueryView<Tag> operation, const Graph& graph, const R&, Workspace&)
-    {
-        state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs()));
-    }
+    { state.initialize(graph.result(operation.get_lhs()), graph.result(operation.get_rhs())); }
     template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
     static void update(State& state, QueryView<Tag> operation, const Graph& graph, const R&, Workspace&)
-    {
-        state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change());
-    }
+    { state.apply(graph.delta(operation.get_lhs()).change(), graph.delta(operation.get_rhs()).change()); }
 };
 
 template<>
@@ -194,14 +182,10 @@ struct NodeRules<QueryDistanceTag>
     static State make(QueryView<QueryDistanceTag> operation) { return State(operation.get_plan()); }
     template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
     static void initialize(State& state, QueryView<QueryDistanceTag> operation, const Graph& graph, const R&, Workspace&)
-    {
-        state.initialize(graph.result(operation.get_sources()), graph.result(operation.get_edges()), graph.result(operation.get_targets()));
-    }
+    { state.initialize(graph.result(operation.get_sources()), graph.result(operation.get_edges()), graph.result(operation.get_targets())); }
     template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
     static void update(State& state, QueryView<QueryDistanceTag> operation, const Graph& graph, const R&, Workspace&)
-    {
-        state.apply(graph.delta(operation.get_sources()).change(), graph.delta(operation.get_edges()).change(), graph.delta(operation.get_targets()).change());
-    }
+    { state.apply(graph.delta(operation.get_sources()).change(), graph.delta(operation.get_edges()).change(), graph.delta(operation.get_targets()).change()); }
 };
 
 /// The node of one operator; the tag keeps the states of different operators distinct.
@@ -258,10 +242,9 @@ public:
         database::detail::validate_bindings(m_plan, bindings, [&](const void* address) { return is_internal(address); });
         m_initialized = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
-            ygg::visit(
-                [&]<typename Tag>(QueryView<Tag> operation)
-                { Rules<Tag>::initialize(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, bindings, m_workspace); },
-                m_plan[NodeId(to_uint_t(i))].get_variant());
+            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+                       { Rules<Tag>::initialize(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, bindings, m_workspace); },
+                       m_plan[NodeId(to_uint_t(i))].get_variant());
         // Fixed-schema builders retain their storage identity, including after a failed update.
         m_storage_addresses.clear();
         for (size_t i = 0; i < m_nodes.size(); ++i)
@@ -300,10 +283,9 @@ public:
         }
         m_initialized = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
-            ygg::visit(
-                [&]<typename Tag>(QueryView<Tag> operation)
-                { Rules<Tag>::update(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, changes, m_workspace); },
-                m_plan[NodeId(to_uint_t(i))].get_variant());
+            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+                       { Rules<Tag>::update(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, changes, m_workspace); },
+                       m_plan[NodeId(to_uint_t(i))].get_variant());
         m_initialized = true;
     }
     const Builder<Relation>& get_result(size_t root = 0) const&
@@ -326,8 +308,11 @@ public:
     size_t memory_usage() const noexcept
     {
         size_t result = m_workspace.memory_usage() + m_storage_addresses.capacity() * sizeof(const void*);
+        // get_if rather than std::visit, which throws for a valueless variant; nodes are never valueless.
+        const auto node_usage = []<typename... Nodes>(const std::variant<Nodes...>& node) noexcept
+        { return ((std::get_if<Nodes>(&node) ? std::get_if<Nodes>(&node)->state.memory_usage() : size_t { 0 }) + ...); };
         for (const auto& node : m_nodes)
-            result += std::visit([](const auto& value) { return value.state.memory_usage(); }, node);
+            result += node_usage(node);
         return result;
     }
 };

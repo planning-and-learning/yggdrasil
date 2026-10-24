@@ -31,9 +31,7 @@ struct Less<ObserverPtr<T>>
 {
     bool operator()(ObserverPtr<T> lhs, ObserverPtr<T> rhs) const noexcept(noexcept(Less<std::remove_cvref_t<T>> {}(*lhs, *rhs)))
         requires OrderedByLess<T>
-    {
-        return Less<std::remove_cvref_t<T>> {}(*lhs, *rhs);
-    }
+    { return Less<std::remove_cvref_t<T>> {}(*lhs, *rhs); }
 };
 
 }  // namespace ygg

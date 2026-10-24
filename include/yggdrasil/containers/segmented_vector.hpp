@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
 #include "yggdrasil/containers/detail/segmented_rows.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 
 #include <array>
 #include <atomic>
@@ -44,7 +45,7 @@ namespace ygg
 /// destruction, and mutation of published elements require quiescence or
 /// external locking.
 /// Index bounds the number of addressable elements and hence the number of segment slots kept inline.
-template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false, std::unsigned_integral Index = size_t>
+template<typename T, size_t FirstSegmentSize = default_first_segment_size, bool ThreadSafe = false, std::unsigned_integral Index = size_t>
 class SegmentedVector
 {
 private:
@@ -75,7 +76,7 @@ private:
                 throw std::length_error("SegmentedVector: segment is too large.");
 
             auto* data = static_cast<T*>(::operator new(new_segment_size * sizeof(T), std::align_val_t { alignof(T) }));
-            detail::store_pointer<ThreadSafe, void>(m_segments[index], data);
+            detail::store_pointer<ThreadSafe, void>(m_segments[index], static_cast<void*>(data));
             m_num_segments = index + 1;
             capacity += new_segment_size;
             detail::store_size<ThreadSafe>(m_capacity, capacity);
@@ -96,9 +97,7 @@ private:
 
     template<typename... Args>
     T& emplace_back_unlocked(Args&&... args)
-    {
-        return emplace_back_at_unlocked(detail::load_size<ThreadSafe>(m_size), std::forward<Args>(args)...);
-    }
+    { return emplace_back_at_unlocked(detail::load_size<ThreadSafe>(m_size), std::forward<Args>(args)...); }
 
     size_t push_back_bounded_unlocked(const T& element, size_t max_index)
     {
@@ -125,7 +124,7 @@ private:
     }
 
     template<typename Construct>
-    void resize_unlocked(size_t new_size, Construct&& construct)
+    void resize_unlocked(size_t new_size, Construct construct)
     {
         const auto old_size = detail::load_size<ThreadSafe>(m_size);
         if (new_size == old_size)
@@ -158,7 +157,7 @@ private:
         destroy_tail(0, detail::load_size<ThreadSafe>(m_size));
         for (size_t i = 0; i < m_num_segments; ++i)
         {
-            ::operator delete(segment(i), std::align_val_t { alignof(T) });
+            ::operator delete(static_cast<void*>(segment(i)), std::align_val_t { alignof(T) });
             detail::store_pointer<ThreadSafe, void>(m_segments[i], nullptr);
         }
         m_num_segments = 0;
@@ -170,7 +169,7 @@ private:
     {
         for (size_t i = 0; i < other.m_num_segments; ++i)
         {
-            detail::store_pointer<ThreadSafe, void>(m_segments[i], other.segment(i));
+            detail::store_pointer<ThreadSafe, void>(m_segments[i], static_cast<void*>(other.segment(i)));
             detail::store_pointer<ThreadSafe, void>(other.m_segments[i], nullptr);
         }
         m_num_segments = std::exchange(other.m_num_segments, 0);
@@ -189,7 +188,7 @@ public:
 
     static constexpr bool thread_safe = ThreadSafe;
 
-    SegmentedVector() : m_segments {}, m_num_segments(0), m_capacity(0), m_size(0) {}
+    SegmentedVector() : m_capacity(0), m_size(0) {}
 
     SegmentedVector(const SegmentedVector&) = delete;
     SegmentedVector& operator=(const SegmentedVector&) = delete;
@@ -284,9 +283,7 @@ public:
         }
 
         friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
-        {
-            return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
-        }
+        { return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos); }
 
         reference operator[](difference_type n) const { return *(*this + n); }
 
@@ -428,8 +425,8 @@ private:
 
     // Segments grow geometrically, i.e., FirstSegmentSize, 2*FirstSegmentSize,
     // 4*FirstSegmentSize, ... Untyped, so the table type is shared by all element types.
-    std::array<detail::Pointer<ThreadSafe, void>, Layout::max_segments> m_segments;
-    size_t m_num_segments;
+    std::array<detail::Pointer<ThreadSafe, void>, Layout::max_segments> m_segments {};
+    size_t m_num_segments = 0;
     detail::Size<ThreadSafe> m_capacity;
     detail::Size<ThreadSafe> m_size;
     [[no_unique_address]] detail::Mutex<ThreadSafe> m_writer_mutex;

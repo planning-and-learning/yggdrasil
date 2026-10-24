@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <concepts>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -167,7 +168,7 @@ TEST(YggdrasilTests, CommonRawVectorPoolGrowthKeepsSpansStableAndAligned)
 
     EXPECT_EQ(pool[first_index].data(), first_storage);
     EXPECT_EQ(first.front(), 7);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(first.data()) % alignof(int), 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(first.data()) % alignof(int), 0);
     EXPECT_EQ(pool.memory_usage() - memory_usage, 128);
 }
 
@@ -177,7 +178,7 @@ TEST(YggdrasilTests, CommonRawVectorPoolPreservesOverAlignment)
     const auto index = pool.insert(std::array<OverAlignedValue, 1> { OverAlignedValue { 7 } });
     const auto const_view = pool[index];
 
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(const_view.data()) % alignof(OverAlignedValue), 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(const_view.data()) % alignof(OverAlignedValue), 0);
     EXPECT_EQ(const_view.front().value, 7);
 }
 

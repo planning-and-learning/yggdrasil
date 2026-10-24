@@ -40,7 +40,7 @@ public:
 
     ErrorHandler(It first, It last, std::ostream& output, std::string file = "", int tabs = 4) :
         boost::spirit::x3::error_handler<It>(first, last, output, file, tabs),
-        m_output(output),
+        m_output(&output),
         m_file(std::move(file)),
         m_tabs(tabs)
     {
@@ -69,7 +69,7 @@ public:
     void report_error() const
     {
         if (m_error)
-            m_output << format_diagnostic(diagnostic(m_error->message, m_error->position));
+            *m_output << format_diagnostic(diagnostic(m_error->message, m_error->position));
     }
 
     SourceSpan source_span(It first, It last) const
@@ -92,15 +92,13 @@ public:
         return make_diagnostic(range.begin(), range.end(), std::move(message));
     }
 
-    void operator()(It position, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(position, message)); }
-    void operator()(It first, It last, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(first, last, message)); }
+    void operator()(It position, const std::string& message) const { *m_output << format_diagnostic(make_diagnostic(position, message)); }
+    void operator()(It first, It last, const std::string& message) const { *m_output << format_diagnostic(make_diagnostic(first, last, message)); }
     void operator()(const boost::spirit::x3::position_tagged& node, const std::string& message) const
-    {
-        m_output << format_diagnostic(make_diagnostic(node, message));
-    }
+    { *m_output << format_diagnostic(make_diagnostic(node, message)); }
 
 private:
-    std::ostream& m_output;
+    std::ostream* m_output;
     std::string m_file;
     int m_tabs;
     std::optional<RecordedError> m_error;
@@ -109,9 +107,7 @@ private:
 
 template<typename It>
 std::string format_error_at(const ErrorHandler<It>& source, It position, const std::string& message)
-{
-    return format_diagnostic(source.make_diagnostic(position, message));
-}
+{ return format_diagnostic(source.make_diagnostic(position, message)); }
 
 template<typename It>
 std::string format_error_at(const ErrorHandler<It>& source, const boost::spirit::x3::position_tagged& node, const std::string& message)
@@ -125,9 +121,7 @@ struct ErrorHandlerBase
 {
     template<typename It, typename Ast, typename Context>
     void on_success(const It& first, const It& last, Ast& ast, const Context& context)
-    {
-        boost::spirit::x3::get<ErrorHandlerTag>(context).get().tag(ast, first, last);
-    }
+    { boost::spirit::x3::get<ErrorHandlerTag>(context).get().tag(ast, first, last); }
 
     template<typename It, typename Exception, typename Context>
     boost::spirit::x3::error_handler_result on_error(It&, const It& last, const Exception& error, const Context& context)
@@ -149,9 +143,7 @@ struct ContextDirective
 
     template<typename Subject>
     auto operator[](const Subject& subject) const
-    {
-        return boost::spirit::x3::as_parser(subject).on_error(*this);
-    }
+    { return boost::spirit::x3::as_parser(subject).on_error(*this); }
 
     template<typename It, typename Exception, typename Context>
     boost::spirit::x3::error_handler_result operator()(It& first, const It& last, const Exception& error, const Context& parser_context) const
@@ -172,9 +164,7 @@ inline auto context(std::string name) { return ContextDirective { std::move(name
 
 /// Whitespace and ';' line comments, the layout shared by PDDL and the DL and policy syntaxes.
 inline auto comment_skipper()
-{
-    return boost::spirit::x3::ascii::space | (';' >> *(boost::spirit::x3::char_ - boost::spirit::x3::eol) >> (boost::spirit::x3::eol | boost::spirit::x3::eoi));
-}
+{ return boost::spirit::x3::ascii::space | (';' >> *(boost::spirit::x3::char_ - boost::spirit::x3::eol) >> (boost::spirit::x3::eol | boost::spirit::x3::eoi)); }
 
 /// The x3 context of rules parsed with comment_skipper() that report errors through Handler.
 template<typename Handler>

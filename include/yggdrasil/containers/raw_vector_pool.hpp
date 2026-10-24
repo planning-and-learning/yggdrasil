@@ -2,6 +2,7 @@
 #define YGG_CONTAINERS_RAW_VECTOR_POOL_HPP_
 
 #include "yggdrasil/containers/detail/geometric_byte_storage.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bytes.hpp"
 #include "yggdrasil/core/concepts.hpp"
@@ -23,7 +24,7 @@ namespace ygg
 /// ThreadSafe permits concurrent insertion, size queries, and reads after
 /// publication was observed through size() or external synchronization.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<std::unsigned_integral Size, TriviallyCopyable T, size_t FirstSegmentBytes = 1024, bool ThreadSafe = false>
+template<std::unsigned_integral Size, TriviallyCopyable T, size_t FirstSegmentBytes = default_first_segment_bytes, bool ThreadSafe = false>
 class RawVectorPool
 {
 public:
@@ -66,6 +67,7 @@ public:
     RawVectorPool& operator=(const RawVectorPool&) = delete;
     RawVectorPool(RawVectorPool&&) = default;
     RawVectorPool& operator=(RawVectorPool&&) = default;
+    ~RawVectorPool() = default;
 
     uint_t insert(std::span<const T> value) { return insert(value.data(), value.size()); }
 
@@ -95,7 +97,7 @@ public:
     {
         assert(index < m_index.size());
         const auto* slot = m_index[index];
-        const auto size = load_unaligned<Size>({ slot, sizeof(Size) });
+        const auto size = load_unaligned<Size>(std::span<const std::byte, sizeof(Size)>(slot, sizeof(Size)));
         if (size == 0)
             return {};
         return { std::launder(reinterpret_cast<const T*>(slot + payload_offset)), static_cast<size_t>(size) };
@@ -132,7 +134,7 @@ public:
 
 private:
     Storage m_storage;
-    SegmentedVector<std::byte*, 32, ThreadSafe> m_index;
+    SegmentedVector<std::byte*, default_first_segment_size, ThreadSafe> m_index;
 };
 
 }  // namespace ygg

@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <concepts>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -214,6 +215,9 @@ TEST(YggdrasilTests, CommonRawArrayPoolErasePreservesAlignmentAndNoncopyableValu
         explicit Value(int value_) : value(value_) {}
         Value(const Value&) = delete;
         Value(Value&&) = default;
+        Value& operator=(const Value&) = delete;
+        Value& operator=(Value&&) = delete;
+        ~Value() = default;
     };
     static_assert(TriviallyCopyable<Value>);
     auto pool = RawArrayPool<Value, 1>(2);
@@ -227,10 +231,10 @@ TEST(YggdrasilTests, CommonRawArrayPoolErasePreservesAlignmentAndNoncopyableValu
     ASSERT_EQ(pool.size(), 1);
     EXPECT_EQ(pool[0][0].value, 21);
     EXPECT_EQ(pool[0][1].value, 22);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[0].data()) % alignof(Value), 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(pool[0].data()) % alignof(Value), 0);
     EXPECT_EQ(pool.insert(first), 1);
     EXPECT_EQ(pool[1].data(), reused);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[1].data()) % alignof(Value), 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(pool[1].data()) % alignof(Value), 0);
     EXPECT_EQ(pool[1][0].value, 11);
     EXPECT_EQ(pool.memory_usage(), retained);
 }
@@ -256,12 +260,13 @@ TEST(YggdrasilTests, CommonRawArrayPoolEraseIgnoresUnpublishedSegment)
     const auto values = std::array { 11, 12 };
     pool.insert(values);
     const auto failing = values
-                         | std::views::transform([](int value)
-                                                 {
-                                                     if (value == 12)
-                                                         throw std::runtime_error("fill failed");
-                                                     return value;
-                                                 });
+                         | std::views::transform(
+                             [](int value)
+                             {
+                                 if (value == 12)
+                                     throw std::runtime_error("fill failed");
+                                 return value;
+                             });
     EXPECT_THROW(pool.insert(failing), std::runtime_error);
     ASSERT_EQ(pool.size(), 1);
     const auto retained = pool.memory_usage();
@@ -365,7 +370,7 @@ TEST(YggdrasilTests, CommonRawArrayPoolFailedRangeFillPreservesNextIndex)
     test_raw_array_pool_failed_fill<true>();
 }
 
-enum class PoolRangeOperation
+enum class PoolRangeOperation : std::uint8_t
 {
     None,
     Begin,
@@ -529,6 +534,9 @@ struct NoncopyablePoolValue
     explicit NoncopyablePoolValue(int value_) : value(value_) {}
     NoncopyablePoolValue(const NoncopyablePoolValue&) = delete;
     NoncopyablePoolValue(NoncopyablePoolValue&&) = default;
+    NoncopyablePoolValue& operator=(const NoncopyablePoolValue&) = delete;
+    NoncopyablePoolValue& operator=(NoncopyablePoolValue&&) = delete;
+    ~NoncopyablePoolValue() = default;
 };
 
 static_assert(TriviallyCopyable<NoncopyablePoolValue>);
@@ -537,7 +545,7 @@ static_assert(SizedForwardRangeOf<std::span<const NoncopyablePoolValue>, Noncopy
 TEST(YggdrasilTests, CommonRawArrayPoolBindsNoncopyableRangeReferences)
 {
     const auto values = std::array { NoncopyablePoolValue(11), NoncopyablePoolValue(12) };
-    const auto row = values | std::views::transform([](const NoncopyablePoolValue& value) -> const NoncopyablePoolValue& { return value; });
+    const auto row = values | std::views::transform([](const NoncopyablePoolValue& value YGG_LIFETIMEBOUND) -> const NoncopyablePoolValue& { return value; });
     auto pool = RawArrayPool<NoncopyablePoolValue>(values.size());
     EXPECT_EQ(pool.insert(row), 0);
     EXPECT_EQ(pool[0][0].value, 11);

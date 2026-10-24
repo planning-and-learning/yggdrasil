@@ -26,9 +26,7 @@ void bind_query(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = QueryView;
         auto cls = nb::class_<V>(m, "Query", "Immutable interned query. Keeps its repository alive.");
-        cls.def("get_index", &V::get_index)
-            .def("get_variant", &V::get_variant, nb::keep_alive<0, 1>())
-            .def("columns", &V::columns, nb::keep_alive<0, 1>());
+        cls.def("get_index", &V::get_index).def("get_variant", &V::get_variant, nb::keep_alive<0, 1>()).def("columns", &V::columns, nb::keep_alive<0, 1>());
         ygg::add_comparison(cls);
         ygg::add_hash(cls);
     }
@@ -42,9 +40,7 @@ namespace yggdrasil
 {
 void bind_database_queries(nb::module_& m)
 {
-    nb::class_<ygg::database::QueryRepositoryFactory>(m,
-                                                                      "QueryRepositoryFactory",
-                                                                      "Creates query repositories with distinct identities within this factory.")
+    nb::class_<ygg::database::QueryRepositoryFactory>(m, "QueryRepositoryFactory", "Creates query repositories with distinct identities within this factory.")
         .def(nb::init<>())
         .def(
             "create",

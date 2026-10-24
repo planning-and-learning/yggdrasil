@@ -4,44 +4,33 @@
  */
 
 #include "yggdrasil/database/semantics/relation_repository.hpp"
+
 #include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 
 namespace ygg::database
 {
-RelationRepository RelationRepositoryFactory::create()
-{
-    return RelationRepository(next_index(), *this);
-}
+RelationRepository RelationRepositoryFactory::create() { return RelationRepository(next_index(), *this); }
 }
 
 namespace ygg::database
 {
 std::shared_ptr<RelationRepository> RelationRepositoryFactory::create_shared()
-{
-    return std::shared_ptr<RelationRepository>(new RelationRepository(next_index(), *this));
-}
+{ return std::shared_ptr<RelationRepository>(new RelationRepository(next_index(), *this)); }
 }
 
 namespace ygg::database
 {
-const RelationRepository& get_repository(const RelationRepository& repository) noexcept
-{
-    return repository;
-}
+const RelationRepository& get_repository(const RelationRepository& repository) noexcept { return repository; }
 }
 
 namespace ygg::database
 {
-void prepare_for_insert(RelationRepository&, Data<Columns>&) noexcept
-{
-}
+void prepare_for_insert(RelationRepository&, Data<Columns>&) noexcept {}
 }
 
 namespace ygg::database
 {
-void prepare_for_insert(RelationRepository&, Data<Relation>&) noexcept
-{
-}
+void prepare_for_insert(RelationRepository&, Data<Relation>&) noexcept {}
 }
 
 namespace ygg::database

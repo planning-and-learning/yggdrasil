@@ -37,9 +37,7 @@ namespace ygg::bit
 
 template<std::unsigned_integral T>
 constexpr bool is_power_of_two(T x)
-{
-    return std::has_single_bit(x);
-}
+{ return std::has_single_bit(x); }
 
 template<std::unsigned_integral T>
 constexpr T ceil_div(T x, T y)
@@ -83,7 +81,7 @@ constexpr auto lo_set = make_lo_set<Block>();
 
 /// Calls callback(i) for each set bit i of the word, in ascending order.
 template<std::unsigned_integral Block, typename Callback>
-constexpr void for_each_set_bit(Block word, Callback&& callback)
+constexpr void for_each_set_bit(Block word, Callback callback)
 {
     for (; word; word &= word - 1)
         callback(static_cast<std::size_t>(std::countr_zero(word)));
@@ -113,8 +111,8 @@ constexpr void write_int(Block* word, Block x, uint8_t offset, const uint8_t len
     {
         *word &= ((lo_set<Block>[offset]));
         *word |= (x << offset);
-        if ((offset = (offset + len) & (digits - 1)))  // Number of bits written into
-                                                       // word[1]; zero on exact boundary
+        offset = (offset + len) & (digits - 1);  // Number of bits written into word[1]; zero on exact boundary
+        if (offset != 0)
         {
             *(word + 1) &= (~lo_set<Block>[offset]);
             *(word + 1) |= (x >> (len - offset));
@@ -196,7 +194,16 @@ public:
         return *this;
     }
 
-    constexpr int_reference& operator=(const int_reference& other) { return (*this = static_cast<value_type>(other)); }
+    constexpr int_reference(const int_reference&) = default;
+    constexpr ~int_reference() = default;
+    constexpr int_reference& operator=(const int_reference& other)
+    {
+        if (this != &other)
+            *this = static_cast<value_type>(other);
+        return *this;
+    }
+    constexpr int_reference(int_reference&&) = default;
+    constexpr int_reference& operator=(int_reference&& other) noexcept { return *this = static_cast<const int_reference&>(other); }
 
     constexpr operator value_type() const { return Coder::decode(bit::read_int(m_word, m_offset, m_len)); }
 
@@ -220,7 +227,16 @@ public:
         return *this;
     }
 
-    constexpr block_reference& operator=(const block_reference& other) { return (*this = static_cast<value_type>(other)); }
+    constexpr block_reference(const block_reference&) = default;
+    constexpr ~block_reference() = default;
+    constexpr block_reference& operator=(const block_reference& other)
+    {
+        if (this != &other)
+            *this = static_cast<value_type>(other);
+        return *this;
+    }
+    constexpr block_reference(block_reference&&) = default;
+    constexpr block_reference& operator=(block_reference&& other) noexcept { return *this = static_cast<const block_reference&>(other); }
 
     constexpr operator value_type() const { return Coder::decode(*m_ptr); }
 
@@ -254,7 +270,16 @@ struct bit_reference
         return *this;
     }
 
-    bit_reference& operator=(const bit_reference& other) noexcept { return *this = static_cast<bool>(other); }
+    bit_reference(const bit_reference&) = default;
+    ~bit_reference() = default;
+    bit_reference& operator=(const bit_reference& other) noexcept
+    {
+        if (this != &other)
+            *this = static_cast<bool>(other);
+        return *this;
+    }
+    bit_reference(bit_reference&&) noexcept = default;
+    bit_reference& operator=(bit_reference&& other) noexcept { return *this = static_cast<const bit_reference&>(other); }
 
     explicit operator bool() const noexcept { return ((data[block_index(bit)] >> bit_index(bit)) & Block(1)) != 0; }
 };

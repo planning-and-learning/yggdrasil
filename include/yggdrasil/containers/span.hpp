@@ -62,9 +62,7 @@ public:
         size_t m_position = 0;
 
         bool same_range(const const_iterator& other) const noexcept
-        {
-            return m_elements.data() == other.m_elements.data() && m_elements.size() == other.m_elements.size() && m_context == other.m_context;
-        }
+        { return m_elements.data() == other.m_elements.data() && m_elements.size() == other.m_elements.size() && m_context == other.m_context; }
 
     public:
         using difference_type = std::ptrdiff_t;
@@ -137,9 +135,7 @@ public:
             return static_cast<difference_type>(lhs.m_position) - static_cast<difference_type>(rhs.m_position);
         }
         friend bool operator==(const const_iterator& lhs, const const_iterator& rhs) noexcept
-        {
-            return lhs.same_range(rhs) && lhs.m_position == rhs.m_position;
-        }
+        { return lhs.same_range(rhs) && lhs.m_position == rhs.m_position; }
         friend auto operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept
         {
             assert(lhs.same_range(rhs));

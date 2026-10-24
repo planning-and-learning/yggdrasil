@@ -7,18 +7,12 @@
 
 namespace ygg::database::detail
 {
-std::vector<Index<Column>> variables(QueryView<> query)
-{
-    return ygg::canonicalized(column_labels(query.columns()));
-}
+std::vector<Index<Column>> variables(QueryView<> query) { return ygg::canonicalized(column_labels(query.columns())); }
 }
 
 namespace ygg::database::detail
 {
-QueryView<> semijoin(OperatorBuilder& build, QueryView<> lhs, QueryView<> rhs)
-{
-    return build.join(lhs, build.restrict(rhs, variables(lhs)));
-}
+QueryView<> semijoin(OperatorBuilder& build, QueryView<> lhs, QueryView<> rhs) { return build.join(lhs, build.restrict(rhs, variables(lhs))); }
 }
 
 namespace ygg::database::detail

@@ -33,8 +33,15 @@ size_t sequence_index(std::ptrdiff_t index, size_t size)
 
 template<typename R>
 ygg::database::Row row_at(const R& relation, std::ptrdiff_t index)
+{ return ygg::database::Row(relation.row(sequence_index(index, relation.size())), relation.columns().span()); }
+
+/// Lazy iteration over a sequence binding: map(self.__getitem__, range(len(self))), so every element keeps the
+/// lifetime rules of __getitem__.
+template<typename Element, typename T>
+nb::typed<nb::iterator, Element> iterate(nb::typed<nb::handle, T> self)
 {
-    return ygg::database::Row(relation.row(sequence_index(index, relation.size())), relation.columns().span());
+    const auto builtins = nb::module_::import_("builtins");
+    return nb::borrow<nb::typed<nb::iterator, Element>>(builtins.attr("map")(self.attr("__getitem__"), builtins.attr("range")(nb::len(self))));
 }
 }  // namespace
 
@@ -73,6 +80,7 @@ void bind_database_module_definitions(nb::module_& m)
                     "Read-only borrowed row. Keeps its Python owner alive, but clearing the owning "
                     "relation or repository invalidates the borrowed data. Memoization resets alone do not.")
         .def("__len__", &Row::size)
+        .def("__iter__", &iterate<nb::object, Row>)
         .def("__getitem__",
              [](Row row, std::ptrdiff_t index)
              { return row.visit(sequence_index(index, row.size()), [](auto value) -> nb::object { return nb::cast(value); }); });
@@ -82,6 +90,7 @@ void bind_database_module_definitions(nb::module_& m)
                               "Read-only borrowed column labels. Keeps its Python owner alive; "
                               "replacing a builder's schema or clearing its repository invalidates the labels.")
         .def("__len__", &ColumnIndices::size)
+        .def("__iter__", &iterate<Column, ColumnIndices>)
         .def("__getitem__", [](ColumnIndices columns, std::ptrdiff_t index) { return columns[sequence_index(index, columns.size())].label; })
         .def("type",
              [](ColumnIndices columns, size_t index)
@@ -110,6 +119,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def(nb::init<std::vector<Column>>(), nb::arg("labels"))
         .def("__len__", &Relation::size)
         .def("__getitem__", &row_at<Relation>, nb::keep_alive<0, 1>())
+        .def("__iter__", &iterate<Row, Relation>)
         .def("arity", &Relation::arity)
         .def("empty", &Relation::empty)
         .def("at", &Relation::at, nb::arg("index"), nb::keep_alive<0, 1>())
@@ -120,7 +130,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def("clear", &Relation::clear)
         .def(
             "insert",
-            [](Relation& relation, nb::sequence row)
+            [](Relation& relation, nb::typed<nb::sequence, nb::object> row)
             {
                 if (nb::len(row) != relation.arity())
                     throw std::invalid_argument("Relation: row arity does not match schema.");
@@ -145,6 +155,7 @@ void bind_database_module_definitions(nb::module_& m)
             nb::keep_alive<1, 2>())
         .def("__len__", &BorrowedRelationView::size)
         .def("__getitem__", &row_at<BorrowedRelationView>, nb::keep_alive<0, 1>())
+        .def("__iter__", &iterate<Row, BorrowedRelationView>)
         .def("arity", &BorrowedRelationView::arity)
         .def("empty", &BorrowedRelationView::empty)
         .def(
@@ -158,7 +169,6 @@ void bind_database_module_definitions(nb::module_& m)
             nb::arg("index"),
             nb::keep_alive<0, 1>())
         .def("columns", [](const BorrowedRelationView& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
-    nb::implicitly_convertible<Relation, BorrowedRelationView>();
 
     nb::class_<RelationPtr>(m, "RelationPtr", "Owns a pooled relation until the handle and its borrowed rows are released.")
         .def("get", &RelationPtr::get, nb::rv_policy::reference_internal);
@@ -179,6 +189,7 @@ void bind_database_module_definitions(nb::module_& m)
                         .def("get_index", &RelationView::get_index)
                         .def("__len__", &RelationView::size)
                         .def("__getitem__", &row_at<RelationView>, nb::keep_alive<0, 1>())
+                        .def("__iter__", &iterate<Row, RelationView>)
                         .def("arity", &RelationView::arity)
                         .def("empty", &RelationView::empty)
                         .def(

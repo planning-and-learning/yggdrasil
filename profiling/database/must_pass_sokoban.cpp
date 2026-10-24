@@ -27,6 +27,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <exception>
+#include <fmt/core.h>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -196,13 +198,11 @@ struct PushDistance
 
 double seconds_since(std::chrono::steady_clock::time_point start) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); }
 
-}  // namespace
-
-int main(int argc, char** argv)
+int run(int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::fprintf(stderr, "usage: %s <task.pddl> [state.txt] [repeats]\n", argv[0]);
+        fmt::print(stderr, "usage: {} <task.pddl> [state.txt] [repeats]\n", argv[0]);
         return 2;
     }
     auto task = read_task(argv[1], argc > 2 ? argv[2] : "");
@@ -290,11 +290,11 @@ int main(int argc, char** argv)
         auto rows = Relation(plan.output_columns().span());
         const auto start = std::chrono::steady_clock::now();
         blind.must_pass(slot_input, borrow(sources), borrow(targets), borrow(probes), rows);
-        std::printf("blind: %.3f s, %zu rows, expanded %zu, backward %zu\n",
-                    seconds_since(start),
-                    rows.size(),
-                    blind.statistics().vertices,
-                    blind.statistics().backward);
+        fmt::print("blind: {:.3f} s, {} rows, expanded {}, backward {}\n",
+                   seconds_since(start),
+                   rows.size(),
+                   blind.statistics().vertices,
+                   blind.statistics().backward);
     }
     auto out = Relation(plan.output_columns().span());
     auto total = 0.0;
@@ -328,7 +328,7 @@ int main(int argc, char** argv)
                                    return true;
                                });
         }
-        std::printf("projected edges: %zu rows (%zu self loops) for %zu keys in %.3f s\n", rows, loops, unfinished.size(), seconds_since(start));
+        fmt::print("projected edges: {} rows ({} self loops) for {} keys in {:.3f} s\n", rows, loops, unfinished.size(), seconds_since(start));
     }
     if (std::getenv("PROJECTED_FULL"))  // Times the full, optimized evaluation of the edges projected onto the box column.
     {
@@ -342,11 +342,11 @@ int main(int argc, char** argv)
         const auto& result = evaluator.get_result();
         for (size_t r = 0; r < result.size(); ++r)
             loops += result[r].get<uint_t>(1) == result[r].get<uint_t>(2);
-        std::printf("projected edges, full: %zu rows (%zu self loops), optimize %.3f s, evaluate %.3f s\n",
-                    result.size(),
-                    loops,
-                    compiled,
-                    seconds_since(evaluated));
+        fmt::print("projected edges, full: {} rows ({} self loops), optimize {:.3f} s, evaluate {:.3f} s\n",
+                   result.size(),
+                   loops,
+                   compiled,
+                   seconds_since(evaluated));
     }
     if (std::getenv("PER_KEY"))  // Times each key alone.
     {
@@ -364,25 +364,25 @@ int main(int argc, char** argv)
         }
         std::ranges::sort(timings, std::greater<>());
         for (size_t i = 0; i < std::min<size_t>(std::getenv("TOP") ? std::stoul(std::getenv("TOP")) : 5, timings.size()); ++i)
-            std::printf("  %-22s %8.3f s %10zu expanded\n", std::get<2>(timings[i]).c_str(), std::get<0>(timings[i]), std::get<1>(timings[i]));
+            fmt::print("  {:<22} {:8.3f} s {:10} expanded\n", std::get<2>(timings[i]).c_str(), std::get<0>(timings[i]), std::get<1>(timings[i]));
         auto total = 0.0;
         for (const auto& timing : timings)
             total += std::get<0>(timing);
-        std::printf("  all keys alone: %.3f s; top 5: %.3f s\n", total, std::get<0>(timings[0]) + (timings.size() > 1 ? std::get<0>(timings[1]) : 0.0));
+        fmt::print("  all keys alone: {:.3f} s; top 5: {:.3f} s\n", total, std::get<0>(timings[0]) + (timings.size() > 1 ? std::get<0>(timings[1]) : 0.0));
     }
     const auto& statistics = must_pass.statistics();
-    std::printf("boxes %zu unfinished %zu locations %zu: %.3f s per call; keys %zu, expanded %zu, edges %zu, removal searches %zu, backward expanded %zu (over "
-                "%zu calls)\n",
-                task.at.size(),
-                unfinished.size(),
-                task.locations.size(),
-                total / double(repeats),
-                statistics.keys,
-                statistics.vertices,
-                statistics.edges,
-                statistics.removals,
-                statistics.backward,
-                repeats);
+    fmt::print("boxes {} unfinished {} locations {}: {:.3f} s per call; keys {}, expanded {}, edges {}, removal searches {}, backward expanded {} (over "
+               "{} calls)\n",
+               task.at.size(),
+               unfinished.size(),
+               task.locations.size(),
+               total / double(repeats),
+               statistics.keys,
+               statistics.vertices,
+               statistics.edges,
+               statistics.removals,
+               statistics.backward,
+               repeats);
 
     // The order key of every unfinished box: the other boxes for which its goal cell must be passed.
     auto must = std::map<uint_t, std::vector<uint_t>>();
@@ -398,7 +398,22 @@ int main(int argc, char** argv)
         auto own = std::string();
         for (const auto x : must[c])
             own += " " + task.names[x];
-        std::printf("%-6s blocks [%s ] must pass [%s ]\n", task.names[c].c_str(), blocked.c_str(), own.c_str());
+        fmt::print("{:<6} blocks [{} ] must pass [{} ]\n", task.names[c].c_str(), blocked.c_str(), own.c_str());
     }
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv)
+{
+    try
+    {
+        return run(argc, argv);
+    }
+    catch (const std::exception& e)
+    {
+        fmt::print(stderr, "error: {}\n", e.what());
+        return 1;
+    }
 }

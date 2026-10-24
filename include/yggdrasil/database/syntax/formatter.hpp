@@ -63,8 +63,9 @@ OutputIt format_query_plan(OutputIt out, const QueryPlan& plan)
             {
                 std::vector<uint_t> children;
                 for_each_child(operation, [&](QueryView<> child) { children.push_back(child.get_index().get_value()); });
-                const auto columns = operation.columns()
-                                     | std::views::transform([](const ColumnLayout& column) { return fmt::format("{}:{}", column.label.get_value(), column.type); });
+                const auto columns =
+                    operation.columns()
+                    | std::views::transform([](const ColumnLayout& column) { return fmt::format("{}:{}", column.label.get_value(), column.type); });
                 out = fmt::format_to(out, "{}: {}({}) columns=[{}]", id, query_operation_name(operation), fmt::join(children, ","), fmt::join(columns, ","));
                 if constexpr (std::same_as<Concrete, QueryView<QueryInputTag>>)
                     out = fmt::format_to(out, " slot={}", operation.get_input_slot());
@@ -90,9 +91,7 @@ struct formatter<ygg::database::QueryPlan, char>
 
     template<typename FormatContext>
     auto format(const ygg::database::QueryPlan& plan, FormatContext& ctx) const
-    {
-        return ygg::database::detail::format_query_plan(ctx.out(), plan);
-    }
+    { return ygg::database::detail::format_query_plan(ctx.out(), plan); }
 };
 }  // namespace fmt
 #endif

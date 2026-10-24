@@ -121,9 +121,7 @@ size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column)
 namespace ygg::database
 {
 bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept
-{
-    return std::ranges::find(columns, column, &ColumnLayout::label) != columns.end();
-}
+{ return std::ranges::find(columns, column, &ColumnLayout::label) != columns.end(); }
 }
 
 namespace ygg::database
