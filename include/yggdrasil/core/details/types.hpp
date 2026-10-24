@@ -105,7 +105,7 @@ using ContextArg = std::conditional_t<is_shared_ptr_v<C>, C, const C&>;
 template<typename T, typename C>
 class IndexViewBase
 {
-protected:
+private:
     Index<T> m_handle;
     detail::ContextStorage<C> m_context;
 
@@ -146,7 +146,7 @@ public:
 template<typename T, typename C>
 class DataViewBase
 {
-protected:
+private:
     detail::DataStorage<T> m_handle;
     detail::ContextStorage<C> m_context;
 
@@ -194,7 +194,7 @@ public:
 template<typename T, typename C>
 class BuilderViewBase
 {
-protected:
+private:
     detail::BuilderStorage<T> m_handle;
     detail::ContextStorage<C> m_context;
 

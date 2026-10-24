@@ -205,7 +205,7 @@ public:
         return *this;
     }
     constexpr int_reference(int_reference&&) = default;
-    constexpr int_reference& operator=(int_reference&& other) { return *this = static_cast<const int_reference&>(other); }
+    constexpr int_reference& operator=(int_reference&& other) noexcept { return *this = static_cast<const int_reference&>(other); }
 
     constexpr operator value_type() const { return Coder::decode(bit::read_int(m_word, m_offset, m_len)); }
 
@@ -238,7 +238,7 @@ public:
         return *this;
     }
     constexpr block_reference(block_reference&&) = default;
-    constexpr block_reference& operator=(block_reference&& other) { return *this = static_cast<const block_reference&>(other); }
+    constexpr block_reference& operator=(block_reference&& other) noexcept { return *this = static_cast<const block_reference&>(other); }
 
     constexpr operator value_type() const { return Coder::decode(*m_ptr); }
 

@@ -84,13 +84,19 @@ public:
         Dictionaries* m_dictionaries;
         const std::optional<std::vector<std::string>>* m_selected_fields;
 
-    public:
-        boost::json::object fields;
+        boost::json::object m_fields;
 
+    public:
         Archive(Dictionaries& dictionaries, const std::optional<std::vector<std::string>>& selected_fields) :
             m_dictionaries(&dictionaries),
             m_selected_fields(&selected_fields)
         {}
+
+        /// Stores an already converted value; callers check accepts(name) first.
+        void put(std::string_view name, boost::json::value value) { m_fields[name] = std::move(value); }
+
+        /// The collected fields; the archive is done.
+        boost::json::object take_fields() && { return std::move(m_fields); }
 
         bool accepts(std::string_view name) const { return !*m_selected_fields || std::ranges::find(**m_selected_fields, name) != (*m_selected_fields)->end(); }
 
@@ -99,7 +105,7 @@ public:
         {
             // Filter before conversion: omitted fields must not collect descendants into other tables.
             if (accepts(name))
-                fields[name] = m_dictionaries->convert(value);
+                m_fields[name] = m_dictionaries->convert(value);
         }
 
         template<typename Variant>
@@ -182,7 +188,7 @@ public:
                 table.project(archive, std::addressof(value));
             else
                 fields(archive);
-            return std::move(archive.fields);
+            return std::move(archive).take_fields();
         });
     }
 

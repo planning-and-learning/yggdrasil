@@ -201,7 +201,7 @@ void register_table(serialization::Dictionaries& dictionaries,
                         throw nanobind::type_error("serialization mapping keys must be strings");
                     const auto field = nanobind::cast<std::string>(key);
                     if (archive.accepts(field))
-                        archive.fields[field] = from_python(dictionaries, item, owners);
+                        archive.put(field, from_python(dictionaries, item, owners));
                 }
             };
         }

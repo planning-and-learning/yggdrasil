@@ -128,7 +128,7 @@ public:
         if (m_array_size == 0)
             return {};
 
-        return ConstView(std::launder(static_cast<const T*>(static_cast<const void*>(m_storage.data_at(array_index)))), m_array_size);
+        return ConstView(std::launder(reinterpret_cast<const T*>(m_storage.data_at(array_index))), m_array_size);
     }
 
     ConstView at(size_t array_index) const

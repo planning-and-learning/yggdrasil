@@ -100,7 +100,7 @@ public:
         const auto size = load_unaligned<Size>({ slot, sizeof(Size) });
         if (size == 0)
             return {};
-        return { std::launder(static_cast<const T*>(static_cast<const void*>(slot + payload_offset))), static_cast<size_t>(size) };
+        return { std::launder(reinterpret_cast<const T*>(slot + payload_offset)), static_cast<size_t>(size) };
     }
 
     ConstView at(uint_t index) const

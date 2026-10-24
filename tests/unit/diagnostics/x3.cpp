@@ -36,7 +36,7 @@ using Handler = diagnostics::ErrorHandler<std::string::const_iterator>;
 struct NumberRule : diagnostics::ErrorHandlerBase
 {
 };
-const auto number = boost::spirit::x3::rule<NumberRule, Number> { "number" } = ('(' > boost::spirit::x3::int_) > ')';
+auto number() { return boost::spirit::x3::rule<NumberRule, Number> { "number" } = ('(' > boost::spirit::x3::int_) > ')'; }
 
 TEST(YggdrasilX3Diagnostics, GrammarSuccessTagsAstWithItsSourceRange)
 {
@@ -45,7 +45,7 @@ TEST(YggdrasilX3Diagnostics, GrammarSuccessTagsAstWithItsSourceRange)
     auto output = std::ostringstream {};
     auto handler = Handler(first, source.cend(), output, "numbers", 2);
     auto ast = Number {};
-    const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number];
+    const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number()];
     ASSERT_TRUE(boost::spirit::x3::phrase_parse(first, source.cend(), grammar, boost::spirit::x3::ascii::space, ast));
     EXPECT_EQ(first, source.cend());
     EXPECT_EQ(ast.value, 42);
@@ -69,7 +69,7 @@ TEST(YggdrasilX3Diagnostics, GrammarExpectationFailureRecordsAndRendersEof)
     auto output = std::ostringstream {};
     auto handler = Handler(first, source.cend(), output);
     auto ast = Number {};
-    const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number];
+    const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number()];
     EXPECT_FALSE(boost::spirit::x3::phrase_parse(first, source.cend(), grammar, boost::spirit::x3::ascii::space, ast));
     ASSERT_TRUE(handler.last_error());
     EXPECT_EQ(handler.last_error()->position, source.cend());

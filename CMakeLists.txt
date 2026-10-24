@@ -31,7 +31,7 @@ option(YGGDRASIL_STDLIB_ASSERTIONS "Check bounds and preconditions of the standa
 if(YGGDRASIL_STDLIB_ASSERTIONS)
     add_compile_definitions(
         $<$<CONFIG:Debug>:_GLIBCXX_ASSERTIONS>
-        $<$<CONFIG:Debug>:_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE>
+        "$<$<CONFIG:Debug>:_LIBCPP_HARDENING_MODE=(_LIBCPP_HARDENING_MODE_EXTENSIVE)>"
     )
 endif()
 

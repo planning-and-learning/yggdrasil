@@ -1,10 +1,16 @@
 # Tests and benchmarks: literal values are the test data, fixed seeds keep runs
 # reproducible, checks of moved-from objects use them after the move, and values that
-# throw in their moves test exception safety.
+# throw in their moves test exception safety. The allocation test replaces operator new
+# with malloc, test types override methods to inject failures, and benchmarks register
+# themselves during static initialization.
 InheritParentConfig: true
 Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
   -bugprone-random-generator-seed,
   -bugprone-use-after-move,
   -cppcoreguidelines-noexcept-move-operations,
-  -performance-noexcept-move-constructor
+  -performance-noexcept-move-constructor,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-no-malloc,
+  -bugprone-derived-method-shadowing-base-method,
+  -bugprone-throwing-static-initialization

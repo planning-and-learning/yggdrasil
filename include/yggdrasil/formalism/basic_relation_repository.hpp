@@ -127,14 +127,8 @@ private:
     class SequentialSlotDirectory
     {
     public:
-        Slot* find(ygg::uint_t gi) noexcept
-        {
-            if (gi >= m_forward.size() || m_forward[gi] == kInvalid)
-                return nullptr;
-            return &m_slots[m_forward[gi]];
-        }
-
-        const Slot* find(ygg::uint_t gi) const noexcept { return const_cast<SequentialSlotDirectory*>(this)->find(gi); }
+        Slot* find(ygg::uint_t gi) noexcept { return find_in(*this, gi); }
+        const Slot* find(ygg::uint_t gi) const noexcept { return find_in(*this, gi); }
 
         Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
         {
@@ -169,6 +163,15 @@ private:
         size_t memory_usage() const noexcept { return m_forward.capacity() * sizeof(ygg::uint_t) + m_slots.capacity() * sizeof(Slot); }
 
     private:
+        template<typename Self>
+        static auto* find_in(Self& self, ygg::uint_t gi) noexcept
+        {
+            using Result = decltype(&self.m_slots[0]);
+            if (gi >= self.m_forward.size() || self.m_forward[gi] == kInvalid)
+                return Result { nullptr };
+            return &self.m_slots[self.m_forward[gi]];
+        }
+
         std::vector<ygg::uint_t> m_forward;
         std::vector<Slot> m_slots;
     };
@@ -191,6 +194,28 @@ private:
             std::unique_ptr<std::atomic<Slot*>[]> entries;
             size_t size;
         };
+
+        // The slots are reached through atomic pointers, so const members find them mutable too.
+        Slot* lookup(ygg::uint_t gi) const noexcept
+        {
+            const auto [segment_index, offset] = locate(gi);
+            const auto* segment = m_segments[segment_index].load(std::memory_order_acquire);
+            return segment ? segment->entries[offset].load(std::memory_order_acquire) : nullptr;
+        }
+
+        template<typename F>
+        void visit_slots(F function) const
+        {
+            for (const auto& segment_ptr : m_segments)
+            {
+                const auto* segment = segment_ptr.load(std::memory_order_relaxed);
+                if (!segment)
+                    continue;
+                for (size_t i = 0; i < segment->size; ++i)
+                    if (auto* slot = segment->entries[i].load(std::memory_order_relaxed))
+                        function(*slot);
+            }
+        }
 
         static std::pair<size_t, size_t> locate(ygg::uint_t gi) noexcept
         {
@@ -230,12 +255,12 @@ private:
         {
             for (auto& segment_ptr : m_segments)
             {
-                auto* segment = segment_ptr.load(std::memory_order_relaxed);
+                // Each segment and slot was released from a unique_ptr when published.
+                const auto segment = std::unique_ptr<Segment>(segment_ptr.load(std::memory_order_relaxed));
                 if (!segment)
                     continue;
                 for (size_t i = 0; i < segment->size; ++i)
-                    delete segment->entries[i].load(std::memory_order_relaxed);
-                delete segment;
+                    std::unique_ptr<Slot>(segment->entries[i].load(std::memory_order_relaxed)).reset();
             }
         }
 
@@ -244,14 +269,8 @@ private:
         ConcurrentSlotDirectory(ConcurrentSlotDirectory&&) = delete;
         ConcurrentSlotDirectory& operator=(ConcurrentSlotDirectory&&) = delete;
 
-        Slot* find(ygg::uint_t gi) noexcept
-        {
-            const auto [segment_index, offset] = locate(gi);
-            const auto* segment = m_segments[segment_index].load(std::memory_order_acquire);
-            return segment ? segment->entries[offset].load(std::memory_order_acquire) : nullptr;
-        }
-
-        const Slot* find(ygg::uint_t gi) const noexcept { return const_cast<ConcurrentSlotDirectory*>(this)->find(gi); }
+        Slot* find(ygg::uint_t gi) noexcept { return lookup(gi); }
+        const Slot* find(ygg::uint_t gi) const noexcept { return lookup(gi); }
 
         Slot& get_or_create(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width)
         {
@@ -275,21 +294,13 @@ private:
         template<typename F>
         void for_each(F function)
         {
-            for (auto& segment_ptr : m_segments)
-            {
-                auto* segment = segment_ptr.load(std::memory_order_relaxed);
-                if (!segment)
-                    continue;
-                for (size_t i = 0; i < segment->size; ++i)
-                    if (auto* slot = segment->entries[i].load(std::memory_order_relaxed))
-                        function(*slot);
-            }
+            visit_slots([&](Slot& slot) { function(slot); });
         }
 
         template<typename F>
         void for_each(F function) const
         {
-            const_cast<ConcurrentSlotDirectory*>(this)->for_each([&](Slot& slot) { function(std::as_const(slot)); });
+            visit_slots([&](Slot& slot) { function(std::as_const(slot)); });
         }
 
         size_t memory_usage() const noexcept
