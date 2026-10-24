@@ -49,7 +49,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dependencies-install
-          key: deps-${{ runner.os }}-${{ matrix.build_type }}-${{ hashFiles('src/**', 'cmake/**', 'docs/SOURCES.json') }}
+          key: deps-${{ runner.os }}-${{ matrix.build_type }}-${{ hashFiles('src/**', '!src/database/**', 'cmake/**', 'docs/SOURCES.json') }}
 
       - name: Build native dependencies
         if: steps.deps.outputs.cache-hit != 'true'

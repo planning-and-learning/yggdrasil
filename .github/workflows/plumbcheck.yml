@@ -19,7 +19,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/yggdrasil-deps
-          key: deps-${{ runner.os }}-${{ hashFiles('src/**', 'cmake/**', 'docs/SOURCES.json') }}
+          key: deps-${{ runner.os }}-${{ hashFiles('src/**', '!src/database/**', 'cmake/**', 'docs/SOURCES.json') }}
       - uses: drexlerd/plumbcheck@e209ba689a4451b67181592f4a291e128b6208b1
         with:
           # clang-tidy needs compile_commands.json, pyright the package in
