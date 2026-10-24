@@ -33,9 +33,7 @@ size_t sequence_index(std::ptrdiff_t index, size_t size)
 
 template<typename R>
 ygg::database::Row row_at(const R& relation, std::ptrdiff_t index)
-{
-    return ygg::database::Row(relation.row(sequence_index(index, relation.size())), relation.columns().span());
-}
+{ return ygg::database::Row(relation.row(sequence_index(index, relation.size())), relation.columns().span()); }
 
 /// Lazy iteration over a sequence binding: map(self.__getitem__, range(len(self))), so every element keeps the
 /// lifetime rules of __getitem__.

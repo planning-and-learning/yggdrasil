@@ -50,14 +50,10 @@ public:
 
     template<ygg::ByteCodable T>
     T get(std::span<const std::byte> bytes, Index<database::Column> column) const
-    {
-        return database::detail::read_column<T>(bytes, span(), column_index(column));
-    }
+    { return database::detail::read_column<T>(bytes, span(), column_index(column)); }
     template<ygg::ByteCodable T>
     void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
-    {
-        database::detail::write_column<T>(bytes, span(), column_index(column), value);
-    }
+    { database::detail::write_column<T>(bytes, span(), column_index(column), value); }
     void validate_row(std::span<const std::byte> bytes) const { database::validate_row(bytes, span()); }
 };
 }  // namespace ygg

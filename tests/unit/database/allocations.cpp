@@ -200,9 +200,7 @@ Builder<database::Columns> columns_of(std::initializer_list<Index<database::Colu
 }
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{
-    return std::tuple { T(values)... };
-}
+{ return std::tuple { T(values)... }; }
 
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
@@ -817,9 +815,7 @@ struct IncrementalEvaluation
     }
 
     size_t memory_usage() const
-    {
-        return joining.memory_usage() + projecting.memory_usage() + delta.memory_usage() + unchanged.memory_usage() + workspace.row.capacity() * sizeof(uint_t);
-    }
+    { return joining.memory_usage() + projecting.memory_usage() + delta.memory_usage() + unchanged.memory_usage() + workspace.row.capacity() * sizeof(uint_t); }
 };
 }  // namespace
 

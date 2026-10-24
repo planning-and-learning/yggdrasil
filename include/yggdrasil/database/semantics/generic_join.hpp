@@ -31,7 +31,7 @@ inline GenericJoinWork& generic_join_work() noexcept
     return work;
 }
 #endif
-void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept;
+void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) noexcept;
 
 struct GenericJoinKey
 {
@@ -155,10 +155,7 @@ public:
 /// https://arxiv.org/abs/1310.3314. Hash costs are expected; no ordering is required.
 /// Output replaces its rows; schema/alias/plan errors precede mutation.
 template<RelationViewRange R>
-void generic_join(const R& inputs,
-                  const GenericJoinPlan& plan,
-                  Builder<Relation>& out,
-                  GenericJoinWorkspace& workspace)
+void generic_join(const R& inputs, const GenericJoinPlan& plan, Builder<Relation>& out, GenericJoinWorkspace& workspace)
 {
     if (std::ranges::size(inputs) != plan.input_count() || !workspace.matches(plan))
         throw std::invalid_argument("Generic join: inputs or workspace do not match the plan.");

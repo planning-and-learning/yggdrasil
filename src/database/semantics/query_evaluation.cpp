@@ -22,9 +22,7 @@ namespace ygg::database
 namespace detail
 {
 bool query_accepts(QueryView<QuerySelectValueTag> selection, std::span<const std::byte> row)
-{
-    return std::ranges::equal(column_bytes(row, selection.columns()[selection.get_position()]), selection.get_constant());
-}
+{ return std::ranges::equal(column_bytes(row, selection.columns()[selection.get_position()]), selection.get_constant()); }
 }
 }
 

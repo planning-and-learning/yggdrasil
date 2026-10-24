@@ -78,7 +78,5 @@ const Delta& ProjectionEvaluator::get_delta() const&
 namespace ygg::database::incremental
 {
 size_t ProjectionEvaluator::memory_usage() const noexcept
-{
-    return m_result.memory_usage() + m_delta.memory_usage() + m_supports.capacity() * sizeof(size_t) + m_pending_removals.capacity() * sizeof(uint_t);
-}
+{ return m_result.memory_usage() + m_delta.memory_usage() + m_supports.capacity() * sizeof(size_t) + m_pending_removals.capacity() * sizeof(uint_t); }
 }

@@ -43,9 +43,7 @@ inline nb::object retain_owner_tree(nb::handle value, nb::handle owner, const nb
 
 template<typename T>
 nb::object cast_with_owner(T&& value, nb::handle owner, const nb::object& retainer)
-{
-    return retain_owner_tree(nb::cast(std::forward<T>(value)), owner, retainer);
-}
+{ return retain_owner_tree(nb::cast(std::forward<T>(value)), owner, retainer); }
 
 /// Keep the iterator owner alive and retain it on every yielded borrowed leaf.
 inline nb::object make_iterator_with_owner(nb::object iterator, nb::handle owner, const nb::object& retainer)

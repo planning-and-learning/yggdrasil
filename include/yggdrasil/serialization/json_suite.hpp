@@ -37,9 +37,7 @@ inline std::filesystem::path suite_prefix_path(const boost::json::object& suite)
 inline std::filesystem::path suite_path(const boost::json::object& suite, std::string_view path) { return resolve_path(suite_prefix_path(suite), path); }
 
 inline std::filesystem::path suite_member_path(const boost::json::object& suite, std::string_view key)
-{
-    return suite_path(suite, as_string(suite, key, "suite"));
-}
+{ return suite_path(suite, as_string(suite, key, "suite")); }
 #endif
 
 }  // namespace ygg::common

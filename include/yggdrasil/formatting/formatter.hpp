@@ -39,9 +39,7 @@ struct View;
 
 template<typename T>
 std::string to_string(const T& element)
-{
-    return fmt::format("{}", element);
-}
+{ return fmt::format("{}", element); }
 
 }  // namespace ygg
 
@@ -56,9 +54,7 @@ struct formatter<ygg::Index<T>, char>
 
     template<typename FormatContext>
     auto format(const ygg::Index<T>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", ygg::uint_t(value));
-    }
+    { return fmt::format_to(ctx.out(), "{}", ygg::uint_t(value)); }
 };
 
 template<typename T>
@@ -110,9 +106,7 @@ struct formatter<std::monostate, char>
 
     template<typename FormatContext>
     auto format(const std::monostate&, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "monostate");
-    }
+    { return fmt::format_to(ctx.out(), "monostate"); }
 };
 
 }  // namespace fmt

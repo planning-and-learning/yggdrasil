@@ -7,8 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_MIN_DISTANCE_HPP_
 
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
-#include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/bound/query_evaluation.hpp"
+#include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/search/tree_repair.hpp"
 #include "yggdrasil/database/semantics/min_distance.hpp"
 #include "yggdrasil/database/semantics/search/a_star.hpp"
@@ -191,7 +191,7 @@ private:
     SearchTree m_tree;
     BackwardFrontier m_backward;
     database::detail::TargetSet m_targets;
-    EdgeList m_added;  ///< Edges bind() can have added whose source is stored: the only ones repair reads.
+    EdgeList m_added;                 ///< Edges bind() can have added whose source is stored: the only ones repair reads.
     bool m_restart_backward = false;  ///< An added edge breaks the backward frontier's bounds.
     bool m_reset_pending = true;
     bool m_targets_set = false;

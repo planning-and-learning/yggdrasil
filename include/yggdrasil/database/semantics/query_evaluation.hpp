@@ -49,9 +49,9 @@ struct QueryDistanceWorkspace
 
 /// Operators whose result is a function of the operands' results alone.
 template<class Tag>
-concept StatelessQueryTag = std::same_as<Tag, QueryInputTag> || std::same_as<Tag, QueryEmptyTag> || std::same_as<Tag, QueryRenameTag>
-                            || std::same_as<Tag, QuerySelectEqualTag> || std::same_as<Tag, QuerySelectValueTag> || std::same_as<Tag, QueryUnionTag>
-                            || std::same_as<Tag, QueryDifferenceTag>;
+concept StatelessQueryTag =
+    std::same_as<Tag, QueryInputTag> || std::same_as<Tag, QueryEmptyTag> || std::same_as<Tag, QueryRenameTag> || std::same_as<Tag, QuerySelectEqualTag>
+    || std::same_as<Tag, QuerySelectValueTag> || std::same_as<Tag, QueryUnionTag> || std::same_as<Tag, QueryDifferenceTag>;
 
 /// Evaluates a stateless operator from the bound inputs and the operands' results.
 template<StatelessQueryTag Tag, RelationViewRange R, std::invocable<QueryView<>> GetResult>
@@ -145,19 +145,19 @@ public:
                         database::project(child(operation.get_arg()), operation.get_plan(), out, m_workspace);
                     else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                     {
-                        const auto inputs = operation.get_inputs()
-                                            | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.get_value()].result; });
+                        const auto inputs =
+                            operation.get_inputs() | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.get_value()].result; });
                         generic_join(inputs, operation.get_plan(), out, std::get<GenericJoinWorkspace>(state.state));
                     }
                     else
                     {
                         static_assert(std::same_as<Tag, QueryDistanceTag>);
                         database::distance(child(operation.get_sources()),
-                                               child(operation.get_edges()),
-                                               child(operation.get_targets()),
-                                               operation.get_plan(),
-                                               out,
-                                               std::get<DistanceState>(state.state).workspace);
+                                           child(operation.get_edges()),
+                                           child(operation.get_targets()),
+                                           operation.get_plan(),
+                                           out,
+                                           std::get<DistanceState>(state.state).workspace);
                     }
                 },
                 m_plan[NodeId(to_uint_t(i))].get_variant());

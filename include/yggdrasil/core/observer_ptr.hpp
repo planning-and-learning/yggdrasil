@@ -82,15 +82,11 @@ private:
 template<typename T>
 auto make_observer(T& element) noexcept
     requires(!std::is_const_v<T>)
-{
-    return ObserverPtr<T>(&element);
-}
+{ return ObserverPtr<T>(&element); }
 
 template<typename T>
 auto make_observer(const T& element) noexcept
-{
-    return ObserverPtr<const T>(&element);
-}
+{ return ObserverPtr<const T>(&element); }
 
 }  // namespace ygg
 

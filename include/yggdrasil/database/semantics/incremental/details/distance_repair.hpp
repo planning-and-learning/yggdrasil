@@ -41,7 +41,7 @@ inline DistanceWork& distance_work() noexcept
     return work;
 }
 #endif
-void count_distance_work([[maybe_unused]] size_t DistanceWork::*member) noexcept;
+void count_distance_work([[maybe_unused]] size_t DistanceWork::* member) noexcept;
 
 /// Shared across source trees: every heap is empty between completed repairs.
 class DistanceRepairWorkspace

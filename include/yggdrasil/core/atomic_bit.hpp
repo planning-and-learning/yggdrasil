@@ -34,9 +34,7 @@ namespace ygg::bit
 
 template<std::unsigned_integral Block>
 Block atomic_load(const Block* block) noexcept
-{
-    return std::atomic_ref<Block>(*const_cast<Block*>(block)).load(std::memory_order_relaxed);
-}
+{ return std::atomic_ref<Block>(*const_cast<Block*>(block)).load(std::memory_order_relaxed); }
 
 template<std::unsigned_integral Block>
 void atomic_replace_bits(Block* block, Block mask, Block value) noexcept

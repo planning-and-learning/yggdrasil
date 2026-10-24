@@ -126,24 +126,13 @@ void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& o
 /// The index must match that input's storage and the plan's ordered field slices.
 /// Result row order is unspecified, as for the other relational operations.
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs,
-          const R& rhs,
-          const JoinPlan& plan,
-          const JoinIndex& index,
-          Builder<Relation>& out,
-          Workspace& workspace);
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& index, Builder<Relation>& out, Workspace& workspace);
 
 /// Reuses the one marked input, or the smaller input when both are marked.
 /// With neither marked, uses an ordinary transient index. Empty inputs and
 /// Cartesian products do not create cached indexes.
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs,
-          const R& rhs,
-          const JoinPlan& plan,
-          JoinIndexCache& cache,
-          JoinReuse reuse,
-          Builder<Relation>& out,
-          Workspace& workspace);
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cache, JoinReuse reuse, Builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept L, RelationViewConcept R>
 void join(const L& lhs, const R& rhs, Builder<Relation>& out, Workspace& workspace);

@@ -41,9 +41,7 @@ struct Hash<View<::cista::array<T, N>, C>>
 {
     hash_t operator()(const View<::cista::array<T, N>, C>& el) const
         requires Hashable<std::ranges::range_value_t<const View<::cista::array<T, N>, C>>>
-    {
-        return ygg::hash_range(el);
-    }
+    { return ygg::hash_range(el); }
 };
 
 template<typename T1, typename T2>
@@ -51,9 +49,7 @@ struct Hash<::cista::pair<T1, T2>>
 {
     hash_t operator()(const ::cista::pair<T1, T2>& el) const
         requires Hashable<T1> && Hashable<T2>
-    {
-        return ygg::hash_combine(el.first, el.second);
-    }
+    { return ygg::hash_combine(el.first, el.second); }
 };
 
 template<typename C, typename T1, typename T2>
@@ -64,9 +60,7 @@ struct Hash<View<::cista::pair<T1, T2>, C>>
             { el.get_first() } -> Hashable;
             { el.get_second() } -> Hashable;
         }
-    {
-        return ygg::hash_combine(el.get_first(), el.get_second());
-    }
+    { return ygg::hash_combine(el.get_first(), el.get_second()); }
 };
 
 template<>
@@ -81,9 +75,7 @@ struct Hash<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Alloc
 {
     hash_t operator()(const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& el) const
         requires Hashable<T>
-    {
-        return ygg::hash_range(el);
-    }
+    { return ygg::hash_range(el); }
 };
 
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
@@ -91,9 +83,7 @@ struct Hash<View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, 
 {
     hash_t operator()(const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>& el) const
         requires Hashable<std::ranges::range_value_t<const View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>>>
-    {
-        return ygg::hash_range(el);
-    }
+    { return ygg::hash_range(el); }
 };
 
 template<typename... Ts>

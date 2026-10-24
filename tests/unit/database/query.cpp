@@ -1,3 +1,5 @@
+#include "query_helpers.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cista/serialization.h>
@@ -7,9 +9,8 @@
 #include <vector>
 #include <yggdrasil/database/semantics/incremental/query.hpp>
 #include <yggdrasil/database/semantics/query_evaluation.hpp>
-#include <yggdrasil/database/syntax/query_repository.hpp>
 #include <yggdrasil/database/semantics/relation_repository.hpp>
-#include "query_helpers.hpp"
+#include <yggdrasil/database/syntax/query_repository.hpp>
 
 namespace
 {
@@ -67,8 +68,8 @@ static_assert(HasArgument<ProjectView> && !HasOperands<ProjectView>);
 static_assert(HasSources<DistanceView> && !HasArgument<DistanceView> && !HasOperands<DistanceView>);
 static_assert(!HasArgument<ygg::database::QueryView<>> && !HasOperands<ygg::database::QueryView<>>);
 static_assert(!std::copy_constructible<ygg::database::QueryRepository>);
-static_assert(!std::convertible_to<ygg::Index<ygg::database::Query<ygg::database::QueryInputTag>>,
-                                   ygg::Index<ygg::database::Query<ygg::database::QueryJoinTag>>>);
+static_assert(
+    !std::convertible_to<ygg::Index<ygg::database::Query<ygg::database::QueryInputTag>>, ygg::Index<ygg::database::Query<ygg::database::QueryJoinTag>>>);
 
 TEST(DatabaseQuery, TypedLogicalAlternativesKeepOperandsAndRootProvenance)
 {
@@ -243,8 +244,9 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
     dbb.removed.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(1) });
     dbb.added.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     dc.added.insert(std::tuple { ygg::uint_t(2), ygg::uint_t(7) });
-    const auto changes =
-        std::array { std::pair { borrow(da.added), borrow(da.removed) }, std::pair { borrow(dbb.added), borrow(dbb.removed) }, std::pair { borrow(dc.added), borrow(dc.removed) } };
+    const auto changes = std::array { std::pair { borrow(da.added), borrow(da.removed) },
+                                      std::pair { borrow(dbb.added), borrow(dbb.removed) },
+                                      std::pair { borrow(dc.added), borrow(dc.removed) } };
     for (int iteration = 0; iteration < 2; ++iteration)
     {
         std::vector<decltype(rows(first))> before;
@@ -314,8 +316,9 @@ TEST(DatabaseQuery, MixedTypesConstantsAndDistanceComposition)
     ASSERT_TRUE(incremental.get_result(1).contains(std::tuple { ygg::uint_t(1), ygg::uint_t(3), ygg::uint_t(2) }));
     Delta ds(s.columns().span()), de(e.columns().span()), dt(t.columns().span());
     de.added.insert(std::tuple { ygg::uint_t(1), ygg::uint_t(3) });
-    incremental.update(
-        std::array { std::pair { borrow(ds.added), borrow(ds.removed) }, std::pair { borrow(de.added), borrow(de.removed) }, std::pair { borrow(dt.added), borrow(dt.removed) } });
+    incremental.update(std::array { std::pair { borrow(ds.added), borrow(ds.removed) },
+                                    std::pair { borrow(de.added), borrow(de.removed) },
+                                    std::pair { borrow(dt.added), borrow(dt.removed) } });
     apply(e, de);
     full.evaluate(inputs);
     EXPECT_EQ(rows(full.get_result()), rows(incremental.get_result()));
@@ -465,8 +468,9 @@ TEST(DatabaseQuery, GenericJoinPlanExecutesInBothModesAndPrunesAlternatives)
     EXPECT_EQ(rows(full.get_result()), rows(incremental.get_result()));
     Delta da(ar.columns().span()), dbb(br.columns().span()), dc(cr.columns().span());
     dc.removed.insert(std::tuple { ygg::uint_t(3), ygg::uint_t(1) });
-    incremental.update(
-        std::array { std::pair { borrow(da.added), borrow(da.removed) }, std::pair { borrow(dbb.added), borrow(dbb.removed) }, std::pair { borrow(dc.added), borrow(dc.removed) } });
+    incremental.update(std::array { std::pair { borrow(da.added), borrow(da.removed) },
+                                    std::pair { borrow(dbb.added), borrow(dbb.removed) },
+                                    std::pair { borrow(dc.added), borrow(dc.removed) } });
     EXPECT_TRUE(incremental.get_result().empty());
     EXPECT_EQ(incremental.get_delta().removed.size(), 1);
     apply(cr, dc);

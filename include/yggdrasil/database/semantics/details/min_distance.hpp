@@ -70,7 +70,9 @@ public:
     template<RowPredicate OnVertex>
     void successors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
     {
-        m_edges.evaluate(m_forward, bound(key, vertex), [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset, m_vertex_size)); });
+        m_edges.evaluate(m_forward,
+                         bound(key, vertex),
+                         [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset, m_vertex_size)); });
     }
     template<RowPredicate OnVertex>
     void predecessors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
@@ -101,14 +103,10 @@ public:
 
         template<RowPredicate OnVertex>
         void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
-        {
-            m_edges->successors(m_key, vertex, on_vertex);
-        }
+        { m_edges->successors(m_key, vertex, on_vertex); }
         template<RowPredicate OnVertex>
         void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
-        {
-            m_edges->predecessors(m_key, vertex, on_vertex);
-        }
+        { m_edges->predecessors(m_key, vertex, on_vertex); }
         bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return m_edges->edge_exists(m_key, from, to); }
 
     private:

@@ -69,9 +69,7 @@ std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_unsafe_
 
 template<typename T, bool ThreadSafe>
 std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local(Data<T>& builder)
-{
-    return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder));
-}
+{ return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
 template<typename T, bool ThreadSafe>
 std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_with_hash(Data<T>& builder, size_t h)

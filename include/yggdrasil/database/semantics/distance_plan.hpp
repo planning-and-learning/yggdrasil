@@ -40,7 +40,8 @@ public:
     auto output_columns() const&& = delete;
     size_t tuple_size() const noexcept { return m_sources.row_size(); }
     size_t arity() const noexcept { return m_sources.size(); }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&DistancePlan::m_sources, &DistancePlan::m_edges, &DistancePlan::m_targets, &DistancePlan::m_output> {}; }
+    static constexpr auto cista_members() noexcept
+    { return ygg::Members<&DistancePlan::m_sources, &DistancePlan::m_edges, &DistancePlan::m_targets, &DistancePlan::m_output> {}; }
 };
 }  // namespace ygg::database
 

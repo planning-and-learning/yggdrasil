@@ -24,9 +24,9 @@ namespace detail
 hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice> keys) noexcept;
 
 bool join_keys_equal(std::span<const std::byte> lhs,
-                            std::span<const ColumnSlice> lhs_keys,
-                            std::span<const std::byte> rhs,
-                            std::span<const ColumnSlice> rhs_keys) noexcept;
+                     std::span<const ColumnSlice> lhs_keys,
+                     std::span<const std::byte> rhs,
+                     std::span<const ColumnSlice> rhs_keys) noexcept;
 
 void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys);
 
@@ -52,9 +52,7 @@ JoinIndex::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_rela
 
 template<RelationViewConcept V>
 bool JoinIndex::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
-{
-    return ygg::EqualTo<JoinIndex> {}(*this, std::make_tuple(relation.get_storage_index(), keys));
-}
+{ return ygg::EqualTo<JoinIndex> {}(*this, std::make_tuple(relation.get_storage_index(), keys)); }
 
 template<RelationViewConcept V>
 const JoinIndex& JoinIndexCache::get_or_create(const V& relation, std::span<const ColumnSlice> keys)

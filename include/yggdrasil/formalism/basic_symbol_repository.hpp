@@ -190,9 +190,7 @@ public:
 
 template<typename T, bool ThreadSafe>
 size_t BasicSymbolRepository<T, ThreadSafe>::hash(const Data<T>& builder) noexcept
-{
-    return Slot<T>::hash(builder);
-}
+{ return Slot<T>::hash(builder); }
 
 }  // namespace ygg::formalism
 

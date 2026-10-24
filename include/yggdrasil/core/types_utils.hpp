@@ -50,15 +50,11 @@ void clear_members(T& element)
 
 template<typename T, typename C>
 void append(View<Index<T>, C> view, IndexList<T>& ref_list)
-{
-    ref_list.push_back(view.get_index());
-}
+{ ref_list.push_back(view.get_index()); }
 
 template<typename T, typename C>
 void append(View<Data<T>, C> view, DataList<T>& ref_list)
-{
-    ref_list.push_back(view.get_data());
-}
+{ ref_list.push_back(view.get_data()); }
 
 template<typename Range, typename List>
     requires std::ranges::input_range<const Range>
@@ -71,15 +67,11 @@ void extend(const Range& views, List& ref_list)
 
 template<typename T, typename C>
 void set(View<Index<T>, C> view, Index<T>& index)
-{
-    index = view.get_index();
-}
+{ index = view.get_index(); }
 
 template<typename T, typename C>
 void set(View<Data<T>, C> view, Data<T>& data)
-{
-    data = view.get_data();
-}
+{ data = view.get_data(); }
 
 template<typename T, typename C>
 void set(const std::optional<View<Index<T>, C>>& view, ::cista::optional<Index<T>>& data)

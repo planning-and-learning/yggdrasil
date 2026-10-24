@@ -74,9 +74,7 @@ public:
     void clear() noexcept;
 
     static size_t hash(const Data<Tag>& element) noexcept(std::is_nothrow_default_constructible_v<H> && std::is_nothrow_invocable_v<const H&, const Data<Tag>&>)
-    {
-        return gtl::phmap_mix<sizeof(size_t)>()(H {}(element));
-    }
+    { return gtl::phmap_mix<sizeof(size_t)>()(H {}(element)); }
 
     std::optional<Index<Tag>> find_with_hash(const Data<Tag>& element, size_t h) const;
 

@@ -55,7 +55,6 @@ struct Data<tests::ConcurrentElement>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
-
 template<>
 struct Data<tests::ConcurrentSerializedElement>
 {
@@ -145,16 +144,12 @@ public:
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
     const Data<T>& operator[](Index<T> index) const noexcept
-    {
-        return local(index);
-    }
+    { return local(index); }
 
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
     const PublishedRepository& get_canonical_context(Index<T>) const noexcept
-    {
-        return *this;
-    }
+    { return *this; }
 
     size_t get_index() const noexcept { return 0; }
     friend const PublishedRepository& get_repository(const PublishedRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }

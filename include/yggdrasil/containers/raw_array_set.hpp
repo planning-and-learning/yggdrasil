@@ -40,9 +40,7 @@ public:
     /// Invalidates the erased and moved rows' indices and borrowed spans.
     void erase(uint_t index)
         requires(!ThreadSafe)
-    {
-        Base::erase_index(index);
-    }
+    { Base::erase_index(index); }
 };
 
 }  // namespace ygg

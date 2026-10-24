@@ -161,9 +161,7 @@ private:
             m_edges.predecessors(vertex, allowed_only(on_vertex));
         }
         bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
-        {
-            return m_owner->allowed(from) && m_owner->allowed(to) && m_edges.edge_exists(from, to);
-        }
+        { return m_owner->allowed(from) && m_owner->allowed(to) && m_edges.edge_exists(from, to); }
 
     private:
         /// on_vertex for allowed vertices; the others are skipped.
@@ -344,7 +342,7 @@ private:
     BackwardFrontier m_frontier;
     detail::TargetSet m_targets;
     AStarStorage m_search;
-    std::vector<uint_t> m_candidates;  ///< Probe objects on the witness.
+    std::vector<uint_t> m_candidates;    ///< Probe objects on the witness.
     std::vector<std::byte> m_estimated;  ///< The key and a vertex, as given to the heuristic.
     std::vector<std::byte> m_row;
     MustPassStatistics m_statistics;

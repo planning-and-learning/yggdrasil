@@ -38,9 +38,7 @@ namespace
 {
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{
-    return std::tuple { T(values)... };
-}
+{ return std::tuple { T(values)... }; }
 
 template<typename T>
 auto packed(std::span<const T> values)
@@ -773,9 +771,7 @@ namespace
 /// Columns store indices as uint_t; their owner resolves them.
 template<typename Repository>
 auto resolve_in(uint_t value, const Repository& repository)
-{
-    return make_view(ColumnsIndex(value), repository);
-}
+{ return make_view(ColumnsIndex(value), repository); }
 }
 
 TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)

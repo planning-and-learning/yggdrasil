@@ -131,9 +131,7 @@ auto IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::operator=(IndexedH
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::~IndexedHashSet()
-{
-    delete m_store;
-}
+{ delete m_store; }
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 void IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::clear() noexcept
@@ -185,9 +183,9 @@ Index<Tag> IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::append_new_w
         throw std::logic_error("Buffer IndexedHashSet requires a buffer and "
                                "arena before insertion.");
 
-    return Index<Tag>(static_cast<uint_t>(
-        m_store->storage.emplace_back_with_index([&](size_t index) { return serialize<Mode>(std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index)))); },
-                                          std::numeric_limits<uint_t>::max())));
+    return Index<Tag>(static_cast<uint_t>(m_store->storage.emplace_back_with_index(
+        [&](size_t index) { return serialize<Mode>(std::forward<Factory>(factory)(Index<Tag>(static_cast<uint_t>(index)))); },
+        std::numeric_limits<uint_t>::max())));
 }
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
@@ -219,7 +217,8 @@ std::pair<Index<Tag>, bool> IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSa
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 template<::cista::mode Mode, typename Factory>
-std::pair<Index<Tag>, bool> IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::complete_miss_with_hash(size_t h, const Data<Tag>& element, Factory&& factory)
+std::pair<Index<Tag>, bool>
+IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::complete_miss_with_hash(size_t h, const Data<Tag>& element, Factory&& factory)
 {
     assert(h == IndexedHashSet::hash(element) && "The given hash does not match container internal's hash.");
     assert(h == m_store->set.hash(element));
@@ -243,9 +242,7 @@ Index<Tag> IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::insert_new_w
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>
 template<::cista::mode Mode>
 std::pair<Index<Tag>, bool> IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::insert(const Data<Tag>& element)
-{
-    return insert_with_hash<Mode>(IndexedHashSet::hash(element), element);
-}
+{ return insert_with_hash<Mode>(IndexedHashSet::hash(element), element); }
 
 }  // namespace ygg::buffer
 

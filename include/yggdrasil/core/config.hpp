@@ -92,9 +92,7 @@ struct FloatTolerance<float_t>
     static_assert(rel_epsilon < static_cast<float_t>(1), "Relative float tolerance is too large.");
 
     static constexpr float_t tolerance(float_t lhs, float_t rhs) noexcept
-    {
-        return std::max(abs_epsilon, rel_epsilon * std::max(std::abs(lhs), std::abs(rhs)));
-    }
+    { return std::max(abs_epsilon, rel_epsilon * std::max(std::abs(lhs), std::abs(rhs))); }
 
     static constexpr float_t canonicalize(float_t value) noexcept
     {

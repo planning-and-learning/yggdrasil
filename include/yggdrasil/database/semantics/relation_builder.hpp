@@ -8,8 +8,8 @@
 
 #include "yggdrasil/containers/raw_array_set.hpp"
 #include "yggdrasil/core/types_utils.hpp"
-#include "yggdrasil/database/syntax/columns.hpp"
 #include "yggdrasil/database/declarations.hpp"
+#include "yggdrasil/database/syntax/columns.hpp"
 #include "yggdrasil/database/syntax/row.hpp"
 
 #include <cassert>
@@ -96,9 +96,7 @@ public:
     bool contains(database::Row row) const { return find(row).has_value(); }
     template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
-    {
-        return find(values).has_value();
-    }
+    { return find(values).has_value(); }
 
     /// Invalidates the erased and moved rows' positions and borrowed rows.
     void erase(size_t index);

@@ -77,9 +77,7 @@ public:
     size_t prepare(std::vector<size_t> positions) { return m_base.prepare(std::move(positions)); }
     template<RowPredicate OnRow>
     void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
-    {
-        m_base.evaluate(binding, values, on_row);
-    }
+    { m_base.evaluate(binding, values, on_row); }
 
     /// Binds every input, static ones included, as a new baseline: input(slot) returns slot's relation view.
     template<SlotRelations Input>
@@ -155,12 +153,12 @@ public:
 private:
     database::bound::QueryEvaluator m_base;
     UnorderedMap<std::vector<bool>, std::vector<database::bound::ConjunctivePlan>> m_seed_plans;  ///< By the variables bound on arrival.
-    std::vector<InputChange> m_changes;  ///< By slot; reused across bind() calls.
-    std::vector<size_t> m_changed;               ///< The slots the last bind() changed.
-    std::vector<bool> m_positive;                ///< By slot: whether it occurs under an even number of negations.
-    std::vector<bool> m_negative;                ///< By slot: whether it occurs under an odd number of negations.
+    std::vector<InputChange> m_changes;                                                           ///< By slot; reused across bind() calls.
+    std::vector<size_t> m_changed;                                                                ///< The slots the last bind() changed.
+    std::vector<bool> m_positive;  ///< By slot: whether it occurs under an even number of negations.
+    std::vector<bool> m_negative;  ///< By slot: whether it occurs under an odd number of negations.
     uint64_t m_version = 0;
-    std::vector<bool> m_bound;                   ///< Scratch of seed_plan() and seed_branch(), kept to avoid allocations.
+    std::vector<bool> m_bound;  ///< Scratch of seed_plan() and seed_branch(), kept to avoid allocations.
     std::vector<bool> m_top_vars;
 
     /// Applies a change that is known to be valid (see update()).

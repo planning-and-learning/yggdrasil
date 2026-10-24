@@ -20,21 +20,16 @@ namespace ygg::database
 /// Whether the query's operation has the tag.
 template<class Tag>
 bool is(QueryView<> query)
-{
-    return query.get_variant().template is<Index<Query<Tag>>>();
-}
+{ return query.get_variant().template is<Index<Query<Tag>>>(); }
 /// The query's operation; requires is<Tag>(query).
 template<class Tag>
 QueryView<Tag> as(QueryView<> query)
-{
-    return query.get_variant().template get<Index<Query<Tag>>>();
-}
+{ return query.get_variant().template get<Index<Query<Tag>>>(); }
 
 namespace detail
 {
 /// Rebinds a query's operation to schema-identical children in the destination.
-QueryView<>
-clone_query(QueryView<> source, std::span<const QueryView<>> children, QueryRepository& destination, QueryBuilder& builder);
+QueryView<> clone_query(QueryView<> source, std::span<const QueryView<>> children, QueryRepository& destination, QueryBuilder& builder);
 }  // namespace detail
 
 /// An immutable owning snapshot of the same typed query records used to build queries.
@@ -47,9 +42,7 @@ class QueryPlan
 
 public:
     QueryPlan() : m_repository(QueryRepositoryFactory {}.create_shared()) {}
-    QueryPlan(std::shared_ptr<const QueryRepository> repository, std::vector<QueryIndex> roots) :
-        m_repository(std::move(repository)),
-        m_roots(std::move(roots))
+    QueryPlan(std::shared_ptr<const QueryRepository> repository, std::vector<QueryIndex> roots) : m_repository(std::move(repository)), m_roots(std::move(roots))
     {
     }
 

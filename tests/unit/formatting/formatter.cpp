@@ -17,6 +17,7 @@
 
 #include "yggdrasil/formatting/formatter.hpp"
 
+#include "../database/query_helpers.hpp"
 #include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/formatting/associative_container_formatters.hpp"
@@ -36,7 +37,6 @@
 #include <string_view>
 #include <variant>
 #include <vector>
-#include "../database/query_helpers.hpp"
 
 namespace ygg::tests
 {

@@ -1,6 +1,6 @@
-#include "module.hpp"
-
 #include "yggdrasil/database/optimization/optimization.hpp"
+
+#include "module.hpp"
 #include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/python/type_casters.hpp"

@@ -106,9 +106,9 @@ Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t
 namespace ygg::database
 {
 DistancePlan::DistancePlan(std::span<const ColumnLayout> sources,
-                                   std::span<const ColumnLayout> edges,
-                                   std::span<const ColumnLayout> targets,
-                                   Index<Column> distance_column) :
+                           std::span<const ColumnLayout> edges,
+                           std::span<const ColumnLayout> targets,
+                           Index<Column> distance_column) :
     m_sources(sources),
     m_edges(edges),
     m_targets(targets),
@@ -126,23 +126,16 @@ DistancePlan::DistancePlan(std::span<const ColumnLayout> sources,
 
 namespace ygg::database
 {
-DistanceWorkspace::DistanceWorkspace(const DistancePlan& plan) : m_graph(plan.tuple_size())
-{
-}
+DistanceWorkspace::DistanceWorkspace(const DistancePlan& plan) : m_graph(plan.tuple_size()) {}
 }
 
 namespace ygg::database
 {
-bool DistanceWorkspace::matches(const DistancePlan& plan) const noexcept
-{
-    return m_graph.vertices.array_size() == plan.tuple_size();
-}
+bool DistanceWorkspace::matches(const DistancePlan& plan) const noexcept { return m_graph.vertices.array_size() == plan.tuple_size(); }
 }
 
 namespace ygg::database
 {
 size_t DistanceWorkspace::memory_usage() const noexcept
-{
-    return m_graph.memory_usage() + (m_distances.capacity() + m_queue.capacity() + m_targets.capacity()) * sizeof(uint_t) + m_row.capacity();
-}
+{ return m_graph.memory_usage() + (m_distances.capacity() + m_queue.capacity() + m_targets.capacity()) * sizeof(uint_t) + m_row.capacity(); }
 }

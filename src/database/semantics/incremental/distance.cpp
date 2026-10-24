@@ -29,18 +29,12 @@ uint_t DistanceEvaluator::require_vertex(std::span<const std::byte> row) const
 
 namespace ygg::database::incremental
 {
-bool DistanceEvaluator::is_source(uint_t vertex) const noexcept
-{
-    return vertex < m_source_slots.size() && m_source_slots[vertex] != absent;
-}
+bool DistanceEvaluator::is_source(uint_t vertex) const noexcept { return vertex < m_source_slots.size() && m_source_slots[vertex] != absent; }
 }
 
 namespace ygg::database::incremental
 {
-bool DistanceEvaluator::is_target(uint_t vertex) const noexcept
-{
-    return vertex < m_target_flags.size() && m_target_flags[vertex] == Flag::SET;
-}
+bool DistanceEvaluator::is_target(uint_t vertex) const noexcept { return vertex < m_target_flags.size() && m_target_flags[vertex] == Flag::SET; }
 }
 
 namespace ygg::database::incremental
@@ -117,10 +111,7 @@ void DistanceEvaluator::set_distance(SourceState& state, uint_t vertex, uint_t l
 
 namespace ygg::database::incremental
 {
-uint_t DistanceEvaluator::successor_distance(uint_t distance) noexcept
-{
-    return distance == infinity ? infinity : distance + 1;
-}
+uint_t DistanceEvaluator::successor_distance(uint_t distance) noexcept { return distance == infinity ? infinity : distance + 1; }
 }
 
 namespace ygg::database::incremental

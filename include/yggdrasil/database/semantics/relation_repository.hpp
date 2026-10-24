@@ -127,16 +127,12 @@ public:
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
     const Data<Entity>& operator[](Index<Entity> index) const noexcept
-    {
-        return m_symbols.template local<Entity>(index);
-    }
+    { return m_symbols.template local<Entity>(index); }
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
     const RelationRepository& get_canonical_context(Index<Entity>) const noexcept
-    {
-        return *this;
-    }
+    { return *this; }
     size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
     bool empty() const noexcept { return size() == 0; }
 
@@ -163,9 +159,7 @@ public:
 
     template<typename C>
     View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const ColumnLayout> columns)
-    {
-        return rename(source, columns, source.get_data().schema_namespace);
-    }
+    { return rename(source, columns, source.get_data().schema_namespace); }
 
     template<typename C>
     View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const Index<Column>> columns, size_t schema_namespace)
@@ -177,9 +171,7 @@ public:
 
     template<typename C>
     View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const Index<Column>> columns)
-    {
-        return rename(source, columns, source.get_data().schema_namespace);
-    }
+    { return rename(source, columns, source.get_data().schema_namespace); }
 
     void clear() noexcept
     {
@@ -209,10 +201,7 @@ void prepare_for_insert(RelationRepository&, Data<Relation>&) noexcept;
 using formalism::insert;
 
 /// Insert mutable schemas and synchronize their canonical identity.
-inline auto insert(RelationRepository& repository, Builder<Columns>& builder)
-{
-    return formalism::insert(repository, builder.get_data());
-}
+inline auto insert(RelationRepository& repository, Builder<Columns>& builder) { return formalism::insert(repository, builder.get_data()); }
 
 /// Intern a compatible mutable relation without copying its tuple storage.
 inline auto insert(RelationRepository& repository, Builder<Relation>& builder, size_t schema_namespace = 0)
@@ -247,9 +236,7 @@ auto copy(View<Index<Relation>, C> source, RelationRepository& repository)
 
 template<ColumnsViewConcept V>
 auto copy(const V& source, RelationRepository& repository)
-{
-    return repository.insert(source.span());
-}
+{ return repository.insert(source.span()); }
 
 }  // namespace ygg::database
 

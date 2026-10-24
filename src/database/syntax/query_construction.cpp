@@ -23,9 +23,7 @@ namespace ygg::database
 namespace detail
 {
 void prepare(Data<Query<QueryProjectTag>>& data, const QueryRepository& repository)
-{
-    data.plan = ProjectionPlan(child_columns(data.arg, repository), { data.labels.data(), data.labels.size() });
-}
+{ data.plan = ProjectionPlan(child_columns(data.arg, repository), { data.labels.data(), data.labels.size() }); }
 }
 }
 
@@ -82,9 +80,9 @@ namespace detail
 void prepare(Data<Query<QueryDistanceTag>>& data, const QueryRepository& repository)
 {
     data.plan = DistancePlan(child_columns(data.sources, repository),
-                                     child_columns(data.edges, repository),
-                                     child_columns(data.targets, repository),
-                                     data.distance_column);
+                             child_columns(data.edges, repository),
+                             child_columns(data.targets, repository),
+                             data.distance_column);
 }
 }
 }
@@ -106,9 +104,7 @@ void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repo
             for (const auto& column : schema)
                 if (std::ranges::find(data.output_order, column.label) == data.output_order.end())
                     data.output_order.push_back(column.label);
-    data.plan = GenericJoinPlan(schemas,
-                                        { data.variable_order.data(), data.variable_order.size() },
-                                        { data.output_order.data(), data.output_order.size() });
+    data.plan = GenericJoinPlan(schemas, { data.variable_order.data(), data.variable_order.size() }, { data.output_order.data(), data.output_order.size() });
 }
 }
 }

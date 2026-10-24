@@ -6,17 +6,17 @@
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
 #include "yggdrasil/database/optimization/details/optimization.hpp"
-#include "yggdrasil/diagnostics/warnings.hpp"
 #include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
+#include "yggdrasil/diagnostics/warnings.hpp"
 
-#include <concepts>
 #include <algorithm>
+#include <concepts>
 #include <ranges>
-#include <string>
 #include <span>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -137,12 +137,8 @@ private:
 ///     Worst-Case Optimal Joins in Relational Database Systems, PVLDB 13(11), 2020.
 /// [LEO01] M. Stillger, G. Lohman, V. Markl, M. Kandil, LEO – DB2's LEarning Optimizer,
 ///     VLDB 2001.
-inline QueryPlan optimize(std::span<const QueryView<>> roots,
-                           std::span<const Evaluation> evaluations,
-                           const std::type_identity_t<Statistics>& statistics = {})
-{
-    return detail::optimize(roots, evaluations, statistics);
-}
+inline QueryPlan optimize(std::span<const QueryView<>> roots, std::span<const Evaluation> evaluations, const std::type_identity_t<Statistics>& statistics = {})
+{ return detail::optimize(roots, evaluations, statistics); }
 
 /// Plans roots that are all evaluated fully.
 inline QueryPlan optimize(std::span<const QueryView<>> roots, const std::type_identity_t<Statistics>& statistics = {})
@@ -152,15 +148,11 @@ inline QueryPlan optimize(std::span<const QueryView<>> roots, const std::type_id
 }
 
 inline QueryPlan optimize(QueryView<> root, const std::type_identity_t<Statistics>& statistics = {})
-{
-    return optimize(std::span<const QueryView<>>(&root, 1), statistics);
-}
+{ return optimize(std::span<const QueryView<>>(&root, 1), statistics); }
 
 template<std::ranges::contiguous_range R>
     requires std::same_as<std::ranges::range_value_t<R>, QueryView<>>
 QueryPlan optimize(const R& roots, const std::type_identity_t<Statistics>& statistics = {})
-{
-    return optimize(std::span<const QueryView<>>(roots), statistics);
-}
+{ return optimize(std::span<const QueryView<>>(roots), statistics); }
 }  // namespace ygg::database
 #endif

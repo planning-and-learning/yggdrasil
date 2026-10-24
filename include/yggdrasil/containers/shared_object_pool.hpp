@@ -50,9 +50,7 @@ struct SharedObjectPoolEntry
 
     template<typename... Args>
     void initialize(Args&&... args)
-    {
-        object.initialize(std::forward<Args>(args)...);
-    }
+    { object.initialize(std::forward<Args>(args)...); }
 };
 
 template<typename T, bool ThreadSafe = false>

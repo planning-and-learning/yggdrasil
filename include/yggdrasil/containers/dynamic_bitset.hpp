@@ -26,8 +26,8 @@
 #include <cassert>
 #include <concepts>
 #include <cstddef>
-#include <limits>
 #include <iterator>
+#include <limits>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -334,16 +334,12 @@ public:
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
     bool is_superset_of(const BitsetSpan<OtherBlock>& other) const
-    {
-        return other.is_subset_of(*this);
-    }
+    { return other.is_subset_of(*this); }
 
     template<std::unsigned_integral OtherBlock>
         requires SameAsIgnoringConst<OtherBlock, U>
     bool is_proper_superset_of(const BitsetSpan<OtherBlock>& other) const
-    {
-        return other.is_proper_subset_of(*this);
-    }
+    { return other.is_proper_subset_of(*this); }
 
     /**
      * Modifiers
@@ -615,16 +611,12 @@ public:
 
     std::span<U> blocks() noexcept
         requires(!std::is_const_v<Block>)
-    {
-        return { m_data, num_blocks(m_num_bits) };
-    }
+    { return { m_data, num_blocks(m_num_bits) }; }
 
     std::span<const U> blocks() const noexcept { return { m_data, num_blocks(m_num_bits) }; }
     U* data() noexcept
         requires(!std::is_const_v<Block>)
-    {
-        return m_data;
-    }
+    { return m_data; }
     const U* data() const noexcept { return m_data; }
     size_t num_bits() const noexcept { return m_num_bits; }
 
@@ -716,9 +708,7 @@ public:
 
 template<std::unsigned_integral Block>
 auto set_bit_indices(BitsetSpan<Block> bits) noexcept
-{
-    return SetBitIndices<std::remove_const_t<Block>>(BitsetSpan<const std::remove_const_t<Block>>(bits));
-}
+{ return SetBitIndices<std::remove_const_t<Block>>(BitsetSpan<const std::remove_const_t<Block>>(bits)); }
 
 template<std::unsigned_integral B1, std::unsigned_integral B2>
     requires SameAsIgnoringConst<B1, B2>
@@ -745,9 +735,7 @@ constexpr bool operator==(const BitsetSpan<B1>& lhs, const BitsetSpan<B2>& rhs) 
 template<std::unsigned_integral B1, std::unsigned_integral B2>
     requires SameAsIgnoringConst<B1, B2>
 constexpr bool operator!=(const BitsetSpan<B1>& lhs, const BitsetSpan<B2>& rhs) noexcept
-{
-    return !(lhs == rhs);
-}
+{ return !(lhs == rhs); }
 
 template<typename Callback, typename BlockCombiner, std::unsigned_integral Block0, std::unsigned_integral... Blocks>
     requires(SameAsIgnoringConst<Block0, Blocks> && ...)

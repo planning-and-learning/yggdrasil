@@ -48,8 +48,8 @@ QueryPlan optimize(std::span<const QueryView<>> roots, std::span<const Evaluatio
     {
         const auto root = roots[i];
         // The bound evaluator orders each binding's joins itself, so a bound root keeps its normalized join structure.
-        outputs.push_back(evaluations[i] == Evaluation::bound ? copy(normalize(root), [](size_t slot) { return slot; }, plans, builder) :
-                                                                planner.plan(normalize(root)));
+        outputs.push_back(
+            evaluations[i] == Evaluation::bound ? copy(normalize(root), [](size_t slot) { return slot; }, plans, builder) : planner.plan(normalize(root)));
         assert(std::ranges::equal(outputs.back().columns(), root.columns()) && "Plans preserve ordered schemas.");
     }
     return compile(std::span<const QueryView<>>(outputs));
@@ -90,8 +90,8 @@ QueryView<> Planner::plan_block(QueryView<> join, std::span<const ColumnLayout> 
         return m_build.generic_join(block.atoms, {});
     const bool measured = block.atoms.size() <= max_cost_based_atoms && std::ranges::all_of(block.atoms, [&](auto atom) { return known(atom); });
     const auto result = block.atoms.size() == 1 ? block.atoms.front() :
-                        measured ? CostBasedPlanner(block, m_build, [&](QueryView<> atom) { return estimate(atom); }).plan() :
-                                   structural_plan(block, m_build);
+                        measured                ? CostBasedPlanner(block, m_build, [&](QueryView<> atom) { return estimate(atom); }).plan() :
+                                                  structural_plan(block, m_build);
     return m_build.project(result, column_labels(output));
 }
 }

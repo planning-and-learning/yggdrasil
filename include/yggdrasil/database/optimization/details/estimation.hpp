@@ -93,14 +93,10 @@ Estimate estimate_operation(QueryView<QueryInputTag> query, FactorIdentity, GetE
 }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryEmptyTag> query, FactorIdentity identity, GetEstimate&&, const Statistics&)
-{
-    return factor({ 0, {} }, query.columns(), identity);
-}
+{ return factor({ 0, {} }, query.columns(), identity); }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryJoinTag> query, FactorIdentity, GetEstimate child, const Statistics&)
-{
-    return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), column_labels(query.columns()));
-}
+{ return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), column_labels(query.columns())); }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
@@ -201,9 +197,7 @@ Estimate estimate_operation(QueryView<Tag> query, FactorIdentity identity, GetEs
 /// The literature has no estimate for distances; they are only known when observed.
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryDistanceTag>, FactorIdentity, GetEstimate&&, const Statistics&)
-{
-    throw std::logic_error("Optimizer: distances have no estimate unless observed.");
-}
+{ throw std::logic_error("Optimizer: distances have no estimate unless observed."); }
 
 /// The System R estimate of a query from its children's estimates. An observation of
 /// the equivalent caller query replaces the derivation (LEO, VLDB 2001).

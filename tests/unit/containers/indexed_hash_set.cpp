@@ -57,7 +57,6 @@ inline bool is_canonical(const Data<ygg::tests::IndexedHashSetTestTag>&) { retur
 
 inline void canonicalize(Data<ygg::tests::IndexedHashSetTestTag>&) {}
 
-
 }  // namespace ygg
 
 namespace ygg::tests

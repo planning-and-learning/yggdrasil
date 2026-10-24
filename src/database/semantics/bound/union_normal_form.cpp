@@ -7,10 +7,7 @@
 
 namespace ygg::database::bound
 {
-UnionNormalForm union_normal_form(QueryView<> query)
-{
-    return detail::UnionNormalFormBuilder {}.build(query);
-}
+UnionNormalForm union_normal_form(QueryView<> query) { return detail::UnionNormalFormBuilder {}.build(query); }
 }
 
 namespace ygg::database::bound
@@ -122,8 +119,8 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                 const auto lhs = concrete.get_lhs();
                 const auto rhs = concrete.get_rhs();
                 auto result = flatten(lhs, by_label(lhs.columns(), columns, mapping));
-                auto negation = ConjunctiveNegation { std::vector<uint32_t>(mapping.begin(), mapping.end()),
-                                                 flatten(rhs, by_label(rhs.columns(), columns, mapping)) };
+                auto negation =
+                    ConjunctiveNegation { std::vector<uint32_t>(mapping.begin(), mapping.end()), flatten(rhs, by_label(rhs.columns(), columns, mapping)) };
                 for (auto& branch : result)
                     branch.negations.push_back(negation);
                 return result;

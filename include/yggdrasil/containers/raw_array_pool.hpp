@@ -80,9 +80,7 @@ public:
         m_array_size_bytes(other.m_array_size_bytes),
         m_storage(std::move(other.m_storage)),
         m_size(other.size())
-    {
-        detail::store_size<ThreadSafe>(other.m_size, 0);
-    }
+    { detail::store_size<ThreadSafe>(other.m_size, 0); }
 
     RawArrayPool& operator=(RawArrayPool&& other) noexcept
     {

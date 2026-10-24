@@ -53,7 +53,15 @@ public:
     }
     ColumnSlice output_position(size_t depth) const { return m_output_positions.at(depth); }
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&GenericJoinPlan::m_inputs, &GenericJoinPlan::m_output, &GenericJoinPlan::m_order, &GenericJoinPlan::m_keys, &GenericJoinPlan::m_occurrences, &GenericJoinPlan::m_output_positions> {}; }
+    static constexpr auto cista_members() noexcept
+    {
+        return ygg::Members<&GenericJoinPlan::m_inputs,
+                            &GenericJoinPlan::m_output,
+                            &GenericJoinPlan::m_order,
+                            &GenericJoinPlan::m_keys,
+                            &GenericJoinPlan::m_occurrences,
+                            &GenericJoinPlan::m_output_positions> {};
+    }
 
     bool matches(const GenericJoinPlan& other) const;
 };

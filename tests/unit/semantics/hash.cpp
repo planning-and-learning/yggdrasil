@@ -86,7 +86,7 @@ TEST(YggdrasilTests, CommonHashBytesMatchesXxHashReferenceAcrossBlockBoundaries)
         bytes[i] = static_cast<unsigned char>(i * 37);
 
     // Seed-zero results from the reference xxHash implementation, including unaligned input.
-    const auto cases = std::array<std::pair<size_t, ygg::hash_t>, 15> {{
+    const auto cases = std::array<std::pair<size_t, ygg::hash_t>, 15> { {
         { 0, 0xef46db3751d8e999ULL },
         { 1, 0x89ac406afd6cd3b7ULL },
         { 3, 0x614123b469e8f204ULL },
@@ -102,7 +102,7 @@ TEST(YggdrasilTests, CommonHashBytesMatchesXxHashReferenceAcrossBlockBoundaries)
         { 63, 0x70781206707beec8ULL },
         { 64, 0x6892b7f3d78396eeULL },
         { 65, 0x4948c637675f5150ULL },
-    }};
+    } };
     EXPECT_EQ(ygg::hashing::hash_bytes(nullptr, 0), 0xef46db3751d8e999ULL);
     for (const auto& [size, expected] : cases)
     {

@@ -19,8 +19,8 @@
 #define YGG_CONTAINERS_DETAIL_CONCURRENCY_HPP_
 
 #include "yggdrasil/containers/detail/lazy_insert.hpp"
-#include "yggdrasil/core/spin_mutex.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/core/spin_mutex.hpp"
 
 #include <cstddef>
 #include <gtl/phmap.hpp>

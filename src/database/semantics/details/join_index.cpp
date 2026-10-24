@@ -24,9 +24,9 @@ namespace ygg::database
 namespace detail
 {
 bool join_keys_equal(std::span<const std::byte> lhs,
-                            std::span<const ColumnSlice> lhs_keys,
-                            std::span<const std::byte> rhs,
-                            std::span<const ColumnSlice> rhs_keys) noexcept
+                     std::span<const ColumnSlice> lhs_keys,
+                     std::span<const std::byte> rhs,
+                     std::span<const ColumnSlice> rhs_keys) noexcept
 {
     for (size_t i = 0; i < lhs_keys.size(); ++i)
         if (!std::ranges::equal(lhs.subspan(lhs_keys[i].offset, lhs_keys[i].size), rhs.subspan(rhs_keys[i].offset, rhs_keys[i].size)))

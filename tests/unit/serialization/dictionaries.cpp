@@ -83,9 +83,7 @@ struct EntityWrapper
 
 template<typename Archive>
 void describe_fields(Archive& archive, std::type_identity<EntityWrapper>)
-{
-    describe_fields(archive, std::type_identity<DictionaryEntity> {});
-}
+{ describe_fields(archive, std::type_identity<DictionaryEntity> {}); }
 
 const DictionaryEntity& serialize_as(serialization::Dictionaries&, const EntityWrapper& wrapper) { return wrapper.entity; }
 

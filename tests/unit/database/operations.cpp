@@ -77,9 +77,7 @@ Builder<database::Columns> columns_of(std::initializer_list<Index<database::Colu
 }
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{
-    return std::tuple { T(values)... };
-}
+{ return std::tuple { T(values)... }; }
 
 template<typename T>
 auto packed(std::span<const T> values)

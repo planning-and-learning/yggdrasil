@@ -63,12 +63,7 @@ public:
 /// schemas and aliases are checked before clearing output. Evaluation failures
 /// may leave partial output. Inputs must not borrow the workspace's buffers.
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
-void distance(const S& sources,
-              const E& edges,
-              const T& targets,
-              const DistancePlan& plan,
-              Builder<Relation>& out,
-              DistanceWorkspace& workspace);
+void distance(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& out, DistanceWorkspace& workspace);
 
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
 Builder<Relation> distance(const S& sources, const E& edges, const T& targets, const DistancePlan& plan);
@@ -76,12 +71,7 @@ Builder<Relation> distance(const S& sources, const E& edges, const T& targets, c
 /// The smallest distance between any source and target, from distance() into result.
 /// uint_t's maximum if no target is reachable.
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
-uint_t min_distance(const S& sources,
-                    const E& edges,
-                    const T& targets,
-                    const DistancePlan& plan,
-                    Builder<Relation>& result,
-                    DistanceWorkspace& workspace);
+uint_t min_distance(const S& sources, const E& edges, const T& targets, const DistancePlan& plan, Builder<Relation>& result, DistanceWorkspace& workspace);
 
 }  // namespace ygg::database
 

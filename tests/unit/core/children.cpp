@@ -35,7 +35,8 @@ struct Data<tests::children::Node>
     ::cista::offset::vector<tests::children::LeafPair> pairs;
     int unrelated = 0;
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::single, &Data::list, &Data::matrix, &Data::variants, &Data::pairs, &Data::unrelated> {}; }
+    static constexpr auto cista_members() noexcept
+    { return ygg::Members<&Data::index, &Data::single, &Data::list, &Data::matrix, &Data::variants, &Data::pairs, &Data::unrelated> {}; }
 };
 }  // namespace ygg
 
@@ -47,9 +48,7 @@ struct Store
 
     template<typename T>
     const Store& get_canonical_context(Index<T>) const noexcept
-    {
-        return *this;
-    }
+    { return *this; }
 };
 }  // namespace ygg::tests::children
 

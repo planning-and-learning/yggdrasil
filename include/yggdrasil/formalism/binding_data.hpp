@@ -55,10 +55,7 @@ struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
-    void clear() noexcept
-    {
-        ygg::clear_members(*this);
-    }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
 
 }  // namespace ygg

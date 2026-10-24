@@ -42,7 +42,6 @@ struct Data<profiling::TrivialSymbol>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
-
 template<>
 struct Data<profiling::SerializedSymbol>
 {
@@ -128,9 +127,7 @@ void set_key(Data<Binding>& data, std::uint64_t key) noexcept
 
 template<typename Repository>
 void set_up_empty(const benchmark::State&)
-{
-    repository<Repository>() = std::make_unique<Repository>(0, nullptr, formalism::RelationRepositoryConfig(12));
-}
+{ repository<Repository>() = std::make_unique<Repository>(0, nullptr, formalism::RelationRepositoryConfig(12)); }
 
 template<typename Repository, typename Symbol>
 void set_up_symbol(const benchmark::State& state)
@@ -162,9 +159,7 @@ void set_up_relation(const benchmark::State& state)
 
 template<typename Repository>
 void tear_down(const benchmark::State&)
-{
-    repository<Repository>().reset();
-}
+{ repository<Repository>().reset(); }
 
 template<typename Repository, typename Symbol>
 void report_symbol(benchmark::State& state, std::uint64_t created)
@@ -330,15 +325,11 @@ void benchmark_relation_insert(benchmark::State& state)
 
 template<typename Repository>
 void configure_sequential(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations)
-{
-    benchmark->Iterations(iterations)->Threads(1)->UseRealTime();
-}
+{ benchmark->Iterations(iterations)->Threads(1)->UseRealTime(); }
 
 template<typename Repository>
 void configure_concurrent(benchmark::Benchmark* benchmark, benchmark::IterationCount iterations)
-{
-    benchmark->Iterations(iterations)->ThreadRange(1, 8)->UseRealTime();
-}
+{ benchmark->Iterations(iterations)->ThreadRange(1, 8)->UseRealTime(); }
 
 template<typename Repository, typename Symbol>
 void register_symbol_benchmarks(const char* prefix, bool concurrent)

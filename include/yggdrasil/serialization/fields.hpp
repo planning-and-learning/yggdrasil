@@ -23,10 +23,12 @@ struct FieldNames
     std::vector<std::string> names;
 
     template<typename Accessor>
-    void field(std::string_view name, Accessor) { names.emplace_back(name); }
+    void field(std::string_view name, Accessor)
+    { names.emplace_back(name); }
 
     template<typename Accessor>
-    void variant(Accessor) { names.emplace_back(detail::variant_field); }
+    void variant(Accessor)
+    { names.emplace_back(detail::variant_field); }
 };
 
 template<typename Archive, typename T>

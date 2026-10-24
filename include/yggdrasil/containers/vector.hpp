@@ -300,30 +300,22 @@ public:
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     T& operator()(Idx... idx) noexcept
-    {
-        return m_data[offset(idx...)];
-    }
+    { return m_data[offset(idx...)]; }
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     const T& operator()(Idx... idx) const noexcept
-    {
-        return m_data[offset(idx...)];
-    }
+    { return m_data[offset(idx...)]; }
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     T& at(Idx... idx)
-    {
-        return m_data[offset_checked(idx...)];
-    }
+    { return m_data[offset_checked(idx...)]; }
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     const T& at(Idx... idx) const
-    {
-        return m_data[offset_checked(idx...)];
-    }
+    { return m_data[offset_checked(idx...)]; }
 
     // Prefix indexing: returns a lower-rank span
     template<typename... Idx>
@@ -436,15 +428,11 @@ private:
 
     template<typename... Idx>
     size_t offset_prefix(Idx... idx) const noexcept
-    {
-        return offset(idx...);
-    }
+    { return offset(idx...); }
 
     template<typename... Idx>
     size_t offset_prefix_checked(Idx... idx) const
-    {
-        return offset_checked(idx...);
-    }
+    { return offset_checked(idx...); }
 
 private:
     T* m_data;

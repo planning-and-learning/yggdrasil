@@ -46,7 +46,6 @@ struct NoLeafSet
     static constexpr bool empty() noexcept { return true; }
 };
 
-
 template<typename T>
 struct TreeVectorLeaf;
 
@@ -94,12 +93,8 @@ struct Data<detail::TreeVectorLeaf<T>>
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::value> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
-    void clear() noexcept
-    {
-        ygg::clear_members(*this);
-    }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
-
 
 template<typename T, size_t Arity>
 struct Data<detail::TreeVectorNode<T, Arity>>
@@ -111,12 +106,8 @@ struct Data<detail::TreeVectorNode<T, Arity>>
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::children> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::children> {}; }
-    void clear() noexcept
-    {
-        ygg::clear_members(*this);
-    }
+    void clear() noexcept { ygg::clear_members(*this); }
 };
-
 
 template<typename T>
 struct TreeVectorIndex
@@ -155,7 +146,8 @@ private:
     // Unique object representations make bitwise identity agree with equality (rules out float, padding).
     static constexpr bool inline_leaves = std::has_unique_object_representations_v<T> && sizeof(T) == sizeof(uint_t);
 
-    using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
+    using LeafSet =
+        std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
 
     using Write = TreeVectorWrite<T>;

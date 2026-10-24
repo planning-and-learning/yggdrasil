@@ -155,9 +155,7 @@ public:
         m_segments(std::move(other.m_segments)),
         m_unit_size(other.m_unit_size),
         m_current_segment(std::exchange(other.m_current_segment, 0))
-    {
-        rebuild_publication();
-    }
+    { rebuild_publication(); }
 
     GeometricByteStorage& operator=(GeometricByteStorage&& other) noexcept
     {

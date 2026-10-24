@@ -260,12 +260,13 @@ TEST(YggdrasilTests, CommonRawArrayPoolEraseIgnoresUnpublishedSegment)
     const auto values = std::array { 11, 12 };
     pool.insert(values);
     const auto failing = values
-                         | std::views::transform([](int value)
-                                                 {
-                                                     if (value == 12)
-                                                         throw std::runtime_error("fill failed");
-                                                     return value;
-                                                 });
+                         | std::views::transform(
+                             [](int value)
+                             {
+                                 if (value == 12)
+                                     throw std::runtime_error("fill failed");
+                                 return value;
+                             });
     EXPECT_THROW(pool.insert(failing), std::runtime_error);
     ASSERT_EQ(pool.size(), 1);
     const auto retained = pool.memory_usage();

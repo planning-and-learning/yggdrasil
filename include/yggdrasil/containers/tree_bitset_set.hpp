@@ -85,7 +85,8 @@ private:
     using Leaf = detail::TreeVectorLeaf<Block>;
     using Node = detail::TreeVectorNode<Block, Arity>;
     using Children = std::array<uint_t, Arity>;
-    using LeafSet = std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
+    using LeafSet =
+        std::conditional_t<inline_leaves, detail::NoLeafSet, IndexedHashSet<Leaf, Hash<Data<Leaf>>, EqualTo<Data<Leaf>>, FirstSegmentSize, ThreadSafe>>;
     using NodeSet = IndexedHashSet<Node, Hash<Data<Node>>, EqualTo<Data<Node>>, FirstSegmentSize, ThreadSafe>;
     using Flip = TreeBitsetFlip<Block>;
 
@@ -153,9 +154,7 @@ private:
     {
     public:
         BaseCursor(const NodeSet& nodes, TreeBitsetIndex<Block> base) : m_nodes(&nodes), m_base_size(base.size)
-        {
-            m_path[0] = Frame { base.root, 0, base.size };
-        }
+        { m_path[0] = Frame { base.root, 0, base.size }; }
 
         /// Returns the subtree of the base that covers exactly [offset, offset + size), or nullopt if the base has
         /// no such subtree. Ranges inside all-zero subtrees, or beyond the base, are zero.
@@ -194,7 +193,8 @@ private:
             uint_t offset;
             uint_t size;
 
-            bool contains(uint_t other_offset, uint_t other_size) const noexcept { return offset <= other_offset && other_offset + other_size <= offset + size; }
+            bool contains(uint_t other_offset, uint_t other_size) const noexcept
+            { return offset <= other_offset && other_offset + other_size <= offset + size; }
         };
 
         const NodeSet* m_nodes;

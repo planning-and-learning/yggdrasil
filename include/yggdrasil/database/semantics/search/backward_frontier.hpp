@@ -6,13 +6,13 @@
 #ifndef YGG_DATABASE_SEMANTICS_SEARCH_BACKWARD_FRONTIER_HPP_
 #define YGG_DATABASE_SEMANTICS_SEARCH_BACKWARD_FRONTIER_HPP_
 
-#include "yggdrasil/database/semantics/search/search_tree.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
+#include "yggdrasil/database/semantics/search/search_tree.hpp"
 
 #include <cstddef>
 #include <optional>
-#include <utility>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ygg::database

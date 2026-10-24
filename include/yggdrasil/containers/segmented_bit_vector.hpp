@@ -132,9 +132,7 @@ public:
         }
 
         friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
-        {
-            return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
-        }
+        { return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos); }
 
         reference operator[](difference_type offset) const { return *(*this + offset); }
 

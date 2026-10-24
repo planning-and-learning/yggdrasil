@@ -18,9 +18,7 @@ void bind_query_project(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = ConcreteQueryView<ygg::database::QueryProjectTag>;
         auto cls = nb::class_<V>(m, "QueryProject");
-        cls.def("get_index", &V::get_index)
-            .def("columns", &V::columns, nb::keep_alive<0, 1>())
-            .def("get_arg", &V::get_arg, nb::keep_alive<0, 1>());
+        cls.def("get_index", &V::get_index).def("columns", &V::columns, nb::keep_alive<0, 1>()).def("get_arg", &V::get_arg, nb::keep_alive<0, 1>());
         ygg::add_comparison(cls);
         ygg::add_hash(cls);
     }

@@ -350,14 +350,10 @@ struct ListGraph
     }
     template<typename OnVertex>
     void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
-    {
-        each(out[id(vertex)], on_vertex);
-    }
+    { each(out[id(vertex)], on_vertex); }
     template<typename OnVertex>
     void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
-    {
-        each(in[id(vertex)], on_vertex);
-    }
+    { each(in[id(vertex)], on_vertex); }
     bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return std::ranges::find(out[id(from)], id(to)) != out[id(from)].end(); }
 };
 

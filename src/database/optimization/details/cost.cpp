@@ -69,14 +69,14 @@ QueryView<> CostBasedPlanner::plan() &&
                 graph[rhs] |= std::uint64_t { 1 } << lhs;
             }
     enumerate_connected_pairs(graph,
-                                      [&](std::uint64_t lhs, std::uint64_t rhs)
-                                      {
-                                          const auto subset = lhs | rhs;
-                                          const auto cost = m_best.at(lhs).cost + m_best.at(rhs).cost + rows(subset);
-                                          if (const auto it = m_best.find(subset); it == m_best.end() || cost < it->second.cost)
-                                              m_best.insert_or_assign(subset, Split { cost, lhs });
-                                          return true;
-                                      });
+                              [&](std::uint64_t lhs, std::uint64_t rhs)
+                              {
+                                  const auto subset = lhs | rhs;
+                                  const auto cost = m_best.at(lhs).cost + m_best.at(rhs).cost + rows(subset);
+                                  if (const auto it = m_best.find(subset); it == m_best.end() || cost < it->second.cost)
+                                      m_best.insert_or_assign(subset, Split { cost, lhs });
+                                  return true;
+                              });
     std::vector<std::uint64_t> components;
     for (auto unseen = bit::lo_set<std::uint64_t>[count]; unseen;)
     {

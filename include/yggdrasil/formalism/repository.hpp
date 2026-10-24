@@ -211,16 +211,12 @@ public:
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     std::optional<View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
-    {
-        return find_with_hash(builder, SymbolRepo::hash(builder));
-    }
+    { return find_with_hash(builder, SymbolRepo::hash(builder)); }
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     std::pair<View<Index<T>, Repository>, bool> insert(Data<T>& builder)
-    {
-        return insert_with_hash(builder, SymbolRepo::hash(builder));
-    }
+    { return insert_with_hash(builder, SymbolRepo::hash(builder)); }
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
@@ -234,30 +230,22 @@ public:
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     const Data<T>& front() const
-    {
-        return (*this)[Index<T>(0)];
-    }
+    { return (*this)[Index<T>(0)]; }
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     size_t size() const noexcept
-    {
-        return m_symbol_repository.template size<T>();
-    }
+    { return m_symbol_repository.template size<T>(); }
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     size_t memory_usage() const noexcept
-    {
-        return m_symbol_repository.template memory_usage<T>();
-    }
+    { return m_symbol_repository.template memory_usage<T>(); }
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
     bool contains(Index<T> index) const noexcept
-    {
-        return find_canonical_context(index) != nullptr;
-    }
+    { return find_canonical_context(index) != nullptr; }
 
     template<typename T>
         requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
@@ -279,16 +267,12 @@ public:
     template<typename T>
         requires SupportsRelation<Repository, T>
     std::optional<View<Index<RelationBinding<T, object_tag>>, Repository>> find(const Data<RelationBinding<T, object_tag>>& builder) const
-    {
-        return find_with_hash(builder, RelationRepo::hash(builder));
-    }
+    { return find_with_hash(builder, RelationRepo::hash(builder)); }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
     std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool> insert(const Data<RelationBinding<T, object_tag>>& builder)
-    {
-        return insert_with_hash(builder, RelationRepo::hash(builder));
-    }
+    { return insert_with_hash(builder, RelationRepo::hash(builder)); }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
@@ -302,16 +286,12 @@ public:
     template<typename T>
         requires SupportsRelation<Repository, T>
     auto front(Index<T> g) const
-    {
-        return (*this)[Index<RelationBinding<T, object_tag>> { g, Index<Row>(0) }];
-    }
+    { return (*this)[Index<RelationBinding<T, object_tag>> { g, Index<Row>(0) }]; }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
     size_t size(Index<T> g) const noexcept
-    {
-        return m_relation_repository.size(g);
-    }
+    { return m_relation_repository.size(g); }
 
     template<RelationBindingConcept T>
         requires SupportsRelation<Repository, typename T::relation_tag> && std::same_as<typename T::object_tag, object_tag>
@@ -324,9 +304,7 @@ public:
     template<typename T>
         requires SupportsRelation<Repository, T>
     bool contains(Index<RelationBinding<T, object_tag>> index) const noexcept
-    {
-        return find_canonical_context(index) != nullptr;
-    }
+    { return find_canonical_context(index) != nullptr; }
 
     template<typename T>
         requires SupportsRelation<Repository, T>
@@ -340,9 +318,7 @@ public:
     template<typename T, typename C>
         requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
     bool contains(const ::ygg::View<Index<T>, C>& view) const
-    {
-        return ::ygg::formalism::contains(*this, view);
-    }
+    { return ::ygg::formalism::contains(*this, view); }
 
     /**
      * Common methods do not depend on lookup scope.
@@ -355,9 +331,7 @@ public:
         m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
         m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr),
         m_index(index)
-    {
-        clear();
-    }
+    { clear(); }
 
     Repository(size_t index, const Repository* parent, RelationRepositoryConfig config) :
         m_parent(parent),
@@ -365,9 +339,7 @@ public:
         m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
         m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr, config),
         m_index(index)
-    {
-        clear();
-    }
+    { clear(); }
     ~Repository() = default;
     Repository(const Repository& other) = delete;
     Repository& operator=(const Repository& other) = delete;

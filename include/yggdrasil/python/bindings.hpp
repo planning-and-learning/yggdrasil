@@ -80,7 +80,10 @@ void bind_insert(nb::class_<Repository>& repository)
     repository.def(
         "insert",
         [retainer](nb::typed<nb::handle, Repository> owner, Data<T> data) -> nb::typed<nb::tuple, View<Index<T>, Repository>, bool>
-        { return nb::borrow<nb::typed<nb::tuple, View<Index<T>, Repository>, bool>>(python::cast_with_owner(formalism::insert(nb::cast<Repository&>(owner), data), owner, retainer)); },
+        {
+            return nb::borrow<nb::typed<nb::tuple, View<Index<T>, Repository>, bool>>(
+                python::cast_with_owner(formalism::insert(nb::cast<Repository&>(owner), data), owner, retainer));
+        },
         nb::arg("data"));
 }
 

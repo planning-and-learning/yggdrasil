@@ -10,8 +10,8 @@
 #include "yggdrasil/database/semantics/bound/conjunctive_plan.hpp"
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 #include "yggdrasil/database/semantics/details/join_index.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
+#include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
@@ -112,7 +112,8 @@ public:
             snapshot.erase(*position);
             if (*position != last)
                 for_each_index(slot,
-                               [&](KeyIndex& entry) { entry.rows.replace(database::detail::join_key_hash(snapshot.row(*position), entry.keys), last, *position); });
+                               [&](KeyIndex& entry)
+                               { entry.rows.replace(database::detail::join_key_hash(snapshot.row(*position), entry.keys), last, *position); });
         }
         for (size_t r = 0; r < added.size(); ++r)
         {
@@ -172,7 +173,6 @@ public:
     }
 
 private:
-
     struct Binding
     {
         std::vector<size_t> positions;
@@ -196,8 +196,8 @@ private:
 
     UnionNormalForm m_query;
     std::vector<ColumnLayout> m_columns;
-    RelationPool m_pool;  ///< Owns the input snapshots; declared before them, so it outlives them.
-    std::vector<std::byte> m_frame;                ///< The variables' values while a branch runs.
+    RelationPool m_pool;             ///< Owns the input snapshots; declared before them, so it outlives them.
+    std::vector<std::byte> m_frame;  ///< The variables' values while a branch runs.
     std::vector<bool> m_static;
     std::vector<UniqueObjectPoolPtr<Builder<Relation>>> m_inputs;
     std::vector<bool> m_bound;
@@ -308,7 +308,6 @@ private:
                 return proceed;
         return true;
     }
-
 };
 
 }  // namespace ygg::database::bound

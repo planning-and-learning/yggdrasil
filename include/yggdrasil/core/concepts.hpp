@@ -67,18 +67,14 @@ namespace detail
 {
 template<typename T, typename F, auto... Ms>
 constexpr void for_each_member(T& t, F& f, Members<Ms...>)
-{
-    (f(t.*Ms), ...);
-}
+{ (f(t.*Ms), ...); }
 }
 
 /// Calls f with each field of t, in the order of cista_members().
 template<typename T, typename F>
     requires MemberListed<std::remove_const_t<T>>
 constexpr void for_each_member(T& t, F f)
-{
-    detail::for_each_member(t, f, std::remove_const_t<T>::cista_members());
-}
+{ detail::for_each_member(t, f, std::remove_const_t<T>::cista_members()); }
 
 namespace detail
 {
@@ -125,10 +121,9 @@ concept InputRangeOf = std::ranges::input_range<Range> && std::same_as<std::rang
 
 /// A read-only, multipass range whose elements bind to the requested value type.
 template<typename Range, typename Value>
-concept SizedForwardRangeOf =
-    std::ranges::forward_range<const std::remove_reference_t<Range>> && std::ranges::sized_range<const std::remove_reference_t<Range>>
-    && std::same_as<std::ranges::range_value_t<const std::remove_reference_t<Range>>, Value>
-    && std::convertible_to<std::ranges::range_reference_t<const std::remove_reference_t<Range>>, const Value&>;
+concept SizedForwardRangeOf = std::ranges::forward_range<const std::remove_reference_t<Range>> && std::ranges::sized_range<const std::remove_reference_t<Range>>
+                              && std::same_as<std::ranges::range_value_t<const std::remove_reference_t<Range>>, Value>
+                              && std::convertible_to<std::ranges::range_reference_t<const std::remove_reference_t<Range>>, const Value&>;
 
 template<typename T>
 concept Clearable = requires(T& value) { value.clear(); };

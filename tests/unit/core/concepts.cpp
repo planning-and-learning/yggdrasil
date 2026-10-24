@@ -15,9 +15,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/core/concepts.hpp"
 
+#include "yggdrasil/containers/variant.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/comparators.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -47,8 +47,17 @@ struct RangeContractIterator
     RangeContractIterator(RangeContractIterator&&) noexcept(Copy) = default;
     RangeContractIterator& operator=(RangeContractIterator&&) noexcept(Copy) = default;
     int operator*() const noexcept(Dereference) { return *position; }
-    RangeContractIterator& operator++() noexcept(Increment) { ++position; return *this; }
-    RangeContractIterator operator++(int) noexcept(Copy && Increment) { auto old = *this; ++*this; return old; }
+    RangeContractIterator& operator++() noexcept(Increment)
+    {
+        ++position;
+        return *this;
+    }
+    RangeContractIterator operator++(int) noexcept(Copy && Increment)
+    {
+        auto old = *this;
+        ++*this;
+        return old;
+    }
     friend bool operator==(const RangeContractIterator&, const RangeContractIterator&) noexcept = default;
 };
 

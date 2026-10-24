@@ -71,9 +71,7 @@ public:
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     size_t size() const noexcept
-    {
-        return m_symbols.template local_size<T>();
-    }
+    { return m_symbols.template local_size<T>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
@@ -96,9 +94,7 @@ public:
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     const Data<T>& operator[](Index<T> index) const noexcept
-    {
-        return m_symbols.template local<T>(index);
-    }
+    { return m_symbols.template local<T>(index); }
 };
 
 }  // namespace ygg::database

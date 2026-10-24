@@ -151,9 +151,7 @@ struct BlockingValue
 
     // Constructing from another value, by copy or move, is counted and may block.
     BlockingValue(const BlockingValue& other) noexcept : value(other.value), copies(other.copies), started(other.started), release(other.release)
-    {
-        on_transfer();
-    }
+    { on_transfer(); }
     BlockingValue(BlockingValue&& other) noexcept : value(other.value), copies(other.copies), started(other.started), release(other.release) { on_transfer(); }
     BlockingValue& operator=(const BlockingValue&) = default;
     BlockingValue& operator=(BlockingValue&&) = default;

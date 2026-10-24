@@ -62,8 +62,8 @@ inline hash_t hash_bytes(const void* data, size_t size) noexcept
 
 /// Byte equality must agree with value equality; custom Hash specializations retain value hashing.
 template<typename T>
-concept ByteHashable = (std::integral<T> || Enumeration<T>) && !std::same_as<T, bool> && std::has_unique_object_representations_v<T>
-                      && requires { requires Hash<T>::is_identity; };
+concept ByteHashable = (std::integral<T> || Enumeration<T>)
+                       && !std::same_as<T, bool> && std::has_unique_object_representations_v<T> && requires { requires Hash<T>::is_identity; };
 
 template<typename Range>
 concept ByteHashableRange = std::ranges::input_range<Range> && Hashable<std::ranges::range_value_t<Range>> && std::ranges::sized_range<Range>
@@ -121,9 +121,7 @@ struct Hash<T>
 
     hash_t operator()(const T& el) const
         requires Hashable<std::underlying_type_t<T>>
-    {
-        return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el));
-    }
+    { return Hash<std::underlying_type_t<T>> {}(static_cast<std::underlying_type_t<T>>(el)); }
 };
 
 template<>
@@ -133,9 +131,7 @@ struct Hash<void>
 
     template<Hashable T>
     hash_t operator()(const T& el) const
-    {
-        return Hash<std::remove_cvref_t<T>> {}(el);
-    }
+    { return Hash<std::remove_cvref_t<T>> {}(el); }
 };
 
 template<std::floating_point T>
@@ -169,9 +165,7 @@ struct Hash<std::array<T, N>>
 {
     hash_t operator()(const std::array<T, N>& arr) const
         requires Hashable<T>
-    {
-        return ygg::hash_range(arr);
-    }
+    { return ygg::hash_range(arr); }
 };
 
 template<typename T>
@@ -179,9 +173,7 @@ struct Hash<std::reference_wrapper<T>>
 {
     hash_t operator()(const std::reference_wrapper<T>& ref) const
         requires Hashable<T>
-    {
-        return Hash<std::remove_cvref_t<T>> {}(ref.get());
-    }
+    { return Hash<std::remove_cvref_t<T>> {}(ref.get()); }
 };
 
 template<typename Key, typename Compare, typename Allocator>
@@ -189,9 +181,7 @@ struct Hash<std::set<Key, Compare, Allocator>>
 {
     hash_t operator()(const std::set<Key, Compare, Allocator>& set) const
         requires Hashable<Key>
-    {
-        return ygg::hash_range(set);
-    }
+    { return ygg::hash_range(set); }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
@@ -199,9 +189,7 @@ struct Hash<std::map<Key, T, Compare, Allocator>>
 {
     hash_t operator()(const std::map<Key, T, Compare, Allocator>& map) const
         requires Hashable<Key> && Hashable<T>
-    {
-        return ygg::hash_range(map);
-    }
+    { return ygg::hash_range(map); }
 };
 
 template<typename Key, typename Compare, typename Allocator>
@@ -209,9 +197,7 @@ struct Hash<gtl::btree_set<Key, Compare, Allocator>>
 {
     hash_t operator()(const gtl::btree_set<Key, Compare, Allocator>& set) const
         requires Hashable<Key>
-    {
-        return ygg::hash_range(set);
-    }
+    { return ygg::hash_range(set); }
 };
 
 template<typename Key, typename T, typename Compare, typename Allocator>
@@ -219,9 +205,7 @@ struct Hash<gtl::btree_map<Key, T, Compare, Allocator>>
 {
     hash_t operator()(const gtl::btree_map<Key, T, Compare, Allocator>& map) const
         requires Hashable<Key> && Hashable<T>
-    {
-        return ygg::hash_range(map);
-    }
+    { return ygg::hash_range(map); }
 };
 
 template<typename T, typename Allocator>
@@ -229,9 +213,7 @@ struct Hash<std::vector<T, Allocator>>
 {
     hash_t operator()(const std::vector<T, Allocator>& vec) const
         requires Hashable<T>
-    {
-        return ygg::hash_range(vec);
-    }
+    { return ygg::hash_range(vec); }
 };
 
 template<typename T1, typename T2>
@@ -239,9 +221,7 @@ struct Hash<std::pair<T1, T2>>
 {
     hash_t operator()(const std::pair<T1, T2>& pair) const
         requires Hashable<T1> && Hashable<T2>
-    {
-        return ygg::hash_combine(pair.first, pair.second);
-    }
+    { return ygg::hash_combine(pair.first, pair.second); }
 };
 
 template<typename... Ts>
@@ -286,9 +266,7 @@ struct Hash<std::span<T, Extent>>
 {
     hash_t operator()(const std::span<T, Extent>& span) const
         requires Hashable<T>
-    {
-        return ygg::hash_range(span);
-    }
+    { return ygg::hash_range(span); }
 };
 
 template<MemberIdentified T>
@@ -309,15 +287,11 @@ struct Hash<T>
 
     hash_t operator()(const T& element) const
         requires Hashable<IdentifyingMembers<T>>
-    {
-        return ygg::hash_combine(element.identifying_members());
-    }
+    { return ygg::hash_combine(element.identifying_members()); }
 
     template<Hashable... Args>
     hash_t operator()(const std::tuple<Args...>& view) const
-    {
-        return ygg::hash_combine(view);
-    }
+    { return ygg::hash_combine(view); }
 };
 
 /**
@@ -366,9 +340,7 @@ inline void hash_combine(hash_t& seed, const T& value)
 
 template<typename T, Hashable... Rest>
 inline void hash_combine(hash_t& seed, const Rest&... rest)
-{
-    (ygg::hash_combine(seed, rest), ...);
-}
+{ (ygg::hash_combine(seed, rest), ...); }
 
 template<Hashable... Ts>
 inline hash_t hash_combine(const Ts&... rest)

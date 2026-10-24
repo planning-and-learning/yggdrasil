@@ -23,12 +23,12 @@
 #include "yggdrasil/semantics/containers/dynamic_bitset_hash.hpp"
 #include "yggdrasil/semantics/containers/dynamic_bitset_ordering.hpp"
 
-#include <boost/dynamic_bitset.hpp>
 #include <algorithm>
 #include <array>
-#include <ranges>
+#include <boost/dynamic_bitset.hpp>
 #include <concepts>
 #include <gtest/gtest.h>
+#include <ranges>
 #include <stdexcept>
 #include <vector>
 

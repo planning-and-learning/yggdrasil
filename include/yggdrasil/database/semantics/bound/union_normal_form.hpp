@@ -56,10 +56,10 @@ struct QueryVariable
 /// only filters rows once its outer variables are bound (relational algebra is safe-range).
 struct UnionNormalForm
 {
-    std::vector<QueryVariable> variables;               ///< Byte ranges of the variables in a frame of `frame_size`.
+    std::vector<QueryVariable> variables;  ///< Byte ranges of the variables in a frame of `frame_size`.
     size_t frame_size = 0;
     std::vector<std::vector<ColumnLayout>> input_columns;  ///< The schema of each input slot.
-    std::vector<uint32_t> output;                       ///< The variable of each of the query's columns.
+    std::vector<uint32_t> output;                          ///< The variable of each of the query's columns.
     std::vector<ConjunctiveBranch> branches;
 };
 

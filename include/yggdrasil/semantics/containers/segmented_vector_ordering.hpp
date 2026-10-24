@@ -30,9 +30,7 @@ struct Less<SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>>
     bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& lhs,
                     const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& rhs) const
         requires OrderedByLess<T>
-    {
-        return less_range(lhs, rhs);
-    }
+    { return less_range(lhs, rhs); }
 };
 
 }

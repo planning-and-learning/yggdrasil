@@ -162,7 +162,8 @@ TEST(YggdrasilTests, CommonTreeBitsetSetDistinguishesAllOnesBlocksFromZeroSubtre
 
     // An all-ones block has the bit pattern of the zero-subtree sentinel, but leaves are read by position.
     constexpr auto ones = ~Block { 0 };
-    for (const auto& blocks : { std::vector<Block> { ones }, std::vector<Block> { ones, ones }, std::vector<Block> { 0, ones }, std::vector<Block> { ones, 0, 0, ones } })
+    for (const auto& blocks :
+         { std::vector<Block> { ones }, std::vector<Block> { ones, ones }, std::vector<Block> { 0, ones }, std::vector<Block> { ones, 0, 0, ones } })
     {
         const auto index = set.insert(blocks);
         EXPECT_EQ(read_all(set, index), blocks);
@@ -196,8 +197,7 @@ TEST(YggdrasilTests, CommonTreeBitsetSetDeltaInsertMatchesFullInsert)
 
     // No flips leaves the index unchanged; clearing everything gives the empty index.
     EXPECT_EQ(set.insert(base, std::span<const Flip> {}), base);
-    EXPECT_EQ(set.insert(base, std::array<Flip, 5> { Flip { 0, 1 }, Flip { 1, 2 }, Flip { 2, 3 }, Flip { 3, 4 }, Flip { 4, 5 } }),
-              TreeBitsetIndex<Block> {});
+    EXPECT_EQ(set.insert(base, std::array<Flip, 5> { Flip { 0, 1 }, Flip { 1, 2 }, Flip { 2, 3 }, Flip { 3, 4 }, Flip { 4, 5 } }), TreeBitsetIndex<Block> {});
     EXPECT_EQ(set.insert(TreeBitsetIndex<Block> {}, std::array<Flip, 1> { Flip { 3, 8 } }), set.insert(std::array<Block, 4> { 0, 0, 0, 8 }));
 }
 

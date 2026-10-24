@@ -9,10 +9,7 @@ void bind_query_antijoin(nb::module_& m, QueryRepositoryBinding& repository)
 
     {
         using V = QueryData<ygg::database::QueryAntijoinTag>;
-        ygg::bind_data<V>(m, "QueryAntijoinData")
-            .def(nb::init<QueryView, QueryView>(), "lhs"_a, "rhs"_a)
-            .def_rw("lhs", &V::lhs)
-            .def_rw("rhs", &V::rhs);
+        ygg::bind_data<V>(m, "QueryAntijoinData").def(nb::init<QueryView, QueryView>(), "lhs"_a, "rhs"_a).def_rw("lhs", &V::lhs).def_rw("rhs", &V::rhs);
     }
 
     {

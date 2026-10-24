@@ -28,24 +28,23 @@ namespace ygg::database
 /// Raw read-only row access shared by builders and contextual Builder/Data/Index views.
 /// Contextual indexing and iteration may resolve stored elements into semantic views.
 template<typename V>
-concept RelationViewConcept =
-    requires(const std::remove_reference_t<V>& view, size_t i, Index<Column> column, std::span<const std::byte> row, Row typed_row) {
-           { view.columns() } -> ColumnsViewConcept;
-           { view.arity() } -> std::same_as<size_t>;
-           { view.size() } -> std::same_as<size_t>;
-           { view.empty() } -> std::same_as<bool>;
-           { view.get_storage_address() } -> std::same_as<const void*>;
-           { view.get_storage_index() } -> std::same_as<size_t>;
-           { view.column_index(column) } -> std::same_as<size_t>;
-           { view.row(i) } -> std::same_as<std::span<const std::byte>>;
-           { view.contains(row) } -> std::same_as<bool>;
-           { view.contains(typed_row) } -> std::same_as<bool>;
-       };
+concept RelationViewConcept = requires(const std::remove_reference_t<V>& view, size_t i, Index<Column> column, std::span<const std::byte> row, Row typed_row) {
+    { view.columns() } -> ColumnsViewConcept;
+    { view.arity() } -> std::same_as<size_t>;
+    { view.size() } -> std::same_as<size_t>;
+    { view.empty() } -> std::same_as<bool>;
+    { view.get_storage_address() } -> std::same_as<const void*>;
+    { view.get_storage_index() } -> std::same_as<size_t>;
+    { view.column_index(column) } -> std::same_as<size_t>;
+    { view.row(i) } -> std::same_as<std::span<const std::byte>>;
+    { view.contains(row) } -> std::same_as<bool>;
+    { view.contains(typed_row) } -> std::same_as<bool>;
+};
 
 /// Sized random-access inputs whose elements, possibly references, are relation views.
 template<typename R>
-concept RelationViewRange = std::ranges::random_access_range<const R> && std::ranges::sized_range<const R>
-                            && RelationViewConcept<std::ranges::range_reference_t<const R>>;
+concept RelationViewRange =
+    std::ranges::random_access_range<const R> && std::ranges::sized_range<const R> && RelationViewConcept<std::ranges::range_reference_t<const R>>;
 
 /// A row consumer: called with the bytes of each row; returning false stops the enumeration.
 template<typename F>
@@ -65,9 +64,7 @@ struct RowAt
     template<typename V>
         requires requires(const V& view, size_t index) { view[index]; }
     auto operator()(const V& view, size_t index) const
-    {
-        return view[index];
-    }
+    { return view[index]; }
 };
 
 /// Keeps the lightweight relation view alive, independently of the range expression.
@@ -169,9 +166,7 @@ public:
     bool contains(database::Row row) const { return this->get_handle().contains(row); }
     template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
-    {
-        return this->get_handle().contains(values);
-    }
+    { return this->get_handle().contains(values); }
 };
 }  // namespace ygg
 
@@ -196,9 +191,7 @@ public:
     size_t size() const noexcept { return row_indices().size(); }
     bool empty() const noexcept { return row_indices().empty(); }
     std::span<const Index<database::RelationRow>> row_indices() const noexcept
-    {
-        return self().get_repository().get_row_set_repository()[record().row_set_index.get_value()];
-    }
+    { return self().get_repository().get_row_set_repository()[record().row_set_index.get_value()]; }
     const void* get_storage_address() const noexcept { return row_indices().data(); }
     size_t get_storage_index() const noexcept { return self().get_repository().get_storage_index(record().row_set_index); }
     size_t column_index(Index<database::Column> column) const { return columns().column_index(column); }
@@ -240,9 +233,7 @@ public:
 
     template<ygg::ByteCodable... Ts>
     bool contains(const std::tuple<Ts...>& values) const
-    {
-        return contains_canonical(database::encode_row(values, columns().span()));
-    }
+    { return contains_canonical(database::encode_row(values, columns().span())); }
 };
 }  // namespace ygg
 

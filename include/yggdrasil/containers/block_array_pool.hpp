@@ -223,9 +223,7 @@ public:
         }
 
         friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
-        {
-            return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
-        }
+        { return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos); }
 
         reference operator[](difference_type n) const { return *(*this + n); }
 
@@ -292,15 +290,11 @@ public:
 
     iterator begin() noexcept
         requires(!std::is_const_v<Block>)
-    {
-        return iterator(*this, 0);
-    }
+    { return iterator(*this, 0); }
 
     iterator end() noexcept
         requires(!std::is_const_v<Block>)
-    {
-        return iterator(*this, size());
-    }
+    { return iterator(*this, size()); }
 
     const_iterator begin() const noexcept { return const_iterator(*this, 0); }
     const_iterator end() const noexcept { return const_iterator(*this, size()); }
@@ -518,9 +512,7 @@ public:
         }
 
         friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
-        {
-            return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos);
-        }
+        { return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos); }
 
         reference operator[](difference_type n) const { return *(*this + n); }
 

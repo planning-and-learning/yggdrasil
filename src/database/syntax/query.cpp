@@ -9,8 +9,7 @@ namespace ygg::database
 {
 namespace detail
 {
-QueryView<>
-clone_query(QueryView<> source, std::span<const QueryView<>> children, QueryRepository& destination, QueryBuilder& builder)
+QueryView<> clone_query(QueryView<> source, std::span<const QueryView<>> children, QueryRepository& destination, QueryBuilder& builder)
 {
     std::vector<QueryView<>> original;
     for_each_child(source, [&](QueryView<> child) { original.push_back(child); });

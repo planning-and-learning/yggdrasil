@@ -7,9 +7,9 @@
 #define YGG_DATABASE_SEMANTICS_SEARCH_A_STAR_HPP_
 
 #include "yggdrasil/containers/raw_array_set.hpp"
-#include "yggdrasil/database/semantics/search/search_tree.hpp"
 #include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
+#include "yggdrasil/database/semantics/search/search_tree.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -111,7 +111,7 @@ private:
         uint_t h = 0;        ///< The A* estimate when queued.
         uint_t h_learn = 0;  ///< max(heuristic, learned): the estimate learning may rely on.
         uint_t parent = 0;
-        uint_t stored = 0;   ///< The tree index, or none if the vertex was not stored when last looked up.
+        uint_t stored = 0;  ///< The tree index, or none if the vertex was not stored when last looked up.
         bool closed = false;
     };
 
@@ -147,13 +147,7 @@ template<typename Oracle, DistanceHeuristic H>
 class AStar
 {
 public:
-    AStar(Oracle& oracle,
-          SearchTree& tree,
-          BackwardFrontier& backward,
-          const H& heuristic,
-          const VertexSet& targets,
-          AStarStorage& storage,
-          uint64_t version) :
+    AStar(Oracle& oracle, SearchTree& tree, BackwardFrontier& backward, const H& heuristic, const VertexSet& targets, AStarStorage& storage, uint64_t version) :
         m_oracle(&oracle),
         m_tree(&tree),
         m_backward(&backward),
@@ -161,9 +155,7 @@ public:
         m_targets(&targets),
         m_storage(&storage),
         m_version(version)
-    {
-        m_storage->clear();
-    }
+    { m_storage->clear(); }
     AStar(const AStar&) = delete;
     AStar& operator=(const AStar&) = delete;
     AStar(AStar&&) = delete;  // One search, run in place.
@@ -237,12 +229,8 @@ private:
 
     bool on_valid_path(uint_t id)
     {
-        return m_tree->on_valid_path(
-            id,
-            [&](uint_t u) { return value(u); },
-            [&](uint_t u) { return m_targets->contains(m_tree->vertex(u)); },
-            *m_oracle,
-            m_version);
+        return m_tree
+            ->on_valid_path(id, [&](uint_t u) { return value(u); }, [&](uint_t u) { return m_targets->contains(m_tree->vertex(u)); }, *m_oracle, m_version);
     }
 
     /// Whether the exhausted backward frontier found no source.
@@ -372,11 +360,11 @@ private:
         m_storage->m_vertex.assign(vertex.begin(), vertex.end());
         const auto cost = node(index).g + 1;
         m_oracle->successors(m_storage->m_vertex,
-                            [&](std::span<const std::byte> to)
-                            {
-                                push(to, cost, index);
-                                return true;
-                            });
+                             [&](std::span<const std::byte> to)
+                             {
+                                 push(to, cost, index);
+                                 return true;
+                             });
     }
 
     /// Learns for closed vertices (see the class comment) and links the found path into the tree. Only vertices that

@@ -70,9 +70,7 @@ private:
 public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t)
-    {
-        return container_type<Block, Coder, ThreadSafe>(arity);
-    }
+    { return container_type<Block, Coder, ThreadSafe>(arity); }
 };
 
 struct BitPackedArraySetStorage
@@ -84,9 +82,7 @@ private:
 public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
     static container_type<Block, Coder, ThreadSafe> make(size_t arity, std::uint8_t object_index_width)
-    {
-        return container_type<Block, Coder, ThreadSafe>(arity, object_index_width);
-    }
+    { return container_type<Block, Coder, ThreadSafe>(arity, object_index_width); }
 };
 
 template<typename ObjectTag>
@@ -104,9 +100,7 @@ private:
     using storage_type = typename RelationRepositoryTraits<ObjectTag>::storage_type;
 
     static auto make_container(size_t arity, std::uint8_t object_index_width)
-    {
-        return storage_type::template make<ygg::uint_t, IndexCoder<Index<Object<ObjectTag>>, ygg::uint_t>, ThreadSafe>(arity, object_index_width);
-    }
+    { return storage_type::template make<ygg::uint_t, IndexCoder<Index<Object<ObjectTag>>, ygg::uint_t>, ThreadSafe>(arity, object_index_width); }
 
     using internal_container_type = decltype(make_container(size_t {}, std::uint8_t {}));
 
@@ -224,9 +218,7 @@ private:
         }
 
         static constexpr size_t segment_size(size_t segment) noexcept
-        {
-            return segment + 1 == kNumSegments ? Layout::segment_offset(kMaxIndex, segment) + 1 : Layout::segment_capacity(segment);
-        }
+        { return segment + 1 == kNumSegments ? Layout::segment_offset(kMaxIndex, segment) + 1 : Layout::segment_capacity(segment); }
 
         Segment& get_or_create_segment(size_t index)
         {
@@ -395,9 +387,7 @@ public:
     }
 
     std::optional<Index<Row>> find_local(const Data<RelationBinding<T, ObjectTag>>& builder) const
-    {
-        return find_local_with_hash(builder, BasicRelationRepository::hash(builder));
-    }
+    { return find_local_with_hash(builder, BasicRelationRepository::hash(builder)); }
 
     std::pair<Index<Row>, bool> insert_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)
     {
@@ -408,9 +398,7 @@ public:
     }
 
     std::pair<Index<Row>, bool> insert_local(const Data<RelationBinding<T, ObjectTag>>& builder)
-    {
-        return insert_local_with_hash(builder, BasicRelationRepository::hash(builder));
-    }
+    { return insert_local_with_hash(builder, BasicRelationRepository::hash(builder)); }
 
     /// Completes a hierarchy-wide miss by rechecking this lane before publishing storage.
     std::pair<Index<Row>, bool> create_local_with_hash(const Data<RelationBinding<T, ObjectTag>>& builder, size_t h)

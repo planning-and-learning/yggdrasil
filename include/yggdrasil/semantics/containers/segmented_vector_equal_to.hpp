@@ -30,9 +30,7 @@ struct EqualTo<SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>>
     bool operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& lhs,
                     const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& rhs) const
         requires EqualityComparableByEqualTo<T>
-    {
-        return equal_range(lhs, rhs);
-    }
+    { return equal_range(lhs, rhs); }
 };
 
 }

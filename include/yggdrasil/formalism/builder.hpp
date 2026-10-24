@@ -65,9 +65,7 @@ public:
     template<typename T>
         requires(Types::template contains<T>)
     [[nodiscard]] auto get_builder()
-    {
-        return static_cast<detail::BuilderSlot<T>&>(*this).pool.get_or_allocate();
-    }
+    { return static_cast<detail::BuilderSlot<T>&>(*this).pool.get_or_allocate(); }
 
     /// Clear pooled data once, retaining its reusable buffers.
     template<typename T>
@@ -83,9 +81,7 @@ public:
 template<typename T, typename... Ts>
     requires requires(BuilderStorage<Ts...>& builder) { builder.template checkout<T>(); }
 [[nodiscard]] auto checkout(BuilderStorage<Ts...>& builder)
-{
-    return builder.template checkout<T>();
-}
+{ return builder.template checkout<T>(); }
 
 }  // namespace ygg::formalism
 

@@ -45,11 +45,7 @@ void require_plan_columns(std::span<const ColumnLayout> actual, std::span<const 
 namespace detail
 {
 template<RelationViewConcept V>
-void project_rows(const V& input,
-                  std::span<const ColumnLayout> columns,
-                  std::span<const ColumnSlice> positions,
-                  Builder<Relation>& out,
-                  Workspace& workspace)
+void project_rows(const V& input, std::span<const ColumnLayout> columns, std::span<const ColumnSlice> positions, Builder<Relation>& out, Workspace& workspace)
 {
     detail::prepare_output(out, columns, { input.get_storage_address() });
 
@@ -89,9 +85,7 @@ void project(const V& input, std::span<const Index<Column>> columns, Builder<Rel
 
 template<RelationViewConcept V>
 void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out, Workspace& workspace)
-{
-    project(input, std::span<const Index<Column>>(columns), out, workspace);
-}
+{ project(input, std::span<const Index<Column>>(columns), out, workspace); }
 
 template<RelationViewConcept V>
 void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out)
@@ -102,9 +96,7 @@ void project(const V& input, std::span<const Index<Column>> columns, Builder<Rel
 
 template<RelationViewConcept V>
 void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out)
-{
-    project(input, std::span<const Index<Column>>(columns), out);
-}
+{ project(input, std::span<const Index<Column>>(columns), out); }
 
 template<RelationViewConcept V>
 Builder<Relation> project(const V& input, Builder<Columns> columns)
@@ -135,9 +127,7 @@ Builder<Relation> project(const V& input, std::span<const Index<Column>> columns
 
 template<RelationViewConcept V>
 Builder<Relation> project(const V& input, std::initializer_list<Index<Column>> columns)
-{
-    return project(input, std::span<const Index<Column>>(columns));
-}
+{ return project(input, std::span<const Index<Column>>(columns)); }
 
 template<RelationViewConcept V, typename Predicate>
     requires std::predicate<Predicate&, Row>
@@ -179,10 +169,7 @@ void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, 
     const auto& right = input.columns().span()[input.column_index(rhs)];
     if (left.type != right.type)
         throw std::invalid_argument("Relational operation: selected columns must have the same type.");
-    select(
-        input,
-        [=](Row row) { return std::ranges::equal(row.bytes().subspan(left.offset, left.size), row.bytes().subspan(right.offset, right.size)); },
-        out);
+    select(input, [=](Row row) { return std::ranges::equal(row.bytes().subspan(left.offset, left.size), row.bytes().subspan(right.offset, right.size)); }, out);
 }
 
 template<RelationViewConcept V>
@@ -298,12 +285,7 @@ void join_rows(const L& lhs,
 }  // namespace detail
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs,
-          const R& rhs,
-          const JoinPlan& plan,
-          const JoinIndex& index,
-          Builder<Relation>& out,
-          Workspace& workspace)
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& index, Builder<Relation>& out, Workspace& workspace)
 {
     detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
@@ -323,13 +305,7 @@ void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& o
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs,
-          const R& rhs,
-          const JoinPlan& plan,
-          JoinIndexCache& cache,
-          JoinReuse reuse,
-          Builder<Relation>& out,
-          Workspace& workspace)
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cache, JoinReuse reuse, Builder<Relation>& out, Workspace& workspace)
 {
     if (!reuse.lhs && !reuse.rhs)
         return join(lhs, rhs, plan, out, workspace);
@@ -440,9 +416,7 @@ void filter_matches(const L& lhs, const R& rhs, const JoinPlan& plan, bool match
 
 template<RelationViewConcept L, RelationViewConcept R>
 void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
-{
-    detail::filter_matches(lhs, rhs, plan, true, out, workspace);
-}
+{ detail::filter_matches(lhs, rhs, plan, true, out, workspace); }
 
 template<RelationViewConcept L, RelationViewConcept R>
 Builder<Relation> semijoin(const L& lhs, const R& rhs)
@@ -455,9 +429,7 @@ Builder<Relation> semijoin(const L& lhs, const R& rhs)
 
 template<RelationViewConcept L, RelationViewConcept R>
 void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
-{
-    detail::filter_matches(lhs, rhs, plan, false, out, workspace);
-}
+{ detail::filter_matches(lhs, rhs, plan, false, out, workspace); }
 
 template<RelationViewConcept L, RelationViewConcept R>
 Builder<Relation> antijoin(const L& lhs, const R& rhs)

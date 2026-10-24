@@ -121,15 +121,15 @@ template<RelationViewConcept L, RelationViewConcept R>
 void JoinEvaluator::join(const L& lhs, const R& rhs, bool build_left, Builder<Relation>& output, Workspace& workspace) const
 {
     database::detail::join_rows(lhs,
-                                        rhs,
-                                        m_plan.output_columns().span(),
-                                        m_plan.lhs_keys(),
-                                        m_plan.rhs_keys(),
-                                        m_plan.rhs_payload(),
-                                        build_left,
-                                        build_left ? m_lhs_index : m_rhs_index,
-                                        output,
-                                        workspace);
+                                rhs,
+                                m_plan.output_columns().span(),
+                                m_plan.lhs_keys(),
+                                m_plan.rhs_keys(),
+                                m_plan.rhs_payload(),
+                                build_left,
+                                build_left ? m_lhs_index : m_rhs_index,
+                                output,
+                                workspace);
 }
 
 template<RelationViewConcept L, RelationViewConcept R>

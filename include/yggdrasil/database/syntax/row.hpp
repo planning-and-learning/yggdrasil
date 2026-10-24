@@ -33,9 +33,7 @@ class Row
 
 public:
     Row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns) noexcept : m_bytes(bytes), m_columns(columns)
-    {
-        assert(bytes.size() == row_size(columns));
-    }
+    { assert(bytes.size() == row_size(columns)); }
 
     std::span<const std::byte> bytes() const noexcept { return m_bytes; }
     std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
@@ -44,9 +42,7 @@ public:
 
     template<ByteCodable T>
     T get(size_t position) const
-    {
-        return detail::read_column<T>(m_bytes, m_columns, position);
-    }
+    { return detail::read_column<T>(m_bytes, m_columns, position); }
     /// Decodes every column as T into the reusable buffer, which the result borrows.
     template<ByteCodable T>
     std::span<const T> get_all(std::vector<T>& buffer) const
@@ -58,9 +54,7 @@ public:
     }
     template<ByteCodable T>
     T get(Index<Column> column) const
-    {
-        return get<T>(column_index(m_columns, column));
-    }
+    { return get<T>(column_index(m_columns, column)); }
 
     /// Calls visitor with the value at `position`, decoded as its column's type.
     template<typename Visitor>
@@ -125,20 +119,14 @@ public:
 
     template<ygg::ByteCodable T>
     T get(size_t position) const
-    {
-        return m_handle.template get<T>(position);
-    }
+    { return m_handle.template get<T>(position); }
     template<ygg::ByteCodable T>
     T get(Index<database::Column> column) const
-    {
-        return get<T>(database::column_index(columns(), column));
-    }
+    { return get<T>(database::column_index(columns(), column)); }
 
     template<typename Visitor>
     auto visit(size_t position, Visitor&& visitor) const
-    {
-        return m_handle.visit(position, std::forward<Visitor>(visitor));
-    }
+    { return m_handle.visit(position, std::forward<Visitor>(visitor)); }
 };
 }  // namespace ygg
 

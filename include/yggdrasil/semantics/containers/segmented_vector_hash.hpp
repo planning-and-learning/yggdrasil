@@ -29,9 +29,7 @@ struct Hash<SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>>
 {
     hash_t operator()(const SegmentedVector<T, FirstSegmentSize, ThreadSafe, Index>& value) const
         requires Hashable<T>
-    {
-        return ygg::hash_range(value);
-    }
+    { return ygg::hash_range(value); }
 };
 
 }

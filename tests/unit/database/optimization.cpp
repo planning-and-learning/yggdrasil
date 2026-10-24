@@ -3,10 +3,10 @@
 #include <array>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <string>
 #include <limits>
 #include <random>
 #include <set>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <yggdrasil/database/optimization/optimization.hpp>
@@ -98,9 +98,9 @@ TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmpty
     auto warnings = ygg::diagnostics::Warnings();
     const auto stats = accumulator.finish(warnings, [](const std::string& key) { return key; });
 
-    EXPECT_EQ(stats.at("sometimes").rows, 2);              // (2 + 4 + 0) / 3
+    EXPECT_EQ(stats.at("sometimes").rows, 2);                  // (2 + 4 + 0) / 3
     EXPECT_EQ(stats.at("sometimes").distinct.at(x), 5.0 / 3);  // (1 + 4 + 0) / 3
-    EXPECT_EQ(stats.at("sometimes").distinct.at(y), 1);    // (2 + 1 + 0) / 3, clamped into [1, rows]
+    EXPECT_EQ(stats.at("sometimes").distinct.at(y), 1);        // (2 + 1 + 0) / 3, clamped into [1, rows]
     EXPECT_EQ(stats.at("always").rows, 0);
     ASSERT_EQ(warnings.get().size(), 1);
     EXPECT_NE(warnings.get()[0].message.find("always was empty in all 3 samples"), std::string::npos);
@@ -194,8 +194,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     };
     const auto roots = std::array { root };
     const auto bound = std::array { ygg::database::Evaluation::bound };
-    const auto plan = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots),
-                                                                                  std::span<const ygg::database::Evaluation>(bound));
+    const auto plan = ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const ygg::database::Evaluation>(bound));
     const auto planned = plan[plan.roots().front()];
     EXPECT_EQ(atoms(planned), 3);
     const auto full = ygg::database::optimize(root);
@@ -227,8 +226,7 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
     };
     EXPECT_FALSE(successors(root).empty());
     EXPECT_EQ(successors(planned), successors(root));
-    EXPECT_THROW((ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots),
-                                                                             std::span<const ygg::database::Evaluation>())),
+    EXPECT_THROW((ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const ygg::database::Evaluation>())),
                  std::invalid_argument);
 }
 

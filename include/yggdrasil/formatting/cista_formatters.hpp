@@ -82,9 +82,7 @@ struct formatter<::cista::basic_string<Ptr>, char>
 
     template<typename FormatContext>
     auto format(const ::cista::basic_string<Ptr>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", std::string_view(value.data(), value.size()));
-    }
+    { return fmt::format_to(ctx.out(), "{}", std::string_view(value.data(), value.size())); }
 };
 
 template<typename T>
@@ -123,9 +121,7 @@ struct formatter<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, 
 
     template<typename FormatContext>
     auto format(const ::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>& value, FormatContext& ctx) const
-    {
-        return format_sequence(value, ctx);
-    }
+    { return format_sequence(value, ctx); }
 };
 
 template<typename C, typename T, template<typename> typename Ptr, bool IndexPointers, typename TemplateSizeType, class Allocator>
@@ -135,9 +131,7 @@ struct formatter<ygg::View<::cista::basic_vector<T, Ptr, IndexPointers, Template
 
     template<typename FormatContext>
     auto format(const ygg::View<::cista::basic_vector<T, Ptr, IndexPointers, TemplateSizeType, Allocator>, C>& value, FormatContext& ctx) const
-    {
-        return format_sequence(value, ctx);
-    }
+    { return format_sequence(value, ctx); }
 };
 
 template<typename C, typename T>
@@ -161,9 +155,7 @@ struct formatter<ygg::View<::cista::pair<T1, T2>, C>, char>
 
     template<typename FormatContext>
     auto format(const ygg::View<::cista::pair<T1, T2>, C>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "({}, {})", value.get_first(), value.get_second());
-    }
+    { return fmt::format_to(ctx.out(), "({}, {})", value.get_first(), value.get_second()); }
 };
 
 template<typename C, typename T, typename... Ts>

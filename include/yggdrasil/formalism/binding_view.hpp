@@ -98,50 +98,32 @@ public:
     }
     friend RelationBindingIterator operator+(RelationBindingIterator it, difference_type n)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return it += n;
-    }
+    { return it += n; }
     friend RelationBindingIterator operator+(difference_type n, RelationBindingIterator it)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return it += n;
-    }
+    { return it += n; }
     friend RelationBindingIterator operator-(RelationBindingIterator it, difference_type n)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return it -= n;
-    }
+    { return it -= n; }
     friend difference_type operator-(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return lhs.m_it - rhs.m_it;
-    }
+    { return lhs.m_it - rhs.m_it; }
     reference operator[](difference_type n) const
         requires std::random_access_iterator<BaseIterator>
-    {
-        return *(*this + n);
-    }
+    { return *(*this + n); }
     friend bool operator==(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs) { return lhs.m_it == rhs.m_it; }
     friend bool operator<(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return lhs.m_it < rhs.m_it;
-    }
+    { return lhs.m_it < rhs.m_it; }
     friend bool operator>(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return rhs < lhs;
-    }
+    { return rhs < lhs; }
     friend bool operator<=(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return !(rhs < lhs);
-    }
+    { return !(rhs < lhs); }
     friend bool operator>=(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
         requires std::random_access_iterator<BaseIterator>
-    {
-        return !(lhs < rhs);
-    }
+    { return !(lhs < rhs); }
 };
 }  // namespace ygg::formalism::detail
 
@@ -166,7 +148,8 @@ public:
 template<typename RelationTag, typename ObjectTag, typename C>
 class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>
 {
-    auto objects() const noexcept { return std::span<const Index<formalism::Object<ObjectTag>>>(this->get_data().objects.data(), this->get_data().objects.size()); }
+    auto objects() const noexcept
+    { return std::span<const Index<formalism::Object<ObjectTag>>>(this->get_data().objects.data(), this->get_data().objects.size()); }
 
 public:
     using DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>::DataViewBase;
@@ -190,9 +173,7 @@ public:
 
     size_t size() const
         requires std::ranges::sized_range<const std::remove_reference_t<BindingRange>>
-    {
-        return std::ranges::size(*get_data().rows);
-    }
+    { return std::ranges::size(*get_data().rows); }
 
     decltype(auto) front() const
     {

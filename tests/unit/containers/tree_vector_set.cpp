@@ -23,8 +23,8 @@
 #include <bit>
 #include <cstddef>
 #include <gtest/gtest.h>
-#include <random>
 #include <limits>
+#include <random>
 #include <span>
 #include <stdexcept>
 #include <thread>
@@ -173,13 +173,9 @@ TEST(YggdrasilTests, CommonTreeVectorSetWritesMatchFullInsert)
     };
 
     // Inline leaves, a value equal to its position's old value, and the last position.
-    expect_writes(TreeVectorSet<uint_t> {},
-                  std::vector<uint_t> { 1, 2, 3, 4, 5, 6, 7 },
-                  std::vector<TreeVectorWrite<uint_t>> { { 0, 9 }, { 3, 4 }, { 6, 0 } });
+    expect_writes(TreeVectorSet<uint_t> {}, std::vector<uint_t> { 1, 2, 3, 4, 5, 6, 7 }, std::vector<TreeVectorWrite<uint_t>> { { 0, 9 }, { 3, 4 }, { 6, 0 } });
     // Leaf table leaves.
-    expect_writes(TreeVectorSet<double> {},
-                  std::vector<double> { 1.5, 2.5, 3.5, 4.5, 5.5 },
-                  std::vector<TreeVectorWrite<double>> { { 1, -2.0 }, { 4, 8.25 } });
+    expect_writes(TreeVectorSet<double> {}, std::vector<double> { 1.5, 2.5, 3.5, 4.5, 5.5 }, std::vector<TreeVectorWrite<double>> { { 1, -2.0 }, { 4, 8.25 } });
     // No writes and single-value vectors.
     expect_writes(TreeVectorSet<uint_t> {}, std::vector<uint_t> { 1, 2, 3 }, std::vector<TreeVectorWrite<uint_t>> {});
     expect_writes(TreeVectorSet<double> {}, std::vector<double> { 1.0 }, std::vector<TreeVectorWrite<double>> { { 0, 3.0 } });

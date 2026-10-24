@@ -33,9 +33,7 @@ UniqueObjectPoolPtr<ygg::Builder<Relation>> RelationPool::get_or_allocate(std::s
 
 template<ByteCodable T>
 UniqueObjectPoolPtr<ygg::Builder<Relation>> RelationPool::get_or_allocate(std::initializer_list<Index<Column>> columns)
-{
-    return get_or_allocate<T>(std::span<const Index<Column>>(columns));
-}
+{ return get_or_allocate<T>(std::span<const Index<Column>>(columns)); }
 
 }  // namespace ygg::database
 

@@ -38,9 +38,7 @@ namespace detail
 template<typename C, typename Element>
     requires ViewConcept<Element, C>
 std::string fmt_key(const C& context, const Element& element)
-{
-    return fmt::format("{}", make_view(element, context));
-}
+{ return fmt::format("{}", make_view(element, context)); }
 
 template<bool Deduplicate, typename C, typename List>
 bool is_canonical(const C& context, const List& list)
@@ -115,9 +113,7 @@ bool is_canonical(const DataList<T>& list)
 
 template<typename T>
 bool is_canonical(const ::cista::optional<T>&)
-{
-    return true;
-}
+{ return true; }
 
 template<bool Deduplicate = true, typename T, typename Allocator>
 void canonicalize(std::vector<T, Allocator>& list)
@@ -165,30 +161,22 @@ void canonicalize(::cista::optional<T>&)
 template<bool Deduplicate = true, typename C, typename T>
     requires ViewConcept<Index<T>, C>
 bool is_canonical(const C& context, const IndexList<T>& list)
-{
-    return detail::is_canonical<Deduplicate>(context, list);
-}
+{ return detail::is_canonical<Deduplicate>(context, list); }
 
 template<bool Deduplicate = true, typename C, typename T>
     requires ViewConcept<Data<T>, C>
 bool is_canonical(const C& context, const DataList<T>& list)
-{
-    return detail::is_canonical<Deduplicate>(context, list);
-}
+{ return detail::is_canonical<Deduplicate>(context, list); }
 
 template<bool Deduplicate = true, typename C, typename T>
     requires ViewConcept<Index<T>, C>
 void canonicalize(const C& context, IndexList<T>& list)
-{
-    detail::canonicalize<Deduplicate>(context, list);
-}
+{ detail::canonicalize<Deduplicate>(context, list); }
 
 template<bool Deduplicate = true, typename C, typename T>
     requires ViewConcept<Data<T>, C>
 void canonicalize(const C& context, DataList<T>& list)
-{
-    detail::canonicalize<Deduplicate>(context, list);
-}
+{ detail::canonicalize<Deduplicate>(context, list); }
 }
 
 #endif

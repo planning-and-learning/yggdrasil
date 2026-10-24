@@ -4,22 +4,17 @@
  */
 
 #include "yggdrasil/database/syntax/query_repository.hpp"
+
 #include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 
 namespace ygg::database
 {
-QueryRepository QueryRepositoryFactory::create()
-{
-    return QueryRepository(next_index(), *this);
-}
+QueryRepository QueryRepositoryFactory::create() { return QueryRepository(next_index(), *this); }
 }
 
 namespace ygg::database
 {
-std::shared_ptr<QueryRepository> QueryRepositoryFactory::create_shared()
-{
-    return std::shared_ptr<QueryRepository>(new QueryRepository(next_index(), *this));
-}
+std::shared_ptr<QueryRepository> QueryRepositoryFactory::create_shared() { return std::shared_ptr<QueryRepository>(new QueryRepository(next_index(), *this)); }
 }
 
 namespace ygg::database

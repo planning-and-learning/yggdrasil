@@ -60,18 +60,14 @@ struct formatter<ygg::View<T, ygg::tests::CanonicalizationContext>, char>
 
     template<typename FormatContext>
     auto format(const ygg::View<T, ygg::tests::CanonicalizationContext>& value, FormatContext& ctx) const
-    {
-        return fmt::format_to(ctx.out(), "{}", value.get_context().labels.at(value.get_data().value));
-    }
+    { return fmt::format_to(ctx.out(), "{}", value.get_context().labels.at(value.get_data().value)); }
 };
 }  // namespace fmt
 
 namespace ygg::tests
 {
 const ygg::Data<CanonicalizationTestTag>& CanonicalizationContext::operator[](ygg::Index<CanonicalizationTestTag> index) const
-{
-    return data->at(index.get_value());
-}
+{ return data->at(index.get_value()); }
 
 struct InvalidCanonicalizationContext
 {

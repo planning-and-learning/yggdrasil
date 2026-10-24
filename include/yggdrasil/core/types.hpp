@@ -96,15 +96,11 @@ concept CanonicalizableContext = requires(const C& context, const T& handle) {
 /// Domain overloads may select the owner of an embedded handle.
 template<typename T, typename C>
 const C& get_canonical_context(const T&, const C& context YGG_LIFETIMEBOUND) noexcept
-{
-    return context;
-}
+{ return context; }
 
 template<typename T, CanonicalizableContext<T> C>
 const C& get_canonical_context(const T& handle, const C& context) noexcept(noexcept(context.get_canonical_context(handle)))
-{
-    return context.get_canonical_context(handle);
-}
+{ return context.get_canonical_context(handle); }
 
 /// Construct the representation using its canonical owner, discovered by ADL.
 template<typename T, typename C>
@@ -113,9 +109,7 @@ template<typename T, typename C>
     }
 View<T, C> make_view(const T& handle, const C& context) noexcept(noexcept(get_canonical_context(handle, context))
                                                                  && std::is_nothrow_constructible_v<View<T, C>, const T&, const C&>)
-{
-    return View<T, C>(handle, get_canonical_context(handle, context));
-}
+{ return View<T, C>(handle, get_canonical_context(handle, context)); }
 
 /// True if V is a view of handle H in any context.
 template<typename V, typename H>

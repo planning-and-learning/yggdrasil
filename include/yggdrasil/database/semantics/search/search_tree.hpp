@@ -135,9 +135,9 @@ private:
     {
         uint_t learned = 0;
         uint_t next = none;
-        uint64_t checked = 0;              ///< Epoch of the last chain check.
-        bool valid = false;                ///< Its result.
-        uint64_t edge_version = unchecked; ///< Graph version at which the edge to next was checked.
+        uint64_t checked = 0;               ///< Epoch of the last chain check.
+        bool valid = false;                 ///< Its result.
+        uint64_t edge_version = unchecked;  ///< Graph version at which the edge to next was checked.
     };
 
     /// A new next pointer has an unchecked edge.

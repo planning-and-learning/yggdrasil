@@ -84,9 +84,7 @@ namespace ygg
 
 template<ygg::ByteCodable T>
 void Builder<database::Columns>::push_back(Index<database::Column> column)
-{
-    push_back(column, ygg::type_id<T>);
-}
+{ push_back(column, ygg::type_id<T>); }
 
 template<ygg::ByteCodable T>
 void Builder<database::Columns>::assign(std::span<const Index<database::Column>> columns)
@@ -101,9 +99,7 @@ void Builder<database::Columns>::assign(std::span<const Index<database::Column>>
 
 template<ygg::ByteCodable T>
 void Builder<database::Columns>::assign(std::initializer_list<Index<database::Column>> columns)
-{
-    assign<T>(std::span<const Index<database::Column>>(columns));
-}
+{ assign<T>(std::span<const Index<database::Column>>(columns)); }
 
 }  // namespace ygg
 

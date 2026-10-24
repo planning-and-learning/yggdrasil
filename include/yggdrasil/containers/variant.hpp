@@ -47,9 +47,7 @@ public:
 
     template<typename U>
     bool is() const noexcept
-    {
-        return cista::holds_alternative<U>(index_variant());
-    }
+    { return cista::holds_alternative<U>(index_variant()); }
 
     template<typename U>
     decltype(auto) get() const
@@ -90,15 +88,11 @@ private:
 
 template<typename Visitor, typename C, typename... T>
 constexpr auto visit(Visitor&& vis, View<::cista::offset::variant<T...>, C>&& v)
-{
-    return std::move(v).apply(std::forward<Visitor>(vis));
-}
+{ return std::move(v).apply(std::forward<Visitor>(vis)); }
 
 template<typename Visitor, typename C, typename... T>
 constexpr auto visit(Visitor vis, const View<::cista::offset::variant<T...>, C>& v)
-{
-    return v.apply(vis);
-}
+{ return v.apply(vis); }
 }  // namespace ygg
 namespace ygg
 {

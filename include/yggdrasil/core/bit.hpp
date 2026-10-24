@@ -37,9 +37,7 @@ namespace ygg::bit
 
 template<std::unsigned_integral T>
 constexpr bool is_power_of_two(T x)
-{
-    return std::has_single_bit(x);
-}
+{ return std::has_single_bit(x); }
 
 template<std::unsigned_integral T>
 constexpr T ceil_div(T x, T y)
