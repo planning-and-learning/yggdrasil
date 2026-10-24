@@ -1,9 +1,9 @@
 name: CI Ctest
 
+# Pull requests run on their own trigger; a push run of a PR branch would repeat it.
 on:
   push:
-    branches-ignore:
-      - test-pypi
+    branches: [main]
   pull_request:
 
 env:
@@ -67,6 +67,7 @@ jobs:
         run: |
           cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
                 -DYGGDRASIL_BUILD_TESTS=ON \
+                -DYGGDRASIL_BUILD_PROFILING=ON \
                 -DYGGDRASIL_NATIVE_PREFIX="$PWD/dependencies-install" \
                 -DCMAKE_INSTALL_LIBDIR=lib \
                 -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \

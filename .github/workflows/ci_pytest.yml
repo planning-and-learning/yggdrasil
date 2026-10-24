@@ -1,9 +1,9 @@
 name: CI Pytest
 
+# Pull requests run on their own trigger; a push run of a PR branch would repeat it.
 on:
   push:
-    branches-ignore:
-      - test-pypi
+    branches: [main]
   pull_request:
 
 env:
