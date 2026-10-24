@@ -366,6 +366,8 @@ TEST(YggdrasilTests, CommonEqualRangeComparesProxyValuesWithoutCopyingReferenceE
         int value;
         explicit Noncopyable(int value_) : value(value_) {}
         Noncopyable(const Noncopyable&) = delete;
+        Noncopyable& operator=(const Noncopyable&) = delete;
+        ~Noncopyable() = default;
         bool operator==(const Noncopyable&) const = default;
     };
     const auto lhs = std::array { Noncopyable(1), Noncopyable(2) };

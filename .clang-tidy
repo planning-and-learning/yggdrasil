@@ -19,3 +19,7 @@ Checks: >
   -cppcoreguidelines-missing-std-forward
 HeaderFilterRegex: '.*/(include|tests|profiling|python/src)/.*'
 ExcludeHeaderFilterRegex: '.*/(dependencies-install|dependencies-build|build|site-packages|_deps)/.*'
+CheckOptions:
+  # Proxy references (bit_reference, int_reference, ...) must not get a defaulted move
+  # assignment: it would rebind the proxy instead of writing through it.
+  cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions: true

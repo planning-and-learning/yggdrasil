@@ -59,6 +59,7 @@ public:
     BuilderStorage& operator=(const BuilderStorage&) = delete;
     BuilderStorage(BuilderStorage&&) = delete;
     BuilderStorage& operator=(BuilderStorage&&) = delete;
+    ~BuilderStorage() = default;
 
     /// Acquire pooled data without resetting its contents.
     template<typename T>

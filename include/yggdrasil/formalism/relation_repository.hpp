@@ -306,6 +306,7 @@ public:
     {
     }
 
+    ~RelationRepositoryBase() = default;
     RelationRepositoryBase(const RelationRepositoryBase&) = delete;
     RelationRepositoryBase& operator=(const RelationRepositoryBase&) = delete;
     RelationRepositoryBase(RelationRepositoryBase&&) = delete;

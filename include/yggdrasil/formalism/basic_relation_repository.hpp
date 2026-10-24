@@ -488,6 +488,7 @@ public:
             throw std::invalid_argument("BasicRelationRepository: child object index width must not be smaller than its parent's.");
         clear_slots();
     }
+    ~BasicRelationRepository() = default;
     BasicRelationRepository(const BasicRelationRepository& other) = delete;
     BasicRelationRepository& operator=(const BasicRelationRepository& other) = delete;
     BasicRelationRepository(BasicRelationRepository&&) noexcept

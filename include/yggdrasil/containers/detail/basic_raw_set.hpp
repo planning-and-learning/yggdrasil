@@ -147,6 +147,7 @@ public:
     BasicRawSet& operator=(const BasicRawSet&) = delete;
     BasicRawSet(BasicRawSet&&) = default;
     BasicRawSet& operator=(BasicRawSet&&) = default;
+    ~BasicRawSet() = default;
 
     std::optional<index_type> find(std::span<const value_type> value) const
     {

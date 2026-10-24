@@ -63,6 +63,7 @@ private:
 
         Segment(Segment&&) noexcept = default;
         Segment& operator=(Segment&&) noexcept = default;
+        ~Segment() = default;
 
         void clear() noexcept { size = 0; }
     };
@@ -132,6 +133,7 @@ public:
     SegmentedBuffer& operator=(const SegmentedBuffer&) = default;
     SegmentedBuffer(SegmentedBuffer&&) noexcept = default;
     SegmentedBuffer& operator=(SegmentedBuffer&&) noexcept = default;
+    ~SegmentedBuffer() = default;
 
     /// @brief Write the data with alignment requirement.
     const uint8_t* write(const uint8_t* data, size_t amount, size_t align = 1)

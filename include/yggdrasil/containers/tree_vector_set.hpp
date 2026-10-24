@@ -242,6 +242,7 @@ public:
     TreeVectorSet& operator=(const TreeVectorSet&) = delete;
     TreeVectorSet(TreeVectorSet&&) = default;
     TreeVectorSet& operator=(TreeVectorSet&&) = default;
+    ~TreeVectorSet() = default;
 
     index_type insert(std::span<const T> values)
     {

@@ -24,6 +24,7 @@ struct ResizeValue
     ResizeValue() { initialize(0); }
     explicit ResizeValue(int value_) { initialize(value_); }
     ResizeValue(const ResizeValue& other) { initialize(other.value); }
+    ResizeValue& operator=(const ResizeValue&) = default;
     ~ResizeValue() { --alive; }
 
 private:

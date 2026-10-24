@@ -157,6 +157,8 @@ struct BlockingValue
         while (!release->load(std::memory_order_acquire))
             std::this_thread::yield();
     }
+    BlockingValue& operator=(const BlockingValue&) = default;
+    ~BlockingValue() = default;
 };
 
 struct BlockingCoder

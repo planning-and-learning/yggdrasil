@@ -147,6 +147,7 @@ public:
             static_cast<void>(nominal_capacity(0));
     }
 
+    ~GeometricByteStorage() = default;
     GeometricByteStorage(const GeometricByteStorage&) = delete;
     GeometricByteStorage& operator=(const GeometricByteStorage&) = delete;
 

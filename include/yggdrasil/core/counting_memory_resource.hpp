@@ -39,6 +39,7 @@ public:
     CountingMemoryResource& operator=(const CountingMemoryResource&) = delete;
     CountingMemoryResource(CountingMemoryResource&&) = delete;
     CountingMemoryResource& operator=(CountingMemoryResource&&) = delete;
+    ~CountingMemoryResource() = default;
 
     size_t memory_usage() const noexcept { return m_bytes; }
 };

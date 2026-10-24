@@ -95,7 +95,7 @@ void bind_native_serializer()
         return;
     static const NativeSerializer serializer = [](serialization::Dictionaries& dictionaries, nanobind::handle value)
     { return dictionaries.serialize(nanobind::cast<std::conditional_t<std::is_enum_v<T>, T, const T&>>(value)); };
-    native_type.attr("_ygg_serialize") = nanobind::capsule(&serializer, native_serializer_capsule_name);
+    native_type.attr("_ygg_serialize") = nanobind::capsule(static_cast<const void*>(&serializer), native_serializer_capsule_name);
 }
 
 inline std::optional<boost::json::value> from_python_native(serialization::Dictionaries& dictionaries,
@@ -145,6 +145,9 @@ inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
         throw nanobind::python_error();
     struct RecursionGuard
     {
+        RecursionGuard() = default;
+        RecursionGuard(const RecursionGuard&) = delete;
+        RecursionGuard& operator=(const RecursionGuard&) = delete;
         ~RecursionGuard() { Py_LeaveRecursiveCall(); }
     } guard;
 

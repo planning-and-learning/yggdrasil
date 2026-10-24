@@ -112,6 +112,8 @@ public:
         return *this;
     }
 
+    atomic_int_reference(const atomic_int_reference&) = default;
+    ~atomic_int_reference() = default;
     atomic_int_reference& operator=(const atomic_int_reference& other) { return *this = static_cast<value_type>(other); }
 
     operator value_type() const { return Coder::decode(atomic_read_int(m_word, m_offset, m_len)); }

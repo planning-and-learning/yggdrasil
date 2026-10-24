@@ -70,6 +70,7 @@ class SpinMutex
 public:
     SpinMutex() noexcept = default;
     SpinMutex(const SpinMutex&) = delete;
+    ~SpinMutex() = default;
     SpinMutex& operator=(const SpinMutex&) = delete;
 
     void lock() noexcept
@@ -99,6 +100,7 @@ class SpinSharedMutex
 public:
     SpinSharedMutex() noexcept = default;
     SpinSharedMutex(const SpinSharedMutex&) = delete;
+    ~SpinSharedMutex() = default;
     SpinSharedMutex& operator=(const SpinSharedMutex&) = delete;
 
     void lock() noexcept

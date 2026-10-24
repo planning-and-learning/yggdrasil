@@ -294,6 +294,7 @@ public:
     static constexpr size_t arity = Arity;
 
     TreeBitsetSet() = default;
+    ~TreeBitsetSet() = default;
     TreeBitsetSet(const TreeBitsetSet&) = delete;
     TreeBitsetSet& operator=(const TreeBitsetSet&) = delete;
     TreeBitsetSet(TreeBitsetSet&&) = default;

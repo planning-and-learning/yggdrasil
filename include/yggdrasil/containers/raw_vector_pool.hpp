@@ -66,6 +66,7 @@ public:
     RawVectorPool& operator=(const RawVectorPool&) = delete;
     RawVectorPool(RawVectorPool&&) = default;
     RawVectorPool& operator=(RawVectorPool&&) = default;
+    ~RawVectorPool() = default;
 
     uint_t insert(std::span<const T> value) { return insert(value.data(), value.size()); }
 

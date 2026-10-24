@@ -107,6 +107,7 @@ public:
             return *this;
         }
 
+        ~bit_reference() = default;
         bit_reference& operator=(const bit_reference& other) noexcept { return *this = static_cast<bool>(other); }
 
         bit_reference& flip() noexcept

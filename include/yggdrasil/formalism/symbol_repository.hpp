@@ -294,6 +294,7 @@ public:
     {
     }
 
+    ~SymbolRepositoryBase() = default;
     SymbolRepositoryBase(const SymbolRepositoryBase&) = delete;
     SymbolRepositoryBase& operator=(const SymbolRepositoryBase&) = delete;
     SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;

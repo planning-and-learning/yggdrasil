@@ -368,6 +368,7 @@ public:
     {
         clear();
     }
+    ~Repository() = default;
     Repository(const Repository& other) = delete;
     Repository& operator=(const Repository& other) = delete;
     Repository(Repository&& other) = delete;

@@ -70,6 +70,7 @@ public:
     {
     }
 
+    ~RawArrayPool() = default;
     RawArrayPool(const RawArrayPool&) = delete;
     RawArrayPool& operator=(const RawArrayPool&) = delete;
 

@@ -214,6 +214,9 @@ TEST(YggdrasilTests, CommonRawArrayPoolErasePreservesAlignmentAndNoncopyableValu
         explicit Value(int value_) : value(value_) {}
         Value(const Value&) = delete;
         Value(Value&&) = default;
+        Value& operator=(const Value&) = delete;
+        Value& operator=(Value&&) = delete;
+        ~Value() = default;
     };
     static_assert(TriviallyCopyable<Value>);
     auto pool = RawArrayPool<Value, 1>(2);
@@ -529,6 +532,9 @@ struct NoncopyablePoolValue
     explicit NoncopyablePoolValue(int value_) : value(value_) {}
     NoncopyablePoolValue(const NoncopyablePoolValue&) = delete;
     NoncopyablePoolValue(NoncopyablePoolValue&&) = default;
+    NoncopyablePoolValue& operator=(const NoncopyablePoolValue&) = delete;
+    NoncopyablePoolValue& operator=(NoncopyablePoolValue&&) = delete;
+    ~NoncopyablePoolValue() = default;
 };
 
 static_assert(TriviallyCopyable<NoncopyablePoolValue>);

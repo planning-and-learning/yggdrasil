@@ -75,7 +75,7 @@ private:
                 throw std::length_error("SegmentedVector: segment is too large.");
 
             auto* data = static_cast<T*>(::operator new(new_segment_size * sizeof(T), std::align_val_t { alignof(T) }));
-            detail::store_pointer<ThreadSafe, void>(m_segments[index], data);
+            detail::store_pointer<ThreadSafe, void>(m_segments[index], static_cast<void*>(data));
             m_num_segments = index + 1;
             capacity += new_segment_size;
             detail::store_size<ThreadSafe>(m_capacity, capacity);
@@ -158,7 +158,7 @@ private:
         destroy_tail(0, detail::load_size<ThreadSafe>(m_size));
         for (size_t i = 0; i < m_num_segments; ++i)
         {
-            ::operator delete(segment(i), std::align_val_t { alignof(T) });
+            ::operator delete(static_cast<void*>(segment(i)), std::align_val_t { alignof(T) });
             detail::store_pointer<ThreadSafe, void>(m_segments[i], nullptr);
         }
         m_num_segments = 0;
@@ -170,7 +170,7 @@ private:
     {
         for (size_t i = 0; i < other.m_num_segments; ++i)
         {
-            detail::store_pointer<ThreadSafe, void>(m_segments[i], other.segment(i));
+            detail::store_pointer<ThreadSafe, void>(m_segments[i], static_cast<void*>(other.segment(i)));
             detail::store_pointer<ThreadSafe, void>(other.m_segments[i], nullptr);
         }
         m_num_segments = std::exchange(other.m_num_segments, 0);

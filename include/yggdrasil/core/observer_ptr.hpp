@@ -39,6 +39,7 @@ public:
     ObserverPtr& operator=(const ObserverPtr& other) = default;
     ObserverPtr(ObserverPtr&& other) noexcept = default;
     ObserverPtr& operator=(ObserverPtr&& other) noexcept = default;
+    ~ObserverPtr() = default;
 
     /**
      * Accessors

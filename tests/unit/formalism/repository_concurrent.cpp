@@ -67,6 +67,7 @@ struct Data<tests::ConcurrentSerializedElement>
     Data& operator=(const Data&) = delete;
     Data(Data&&) = default;
     Data& operator=(Data&&) = default;
+    ~Data() = default;
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::values> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }

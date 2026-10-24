@@ -59,6 +59,7 @@ public:
     ObjectPoolStorage& operator=(const ObjectPoolStorage&) = delete;
     ObjectPoolStorage(ObjectPoolStorage&&) = delete;
     ObjectPoolStorage& operator=(ObjectPoolStorage&&) = delete;
+    ~ObjectPoolStorage() = default;
 
     Entry* acquire()
     {

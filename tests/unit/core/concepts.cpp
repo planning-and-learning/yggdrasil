@@ -42,6 +42,7 @@ struct RangeContractIterator
     const int* position = nullptr;
     RangeContractIterator() = default;
     RangeContractIterator(const RangeContractIterator&) noexcept(Copy) = default;
+    ~RangeContractIterator() = default;
     RangeContractIterator& operator=(const RangeContractIterator&) noexcept(Copy) = default;
     int operator*() const noexcept(Dereference) { return *position; }
     RangeContractIterator& operator++() noexcept(Increment) { ++position; return *this; }

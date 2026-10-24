@@ -121,6 +121,9 @@ struct ThrowingValue
         if (fail)
             throw std::runtime_error("value construction failed");
     }
+    ThrowingValue& operator=(const ThrowingValue&) = delete;
+    ThrowingValue& operator=(ThrowingValue&&) = delete;
+    ~ThrowingValue() = default;
 };
 }  // namespace
 
