@@ -5,11 +5,6 @@ on:
   push:
     branches: [main]
 
-env:
-  # Outside the repository: the plumbcheck action checks it out again, which
-  # would delete a dependencies-install/ inside it.
-  DEPS: ${{ github.workspace }}/../yggdrasil-deps
-
 jobs:
   plumbcheck:
     runs-on: ubuntu-latest
@@ -19,16 +14,18 @@ jobs:
         with:
           python-version: "3.11"
       # The native dependencies take minutes to build; they are rebuilt only
-      # when their recipe changes.
+      # when their recipe changes. They live outside the repository: the
+      # plumbcheck action checks it out again, which would delete them there.
       - uses: actions/cache@v4
         with:
-          path: ${{ env.DEPS }}
+          path: ~/yggdrasil-deps
           key: deps-${{ runner.os }}-${{ hashFiles('src/**', 'cmake/**') }}
       - uses: drexlerd/plumbcheck@64afe2c7eefa7f02046fee81f079e9f98b5ba56b
         with:
           # clang-tidy needs compile_commands.json, and the configure needs
           # the native dependencies.
           prepare: |
+            DEPS="$HOME/yggdrasil-deps"
             python -m pip install "nanobind-backend>=1.0"
             PYTHON="$(python -c 'import sys; print(sys.executable)')"
             if [ ! -d "$DEPS/lib" ]; then
