@@ -20,10 +20,11 @@ jobs:
         with:
           path: ~/yggdrasil-deps
           key: deps-${{ runner.os }}-${{ hashFiles('src/**', 'cmake/**', 'docs/SOURCES.json') }}
-      - uses: drexlerd/plumbcheck@64afe2c7eefa7f02046fee81f079e9f98b5ba56b
+      - uses: drexlerd/plumbcheck@e209ba689a4451b67181592f4a291e128b6208b1
         with:
-          # clang-tidy needs compile_commands.json, and the configure needs
-          # the native dependencies.
+          # clang-tidy needs compile_commands.json, pyright the package in
+          # .venv (its stubs are generated at install), and both the native
+          # dependencies.
           prepare: |
             DEPS="$HOME/yggdrasil-deps"
             python -m pip install "nanobind-backend>=1.0"
@@ -39,3 +40,6 @@ jobs:
                   -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_PROFILING=ON \
                   -DYGGDRASIL_NATIVE_PREFIX="$DEPS" -DCMAKE_INSTALL_LIBDIR=lib \
                   -DPython_EXECUTABLE="$PYTHON"
+            "$PYTHON" -m venv .venv
+            YGGDRASIL_BUILD_NATIVE=OFF YGGDRASIL_NATIVE_PREFIX="$DEPS" \
+              .venv/bin/python -m pip install --no-cache-dir ".[test]"
