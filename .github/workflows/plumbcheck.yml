@@ -37,7 +37,7 @@ jobs:
               cmake --install "$RUNNER_TEMP/deps-build"
             fi
             cmake -S . -B build/plumbcheck -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                  -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_PROFILING=ON \
+                  -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_PROFILING=ON -DYGGDRASIL_UNITY_BUILD=OFF \
                   -DYGGDRASIL_NATIVE_PREFIX="$DEPS" -DCMAKE_INSTALL_LIBDIR=lib \
                   -DPython_EXECUTABLE="$PYTHON"
             "$PYTHON" -m venv .venv

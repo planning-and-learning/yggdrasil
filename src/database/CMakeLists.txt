@@ -12,6 +12,8 @@ elseif(UNIX)
 endif()
 
 set(YGGDRASIL_DATABASE_UNITY_BATCH 8 CACHE STRING "Database library sources per compiled unit.")
+# OFF lists each source in compile_commands.json, which clang-tidy (plumbcheck) needs.
+option(YGGDRASIL_UNITY_BUILD "Compile the database library's sources in batches." ON)
 
 function(yggdrasil_add_database_library target)
     add_library(${target} SHARED ${YGGDRASIL_DATABASE_SOURCES})
@@ -27,7 +29,7 @@ function(yggdrasil_add_database_library target)
     )
     target_link_libraries(${target} PUBLIC fmt::fmt TBB::tbb)
     # Sources share the headers that dominate their cost; batches compile them once (docs/TEMPLATE_RULES.md, rule 11).
-    set_target_properties(${target} PROPERTIES UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE ${YGGDRASIL_DATABASE_UNITY_BATCH})
+    set_target_properties(${target} PROPERTIES UNITY_BUILD ${YGGDRASIL_UNITY_BUILD} UNITY_BUILD_BATCH_SIZE ${YGGDRASIL_DATABASE_UNITY_BATCH})
     set_target_properties(
         ${target}
         PROPERTIES
