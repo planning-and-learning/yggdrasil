@@ -17,6 +17,7 @@
 #include <concepts>
 #include <functional>
 #include <iterator>
+#include <string_view>
 
 namespace ygg::diagnostics
 {
@@ -139,10 +140,12 @@ struct ErrorHandlerBase
 /// Label a grammar expression without changing its grammar or scanning its input separately.
 struct ContextDirective
 {
-    std::string name;
+    /// A string literal, so grammars can define their rules constexpr: built at compile time,
+    /// with nothing left to run (or throw) during static initialization.
+    std::string_view name;
 
     template<typename Subject>
-    auto operator[](const Subject& subject) const
+    constexpr auto operator[](const Subject& subject) const
     { return boost::spirit::x3::as_parser(subject).on_error(*this); }
 
     template<typename It, typename Exception, typename Context>
@@ -154,13 +157,13 @@ struct ContextDirective
         boost::spirit::x3::skip_over(position, last, parser_context);
         auto& handler = boost::spirit::x3::get<ErrorHandlerTag>(parser_context).get();
         handler.record_error(position,
-                             "Expected " + std::string(error.which()) + " while parsing " + name,
-                             { DiagnosticNote { name + " starts here", handler.source_span(start, start) } });
+                             "Expected " + std::string(error.which()) + " while parsing " + std::string(name),
+                             { DiagnosticNote { std::string(name) + " starts here", handler.source_span(start, start) } });
         return boost::spirit::x3::error_handler_result::rethrow;
     }
 };
 
-inline auto context(std::string name) { return ContextDirective { std::move(name) }; }
+constexpr auto context(std::string_view name) { return ContextDirective { name }; }
 
 /// Whitespace and ';' line comments, the layout shared by PDDL and the DL and policy syntaxes.
 inline auto comment_skipper()
@@ -180,7 +183,7 @@ template<typename Subject>
 struct get_info<guard<Subject, ygg::diagnostics::ContextDirective>>
 {
     using result_type = std::string;
-    std::string operator()(const guard<Subject, ygg::diagnostics::ContextDirective>& parser) const { return parser.handler.name; }
+    std::string operator()(const guard<Subject, ygg::diagnostics::ContextDirective>& parser) const { return std::string(parser.handler.name); }
 };
 
 }  // namespace boost::spirit::x3
