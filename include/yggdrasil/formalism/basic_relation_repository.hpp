@@ -105,14 +105,14 @@ private:
 
     struct Slot
     {
-        Index<T> g;
         internal_container_type container;
         size_t parent_size = 0;
+        Index<T> g;
 
         Slot(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width) :
-            g(g),
             container(make_container(arity, object_index_width)),
-            parent_size(parent_size)
+            parent_size(parent_size),
+            g(g)
         {
         }
     };

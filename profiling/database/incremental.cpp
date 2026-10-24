@@ -44,7 +44,7 @@ void append_only(benchmark::State& state)
             relation.insert(std::tuple { static_cast<uint_t>(i / repetitions), static_cast<uint_t>(i / repetitions + rows) });
     };
     refill();
-    for (auto _ : state)
+    for ([[maybe_unused]] auto _ : state)
     {
         refill();
         benchmark::DoNotOptimize(std::addressof(relation));

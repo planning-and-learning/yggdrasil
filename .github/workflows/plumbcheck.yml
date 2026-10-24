@@ -40,7 +40,7 @@ jobs:
         with:
           path: ~/yggdrasil-deps
           key: ${{ steps.deps.outputs.cache-primary-key }}
-      - uses: drexlerd/plumbcheck@e209ba689a4451b67181592f4a291e128b6208b1
+      - uses: drexlerd/plumbcheck@9815e1d9ee833afba91a7a177d15ecb12a2d3aca
         env:
           PYTHON: ${{ steps.python.outputs.python-path }}
         with:

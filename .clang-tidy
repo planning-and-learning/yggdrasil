@@ -15,7 +15,7 @@
 # - crtp-constructor-accessibility: private mixin constructors break inheriting constructors
 #   (using Base::Base) and aggregate initialization of derived types.
 # From the other families, the checks that find defects rather than enforce a style:
-# concurrency, include cycles, redundant expressions, external linkage of file-local
+# the static analyzer (clang-analyzer-*), concurrency, include cycles, redundant expressions, external linkage of file-local
 # functions, discarded results, nested namespace syntax and C-style casts. Not
 # misc-const-correctness: in templates it reports variables as never modified that an
 # overload chosen at instantiation does modify (hash_combine's seed, fold-expression
@@ -26,6 +26,7 @@ Checks: >
   bugprone-*,
   cppcoreguidelines-*,
   performance-*,
+  clang-analyzer-*,
   concurrency-*,
   misc-header-include-cycle,
   misc-redundant-expression,

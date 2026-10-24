@@ -582,8 +582,8 @@ TEST(DatabaseQuery, FactoriesRejectMalformedQueriesBeforePublishingPlans)
     EXPECT_THROW(ygg::tests::qb::input(repository, 0, malformed), std::invalid_argument);
     const auto plan = ygg::database::compile({ input });
     EXPECT_THROW(plan[ygg::Index<ygg::database::Query<>>(99)], std::out_of_range);
-    const auto typed = ygg::database::as<ygg::database::QueryInputTag>(plan[plan.roots().front()]);
-    static_assert(std::is_const_v<std::remove_reference_t<decltype(typed.get_data())>>);
+    using Typed = decltype(ygg::database::as<ygg::database::QueryInputTag>(plan[plan.roots().front()]));
+    static_assert(std::is_const_v<std::remove_reference_t<decltype(std::declval<const Typed&>().get_data())>>);
     EXPECT_EQ(repository.size(), 1);
 }
 }  // namespace

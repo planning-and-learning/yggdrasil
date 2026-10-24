@@ -1,5 +1,5 @@
 # Tests: literal values are the test data, fixed seeds keep runs reproducible, checks of
-# moved-from objects use them after the move, and values that throw in their moves test
+# moved-from objects use them after the move, validation tests cast invalid enum values, and values that throw in their moves test
 # exception safety (so moves may throw). The allocation test replaces operator new with
 # malloc and frees what it allocates, and test types shadow methods to inject failures. Tests read optionals with value(), whose
 # bad_optional_access fails the test: the check cannot see gtest's ASSERTs.
@@ -8,6 +8,8 @@ Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
   -bugprone-random-generator-seed,
   -bugprone-use-after-move,
+  -clang-analyzer-cplusplus.Move,
+  -clang-analyzer-optin.core.EnumCastOutOfRange,
   -cppcoreguidelines-noexcept-move-operations,
   -performance-noexcept-move-constructor,
   -cppcoreguidelines-owning-memory,

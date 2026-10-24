@@ -278,10 +278,10 @@ TEST(YggdrasilTests, CommonCoreTypeUtilsExtendsAnyInputRange)
     const auto first = ygg::View<ygg::Index<CoreTypeUtilsTag>, CoreTypeUtilsContext>(ygg::Index<CoreTypeUtilsTag>(0), context);
     const auto second = ygg::View<ygg::Index<CoreTypeUtilsTag>, CoreTypeUtilsContext>(ygg::Index<CoreTypeUtilsTag>(1), context);
     const auto views = std::array { first, second };
-    const auto mutable_only = views | std::views::filter([](const auto&) { return true; });
-    static_assert(std::ranges::input_range<std::remove_const_t<decltype(mutable_only)>>);
-    static_assert(!CanExtendCoreRange<decltype(mutable_only), IndexList<CoreTypeUtilsTag>>);
-    static_assert(!CanSetCoreRange<decltype(mutable_only), IndexList<CoreTypeUtilsTag>>);
+    using MutableOnly = decltype(views | std::views::filter([](const auto&) { return true; }));
+    static_assert(std::ranges::input_range<MutableOnly>);
+    static_assert(!CanExtendCoreRange<const MutableOnly, IndexList<CoreTypeUtilsTag>>);
+    static_assert(!CanSetCoreRange<const MutableOnly, IndexList<CoreTypeUtilsTag>>);
 
     auto indices = ygg::IndexList<CoreTypeUtilsTag> {};
     ygg::extend(views, indices);

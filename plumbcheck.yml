@@ -1,5 +1,5 @@
 # plumbcheck's configuration: https://github.com/drexlerd/plumbcheck#configuration
-PLUMBCHECK_VERSION: e209ba689a4451b67181592f4a291e128b6208b1
+PLUMBCHECK_VERSION: 9815e1d9ee833afba91a7a177d15ecb12a2d3aca
 ENABLE_LINTERS: [PYTHON_RUFF, PYTHON_RUFF_FORMAT, PYTHON_PYRIGHT, CPP_CLANG_TIDY, CPP_CLANG_FORMAT]
 # Files that hold nothing but nanobind's module macro, whose global and C variadic call are nanobind's.
 CPP_CLANG_TIDY_FILTER_REGEX_EXCLUDE: '^(python/src/module|tests/python/\w+_module)\.cpp$'
