@@ -63,7 +63,7 @@ public:
     decltype(auto) apply(F&& f) const
     {
         return std::visit(
-            [&]<typename Arg>(Arg&& arg) -> decltype(auto)
+            [&]<typename Arg>(const Arg& arg) -> decltype(auto)
             {
                 using U = std::decay_t<Arg>;
 
@@ -91,7 +91,7 @@ constexpr auto visit(Visitor&& vis, View<::cista::offset::variant<T...>, C>&& v)
 }
 
 template<typename Visitor, typename C, typename... T>
-constexpr auto visit(Visitor&& vis, const View<::cista::offset::variant<T...>, C>& v)
+constexpr auto visit(Visitor vis, const View<::cista::offset::variant<T...>, C>& v)
 {
     return v.apply(vis);
 }

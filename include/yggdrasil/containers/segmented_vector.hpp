@@ -126,7 +126,7 @@ private:
     }
 
     template<typename Construct>
-    void resize_unlocked(size_t new_size, Construct&& construct)
+    void resize_unlocked(size_t new_size, Construct construct)
     {
         const auto old_size = detail::load_size<ThreadSafe>(m_size);
         if (new_size == old_size)

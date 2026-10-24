@@ -179,7 +179,7 @@ public:
 
 private:
     template<typename Fill>
-    uint_t insert_with(size_t size, Fill&& fill)
+    uint_t insert_with(size_t size, Fill fill)
     {
         if (size != m_array_size)
             throw std::invalid_argument("RawArrayPool: wrong number of elements.");

@@ -29,7 +29,7 @@ public:
     QueryBuilder& builder() noexcept { return *m_builder; }
 
     template<class Tag, std::invocable<Data<Query<Tag>>&> Fill>
-    QueryView<> make(Fill&& fill)
+    QueryView<> make(Fill fill)
     {
         auto data = checkout<Query<Tag>>(*m_builder);
         fill(*data);

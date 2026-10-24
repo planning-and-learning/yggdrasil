@@ -153,14 +153,14 @@ private:
         }
 
         template<typename F>
-        void for_each(F&& function)
+        void for_each(F function)
         {
             for (auto& slot : m_slots)
                 function(slot);
         }
 
         template<typename F>
-        void for_each(F&& function) const
+        void for_each(F function) const
         {
             for (const auto& slot : m_slots)
                 function(slot);
@@ -273,7 +273,7 @@ private:
         }
 
         template<typename F>
-        void for_each(F&& function)
+        void for_each(F function)
         {
             for (auto& segment_ptr : m_segments)
             {
@@ -287,7 +287,7 @@ private:
         }
 
         template<typename F>
-        void for_each(F&& function) const
+        void for_each(F function) const
         {
             const_cast<ConcurrentSlotDirectory*>(this)->for_each([&](Slot& slot) { function(std::as_const(slot)); });
         }

@@ -43,7 +43,7 @@ namespace ygg::tests
 namespace
 {
 template<typename Publish, typename Size, typename Read>
-auto publish_and_read(Publish&& publish, Size&& size, Read&& read)
+auto publish_and_read(Publish publish, Size size, Read read)
 {
     using Value = std::invoke_result_t<Read>;
 

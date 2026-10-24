@@ -114,10 +114,10 @@ struct EqualTo<::cista::offset::variant<Ts...>>
             return false;
 
         return lhs.apply(
-            [&]<typename L>(L&& l)
+            [&]<typename L>(const L& l)
             {
                 return rhs.apply(
-                    [&]<typename R>(R&& r)
+                    [&]<typename R>(const R& r)
                     {
                         if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
                             return EqualTo<std::remove_cvref_t<L>> {}(l, r);
@@ -143,10 +143,10 @@ struct EqualTo<View<::cista::offset::variant<Ts...>, C>>
             return false;
 
         return lhs.apply(
-            [&]<typename L>(L&& l)
+            [&]<typename L>(const L& l)
             {
                 return rhs.apply(
-                    [&]<typename R>(R&& r)
+                    [&]<typename R>(const R& r)
                     {
                         if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
                             return EqualTo<std::remove_cvref_t<L>> {}(l, r);

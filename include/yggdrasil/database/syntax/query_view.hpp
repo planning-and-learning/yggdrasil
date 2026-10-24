@@ -151,7 +151,7 @@ namespace ygg::database
 {
 /// Calls f(QueryView<>) for every operand of a query, in operand order.
 template<typename Tag, std::invocable<QueryView<>> F>
-void for_each_child(QueryView<Tag> view, F&& f)
+void for_each_child(QueryView<Tag> view, F f)
 {
     if constexpr (std::same_as<Tag, void>)
         ygg::visit([&](auto concrete) { for_each_child(concrete, f); }, view.get_variant());

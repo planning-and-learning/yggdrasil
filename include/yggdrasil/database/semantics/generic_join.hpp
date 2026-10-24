@@ -87,7 +87,7 @@ class GenericJoinWorkspace
 
     /// Appends the full assignments over the tries returned by root(input).
     template<std::invocable<size_t> Root>
-    void append(Builder<Relation>& out, Root&& root)
+    void append(Builder<Relation>& out, Root root)
     {
         for (size_t input = 0; input < m_tries.size(); ++input)
         {

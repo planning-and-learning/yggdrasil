@@ -751,7 +751,7 @@ constexpr bool operator!=(const BitsetSpan<B1>& lhs, const BitsetSpan<B2>& rhs) 
 
 template<typename Callback, typename BlockCombiner, std::unsigned_integral Block0, std::unsigned_integral... Blocks>
     requires(SameAsIgnoringConst<Block0, Blocks> && ...)
-void for_each_bit(Callback&& callback, BlockCombiner&& combiner, const BitsetSpan<Block0>& first, const BitsetSpan<Blocks>&... rest)
+void for_each_bit(Callback callback, BlockCombiner combiner, const BitsetSpan<Block0>& first, const BitsetSpan<Blocks>&... rest)
 {
     using U = std::remove_const_t<Block0>;
 

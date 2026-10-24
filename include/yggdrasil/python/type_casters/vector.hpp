@@ -29,7 +29,7 @@ handle sequence_view_from_cpp(T&& src, rv_policy policy, cleanup_list* cleanup)
     {
         Py_ssize_t index = 0;
 
-        for (auto&& value : src)
+        for (auto&& value : std::forward<T>(src))
         {
             handle h = Caster::from_cpp(forward_like_<T>(value), policy, cleanup);
 

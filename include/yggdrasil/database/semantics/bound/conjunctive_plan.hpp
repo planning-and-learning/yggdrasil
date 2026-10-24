@@ -70,7 +70,7 @@ struct ConjunctivePlan
 /// Enumeration", CSL 2007). `statistics(slot)` measures an input.
 template<typename Statistics>
     requires std::invocable<Statistics&, size_t> && std::convertible_to<std::invoke_result_t<Statistics&, size_t>, const RelationStatistics&>
-ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranch& branch, std::vector<bool> bound, Statistics&& statistics)
+ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranch& branch, std::vector<bool> bound, Statistics statistics)
 {
     const auto fanout = [&](const ConjunctiveAtom& atom)
     {

@@ -115,7 +115,7 @@ public:
 
 private:
     template<typename T, typename Body>
-    boost::json::value collect(const T& value, Body&& body)
+    boost::json::value collect(const T& value, Body body)
     {
         if constexpr (Hashable<T>)
         {
@@ -173,7 +173,7 @@ public:
     }
 
     template<typename T, typename Fields>
-    void object(boost::json::value& result, const T& value, Fields&& fields)
+    void object(boost::json::value& result, const T& value, Fields fields)
     {
         result = collect(value, [&](const Table& table)
         {

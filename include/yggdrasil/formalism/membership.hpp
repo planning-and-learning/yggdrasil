@@ -40,7 +40,7 @@ template<typename Repository, std::ranges::input_range Range>
     requires requires(const Repository& repository, std::ranges::range_reference_t<Range> value) {
         { repository.contains(value) } -> std::same_as<bool>;
     }
-bool contains_all(const Repository& repository, Range&& values)
+bool contains_all(const Repository& repository, const Range& values)
 {
     for (auto&& value : values)
         if (!repository.contains(value))

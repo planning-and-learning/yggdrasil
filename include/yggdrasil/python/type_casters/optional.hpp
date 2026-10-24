@@ -34,7 +34,7 @@ public:
     bool from_python(handle, uint32_t, cleanup_list*) noexcept { return false; }
 
     template<typename U>
-    static handle from_cpp(U&& value, rv_policy policy, cleanup_list* cleanup) noexcept
+    static handle from_cpp(const U& value, rv_policy policy, cleanup_list* cleanup) noexcept
     {
         if (!value)  // uses View::operator bool()
             return none().release();

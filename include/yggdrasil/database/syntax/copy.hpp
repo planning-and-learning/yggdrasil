@@ -27,7 +27,7 @@ std::vector<size_t> input_slots(std::span<const QueryView<>> roots);
 /// each root. An input's slot s becomes slot_of(s).
 template<typename SlotOf>
     requires std::convertible_to<std::invoke_result_t<SlotOf&, size_t>, size_t>
-std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf&& slot_of, QueryRepository& destination, QueryBuilder& builder)
+std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf slot_of, QueryRepository& destination, QueryBuilder& builder)
 {
     if (roots.empty())
         return {};

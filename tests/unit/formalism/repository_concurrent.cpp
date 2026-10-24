@@ -91,7 +91,7 @@ namespace
 constexpr std::size_t kThreads = 8;
 
 template<typename Function>
-void run_threads(std::size_t count, Function&& function)
+void run_threads(std::size_t count, Function function)
 {
     auto start = std::barrier<>(static_cast<std::ptrdiff_t>(count));
     auto threads = std::vector<std::jthread> {};

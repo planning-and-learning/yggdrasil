@@ -90,7 +90,7 @@ concept TypeIdVisitor = std::invocable<Visitor&, std::type_identity<std::uint32_
 
 /// Calls visitor with std::type_identity<T> for the type T of `id`; every call returns the same type.
 template<TypeIdVisitor Visitor>
-decltype(auto) visit_type_id(TypeId id, Visitor&& visitor)
+decltype(auto) visit_type_id(TypeId id, Visitor visitor)
 {
     using Result = std::invoke_result_t<Visitor&, std::type_identity<std::uint32_t>>;
     const auto call = [&]<typename T>(std::type_identity<T> type) -> Result

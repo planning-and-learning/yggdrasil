@@ -127,7 +127,7 @@ std::vector<std::string> to_strings(Range&& range)
     auto result = std::vector<std::string> {};
     if constexpr (std::ranges::sized_range<Range>)
         result.reserve(std::ranges::size(range));
-    for (const auto& element : range)
+    for (const auto& element : std::forward<Range>(range))
         result.push_back(to_string(element));
     return result;
 }

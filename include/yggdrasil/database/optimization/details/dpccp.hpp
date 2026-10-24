@@ -102,7 +102,7 @@ public:
 /// Vertex indices are mask bits; arbitrary numbering and disconnected graphs work.
 template<typename Callback>
     requires std::predicate<Callback&, std::uint64_t, std::uint64_t>
-bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callback&& emit)
+bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callback emit)
 {
     if (adjacency.size() > max_dpccp_vertices)
         throw std::invalid_argument("DPccp: at most 63 vertices are supported.");

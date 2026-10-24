@@ -75,7 +75,7 @@ constexpr void for_each_member(T& t, F& f, Members<Ms...>)
 /// Calls f with each field of t, in the order of cista_members().
 template<typename T, typename F>
     requires MemberListed<std::remove_const_t<T>>
-constexpr void for_each_member(T& t, F&& f)
+constexpr void for_each_member(T& t, F f)
 {
     detail::for_each_member(t, f, std::remove_const_t<T>::cista_members());
 }

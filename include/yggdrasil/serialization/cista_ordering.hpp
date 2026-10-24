@@ -150,10 +150,10 @@ struct Less<::cista::offset::variant<Ts...>>
             return lhs.index() < rhs.index();
 
         return lhs.apply(
-            [&]<typename L>(L&& l)
+            [&]<typename L>(const L& l)
             {
                 return rhs.apply(
-                    [&]<typename R>(R&& r)
+                    [&]<typename R>(const R& r)
                     {
                         if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
                             return Less<std::remove_cvref_t<L>> {}(l, r);
@@ -179,10 +179,10 @@ struct Less<View<::cista::offset::variant<Ts...>, C>>
             return lhs.index_variant().index() < rhs.index_variant().index();
 
         return lhs.apply(
-            [&]<typename L>(L&& l)
+            [&]<typename L>(const L& l)
             {
                 return rhs.apply(
-                    [&]<typename R>(R&& r)
+                    [&]<typename R>(const R& r)
                     {
                         if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
                             return Less<std::remove_cvref_t<L>> {}(l, r);

@@ -24,7 +24,7 @@ bool query_accepts(QueryView<QuerySelectValueTag> selection, std::span<const std
 
 /// Validates each input binding of the plan; inputs must not alias the evaluator's storage.
 template<RelationViewRange R, std::predicate<const void*> IsInternal>
-void validate_bindings(const QueryPlan& plan, const R& bindings, IsInternal&& is_internal)
+void validate_bindings(const QueryPlan& plan, const R& bindings, IsInternal is_internal)
 {
     for (size_t i = 0; i < plan.node_count(); ++i)
     {
@@ -55,7 +55,7 @@ concept StatelessQueryTag = std::same_as<Tag, QueryInputTag> || std::same_as<Tag
 
 /// Evaluates a stateless operator from the bound inputs and the operands' results.
 template<StatelessQueryTag Tag, RelationViewRange R, std::invocable<QueryView<>> GetResult>
-void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult&& result, Builder<Relation>& out)
+void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult result, Builder<Relation>& out)
 {
     if constexpr (std::same_as<Tag, QueryInputTag>)
         database::assign(out, bindings[operation.get_input_slot()]);

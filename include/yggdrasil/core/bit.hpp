@@ -83,7 +83,7 @@ constexpr auto lo_set = make_lo_set<Block>();
 
 /// Calls callback(i) for each set bit i of the word, in ascending order.
 template<std::unsigned_integral Block, typename Callback>
-constexpr void for_each_set_bit(Block word, Callback&& callback)
+constexpr void for_each_set_bit(Block word, Callback callback)
 {
     for (; word; word &= word - 1)
         callback(static_cast<std::size_t>(std::countr_zero(word)));

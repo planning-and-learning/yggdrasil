@@ -97,12 +97,12 @@ Estimate estimate_operation(QueryView<QueryEmptyTag> query, FactorIdentity ident
     return factor({ 0, {} }, query.columns(), identity);
 }
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryJoinTag> query, FactorIdentity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QueryJoinTag> query, FactorIdentity, GetEstimate child, const Statistics&)
 {
     return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), column_labels(query.columns()));
 }
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
     const auto inputs = query.get_inputs();
     if (inputs.empty())
@@ -113,7 +113,7 @@ Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QuerySelectEqualTag> query, FactorIdentity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QuerySelectEqualTag> query, FactorIdentity, GetEstimate child, const Statistics&)
 {
     auto result = child(query.get_arg());
     const auto lhs = query.get_lhs_column(), rhs = query.get_rhs_column();
@@ -121,7 +121,7 @@ Estimate estimate_operation(QueryView<QuerySelectEqualTag> query, FactorIdentity
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QuerySelectValueTag> query, FactorIdentity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QuerySelectValueTag> query, FactorIdentity, GetEstimate child, const Statistics&)
 {
     auto result = child(query.get_arg());
     const auto constant = query.get_constant();
@@ -129,7 +129,7 @@ Estimate estimate_operation(QueryView<QuerySelectValueTag> query, FactorIdentity
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryRenameTag> query, FactorIdentity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QueryRenameTag> query, FactorIdentity, GetEstimate child, const Statistics&)
 {
     auto result = child(query.get_arg());
     UnorderedMap<Index<Column>, Index<Column>> renamed;
@@ -156,7 +156,7 @@ RelationStatistics capped(RelationStatistics stats);
 /// Duplicate elimination after projection: min(T(R)/2, ∏ V(R, a)) over the kept columns.
 /// A projection that keeps every column only reorders it.
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryProjectTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QueryProjectTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
     auto argument = child(query.get_arg());
     if (query.columns().size() == query.get_arg().columns().size())
@@ -173,7 +173,7 @@ Estimate estimate_operation(QueryView<QueryProjectTag> query, FactorIdentity ide
 }
 /// Set union: max(T(R), T(S)) + min(T(R), T(S))/2; V = max(V(R, a), V(S, a)).
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryUnionTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QueryUnionTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
     const auto lhs = child(query.get_lhs()), rhs = child(query.get_rhs());
     RelationStatistics result { bounded(std::max(lhs.rows, rhs.rows) + std::min(lhs.rows, rhs.rows) / 2), {} };
@@ -183,7 +183,7 @@ Estimate estimate_operation(QueryView<QueryUnionTag> query, FactorIdentity ident
 }
 /// Difference: T(R) − T(S)/2; V = V(R, a).
 template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryDifferenceTag> query, FactorIdentity identity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<QueryDifferenceTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
     const auto lhs = child(query.get_lhs()), rhs = child(query.get_rhs());
     return factor(capped({ std::max(0.0, lhs.rows - rhs.rows / 2), lhs.distinct }), query.columns(), identity);
@@ -191,7 +191,7 @@ Estimate estimate_operation(QueryView<QueryDifferenceTag> query, FactorIdentity 
 /// Semijoin: T(R ⋉ S) = min(T(R), T(π_R(R ⋈ S))); antijoin: T(R ▷ S) = T(R) − T(R ⋉ S); V = V(R, a).
 template<typename Tag, class GetEstimate>
     requires(std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
-Estimate estimate_operation(QueryView<Tag> query, FactorIdentity identity, GetEstimate&& child, const Statistics&)
+Estimate estimate_operation(QueryView<Tag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
     const auto lhs = child(query.get_lhs());
     const auto matched = std::min(lhs.rows, conjunction(combine(lhs, child(query.get_rhs())), column_labels(query.columns())).rows);
@@ -208,10 +208,7 @@ Estimate estimate_operation(QueryView<QueryDistanceTag>, FactorIdentity, GetEsti
 /// The System R estimate of a query from its children's estimates. An observation of
 /// the equivalent caller query replaces the derivation (LEO, VLDB 2001).
 template<std::invocable<QueryView<>> GetEstimate>
-Estimate estimate(QueryView<> query,
-                  std::type_identity_t<std::optional<Index<Query<>>>> source,
-                  GetEstimate&& child,
-                  const Statistics& statistics)
+Estimate estimate(QueryView<> query, std::type_identity_t<std::optional<Index<Query<>>>> source, GetEstimate child, const Statistics& statistics)
 {
     const FactorIdentity identity = QueryFactorIdentity { query.get_index().get_value() };
     if (source)

@@ -284,10 +284,12 @@ constexpr bool equal_range(LhsRange&& lhs, RhsRange&& rhs)
             return false;
     }
 
-    auto lhs_it = std::ranges::begin(lhs);
-    auto rhs_it = std::ranges::begin(rhs);
-    const auto lhs_end = std::ranges::end(lhs);
-    const auto rhs_end = std::ranges::end(rhs);
+    auto lhs_view = std::views::all(std::forward<LhsRange>(lhs));
+    auto rhs_view = std::views::all(std::forward<RhsRange>(rhs));
+    auto lhs_it = std::ranges::begin(lhs_view);
+    auto rhs_it = std::ranges::begin(rhs_view);
+    const auto lhs_end = std::ranges::end(lhs_view);
+    const auto rhs_end = std::ranges::end(rhs_view);
 
     for (; lhs_it != lhs_end && rhs_it != rhs_end; ++lhs_it, ++rhs_it)
     {

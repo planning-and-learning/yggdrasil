@@ -332,7 +332,7 @@ inline hash_t hash_range(Range&& range)
     if constexpr (std::ranges::sized_range<Range>)
         seed = std::ranges::size(range);
 
-    for (const std::ranges::range_value_t<Range>& value : range)
+    for (const std::ranges::range_value_t<Range>& value : std::forward<Range>(range))
         ygg::hash_combine(seed, value);
 
     return seed;
@@ -343,7 +343,7 @@ template<hashing::ByteHashableRange Range>
 inline hash_t hash_range(Range&& range)
 {
     auto hash = boost::hash2::xxhash_64 {};
-    for (std::ranges::range_value_t<Range> value : range)
+    for (std::ranges::range_value_t<Range> value : std::forward<Range>(range))
         hash.update(&value, sizeof(value));
     return hash.result();
 }
@@ -352,7 +352,8 @@ template<hashing::ByteHashableRange Range>
     requires std::ranges::contiguous_range<Range> && (!std::is_volatile_v<std::remove_reference_t<std::ranges::range_reference_t<Range>>>)
 inline hash_t hash_range(Range&& range) noexcept(noexcept(std::ranges::data(range)) && noexcept(std::ranges::size(range)))
 {
-    return hashing::hash_bytes(std::ranges::data(range), std::ranges::size(range) * sizeof(std::ranges::range_value_t<Range>));
+    const auto view = std::views::all(std::forward<Range>(range));
+    return hashing::hash_bytes(std::ranges::data(view), std::ranges::size(view) * sizeof(std::ranges::range_value_t<Range>));
 }
 
 template<Hashable T>

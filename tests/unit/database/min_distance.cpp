@@ -98,7 +98,7 @@ void check_sequence(ygg::database::QueryView<> edges,
                     Relation& sources,
                     Relation& targets,
                     size_t steps,
-                    Mutate&& mutate)
+                    Mutate mutate)
 {
     const auto k = sources.arity();
     const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
