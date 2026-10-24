@@ -122,13 +122,18 @@ public:
     /// storage.
     std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h);
 
+    /// Unchecked, like std::vector::operator[]: index must be local (asserted in Debug).
+    const Data<T>& local(Index<T> index) const noexcept
+    {
+        assert(is_local(index));
+        return m_slot.container[Index<T>(index.value - m_slot.parent_size)];
+    }
+
     const Data<T>& at_local(Index<T> index) const
     {
-        const auto parent_size = m_slot.parent_size;
-        if (index.value < parent_size || index.value >= size())
+        if (!is_local(index))
             throw std::out_of_range("Symbol index not found in local repository.");
-
-        return m_slot.container[Index<T>(index.value - parent_size)];
+        return local(index);
     }
 
     const Data<T>& front_local() const

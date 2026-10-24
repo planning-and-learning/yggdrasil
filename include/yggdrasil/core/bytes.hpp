@@ -20,14 +20,21 @@ namespace ygg
 {
 /// Load a valid native representation of T from exactly sizeof(T) bytes.
 /// No alignment or default constructor is required; no byte-order conversion is performed.
+/// The fixed-width overload has nothing to check; the other one checks the width at run time.
+template<TriviallyCopyable T>
+T load_unaligned(std::span<const std::byte, sizeof(T)> bytes) noexcept
+{
+    auto representation = std::array<std::byte, sizeof(T)> {};
+    std::memcpy(representation.data(), bytes.data(), sizeof(T));
+    return std::bit_cast<T>(representation);
+}
+
 template<TriviallyCopyable T>
 T load_unaligned(std::span<const std::byte> bytes)
 {
     if (bytes.size() != sizeof(T))
         throw std::invalid_argument("load_unaligned: incorrect byte width.");
-    auto representation = std::array<std::byte, sizeof(T)> {};
-    std::memcpy(representation.data(), bytes.data(), sizeof(T));
-    return std::bit_cast<T>(representation);
+    return load_unaligned<T>(bytes.first<sizeof(T)>());
 }
 
 /// Copy the native representation into exactly sizeof(T) bytes, without canonicalization.

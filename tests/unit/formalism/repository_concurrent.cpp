@@ -146,7 +146,7 @@ public:
         requires formalism::SupportsSymbol<PublishedRepository, T>
     const Data<T>& operator[](Index<T> index) const noexcept
     {
-        return at_local(index);
+        return local(index);
     }
 
     template<typename T>

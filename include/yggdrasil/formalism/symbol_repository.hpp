@@ -235,6 +235,13 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
+    const Data<T>& local(Index<T> index) const noexcept
+    {
+        return get<T>().local(index);
+    }
+
+    template<typename T>
+        requires SupportsSymbol<SymbolRepositoryBase, T>
     const Data<T>& at_local(Index<T> index) const
     {
         return get<T>().at_local(index);

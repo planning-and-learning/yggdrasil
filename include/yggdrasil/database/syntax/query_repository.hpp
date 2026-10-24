@@ -97,8 +97,7 @@ public:
         requires formalism::SupportsSymbol<QueryRepository, T>
     const Data<T>& operator[](Index<T> index) const noexcept
     {
-        assert(index.get_value() < size<T>());
-        return m_symbols.template at_local<T>(index);
+        return m_symbols.template local<T>(index);
     }
 };
 

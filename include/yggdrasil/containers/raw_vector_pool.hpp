@@ -97,7 +97,7 @@ public:
     {
         assert(index < m_index.size());
         const auto* slot = m_index[index];
-        const auto size = load_unaligned<Size>({ slot, sizeof(Size) });
+        const auto size = load_unaligned<Size>(std::span<const std::byte, sizeof(Size)>(slot, sizeof(Size)));
         if (size == 0)
             return {};
         return { std::launder(reinterpret_cast<const T*>(slot + payload_offset)), static_cast<size_t>(size) };

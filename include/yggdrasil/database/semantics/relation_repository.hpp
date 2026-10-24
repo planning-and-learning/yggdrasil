@@ -128,8 +128,7 @@ public:
         requires formalism::SupportsSymbol<RelationRepository, Entity>
     const Data<Entity>& operator[](Index<Entity> index) const noexcept
     {
-        assert(m_symbols.template is_local<Entity>(index));
-        return m_symbols.template at_local<Entity>(index);
+        return m_symbols.template local<Entity>(index);
     }
 
     template<typename Entity>
