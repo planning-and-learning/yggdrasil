@@ -17,7 +17,7 @@ Checks: >
   -bugprone-std-namespace-modification,
   -bugprone-unhandled-self-assignment,
   -cppcoreguidelines-missing-std-forward
-HeaderFilterRegex: '.*/(include|tests|profiling|python/src)/.*'
+HeaderFilterRegex: '.*/(include/yggdrasil|tests|profiling|python/src)/.*'
 ExcludeHeaderFilterRegex: '.*/(dependencies-install|dependencies-build|build|site-packages|_deps)/.*'
 CheckOptions:
   # Proxy references (bit_reference, int_reference, ...) must not get a defaulted move
@@ -26,3 +26,7 @@ CheckOptions:
   # Segment sizes, alignments and byte widths are powers of two, usually defaults of
   # template parameters that name them already.
   cppcoreguidelines-avoid-magic-numbers.IgnorePowersOf2IntegerValues: true
+  # Copying a reference-counted handle has a side effect (the count); it is not a wasted copy.
+  performance-unnecessary-copy-initialization.AllowedTypes: 'SharedObjectPoolPtr'
+  # Member initializers are written `= value`, as elsewhere in the code.
+  cppcoreguidelines-use-default-member-init.UseAssignment: true

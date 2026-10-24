@@ -46,7 +46,7 @@ public:
 
     ClosedInterval() : m_interval(Interval::empty()) {}
     ClosedInterval(A lower, A upper) : m_interval(lower, upper) {}
-    ClosedInterval(Interval interval) : m_interval(interval) {}
+    ClosedInterval(const Interval& interval) : m_interval(interval) {}
 
     /**
      * Operators

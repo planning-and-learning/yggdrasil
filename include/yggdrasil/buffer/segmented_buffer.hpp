@@ -41,9 +41,9 @@ private:
     {
         std::unique_ptr<uint8_t[]> storage;
         size_t capacity;
-        size_t size;
+        size_t size = 0;
 
-        explicit Segment(size_t capacity_) : storage(std::make_unique_for_overwrite<uint8_t[]>(capacity_)), capacity(capacity_), size(0) {}
+        explicit Segment(size_t capacity_) : storage(std::make_unique_for_overwrite<uint8_t[]>(capacity_)), capacity(capacity_) {}
 
         Segment(const Segment& other) : storage(std::make_unique_for_overwrite<uint8_t[]>(other.capacity)), capacity(other.capacity), size(other.size)
         {
@@ -72,11 +72,11 @@ private:
 
     std::vector<Segment> m_segments;
 
-    size_t m_cur_seg;
-    size_t m_cur_pos;
+    size_t m_cur_seg = 0;
+    size_t m_cur_pos = 0;
 
-    size_t m_size;
-    size_t m_capacity;
+    size_t m_size = 0;
+    size_t m_capacity = 0;
 
     void increase_capacity(size_t amount)
     {
@@ -121,7 +121,7 @@ private:
     }
 
 public:
-    explicit SegmentedBuffer(size_t seg_size = 1024) : m_seg_size(seg_size), m_segments(), m_cur_seg(0), m_cur_pos(0), m_size(0), m_capacity(0)
+    explicit SegmentedBuffer(size_t seg_size = 1024) : m_seg_size(seg_size), m_segments()
     {
         if (!ygg::bit::is_power_of_two(seg_size))
         {

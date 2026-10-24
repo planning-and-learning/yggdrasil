@@ -94,7 +94,7 @@ template<typename Mutate>
 void check_sequence(ygg::database::QueryView<> edges,
                     const std::vector<Relation>& maximal,
                     std::vector<Relation>& inputs,
-                    std::vector<bool> static_slots,
+                    const std::vector<bool>& static_slots,
                     Relation& sources,
                     Relation& targets,
                     size_t steps,

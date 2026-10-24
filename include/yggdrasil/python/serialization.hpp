@@ -171,7 +171,7 @@ inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
 
 template<typename... Registered>
 void register_table(serialization::Dictionaries& dictionaries,
-                    nanobind::type_object native_type,
+                    const nanobind::type_object& native_type,
                     const std::string& name,
                     const std::string& prefix,
                     TypeList<Registered...>,
@@ -182,7 +182,7 @@ void register_table(serialization::Dictionaries& dictionaries,
         throw nanobind::type_error("project must be callable");
     auto register_type = [&]<typename T>()
     {
-        const auto selected = selected_fields(native_type, fields);
+        const auto selected = selected_fields(native_type, std::move(fields));
         std::function<void(serialization::Dictionaries::Archive&, const T&)> projection;
         if (!project.is_none())
         {
@@ -220,7 +220,7 @@ nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::
 }
 
 template<typename... Ts>
-nanobind::object table(serialization::Dictionaries& dictionaries, nanobind::type_object native_type, TypeList<Ts...>)
+nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, TypeList<Ts...>)
 {
     nanobind::object result;
     if (!((native_type.is(nanobind::type<Ts>()) && (result = to_python(dictionaries.table<Ts>()), true)) || ...))

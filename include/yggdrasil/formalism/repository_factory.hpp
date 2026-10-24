@@ -46,7 +46,7 @@ private:
     }
 
 public:
-    RepositoryFactory() : m_next_index(0) {}
+    RepositoryFactory() = default;
 
     Repository<SymbolRepo, RelationRepo> create(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
     {
@@ -81,7 +81,7 @@ public:
     }
 
 private:
-    ygg::uint_t m_next_index;
+    ygg::uint_t m_next_index = 0;
 };
 
 }  // namespace ygg::formalism

@@ -189,7 +189,7 @@ public:
 
     static constexpr bool thread_safe = ThreadSafe;
 
-    SegmentedVector() : m_segments {}, m_num_segments(0), m_capacity(0), m_size(0) {}
+    SegmentedVector() : m_capacity(0), m_size(0) {}
 
     SegmentedVector(const SegmentedVector&) = delete;
     SegmentedVector& operator=(const SegmentedVector&) = delete;
@@ -428,8 +428,8 @@ private:
 
     // Segments grow geometrically, i.e., FirstSegmentSize, 2*FirstSegmentSize,
     // 4*FirstSegmentSize, ... Untyped, so the table type is shared by all element types.
-    std::array<detail::Pointer<ThreadSafe, void>, Layout::max_segments> m_segments;
-    size_t m_num_segments;
+    std::array<detail::Pointer<ThreadSafe, void>, Layout::max_segments> m_segments {};
+    size_t m_num_segments = 0;
     detail::Size<ThreadSafe> m_capacity;
     detail::Size<ThreadSafe> m_size;
     [[no_unique_address]] detail::Mutex<ThreadSafe> m_writer_mutex;
