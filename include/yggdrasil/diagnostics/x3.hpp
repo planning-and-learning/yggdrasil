@@ -40,7 +40,7 @@ public:
 
     ErrorHandler(It first, It last, std::ostream& output, std::string file = "", int tabs = 4) :
         boost::spirit::x3::error_handler<It>(first, last, output, file, tabs),
-        m_output(output),
+        m_output(&output),
         m_file(std::move(file)),
         m_tabs(tabs)
     {
@@ -69,7 +69,7 @@ public:
     void report_error() const
     {
         if (m_error)
-            m_output << format_diagnostic(diagnostic(m_error->message, m_error->position));
+            *m_output << format_diagnostic(diagnostic(m_error->message, m_error->position));
     }
 
     SourceSpan source_span(It first, It last) const
@@ -92,15 +92,15 @@ public:
         return make_diagnostic(range.begin(), range.end(), std::move(message));
     }
 
-    void operator()(It position, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(position, message)); }
-    void operator()(It first, It last, const std::string& message) const { m_output << format_diagnostic(make_diagnostic(first, last, message)); }
+    void operator()(It position, const std::string& message) const { *m_output << format_diagnostic(make_diagnostic(position, message)); }
+    void operator()(It first, It last, const std::string& message) const { *m_output << format_diagnostic(make_diagnostic(first, last, message)); }
     void operator()(const boost::spirit::x3::position_tagged& node, const std::string& message) const
     {
-        m_output << format_diagnostic(make_diagnostic(node, message));
+        *m_output << format_diagnostic(make_diagnostic(node, message));
     }
 
 private:
-    std::ostream& m_output;
+    std::ostream* m_output;
     std::string m_file;
     int m_tabs;
     std::optional<RecordedError> m_error;

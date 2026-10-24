@@ -32,21 +32,21 @@ struct FieldNames
 template<typename Archive, typename T>
 struct FieldWriter
 {
-    Archive& archive;
-    const T& value;
+    Archive* archive;
+    const T* value;
 
     template<typename Accessor>
     void field(std::string_view name, Accessor accessor)
     {
-        if (archive.accepts(name))
-            archive.field(name, std::invoke(accessor, value));
+        if (archive->accepts(name))
+            archive->field(name, std::invoke(accessor, *value));
     }
 
     template<typename Accessor>
     void variant(Accessor accessor)
     {
-        if (archive.accepts(detail::variant_field))
-            archive.variant(std::invoke(accessor, value));
+        if (archive->accepts(detail::variant_field))
+            archive->variant(std::invoke(accessor, *value));
     }
 };
 

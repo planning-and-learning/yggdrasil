@@ -152,7 +152,10 @@ private:
     class BaseCursor
     {
     public:
-        BaseCursor(const NodeSet& nodes, TreeBitsetIndex<Block> base) : m_nodes(nodes), m_base_size(base.size) { m_path[0] = Frame { base.root, 0, base.size }; }
+        BaseCursor(const NodeSet& nodes, TreeBitsetIndex<Block> base) : m_nodes(&nodes), m_base_size(base.size)
+        {
+            m_path[0] = Frame { base.root, 0, base.size };
+        }
 
         /// Returns the subtree of the base that covers exactly [offset, offset + size), or nullopt if the base has
         /// no such subtree. Ranges inside all-zero subtrees, or beyond the base, are zero.
@@ -174,7 +177,7 @@ private:
                 if (frame.root == ZERO)
                     return zero(size);
 
-                const auto& node = m_nodes[Index<Node>(frame.root)];
+                const auto& node = (*m_nodes)[Index<Node>(frame.root)];
                 const auto k = (offset - frame.offset) / chunk(frame.size);
                 const auto child_offset = frame.offset + k * chunk(frame.size);
                 const auto child_blocks = child_size(frame.size, k);
@@ -194,7 +197,7 @@ private:
             bool contains(uint_t other_offset, uint_t other_size) const noexcept { return offset <= other_offset && other_offset + other_size <= offset + size; }
         };
 
-        const NodeSet& m_nodes;
+        const NodeSet* m_nodes;
         uint_t m_base_size;
         std::array<Frame, std::numeric_limits<uint_t>::digits + 2> m_path {};  // Bounded by the tree height.
         size_t m_depth = 0;

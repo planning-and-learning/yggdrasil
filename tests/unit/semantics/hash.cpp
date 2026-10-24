@@ -563,7 +563,7 @@ TEST(YggdrasilTests, CommonHashAdaptersPropagateNestedDecodeErrors)
 
     struct Record
     {
-        decltype(wrapped) values;
+        std::remove_const_t<decltype(wrapped)> values;
         static constexpr auto identifying_members() noexcept { return ygg::Members<&Record::values> {}; }
     };
     const auto record = Record { wrapped };

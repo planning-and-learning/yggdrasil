@@ -70,8 +70,8 @@ using ColumnsIndexView = View<ColumnsIndex, Repository>;
 
 struct RelationContext
 {
-    const Repository& repository;
-    friend const Repository& get_repository(const RelationContext& context) noexcept { return context.repository; }
+    const Repository* repository;
+    friend const Repository& get_repository(const RelationContext& context) noexcept { return *context.repository; }
 };
 
 struct AliasFreeRelationView
@@ -394,7 +394,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
     database::join(left_builder_view, right_index_view, joined, workspace);
     expect_rows(joined, { { 4, 40, 400 } });
 
-    const RelationContext context { repository };
+    const RelationContext context { &repository };
     const auto contextual_index_view = make_view(right_view.get_index(), context);
     static_assert(database::RelationViewConcept<decltype(contextual_index_view)>);
     EXPECT_EQ(&contextual_index_view.get_context(), &context);

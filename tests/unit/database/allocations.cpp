@@ -262,11 +262,11 @@ struct Evaluation
     Builder<database::Relation> only_left_keys { { ColumnIndex(1) } };
     Builder<database::Relation> exists;
     database::Workspace workspace;
-    const Builder<database::Columns> joined_columns { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
-    const std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
-    const std::array<ColumnIndex, 1> projected_columns { ColumnIndex(6) };
-    const std::span<const ColumnIndex> renamed_schema { std::span<const ColumnIndex>(renamed_columns) };
-    const std::span<const ColumnIndex> projected_schema { std::span<const ColumnIndex>(projected_columns) };
+    Builder<database::Columns> joined_columns { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
+    std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
+    std::array<ColumnIndex, 1> projected_columns { ColumnIndex(6) };
+    std::span<const ColumnIndex> renamed_schema { std::span<const ColumnIndex>(renamed_columns) };
+    std::span<const ColumnIndex> projected_schema { std::span<const ColumnIndex>(projected_columns) };
     Builder<database::Columns> retained_columns { ColumnIndex(4), ColumnIndex(5), ColumnIndex(6) };
 
     bool evaluate(size_t left_size, size_t right_size, uint_t offset)
@@ -397,7 +397,7 @@ struct PreparedPooledEvaluation
     database::ProjectionPlan projecting_left_keys { left.columns(), { key_column } };
     database::ProjectionPlan projecting_right_keys { right.columns(), { key_column } };
     database::ProjectionPlan testing_existence { joining.output_columns(), {} };
-    const Builder<database::Columns> alternate_join_columns { ColumnIndex(7), ColumnIndex(8), ColumnIndex(9) };
+    Builder<database::Columns> alternate_join_columns { ColumnIndex(7), ColumnIndex(8), ColumnIndex(9) };
     database::RelationPool pool;
     database::Workspace workspace;
 
@@ -471,7 +471,7 @@ struct InterningEvaluation
     Builder<database::Columns> schema_builder;
     Data<database::Columns> schema_data;
     const std::array<ColumnIndex, 3> columns { ColumnIndex(11), ColumnIndex(12), ColumnIndex(13) };
-    const std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(21), ColumnIndex(22), ColumnIndex(23) };
+    std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(21), ColumnIndex(22), ColumnIndex(23) };
 
     bool evaluate(bool reverse, uint_t generation)
     {

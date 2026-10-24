@@ -43,16 +43,16 @@ namespace ygg
 template<>
 struct View<tests::VectorViewElement, tests::VectorViewContext>
 {
-    const tests::VectorViewElement& element;
-    const tests::VectorViewContext& context;
-    View(const tests::VectorViewElement& element, const tests::VectorViewContext& context) : element(element), context(context)
+    const tests::VectorViewElement* element;
+    const tests::VectorViewContext* context;
+    View(const tests::VectorViewElement& element, const tests::VectorViewContext& context) : element(&element), context(&context)
     {
         if (context.fail)
             throw std::runtime_error("view construction");
     }
-    const auto& get_data() const { return element; }
-    const auto& get_handle() const { return element; }
-    const auto& get_context() const { return context; }
+    const auto& get_data() const { return *element; }
+    const auto& get_handle() const { return *element; }
+    const auto& get_context() const { return *context; }
 };
 }
 

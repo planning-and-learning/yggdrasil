@@ -81,27 +81,25 @@ private:
 public:
     class Archive
     {
-        Dictionaries& m_dictionaries;
-        const std::optional<std::vector<std::string>>& m_selected_fields;
+        Dictionaries* m_dictionaries;
+        const std::optional<std::vector<std::string>>* m_selected_fields;
 
     public:
         boost::json::object fields;
 
         Archive(Dictionaries& dictionaries, const std::optional<std::vector<std::string>>& selected_fields) :
-            m_dictionaries(dictionaries), m_selected_fields(selected_fields)
+            m_dictionaries(&dictionaries),
+            m_selected_fields(&selected_fields)
         {}
 
-        bool accepts(std::string_view name) const
-        {
-            return !m_selected_fields || std::ranges::find(*m_selected_fields, name) != m_selected_fields->end();
-        }
+        bool accepts(std::string_view name) const { return !*m_selected_fields || std::ranges::find(**m_selected_fields, name) != (*m_selected_fields)->end(); }
 
         template<typename T>
         void field(std::string_view name, const T& value)
         {
             // Filter before conversion: omitted fields must not collect descendants into other tables.
             if (accepts(name))
-                fields[name] = m_dictionaries.convert(value);
+                fields[name] = m_dictionaries->convert(value);
         }
 
         template<typename Variant>
@@ -151,11 +149,13 @@ public:
         else if constexpr (Described<T>)
         {
             auto result = boost::json::value {};
-            object(result, value, [&](auto& archive)
-            {
-                auto writer = FieldWriter {archive, value};
-                describe_fields(writer, std::type_identity<T> {});
-            });
+            object(result,
+                   value,
+                   [&](auto& archive)
+                   {
+                       auto writer = FieldWriter { &archive, &value };
+                       describe_fields(writer, std::type_identity<T> {});
+                   });
             return result;
         }
         else if constexpr (IsDescribedOptional<T>::value)

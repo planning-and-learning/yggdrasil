@@ -172,7 +172,8 @@ TEST(YggdrasilTests, UnorderedMultiMapReconstructsValuesWithoutRequiringAssignme
 {
     struct Value
     {
-        const int value;
+        int value;
+        Value& operator=(const Value&) = delete;  // not replaceable
         bool operator==(const Value&) const = default;
     };
     using Map = UnorderedMultiMap<int, Value>;
