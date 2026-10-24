@@ -20,6 +20,7 @@
 
 #include "yggdrasil/core/concepts.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <compare>
@@ -376,31 +377,14 @@ template<std::ranges::input_range LhsRange, std::ranges::input_range RhsRange>
     requires OrderedByLess<std::ranges::range_value_t<LhsRange>> && OrderedByLess<std::ranges::range_value_t<RhsRange>>
 constexpr bool less_range(LhsRange&& lhs, RhsRange&& rhs)
 {
+    using LhsValue = std::ranges::range_value_t<LhsRange>;
+    using RhsValue = std::ranges::range_value_t<RhsRange>;
     auto lhs_view = std::views::all(std::forward<LhsRange>(lhs));
     auto rhs_view = std::views::all(std::forward<RhsRange>(rhs));
-    auto lhs_it = std::ranges::begin(lhs_view);
-    auto rhs_it = std::ranges::begin(rhs_view);
-    const auto lhs_end = std::ranges::end(lhs_view);
-    const auto rhs_end = std::ranges::end(rhs_view);
-
-    for (; lhs_it != lhs_end && rhs_it != rhs_end; ++lhs_it, ++rhs_it)
-    {
-        using LhsValue = std::ranges::range_value_t<LhsRange>;
-        using RhsValue = std::ranges::range_value_t<RhsRange>;
-        if constexpr (std::same_as<LhsValue, RhsValue>)
-        {
-            if (Less<LhsValue> {}(*lhs_it, *rhs_it))
-                return true;
-            if (Less<LhsValue> {}(*rhs_it, *lhs_it))
-                return false;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    return lhs_it == lhs_end && rhs_it != rhs_end;
+    if constexpr (std::same_as<LhsValue, RhsValue>)
+        return std::ranges::lexicographical_compare(lhs_view, rhs_view, Less<LhsValue> {});
+    else  // Ranges of different values order only an empty one first.
+        return std::ranges::begin(lhs_view) == std::ranges::end(lhs_view) && std::ranges::begin(rhs_view) != std::ranges::end(rhs_view);
 }
 
 }  // namespace ygg

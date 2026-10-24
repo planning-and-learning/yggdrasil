@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
+#include <span>
 #include <stdexcept>
 
 namespace ygg::tests
@@ -48,11 +49,12 @@ TEST(YggdrasilTests, BufferSegmentedBufferTracksSizeCapacityAndRemainingSpace)
     auto arena = buffer::SegmentedBuffer(8);
     const auto first = std::array<uint8_t, 3> { 1, 2, 3 };
     const auto first_position = arena.write(first.data(), first.size());
+    const auto first_bytes = std::span(first_position, first.size());
 
     EXPECT_NE(first_position, nullptr);
-    EXPECT_EQ(first_position[0], 1);
-    EXPECT_EQ(first_position[1], 2);
-    EXPECT_EQ(first_position[2], 3);
+    EXPECT_EQ(first_bytes[0], 1);
+    EXPECT_EQ(first_bytes[1], 2);
+    EXPECT_EQ(first_bytes[2], 3);
     EXPECT_EQ(arena.size(), first.size());
     EXPECT_FALSE(arena.empty());
     EXPECT_EQ(arena.num_segments(), 1);
@@ -79,8 +81,8 @@ TEST(YggdrasilTests, BufferSegmentedBufferHonorsAlignmentAndMovesToNewSegments)
     const auto aligned_position = arena.write(aligned.data(), aligned.size(), 4);
 
     EXPECT_EQ(std::bit_cast<std::uintptr_t>(aligned_position) % 4, 0);
-    EXPECT_EQ(aligned_position[0], 2);
-    EXPECT_EQ(aligned_position[3], 5);
+    EXPECT_EQ(std::span(aligned_position, aligned.size())[0], 2);
+    EXPECT_EQ(std::span(aligned_position, aligned.size())[3], 5);
     EXPECT_EQ(arena.size(), 8);
     EXPECT_EQ(arena.remaining_in_current_segment(), 0);
 
@@ -89,7 +91,7 @@ TEST(YggdrasilTests, BufferSegmentedBufferHonorsAlignmentAndMovesToNewSegments)
     EXPECT_NE(second_segment_position, nullptr);
     EXPECT_EQ(arena.num_segments(), 2);
     EXPECT_EQ(arena.size(), 9);
-    EXPECT_EQ(byte[0], first_position[0]);
+    EXPECT_EQ(byte[0], *first_position);
 }
 
 TEST(YggdrasilTests, BufferSegmentedBufferCopiesRemainIndependent)
@@ -106,8 +108,8 @@ TEST(YggdrasilTests, BufferSegmentedBufferCopiesRemainIndependent)
     copy.clear();
     EXPECT_TRUE(copy.empty());
     EXPECT_FALSE(arena.empty());
-    EXPECT_EQ(stored[0], 1);
-    EXPECT_EQ(stored[3], 4);
+    EXPECT_EQ(std::span(stored, data.size())[0], 1);
+    EXPECT_EQ(std::span(stored, data.size())[3], 4);
 
     auto assigned = buffer::SegmentedBuffer(2);
     assigned = arena;

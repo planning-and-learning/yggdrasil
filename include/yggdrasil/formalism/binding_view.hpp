@@ -228,15 +228,10 @@ public:
     decltype(auto) back() const
     {
         ensure_not_empty();
-        auto it = std::ranges::begin(*get_data().rows) + (std::ranges::ssize(*get_data().rows) - 1);
-        return ygg::make_view(T { *get_data().relation, *it }, get_context());
+        return ygg::make_view(T { *get_data().relation, std::views::all(*get_data().rows).back() }, get_context());
     }
 
-    decltype(auto) operator[](size_t i) const
-    {
-        auto it = std::ranges::begin(*get_data().rows) + static_cast<std::ptrdiff_t>(i);
-        return ygg::make_view(T { *get_data().relation, *it }, get_context());
-    }
+    decltype(auto) operator[](size_t i) const { return ygg::make_view(T { *get_data().relation, std::views::all(*get_data().rows)[i] }, get_context()); }
 
     using const_iterator =
         formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;

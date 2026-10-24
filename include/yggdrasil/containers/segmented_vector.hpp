@@ -33,6 +33,7 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -59,7 +60,7 @@ private:
     {
         assert(pos <= std::numeric_limits<Index>::max());
         const auto index = Layout::segment_index(static_cast<Index>(pos));
-        return segment(index) + Layout::segment_offset(static_cast<Index>(pos), index);
+        return &std::span(segment(index), Layout::segment_capacity(index))[Layout::segment_offset(static_cast<Index>(pos), index)];
     }
 
     void resize_to_fit(size_t n)

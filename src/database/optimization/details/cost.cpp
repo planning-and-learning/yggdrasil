@@ -9,20 +9,21 @@ namespace ygg::database::detail
 {
 const CostBasedPlanner::Refined& CostBasedPlanner::refine(size_t node)
 {
-    if (m_refined[node])
-        return *m_refined[node];
+    if (const auto& refined = m_refined[node])
+        return *refined;
     Refined result;
-    const auto [subset, lhs, rhs] = m_tree[node];
-    if (lhs)
+    const auto subset = m_tree[node].subset;
+    if (const auto children = m_tree[node].children)
     {
-        const auto& left = refine(*lhs);
-        const auto& right = refine(*rhs);
-        const auto largest_input = std::max(rows(m_tree[*lhs].subset), rows(m_tree[*rhs].subset));
+        const auto [lhs, rhs] = *children;
+        const auto& left = refine(lhs);
+        const auto& right = refine(rhs);
+        const auto largest_input = std::max(rows(m_tree[lhs].subset), rows(m_tree[rhs].subset));
         const bool growing = rows(subset) - largest_input > FloatTolerance<float_t>::tolerance(rows(subset), largest_input);
         if (growing || left.multiway || right.multiway)
         {
             std::vector<size_t> inputs;
-            for (const auto& [child, refined] : { std::pair(*lhs, &left), std::pair(*rhs, &right) })
+            for (const auto& [child, refined] : { std::pair(lhs, &left), std::pair(rhs, &right) })
                 if (refined->multiway)
                     inputs.insert(inputs.end(), refined->inputs.begin(), refined->inputs.end());
                 else
@@ -30,8 +31,7 @@ const CostBasedPlanner::Refined& CostBasedPlanner::refine(size_t node)
             result = { true, std::move(inputs) };
         }
     }
-    m_refined[node] = std::move(result);
-    return *m_refined[node];
+    return m_refined[node].emplace(std::move(result));
 }
 }
 
@@ -39,14 +39,16 @@ namespace ygg::database::detail
 {
 QueryView<> CostBasedPlanner::build(size_t node)
 {
-    const auto [subset, lhs, rhs] = m_tree[node];
+    const auto subset = m_tree[node].subset;
+    const auto children = m_tree[node].children;
     const auto keep = needed(subset);
-    if (!lhs)
+    if (!children)
         return m_build->restrict(m_block->atoms[std::countr_zero(subset)], keep);
+    const auto [lhs, rhs] = *children;
     // Multi-way joins with only two inputs are built as binary joins (Freitag et al.).
     const auto& refined = refine(node);
     if (!refined.multiway || refined.inputs.size() == 2)
-        return m_build->restrict(m_build->join(build(*lhs), build(*rhs)), keep);
+        return m_build->restrict(m_build->join(build(lhs), build(rhs)), keep);
     std::vector<QueryView<>> inputs;
     inputs.reserve(refined.inputs.size());
     for (const auto input : refined.inputs)
@@ -96,7 +98,8 @@ QueryView<> CostBasedPlanner::plan() &&
     for (const auto component : std::span(components).subspan(1))
     {
         joined |= component;
-        root = add({ joined, root, tree(component) });
+        const auto right = tree(component);
+        root = add({ joined, std::pair(root, right) });
     }
     m_refined.resize(m_tree.size());
     return build(root);

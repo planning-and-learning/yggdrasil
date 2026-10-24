@@ -173,7 +173,7 @@ private:
     class ConcurrentSlotDirectory
     {
     private:
-        using Layout = ::ygg::detail::GeometricSegmentLayout<32, ygg::uint_t>;
+        using Layout = ::ygg::detail::GeometricSegmentLayout<default_first_segment_size, ygg::uint_t>;
         static constexpr auto kMaxIndex = std::numeric_limits<ygg::uint_t>::max() - 1;
         static constexpr size_t kNumSegments = Layout::segment_index(kMaxIndex) + 1;
 

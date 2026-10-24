@@ -20,6 +20,7 @@
 
 #include "yggdrasil/containers/block_array_pool.hpp"
 #include "yggdrasil/containers/detail/basic_array_set.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 
 #include <concepts>
 #include <memory>
@@ -32,7 +33,10 @@ namespace ygg
 /// Hash-table locking is limited to the target shard and pool appends use their
 /// narrow publication lock. Clear, segment or memory inspection, move, and
 /// destruction require quiescence.
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
+template<std::unsigned_integral Block,
+         bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>,
+         size_t FirstSegmentSize = default_first_array_segment_size,
+         bool ThreadSafe = false>
 class BlockArraySet : public detail::BasicArraySet<BlockArrayPool<Block, Coder, FirstSegmentSize, ThreadSafe>>
 {
 private:

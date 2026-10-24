@@ -40,6 +40,7 @@
 #include <iterator>
 #include <limits>
 #include <list>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -1198,7 +1199,7 @@ struct ThrowingBindingRows
     {
         if (failure == Failure::END)
             throw std::runtime_error("end");
-        return rows.data() + rows.size();
+        return std::to_address(rows.end());
     }
     size_t size() const
     {

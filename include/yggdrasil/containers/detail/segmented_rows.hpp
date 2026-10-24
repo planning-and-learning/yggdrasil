@@ -24,6 +24,7 @@
 #include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <span>
 #include <stdexcept>
 
 namespace ygg::detail
@@ -47,7 +48,8 @@ private:
     const T* element(size_t pos) const noexcept
     {
         const auto index = Layout::segment_index(static_cast<Index>(pos));
-        return static_cast<const T*>(load_pointer<ThreadSafe, void>(m_segments[index])) + Layout::segment_offset(static_cast<Index>(pos), index);
+        const auto* segment = static_cast<const T*>(load_pointer<ThreadSafe, void>(std::span(m_segments, Layout::max_segments)[index]));
+        return &std::span(segment, Layout::segment_capacity(index))[Layout::segment_offset(static_cast<Index>(pos), index)];
     }
 
     void ensure_not_empty() const

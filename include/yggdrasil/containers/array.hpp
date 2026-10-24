@@ -28,6 +28,7 @@
 #include <concepts>
 #include <cstddef>
 #include <iterator>
+#include <span>
 #include <type_traits>
 
 namespace ygg
@@ -84,7 +85,7 @@ public:
     struct const_iterator
     {
         const C* ctx;
-        ContainerConstIterator<Container> it;
+        typename std::span<const T>::iterator it;
 
         using difference_type = std::ptrdiff_t;
         using value_type = ViewOrValue<T, C>;
@@ -92,7 +93,7 @@ public:
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(typename std::span<const T>::iterator it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
 
         decltype(auto) operator*() const
         {
@@ -169,9 +170,9 @@ public:
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.it <=> rhs.it; }
     };
 
-    const_iterator begin() const noexcept { return const_iterator { get_data().begin(), get_context() }; }
+    const_iterator begin() const noexcept { return const_iterator { std::span<const T>(get_data()).begin(), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { get_data().end(), get_context() }; }
+    const_iterator end() const noexcept { return const_iterator { std::span<const T>(get_data()).end(), get_context() }; }
 
     const_iterator cbegin() const noexcept { return begin(); }
 

@@ -25,6 +25,8 @@
 #include <cassert>
 #include <cista/serialization.h>
 #include <limits>
+#include <memory>
+#include <span>
 #include <stdexcept>
 #include <utility>
 
@@ -171,8 +173,8 @@ const Data<Tag>* IndexedHashSet<Tag, H, E, FirstSegmentSize, ThreadSafe>::serial
 {
     m_buf->reset();
     ::cista::serialize<Mode>(*m_buf, element);
-    auto begin = m_arena->write(m_buf->base(), m_buf->size(), alignof(Data<Tag>));
-    return ::cista::deserialize<const Data<Tag>, Mode>(begin, begin + m_buf->size());
+    const auto bytes = std::span(m_arena->write(m_buf->base(), m_buf->size(), alignof(Data<Tag>)), m_buf->size());
+    return ::cista::deserialize<const Data<Tag>, Mode>(bytes.data(), std::to_address(bytes.end()));
 }
 
 template<typename Tag, HashFor<Data<Tag>> H, EqualToFor<Data<Tag>> E, size_t FirstSegmentSize, bool ThreadSafe>

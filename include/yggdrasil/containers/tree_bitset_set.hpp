@@ -19,6 +19,7 @@
 #define YGG_CONTAINERS_TREE_BITSET_SET_HPP_
 
 #include "yggdrasil/containers/detail/indexed_hash_set_impl.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/tree_vector_set.hpp"
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/types_utils.hpp"
@@ -75,7 +76,7 @@ struct TreeBitsetFlip
 /// sentinel Index<>::MAX, except that an inline zero block is the value 0.
 /// ThreadSafe permits concurrent insertion, size queries, and reads of published indices.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<std::unsigned_integral Block, size_t FirstSegmentSize = 32, bool ThreadSafe = false, size_t Arity = 2>
+template<std::unsigned_integral Block, size_t FirstSegmentSize = default_first_segment_size, bool ThreadSafe = false, size_t Arity = 2>
     requires(std::has_single_bit(Arity) && Arity >= 2)
 class TreeBitsetSet
 {

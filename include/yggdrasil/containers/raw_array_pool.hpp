@@ -110,12 +110,13 @@ public:
             return insert_with(std::ranges::size(value),
                                [&](std::byte* destination)
                                {
-                                   const auto end = std::ranges::end(value);
-                                   for (auto iterator = std::ranges::begin(value); iterator != end; ++iterator)
+                                   const auto bytes = std::span(destination, std::ranges::size(value) * sizeof(T));
+                                   size_t offset = 0;
+                                   for (auto&& element : value)
                                    {
-                                       const T& element = *iterator;
-                                       std::memcpy(destination, &element, sizeof(T));
-                                       destination += sizeof(T);
+                                       const T& item = element;
+                                       std::memcpy(bytes.subspan(offset, sizeof(T)).data(), &item, sizeof(T));
+                                       offset += sizeof(T);
                                    }
                                });
     }

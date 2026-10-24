@@ -43,7 +43,7 @@ void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout
                       [&]<typename T>(std::type_identity<T>)
                       {
                           const auto source = detail::column_bytes(bytes, column);
-                          std::array<std::byte, ByteCodec<T>::size> canonical;
+                          auto canonical = std::array<std::byte, ByteCodec<T>::size> {};
                           ByteCodec<T>::encode(ByteCodec<T>::decode(source), canonical);
                           if (!std::ranges::equal(source, canonical))
                               throw std::invalid_argument("Relation: row contains a noncanonical value encoding.");

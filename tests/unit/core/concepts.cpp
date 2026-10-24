@@ -39,7 +39,7 @@ struct RangeContractIterator
     using value_type = int;
     using difference_type = std::ptrdiff_t;
     using iterator_concept = std::forward_iterator_tag;
-    const int* position = nullptr;
+    std::span<const int>::iterator position {};
     RangeContractIterator() = default;
     RangeContractIterator(const RangeContractIterator&) noexcept(Copy) = default;
     ~RangeContractIterator() = default;

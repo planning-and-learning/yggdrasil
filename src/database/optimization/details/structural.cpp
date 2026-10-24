@@ -5,6 +5,8 @@
 
 #include "yggdrasil/database/optimization/details/structural.hpp"
 
+#include "yggdrasil/core/config.hpp"
+
 namespace ygg::database::detail
 {
 std::optional<std::vector<std::optional<size_t>>> join_tree(std::vector<std::vector<Index<Column>>> edges)
@@ -59,8 +61,8 @@ QueryView<> yannakakis(const JoinBlock& block, std::span<const std::optional<siz
     std::vector<std::vector<size_t>> children(count);
     size_t root = 0;
     for (size_t atom = 0; atom < count; ++atom)
-        if (parent[atom])
-            children[*parent[atom]].push_back(atom);
+        if (const auto& above = parent[atom])
+            children[*above].push_back(atom);
         else
             root = atom;
     std::vector<size_t> preorder { root };
@@ -70,28 +72,34 @@ QueryView<> yannakakis(const JoinBlock& block, std::span<const std::optional<siz
 
     auto relations = block.atoms;
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
-        if (parent[*atom])
-            relations[*parent[*atom]] = semijoin(build, relations[*parent[*atom]], relations[*atom]);
+        if (const auto& above = parent[*atom])
+            relations[*above] = semijoin(build, relations[*above], relations[*atom]);
     for (const auto atom : preorder)
-        if (parent[atom])
-            relations[atom] = semijoin(build, relations[atom], relations[*parent[atom]]);
+        if (const auto& above = parent[atom])
+            relations[atom] = semijoin(build, relations[atom], relations[*above]);
 
     std::vector<std::optional<QueryView<>>> results(count);
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
     {
         auto joined = relations[*atom];
         for (const auto child : children[*atom])
-            joined = build.join(joined, *results[child]);
-        auto keep = block.required;
-        if (parent[*atom])
         {
-            const auto shared = variables(block.atoms[*parent[*atom]]);
+            const auto& result = results[child];
+            YGG_ASSUME(result.has_value());  // the reverse preorder visits children first
+            joined = build.join(joined, *result);
+        }
+        auto keep = block.required;
+        if (const auto& above = parent[*atom])
+        {
+            const auto shared = variables(block.atoms[*above]);
             keep.insert(keep.end(), shared.begin(), shared.end());
             keep = ygg::canonicalized(std::move(keep));
         }
         results[*atom] = build.restrict(joined, keep);
     }
-    return *results[root];
+    const auto& result = results[root];
+    YGG_ASSUME(result.has_value());  // the reverse preorder ends at the root
+    return *result;
 }
 }
 

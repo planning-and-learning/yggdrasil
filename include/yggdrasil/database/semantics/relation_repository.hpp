@@ -7,6 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_RELATION_REPOSITORY_HPP_
 
 #include "yggdrasil/containers/raw_vector_set.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/formalism/interning.hpp"
@@ -190,7 +191,7 @@ private:
     }
 };
 
-const RelationRepository& get_repository(const RelationRepository& repository) noexcept;
+const RelationRepository& get_repository(const RelationRepository& repository YGG_LIFETIMEBOUND) noexcept;
 
 // Validation stays in the raw repository members for both direct and prepared
 // calls.

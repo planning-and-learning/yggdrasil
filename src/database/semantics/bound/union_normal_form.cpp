@@ -78,7 +78,7 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                             labels.push_back(column);
                             variables.push_back(fresh(column));
                         }
-                    result = product(std::move(result), flatten(child, by_label(child.columns(), labels, variables)));
+                    result = product(result, flatten(child, by_label(child.columns(), labels, variables)));
                 }
                 return result;
             }

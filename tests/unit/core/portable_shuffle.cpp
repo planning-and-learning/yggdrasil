@@ -20,6 +20,7 @@
 #include <array>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <span>
 
 namespace ygg::tests
 {
@@ -46,7 +47,8 @@ TEST(CorePortableShuffleTest, UsesStableFisherYatesOrder)
     auto values = std::array<int, 5> { 0, 1, 2, 3, 4 };
     auto generator = FixedGenerator {};
 
-    portable_shuffle(values.begin(), values.end(), generator);
+    const auto range = std::span(values);
+    portable_shuffle(range.begin(), range.end(), generator);
 
     EXPECT_EQ(values, (std::array<int, 5> { 3, 4, 1, 0, 2 }));
 }

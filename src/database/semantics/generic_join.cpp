@@ -6,6 +6,7 @@
 #include "yggdrasil/database/semantics/generic_join.hpp"
 
 #include <algorithm>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -156,14 +157,15 @@ void GenericJoinWorkspace::enumerate(size_t depth, Builder<Relation>& out)
         return;
     }
     const auto count = m_plan.input_count();
-    const auto* current = m_cursors.data() + depth * count;
-    auto* next = m_cursors.data() + (depth + 1) * count;
+    const auto cursors = std::span(m_cursors);
+    const auto current = cursors.subspan(depth * count, count);
+    const auto next = cursors.subspan((depth + 1) * count, count);
     const auto inputs = m_plan.variable_inputs(depth);
     const auto source = *std::ranges::min_element(inputs, {}, [&](size_t input) { return current[input]->children.size(); });
     for (const auto& [key, child] : current[source]->children)
     {
         detail::count_generic_join_work(&detail::GenericJoinWork::candidate_keys);
-        std::copy_n(current, count, next);
+        std::ranges::copy(current, next.begin());
         bool present = true;
         for (const auto input : inputs)
         {
@@ -179,7 +181,7 @@ void GenericJoinWorkspace::enumerate(size_t depth, Builder<Relation>& out)
         if (present)
         {
             const auto output = m_plan.output_position(depth);
-            std::ranges::copy(key.bytes, m_row.begin() + output.offset);
+            std::ranges::copy(key.bytes, std::span(m_row).subspan(output.offset).begin());
             enumerate(depth + 1, out);
         }
     }

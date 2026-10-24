@@ -93,8 +93,8 @@ struct Hash<::cista::offset::variant<Ts...>>
         requires(Hashable<Ts> && ...)
     {
         hash_t seed = el.index();
-        if (el.valid())
-            el.apply([&seed](auto&& arg) { ygg::hash_combine(seed, arg); });
+        if (el.valid())  // The static apply has no empty case, which valid() has handled.
+            ::cista::offset::variant<Ts...>::apply([&seed](auto&& arg) { ygg::hash_combine(seed, arg); }, el.index(), el);
         return seed;
     }
 };

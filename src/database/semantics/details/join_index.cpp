@@ -13,7 +13,7 @@ hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice
 {
     auto hash = boost::hash2::xxhash_64 {};
     for (const auto key : keys)
-        hash.update(row.data() + key.offset, key.size);
+        hash.update(row.subspan(key.offset, key.size).data(), key.size);
     return hash.result();
 }
 }

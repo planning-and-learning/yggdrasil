@@ -41,9 +41,9 @@ using FactorIdentity = std::variant<InputFactorIdentity, QueryFactorIdentity>;
 /// A column of a factor: its position in the factor and its current label.
 struct Attribute
 {
-    size_t position;
+    size_t position = 0;
     Index<Column> column;
-    double distinct;
+    double distinct = 0;
     auto operator<=>(const Attribute&) const = default;
 };
 struct Factor

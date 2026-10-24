@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <limits>
 #include <new>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -76,10 +77,13 @@ class GeometricByteStorage
 
         size_t remaining() const noexcept { return capacity - used; }
 
+        /// The segment's bytes: subspans assert their bounds in Debug (YGGDRASIL_STDLIB_ASSERTIONS).
+        std::span<std::byte> bytes() const noexcept { return { storage, capacity }; }
+
         std::byte* allocate(size_t size) noexcept
         {
             assert(size <= remaining());
-            auto* result = storage + used;
+            auto* result = bytes().subspan(used, size).data();
             used += size;
             return result;
         }
@@ -185,7 +189,7 @@ public:
             publish(segment);
         }
 
-        auto* result = m_segments[segment].storage + m_segments[segment].used;
+        auto* result = m_segments[segment].bytes().subspan(m_segments[segment].used, size).data();
         std::forward<Fill>(fill)(result);
         m_segments[segment].allocate(size);
         m_current_segment = segment;
@@ -224,17 +228,21 @@ private:
         }
     }
 
+    /// The bytes of the units the layout places in `segment` (a segment may hold more).
+    std::span<std::byte> unit_bytes(size_t segment) noexcept { return { data(segment), Layout::segment_capacity(segment) * m_unit_size }; }
+    std::span<const std::byte> unit_bytes(size_t segment) const noexcept { return { data(segment), Layout::segment_capacity(segment) * m_unit_size }; }
+
 public:
     std::byte* data_at(size_t unit_index) noexcept
     {
         const auto segment = Layout::segment_index(unit_index);
-        return data(segment) + Layout::segment_offset(unit_index, segment) * m_unit_size;
+        return unit_bytes(segment).subspan(Layout::segment_offset(unit_index, segment) * m_unit_size, m_unit_size).data();
     }
 
     const std::byte* data_at(size_t unit_index) const noexcept
     {
         const auto segment = Layout::segment_index(unit_index);
-        return data(segment) + Layout::segment_offset(unit_index, segment) * m_unit_size;
+        return unit_bytes(segment).subspan(Layout::segment_offset(unit_index, segment) * m_unit_size, m_unit_size).data();
     }
 
     /// Undo the last successful allocation, retaining every segment.

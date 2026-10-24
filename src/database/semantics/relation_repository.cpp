@@ -20,7 +20,7 @@ std::shared_ptr<RelationRepository> RelationRepositoryFactory::create_shared()
 
 namespace ygg::database
 {
-const RelationRepository& get_repository(const RelationRepository& repository) noexcept { return repository; }
+const RelationRepository& get_repository(const RelationRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 }
 
 namespace ygg::database

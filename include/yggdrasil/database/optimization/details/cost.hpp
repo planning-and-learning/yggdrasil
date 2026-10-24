@@ -72,11 +72,11 @@ class CostBasedPlanner
                 result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end());
         return ygg::canonicalized(std::move(result));
     }
-    /// A node of the chosen operator tree; leaves are single operands.
+    /// A node of the chosen operator tree: a join of its two children, or a leaf (a single operand).
     struct Node
     {
         std::uint64_t subset;
-        std::optional<size_t> lhs, rhs;
+        std::optional<std::pair<size_t, size_t>> children;
     };
     /// A refined node: a multi-way join over the given tree nodes, or unchanged.
     struct Refined
@@ -96,10 +96,10 @@ class CostBasedPlanner
     size_t tree(std::uint64_t subset)
     {
         if (std::has_single_bit(subset))
-            return add({ subset, {}, {} });
+            return add({ subset, std::nullopt });
         const auto lhs = m_best.at(subset).lhs;
         const auto left = tree(lhs), right = tree(subset ^ lhs);
-        return add({ subset, left, right });
+        return add({ subset, std::pair(left, right) });
     }
     /// Algorithm 4 of M. Freitag et al., "Adopting Worst-Case Optimal Joins in Relational
     /// Database Systems", PVLDB 13(11), 2020: bottom-up, a join whose estimate exceeds both

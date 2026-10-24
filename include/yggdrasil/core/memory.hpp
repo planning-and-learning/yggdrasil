@@ -73,7 +73,8 @@ inline int64_t get_peak_memory_usage_in_bytes()
 
     if (memory_in_kb < 0)
         return -1;
-    return memory_in_kb * 1024;
+    constexpr auto bytes_per_kb = 1024;
+    return memory_in_kb * bytes_per_kb;
 }
 
 }  // namespace ygg

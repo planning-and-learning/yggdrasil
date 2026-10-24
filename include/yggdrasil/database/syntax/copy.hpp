@@ -5,6 +5,7 @@
 #ifndef YGG_DATABASE_SYNTAX_COPY_HPP_
 #define YGG_DATABASE_SYNTAX_COPY_HPP_
 
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -51,7 +52,11 @@ std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf slot_of
     }
     auto result = std::vector<QueryView<>>();
     for (const auto root : roots)
-        result.push_back(*copies[root.get_index().get_value()]);
+    {
+        const auto& copy = copies[root.get_index().get_value()];
+        YGG_ASSUME(copy.has_value());  // the loop above copied every query reachable from a root
+        result.push_back(*copy);
+    }
     return result;
 }
 

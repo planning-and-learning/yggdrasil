@@ -20,6 +20,7 @@
 
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
 #include "yggdrasil/containers/detail/basic_array_set.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 
 #include <concepts>
 #include <cstdint>
@@ -34,7 +35,10 @@ namespace ygg
 /// narrow publication lock. Clear, segment or memory inspection, move, and
 /// destruction require quiescence. Atomic packed access prevents
 /// neighboring-array races but does not make multi-block updates atomic.
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
+template<std::unsigned_integral Block,
+         bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>,
+         size_t FirstSegmentSize = default_first_array_segment_size,
+         bool ThreadSafe = false>
 class BitPackedArraySet : public detail::BasicArraySet<BitPackedArrayPool<Block, Coder, FirstSegmentSize, ThreadSafe>>
 {
 private:

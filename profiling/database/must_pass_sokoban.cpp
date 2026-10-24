@@ -31,6 +31,7 @@
 #include <fmt/core.h>
 #include <fstream>
 #include <map>
+#include <span>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -198,15 +199,15 @@ struct PushDistance
 
 double seconds_since(std::chrono::steady_clock::time_point start) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); }
 
-int run(int argc, char** argv)
+int run(std::span<char*> args)
 {
-    if (argc < 2)
+    if (args.size() < 2)
     {
-        fmt::print(stderr, "usage: {} <task.pddl> [state.txt] [repeats]\n", argv[0]);
+        fmt::print(stderr, "usage: {} <task.pddl> [state.txt] [repeats]\n", args[0]);
         return 2;
     }
-    auto task = read_task(argv[1], argc > 2 ? argv[2] : "");
-    const auto repeats = argc > 3 ? std::stoul(argv[3]) : 1ul;
+    auto task = read_task(args[1], args.size() > 2 ? args[2] : "");
+    const auto repeats = args.size() > 3 ? std::stoul(args[3]) : 1ul;
     const Column box(0), robot(1), boxloc(2), next_robot(3), next_boxloc(4), direction(5), cell(6);
 
     // The relations of the state.
@@ -409,7 +410,7 @@ int main(int argc, char** argv)
 {
     try
     {
-        return run(argc, argv);
+        return run(std::span(argv, static_cast<size_t>(argc)));
     }
     catch (const std::exception& e)
     {

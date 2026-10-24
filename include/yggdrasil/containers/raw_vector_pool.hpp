@@ -87,7 +87,7 @@ public:
                 std::byte* slot = m_storage.allocate(needed_bytes);
                 store_unaligned({ slot, sizeof(Size) }, static_cast<Size>(size));
                 if (size > 0)
-                    std::memcpy(slot + payload_offset, data, size * sizeof(T));
+                    std::memcpy(std::span(slot, needed_bytes).subspan(payload_offset).data(), data, size * sizeof(T));
                 return slot;
             },
             std::numeric_limits<uint_t>::max()));
@@ -100,7 +100,9 @@ public:
         const auto size = load_unaligned<Size>(std::span<const std::byte, sizeof(Size)>(slot, sizeof(Size)));
         if (size == 0)
             return {};
-        return { std::launder(reinterpret_cast<const T*>(slot + payload_offset)), static_cast<size_t>(size) };
+        // insert checked that the slot's size fits (slot_size_bytes), so this cannot overflow.
+        const auto payload = std::span(slot, payload_offset + static_cast<size_t>(size) * sizeof(T)).subspan(payload_offset);
+        return { std::launder(reinterpret_cast<const T*>(payload.data())), static_cast<size_t>(size) };
     }
 
     ConstView at(uint_t index) const

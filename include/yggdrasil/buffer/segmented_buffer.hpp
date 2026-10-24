@@ -28,6 +28,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -168,7 +169,7 @@ public:
         assert(m_cur_pos % align == 0);
 
         auto& segment = m_segments[m_cur_seg];
-        const auto pos = segment.storage.get() + m_cur_pos;
+        const auto pos = std::span(segment.storage.get(), segment.capacity).subspan(m_cur_pos, amount).data();
 
         std::memcpy(pos, data, amount);
 

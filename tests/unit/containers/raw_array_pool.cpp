@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -399,7 +400,7 @@ struct ThrowingPoolRange
         using value_type = int;
         using difference_type = std::ptrdiff_t;
         using iterator_concept = std::forward_iterator_tag;
-        const int* position = nullptr;
+        std::span<const int>::iterator position {};
         const ThrowingPoolRange* range = nullptr;
 
         const int& operator*() const
@@ -430,12 +431,12 @@ struct ThrowingPoolRange
     Iterator begin() const
     {
         check(PoolRangeOperation::Begin);
-        return { values.data(), this };
+        return { values.begin(), this };
     }
     Iterator end() const
     {
         check(PoolRangeOperation::End);
-        return { values.data() + values.size(), this };
+        return { values.end(), this };
     }
     size_t size() const
     {
@@ -480,7 +481,7 @@ struct ThrowingPoolDataRange
     std::span<const int> values;
     bool fail = true;
     const int* begin() const { return values.data(); }
-    const int* end() const { return values.data() + values.size(); }
+    const int* end() const { return std::to_address(values.end()); }
     size_t size() const { return values.size(); }
     const int* data() const
     {
@@ -523,7 +524,7 @@ TEST(YggdrasilTests, CommonRawArrayStorageFailedFillPreservesEarlierSegmentSpace
                                        }),
                  std::runtime_error);
     const auto retained = storage.memory_usage();
-    EXPECT_EQ(storage.allocate(1), first + 3);
+    EXPECT_EQ(storage.allocate(1), std::span(first, 4).subspan(3).data());
     EXPECT_EQ(storage.allocate(3), failed);
     EXPECT_EQ(storage.memory_usage(), retained);
 }

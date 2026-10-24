@@ -107,7 +107,7 @@ TEST(YggdrasilTests, CommonHashBytesMatchesXxHashReferenceAcrossBlockBoundaries)
     for (const auto& [size, expected] : cases)
     {
         SCOPED_TRACE(size);
-        EXPECT_EQ(ygg::hashing::hash_bytes(bytes.data() + 1, size), expected);
+        EXPECT_EQ(ygg::hashing::hash_bytes(std::span(bytes).subspan(1).data(), size), expected);
     }
 }
 

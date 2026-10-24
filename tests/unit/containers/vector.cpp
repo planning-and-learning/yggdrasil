@@ -23,6 +23,7 @@
 #include <concepts>
 #include <gtest/gtest.h>
 #include <iterator>
+#include <memory>
 #include <ranges>
 #include <stdexcept>
 
@@ -107,8 +108,8 @@ TEST(YggdrasilTests, CommonVector)
     EXPECT_EQ(mdspan.stride(), mdspan.strides());
     EXPECT_EQ(mdspan.begin(), vec.data());
     EXPECT_EQ(mdspan.cbegin(), vec.data());
-    EXPECT_EQ(mdspan.end(), vec.data() + vec.size());
-    EXPECT_EQ(mdspan.cend(), vec.data() + vec.size());
+    EXPECT_EQ(mdspan.end(), std::to_address(vec.end()));
+    EXPECT_EQ(mdspan.cend(), std::to_address(vec.end()));
 
     auto submdspan_full = mdspan();
     auto checked_submdspan_full = mdspan.at();
@@ -147,7 +148,7 @@ TEST(YggdrasilTests, CommonVector)
     EXPECT_EQ(submdspan_1.data(), &mdspan(1, 0, 0));
 
     const auto& const_mdspan = mdspan;
-    EXPECT_EQ(const_mdspan.end(), vec.data() + vec.size());
+    EXPECT_EQ(const_mdspan.end(), std::to_address(vec.end()));
     EXPECT_EQ(const_mdspan(0, 2, 0), 5);
     EXPECT_EQ(const_mdspan.at(0, 2, 0), 5);
     EXPECT_EQ(const_mdspan[0][2][0], 5);

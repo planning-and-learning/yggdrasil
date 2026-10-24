@@ -103,17 +103,11 @@ struct EqualTo<::cista::offset::variant<Ts...>>
         if (lhs.index() != rhs.index())
             return false;
 
-        return lhs.apply(
-            [&]<typename L>(const L& l)
-            {
-                return rhs.apply(
-                    [&]<typename R>(const R& r)
-                    {
-                        if constexpr (std::is_same_v<std::remove_cvref_t<L>, std::remove_cvref_t<R>>)
-                            return EqualTo<std::remove_cvref_t<L>> {}(l, r);
-                        return false;
-                    });
-            });
+        // Both hold the same alternative; the static apply has no empty case to throw for.
+        return ::cista::offset::variant<Ts...>::apply([]<typename T>(const T& l, const T& r) { return EqualTo<std::remove_cvref_t<T>> {}(l, r); },
+                                                      lhs.index(),
+                                                      lhs,
+                                                      rhs);
     }
 };
 

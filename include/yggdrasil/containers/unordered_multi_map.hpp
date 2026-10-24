@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -64,11 +65,11 @@ public:
     class ValueIterator
     {
     private:
-        const Entry* m_entries = nullptr;
+        std::span<const Entry> m_entries;
         size_t m_index = npos;
 
         friend class UnorderedMultiMap;
-        ValueIterator(const Entry* entries, size_t index) noexcept : m_entries(entries), m_index(index) {}
+        ValueIterator(std::span<const Entry> entries, size_t index) noexcept : m_entries(entries), m_index(index) {}
 
     public:
         using value_type = Value;
@@ -91,7 +92,8 @@ public:
             ++*this;
             return previous;
         }
-        friend bool operator==(const ValueIterator&, const ValueIterator&) = default;
+        /// Iterators of the same map compare by slot.
+        friend bool operator==(const ValueIterator& lhs, const ValueIterator& rhs) noexcept { return lhs.m_index == rhs.m_index; }
     };
 
     UnorderedMultiMap() = default;
@@ -198,7 +200,7 @@ public:
     auto values(const Key& key) const&
     {
         const auto head = m_heads.find(key);
-        return std::ranges::subrange(ValueIterator(m_entries.data(), head == m_heads.end() ? npos : head->second), ValueIterator(m_entries.data(), npos));
+        return std::ranges::subrange(ValueIterator(m_entries, head == m_heads.end() ? npos : head->second), ValueIterator(m_entries, npos));
     }
 
     auto values(const Key& key) const&& = delete;
