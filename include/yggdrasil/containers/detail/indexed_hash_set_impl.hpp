@@ -78,8 +78,10 @@ public:
 
     Store() : storage(), set(0, IndexableHash(*this), IndexableEqualTo(*this)) {}
     Store(const Store&) = delete;
-    ~Store() = default;
     Store& operator=(const Store&) = delete;
+    Store(Store&&) = delete;
+    Store& operator=(Store&&) = delete;
+    ~Store() = default;
 
     SegmentedVector<Data<Tag>, FirstSegmentSize, ThreadSafe, uint_t> storage;
     SetType set;

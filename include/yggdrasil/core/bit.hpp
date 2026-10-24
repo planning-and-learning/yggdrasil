@@ -198,7 +198,14 @@ public:
 
     constexpr int_reference(const int_reference&) = default;
     constexpr ~int_reference() = default;
-    constexpr int_reference& operator=(const int_reference& other) { return (*this = static_cast<value_type>(other)); }
+    constexpr int_reference& operator=(const int_reference& other)
+    {
+        if (this != &other)
+            *this = static_cast<value_type>(other);
+        return *this;
+    }
+    constexpr int_reference(int_reference&&) = default;
+    constexpr int_reference& operator=(int_reference&& other) { return *this = static_cast<const int_reference&>(other); }
 
     constexpr operator value_type() const { return Coder::decode(bit::read_int(m_word, m_offset, m_len)); }
 
@@ -224,7 +231,14 @@ public:
 
     constexpr block_reference(const block_reference&) = default;
     constexpr ~block_reference() = default;
-    constexpr block_reference& operator=(const block_reference& other) { return (*this = static_cast<value_type>(other)); }
+    constexpr block_reference& operator=(const block_reference& other)
+    {
+        if (this != &other)
+            *this = static_cast<value_type>(other);
+        return *this;
+    }
+    constexpr block_reference(block_reference&&) = default;
+    constexpr block_reference& operator=(block_reference&& other) { return *this = static_cast<const block_reference&>(other); }
 
     constexpr operator value_type() const { return Coder::decode(*m_ptr); }
 
@@ -260,7 +274,14 @@ struct bit_reference
 
     bit_reference(const bit_reference&) = default;
     ~bit_reference() = default;
-    bit_reference& operator=(const bit_reference& other) noexcept { return *this = static_cast<bool>(other); }
+    bit_reference& operator=(const bit_reference& other) noexcept
+    {
+        if (this != &other)
+            *this = static_cast<bool>(other);
+        return *this;
+    }
+    bit_reference(bit_reference&&) noexcept = default;
+    bit_reference& operator=(bit_reference&& other) noexcept { return *this = static_cast<const bit_reference&>(other); }
 
     explicit operator bool() const noexcept { return ((data[block_index(bit)] >> bit_index(bit)) & Block(1)) != 0; }
 };

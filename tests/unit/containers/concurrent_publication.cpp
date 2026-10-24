@@ -158,6 +158,9 @@ struct BlockingValue
             std::this_thread::yield();
     }
     BlockingValue& operator=(const BlockingValue&) = default;
+    // Moves copy, so that every transfer passes the copy constructor above.
+    BlockingValue(BlockingValue&& other) : BlockingValue(static_cast<const BlockingValue&>(other)) {}
+    BlockingValue& operator=(BlockingValue&& other) { return *this = static_cast<const BlockingValue&>(other); }
     ~BlockingValue() = default;
 };
 

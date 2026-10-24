@@ -367,6 +367,8 @@ TEST(YggdrasilTests, CommonEqualRangeComparesProxyValuesWithoutCopyingReferenceE
         explicit Noncopyable(int value_) : value(value_) {}
         Noncopyable(const Noncopyable&) = delete;
         Noncopyable& operator=(const Noncopyable&) = delete;
+        Noncopyable(Noncopyable&&) = delete;
+        Noncopyable& operator=(Noncopyable&&) = delete;
         ~Noncopyable() = default;
         bool operator==(const Noncopyable&) const = default;
     };

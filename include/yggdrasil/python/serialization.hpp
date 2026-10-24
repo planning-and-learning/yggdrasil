@@ -148,6 +148,8 @@ inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
         RecursionGuard() = default;
         RecursionGuard(const RecursionGuard&) = delete;
         RecursionGuard& operator=(const RecursionGuard&) = delete;
+        RecursionGuard(RecursionGuard&&) = delete;
+        RecursionGuard& operator=(RecursionGuard&&) = delete;
         ~RecursionGuard() { Py_LeaveRecursiveCall(); }
     } guard;
 
