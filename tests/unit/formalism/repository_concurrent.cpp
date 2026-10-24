@@ -157,7 +157,7 @@ public:
     }
 
     size_t get_index() const noexcept { return 0; }
-    friend const PublishedRepository& get_repository(const PublishedRepository& repository) noexcept { return repository; }
+    friend const PublishedRepository& get_repository(const PublishedRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 static_assert(formalism::SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);

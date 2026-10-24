@@ -24,10 +24,10 @@ struct ResizeValue
     ResizeValue() { initialize(0); }
     explicit ResizeValue(int value_) { initialize(value_); }
     ResizeValue(const ResizeValue& other) { initialize(other.value); }
+    // Constructing from another value, by copy or move, is counted and may throw.
+    ResizeValue(ResizeValue&& other) { initialize(other.value); }
     ResizeValue& operator=(const ResizeValue&) = default;
-    // Moves copy, so that every transfer may throw and is counted like a copy.
-    ResizeValue(ResizeValue&& other) : ResizeValue(static_cast<const ResizeValue&>(other)) {}
-    ResizeValue& operator=(ResizeValue&& other) { return *this = static_cast<const ResizeValue&>(other); }
+    ResizeValue& operator=(ResizeValue&&) = default;
     ~ResizeValue() { --alive; }
 
 private:

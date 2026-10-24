@@ -1,7 +1,10 @@
 # Tests and benchmarks: literal values are the test data, fixed seeds keep runs
-# reproducible, and checks of moved-from objects use them after the move.
+# reproducible, checks of moved-from objects use them after the move, and values that
+# throw in their moves test exception safety.
 InheritParentConfig: true
 Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
   -bugprone-random-generator-seed,
-  -bugprone-use-after-move
+  -bugprone-use-after-move,
+  -cppcoreguidelines-noexcept-move-operations,
+  -performance-noexcept-move-constructor

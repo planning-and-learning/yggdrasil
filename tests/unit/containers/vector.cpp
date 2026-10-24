@@ -94,7 +94,7 @@ TEST(YggdrasilTests, CommonVector)
     const auto dim0 = 2;
     const auto dim1 = 3;
     const auto dim2 = 4;
-    auto vec = std::vector<uint64_t>(2 * 3 * 4, uint64_t(0));
+    auto vec = std::vector<uint64_t>(std::size_t { 2 } * 3 * 4, uint64_t(0));
 
     auto mdspan = ygg::MDSpan<uint64_t, 3>(vec.data(), std::array<size_t, 3> { dim0, dim1, dim2 });
     auto empty_mdspan = ygg::MDSpan<uint64_t, 3>();

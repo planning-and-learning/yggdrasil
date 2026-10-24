@@ -334,10 +334,10 @@ struct AdlViewContext
     const Data<RepositoryTypesElement>* data;
     const AdlViewContext* owner = nullptr;
     const Data<RepositoryTypesElement>& operator[](Index<RepositoryTypesElement>) const noexcept { return *data; }
-    friend const AdlViewContext& get_repository(const AdlViewContext& context) noexcept { return context; }
+    friend const AdlViewContext& get_repository(const AdlViewContext& context YGG_LIFETIMEBOUND) noexcept { return context; }
 };
 
-const AdlViewContext& get_canonical_context(Index<RepositoryTypesElement>, const AdlViewContext& context) noexcept
+const AdlViewContext& get_canonical_context(Index<RepositoryTypesElement>, const AdlViewContext& context YGG_LIFETIMEBOUND) noexcept
 {
     return context.owner ? *context.owner : context;
 }
@@ -392,7 +392,7 @@ struct AliasFreeRelationRows
     using RelationTypes = TypeList<RepositoryTypesRelation>;
     template<typename RelationTag>
     std::span<const Index<formalism::Object<RepositoryTypesObjectTag>>> operator[](Index<formalism::RelationBinding<RelationTag, RepositoryTypesObjectTag>>) const;
-    friend const AliasFreeRelationRows& get_repository(const AliasFreeRelationRows& repository) noexcept { return repository; }
+    friend const AliasFreeRelationRows& get_repository(const AliasFreeRelationRows& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 struct MutableRelationRows : AliasFreeRelationRows
@@ -470,7 +470,7 @@ struct PreparedRepository
         return { View<Index<RepositoryTypesElement>, PreparedRepository>(index, *this), created };
     }
     const auto& operator[](Index<RepositoryTypesElement> index) const { return symbols[index]; }
-    friend const PreparedRepository& get_repository(const PreparedRepository& repository) noexcept { return repository; }
+    friend const PreparedRepository& get_repository(const PreparedRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 void prepare_for_insert(PreparedRepository& repository, Data<RepositoryTypesElement>& data)

@@ -172,7 +172,7 @@ struct ViewContractContext
 {
     Data<ViewContractValue> value;
     const Data<ViewContractValue>& operator[](Index<ViewContractValue>) const { return value; }
-    friend const ViewContractContext& get_repository(const ViewContractContext& context) noexcept { return context; }
+    friend const ViewContractContext& get_repository(const ViewContractContext& context YGG_LIFETIMEBOUND) noexcept { return context; }
 };
 
 static_assert(ViewConcept<Data<ViewContractValue>, ViewContractContext>);

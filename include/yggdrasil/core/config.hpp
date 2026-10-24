@@ -31,6 +31,17 @@
 #define YGG_NOINLINE [[gnu::noinline]]
 #endif
 
+/// Marks a parameter that the function's result refers to, so the compiler can warn when the result
+/// outlives a temporary argument (Clang); empty where the attribute is unknown.
+#if defined(__has_cpp_attribute)
+#if __has_cpp_attribute(clang::lifetimebound)
+#define YGG_LIFETIMEBOUND [[clang::lifetimebound]]
+#endif
+#endif
+#ifndef YGG_LIFETIMEBOUND
+#define YGG_LIFETIMEBOUND
+#endif
+
 #include "yggdrasil/core/dependent_false.hpp"
 
 #include <algorithm>

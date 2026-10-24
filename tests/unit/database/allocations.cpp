@@ -1142,11 +1142,11 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceEdgeRepairAndUndoRetainStorage)
     const auto cycle = [&]
     {
         evaluator.update(std::tie(no_sources, no_sources), change.change(), std::tie(no_targets, no_targets));
-        bool valid = evaluator.get_result().size() == 2 * vertices;
+        bool valid = evaluator.get_result().size() == std::size_t { 2 } * vertices;
         valid &= evaluator.get_result().contains(cells(0, 8, 1));
         valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
         evaluator.update(std::tie(no_sources, no_sources), std::tie(change.removed, change.added), std::tie(no_targets, no_targets));
-        valid &= evaluator.get_result().size() == 2 * vertices;
+        valid &= evaluator.get_result().size() == std::size_t { 2 } * vertices;
         valid &= evaluator.get_result().contains(cells(0, 8, 8));
         valid &= evaluator.get_delta().added.size() == 8 && evaluator.get_delta().removed.size() == 8;
         return valid;
@@ -1193,15 +1193,15 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
     const auto cycle = [&]
     {
         evaluator.update(std::tie(no_sources, no_sources), change.change(), std::tie(no_targets, no_targets));
-        bool valid = evaluator.get_result().size() == 4 * width;
+        bool valid = evaluator.get_result().size() == std::size_t { 4 } * width;
         valid &= evaluator.get_result().contains(cells(0, first_parent, 1));
         valid &= evaluator.get_result().contains(cells(3, first_child, 2));
-        valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
+        valid &= evaluator.get_delta().added.size() == std::size_t { 4 } * width && evaluator.get_delta().removed.size() == std::size_t { 4 } * width;
         evaluator.update(std::tie(no_sources, no_sources), std::tie(change.removed, change.added), std::tie(no_targets, no_targets));
-        valid &= evaluator.get_result().size() == 4 * width;
+        valid &= evaluator.get_result().size() == std::size_t { 4 } * width;
         valid &= evaluator.get_result().contains(cells(0, first_parent, first_parent));
         valid &= evaluator.get_result().contains(cells(3, first_child, first_parent - 2));
-        valid &= evaluator.get_delta().added.size() == 4 * width && evaluator.get_delta().removed.size() == 4 * width;
+        valid &= evaluator.get_delta().added.size() == std::size_t { 4 } * width && evaluator.get_delta().removed.size() == std::size_t { 4 } * width;
         return valid;
     };
     for (size_t i = 0; i < 32; ++i)

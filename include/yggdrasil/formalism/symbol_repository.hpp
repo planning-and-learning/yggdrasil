@@ -320,7 +320,7 @@ class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, Ty
 public:
     SymbolRepository(const SymbolRepository* parent = nullptr) : Base(parent) {}
 
-    friend const SymbolRepository& get_repository(const SymbolRepository& repository) noexcept { return repository; }
+    friend const SymbolRepository& get_repository(const SymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 template<typename... Ts>
@@ -331,7 +331,7 @@ class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolR
 public:
     ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent = nullptr) : Base(parent) {}
 
-    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository) noexcept { return repository; }
+    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 }  // namespace ygg::formalism

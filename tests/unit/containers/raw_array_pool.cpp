@@ -543,7 +543,7 @@ static_assert(SizedForwardRangeOf<std::span<const NoncopyablePoolValue>, Noncopy
 TEST(YggdrasilTests, CommonRawArrayPoolBindsNoncopyableRangeReferences)
 {
     const auto values = std::array { NoncopyablePoolValue(11), NoncopyablePoolValue(12) };
-    const auto row = values | std::views::transform([](const NoncopyablePoolValue& value) -> const NoncopyablePoolValue& { return value; });
+    const auto row = values | std::views::transform([](const NoncopyablePoolValue& value YGG_LIFETIMEBOUND) -> const NoncopyablePoolValue& { return value; });
     auto pool = RawArrayPool<NoncopyablePoolValue>(values.size());
     EXPECT_EQ(pool.insert(row), 0);
     EXPECT_EQ(pool[0][0].value, 11);

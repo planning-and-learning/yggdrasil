@@ -64,7 +64,7 @@ public:
 
     size_t get_index() const noexcept { return m_index; }
     auto get_factory() const noexcept { return m_factory; }
-    friend const QueryRepository& get_repository(const QueryRepository& repository) noexcept { return repository; }
+    friend const QueryRepository& get_repository(const QueryRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
     size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
 

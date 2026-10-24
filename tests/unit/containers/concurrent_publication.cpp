@@ -149,7 +149,18 @@ struct BlockingValue
     {
     }
 
-    BlockingValue(const BlockingValue& other) : value(other.value), copies(other.copies), started(other.started), release(other.release)
+    // Constructing from another value, by copy or move, is counted and may block.
+    BlockingValue(const BlockingValue& other) noexcept : value(other.value), copies(other.copies), started(other.started), release(other.release)
+    {
+        on_transfer();
+    }
+    BlockingValue(BlockingValue&& other) noexcept : value(other.value), copies(other.copies), started(other.started), release(other.release) { on_transfer(); }
+    BlockingValue& operator=(const BlockingValue&) = default;
+    BlockingValue& operator=(BlockingValue&&) = default;
+    ~BlockingValue() = default;
+
+private:
+    void on_transfer() noexcept
     {
         if (!copies || copies->fetch_add(1, std::memory_order_relaxed) != 1)
             return;
@@ -157,11 +168,6 @@ struct BlockingValue
         while (!release->load(std::memory_order_acquire))
             std::this_thread::yield();
     }
-    BlockingValue& operator=(const BlockingValue&) = default;
-    // Moves copy, so that every transfer passes the copy constructor above.
-    BlockingValue(BlockingValue&& other) : BlockingValue(static_cast<const BlockingValue&>(other)) {}
-    BlockingValue& operator=(BlockingValue&& other) { return *this = static_cast<const BlockingValue&>(other); }
-    ~BlockingValue() = default;
 };
 
 struct BlockingCoder

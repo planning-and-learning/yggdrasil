@@ -35,7 +35,7 @@ struct CanonicalizationContext
     std::vector<std::string> labels;
 
     const ygg::Data<CanonicalizationTestTag>& operator[](ygg::Index<CanonicalizationTestTag> index) const;
-    friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context) noexcept { return context; }
+    friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context YGG_LIFETIMEBOUND) noexcept { return context; }
 };
 }  // namespace ygg::tests
 

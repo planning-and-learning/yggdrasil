@@ -198,7 +198,7 @@ private:
 public:
     static constexpr bool thread_safe = SymbolRepo::thread_safe && RelationRepo::thread_safe;
 
-    friend const Repository& get_repository(const Repository& repository) noexcept { return repository; }
+    friend const Repository& get_repository(const Repository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 
     /**
      * Global methods traverse the current repository layer and its parent

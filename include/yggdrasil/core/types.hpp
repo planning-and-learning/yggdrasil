@@ -95,7 +95,7 @@ concept CanonicalizableContext = requires(const C& context, const T& handle) {
 
 /// Domain overloads may select the owner of an embedded handle.
 template<typename T, typename C>
-const C& get_canonical_context(const T&, const C& context) noexcept
+const C& get_canonical_context(const T&, const C& context YGG_LIFETIMEBOUND) noexcept
 {
     return context;
 }
