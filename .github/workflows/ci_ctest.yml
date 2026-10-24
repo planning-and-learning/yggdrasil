@@ -42,7 +42,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake
 
+      # The native dependencies take minutes to build; they are rebuilt only
+      # when their recipe changes.
+      - name: Cache native dependencies
+        id: deps
+        uses: actions/cache@v4
+        with:
+          path: dependencies-install
+          key: deps-${{ runner.os }}-${{ matrix.build_type }}-${{ hashFiles('src/**', 'cmake/**') }}
+
       - name: Build native dependencies
+        if: steps.deps.outputs.cache-hit != 'true'
         run: |
           cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
                 -DYGGDRASIL_JOBS=2 \
