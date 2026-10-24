@@ -22,6 +22,7 @@
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 
+#include <cassert>
 #include <cista/containers/variant.h>
 #include <type_traits>
 #include <utility>
@@ -59,10 +60,12 @@ public:
             return cista::get<U>(index_variant());
     }
 
+    /// Requires valid() (asserted in Debug), like operator[] of a container.
     template<typename F>
     decltype(auto) apply(F&& f) const
     {
-        return std::visit(
+        assert(valid());
+        return Variant::apply(
             [&]<typename Arg>(const Arg& arg) -> decltype(auto)
             {
                 using U = std::decay_t<Arg>;
@@ -72,6 +75,7 @@ public:
                 else
                     return std::forward<F>(f)(arg);
             },
+            index_variant().index(),
             index_variant());
     }
 

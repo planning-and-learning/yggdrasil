@@ -154,11 +154,11 @@ class View<Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>, C> : 
 public:
     using IndexViewBase<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, C>::IndexViewBase;
 
-    auto get_relation() const noexcept { return ygg::make_view(this->get_handle().relation, this->get_context()); }
-    auto get_objects() const noexcept { return ygg::make_view(this->get_data(), this->get_context()); }
+    auto get_relation() const { return ygg::make_view(this->get_handle().relation, this->get_context()); }
+    auto get_objects() const { return ygg::make_view(this->get_data(), this->get_context()); }
     // Use the relation index rather than its view: view identity includes the repository,
     // while this key represents the logical binding across repositories.
-    auto get_key() const noexcept { return std::make_pair(this->get_handle().relation, this->get_data()); }
+    auto get_key() const { return std::make_pair(this->get_handle().relation, this->get_data()); }
 };
 
 /// Borrows a complete binding without publishing a row identity. Data and context
@@ -171,7 +171,7 @@ class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public
 public:
     using DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>::DataViewBase;
 
-    auto get_relation() const noexcept { return make_view(this->get_data().relation, this->get_context()); }
+    auto get_relation() const { return make_view(this->get_data().relation, this->get_context()); }
     auto get_objects() const noexcept { return make_view(objects(), this->get_context()); }
     auto get_key() const noexcept { return std::make_pair(this->get_data().relation, objects()); }
 };

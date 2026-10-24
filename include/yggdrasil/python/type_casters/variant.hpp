@@ -129,7 +129,11 @@ struct type_caster<::cista::offset::variant<Ts...>>
         if (!value.valid())
             return none().release();
 
-        return std::visit([&]<typename V>(V&& v) { return make_caster<V>::from_cpp(std::forward<V>(v), policy, cleanup); }, std::forward<T>(value));
+        // The static apply has no empty case, which valid() above has handled.
+        const auto index = value.index();
+        return std::remove_cvref_t<T>::apply([&]<typename V>(V&& v) { return make_caster<V>::from_cpp(std::forward<V>(v), policy, cleanup); },
+                                             index,
+                                             std::forward<T>(value));
     }
 };
 

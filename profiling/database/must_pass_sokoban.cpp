@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <fmt/core.h>
 #include <fstream>
 #include <map>
@@ -197,9 +198,7 @@ struct PushDistance
 
 double seconds_since(std::chrono::steady_clock::time_point start) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); }
 
-}  // namespace
-
-int main(int argc, char** argv)
+int run(int argc, char** argv)
 {
     if (argc < 2)
     {
@@ -402,4 +401,19 @@ int main(int argc, char** argv)
         fmt::print("{:<6} blocks [{} ] must pass [{} ]\n", task.names[c].c_str(), blocked.c_str(), own.c_str());
     }
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv)
+{
+    try
+    {
+        return run(argc, argv);
+    }
+    catch (const std::exception& e)
+    {
+        fmt::print(stderr, "error: {}\n", e.what());
+        return 1;
+    }
 }

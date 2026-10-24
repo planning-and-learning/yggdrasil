@@ -326,8 +326,11 @@ public:
     size_t memory_usage() const noexcept
     {
         size_t result = m_workspace.memory_usage() + m_storage_addresses.capacity() * sizeof(const void*);
+        // get_if rather than std::visit, which throws for a valueless variant; nodes are never valueless.
+        const auto node_usage = []<typename... Nodes>(const std::variant<Nodes...>& node) noexcept
+        { return ((std::get_if<Nodes>(&node) ? std::get_if<Nodes>(&node)->state.memory_usage() : size_t { 0 }) + ...); };
         for (const auto& node : m_nodes)
-            result += std::visit([](const auto& value) { return value.state.memory_usage(); }, node);
+            result += node_usage(node);
         return result;
     }
 };
