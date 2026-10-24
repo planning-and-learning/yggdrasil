@@ -15,7 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Only nanobind's module macro, which clang-tidy does not check (plumbcheck.yml).
+// Only nanobind's module macro, which clang-tidy does not check (peachycheck.yml).
 #include "diagnostics.hpp"
 
 NB_MODULE(yggdrasil_diagnostics_test, m) { bind_diagnostics_test(m); }

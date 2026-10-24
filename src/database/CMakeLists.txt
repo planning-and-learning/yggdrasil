@@ -12,7 +12,7 @@ elseif(UNIX)
 endif()
 
 set(YGGDRASIL_DATABASE_UNITY_BATCH 8 CACHE STRING "Database library sources per compiled unit.")
-# OFF lists each source in compile_commands.json, which clang-tidy (plumbcheck) needs.
+# OFF lists each source in compile_commands.json, which clang-tidy (peachycheck) needs.
 option(YGGDRASIL_UNITY_BUILD "Compile the database library's sources in batches." ON)
 
 function(yggdrasil_add_database_library target)

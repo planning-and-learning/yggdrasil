@@ -1,4 +1,4 @@
-name: plumbcheck
+name: peachycheck
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  plumbcheck:
+  peachycheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -16,7 +16,7 @@ jobs:
           python-version: "3.11"
       # The native dependencies take minutes to build; they are rebuilt only
       # when their recipe changes. They live outside the repository: the
-      # plumbcheck action checks it out again, which would delete them there.
+      # peachycheck action checks it out again, which would delete them there.
       # Restore and save are separate steps, so the cache is saved right after
       # the build, even when the lint then fails the job.
       - uses: actions/cache/restore@v4
@@ -40,7 +40,7 @@ jobs:
         with:
           path: ~/yggdrasil-deps
           key: ${{ steps.deps.outputs.cache-primary-key }}
-      - uses: drexlerd/plumbcheck@9815e1d9ee833afba91a7a177d15ecb12a2d3aca
+      - uses: drexlerd/peachycheck@139f24b1c618083a1280349077d5327433ea6116
         env:
           PYTHON: ${{ steps.python.outputs.python-path }}
         with:
@@ -50,7 +50,7 @@ jobs:
           prepare: |
             DEPS="$HOME/yggdrasil-deps"
             "$PYTHON" -m pip install "nanobind-backend>=1.0"
-            cmake -S . -B build/plumbcheck -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            cmake -S . -B build/peachycheck -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                   -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_PROFILING=ON -DYGGDRASIL_UNITY_BUILD=OFF \
                   -DYGGDRASIL_NATIVE_PREFIX="$DEPS" -DCMAKE_INSTALL_LIBDIR=lib \
                   -DPython_EXECUTABLE="$PYTHON"

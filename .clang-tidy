@@ -1,4 +1,4 @@
-# clang-tidy for plumbcheck: every bugprone, cppcoreguidelines and performance check is on,
+# clang-tidy for peachycheck: every bugprone, cppcoreguidelines and performance check is on,
 # except where the check is wrong for any code, not just for today's:
 # - unchecked container access, constant array index: the only fix, .at(), puts a bounds
 #   check into hot loops. Debug builds check those bounds instead: YGGDRASIL_STDLIB_ASSERTIONS
