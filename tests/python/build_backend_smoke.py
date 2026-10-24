@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
 import base64
@@ -86,7 +88,8 @@ def expect_raises(expected: type[BaseException], func: Callable[[], object]) -> 
         func()
     except expected:
         return
-    raise AssertionError(f"expected {expected.__name__}")
+    msg = f"expected {expected.__name__}"
+    raise AssertionError(msg)
 
 
 def expect_raises_message(expected: type[BaseException], message_fragment: str, func: Callable[[], object]) -> None:
@@ -95,7 +98,8 @@ def expect_raises_message(expected: type[BaseException], message_fragment: str, 
     except expected as error:
         assert message_fragment in str(error)
         return
-    raise AssertionError(f"expected {expected.__name__}")
+    msg = f"expected {expected.__name__}"
+    raise AssertionError(msg)
 
 
 def test_job_count(backend: BackendModule) -> None:

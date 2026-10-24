@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from pathlib import Path
 
 import pytest
@@ -10,7 +13,7 @@ def test_native_build_cleans_generated_prefix_and_rejects_dirty_custom_prefix(
     def fake_which(name: str) -> str:
         return f"/usr/bin/{name}"
 
-    def fake_run(*args: object, **kwargs: object) -> None:
+    def fake_run(*_args: object, **_kwargs: object) -> None:
         return None
 
     monkeypatch.setattr(backend, "ROOT_DIR", tmp_path)

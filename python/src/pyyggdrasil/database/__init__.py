@@ -1,4 +1,9 @@
-from .._pyyggdrasil.database import (
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Relations, queries and their evaluation."""
+
+from pyyggdrasil._pyyggdrasil.database import (
     BorrowedRelation,
     ColumnIndex,
     ColumnIndices,

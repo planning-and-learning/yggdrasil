@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 import importlib.util
 import math
 import sys
@@ -7,12 +9,14 @@ from pathlib import Path
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: type_casters.py <extension>")
+        msg = "usage: type_casters.py <extension>"
+        raise SystemExit(msg)
 
     extension = Path(sys.argv[1]).resolve()
     spec = importlib.util.spec_from_file_location("yggdrasil_type_casters_test", extension)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {extension}")
+        msg = f"cannot load {extension}"
+        raise RuntimeError(msg)
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -33,7 +37,8 @@ def main() -> None:
             except TypeError:
                 pass
             else:
-                raise AssertionError(f"invalid pair accepted: {value!r}")
+                msg = f"invalid pair accepted: {value!r}"
+                raise AssertionError(msg)
 
     for value in (42, 3.5, -7):
         result = module.roundtrip_variant(value)
@@ -56,7 +61,8 @@ def main() -> None:
     except TypeError:
         pass
     else:
-        raise AssertionError("three bounds must not convert to ClosedInterval")
+        msg = "three bounds must not convert to ClosedInterval"
+        raise AssertionError(msg)
 
 
 if __name__ == "__main__":

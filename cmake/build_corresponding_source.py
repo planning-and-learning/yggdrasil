@@ -1,10 +1,14 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Bundle Yggdrasil's source distribution with the exact upstream sources of its native dependencies."""
+
 from __future__ import annotations
 
 import argparse
 import gzip
 import json
 import shutil
-import sys
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -13,11 +17,13 @@ from pathlib import Path, PurePosixPath
 def _source_names(manifest: Path) -> list[str]:
     document = json.loads(manifest.read_text())
     if document.get("schema_version") != 1 or not isinstance(document.get("sources"), dict):
-        raise ValueError("invalid source manifest")
+        msg = "invalid source manifest"
+        raise ValueError(msg)
 
     names = sorted(document["sources"])
     if any(Path(name).name != name or name in {".", ".."} for name in names):
-        raise ValueError("source names must be plain path components")
+        msg = "source names must be plain path components"
+        raise ValueError(msg)
     return names
 
 
@@ -40,14 +46,13 @@ def _extract_sdist(archive: tarfile.TarFile, destination: Path) -> None:
     for member in archive.getmembers():
         path = PurePosixPath(member.name)
         if path.is_absolute() or ".." in path.parts or not (member.isfile() or member.isdir()):
-            raise ValueError(f"unsafe source-distribution member: {member.name}")
-    if sys.version_info >= (3, 12):
-        archive.extractall(destination, filter="fully_trusted")
-    else:
-        archive.extractall(destination)
+            msg = f"unsafe source-distribution member: {member.name}"
+            raise ValueError(msg)
+    archive.extractall(destination, filter="data")
 
 
 def build_bundle(*, manifest: Path, sdist: Path, sources: Path, output: Path) -> None:
+    """Write ``output``: the sdist together with the exact upstream sources ``manifest`` lists."""
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-sources-") as temporary_directory:
         temporary = Path(temporary_directory)
         with tarfile.open(sdist) as archive:
@@ -55,7 +60,8 @@ def build_bundle(*, manifest: Path, sdist: Path, sources: Path, output: Path) ->
 
         roots = [path for path in temporary.iterdir() if path.is_dir()]
         if len(roots) != 1:
-            raise ValueError("source distribution must contain exactly one root directory")
+            msg = "source distribution must contain exactly one root directory"
+            raise ValueError(msg)
 
         bundle = roots[0].with_name(f"{roots[0].name}-corresponding-source")
         roots[0].rename(bundle)
@@ -65,7 +71,8 @@ def build_bundle(*, manifest: Path, sdist: Path, sources: Path, output: Path) ->
         for name in _source_names(manifest):
             source = sources / name / "src" / name
             if not source.is_dir():
-                raise FileNotFoundError(f"downloaded source is missing: {source}")
+                msg = f"downloaded source is missing: {source}"
+                raise FileNotFoundError(msg)
             shutil.copytree(source, upstream / name, symlinks=True, ignore=shutil.ignore_patterns(".git"))
 
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -78,6 +85,7 @@ def build_bundle(*, manifest: Path, sdist: Path, sources: Path, output: Path) ->
 
 
 def main() -> None:
+    """Bundle the sources the command line names."""
     parser = argparse.ArgumentParser(description="Bundle Yggdrasil and its exact upstream sources.")
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--sdist", type=Path, required=True)

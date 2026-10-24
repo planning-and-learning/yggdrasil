@@ -1,4 +1,8 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import gc
+import math
 from collections.abc import Iterable
 from typing import Any, cast
 
@@ -35,7 +39,7 @@ def test_relation_rows_and_validation() -> None:
         with pytest.raises(IndexError):
             _ = labels[index]
     with pytest.raises(TypeError):  # read-only: no __setitem__ in the type hints either
-        cast(Any, labels)[0] = 7
+        cast("Any", labels)[0] = 7
     assert relation.arity() == 2
     assert relation.empty()
     assert relation.insert([3, 4]) == relation.insert([3, 4])
@@ -56,10 +60,10 @@ def test_relation_rows_and_validation() -> None:
     with pytest.raises(IndexError):
         relation.at(1)
     with pytest.raises(TypeError):  # read-only: no __setitem__ in the type hints either
-        cast(Any, row)[0] = 7
-    with pytest.raises(ValueError):
+        cast("Any", row)[0] = 7
+    with pytest.raises(ValueError, match="Relation: row arity does not match schema"):
         relation.insert([1])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Columns: duplicate column label"):
         database.Relation(columns(1, 1))
 
     for value in range(5000):
@@ -109,7 +113,7 @@ def test_pooled_rows_keep_their_owners_alive() -> None:
     assert tuple(row) == (3, 4)
     del other
     gc.collect()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Columns: duplicate column label"):
         pool.get_or_allocate(database.Columns(columns(10, 10)).columns())
     reused = pool.get_or_allocate(database.Columns(columns(30, 40)).columns())
     assert reused.get().empty()
@@ -178,7 +182,7 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     assert len(repository) == 2
     assert repository.rename(namespaced, columns(10, 20)) == namespaced
     assert repository.rename(namespaced, columns(10, 20), schema_namespace=0) == relation
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="RelationRepository: rename requires a source in this repository"):
         other_repository.rename(relation, columns(30, 40))
 
     builder.clear()
@@ -199,9 +203,9 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     assert [tuple(row) for row in renamed] == [(3, 4), (5, 6)]
     assert renamed != relation
     assert repository.rename(renamed, columns(10, 20)) == relation
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Columns: renaming must preserve arity"):
         repository.rename(relation, columns(30))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Columns: duplicate column label"):
         repository.rename(relation, columns(30, 30))
 
     # Every borrowed layer must keep the repository alive, without keeping the
@@ -303,8 +307,6 @@ def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
 
 
 def test_mixed_column_types_and_float_canonicalization() -> None:
-    import math
-
     types = [database.ColumnType.BOOL, database.ColumnType.FLOAT64, database.ColumnType.INT32]
     relation = database.Relation(typed(columns(10, 20, 30), types))
     assert [relation.columns().type(i) for i in range(3)] == types
@@ -316,7 +318,8 @@ def test_mixed_column_types_and_float_canonicalization() -> None:
     nan = relation.insert([False, float("nan"), 9])
     assert relation.insert([False, -float("nan"), 9]) == nan
     value = relation[nan][1]
-    assert isinstance(value, float) and math.isnan(value)
+    assert isinstance(value, float)
+    assert math.isnan(value)
     repository = database.RelationRepositoryFactory().create()
     interned, _ = repository.insert(relation)
     renamed = repository.rename(interned, columns(1, 2, 3))
@@ -324,7 +327,7 @@ def test_mixed_column_types_and_float_canonicalization() -> None:
     output = database.Relation()
     database.assign(output, renamed)
     assert tuple(output[0]) == (True, 0.0, -7)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Columns: duplicate column label"):
         typed(columns(1, 1), [database.ColumnType.BOOL] * 2)
     del relation, interned, renamed, repository
     gc.collect()

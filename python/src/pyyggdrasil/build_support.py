@@ -1,3 +1,5 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared PEP 517 build-backend machinery for the provider-wheel family.
 
 The consumer repos (loki -> pypddl, tyr -> pytyr, runir -> pyrunir) wrap
@@ -24,6 +26,7 @@ import subprocess
 import sys
 import zipfile
 from collections.abc import Callable, Sequence
+from dataclasses import KW_ONLY, dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -57,7 +60,8 @@ def _record_digest(path: Path) -> tuple[str, str]:
 def _rewrite_record(wheel_root: Path) -> None:
     record_files = list(wheel_root.glob("*.dist-info/RECORD"))
     if len(record_files) != 1:
-        raise RuntimeError(f"expected exactly one RECORD file, found {len(record_files)}")
+        msg = f"expected exactly one RECORD file, found {len(record_files)}"
+        raise RuntimeError(msg)
 
     record_file = record_files[0]
     rows: list[tuple[str, str, str]] = []
@@ -77,6 +81,7 @@ def _rewrite_record(wheel_root: Path) -> None:
 
 
 def repack_wheel(wheel_path: Path, wheel_root: Path) -> None:
+    """Rewrite the RECORD of the unpacked ``wheel_root`` and zip it back into ``wheel_path``."""
     _rewrite_record(wheel_root)
     replacement_path = wheel_path.with_suffix(".tmp")
     with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
@@ -87,12 +92,7 @@ def repack_wheel(wheel_path: Path, wheel_root: Path) -> None:
 
 
 def _native_library_dirs(native_prefixes: Sequence[Path]) -> list[Path]:
-    result: list[Path] = []
-    for prefix in native_prefixes:
-        for path in sorted(Path(prefix).glob("lib*")):
-            if path.is_dir():
-                result.append(path)
-    return result
+    return [path for prefix in native_prefixes for path in sorted(Path(prefix).glob("lib*")) if path.is_dir()]
 
 
 def _prepend_env_paths(name: str, paths: Sequence[Path]) -> None:
@@ -108,10 +108,11 @@ def _prepend_cmake_args(*args: str) -> None:
     os.environ["CMAKE_ARGS"] = shlex.join([*args, *existing])
 
 
+@dataclass
 class ProviderBackend:
     """PEP 517 hooks for a provider wheel that consumes sibling provider wheels.
 
-    Parameters:
+    Attributes:
         package: the python package the wheel ships (e.g. "pypddl").
         providers: provider packages whose native prefixes feed the build, in
             rpath order (e.g. ("pypddl", "pyyggdrasil") for pytyr). Must
@@ -126,38 +127,40 @@ class ProviderBackend:
             parallelism and wheel stripping.
     """
 
-    def __init__(
-        self,
-        package: str,
-        providers: Sequence[str],
-        cmake_defines: Sequence[str] = (),
-        extra_cmake_defines: Callable[[], Sequence[str]] | None = None,
-        rename_packages: Sequence[str] | None = None,
-        jobs_env: str | None = None,
-        strip_env: str | None = None,
-    ) -> None:
-        if "pyyggdrasil" not in providers:
-            raise ValueError("providers must include pyyggdrasil")
-        self.package = package
-        self.providers: tuple[str, ...] = tuple(providers)
-        self.cmake_defines: tuple[str, ...] = tuple(cmake_defines)
-        self.extra_cmake_defines = extra_cmake_defines
-        self.rename_packages: tuple[str, ...] = (
-            tuple(rename_packages) if rename_packages is not None else (package, *self.providers)
-        )
-        self.jobs_env = jobs_env or f"{package.upper()}_JOBS"
-        self.strip_env = strip_env or f"{package.upper()}_STRIP_WHEEL"
+    package: str
+    providers: Sequence[str]
+    _: KW_ONLY
+    cmake_defines: Sequence[str] = ()
+    extra_cmake_defines: Callable[[], Sequence[str]] | None = None
+    rename_packages: Sequence[str] | None = None
+    jobs_env: str = ""
+    strip_env: str = ""
+
+    def __post_init__(self) -> None:
+        """Check the providers and fill in the defaults that depend on the package."""
+        if "pyyggdrasil" not in self.providers:
+            msg = "providers must include pyyggdrasil"
+            raise ValueError(msg)
+        self.providers = tuple(self.providers)
+        self.cmake_defines = tuple(self.cmake_defines)
+        if self.rename_packages is None:
+            self.rename_packages = (self.package, *self.providers)
+        self.jobs_env = self.jobs_env or f"{self.package.upper()}_JOBS"
+        self.strip_env = self.strip_env or f"{self.package.upper()}_STRIP_WHEEL"
 
     # -- pre-build ---------------------------------------------------------
 
     def num_jobs(self) -> int:
+        """The number of parallel build jobs: the jobs variable, else the CPU count."""
         raw_jobs = os.environ.get(self.jobs_env, str(os.cpu_count() or 1))
         try:
             jobs = int(raw_jobs)
         except ValueError as err:
-            raise ValueError(f"{self.jobs_env} must be a positive integer") from err
+            msg = f"{self.jobs_env} must be a positive integer"
+            raise ValueError(msg) from err
         if jobs <= 0:
-            raise ValueError(f"{self.jobs_env} must be a positive integer")
+            msg = f"{self.jobs_env} must be a positive integer"
+            raise ValueError(msg)
         return jobs
 
     def _native_prefixes(self) -> list[Path]:
@@ -169,6 +172,7 @@ class ProviderBackend:
         return prefixes
 
     def prepare_native_build(self) -> None:
+        """Point CMake and the loader at the providers' native prefixes before a build."""
         native_prefixes = self._native_prefixes()
         native_library_dirs = _native_library_dirs(native_prefixes)
         yggdrasil_prefix = native_prefixes[self.providers.index("pyyggdrasil")]
@@ -190,13 +194,12 @@ class ProviderBackend:
     # -- wheel post-processing ---------------------------------------------
 
     def _patch_stub_text(self, text: str) -> str:
-        for rename_package in self.rename_packages:
+        for rename_package in self.rename_packages or ():
             text = text.replace(f"{rename_package}._{rename_package}.", f"{rename_package}.")
             text = text.replace(f"{rename_package}._{rename_package}", rename_package)
         # nanobind stubgen emits bare `os.PathLike` for filesystem::path params; subscript it so
         # strict type checkers do not see PathLike[Unknown].
-        text = re.sub(r"os\.PathLike(?!\[)", "os.PathLike[str]", text)
-        return text
+        return re.sub(r"os\.PathLike(?!\[)", "os.PathLike[str]", text)
 
     def _fix_stubs(self, wheel_root: Path) -> None:
         package_root = wheel_root / self.package
@@ -259,14 +262,17 @@ class ProviderBackend:
     # -- PEP 517 hooks -------------------------------------------------------
 
     def get_requires_for_build_wheel(self, config_settings: ConfigSettings | None = None) -> list[str]:
+        """PEP 517 hook: scikit-build-core's build requirements for a wheel."""
         return scikit_build.get_requires_for_build_wheel(config_settings)
 
     def get_requires_for_build_editable(self, config_settings: ConfigSettings | None = None) -> list[str]:
+        """PEP 517 hook: scikit-build-core's build requirements for an editable wheel."""
         return scikit_build.get_requires_for_build_editable(config_settings)
 
     def prepare_metadata_for_build_wheel(
         self, metadata_directory: str, config_settings: ConfigSettings | None = None
     ) -> str:
+        """PEP 517 hook: the wheel's metadata, from scikit-build-core."""
         return scikit_build.prepare_metadata_for_build_wheel(metadata_directory, config_settings)
 
     def build_wheel(
@@ -275,6 +281,7 @@ class ProviderBackend:
         config_settings: ConfigSettings | None = None,
         metadata_directory: str | None = None,
     ) -> str:
+        """PEP 517 hook: build the wheel against the providers, then fix its stubs and strip it."""
         self.prepare_native_build()
         wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
         self._process_wheel(Path(wheel_directory) / wheel_filename)
@@ -286,12 +293,14 @@ class ProviderBackend:
         config_settings: ConfigSettings | None = None,
         metadata_directory: str | None = None,
     ) -> str:
+        """PEP 517 hook: build an editable wheel against the providers."""
         self.prepare_native_build()
         wheel_filename = scikit_build.build_editable(wheel_directory, config_settings, metadata_directory)
         self._process_wheel(Path(wheel_directory) / wheel_filename, strip=False)
         return wheel_filename
 
     def build_sdist(self, sdist_directory: str, config_settings: ConfigSettings | None = None) -> str:
+        """PEP 517 hook: the source distribution, from scikit-build-core."""
         return scikit_build.build_sdist(sdist_directory, config_settings)
 
     def install_hooks(self, namespace: dict[str, object]) -> None:

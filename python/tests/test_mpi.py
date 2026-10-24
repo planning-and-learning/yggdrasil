@@ -1,10 +1,16 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import os
 import platform
+import shutil
 import subprocess
 import tempfile
 import textwrap
 from importlib import metadata as importlib_metadata
 from pathlib import Path
+
+import pytest
 
 import pyyggdrasil
 
@@ -196,17 +202,20 @@ def _run_smoke_test(root: Path) -> None:
         *prefix.glob("lib*/libboost_serialization*"),
         *prefix.glob("lib*/libicu*"),
     ]
+    tool = shutil.which("otool" if platform.system() == "Darwin" else "readelf")
+    if tool is None:
+        pytest.skip("otool or readelf is needed to read the libraries' search paths")
     for library in native_libraries:
         if platform.system() == "Darwin":
             metadata = subprocess.run(
-                ["otool", "-L", library],
+                [tool, "-L", library],
                 check=True,
                 capture_output=True,
                 text=True,
             ).stdout
         else:
             metadata = subprocess.run(
-                ["readelf", "-d", library],
+                [tool, "-d", library],
                 check=True,
                 capture_output=True,
                 text=True,

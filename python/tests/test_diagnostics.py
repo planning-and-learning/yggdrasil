@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import gc
 
 import pytest
@@ -114,13 +117,13 @@ def test_diagnostic_properties_are_read_only_and_notes_are_copied() -> None:
 
 @pytest.mark.parametrize("tab_width", [0, -1])
 def test_source_rejects_invalid_tab_width(tab_width: int) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="tab_width must be at least 1"):
         Source("text", tab_width=tab_width)
 
 
 @pytest.mark.parametrize(("begin", "end"), [(2, 1), (0, 5), (5, 5)])
 def test_source_span_rejects_invalid_ranges(begin: int, end: int) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="source span must satisfy 0 <= begin <= end <= source size"):
         SourceSpan(Source("text"), begin, end)
 
 

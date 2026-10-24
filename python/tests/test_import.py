@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import shutil
 import subprocess
 import sys
@@ -101,8 +104,9 @@ def test_execution_context_supports_context_manager() -> None:
         assert isinstance(context, pyyggdrasil.execution.ExecutionContext)
         assert context.num_threads == 1
 
-    with pytest.raises(RuntimeError, match="boom"), pyyggdrasil.execution.ExecutionContext(1):
-        raise RuntimeError("boom")
+    msg = "boom"
+    with pytest.raises(RuntimeError, match=msg), pyyggdrasil.execution.ExecutionContext(1):
+        raise RuntimeError(msg)
 
 
 @pytest.mark.parametrize("version_line", ['version = "1.2.3"', "version = '1.2.3' # release"])
@@ -215,7 +219,8 @@ def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
             project(pyyggdrasil_provider_probe LANGUAGES CXX)
 
             find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
-            find_package(yggdrasil ${YGGDRASIL_REQUIRED_VERSION} CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
+            find_package(yggdrasil ${YGGDRASIL_REQUIRED_VERSION} CONFIG REQUIRED
+                         PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(nanobind CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
             find_package(tomlplusplus 3.4 CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
 

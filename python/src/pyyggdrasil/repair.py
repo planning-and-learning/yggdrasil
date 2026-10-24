@@ -1,3 +1,5 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wheel repair helper for consumers of provider wheels (pyyggdrasil, pypddl, ...).
 
 Wraps auditwheel (Linux) / delocate (macOS) and excludes every shared library
@@ -35,6 +37,7 @@ def provider_library_dirs(provider_names: Sequence[str]) -> list[Path]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Repair the wheel without vendoring the providers' libraries; return the tool's exit code."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--providers",

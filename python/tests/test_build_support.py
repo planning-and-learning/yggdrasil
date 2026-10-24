@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import base64
 import csv
 import hashlib
@@ -100,8 +103,8 @@ def test_num_jobs_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch) -> Non
             backend.num_jobs()
 
 
-@pytest.mark.parametrize("private_root", ("_consumer", "_consumer.cpython-313-x86_64-linux-gnu"))
-@pytest.mark.parametrize("mode", ("wheel", "disabled_strip", "missing_strip", "editable"))
+@pytest.mark.parametrize("private_root", ["_consumer", "_consumer.cpython-313-x86_64-linux-gnu"])
+@pytest.mark.parametrize("mode", ["wheel", "disabled_strip", "missing_strip", "editable"])
 def test_default_stub_rewriting_and_publication(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, private_root: str, mode: str
 ) -> None:

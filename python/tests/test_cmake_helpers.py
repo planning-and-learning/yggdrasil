@@ -1,3 +1,5 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Contract tests for the CMake helpers shipped in the pyyggdrasil wheel.
 
 The yggdrasil_* helper functions in lib/cmake/yggdrasil/yggdrasilPythonHelpers.cmake
@@ -55,14 +57,17 @@ def test_helper_functions_contract(tmp_path: Path) -> None:
             endif()
 
             yggdrasil_make_python_native_runtime_rpath_string(runtime_rpath "@loader_path" "../../../")
-            if(NOT runtime_rpath STREQUAL "@loader_path:@loader_path/../../../pyyggdrasil/lib:@loader_path/../../../pypddl/native/lib64")
+            set(expected_rpath "@loader_path:@loader_path/../../../pyyggdrasil/lib")
+            string(APPEND expected_rpath ":@loader_path/../../../pypddl/native/lib64")
+            if(NOT runtime_rpath STREQUAL expected_rpath)
                 message(FATAL_ERROR "unexpected rpath string: ${{runtime_rpath}}")
             endif()
 
             # include-dir registration only records existing directories
             yggdrasil_register_native_dependency_prefix("{dependency_prefix.as_posix()}")
             if(YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES)
-                message(FATAL_ERROR "prefix without include/ must not register: ${{YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}}")
+                message(FATAL_ERROR "prefix without include/ must not register: "
+                                    "${{YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}}")
             endif()
 
             # manual override: preset out-var is respected and prepended to CMAKE_PREFIX_PATH

@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""PEP 517 build backend of pyyggdrasil: builds the native dependencies, then delegates to scikit-build-core."""
+
 from __future__ import annotations
 
 import base64
@@ -36,10 +41,12 @@ def _num_jobs() -> int:
     try:
         jobs = int(raw_value)
     except ValueError as error:
-        raise RuntimeError("YGGDRASIL_JOBS must be a positive integer") from error
+        msg = "YGGDRASIL_JOBS must be a positive integer"
+        raise RuntimeError(msg) from error
 
     if jobs < 1:
-        raise RuntimeError("YGGDRASIL_JOBS must be a positive integer")
+        msg = "YGGDRASIL_JOBS must be a positive integer"
+        raise RuntimeError(msg)
 
     return jobs
 
@@ -49,12 +56,14 @@ def _is_disabled(value: str) -> bool:
 
 
 def configure_and_install_dependencies() -> None:
+    """Build and install the native dependencies (src/) into the native prefix, unless disabled."""
     if _is_disabled(os.environ.get("YGGDRASIL_BUILD_NATIVE", "ON")):
         return
 
     cmake = shutil.which("cmake")
     if cmake is None:
-        raise RuntimeError("cmake is required to build pyyggdrasil")
+        msg = "cmake is required to build pyyggdrasil"
+        raise RuntimeError(msg)
 
     native_prefix = _native_prefix()
     if (
@@ -62,10 +71,11 @@ def configure_and_install_dependencies() -> None:
         and native_prefix.exists()
         and (not native_prefix.is_dir() or any(native_prefix.iterdir()))
     ):
-        raise RuntimeError(
+        msg = (
             "YGGDRASIL_NATIVE_PREFIX must be empty when YGGDRASIL_BUILD_NATIVE is enabled; "
             "set YGGDRASIL_BUILD_NATIVE=OFF to package an existing prefix"
         )
+        raise RuntimeError(msg)
 
     default_native_prefix = ROOT_DIR / "dependencies-install"
     generated_dirs = [YGGDRASIL_BUILD_DIR]
@@ -73,7 +83,8 @@ def configure_and_install_dependencies() -> None:
         generated_dirs.append(default_native_prefix)
     for generated_dir in generated_dirs:
         if generated_dir.is_symlink():
-            raise RuntimeError(f"refusing to clean symlinked build directory: {generated_dir}")
+            msg = f"refusing to clean symlinked build directory: {generated_dir}"
+            raise RuntimeError(msg)
         if generated_dir.exists():
             shutil.rmtree(generated_dir)
 
@@ -144,7 +155,8 @@ def _record_digest(path: Path) -> tuple[str, str]:
 def _rewrite_record(wheel_root: Path) -> None:
     record_files = list(wheel_root.glob("*.dist-info/RECORD"))
     if len(record_files) != 1:
-        raise RuntimeError(f"expected exactly one RECORD file, found {len(record_files)}")
+        msg = f"expected exactly one RECORD file, found {len(record_files)}"
+        raise RuntimeError(msg)
 
     record_file = record_files[0]
     rows: list[tuple[str, str, str]] = []
@@ -198,14 +210,17 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
 
 
 def get_requires_for_build_wheel(config_settings: ConfigSettings | None = None) -> list[str]:
+    """PEP 517 hook: scikit-build-core's build requirements for a wheel."""
     return scikit_build.get_requires_for_build_wheel(config_settings)
 
 
 def get_requires_for_build_editable(config_settings: ConfigSettings | None = None) -> list[str]:
+    """PEP 517 hook: scikit-build-core's build requirements for an editable wheel."""
     return scikit_build.get_requires_for_build_editable(config_settings)
 
 
 def prepare_metadata_for_build_wheel(metadata_directory: str, config_settings: ConfigSettings | None = None) -> str:
+    """PEP 517 hook: the wheel's metadata, from scikit-build-core."""
     return scikit_build.prepare_metadata_for_build_wheel(metadata_directory, config_settings)
 
 
@@ -214,6 +229,7 @@ def build_wheel(
     config_settings: ConfigSettings | None = None,
     metadata_directory: str | None = None,
 ) -> str:
+    """PEP 517 hook: build the native dependencies, then the wheel."""
     _prepare_native_build()
     wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
     wheel_path = Path(wheel_directory) / wheel_filename
@@ -226,9 +242,11 @@ def build_editable(
     config_settings: ConfigSettings | None = None,
     metadata_directory: str | None = None,
 ) -> str:
+    """PEP 517 hook: build the native dependencies, then an editable wheel."""
     _prepare_native_build()
     return scikit_build.build_editable(wheel_directory, config_settings, metadata_directory)
 
 
 def build_sdist(sdist_directory: str, config_settings: ConfigSettings | None = None) -> str:
-    return scikit_build.build_sdist(sdist_directory)
+    """PEP 517 hook: the source distribution, from scikit-build-core."""
+    return scikit_build.build_sdist(sdist_directory, config_settings)

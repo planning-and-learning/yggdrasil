@@ -1,14 +1,18 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared serialization snapshots and table rendering."""
 
 import json
 from collections.abc import Iterable, Iterator, Mapping
 from typing import TypeAlias, TypedDict, cast
 
-JSONValue: TypeAlias = None | bool | int | float | str | list["JSONValue"] | dict[str, "JSONValue"]
+JSONValue: TypeAlias = bool | int | float | str | list["JSONValue"] | dict[str, "JSONValue"] | None
 Row: TypeAlias = dict[str, JSONValue]
 
 
 class Table(TypedDict):
+    """A serialized table: the prefix of its row references and its rows."""
+
     prefix: str
     rows: list[Row]
 
@@ -20,7 +24,7 @@ def _flatten(
     for name, value in row.items():
         column = (*path, name)
         if isinstance(value, dict):
-            yield from _flatten(cast(dict[str, object], value), column)
+            yield from _flatten(cast("dict[str, object]", value), column)
         else:
             yield column, value
 
@@ -29,7 +33,7 @@ def _cell(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, list):
-        values = cast(list[object], value)
+        values = cast("list[object]", value)
         items = [str(item) for item in values]
         if all(isinstance(item, (str, int, float, bool)) for item in values) and all(
             item and item == item.strip() and not any(char in item for char in ',[]{}"\\|\r\n\t') for item in items

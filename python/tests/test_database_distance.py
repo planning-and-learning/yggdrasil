@@ -1,13 +1,19 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import gc
 import math
 from collections.abc import Iterable, Sequence
-from typing import Any, cast
+from typing import Any, TypeAlias, cast
 
 import pytest
 
 from pyyggdrasil import database
 
 Readable = database.Relation | database.BorrowedRelation | database.RelationView
+
+
+Rows: TypeAlias = Iterable[Sequence[object]]
 
 
 def columns(*labels: int) -> tuple[database.ColumnIndex, ...]:
@@ -116,21 +122,19 @@ def test_incremental_distance_exact_deltas(intern_added: bool) -> None:
     assert evaluator.get_delta().removed.empty()
     assert evaluator.memory_usage() > 0
 
+    unchanged: tuple[Rows, Rows] = ((), ())
+
     def update(
-        source_added: Iterable[Sequence[object]] = (),
-        source_removed: Iterable[Sequence[object]] = (),
-        edges_added: Iterable[Sequence[object]] = (),
-        edges_removed: Iterable[Sequence[object]] = (),
-        target_added: Iterable[Sequence[object]] = (),
-        target_removed: Iterable[Sequence[object]] = (),
+        *,
+        source: tuple[Rows, Rows] = unchanged,
+        edges: tuple[Rows, Rows] = unchanged,
+        target: tuple[Rows, Rows] = unchanged,
     ) -> None:
+        """Apply each input's (added, removed) rows."""
         changes = [
-            relation([10], source_added),
-            relation([10], source_removed),
-            relation([20, 21], edges_added),
-            relation([20, 21], edges_removed),
-            relation([30], target_added),
-            relation([30], target_removed),
+            relation(labels, rows)
+            for labels, delta in (([10], source), ([20, 21], edges), ([30], target))
+            for rows in delta
         ]
         for index in range(6):
             if (index % 2 == 0) == intern_added:
@@ -138,14 +142,14 @@ def test_incremental_distance_exact_deltas(intern_added: bool) -> None:
         evaluator.update(change(changes[0], changes[1]), change(changes[2], changes[3]), change(changes[4], changes[5]))
 
     before = expected
-    update(edges_added=[(0, 2)], edges_removed=[(0, 3)])
+    update(edges=([(0, 2)], [(0, 3)]))
     expected = {(0, 0, 0), (0, 2, 1), (0, 3, 2), (2, 2, 0), (2, 3, 1)}
     assert rows(evaluator.get_result()) == expected
     assert rows(evaluator.get_delta().added) == expected - before
     assert rows(evaluator.get_delta().removed) == before - expected
 
     before = expected
-    update(source_added=[(1,)], source_removed=[(2,)], target_added=[(1,)], target_removed=[(0,)])
+    update(source=([(1,)], [(2,)]), target=([(1,)], [(0,)]))
     expected = {(0, 1, 1), (0, 2, 1), (0, 3, 2), (1, 1, 0), (1, 2, 1), (1, 3, 2)}
     assert rows(evaluator.get_result()) == expected
     assert rows(evaluator.get_delta().added) == expected - before
@@ -204,9 +208,9 @@ def test_evaluator_borrowed_results_are_read_only_and_retain_owners(leaf: str) -
         check_read_only(value)
     # Deliberate misuse: the type hints reject these calls, the bindings must too.
     with pytest.raises(AttributeError):
-        cast(Any, delta).added = source
+        cast("Any", delta).added = source
     with pytest.raises(TypeError):
-        cast(Any, database.BorrowedRelation)()
+        cast("Any", database.BorrowedRelation)()
     with pytest.raises(TypeError):
         database.RelationDelta()
     retained: Any  # each leaf is a different borrowed type
@@ -267,21 +271,21 @@ def test_distance_rejects_invalid_schema_and_input_types() -> None:
     edges = relation([20, 21], [(0, 1)])
     target = relation([30], [(1,)])
     plan = plan_for(source, edges, target)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Distance: input arities must be k, 2k, k"):
         plan_for(source, relation([20]), target)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Distance: input arities must be k, 2k, k"):
         plan_for(source, edges, relation([30, 31]))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Distance: vertex field types must agree by position"):
         plan_for(source, relation([20, 21], types=[database.ColumnType.INT32] * 2), target)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Columns: duplicate column label"):
         database.DistancePlan(source.columns(), edges.columns(), target.columns(), database.ColumnIndex(20))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Relational operation: input schema does not match prepared plan"):
         database.distance(*borrow(relation([11]), edges, target), plan)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Relational operation: input schema does not match prepared plan"):
         database.distance(*borrow(source, edges, relation([30], types=[database.ColumnType.INT32])), plan)
     _, edges_view, target_view = borrow(source, edges, target)
     with pytest.raises(TypeError):
-        database.distance(cast(Any, []), edges_view, target_view, plan)
+        database.distance(cast("Any", []), edges_view, target_view, plan)
     evaluator = database.DistanceEvaluator(plan)
     with pytest.raises(RuntimeError):
         evaluator.update(
@@ -289,7 +293,7 @@ def test_distance_rejects_invalid_schema_and_input_types() -> None:
         )
     evaluator.initialize(*borrow(source, edges, target))
     before = rows(evaluator.get_result())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Relational operation: input schema does not match prepared plan"):
         evaluator.update(
             change(relation([11]), relation([10])),
             change(relation([20, 21]), relation([20, 21])),

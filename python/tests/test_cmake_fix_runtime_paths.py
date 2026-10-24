@@ -1,3 +1,5 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Contract test for the shipped yggdrasilFixRuntimePaths.cmake helper.
 
 Drives the module via `cmake -P` against the installed wheel, covering a no-op

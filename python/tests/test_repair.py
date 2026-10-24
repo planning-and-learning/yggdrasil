@@ -1,3 +1,5 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for pyyggdrasil.repair (provider library-dir discovery)."""
 
 import sys

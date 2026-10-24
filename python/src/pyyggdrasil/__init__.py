@@ -1,11 +1,16 @@
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Python bindings of yggdrasil, and the paths of its bundled native build."""
+
 import tomllib as _tomllib
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from . import database as database
-from . import diagnostics as diagnostics
-from . import execution as execution
-from . import serialization as serialization
+from pyyggdrasil import database as database
+from pyyggdrasil import diagnostics as diagnostics
+from pyyggdrasil import execution as execution
+from pyyggdrasil import serialization as serialization
 
 
 def _has_yggdrasil_headers(path: Path) -> bool:
@@ -60,8 +65,10 @@ def cmake_dirs() -> tuple[Path, ...]:
 
 
 def cmake_prefix() -> Path:
-    """Return the prefix to put on CMAKE_PREFIX_PATH to find yggdrasil and its
-    bundled dependencies via find_package."""
+    """Return the prefix to put on CMAKE_PREFIX_PATH.
+
+    find_package then finds yggdrasil and its bundled dependencies there.
+    """
     return native_prefix()
 
 
@@ -72,11 +79,12 @@ def cmake_dir() -> Path:
         if (candidate / "yggdrasilConfig.cmake").is_file():
             return candidate
 
-    raise FileNotFoundError(
+    msg = (
         "yggdrasilConfig.cmake not found under "
         f"{[str(path) for path in cmake_dirs()] or native_prefix()}; "
         "the installed pyyggdrasil is too old or incomplete."
     )
+    raise FileNotFoundError(msg)
 
 
 __all__ = [

@@ -1,30 +1,19 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 import gc
 import importlib.util
 import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
-
-if TYPE_CHECKING:
-    from pyyggdrasil.diagnostics import Diagnostic
-
-
-class DiagnosticError(Protocol):
-    """A bound exception type carries its diagnostic as a read-only property set by the bindings."""
-
-    @property
-    def diagnostic(self) -> "Diagnostic": ...
-
-
-def diagnostic_of(error: BaseException) -> "Diagnostic":
-    return cast(DiagnosticError, error).diagnostic
+from typing import Any, Protocol, cast
 
 
 def main() -> None:
     if len(sys.argv) != 4:
-        raise SystemExit("usage: diagnostics.py <package-init> <provider-extension> <test-extension>")
+        msg = "usage: diagnostics.py <package-init> <provider-extension> <test-extension>"
+        raise SystemExit(msg)
 
     package_init, provider, extension = (Path(argument).resolve() for argument in sys.argv[1:])
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-diagnostics-") as temporary:
@@ -34,12 +23,23 @@ def main() -> None:
 
         sys.path.insert(0, temporary)
         try:
+            # Imported only now, from the copy just put on sys.path.
             from pyyggdrasil import diagnostics
+
+            class DiagnosticError(Protocol):
+                """A bound exception type carries its diagnostic as a read-only property set by the bindings."""
+
+                @property
+                def diagnostic(self) -> diagnostics.Diagnostic: ...
+
+            def diagnostic_of(error: BaseException) -> diagnostics.Diagnostic:
+                return cast("DiagnosticError", error).diagnostic
 
             assert Path(diagnostics.__file__).parent == package_dir / "diagnostics"
             spec = importlib.util.spec_from_file_location("yggdrasil_diagnostics_test", extension)
             if spec is None or spec.loader is None:
-                raise RuntimeError(f"cannot load {extension}")
+                msg = f"cannot load {extension}"
+                raise RuntimeError(msg)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
 
@@ -62,7 +62,8 @@ def main() -> None:
                 assert diagnostic_of(error).notes == []
                 assert str(error) == diagnostics.format_diagnostic(diagnostic_of(error))
             else:
-                raise AssertionError("base exception was not raised")
+                msg = "base exception was not raised"
+                raise AssertionError(msg)
 
             captured = None
             try:
@@ -73,13 +74,15 @@ def main() -> None:
                 captured = diagnostic_of(error)
                 assert str(error) == diagnostics.format_diagnostic(captured)
                 try:
-                    cast(Any, error).diagnostic = diagnostics.Diagnostic("replacement")
+                    cast("Any", error).diagnostic = diagnostics.Diagnostic("replacement")
                 except AttributeError:
                     pass
                 else:
-                    raise AssertionError("exception diagnostic must be read-only")
+                    msg = "exception diagnostic must be read-only"
+                    raise AssertionError(msg)
             else:
-                raise AssertionError("derived exception was not raised")
+                msg = "derived exception was not raised"
+                raise AssertionError(msg)
 
             gc.collect()
             assert isinstance(captured, diagnostics.Diagnostic)
@@ -109,7 +112,8 @@ def main() -> None:
                 except AttributeError:
                     pass
                 else:
-                    raise AssertionError(f"{name} must be read-only")
+                    msg = f"{name} must be read-only"
+                    raise AssertionError(msg)
 
             source = captured.location.source
             del captured
@@ -135,7 +139,8 @@ def main() -> None:
                 assert str(error) == "unrelated failure"
                 assert not hasattr(error, "diagnostic")
             else:
-                raise AssertionError("unrelated exception was not raised")
+                msg = "unrelated exception was not raised"
+                raise AssertionError(msg)
         finally:
             sys.path.remove(temporary)
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Dominik Drexler
+# SPDX-License-Identifier: GPL-3.0-or-later
 import shutil
 import sys
 import tempfile
@@ -7,7 +9,8 @@ from pathlib import Path
 
 def main() -> None:
     if len(sys.argv) != 3:
-        raise SystemExit("usage: import_smoke.py <package-init> <extension>")
+        msg = "usage: import_smoke.py <package-init> <extension>"
+        raise SystemExit(msg)
 
     package_init = Path(sys.argv[1]).resolve()
     extension = Path(sys.argv[2]).resolve()
@@ -93,7 +96,8 @@ def main() -> None:
                 except FileNotFoundError:
                     pass
                 else:
-                    raise AssertionError("cmake_dir() should fail without yggdrasilConfig.cmake")
+                    msg = "cmake_dir() should fail without yggdrasilConfig.cmake"
+                    raise AssertionError(msg)
             finally:
                 pyyggdrasil.__file__ = original_file
 
@@ -117,7 +121,8 @@ def main() -> None:
             except ValueError as error:
                 assert "num_threads must be at least 1" in str(error)
             else:
-                raise AssertionError("ExecutionContext(0) did not fail")
+                msg = "ExecutionContext(0) did not fail"
+                raise AssertionError(msg)
 
             try:
                 pyyggdrasil.execution.ExecutionContext(max_num_threads + 1)
@@ -125,7 +130,8 @@ def main() -> None:
                 assert "Requested " in str(error)
                 assert " are available by default." in str(error)
             else:
-                raise AssertionError("ExecutionContext(max_num_threads + 1) did not fail")
+                msg = "ExecutionContext(max_num_threads + 1) did not fail"
+                raise AssertionError(msg)
         finally:
             sys.path.remove(str(tmp_dir))
 
