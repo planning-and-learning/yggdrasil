@@ -326,8 +326,10 @@ template<hashing::ByteHashableRange Range>
     requires std::ranges::contiguous_range<Range> && (!std::is_volatile_v<std::remove_reference_t<std::ranges::range_reference_t<Range>>>)
 inline hash_t hash_range(Range&& range) noexcept(noexcept(std::ranges::data(range)) && noexcept(std::ranges::size(range)))
 {
-    const auto view = std::views::all(std::forward<Range>(range));
-    return hashing::hash_bytes(std::ranges::data(view), std::ranges::size(view) * sizeof(std::ranges::range_value_t<Range>));
+    // A span of const elements also takes rvalue ranges; std::views::all would need a copy of
+    // a const view, which move-only views do not have.
+    const auto view = std::span<const std::ranges::range_value_t<Range>>(std::forward<Range>(range));
+    return hashing::hash_bytes(view.data(), view.size_bytes());
 }
 
 template<Hashable T>

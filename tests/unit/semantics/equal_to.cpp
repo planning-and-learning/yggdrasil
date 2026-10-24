@@ -96,6 +96,17 @@ TEST(YggdrasilTests, CommonEqualRangeAcceptsRangeAdaptors)
     EXPECT_FALSE(ygg::equal_range(even_squares, std::array<int, 2> { 4, 9 }));
 }
 
+TEST(YggdrasilTests, CommonEqualRangeAcceptsConstMoveOnlyViews)
+{
+    // Taking from a temporary container wraps it in std::ranges::owning_view, which only moves.
+    const auto first_two = std::views::take(std::vector<int> { 1, 2, 3 }, 2);
+
+    EXPECT_TRUE(ygg::equal_range(first_two, std::array<int, 2> { 1, 2 }));
+    EXPECT_FALSE(ygg::equal_range(first_two, std::array<int, 2> { 1, 3 }));
+    EXPECT_FALSE(ygg::less_range(first_two, std::array<int, 2> { 1, 2 }));
+    EXPECT_TRUE(ygg::less_range(first_two, std::array<int, 2> { 1, 3 }));
+}
+
 TEST(YggdrasilTests, CommonEqualToAdaptersCompareVariantAlternativeIndex)
 {
     using Variant = std::variant<int, unsigned>;

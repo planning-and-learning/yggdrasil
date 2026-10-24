@@ -379,12 +379,13 @@ constexpr bool less_range(LhsRange&& lhs, RhsRange&& rhs)
 {
     using LhsValue = std::ranges::range_value_t<LhsRange>;
     using RhsValue = std::ranges::range_value_t<RhsRange>;
-    auto lhs_view = std::views::all(std::forward<LhsRange>(lhs));
-    auto rhs_view = std::views::all(std::forward<RhsRange>(rhs));
+    // The ranges go to the algorithms as given: std::views::all would need a copy of a const
+    // view, which move-only views (std::ranges::owning_view inside) do not have.
     if constexpr (std::same_as<LhsValue, RhsValue>)
-        return std::ranges::lexicographical_compare(lhs_view, rhs_view, Less<LhsValue> {});
+        return std::ranges::lexicographical_compare(std::forward<LhsRange>(lhs), std::forward<RhsRange>(rhs), Less<LhsValue> {});
     else  // Ranges of different values order only an empty one first.
-        return std::ranges::begin(lhs_view) == std::ranges::end(lhs_view) && std::ranges::begin(rhs_view) != std::ranges::end(rhs_view);
+        return std::ranges::none_of(std::forward<LhsRange>(lhs), [](const auto&) { return true; })
+               && std::ranges::any_of(std::forward<RhsRange>(rhs), [](const auto&) { return true; });
 }
 
 }  // namespace ygg
