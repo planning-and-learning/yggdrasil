@@ -1,5 +1,5 @@
 # peachycheck's configuration: https://github.com/drexlerd/peachycheck#configuration
-PEACHYCHECK_VERSION: 139f24b1c618083a1280349077d5327433ea6116
+PEACHYCHECK_VERSION: 343fddca95ebb4eb277a5598bae6af8ea0aac863
 ENABLE_LINTERS: [PYTHON_RUFF, PYTHON_RUFF_FORMAT, PYTHON_PYRIGHT, CPP_CLANG_TIDY, CPP_CLANG_FORMAT]
 # Files that hold nothing but nanobind's module macro, whose global and C variadic call are nanobind's.
 CPP_CLANG_TIDY_FILTER_REGEX_EXCLUDE: '^(python/src/module|tests/python/\w+_module)\.cpp$'
