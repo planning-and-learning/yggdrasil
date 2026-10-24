@@ -1,9 +1,10 @@
-# clang-tidy for plumbcheck. Off: checks too strong for a performance container library
-# (operator[] and pointer arithmetic by design, views holding references, swappable
-# parameters without a clear fix) and false positives (std::ranges specializations,
-# proxy reference assignment). missing-std-forward is off: callables are visitors used by
-# reference, often many times, so forwarding would be wrong and gain nothing.
-# tests/ and profiling/ relax further in their own files.
+# clang-tidy for plumbcheck: every bugprone, cppcoreguidelines and performance check is on,
+# except where the check is wrong for any code, not just for today's:
+# - unchecked container access, constant array index: the only fix, .at(), puts a bounds
+#   check into hot loops;
+# - std-namespace-modification: std::ranges::enable_borrowed_range must be specialized in std;
+# - easily-swappable-parameters: a heuristic without a clear fix.
+# tests/ and profiling/ turn off three more in their own files.
 Checks: >
   -*,
   bugprone-*,
@@ -11,22 +12,12 @@ Checks: >
   performance-*,
   -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
   -cppcoreguidelines-pro-bounds-constant-array-index,
-  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
-  -cppcoreguidelines-avoid-const-or-ref-data-members,
-  -bugprone-easily-swappable-parameters,
   -bugprone-std-namespace-modification,
-  -bugprone-unhandled-self-assignment,
-  -cppcoreguidelines-missing-std-forward
+  -bugprone-easily-swappable-parameters
 HeaderFilterRegex: '.*/(include/yggdrasil|tests|profiling|python/src)/.*'
 ExcludeHeaderFilterRegex: '.*/(dependencies-install|dependencies-build|build|site-packages|_deps)/.*'
 CheckOptions:
-  # Proxy references (bit_reference, int_reference, ...) must not get a defaulted move
-  # assignment: it would rebind the proxy instead of writing through it.
-  cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions: true
-  # Segment sizes, alignments and byte widths are powers of two, usually defaults of
-  # template parameters that name them already.
-  cppcoreguidelines-avoid-magic-numbers.IgnorePowersOf2IntegerValues: true
-  # Copying a reference-counted handle has a side effect (the count); it is not a wasted copy.
-  performance-unnecessary-copy-initialization.AllowedTypes: 'SharedObjectPoolPtr'
   # Member initializers are written `= value`, as elsewhere in the code.
   cppcoreguidelines-use-default-member-init.UseAssignment: true
+  # Copying a reference-counted handle has a side effect (the count); it is not a wasted copy.
+  performance-unnecessary-copy-initialization.AllowedTypes: 'SharedObjectPoolPtr'

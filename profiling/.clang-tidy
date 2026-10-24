@@ -1,9 +1,7 @@
-# Tests and benchmarks: literal values, fixed seeds, checks of moved-from objects,
-# and the globals and varargs of gtest and benchmark macros are intended here.
+# Tests and benchmarks: literal values are the test data, fixed seeds keep runs
+# reproducible, and checks of moved-from objects use them after the move.
 InheritParentConfig: true
 Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
-  -bugprone-use-after-move,
   -bugprone-random-generator-seed,
-  -cppcoreguidelines-pro-type-vararg,
-  -cppcoreguidelines-avoid-non-const-global-variables
+  -bugprone-use-after-move
