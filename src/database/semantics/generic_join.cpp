@@ -75,7 +75,7 @@ namespace detail
 void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept
 {
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
-    ++(generic_join_work.*member);
+    ++(generic_join_work().*member);
 #endif
 }
 }

@@ -28,7 +28,7 @@
 
 namespace nb = nanobind;
 
-NB_MODULE(yggdrasil_type_casters_test, m)
+void bind_type_casters_test(nanobind::module_& m)
 {
     using Interval = ygg::ClosedInterval<ygg::float_t>;
 

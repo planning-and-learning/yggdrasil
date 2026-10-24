@@ -10,7 +10,7 @@ namespace ygg::database::incremental::detail
 void count_distance_work([[maybe_unused]] size_t DistanceWork::*member) noexcept
 {
 #ifdef YGG_DISTANCE_INSTRUMENTATION
-    ++(distance_work.*member);
+    ++(distance_work().*member);
 #endif
 }
 }

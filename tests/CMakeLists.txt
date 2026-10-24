@@ -7,14 +7,14 @@ yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
 find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 add_subdirectory(unit)
 
-nanobind_add_module(yggdrasil_type_casters_test BACKEND_MODULE nanobind_backend python/type_casters.cpp)
+nanobind_add_module(yggdrasil_type_casters_test BACKEND_MODULE nanobind_backend python/type_casters.cpp python/type_casters_module.cpp)
 target_compile_features(yggdrasil_type_casters_test PRIVATE cxx_std_20)
 target_include_directories(yggdrasil_type_casters_test PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
     "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 
-nanobind_add_module(yggdrasil_diagnostics_test BACKEND_MODULE nanobind_backend python/diagnostics.cpp)
+nanobind_add_module(yggdrasil_diagnostics_test BACKEND_MODULE nanobind_backend python/diagnostics.cpp python/diagnostics_module.cpp)
 target_compile_features(yggdrasil_diagnostics_test PRIVATE cxx_std_20)
 target_include_directories(yggdrasil_diagnostics_test PRIVATE
     "${PROJECT_SOURCE_DIR}/include"

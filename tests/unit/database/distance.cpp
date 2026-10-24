@@ -292,9 +292,9 @@ TEST(YggdrasilTests, DatabaseDistanceMixedReplacementLeavesAnUnchangedChainUnpro
     for (const bool undo : { false, true })
     {
         SCOPED_TRACE(undo);
-        database::incremental::detail::distance_work = {};
+        database::incremental::detail::distance_work() = {};
         evaluator.update(ds.change(), std::tie(undo ? de.removed : de.added, undo ? de.added : de.removed), dt.change());
-        const auto work = database::incremental::detail::distance_work;
+        const auto work = database::incremental::detail::distance_work();
         expect_delta(evaluator, expected, expected);
         EXPECT_EQ(work.processed_vertices, 0);
         EXPECT_EQ(work.incoming_edges, 0);
@@ -331,9 +331,9 @@ TEST(YggdrasilTests, DatabaseDistanceEqualSupportsDoNotRescanDenseUnchangedNeigh
     for (const bool undo : { false, true })
     {
         SCOPED_TRACE(undo);
-        database::incremental::detail::distance_work = {};
+        database::incremental::detail::distance_work() = {};
         evaluator.update(ds.change(), std::tie(undo ? de.removed : de.added, undo ? de.added : de.removed), dt.change());
-        const auto work = database::incremental::detail::distance_work;
+        const auto work = database::incremental::detail::distance_work();
         expect_delta(evaluator, undo ? after : before, undo ? before : after);
         EXPECT_EQ(work.processed_vertices, undo ? 2 : 1);
         EXPECT_LE(work.incoming_edges + work.outgoing_edges, 4 * neighbors + 16);

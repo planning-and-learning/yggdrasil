@@ -171,9 +171,9 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
             const database::GenericJoinPlan plan(schemas, variables, output);
             database::GenericJoinWorkspace workspace(plan);
             RelationBuilder result(plan.output_columns().span());
-            database::detail::generic_join_work = {};
+            database::detail::generic_join_work() = {};
             database::generic_join(inputs, plan, result, workspace);
-            const auto work = database::detail::generic_join_work;
+            const auto work = database::detail::generic_join_work();
             expect_same(result, expected);
             // This family has linear extension intersections in every order.
             // Counts cover traversal only; building the three tries reads 3n rows.

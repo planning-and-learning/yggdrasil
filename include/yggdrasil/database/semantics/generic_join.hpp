@@ -25,7 +25,11 @@ struct GenericJoinWork
     size_t prefixes = 0;
 };
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
-inline thread_local GenericJoinWork generic_join_work;
+inline GenericJoinWork& generic_join_work() noexcept
+{
+    thread_local GenericJoinWork work;
+    return work;
+}
 #endif
 void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::*member) noexcept;
 

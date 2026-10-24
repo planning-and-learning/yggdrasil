@@ -43,23 +43,31 @@ struct Counts
     size_t deallocated = 0;
 };
 
-thread_local bool enabled = false;
-thread_local Counts counts;
+bool& enabled() noexcept
+{
+    thread_local bool value = false;
+    return value;
+}
+Counts& counts() noexcept
+{
+    thread_local Counts value;
+    return value;
+}
 
 void* allocate(size_t bytes)
 {
     auto* result = std::malloc(bytes == 0 ? 1 : bytes);
     if (!result)
         throw std::bad_alloc();
-    if (enabled)
-        ++counts.allocated;
+    if (enabled())
+        ++counts().allocated;
     return result;
 }
 
 void deallocate(void* pointer) noexcept
 {
-    if (pointer && enabled)
-        ++counts.deallocated;
+    if (pointer && enabled())
+        ++counts().deallocated;
     std::free(pointer);
 }
 
@@ -76,15 +84,15 @@ void* allocate_aligned(size_t bytes, size_t alignment)
 #endif
     if (!result)
         throw std::bad_alloc();
-    if (enabled)
-        ++counts.allocated;
+    if (enabled())
+        ++counts().allocated;
     return result;
 }
 
 void deallocate_aligned(void* pointer) noexcept
 {
-    if (pointer && enabled)
-        ++counts.deallocated;
+    if (pointer && enabled())
+        ++counts().deallocated;
 #if defined(_MSC_VER)
     _aligned_free(pointer);
 #else
@@ -97,19 +105,19 @@ class Scope
 public:
     Scope()
     {
-        counts = {};
-        enabled = true;
+        counts() = {};
+        enabled() = true;
     }
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
     Scope(Scope&&) = delete;
     Scope& operator=(Scope&&) = delete;
-    ~Scope() { enabled = false; }
+    ~Scope() { enabled() = false; }
 
     Counts finish() noexcept
     {
-        enabled = false;
-        return counts;
+        enabled() = false;
+        return counts();
     }
 };
 }  // namespace allocation_tracking
