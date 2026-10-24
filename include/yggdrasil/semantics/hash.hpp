@@ -142,10 +142,13 @@ template<std::floating_point T>
     requires std::same_as<T, float> || std::same_as<T, double>
 struct Hash<T>
 {
+    /// The hash of every NaN: the 64-bit golden ratio constant.
+    static constexpr hash_t nan_hash = 0x9e3779b97f4a7c15ULL;
+
     hash_t operator()(const T& el) const noexcept
     {
         // EqualTo treats all NaNs as equal; Boost already normalizes signed zero.
-        return std::isnan(el) ? hash_t { 0x9e3779b97f4a7c15ULL } : boost::hash<T> {}(el);
+        return std::isnan(el) ? nan_hash : boost::hash<T> {}(el);
     }
 };
 

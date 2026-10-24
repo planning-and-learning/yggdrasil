@@ -213,6 +213,7 @@ void generic_join_full(benchmark::State& state)
     Triangle trace(static_cast<uint_t>(state.range(0)));
     const auto& input = trace.initial;
     std::vector<std::vector<database::ColumnLayout>> schemas;
+    schemas.reserve(trace.initial.size());
     for (const auto& value : trace.initial)
         schemas.emplace_back(value.columns().span().begin(), value.columns().span().end());
     const std::array order { Column(0), Column(1), Column(2) };

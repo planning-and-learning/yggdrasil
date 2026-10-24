@@ -51,6 +51,7 @@ template<database::RelationViewRange R>
 database::GenericJoinPlan plan_for(const R& inputs, std::initializer_list<ColumnIndex> variables, std::initializer_list<ColumnIndex> output)
 {
     std::vector<std::vector<database::ColumnLayout>> schemas;
+    schemas.reserve(inputs.size());
     for (const auto& input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
     return database::GenericJoinPlan(schemas, { variables.begin(), variables.size() }, { output.begin(), output.size() });
@@ -120,6 +121,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
     std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
     const std::array output { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) };
     std::vector<std::vector<database::ColumnLayout>> schemas;
+    schemas.reserve(inputs.size());
     for (const auto input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
     do
@@ -159,6 +161,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
 
         const std::array inputs { borrow(r), borrow(s), borrow(t) };
         std::vector<std::vector<database::ColumnLayout>> schemas;
+        schemas.reserve(inputs.size());
         for (const auto input : inputs)
             schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
         std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };

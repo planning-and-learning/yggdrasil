@@ -32,6 +32,7 @@ View borrow(const Relation& relation)
 std::vector<View> borrow_all(const std::vector<Relation>& relations)
 {
     std::vector<View> views;
+    views.reserve(relations.size());
     for (const auto& relation : relations)
         views.push_back(borrow(relation));
     return views;
@@ -40,6 +41,7 @@ std::vector<View> borrow_all(const std::vector<Relation>& relations)
 std::vector<uint_t> decode(std::span<const std::byte> bytes, std::span<const ygg::database::ColumnLayout> columns)
 {
     std::vector<uint_t> values;
+    values.reserve(columns.size());
     for (size_t c = 0; c < columns.size(); ++c)
         values.push_back(ygg::database::Row(bytes, columns).get<uint_t>(c));
     return values;

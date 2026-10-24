@@ -100,6 +100,7 @@ namespace ygg::database::detail
 QueryView<> structural_plan(const JoinBlock& block, OperatorBuilder& build)
 {
     std::vector<std::vector<Index<Column>>> edges;
+    edges.reserve(block.atoms.size());
     for (const auto atom : block.atoms)
         edges.push_back(variables(atom));
     if (const auto parent = join_tree(std::move(edges)))

@@ -55,6 +55,7 @@ std::set<std::vector<T>> rows(const V& relation)
     {
         const auto row = database::Row(relation.row(i), relation.columns().span());
         std::vector<T> values;
+        values.reserve(row.size());
         for (size_t column = 0; column < row.size(); ++column)
             values.push_back(row.template get<T>(column));
         result.insert(std::move(values));

@@ -48,6 +48,7 @@ QueryView<> CostBasedPlanner::build(size_t node)
     if (!refined.multiway || refined.inputs.size() == 2)
         return m_build->restrict(m_build->join(build(*lhs), build(*rhs)), keep);
     std::vector<QueryView<>> inputs;
+    inputs.reserve(refined.inputs.size());
     for (const auto input : refined.inputs)
         inputs.push_back(build(input));
     return m_build->restrict(m_build->generic_join(inputs, variable_order(inputs)), keep);

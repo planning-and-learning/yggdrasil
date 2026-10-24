@@ -29,6 +29,7 @@ const Column x(0), y(1), z(2), d(3);
 auto rows(const auto& relation)
 {
     std::vector<std::vector<std::byte>> result;
+    result.reserve(relation.size());
     for (size_t i = 0; i < relation.size(); ++i)
         result.emplace_back(relation.row(i).begin(), relation.row(i).end());
     std::ranges::sort(result);
@@ -247,6 +248,7 @@ TEST(DatabaseQuery, IncrementalDagMatchesFullAndExactDeltasForwardBackward)
     for (int iteration = 0; iteration < 2; ++iteration)
     {
         std::vector<decltype(rows(first))> before;
+        before.reserve(roots.size());
         for (size_t i = 0; i < roots.size(); ++i)
             before.push_back(rows(incremental.get_result(i)));
         incremental.update(changes);
@@ -388,6 +390,7 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
     for (size_t iteration = 0; iteration < 120; ++iteration)
     {
         std::vector<decltype(rows(inputs[0]))> before;
+        before.reserve(roots.size());
         for (size_t i = 0; i < roots.size(); ++i)
             before.push_back(rows(incremental.get_result(i)));
         std::vector<Delta> changes;
@@ -419,6 +422,7 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
                         toggle(std::tuple { i, j });
         }
         std::vector<Change> delta_refs;
+        delta_refs.reserve(changes.size());
         for (const auto& change : changes)
             delta_refs.push_back({ borrow(change.added), borrow(change.removed) });
         incremental.update(delta_refs);

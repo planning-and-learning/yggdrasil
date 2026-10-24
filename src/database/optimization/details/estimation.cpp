@@ -59,6 +59,7 @@ Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
     for (const auto& single : result.factors)
     {
         std::vector<std::pair<size_t, Index<Column>>> bindings;
+        bindings.reserve(single.attributes.size());
         for (const auto& attribute : single.attributes)
             bindings.emplace_back(attribute.position, find(attribute.column));
         if (!unique.emplace(single.identity, std::move(bindings)).second)

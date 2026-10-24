@@ -36,6 +36,7 @@ const Column w(3), x(0), y(1), z(2);
 auto rows(const auto& relation)
 {
     std::vector<std::vector<std::byte>> result;
+    result.reserve(relation.size());
     for (size_t i = 0; i < relation.size(); ++i)
         result.emplace_back(relation.row(i).begin(), relation.row(i).end());
     std::ranges::sort(result);
@@ -160,6 +161,7 @@ TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(plan), 0);
     // Evaluate every operator of the plan as its own root.
     std::vector<ygg::database::QueryView<>> nodes;
+    nodes.reserve(plan.node_count());
     for (size_t position = 0; position < plan.node_count(); ++position)
         nodes.push_back(plan[PlanId(ygg::to_uint_t(position))]);
     ygg::database::QueryEvaluator evaluator(ygg::database::compile(std::span<const ygg::database::QueryView<>>(nodes)));
@@ -368,6 +370,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
     for (size_t iteration = 0; iteration < 35; ++iteration)
     {
         std::vector<decltype(rows(inputs[0]))> before;
+        before.reserve(roots.size());
         for (size_t root = 0; root < roots.size(); ++root)
             before.push_back(rows(incremental.get_result(root)));
         std::vector<Delta> deltas;
@@ -393,6 +396,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
                 }
         }
         std::vector<Change> changes;
+        changes.reserve(deltas.size());
         for (const auto& change : deltas)
             changes.push_back({ borrow(change.added), borrow(change.removed) });
         incremental.update(changes);
