@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import pyyggdrasil
-import pyyggdrasil.execution as execution
+from pyyggdrasil import execution
 
 
 def test_native_prefix_layout() -> None:
@@ -26,12 +26,8 @@ def test_native_prefix_layout() -> None:
     assert (native_prefix / "include" / "boost" / "hash2" / "sha2.hpp").is_file()
     assert (native_prefix / "include" / "toml++" / "toml.hpp").is_file()
     assert (native_prefix / "include" / "yggdrasil.hpp").is_file()
-    assert (
-        native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp"
-    ).is_file()
-    assert (
-        native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp"
-    ).is_file()
+    assert (native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp").is_file()
+    assert (native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp").is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
     assert (native_prefix / "nanobind" / "cmake" / "nanobind-config.cmake").is_file()
     assert not list(native_prefix.glob("lib*/libnanobind*"))
@@ -39,9 +35,7 @@ def test_native_prefix_layout() -> None:
     assert pyyggdrasil.cmake_dir().name == "yggdrasil"
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfig.cmake").is_file()
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfigVersion.cmake").is_file()
-    assert (
-        native_prefix / "lib" / "cmake" / "tomlplusplus" / "tomlplusplusConfig.cmake"
-    ).is_file()
+    assert (native_prefix / "lib" / "cmake" / "tomlplusplus" / "tomlplusplusConfig.cmake").is_file()
 
 
 def test_execution_submodule_is_public() -> None:
@@ -54,12 +48,12 @@ def test_public_package_exports_are_explicit() -> None:
         "cmake_dir",
         "cmake_dirs",
         "cmake_prefix",
-        "include_dir",
-        "library_dirs",
-        "native_prefix",
         "database",
         "diagnostics",
         "execution",
+        "include_dir",
+        "library_dirs",
+        "native_prefix",
         "serialization",
     ]
     for name in pyyggdrasil.__all__:
@@ -107,9 +101,8 @@ def test_execution_context_supports_context_manager() -> None:
         assert isinstance(context, pyyggdrasil.execution.ExecutionContext)
         assert context.num_threads == 1
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with pyyggdrasil.execution.ExecutionContext(1):
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), pyyggdrasil.execution.ExecutionContext(1):
+        raise RuntimeError("boom")
 
 
 @pytest.mark.parametrize("version_line", ['version = "1.2.3"', "version = '1.2.3' # release"])
@@ -132,9 +125,7 @@ def test_source_version_reads_pyproject(tmp_path: Path, monkeypatch: pytest.Monk
     )
     monkeypatch.setattr(pyyggdrasil, "__file__", str(package_dir / "__init__.py"))
 
-    # _source_version is private; reach it via getattr to test internals without a private-access lint.
-    source_version = getattr(pyyggdrasil, "_source_version")
-    assert source_version() == "1.2.3"
+    assert pyyggdrasil.source_version() == "1.2.3"
 
 
 def test_native_prefix_prefers_installed_package_prefix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -148,7 +139,7 @@ def test_native_prefix_prefers_installed_package_prefix(tmp_path: Path, monkeypa
     (package_root / "__init__.py").write_text("# test shim", encoding="utf-8")
 
     repository_root = repo_root / "pyproject.toml"
-    repository_root.write_text("[project]\nname = \"repo\"\n", encoding="utf-8")
+    repository_root.write_text('[project]\nname = "repo"\n', encoding="utf-8")
     monkeypatch.setattr(pyyggdrasil, "__file__", str(package_root / "__init__.py"))
 
     assert pyyggdrasil.native_prefix() == package_root

@@ -27,8 +27,7 @@ def main() -> None:
     assert module.roundtrip_optional_pairs([(1, 2), None, (-3, 4)]) == [(1, 2), None, (-3, 4)]
     assert module.roundtrip_optional_pairs([]) == []
     for value in ((), (1,), (1, 2, 3), ("bad", 2), (1, "bad")):
-        for function, argument in ((module.roundtrip_pair, value),
-                                   (module.roundtrip_optional_pairs, [value])):
+        for function, argument in ((module.roundtrip_pair, value), (module.roundtrip_optional_pairs, [value])):
             try:
                 function(argument)
             except TypeError:

@@ -14,7 +14,8 @@ class Table(TypedDict):
 
 
 def _flatten(
-    row: Mapping[str, object], path: tuple[str, ...] = (),
+    row: Mapping[str, object],
+    path: tuple[str, ...] = (),
 ) -> Iterator[tuple[tuple[str, ...], object]]:
     for name, value in row.items():
         column = (*path, name)
@@ -31,8 +32,7 @@ def _cell(value: object) -> str:
         values = cast(list[object], value)
         items = [str(item) for item in values]
         if all(isinstance(item, (str, int, float, bool)) for item in values) and all(
-            item and item == item.strip() and not any(char in item for char in ',[]{}"\\|\r\n\t')
-            for item in items
+            item and item == item.strip() and not any(char in item for char in ',[]{}"\\|\r\n\t') for item in items
         ):
             text = "[" + ",".join(items) + "]"
         else:
@@ -73,7 +73,7 @@ def render_table(
     for column in columns:
         labels = [""] * height
         for depth, name in enumerate(column[:-1]):
-            group = column[:depth + 1]
+            group = column[: depth + 1]
             if group not in groups:
                 labels[depth] = _cell(name)
                 groups.add(group)
@@ -92,10 +92,7 @@ def render_table(
     # ponytail: code-point widths; use terminal display widths if wide Unicode alignment is needed.
     widths = [max(map(len, column)) for column in zip(*grid, strict=True)]
     widths[-1] = 0  # No alignment padding after the last column.
-    return "\n".join(
-        " | ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True))
-        for row in grid
-    )
+    return "\n".join(" | ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True)) for row in grid)
 
 
 __all__ = ["JSONValue", "Row", "Table", "render_table"]

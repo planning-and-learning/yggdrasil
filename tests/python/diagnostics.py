@@ -5,6 +5,21 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+if TYPE_CHECKING:
+    from pyyggdrasil.diagnostics import Diagnostic
+
+
+class DiagnosticError(Protocol):
+    """A bound exception type carries its diagnostic as a read-only property set by the bindings."""
+
+    @property
+    def diagnostic(self) -> "Diagnostic": ...
+
+
+def diagnostic_of(error: BaseException) -> "Diagnostic":
+    return cast(DiagnosticError, error).diagnostic
 
 
 def main() -> None:
@@ -14,9 +29,7 @@ def main() -> None:
     package_init, provider, extension = (Path(argument).resolve() for argument in sys.argv[1:])
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-diagnostics-") as temporary:
         package_dir = Path(temporary) / "pyyggdrasil"
-        shutil.copytree(
-            package_init.parent, package_dir, ignore=shutil.ignore_patterns("__pycache__")
-        )
+        shutil.copytree(package_init.parent, package_dir, ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(provider, package_dir / provider.name)
 
         sys.path.insert(0, temporary)
@@ -35,19 +48,19 @@ def main() -> None:
             for error_type in (module.ParserError, module.SemanticError):
                 for arguments in ((), ("manual failure",)):
                     error = error_type(*arguments)
-                    assert isinstance(error.diagnostic, diagnostics.Diagnostic)
-                    assert error.diagnostic.message == str(error)
-                    assert error.diagnostic.location is None
-                    assert error.diagnostic.notes == []
+                    assert isinstance(diagnostic_of(error), diagnostics.Diagnostic)
+                    assert diagnostic_of(error).message == str(error)
+                    assert diagnostic_of(error).location is None
+                    assert diagnostic_of(error).notes == []
 
             try:
                 module.raise_base()
             except module.ParserError as error:
                 assert type(error) is module.ParserError
-                assert error.diagnostic.message == "base failure"
-                assert error.diagnostic.location is None
-                assert error.diagnostic.notes == []
-                assert str(error) == diagnostics.format_diagnostic(error.diagnostic)
+                assert diagnostic_of(error).message == "base failure"
+                assert diagnostic_of(error).location is None
+                assert diagnostic_of(error).notes == []
+                assert str(error) == diagnostics.format_diagnostic(diagnostic_of(error))
             else:
                 raise AssertionError("base exception was not raised")
 
@@ -57,10 +70,10 @@ def main() -> None:
             except module.SemanticError as error:
                 assert type(error) is module.SemanticError
                 assert isinstance(error, module.ParserError)
-                captured = error.diagnostic
+                captured = diagnostic_of(error)
                 assert str(error) == diagnostics.format_diagnostic(captured)
                 try:
-                    error.diagnostic = diagnostics.Diagnostic("replacement")
+                    cast(Any, error).diagnostic = diagnostics.Diagnostic("replacement")
                 except AttributeError:
                     pass
                 else:
@@ -83,13 +96,14 @@ def main() -> None:
             assert related.message == "related declaration"
             assert related.location is not None
             assert related.location.source.filename == "related.policy"
-            for owner, name, value in (
+            read_only: tuple[tuple[object, str, object], ...] = (
                 (captured, "message", "replacement"),
                 (captured, "notes", []),
                 (first, "message", "replacement"),
                 (captured.location, "begin", 0),
                 (captured.location.source, "text", "replacement"),
-            ):
+            )
+            for owner, name, value in read_only:
                 try:
                     setattr(owner, name, value)
                 except AttributeError:
@@ -111,6 +125,7 @@ def main() -> None:
             returned = module.roundtrip_diagnostic(diagnostics.Diagnostic("external diagnostic", span))
             assert isinstance(returned, diagnostics.Diagnostic)
             assert returned.message == "external diagnostic"
+            assert returned.location is not None
             assert returned.location.source.filename == "external.policy"
 
             try:

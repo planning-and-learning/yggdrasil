@@ -3,7 +3,7 @@ import gc
 import pytest
 
 import pyyggdrasil
-import pyyggdrasil.diagnostics as diagnostics
+from pyyggdrasil import diagnostics
 from pyyggdrasil.diagnostics import (
     Diagnostic,
     DiagnosticNote,
@@ -15,16 +15,15 @@ from pyyggdrasil.diagnostics import (
 
 def test_diagnostics_submodule_is_public() -> None:
     assert diagnostics is pyyggdrasil.diagnostics
-    assert diagnostics.__all__ == [
-        "Diagnostic", "DiagnosticNote", "Source", "SourceSpan", "format_diagnostic"
-    ]
-    for name in diagnostics.__all__:
+    exported: list[str] = vars(diagnostics)["__all__"]  # the generated type hints do not list __all__
+    assert exported == ["Diagnostic", "DiagnosticNote", "Source", "SourceSpan", "format_diagnostic"]
+    for name in exported:
         assert hasattr(diagnostics, name)
 
 
 def test_source_span_exposes_byte_offsets_and_one_based_location() -> None:
     source = Source("first\né\tvalue\n", "policy.txt", tab_width=8)
-    begin = len("first\né\t".encode("utf-8"))
+    begin = len("first\né\t".encode())
     span = SourceSpan(source, begin, begin + len("value"))
 
     assert source.text == "first\né\tvalue\n"
@@ -92,10 +91,19 @@ def test_diagnostic_properties_are_read_only_and_notes_are_copied() -> None:
     note = DiagnosticNote("note", span)
     diagnostic = Diagnostic("message", span, [note])
     for instance, attribute in (
-        (source, "text"), (source, "filename"), (source, "tab_width"),
-        (span, "source"), (span, "begin"), (span, "end"), (span, "line"), (span, "column"),
-        (note, "message"), (note, "location"),
-        (diagnostic, "message"), (diagnostic, "location"), (diagnostic, "notes"),
+        (source, "text"),
+        (source, "filename"),
+        (source, "tab_width"),
+        (span, "source"),
+        (span, "begin"),
+        (span, "end"),
+        (span, "line"),
+        (span, "column"),
+        (note, "message"),
+        (note, "location"),
+        (diagnostic, "message"),
+        (diagnostic, "location"),
+        (diagnostic, "notes"),
     ):
         with pytest.raises(AttributeError):
             setattr(instance, attribute, None)

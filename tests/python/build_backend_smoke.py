@@ -15,7 +15,6 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -48,7 +47,7 @@ class BackendModule(types.ModuleType):
 
 def load_backend() -> BackendModule:
     fake_scikit_build_core = types.ModuleType("scikit_build_core")
-    setattr(fake_scikit_build_core, "build", types.SimpleNamespace())
+    fake_scikit_build_core.__dict__["build"] = types.SimpleNamespace()
     sys.modules["scikit_build_core"] = fake_scikit_build_core
 
     spec = importlib.util.spec_from_file_location(
@@ -90,9 +89,7 @@ def expect_raises(expected: type[BaseException], func: Callable[[], object]) -> 
     raise AssertionError(f"expected {expected.__name__}")
 
 
-def expect_raises_message(
-    expected: type[BaseException], message_fragment: str, func: Callable[[], object]
-) -> None:
+def expect_raises_message(expected: type[BaseException], message_fragment: str, func: Callable[[], object]) -> None:
     try:
         func()
     except expected as error:
@@ -140,9 +137,7 @@ def test_strip_candidate_detection(backend: BackendModule) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         assert backend.should_strip(root / "module.so")
-        assert backend.should_strip(
-            root / "module.cpython-312-x86_64-linux-gnu.so"
-        )
+        assert backend.should_strip(root / "module.cpython-312-x86_64-linux-gnu.so")
         assert backend.should_strip(root / "libtbb.so.12.16")
         assert backend.should_strip(root / "module.dylib")
         assert backend.should_strip(root / "module.pyd")
@@ -160,11 +155,7 @@ def test_strip_candidate_detection(backend: BackendModule) -> None:
 def read_record(wheel: zipfile.ZipFile) -> dict[str, list[str]]:
     return {
         row[0]: row[1:]
-        for row in csv.reader(
-            wheel.read("pyyggdrasil-0.0.0.dist-info/RECORD")
-            .decode("utf-8")
-            .splitlines()
-        )
+        for row in csv.reader(wheel.read("pyyggdrasil-0.0.0.dist-info/RECORD").decode("utf-8").splitlines())
     }
 
 
@@ -182,11 +173,7 @@ def test_rewrite_record(backend: BackendModule) -> None:
         backend.rewrite_record(wheel_root)
 
         rows = read_record_from_path(dist_info / "RECORD")
-        digest = (
-            base64.urlsafe_b64encode(hashlib.sha256(payload.read_bytes()).digest())
-            .rstrip(b"=")
-            .decode("ascii")
-        )
+        digest = base64.urlsafe_b64encode(hashlib.sha256(payload.read_bytes()).digest()).rstrip(b"=").decode("ascii")
         assert rows["pyyggdrasil/__init__.py"] == [
             f"sha256={digest}",
             str(payload.stat().st_size),
@@ -195,10 +182,7 @@ def test_rewrite_record(backend: BackendModule) -> None:
 
 
 def read_record_from_path(record: Path) -> dict[str, list[str]]:
-    return {
-        row[0]: row[1:]
-        for row in csv.reader(record.read_text(encoding="utf-8").splitlines())
-    }
+    return {row[0]: row[1:] for row in csv.reader(record.read_text(encoding="utf-8").splitlines())}
 
 
 def test_rewrite_record_requires_exactly_one_record_file(

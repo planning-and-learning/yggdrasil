@@ -15,17 +15,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="pyyggdrasil-import-") as tmp:
         tmp_dir = Path(tmp).resolve()
         package_dir = tmp_dir / "pyyggdrasil"
-        shutil.copytree(
-            package_init.parent, package_dir, ignore=shutil.ignore_patterns("__pycache__")
-        )
+        shutil.copytree(package_init.parent, package_dir, ignore=shutil.ignore_patterns("__pycache__"))
         lib_dir = package_dir / "lib"
         cmake_dir = lib_dir / "cmake"
         cmake_dir.mkdir(parents=True)
         yggdrasil_cmake_dir = cmake_dir / "yggdrasil"
         yggdrasil_cmake_dir.mkdir()
-        (yggdrasil_cmake_dir / "yggdrasilConfig.cmake").write_text(
-            "# test placeholder\n", encoding="utf-8"
-        )
+        (yggdrasil_cmake_dir / "yggdrasilConfig.cmake").write_text("# test placeholder\n", encoding="utf-8")
         shutil.copy2(extension, package_dir / extension.name)
 
         sys.path.insert(0, str(tmp_dir))
@@ -53,11 +49,11 @@ def main() -> None:
             assert pyyggdrasil.cmake_dirs() == (cmake_dir,)
             assert pyyggdrasil.cmake_dir() == yggdrasil_cmake_dir
 
-            import pyyggdrasil.execution as execution
+            from pyyggdrasil import execution
 
             assert execution is pyyggdrasil.execution
 
-            import pyyggdrasil.diagnostics as diagnostics
+            from pyyggdrasil import diagnostics
 
             assert diagnostics is pyyggdrasil.diagnostics
             source = diagnostics.Source("policy", "policy.txt")
@@ -68,11 +64,12 @@ def main() -> None:
             assert "policy.txt" in str(diagnostic)
             assert str(diagnostic) == diagnostics.format_diagnostic(diagnostic)
 
-            import pyyggdrasil.serialization as serialization
-            import pyyggdrasil.serialization.table as table
+            import pyyggdrasil.serialization.table
+            from pyyggdrasil import serialization
+            from pyyggdrasil.serialization import table
 
             assert serialization is pyyggdrasil.serialization
-            assert table is serialization.table
+            assert table is pyyggdrasil.serialization.table
             assert serialization.Dictionaries().tables() == {}
 
             source_root = tmp_dir / "source-tree"
@@ -82,9 +79,7 @@ def main() -> None:
             source_package_dir.mkdir(parents=True)
             source_include_dir.mkdir(parents=True)
             source_cmake_dir.mkdir(parents=True)
-            (source_root / "pyproject.toml").write_text(
-                "[project]\nname = 'pyyggdrasil'\n", encoding="utf-8"
-            )
+            (source_root / "pyproject.toml").write_text("[project]\nname = 'pyyggdrasil'\n", encoding="utf-8")
 
             original_file = pyyggdrasil.__file__
             try:
@@ -98,24 +93,16 @@ def main() -> None:
                 except FileNotFoundError:
                     pass
                 else:
-                    raise AssertionError(
-                        "cmake_dir() should fail without yggdrasilConfig.cmake"
-                    )
+                    raise AssertionError("cmake_dir() should fail without yggdrasilConfig.cmake")
             finally:
                 pyyggdrasil.__file__ = original_file
 
             for name in pyyggdrasil.__all__:
                 assert hasattr(pyyggdrasil, name)
 
-            assert "worker threads" in (
-                pyyggdrasil.execution.ExecutionContext.__doc__ or ""
-            )
-            assert "maximum thread count" in (
-                pyyggdrasil.execution.ExecutionContext.max_num_threads.__doc__ or ""
-            )
-            assert "worker thread count" in (
-                pyyggdrasil.execution.ExecutionContext.num_threads.__doc__ or ""
-            )
+            assert "worker threads" in (pyyggdrasil.execution.ExecutionContext.__doc__ or "")
+            assert "maximum thread count" in (pyyggdrasil.execution.ExecutionContext.max_num_threads.__doc__ or "")
+            assert "worker thread count" in (pyyggdrasil.execution.ExecutionContext.num_threads.__doc__ or "")
 
             max_num_threads = pyyggdrasil.execution.ExecutionContext.max_num_threads()
             assert max_num_threads >= 1
@@ -138,9 +125,7 @@ def main() -> None:
                 assert "Requested " in str(error)
                 assert " are available by default." in str(error)
             else:
-                raise AssertionError(
-                    "ExecutionContext(max_num_threads + 1) did not fail"
-                )
+                raise AssertionError("ExecutionContext(max_num_threads + 1) did not fail")
         finally:
             sys.path.remove(str(tmp_dir))
 

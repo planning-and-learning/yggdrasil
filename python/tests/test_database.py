@@ -1,4 +1,6 @@
 import gc
+from collections.abc import Iterable
+from typing import Any, cast
 
 import pytest
 
@@ -6,20 +8,21 @@ import pyyggdrasil
 from pyyggdrasil import database
 
 
-def columns(*labels):
+def columns(*labels: int) -> list[database.ColumnIndex]:
     return [database.ColumnIndex(label) for label in labels]
 
 
-def typed(labels, types):
+def typed(labels: Iterable[database.ColumnIndex], types: Iterable[database.ColumnType]) -> database.Columns:
     schema = database.Columns()
-    for label, column_type in zip(labels, types):
+    for label, column_type in zip(labels, types, strict=True):
         schema.push_back(label, column_type)
     return schema
 
 
 def test_relation_rows_and_validation() -> None:
     assert database is pyyggdrasil.database
-    assert all(hasattr(database, name) for name in database.__all__)
+    exported: list[str] = vars(database)["__all__"]  # the generated type hints do not list __all__
+    assert all(hasattr(database, name) for name in exported)
     relation = database.Relation(columns(10, 20))
     labels = relation.columns()
     assert isinstance(labels, database.ColumnIndices)
@@ -31,8 +34,8 @@ def test_relation_rows_and_validation() -> None:
     for index in (-3, 2):
         with pytest.raises(IndexError):
             _ = labels[index]
-    with pytest.raises(TypeError):
-        labels[0] = 7
+    with pytest.raises(TypeError):  # read-only: no __setitem__ in the type hints either
+        cast(Any, labels)[0] = 7
     assert relation.arity() == 2
     assert relation.empty()
     assert relation.insert([3, 4]) == relation.insert([3, 4])
@@ -52,8 +55,8 @@ def test_relation_rows_and_validation() -> None:
             _ = row[index]
     with pytest.raises(IndexError):
         relation.at(1)
-    with pytest.raises(TypeError):
-        row[0] = 7
+    with pytest.raises(TypeError):  # read-only: no __setitem__ in the type hints either
+        cast(Any, row)[0] = 7
     with pytest.raises(ValueError):
         relation.insert([1])
     with pytest.raises(ValueError):
@@ -284,12 +287,12 @@ def test_copy_and_assign_remap_relations_and_retain_unpacked_owner() -> None:
     assert database.assign(output, target) is output
     assert tuple(output.columns()) == tuple(columns(7, 3))
     assert [tuple(row) for row in output] == [(4, 5)]
-    assert database.assign(output, output) is output
+    assert database.assign(output, database.BorrowedRelation(output)) is output
     assert tuple(output.columns()) == tuple(columns(7, 3))
     assert [tuple(row) for row in output] == [(4, 5)]
     unary = database.Relation(columns(99))
     unary.insert([77])
-    assert database.assign(unary, output) is unary
+    assert database.assign(unary, database.BorrowedRelation(output)) is unary
     assert tuple(unary.columns()) == tuple(columns(7, 3))
     assert [tuple(row) for row in unary] == [(4, 5)]
     del target_result, source, source_repository, target_repository
@@ -312,7 +315,8 @@ def test_mixed_column_types_and_float_canonicalization() -> None:
     assert [type(value) for value in row] == [bool, float, int]
     nan = relation.insert([False, float("nan"), 9])
     assert relation.insert([False, -float("nan"), 9]) == nan
-    assert math.isnan(relation[nan][1])
+    value = relation[nan][1]
+    assert isinstance(value, float) and math.isnan(value)
     repository = database.RelationRepositoryFactory().create()
     interned, _ = repository.insert(relation)
     renamed = repository.rename(interned, columns(1, 2, 3))

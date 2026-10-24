@@ -1,0 +1,12 @@
+name: plumbcheck
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  plumbcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: drexlerd/plumbcheck@b2eede802ffce1d84b63340a879f808934c35011

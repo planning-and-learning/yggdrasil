@@ -1,0 +1,3 @@
+# plumbcheck's configuration: https://github.com/drexlerd/plumbcheck#configuration
+PLUMBCHECK_VERSION: b2eede802ffce1d84b63340a879f808934c35011
+ENABLE_LINTERS: [PYTHON_RUFF, PYTHON_RUFF_FORMAT]

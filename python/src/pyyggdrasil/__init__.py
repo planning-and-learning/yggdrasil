@@ -1,7 +1,6 @@
+import tomllib as _tomllib
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-import tomllib as _tomllib
-from typing import Tuple
 
 from . import database as database
 from . import diagnostics as diagnostics
@@ -13,7 +12,7 @@ def _has_yggdrasil_headers(path: Path) -> bool:
     return (path / "include" / "yggdrasil").is_dir()
 
 
-def _source_version() -> str:
+def source_version() -> str:
     for parent in Path(__file__).resolve().parents:
         pyproject = parent / "pyproject.toml"
         if not pyproject.exists():
@@ -29,7 +28,7 @@ def _source_version() -> str:
 try:
     __version__ = version("pyyggdrasil")
 except PackageNotFoundError:
-    __version__ = _source_version()
+    __version__ = source_version()
 
 
 def native_prefix() -> Path:
@@ -49,19 +48,15 @@ def include_dir() -> Path:
     return native_prefix() / "include"
 
 
-def library_dirs() -> Tuple[Path, ...]:
+def library_dirs() -> tuple[Path, ...]:
     """Return existing bundled native library directories."""
     prefix = native_prefix()
-    return tuple(
-        path for path in (prefix / "lib", prefix / "lib64") if path.is_dir()
-    )
+    return tuple(path for path in (prefix / "lib", prefix / "lib64") if path.is_dir())
 
 
-def cmake_dirs() -> Tuple[Path, ...]:
+def cmake_dirs() -> tuple[Path, ...]:
     """Return existing bundled CMake package directories."""
-    return tuple(
-        path / "cmake" for path in library_dirs() if (path / "cmake").is_dir()
-    )
+    return tuple(path / "cmake" for path in library_dirs() if (path / "cmake").is_dir())
 
 
 def cmake_prefix() -> Path:
@@ -89,11 +84,11 @@ __all__ = [
     "cmake_dir",
     "cmake_dirs",
     "cmake_prefix",
-    "include_dir",
-    "library_dirs",
-    "native_prefix",
     "database",
     "diagnostics",
     "execution",
+    "include_dir",
+    "library_dirs",
+    "native_prefix",
     "serialization",
 ]

@@ -39,7 +39,7 @@ def test_fix_runtime_paths_noop_without_libraries(tmp_path: Path) -> None:
         textwrap.dedent(
             f"""
             cmake_minimum_required(VERSION 3.21)
-            set(CMAKE_INSTALL_PREFIX "{(tmp_path / 'prefix').as_posix()}")
+            set(CMAKE_INSTALL_PREFIX "{(tmp_path / "prefix").as_posix()}")
             include("{module.as_posix()}")
             yggdrasil_fix_runtime_paths(LIB_DIR_GLOB "pkg/lib")
             message(STATUS "fix-runtime-paths noop OK")
@@ -72,7 +72,7 @@ def test_fix_runtime_paths_sets_origin_rpath(tmp_path: Path) -> None:
         textwrap.dedent(
             f"""
             cmake_minimum_required(VERSION 3.21)
-            set(CMAKE_INSTALL_PREFIX "{(tmp_path / 'prefix').as_posix()}")
+            set(CMAKE_INSTALL_PREFIX "{(tmp_path / "prefix").as_posix()}")
             include("{module.as_posix()}")
             yggdrasil_fix_runtime_paths(LIB_DIR_GLOB "pkg/lib" RPATH "$ORIGIN/../sibling")
             """
@@ -87,6 +87,7 @@ def test_fix_runtime_paths_sets_origin_rpath(tmp_path: Path) -> None:
     assert rpath == "$ORIGIN/../sibling"
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Mach-O dependency rewriting is only available on macOS")
 @pytest.mark.parametrize(
     "install_name",
     [
@@ -96,12 +97,7 @@ def test_fix_runtime_paths_sets_origin_rpath(tmp_path: Path) -> None:
         "@rpath/libgtest.1.18.0.dylib",
     ],
 )
-def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(
-    tmp_path: Path, install_name: str
-) -> None:
-    if sys.platform != "darwin":
-        pytest.skip("Mach-O dependency rewriting is only available on macOS")
-
+def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(tmp_path: Path, install_name: str) -> None:
     cmake = _require_cmake()
     module = _module()
     otool = shutil.which("otool")
@@ -113,13 +109,10 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(
     lib_dir = tmp_path / "prefix" / "pkg" / "lib"
     lib_dir.mkdir(parents=True)
     dependency_source = tmp_path / "dependency.cpp"
-    dependency_source.write_text(
-        'extern "C" int dependency() { return 1; }\n', encoding="utf-8"
-    )
+    dependency_source.write_text('extern "C" int dependency() { return 1; }\n', encoding="utf-8")
     consumer_source = tmp_path / "consumer.cpp"
     consumer_source.write_text(
-        'extern "C" int dependency();\n'
-        'extern "C" int consumer() { return dependency(); }\n',
+        'extern "C" int dependency();\nextern "C" int consumer() { return dependency(); }\n',
         encoding="utf-8",
     )
 
@@ -155,9 +148,7 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(
         check=True,
     )
 
-    before = subprocess.run(
-        [otool, "-L", str(consumer)], check=True, capture_output=True, text=True
-    ).stdout
+    before = subprocess.run([otool, "-L", str(consumer)], check=True, capture_output=True, text=True).stdout
     assert install_name in before
     system_dependencies = [
         line.strip().split(" (", 1)[0]
@@ -170,7 +161,7 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(
         textwrap.dedent(
             f"""
             cmake_minimum_required(VERSION 3.21)
-            set(CMAKE_INSTALL_PREFIX "{(tmp_path / 'prefix').as_posix()}")
+            set(CMAKE_INSTALL_PREFIX "{(tmp_path / "prefix").as_posix()}")
             include("{module.as_posix()}")
             yggdrasil_fix_runtime_paths(
                 LIB_DIR_GLOB "pkg/lib"
@@ -206,8 +197,6 @@ def test_fix_runtime_paths_rewrites_bundled_dylib_dependency(
             ).stdout.splitlines()
             assert [line.strip() for line in dependency_id[1:]] == [canonical_install_name]
 
-    load_commands = subprocess.run(
-        [otool, "-l", str(consumer)], check=True, capture_output=True, text=True
-    ).stdout
+    load_commands = subprocess.run([otool, "-l", str(consumer)], check=True, capture_output=True, text=True).stdout
     assert "path @loader_path (offset" in load_commands
     assert "path @loader_path/../pyyggdrasil/lib (offset" in load_commands

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import pyyggdrasil.repair as repair
+from pyyggdrasil import repair
 
 
 def _fake_provider(name: str, prefix: Path, monkeypatch: pytest.MonkeyPatch) -> None:
