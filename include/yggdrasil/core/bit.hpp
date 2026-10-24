@@ -25,7 +25,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
+#include <type_traits>
 
 namespace ygg::bit
 {
@@ -88,14 +90,15 @@ constexpr void for_each_set_bit(Block word, Callback callback)
 }
 
 /// @brief Write a packed unsigned integer of width len starting at bit offset
-/// in word[0].
+/// in words[0].
 /// @tparam Block is the unsigned integral block type.
-/// @param word is a pointer to the first block containing at least one bit.
+/// @param words are the blocks from the first one holding a bit on; a value that crosses into
+/// the next block needs words[1] too (asserted in Debug).
 /// @param x is the value to write.
 /// @param offset is the offset relative to the 0-th bit in the first block.
 /// @param len is the width of the integer to write.
 template<std::unsigned_integral Block>
-constexpr void write_int(Block* word, Block x, uint8_t offset, const uint8_t len)
+constexpr void write_int(std::type_identity_t<std::span<Block>> words, Block x, uint8_t offset, const uint8_t len)
 {
     constexpr std::size_t digits = std::numeric_limits<Block>::digits;
 
@@ -109,31 +112,32 @@ constexpr void write_int(Block* word, Block x, uint8_t offset, const uint8_t len
     if (offset + len >= digits)  // Use >= to avoid UB from shifting all_set in the
                                  // else case by exactly digits.
     {
-        *word &= ((lo_set<Block>[offset]));
-        *word |= (x << offset);
+        words[0] &= ((lo_set<Block>[offset]));
+        words[0] |= (x << offset);
         offset = (offset + len) & (digits - 1);  // Number of bits written into word[1]; zero on exact boundary
         if (offset != 0)
         {
-            *(word + 1) &= (~lo_set<Block>[offset]);
-            *(word + 1) |= (x >> (len - offset));
+            words[1] &= (~lo_set<Block>[offset]);
+            words[1] |= (x >> (len - offset));
         }
     }
     else
     {
-        *word &= ((all_set << (offset + len)) | lo_set<Block>[offset]);
-        *word |= (x << offset);
+        words[0] &= ((all_set << (offset + len)) | lo_set<Block>[offset]);
+        words[0] |= (x << offset);
     }
 }
 
 /// @brief Read a packed unsigned integer of width len starting at bit offset in
-/// word[0].
+/// words[0].
 /// @tparam Block is the unsigned integral block type.
-/// @param word is a pointer to the first block containing at least one bit.
+/// @param words are the blocks from the first one holding a bit on; a value that crosses into
+/// the next block needs words[1] too (asserted in Debug).
 /// @param offset is the offset relative to the 0-th bit in the first block.
 /// @param len is the width of the integer to read.
 /// @return the read value.
 template<std::unsigned_integral Block>
-constexpr Block read_int(const Block* word, uint8_t offset, const uint8_t len)
+constexpr Block read_int(std::type_identity_t<std::span<const Block>> words, uint8_t offset, const uint8_t len)
 {
     constexpr std::size_t digits = std::numeric_limits<Block>::digits;
 
@@ -141,10 +145,10 @@ constexpr Block read_int(const Block* word, uint8_t offset, const uint8_t len)
     assert(len <= digits && "Width exceeds block width.");
     assert(offset < digits && "Offset must lie within one block.");
 
-    const Block w1 = (*word) >> offset;
+    const Block w1 = words[0] >> offset;
 
     if (offset + len > digits)
-        return w1 | ((*(word + 1) & lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
+        return w1 | ((words[1] & lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
     else
         return w1 & lo_set<Block>[len];
 }
@@ -184,13 +188,13 @@ private:
 public:
     using value_type = CoderValue<Coder>;
 
-    constexpr int_reference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len) {}
+    constexpr int_reference(std::span<Block> words, uint8_t offset, uint8_t len) noexcept : m_words(words), m_offset(offset), m_len(len) {}
 
     constexpr int_reference& operator=(const value_type& value)
     {
         const auto raw = Coder::encode(value);
         ensure_fits(raw);
-        bit::write_int(m_word, raw, m_offset, m_len);
+        bit::write_int<Block>(m_words, raw, m_offset, m_len);
         return *this;
     }
 
@@ -205,10 +209,10 @@ public:
     constexpr int_reference(int_reference&&) = default;
     constexpr int_reference& operator=(int_reference&& other) noexcept { return *this = static_cast<const int_reference&>(other); }
 
-    constexpr operator value_type() const { return Coder::decode(bit::read_int(m_word, m_offset, m_len)); }
+    constexpr operator value_type() const { return Coder::decode(bit::read_int<Block>(m_words, m_offset, m_len)); }
 
 private:
-    Block* m_word;
+    std::span<Block> m_words;
     uint8_t m_offset;
     uint8_t m_len;
 };
@@ -247,10 +251,10 @@ private:
 template<std::unsigned_integral Block>
 struct bit_reference
 {
-    Block* data;
+    std::span<Block> data;
     size_t bit;
 
-    bit_reference(Block* data, size_t bit) noexcept : data(data), bit(bit) {}
+    bit_reference(std::span<Block> data, size_t bit) noexcept : data(data), bit(bit) {}
 
     static constexpr size_t bits_per_block = std::numeric_limits<Block>::digits;
 

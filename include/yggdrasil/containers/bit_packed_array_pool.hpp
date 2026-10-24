@@ -204,17 +204,11 @@ public:
         using view_type = View;
         using raw_view_type = std::remove_const_t<View>;
         static constexpr bool is_const_iterator = std::is_const_v<View> || std::is_const_v<Block>;
-        using block_pointer = std::conditional_t<is_const_iterator, const block_type*, block_type*>;
+        using Element = std::conditional_t<is_const_iterator, const block_type, block_type>;
 
-        void advance(std::ptrdiff_t n) noexcept
-        {
-            if (n == 0)
-                return;
-
-            const auto difference = PackedLayout::advance(m_offset, n, m_width);
-            m_word += difference.block_offset;
-            m_offset = difference.bit_offset;
-        }
+        /// The blocks from the one holding this element's first bit on.
+        std::span<Element> words() const noexcept { return m_blocks.subspan(PackedLayout::locate(m_pos, m_width, m_origin).block_index); }
+        uint8_t bit_offset() const noexcept { return PackedLayout::locate(m_pos, m_width, m_origin).bit_offset; }
 
     public:
         using difference_type = std::ptrdiff_t;
@@ -223,33 +217,24 @@ public:
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
-        BasicIterator() noexcept : m_pos(0), m_word(nullptr), m_offset(0), m_width(0) {}
-        BasicIterator(view_type& view, size_t pos) noexcept : m_pos(pos), m_word(view.m_data), m_offset(view.m_offset), m_width(view.m_width)
-        {
-            if (pos == 0 || m_word == nullptr)
-                return;
-
-            const auto position = PackedLayout::locate(pos, m_width, m_offset);
-            m_word += position.block_index;
-            m_offset = position.bit_offset;
-        }
+        BasicIterator() noexcept = default;
+        BasicIterator(view_type& view, size_t pos) noexcept : m_blocks(view.blocks()), m_pos(pos), m_origin(view.m_offset), m_width(view.m_width) {}
 
         reference operator*() const noexcept(is_const_iterator && noexcept(static_cast<value_type>(Coder::decode(block_type {}))))
         {
             if constexpr (is_const_iterator)
             {
                 if constexpr (ThreadSafe)
-                    return static_cast<value_type>(Coder::decode(bit::atomic_read_int<block_type>(m_word, m_offset, m_width)));
+                    return static_cast<value_type>(Coder::decode(bit::atomic_read_int<block_type>(words(), bit_offset(), m_width)));
                 else
-                    return static_cast<value_type>(Coder::decode(bit::read_int<block_type>(m_word, m_offset, m_width)));
+                    return static_cast<value_type>(Coder::decode(bit::read_int<block_type>(words(), bit_offset(), m_width)));
             }
             else
-                return reference_type(m_word, m_offset, m_width);
+                return reference_type(words(), bit_offset(), m_width);
         }
 
         BasicIterator& operator++() noexcept
         {
-            advance(1);
             ++m_pos;
             return *this;
         }
@@ -263,7 +248,6 @@ public:
 
         BasicIterator& operator--() noexcept
         {
-            advance(-1);
             --m_pos;
             return *this;
         }
@@ -277,14 +261,12 @@ public:
 
         BasicIterator& operator+=(difference_type n) noexcept
         {
-            advance(n);
             m_pos += n;
             return *this;
         }
 
         BasicIterator& operator-=(difference_type n) noexcept
         {
-            advance(-n);
             m_pos -= n;
             return *this;
         }
@@ -312,15 +294,15 @@ public:
 
         reference operator[](difference_type n) const { return *(*this + n); }
 
-        friend bool operator==(const BasicIterator&, const BasicIterator&) = default;
-        friend auto operator<=>(const BasicIterator&, const BasicIterator&) = default;
+        /// Iterators of the same view compare by position.
+        friend bool operator==(const BasicIterator& lhs, const BasicIterator& rhs) noexcept { return lhs.m_pos == rhs.m_pos; }
+        friend auto operator<=>(const BasicIterator& lhs, const BasicIterator& rhs) noexcept { return lhs.m_pos <=> rhs.m_pos; }
 
     private:
-        // Position first makes default comparisons short-circuit efficiently for unequal iterators.
-        size_t m_pos;
-        block_pointer m_word;
-        uint8_t m_offset;
-        uint8_t m_width;
+        std::span<Element> m_blocks;
+        size_t m_pos = 0;
+        uint8_t m_origin = 0;
+        uint8_t m_width = 0;
     };
 
     /**
@@ -333,9 +315,7 @@ public:
         assert(pos < m_length);
 
         const auto position = PackedLayout::locate(pos, m_width, m_offset);
-        auto* word = m_data + position.block_index;
-
-        return reference_type(word, position.bit_offset, m_width);
+        return reference_type(blocks().subspan(position.block_index), position.bit_offset, m_width);
     }
 
     value_type operator[](size_t pos) const noexcept(noexcept(static_cast<value_type>(Coder::decode(block_type {}))))
@@ -343,12 +323,12 @@ public:
         assert(pos < m_length);
 
         const auto position = PackedLayout::locate(pos, m_width, m_offset);
-        const auto* word = m_data + position.block_index;
+        const auto words = blocks().subspan(position.block_index);
 
         if constexpr (ThreadSafe)
-            return static_cast<value_type>(Coder::decode(bit::atomic_read_int<block_type>(word, position.bit_offset, m_width)));
+            return static_cast<value_type>(Coder::decode(bit::atomic_read_int<block_type>(words, position.bit_offset, m_width)));
         else
-            return static_cast<value_type>(Coder::decode(bit::read_int<block_type>(word, position.bit_offset, m_width)));
+            return static_cast<value_type>(Coder::decode(bit::read_int<block_type>(words, position.bit_offset, m_width)));
     }
 
     reference_type at(size_t pos)
@@ -414,6 +394,9 @@ public:
     uint8_t width() const noexcept { return m_width; }
 
 private:
+    /// The blocks the elements occupy: subspans and indexing assert their bounds in Debug.
+    std::span<Block> blocks() const noexcept { return { m_data, PackedLayout::block_count(static_cast<size_t>(m_offset) + m_length * m_width) }; }
+
     Block* m_data;
     size_t m_length;
     uint8_t m_width;
@@ -497,9 +480,7 @@ private:
         const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
         const auto position = PackedLayout::locate(seg_pos * m_bits_per_array);
 
-        auto* data = m_segments[seg_idx].data();
-        if (position.block_index > 0)
-            data += position.block_index;
+        auto* data = std::span(m_segments[seg_idx]).subspan(position.block_index).data();
 
         return ArrayView(data, m_length, m_width, position.bit_offset, typename ArrayView::UncheckedTag {});
     }
@@ -510,9 +491,7 @@ private:
         const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
         const auto position = PackedLayout::locate(seg_pos * m_bits_per_array);
 
-        const auto* data = m_segments[seg_idx].data();
-        if (position.block_index > 0)
-            data += position.block_index;
+        const auto* data = std::span(m_segments[seg_idx]).subspan(position.block_index).data();
 
         return ConstArrayView(data, m_length, m_width, position.bit_offset, typename ConstArrayView::UncheckedTag {});
     }

@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -146,7 +147,8 @@ public:
         using view_type = View;
         using raw_view_type = std::remove_const_t<View>;
         static constexpr bool is_const_iterator = std::is_const_v<View> || std::is_const_v<Block>;
-        using block_pointer = std::conditional_t<is_const_iterator, const block_type*, block_type*>;
+        using Element = std::conditional_t<is_const_iterator, const block_type, block_type>;
+        using Base = typename std::span<Element>::iterator;
 
     public:
         using difference_type = std::ptrdiff_t;
@@ -155,20 +157,20 @@ public:
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
-        BasicIterator() noexcept : m_pos(0), m_data(nullptr) {}
-        BasicIterator(view_type& view, size_t pos) noexcept : m_pos(pos), m_data(view.m_data) {}
+        BasicIterator() noexcept = default;
+        BasicIterator(view_type& view, size_t pos) noexcept : m_it(std::span<Element>(view.blocks()).begin() + static_cast<difference_type>(pos)) {}
 
         reference operator*() const noexcept(is_const_iterator && noexcept(static_cast<value_type>(Coder::decode(std::declval<const block_type&>()))))
         {
             if constexpr (is_const_iterator)
-                return static_cast<value_type>(Coder::decode(m_data[m_pos]));
+                return static_cast<value_type>(Coder::decode(*m_it));
             else
-                return reference_type(m_data + m_pos);
+                return reference_type(std::to_address(m_it));
         }
 
         BasicIterator& operator++() noexcept
         {
-            ++m_pos;
+            ++m_it;
             return *this;
         }
 
@@ -181,7 +183,7 @@ public:
 
         BasicIterator& operator--() noexcept
         {
-            --m_pos;
+            --m_it;
             return *this;
         }
 
@@ -194,13 +196,13 @@ public:
 
         BasicIterator& operator+=(difference_type n) noexcept
         {
-            m_pos += n;
+            m_it += n;
             return *this;
         }
 
         BasicIterator& operator-=(difference_type n) noexcept
         {
-            m_pos -= n;
+            m_it -= n;
             return *this;
         }
 
@@ -222,8 +224,7 @@ public:
             return it;
         }
 
-        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept
-        { return static_cast<difference_type>(lhs.m_pos) - static_cast<difference_type>(rhs.m_pos); }
+        friend difference_type operator-(const BasicIterator& lhs, const BasicIterator& rhs) noexcept { return lhs.m_it - rhs.m_it; }
 
         reference operator[](difference_type n) const { return *(*this + n); }
 
@@ -231,22 +232,20 @@ public:
         friend auto operator<=>(const BasicIterator&, const BasicIterator&) = default;
 
     private:
-        // Position first makes default comparisons short-circuit efficiently for unequal iterators.
-        size_t m_pos;
-        block_pointer m_data;
+        Base m_it {};
     };
 
     reference_type operator[](size_t pos) noexcept
         requires(!std::is_const_v<Block>)
     {
         assert(pos < m_length);
-        return reference_type(m_data + pos);
+        return reference_type(&blocks()[pos]);
     }
 
     value_type operator[](size_t pos) const noexcept(noexcept(static_cast<value_type>(Coder::decode(std::declval<Block&>()))))
     {
         assert(pos < m_length);
-        return static_cast<value_type>(Coder::decode(m_data[pos]));
+        return static_cast<value_type>(Coder::decode(blocks()[pos]));
     }
 
     reference_type at(size_t pos)
@@ -305,6 +304,9 @@ public:
     bool empty() const noexcept { return m_length == 0; }
 
 private:
+    /// The blocks, as a span: indexing asserts its bounds in Debug (YGGDRASIL_STDLIB_ASSERTIONS).
+    std::span<Block> blocks() const noexcept { return { m_data, m_length }; }
+
     Block* m_data;
     size_t m_length;
 };
@@ -378,9 +380,7 @@ private:
     {
         const size_t seg_idx = SegmentLayout::segment_index(index);
         const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
-        auto* data = m_segments[seg_idx].data();
-        if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
-            data += block_offset;
+        auto* data = std::span(m_segments[seg_idx]).subspan(seg_pos * static_cast<size_t>(m_length), m_length).data();
 
         return ArrayView(data, m_length, typename ArrayView::UncheckedTag {});
     }
@@ -389,9 +389,7 @@ private:
     {
         const size_t seg_idx = SegmentLayout::segment_index(index);
         const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
-        const auto* data = m_segments[seg_idx].data();
-        if (const auto block_offset = seg_pos * static_cast<size_t>(m_length); block_offset > 0)
-            data += block_offset;
+        const auto* data = std::span(m_segments[seg_idx]).subspan(seg_pos * static_cast<size_t>(m_length), m_length).data();
 
         return ConstArrayView(data, m_length, typename ConstArrayView::UncheckedTag {});
     }

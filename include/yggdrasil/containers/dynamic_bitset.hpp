@@ -21,6 +21,7 @@
 #include "yggdrasil/core/bit.hpp"
 #include "yggdrasil/core/concepts.hpp"
 
+#include <algorithm>
 #include <bit>
 #include <boost/dynamic_bitset.hpp>
 #include <cassert>
@@ -161,7 +162,7 @@ public:
         const size_t n = num_blocks(m_num_bits);
         if (n == 0)
             return;
-        m_data[n - 1] &= last_mask(m_num_bits);
+        blocks()[n - 1] &= last_mask(m_num_bits);
     }
 
     bool trailing_bits_zero() const noexcept
@@ -171,7 +172,7 @@ public:
             return true;
 
         const U mask = last_mask(m_num_bits);
-        return (m_data[n - 1] & ~mask) == U { 0 };
+        return (blocks()[n - 1] & ~mask) == U { 0 };
     }
 
     /**
@@ -182,7 +183,7 @@ public:
     {
         assert(pos < m_num_bits);
 
-        return (m_data[block_index(pos)] & (U { 1 } << block_pos(pos))) != U { 0 };
+        return (blocks()[block_index(pos)] & (U { 1 } << block_pos(pos))) != U { 0 };
     }
 
     bool at(size_t pos) const
@@ -201,7 +202,7 @@ public:
     {
         assert(pos < m_num_bits);
 
-        return bit_reference(m_data[block_index(pos)], U { 1 } << block_pos(pos));
+        return bit_reference(blocks()[block_index(pos)], U { 1 } << block_pos(pos));
     }
 
     bit_reference at(size_t pos)
@@ -222,7 +223,7 @@ public:
         size_t cnt = 0;
 
         for (size_t i = 0; i < n; ++i)
-            cnt += std::popcount(m_data[i]);
+            cnt += std::popcount(blocks()[i]);
 
         return cnt;
     }
@@ -236,7 +237,7 @@ public:
         assert(other.trailing_bits_zero());
         size_t result = 0;
         for (size_t i = 0; i < num_blocks(m_num_bits); ++i)
-            result += std::popcount(static_cast<U>(m_data[i] & other.m_data[i]));
+            result += std::popcount(static_cast<U>(blocks()[i] & other.blocks()[i]));
         return result;
     }
 
@@ -257,7 +258,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            if (m_data[i] != U { 0 })
+            if (blocks()[i] != U { 0 })
                 return true;
         return false;
     }
@@ -273,10 +274,10 @@ public:
             return true;
 
         for (size_t i = 0; i + 1 < n; ++i)
-            if (m_data[i] != full_mask())
+            if (blocks()[i] != full_mask())
                 return false;
 
-        return m_data[n - 1] == last_mask(m_num_bits);
+        return blocks()[n - 1] == last_mask(m_num_bits);
     }
 
     template<std::unsigned_integral OtherBlock>
@@ -289,7 +290,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            if ((m_data[i] & other.m_data[i]) != U { 0 })
+            if ((blocks()[i] & other.blocks()[i]) != U { 0 })
                 return true;
 
         return false;
@@ -305,7 +306,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            if ((m_data[i] & ~other.m_data[i]) != U { 0 })
+            if ((blocks()[i] & ~other.blocks()[i]) != U { 0 })
                 return false;
 
         return true;
@@ -323,9 +324,9 @@ public:
         bool proper = false;
         for (size_t i = 0; i < n; ++i)
         {
-            if ((m_data[i] & ~other.m_data[i]) != U { 0 })
+            if ((blocks()[i] & ~other.blocks()[i]) != U { 0 })
                 return false;
-            proper = proper || (m_data[i] != other.m_data[i]);
+            proper = proper || (blocks()[i] != other.blocks()[i]);
         }
 
         return proper;
@@ -350,7 +351,7 @@ public:
     {
         assert(pos < m_num_bits);
 
-        m_data[block_index(pos)] |= (U { 1 } << block_pos(pos));
+        blocks()[block_index(pos)] |= (U { 1 } << block_pos(pos));
     }
 
     void set(size_t pos, bool value) noexcept
@@ -366,7 +367,7 @@ public:
         requires(!std::is_const_v<Block>)
     {
         const size_t n = num_blocks(m_num_bits);
-        std::fill(m_data, m_data + n, full_mask());
+        std::ranges::fill(blocks(), full_mask());
 
         clear_trailing_bits();
     }
@@ -376,14 +377,14 @@ public:
     {
         assert(pos < m_num_bits);
 
-        m_data[block_index(pos)] &= (~(U { 1 } << block_pos(pos)));
+        blocks()[block_index(pos)] &= (~(U { 1 } << block_pos(pos)));
     }
 
     void reset() noexcept
         requires(!std::is_const_v<Block>)
     {
         const size_t n = num_blocks(m_num_bits);
-        std::fill(m_data, m_data + n, U { 0 });
+        std::ranges::fill(blocks(), U { 0 });
     }
 
     void flip(size_t pos) noexcept
@@ -391,7 +392,7 @@ public:
     {
         assert(pos < m_num_bits);
 
-        m_data[block_index(pos)] ^= (U { 1 } << block_pos(pos));
+        blocks()[block_index(pos)] ^= (U { 1 } << block_pos(pos));
     }
 
     void flip() noexcept
@@ -399,7 +400,7 @@ public:
     {
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] = ~m_data[i];
+            blocks()[i] = ~blocks()[i];
 
         clear_trailing_bits();
     }
@@ -415,7 +416,7 @@ public:
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
         {
-            U w = m_data[i];
+            U w = blocks()[i];
             if (w == U { 0 })
                 continue;
 
@@ -437,7 +438,7 @@ public:
             return npos;
 
         size_t i = block_index(pos);
-        U w = m_data[i] & (~U { 0 } << block_pos(pos));
+        U w = blocks()[i] & (~U { 0 } << block_pos(pos));
 
         const size_t n = num_blocks(m_num_bits);
         for (;;)
@@ -451,7 +452,7 @@ public:
             if (++i == n)
                 return npos;
 
-            w = m_data[i];
+            w = blocks()[i];
         }
     }
 
@@ -460,7 +461,7 @@ public:
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
         {
-            U w = ~m_data[i];
+            U w = ~blocks()[i];
 
             if (i == n - 1)
                 w &= last_mask(m_num_bits);
@@ -484,7 +485,7 @@ public:
             return npos;
 
         size_t i = block_index(pos);
-        U w = ~m_data[i] & (~U { 0 } << block_pos(pos));
+        U w = ~blocks()[i] & (~U { 0 } << block_pos(pos));
 
         const size_t n = num_blocks(m_num_bits);
         for (;;)
@@ -501,7 +502,7 @@ public:
             if (++i == n)
                 return npos;
 
-            w = ~m_data[i];
+            w = ~blocks()[i];
         }
     }
 
@@ -520,7 +521,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] = other.m_data[i];
+            blocks()[i] = other.blocks()[i];
 
         return *this;
     }
@@ -536,7 +537,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] = other.m_data[i] & ~m_data[i];
+            blocks()[i] = other.blocks()[i] & ~blocks()[i];
 
         return *this;
     }
@@ -552,7 +553,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] &= other.m_data[i];
+            blocks()[i] &= other.blocks()[i];
 
         return *this;
     }
@@ -568,7 +569,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] |= other.m_data[i];
+            blocks()[i] |= other.blocks()[i];
 
         return *this;
     }
@@ -584,7 +585,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] ^= other.m_data[i];
+            blocks()[i] ^= other.blocks()[i];
 
         return *this;
     }
@@ -600,7 +601,7 @@ public:
 
         const size_t n = num_blocks(m_num_bits);
         for (size_t i = 0; i < n; ++i)
-            m_data[i] &= ~other.m_data[i];
+            blocks()[i] &= ~other.blocks()[i];
 
         return *this;
     }

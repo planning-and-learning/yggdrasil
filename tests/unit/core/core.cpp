@@ -43,7 +43,7 @@ namespace ygg::tests
 TEST(YggdrasilTests, CommonAtomicIntReferencePreservesAdjacentBits)
 {
     auto blocks = std::array<uint8_t, 2> { 0b00111111, 0b11110000 };
-    auto reference = ygg::bit::atomic_int_reference<uint8_t>(blocks.data(), 6, 6);
+    auto reference = ygg::bit::atomic_int_reference<uint8_t>(blocks, 6, 6);
 
     reference = uint8_t { 0b101011 };
 
@@ -62,11 +62,11 @@ TEST(YggdrasilTests, CommonAtomicPackedAccessMatchesNonAtomicAccess)
             auto actual = expected;
             constexpr auto value = uint8_t { 0b11010011 };
 
-            ygg::bit::write_int(expected.data(), value, offset, len);
-            ygg::bit::atomic_write_int(actual.data(), value, offset, len);
+            ygg::bit::write_int<uint8_t>(expected, value, offset, len);
+            ygg::bit::atomic_write_int<uint8_t>(actual, value, offset, len);
 
             EXPECT_EQ(actual, expected);
-            EXPECT_EQ(ygg::bit::atomic_read_int(actual.data(), offset, len), ygg::bit::read_int(expected.data(), offset, len));
+            EXPECT_EQ(ygg::bit::atomic_read_int<uint8_t>(actual, offset, len), ygg::bit::read_int<uint8_t>(expected, offset, len));
         }
     }
 }
@@ -77,9 +77,9 @@ TEST(YggdrasilTests, CommonAtomicPackedAccessRejectsInvalidRanges)
     auto blocks = std::array<uint8_t, 2> {};
     constexpr auto digits = std::numeric_limits<uint8_t>::digits;
 
-    EXPECT_DEATH((void) ygg::bit::atomic_read_int(blocks.data(), digits, 1), "Offset");
-    EXPECT_DEATH(ygg::bit::atomic_write_int(blocks.data(), uint8_t { 0 }, 0, digits + 1), "Width");
-    EXPECT_DEATH((void) ygg::bit::atomic_int_reference<uint8_t>(blocks.data(), digits, 1), "Offset");
+    EXPECT_DEATH((void) ygg::bit::atomic_read_int<uint8_t>(blocks, digits, 1), "Offset");
+    EXPECT_DEATH(ygg::bit::atomic_write_int<uint8_t>(blocks, uint8_t { 0 }, 0, digits + 1), "Width");
+    EXPECT_DEATH((void) ygg::bit::atomic_int_reference<uint8_t>(blocks, digits, 1), "Offset");
 }
 #endif
 
@@ -151,10 +151,10 @@ TEST(YggdrasilTests, CommonCoreUmbrellaExposesLightweightHelpers)
     EXPECT_EQ(ygg::bit::ceil_div(5u, 2u), 3u);
     EXPECT_EQ(ygg::bit::ceil_div(std::numeric_limits<unsigned>::max(), 2u), std::numeric_limits<unsigned>::max() / 2u + 1u);
     auto packed_blocks = std::array<uint8_t, 2> {};
-    ygg::bit::write_int(packed_blocks.data(), uint8_t { 0b111111 }, 6, 6);
-    EXPECT_EQ(ygg::bit::read_int(packed_blocks.data(), 6, 6), uint8_t { 0b111111 });
+    ygg::bit::write_int<uint8_t>(packed_blocks, uint8_t { 0b111111 }, 6, 6);
+    EXPECT_EQ(ygg::bit::read_int<uint8_t>(packed_blocks, 6, 6), uint8_t { 0b111111 });
 
-    auto packed_ref = ygg::bit::int_reference<uint8_t>(packed_blocks.data(), 0, 3);
+    auto packed_ref = ygg::bit::int_reference<uint8_t>(packed_blocks, 0, 3);
     packed_ref = uint8_t { 5 };
     EXPECT_EQ(static_cast<uint8_t>(packed_ref), uint8_t { 5 });
     EXPECT_THROW((packed_ref = uint8_t { 8 }), std::out_of_range);

@@ -387,7 +387,7 @@ template<std::unsigned_integral Block>
 void append_int_flips(uint_t position, uint8_t offset, uint8_t length, Block value, std::vector<TreeBitsetFlip<Block>>& flips)
 {
     auto masks = std::array<Block, 2> {};
-    bit::write_int(masks.data(), value, offset, length);
+    bit::write_int<Block>(masks, value, offset, length);
     for (uint_t i = 0; i < masks.size(); ++i)
         if (masks[i] != Block { 0 })
             flips.push_back(TreeBitsetFlip<Block> { position + i, masks[i] });

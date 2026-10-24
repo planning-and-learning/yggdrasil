@@ -27,7 +27,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
+#include <type_traits>
 
 namespace ygg::bit
 {
@@ -49,7 +51,7 @@ void atomic_replace_bits(Block* block, Block mask, Block value) noexcept
 }
 
 template<std::unsigned_integral Block>
-Block atomic_read_int(const Block* word, uint8_t offset, uint8_t len) noexcept
+Block atomic_read_int(std::type_identity_t<std::span<const Block>> words, uint8_t offset, uint8_t len) noexcept
 {
     constexpr std::size_t digits = std::numeric_limits<Block>::digits;
 
@@ -57,14 +59,14 @@ Block atomic_read_int(const Block* word, uint8_t offset, uint8_t len) noexcept
     assert(len <= digits && "Width exceeds block width.");
     assert(offset < digits && "Offset must lie within one block.");
 
-    const Block first = atomic_load(word) >> offset;
+    const Block first = atomic_load(&words[0]) >> offset;
     if (offset + len > digits)
-        return first | ((atomic_load(word + 1) & lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
+        return first | ((atomic_load(&words[1]) & lo_set<Block>[(offset + len) & (digits - 1)]) << (digits - offset));
     return first & lo_set<Block>[len];
 }
 
 template<std::unsigned_integral Block>
-void atomic_write_int(Block* word, Block value, uint8_t offset, uint8_t len) noexcept
+void atomic_write_int(std::type_identity_t<std::span<Block>> words, Block value, uint8_t offset, uint8_t len) noexcept
 {
     constexpr std::size_t digits = std::numeric_limits<Block>::digits;
 
@@ -76,12 +78,12 @@ void atomic_write_int(Block* word, Block value, uint8_t offset, uint8_t len) noe
 
     const auto first_len = static_cast<uint8_t>(std::min<size_t>(len, digits - offset));
     const auto first_mask = static_cast<Block>(lo_set<Block>[first_len] << offset);
-    atomic_replace_bits(word, first_mask, static_cast<Block>(value << offset));
+    atomic_replace_bits(&words[0], first_mask, static_cast<Block>(value << offset));
 
     if (first_len < len)
     {
         const auto second_len = static_cast<uint8_t>(len - first_len);
-        atomic_replace_bits(word + 1, lo_set<Block>[second_len], static_cast<Block>(value >> first_len));
+        atomic_replace_bits(&words[1], lo_set<Block>[second_len], static_cast<Block>(value >> first_len));
     }
 }
 
@@ -93,7 +95,7 @@ class atomic_int_reference
 public:
     using value_type = CoderValue<Coder>;
 
-    atomic_int_reference(Block* word, uint8_t offset, uint8_t len) noexcept : m_word(word), m_offset(offset), m_len(len)
+    atomic_int_reference(std::span<Block> words, uint8_t offset, uint8_t len) noexcept : m_words(words), m_offset(offset), m_len(len)
     {
         constexpr std::size_t digits = std::numeric_limits<Block>::digits;
         static_assert(is_power_of_two(digits), "Block width must be a power of two.");
@@ -106,7 +108,7 @@ public:
         const auto raw = Coder::encode(value);
         if ((raw & ~lo_set<Block>[m_len]) != 0)
             throw std::out_of_range("atomic_int_reference: encoded value exceeds bit width");
-        atomic_write_int(m_word, raw, m_offset, m_len);
+        atomic_write_int<Block>(m_words, raw, m_offset, m_len);
         return *this;
     }
 
@@ -121,10 +123,10 @@ public:
     atomic_int_reference(atomic_int_reference&&) = default;
     atomic_int_reference& operator=(atomic_int_reference&& other) noexcept { return *this = static_cast<const atomic_int_reference&>(other); }
 
-    operator value_type() const { return Coder::decode(atomic_read_int(m_word, m_offset, m_len)); }
+    operator value_type() const { return Coder::decode(atomic_read_int<Block>(m_words, m_offset, m_len)); }
 
 private:
-    Block* m_word;
+    std::span<Block> m_words;
     uint8_t m_offset;
     uint8_t m_len;
 };

@@ -26,6 +26,8 @@
 #include <compare>
 #include <cstddef>
 #include <iterator>
+#include <memory>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -79,16 +81,18 @@ public:
 
     struct const_iterator
     {
+        using Base = typename std::span<const T>::iterator;
+
         const C* ctx;
-        const T* ptr;
+        Base ptr;
 
         using difference_type = std::ptrdiff_t;
         using value_type = ViewOrValue<T, C>;
         using iterator_category = std::random_access_iterator_tag;
         using iterator_concept = std::random_access_iterator_tag;
 
-        const_iterator() noexcept : ctx(nullptr), ptr(nullptr) {}
-        const_iterator(const T* ptr, const C& ctx) noexcept : ctx(&ctx), ptr(ptr) {}
+        const_iterator() noexcept : ctx(nullptr), ptr() {}
+        const_iterator(Base ptr, const C& ctx) noexcept : ctx(&ctx), ptr(ptr) {}
 
         decltype(auto) operator*() const
         {
@@ -165,9 +169,9 @@ public:
         friend std::strong_ordering operator<=>(const const_iterator& lhs, const const_iterator& rhs) noexcept { return lhs.ptr <=> rhs.ptr; }
     };
 
-    const_iterator begin() const noexcept { return const_iterator { get_data().data(), get_context() }; }
+    const_iterator begin() const noexcept { return const_iterator { elements().begin(), get_context() }; }
 
-    const_iterator end() const noexcept { return const_iterator { get_data().data() + get_data().size(), get_context() }; }
+    const_iterator end() const noexcept { return const_iterator { elements().end(), get_context() }; }
 
     const_iterator cbegin() const noexcept { return begin(); }
 
@@ -178,6 +182,8 @@ public:
     const auto& get_handle() const noexcept { return *m_handle; }
 
 private:
+    std::span<const T> elements() const noexcept { return { get_data().data(), get_data().size() }; }
+
     const C* m_context;
     const Container* m_handle;
 };
@@ -220,6 +226,9 @@ private:
     template<typename, size_t>
     friend class MDSpan;
 
+    /// The elements, row-major and contiguous: indexing and slicing assert their bounds in Debug.
+    std::span<T> elements() const noexcept { return { m_data, size() }; }
+
     // internal ctor used by slicing
     MDSpan(T* data, const std::array<size_t, Rank>& shapes, const std::array<size_t, Rank>& strides) noexcept :
         m_data(data),
@@ -243,14 +252,14 @@ public:
         requires(Rank > 1)
     {
         assert(pos < m_shapes[0]);
-        return MDSpan<T, Rank - 1>(m_data + pos * m_strides[0], tail_k<1>(m_shapes), tail_k<1>(m_strides));
+        return MDSpan<T, Rank - 1>(elements().subspan(pos * m_strides[0]).data(), tail_k<1>(m_shapes), tail_k<1>(m_strides));
     }
 
     auto operator[](size_t pos) const noexcept
         requires(Rank > 1)
     {
         assert(pos < m_shapes[0]);
-        return MDSpan<const T, Rank - 1>(m_data + pos * m_strides[0], tail_k<1>(m_shapes), tail_k<1>(m_strides));
+        return MDSpan<const T, Rank - 1>(elements().subspan(pos * m_strides[0]).data(), tail_k<1>(m_shapes), tail_k<1>(m_strides));
     }
 
     // base case rank-1 indexing
@@ -259,14 +268,14 @@ public:
         requires(Rank == 1)
     {
         assert(pos < m_shapes[0]);
-        return m_data[pos];
+        return elements()[pos];
     }
 
     const T& operator[](size_t pos) const noexcept
         requires(Rank == 1)
     {
         assert(pos < m_shapes[0]);
-        return m_data[pos];
+        return elements()[pos];
     }
 
     auto at(size_t pos)
@@ -300,22 +309,22 @@ public:
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     T& operator()(Idx... idx) noexcept
-    { return m_data[offset(idx...)]; }
+    { return elements()[offset(idx...)]; }
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     const T& operator()(Idx... idx) const noexcept
-    { return m_data[offset(idx...)]; }
+    { return elements()[offset(idx...)]; }
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     T& at(Idx... idx)
-    { return m_data[offset_checked(idx...)]; }
+    { return elements()[offset_checked(idx...)]; }
 
     template<typename... Idx>
         requires(sizeof...(Idx) == Rank)
     const T& at(Idx... idx) const
-    { return m_data[offset_checked(idx...)]; }
+    { return elements()[offset_checked(idx...)]; }
 
     // Prefix indexing: returns a lower-rank span
     template<typename... Idx>
@@ -324,7 +333,7 @@ public:
     {
         constexpr size_t K = sizeof...(Idx);
         const size_t off = offset_prefix(idx...);
-        return MDSpan<T, Rank - K>(m_data + off, tail_k<K>(m_shapes), tail_k<K>(m_strides));
+        return MDSpan<T, Rank - K>(elements().subspan(off).data(), tail_k<K>(m_shapes), tail_k<K>(m_strides));
     }
 
     template<typename... Idx>
@@ -333,7 +342,7 @@ public:
     {
         constexpr size_t K = sizeof...(Idx);
         const size_t off = offset_prefix(idx...);
-        return MDSpan<const T, Rank - K>(m_data + off, tail_k<K>(m_shapes), tail_k<K>(m_strides));
+        return MDSpan<const T, Rank - K>(elements().subspan(off).data(), tail_k<K>(m_shapes), tail_k<K>(m_strides));
     }
 
     template<typename... Idx>
@@ -342,7 +351,7 @@ public:
     {
         constexpr size_t K = sizeof...(Idx);
         const size_t off = offset_prefix_checked(idx...);
-        return MDSpan<T, Rank - K>(m_data + off, tail_k<K>(m_shapes), tail_k<K>(m_strides));
+        return MDSpan<T, Rank - K>(elements().subspan(off).data(), tail_k<K>(m_shapes), tail_k<K>(m_strides));
     }
 
     template<typename... Idx>
@@ -351,7 +360,7 @@ public:
     {
         constexpr size_t K = sizeof...(Idx);
         const size_t off = offset_prefix_checked(idx...);
-        return MDSpan<const T, Rank - K>(m_data + off, tail_k<K>(m_shapes), tail_k<K>(m_strides));
+        return MDSpan<const T, Rank - K>(elements().subspan(off).data(), tail_k<K>(m_shapes), tail_k<K>(m_strides));
     }
 
     const std::array<size_t, Rank>& shapes() const noexcept { return m_shapes; }
@@ -365,8 +374,8 @@ public:
     const T* begin() const noexcept { return m_data; }
     const T* cbegin() const noexcept { return begin(); }
 
-    T* end() noexcept { return m_data + size(); }
-    const T* end() const noexcept { return m_data + size(); }
+    T* end() noexcept { return std::to_address(elements().end()); }
+    const T* end() const noexcept { return std::to_address(elements().end()); }
     const T* cend() const noexcept { return end(); }
 
     size_t size() const noexcept
