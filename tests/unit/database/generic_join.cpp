@@ -87,7 +87,7 @@ void apply(RelationBuilder& input, const Change& change, bool undo = false)
     {
         const auto position = input.find(removed.row(i));
         ASSERT_TRUE(position);
-        input.erase(*position);
+        input.erase(position.value());
     }
     for (size_t i = 0; i < added.size(); ++i)
         input.insert(added.row(i));

@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_SEMANTICS_DETAILS_DISTANCE_HPP_
 #define YGG_DATABASE_SEMANTICS_DETAILS_DISTANCE_HPP_
 
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 
 #include <algorithm>
@@ -50,7 +51,9 @@ void DistanceWorkspace::append_distances(const S& sources, const E& edges, const
 
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto from = *m_graph.vertices.find(sources.row(i));
+        const auto found = m_graph.vertices.find(sources.row(i));
+        YGG_ASSUME(found.has_value());  // every source was inserted above
+        const auto from = *found;
         detail::breadth_first_search(m_graph, from, m_distances, m_queue);
         for (const auto to : m_targets)
             if (m_distances[to] != detail::distance_infinity)

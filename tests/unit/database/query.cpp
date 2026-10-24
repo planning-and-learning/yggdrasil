@@ -45,7 +45,7 @@ auto minus(const auto& lhs, const auto& rhs)
 void apply(Relation& relation, const Delta& change)
 {
     for (size_t i = 0; i < change.removed.size(); ++i)
-        relation.erase(*relation.find(change.removed.row(i)));
+        relation.erase(relation.find(change.removed.row(i)).value());
     for (size_t i = 0; i < change.added.size(); ++i)
         relation.insert(change.added.row(i));
 }

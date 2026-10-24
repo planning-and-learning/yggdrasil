@@ -108,7 +108,7 @@ TEST(YggdrasilDiagnostics, OwnsPrimaryAndRelatedSourcesAfterTheirCreatorsReturn)
 
     ASSERT_TRUE(diagnostic.location);
     ASSERT_TRUE(diagnostic.notes.front().location);
-    EXPECT_NE(diagnostic.location->source(), diagnostic.notes.front().location->source());
+    EXPECT_NE(diagnostic.location.value().source(), diagnostic.notes.front().location.value().source());
     EXPECT_EQ(diagnostics::format_diagnostic(diagnostic),
               "In file policy.sketch, line 1:\nundefined predicate\n(p)\n ~ <<-- Here\n"
               "In file domain.pddl, line 1:\nnote: domain declared here\n(domain)\n ~~~~~~ <<-- Here\n"

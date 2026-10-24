@@ -54,8 +54,8 @@ TEST(YggdrasilX3Diagnostics, GrammarSuccessTagsAstWithItsSourceRange)
 
     const auto diagnostic = handler.make_diagnostic(ast, "number");
     ASSERT_TRUE(diagnostic.location);
-    EXPECT_EQ(diagnostic.location->begin(), 1);
-    EXPECT_EQ(diagnostic.location->end(), 5);
+    EXPECT_EQ(diagnostic.location.value().begin(), 1);
+    EXPECT_EQ(diagnostic.location.value().end(), 5);
     EXPECT_EQ(diagnostics::format_diagnostic(diagnostic), "In file numbers, line 1:\nnumber\n (42) \n ~~~~ <<-- Here\n");
     EXPECT_EQ(diagnostics::format_error_at(handler, ast, "number"), diagnostics::format_error_at(handler, source.cbegin() + 1, "number"));
     handler(ast, "number");
@@ -72,10 +72,10 @@ TEST(YggdrasilX3Diagnostics, GrammarExpectationFailureRecordsAndRendersEof)
     const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number()];
     EXPECT_FALSE(boost::spirit::x3::phrase_parse(first, source.cend(), grammar, boost::spirit::x3::ascii::space, ast));
     ASSERT_TRUE(handler.last_error());
-    EXPECT_EQ(handler.last_error()->position, source.cend());
-    EXPECT_NE(handler.last_error()->message.find("Expecting:"), std::string::npos);
-    EXPECT_NE(handler.last_error()->message.find(')'), std::string::npos);
-    EXPECT_EQ(output.str(), diagnostics::format_error_at(handler, source.cend(), handler.last_error()->message));
+    EXPECT_EQ(handler.last_error().value().position, source.cend());
+    EXPECT_NE(handler.last_error().value().message.find("Expecting:"), std::string::npos);
+    EXPECT_NE(handler.last_error().value().message.find(')'), std::string::npos);
+    EXPECT_EQ(output.str(), diagnostics::format_error_at(handler, source.cend(), handler.last_error().value().message));
     EXPECT_NE(output.str().find("\n(42\n___^_\n"), std::string::npos);
 }
 
@@ -87,15 +87,15 @@ TEST(YggdrasilX3Diagnostics, PreservesFirstRecordedErrorUntilExplicitReset)
     handler.record_error(source.cbegin(), "first");
     handler.record_error(source.cend(), "second");
     ASSERT_TRUE(handler.last_error());
-    EXPECT_EQ(handler.last_error()->position, source.cbegin());
-    EXPECT_EQ(handler.last_error()->message, "first");
+    EXPECT_EQ(handler.last_error().value().position, source.cbegin());
+    EXPECT_EQ(handler.last_error().value().message, "first");
     EXPECT_TRUE(output.str().empty());
     handler.clear_error();
     EXPECT_FALSE(handler.last_error());
     handler.record_error(source.cend(), "next");
     ASSERT_TRUE(handler.last_error());
-    EXPECT_EQ(handler.last_error()->position, source.cend());
-    EXPECT_EQ(handler.last_error()->message, "next");
+    EXPECT_EQ(handler.last_error().value().position, source.cend());
+    EXPECT_EQ(handler.last_error().value().message, "next");
 }
 
 TEST(YggdrasilX3Diagnostics, UntaggedNodesHaveNoLocation)
@@ -133,7 +133,7 @@ TEST(YggdrasilX3Diagnostics, MaterializedDiagnosticsShareSourceAndOutliveParser)
     }();
 
     ASSERT_TRUE(diagnostic.location);
-    EXPECT_EQ(diagnostic.location->source()->text(), "é\tx");
+    EXPECT_EQ(diagnostic.location.value().source()->text(), "é\tx");
     EXPECT_EQ(diagnostics::format_diagnostic(diagnostic),
               "In file utf8, line 1:\nbad\né  x\n    ~ <<-- Here\n"
               "In file utf8, line 1:\nnote: start\né  x\n^_\n");
@@ -158,11 +158,11 @@ TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttr
     const auto diagnostic = handler.diagnostic("fallback", first);
     EXPECT_NE(diagnostic.message.find("while parsing :values"), std::string::npos);
     ASSERT_TRUE(diagnostic.location);
-    EXPECT_EQ(diagnostic.location->begin(), source.size());
+    EXPECT_EQ(diagnostic.location.value().begin(), source.size());
     ASSERT_EQ(diagnostic.notes.size(), 1);
     EXPECT_EQ(diagnostic.notes.front().message, ":values starts here");
     ASSERT_TRUE(diagnostic.notes.front().location);
-    EXPECT_EQ(diagnostic.notes.front().location->begin(), source.find("(:values"));
+    EXPECT_EQ(diagnostic.notes.front().location.value().begin(), source.find("(:values"));
     EXPECT_EQ(output.str(), diagnostics::format_diagnostic(diagnostic));
 
     const auto valid = std::string("(:outer (:values 42))");
@@ -178,7 +178,7 @@ TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttr
     const auto fallback = valid_handler.diagnostic("fallback", first);
     EXPECT_EQ(fallback.message, "fallback");
     EXPECT_TRUE(fallback.notes.empty());
-    EXPECT_EQ(fallback.location->begin(), valid.size());
+    EXPECT_EQ(fallback.location.value().begin(), valid.size());
 }
 
 TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
@@ -213,7 +213,7 @@ TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
                                                          ast));
         }
         ASSERT_TRUE(handler.last_error());
-        EXPECT_EQ(handler.last_error()->position, source.cbegin() + source.find("(:unknown"));
+        EXPECT_EQ(handler.last_error().value().position, source.cbegin() + source.find("(:unknown"));
     }
 }
 
@@ -237,11 +237,11 @@ TEST(YggdrasilX3Diagnostics, ExpectedContextUsesItsNameWithoutChangingErrorOwner
     const auto diagnostic = handler.diagnostic("fallback", first);
     EXPECT_EQ(diagnostic.message, "Expected :values while parsing :outer");
     ASSERT_TRUE(diagnostic.location);
-    EXPECT_EQ(diagnostic.location->begin(), source.find("(:unknown"));
+    EXPECT_EQ(diagnostic.location.value().begin(), source.find("(:unknown"));
     ASSERT_EQ(diagnostic.notes.size(), 1);
     EXPECT_EQ(diagnostic.notes.front().message, ":outer starts here");
     ASSERT_TRUE(diagnostic.notes.front().location);
-    EXPECT_EQ(diagnostic.notes.front().location->begin(), 0);
+    EXPECT_EQ(diagnostic.notes.front().location.value().begin(), 0);
 }
 
 }  // namespace ygg::tests

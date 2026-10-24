@@ -41,9 +41,9 @@ TEST(YggdrasilTests, CommonJsonHeaderAccessesRequiredAndOptionalMembers)
     EXPECT_EQ(common::as_object(object, "metadata", "root").size(), 1);
     EXPECT_EQ(common::as_array(object, "items", "root").size(), 2);
     ASSERT_TRUE(common::find_object(object, "metadata", "root"));
-    EXPECT_EQ(common::find_object(object, "metadata", "root")->get().size(), 1);
+    EXPECT_EQ(common::find_object(object, "metadata", "root").value().get().size(), 1);
     ASSERT_TRUE(common::find_array(object, "items", "root"));
-    EXPECT_EQ(common::find_array(object, "items", "root")->get().size(), 2);
+    EXPECT_EQ(common::find_array(object, "items", "root").value().get().size(), 2);
     EXPECT_EQ(common::find_string(object, "name", "root"), std::optional<std::string>("case"));
     EXPECT_EQ(common::find_size(object, "count", "root"), std::optional<size_t>(3));
     EXPECT_EQ(common::find_uint_t(object, "count", "root"), std::optional<ygg::uint_t>(3));

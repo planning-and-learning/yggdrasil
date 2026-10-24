@@ -60,10 +60,10 @@ TEST(YggdrasilTests, CommonJsonLoaderReadAndLoadFile)
 
     const auto nested = common::find_object(object, "nested", "root");
     ASSERT_TRUE(nested.has_value());
-    EXPECT_TRUE(common::as_bool(nested->get(), "enabled", "root.nested"));
+    EXPECT_TRUE(common::as_bool(nested.value().get(), "enabled", "root.nested"));
     const auto items = common::find_array(object, "items", "root");
     ASSERT_TRUE(items.has_value());
-    EXPECT_EQ(items->get().size(), 2);
+    EXPECT_EQ(items.value().get().size(), 2);
 
     EXPECT_EQ(common::find_string(object, "missing", "root"), std::nullopt);
     EXPECT_EQ(common::find_bool(object, "missing", "root"), std::nullopt);

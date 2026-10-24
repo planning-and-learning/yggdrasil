@@ -349,7 +349,7 @@ TEST_P(DatabaseIncrementalMinDistance, RelationEdgesUnderChanges)
             {
                 const auto edge = std::tuple { vertex(), vertex() };
                 if (edges.contains(edge))
-                    edges.erase(*edges.find(edge));
+                    edges.erase(edges.find(edge).value());
                 else
                     edges.insert(edge);
             }

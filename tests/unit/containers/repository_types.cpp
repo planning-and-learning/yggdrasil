@@ -852,8 +852,8 @@ TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
     EXPECT_EQ(&view.get_context(), &root);
     const auto root_found = root.find_with_hash(data, hash);
     ASSERT_TRUE(root_found.has_value());
-    EXPECT_EQ(root_found->get_index(), view.get_index());
-    EXPECT_EQ(&root_found->get_context(), &root);
+    EXPECT_EQ(root_found.value().get_index(), view.get_index());
+    EXPECT_EQ(&root_found.value().get_context(), &root);
     EXPECT_EQ(root[view.get_index()].value, 7);
     EXPECT_EQ(root.front<RepositoryTypesElement>().value, 7);
     EXPECT_EQ(&root.get_canonical_context(view.get_index()), &root);
@@ -874,8 +874,8 @@ TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
     EXPECT_EQ(&child_view.get_context(), &root);
     const auto child_found = child.find(data);
     ASSERT_TRUE(child_found.has_value());
-    EXPECT_EQ(child_found->get_index(), view.get_index());
-    EXPECT_EQ(&child_found->get_context(), &root);
+    EXPECT_EQ(child_found.value().get_index(), view.get_index());
+    EXPECT_EQ(&child_found.value().get_context(), &root);
     EXPECT_EQ(child[view.get_index()].value, 7);
     EXPECT_EQ(child.front<RepositoryTypesElement>().value, 7);
     EXPECT_EQ(&child.get_canonical_context(view.get_index()), &root);
@@ -891,8 +891,8 @@ TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
     EXPECT_EQ(root.find(child_data), std::nullopt);
     const auto local_found = child.find(child_data);
     ASSERT_TRUE(local_found.has_value());
-    EXPECT_EQ(local_found->get_index(), local_view.get_index());
-    EXPECT_EQ(&local_found->get_context(), &child);
+    EXPECT_EQ(local_found.value().get_index(), local_view.get_index());
+    EXPECT_EQ(&local_found.value().get_context(), &child);
     EXPECT_EQ(child[local_view.get_index()].value, 11);
     EXPECT_EQ(&child.get_canonical_context(local_view.get_index()), &child);
 }
@@ -949,9 +949,9 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_TRUE(created);
     const auto root_found = root.find(data);
     ASSERT_TRUE(root_found.has_value());
-    EXPECT_EQ(root_found->get_index().relation, view.get_index().relation);
-    EXPECT_EQ(root_found->get_index().row, view.get_index().row);
-    EXPECT_EQ(&root_found->get_context(), &root);
+    EXPECT_EQ(root_found.value().get_index().relation, view.get_index().relation);
+    EXPECT_EQ(root_found.value().get_index().row, view.get_index().row);
+    EXPECT_EQ(&root_found.value().get_context(), &root);
     EXPECT_EQ(view.get_data().size(), 2);
     EXPECT_EQ(view.get_relation().get_index(), relation);
     EXPECT_EQ(view.get_objects().size(), 2);
@@ -970,9 +970,9 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_EQ(&child_view.get_context(), &root);
     const auto child_found = child.find(data);
     ASSERT_TRUE(child_found.has_value());
-    EXPECT_EQ(child_found->get_index().relation, view.get_index().relation);
-    EXPECT_EQ(child_found->get_index().row, view.get_index().row);
-    EXPECT_EQ(&child_found->get_context(), &root);
+    EXPECT_EQ(child_found.value().get_index().relation, view.get_index().relation);
+    EXPECT_EQ(child_found.value().get_index().row, view.get_index().row);
+    EXPECT_EQ(&child_found.value().get_context(), &root);
     EXPECT_EQ(child[view.get_index()].size(), 2);
     EXPECT_EQ(child.front(relation).size(), 2);
     EXPECT_EQ(&child.get_canonical_context(view.get_index()), &root);
@@ -991,8 +991,8 @@ TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
     EXPECT_EQ(root.find(child_data), std::nullopt);
     const auto local_found = child.find(child_data);
     ASSERT_TRUE(local_found.has_value());
-    EXPECT_EQ(local_found->get_index().row, local_view.get_index().row);
-    EXPECT_EQ(&local_found->get_context(), &child);
+    EXPECT_EQ(local_found.value().get_index().row, local_view.get_index().row);
+    EXPECT_EQ(&local_found.value().get_context(), &child);
 }
 
 TEST(YggdrasilTests, CommonRelationRepositoryRejectsWrongArityWithoutMutation)

@@ -182,8 +182,8 @@ TEST(YggdrasilTests, PublicSymbolRepositoryBasePreservesPublishedContextAndScrat
     EXPECT_EQ(data.index, view.get_index());
     const auto found = repository.find(data);
     ASSERT_TRUE(found);
-    EXPECT_EQ(found->get_index(), view.get_index());
-    EXPECT_EQ(&found->get_context(), &repository);
+    EXPECT_EQ(found.value().get_index(), view.get_index());
+    EXPECT_EQ(&found.value().get_context(), &repository);
 
     auto serialized = Data<ConcurrentSerializedElement> {};
     serialized.values.push_back(view.get_index());
@@ -230,10 +230,10 @@ void expect_concurrent_complete_miss_canonicalizes(Set& set, const Element& elem
     EXPECT_EQ(set.size(), 1);
     const auto found = set.find_with_hash(element, hash);
     ASSERT_TRUE(found.has_value());
-    EXPECT_EQ(*found, expected);
+    EXPECT_EQ(found.value(), expected);
     const auto unsafe_found = set.find_unsafe_with_hash(element, hash);
     ASSERT_TRUE(unsafe_found.has_value());
-    EXPECT_EQ(*unsafe_found, expected);
+    EXPECT_EQ(unsafe_found.value(), expected);
     EXPECT_THROW(set.insert_new_with_hash(hash, element), std::logic_error);
     EXPECT_EQ(set.size(), 1);
 
@@ -333,8 +333,8 @@ void expect_duplicate_same_relation_insertions()
         const auto data = make_binding<ObjectTag>(relation, key);
         const auto found = repository.find(data);
         ASSERT_TRUE(found.has_value());
-        EXPECT_EQ(found->get_index().row.get_value(), canonical_rows[key].load(std::memory_order_relaxed));
-        EXPECT_TRUE(std::ranges::equal(found->get_data(), data.objects));
+        EXPECT_EQ(found.value().get_index().row.get_value(), canonical_rows[key].load(std::memory_order_relaxed));
+        EXPECT_TRUE(std::ranges::equal(found.value().get_data(), data.objects));
     }
 }
 
@@ -372,11 +372,11 @@ void expect_unique_same_relation_insertions()
         const auto data = make_binding<ObjectTag>(relation, key);
         const auto found = repository.find(data);
         ASSERT_TRUE(found.has_value());
-        const auto row = found->get_index().row.get_value();
+        const auto row = found.value().get_index().row.get_value();
         ASSERT_LT(row, expected_rows);
         EXPECT_FALSE(seen[row]);
         seen[row] = true;
-        EXPECT_TRUE(std::ranges::equal(found->get_data(), data.objects));
+        EXPECT_TRUE(std::ranges::equal(found.value().get_data(), data.objects));
     }
 }
 
@@ -424,7 +424,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
         data.value = key;
         const auto found = repository.find(data);
         ASSERT_TRUE(found.has_value());
-        const auto index = found->get_index().get_value();
+        const auto index = found.value().get_index().get_value();
         ASSERT_LT(index, num_trivial);
         EXPECT_FALSE(seen[index]);
         seen[index] = true;
@@ -724,7 +724,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailuresDoNotInterfereWit
         const auto data = make_packed_binding(relation, key, true);
         const auto found = repository.find(data);
         ASSERT_TRUE(found.has_value());
-        EXPECT_TRUE(std::ranges::equal(found->get_data(), data.objects));
+        EXPECT_TRUE(std::ranges::equal(found.value().get_data(), data.objects));
     }
 }
 }

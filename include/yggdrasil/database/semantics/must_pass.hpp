@@ -7,6 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_MUST_PASS_HPP_
 
 #include "yggdrasil/containers/raw_array_set.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
 #include "yggdrasil/database/semantics/must_pass_plan.hpp"
@@ -218,7 +219,16 @@ private:
             m_key_targets[key].clear();
         }
         for (size_t r = 0; r < sources.size(); ++r)
-            m_key_sources[keyed ? *m_keys.find(key_of(sources.row(r))) : 0].push_back(r);
+        {
+            if (!keyed)
+            {
+                m_key_sources[0].push_back(r);
+                continue;
+            }
+            const auto key = m_keys.find(key_of(sources.row(r)));
+            YGG_ASSUME(key.has_value());  // every source's key was inserted above
+            m_key_sources[*key].push_back(r);
+        }
         for (size_t r = 0; r < targets.size(); ++r)
         {
             if (!keyed)

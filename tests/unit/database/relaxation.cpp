@@ -178,12 +178,12 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
             continue;
         const auto all_known = relax(root, { true, true, true, true });
         ASSERT_TRUE(all_known->relaxation.queries[0].has_value());
-        EXPECT_EQ(ygg::database::column_labels(all_known->relaxation.queries[0]->columns()), labels_of(root));
+        EXPECT_EQ(ygg::database::column_labels(all_known->relaxation.queries[0].value().columns()), labels_of(root));
         auto all = std::vector<const Relation*>();
         for (const auto slot : all_known->relaxation.slots)
             all.push_back(&inputs[slot]);
         const auto expected = evaluate(root, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
-        const auto actual = evaluate(*all_known->relaxation.queries[0], all);
+        const auto actual = evaluate(all_known->relaxation.queries[0].value(), all);
         EXPECT_EQ(actual.size(), expected.size());
         for (size_t i = 0; i < expected.size(); ++i)
             EXPECT_TRUE(actual.contains(expected.row(i)));
@@ -201,7 +201,7 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
     // An unknown conjunct drops out of a join; its label z is unconstrained.
     const auto joined = relax(qb::join(queries, known_edges, unknown), both_known);
     ASSERT_TRUE(joined->relaxation.queries[0].has_value());
-    EXPECT_EQ(ygg::database::column_labels(joined->relaxation.queries[0]->columns()), (std::vector<Column> { x, y }));
+    EXPECT_EQ(ygg::database::column_labels(joined->relaxation.queries[0].value().columns()), (std::vector<Column> { x, y }));
     EXPECT_EQ(joined->relaxation.slots, (std::vector<size_t> { 0 }));
 
     // A union with an unknown side constrains nothing.
@@ -211,18 +211,18 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
     // A semijoin with an unknown lhs still constrains the shared label y by its known rhs: ⊤ ⋉ B̂ = B̂ on y.
     const auto semi = relax(qb::semijoin(queries, unknown, known_edges), both_known);
     ASSERT_TRUE(semi->relaxation.queries[0].has_value());
-    EXPECT_EQ(ygg::database::column_labels(semi->relaxation.queries[0]->columns()), (std::vector<Column> { y }));
+    EXPECT_EQ(ygg::database::column_labels(semi->relaxation.queries[0].value().columns()), (std::vector<Column> { y }));
 
     // A known antijoin rhs stays: the result is exact.
     const auto anti = relax(qb::antijoin(queries, known_edges, blocked), both_known);
     ASSERT_TRUE(anti->relaxation.queries[0].has_value());
-    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(*anti->relaxation.queries[0]));
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(anti->relaxation.queries[0].value()));
 
     // A selection on an unconstrained column is dropped.
     const auto selected = relax(qb::select_value(queries, qb::join(queries, known_edges, unknown), z, ygg::uint_t(1)), both_known);
     ASSERT_TRUE(selected->relaxation.queries[0].has_value());
-    EXPECT_TRUE(ygg::database::is<ygg::database::QueryJoinTag>(*selected->relaxation.queries[0])
-                || ygg::database::is<ygg::database::QueryInputTag>(*selected->relaxation.queries[0]));
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryJoinTag>(selected->relaxation.queries[0].value())
+                || ygg::database::is<ygg::database::QueryInputTag>(selected->relaxation.queries[0].value()));
 }
 
 TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
@@ -238,7 +238,7 @@ TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
     const auto pattern = qb::project(queries, walk, { x, y });
     const auto relaxed = relax(pattern, { true, true, true, true });
     ASSERT_TRUE(relaxed->relaxation.queries[0].has_value());
-    const auto plan = ygg::database::compile({ *relaxed->relaxation.queries[0] });
+    const auto plan = ygg::database::compile({ relaxed->relaxation.queries[0].value() });
     for (size_t i = 0; i < plan.node_count(); ++i)
     {
         const auto node = plan[ygg::Index<ygg::database::Query<>>(ygg::to_uint_t(i))];
@@ -254,7 +254,7 @@ TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
     // An antijoin whose shared labels are all needed stays exact.
     const auto kept = relax(qb::antijoin(queries, edges, qb::rename(queries, identity, { x, y })), { true, true, true, true });
     ASSERT_TRUE(kept->relaxation.queries[0].has_value());
-    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(*kept->relaxation.queries[0]));
+    EXPECT_TRUE(ygg::database::is<ygg::database::QueryAntijoinTag>(kept->relaxation.queries[0].value()));
 }
 
 TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
@@ -270,7 +270,7 @@ TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
     auto inputs = std::array<Relation, 4> { Relation({ x, y }), Relation({ x, y }), Relation({ y, z }), Relation({ x, z }) };
     inputs[0].insert(std::tuple { ygg::uint_t(1), ygg::uint_t(2) });
     inputs[2].insert(std::tuple { ygg::uint_t(2), ygg::uint_t(3) });
-    const auto plan = ygg::database::compile({ *relaxed->relaxation.queries[0], *relaxed->relaxation.queries[1] });
+    const auto plan = ygg::database::compile({ relaxed->relaxation.queries[0].value(), relaxed->relaxation.queries[1].value() });
     auto evaluator = ygg::database::QueryEvaluator(plan);
     evaluator.evaluate(std::array { borrow(inputs[0]), borrow(inputs[2]) });
     EXPECT_EQ(evaluator.get_result(0).size(), 1);
@@ -411,7 +411,7 @@ TEST(DatabaseRelaxation, SharedSubqueriesKeepTheRequestedColumnOrder)
     const auto roots = std::array { qb::project(queries, qb::select_value(queries, r, x, ygg::uint_t(0)), { y }), r };
     const auto relaxed = relax(roots, { true, true, true, true });
     ASSERT_TRUE(relaxed->relaxation.queries[1].has_value());
-    EXPECT_EQ(ygg::database::column_labels(relaxed->relaxation.queries[1]->columns()), (std::vector<Column> { x, y }));
+    EXPECT_EQ(ygg::database::column_labels(relaxed->relaxation.queries[1].value().columns()), (std::vector<Column> { x, y }));
 }
 
 /// Whether the root's relaxation, evaluated on the known inputs, equals `expected` evaluated on all of them.
@@ -422,7 +422,7 @@ void expect_relaxes_to(View query, View expected, const std::array<bool, 4>& kno
     auto bound = std::vector<const Relation*>();
     for (const auto slot : relaxed->relaxation.slots)
         bound.push_back(&inputs[slot]);
-    const auto actual = evaluate(*relaxed->relaxation.queries[0], bound);
+    const auto actual = evaluate(relaxed->relaxation.queries[0].value(), bound);
     const auto wanted = evaluate(expected, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
     EXPECT_EQ(actual.size(), wanted.size());
     for (size_t i = 0; i < wanted.size(); ++i)

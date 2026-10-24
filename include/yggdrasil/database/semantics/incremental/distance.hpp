@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_DISTANCE_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_DISTANCE_HPP_
 
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/details/distance_repair.hpp"
@@ -179,7 +180,9 @@ void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& ta
         m_target_flags[target] = Flag::SET;
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto& state = add_source(*m_graph.vertices.find(sources.row(i)));
+        const auto source = m_graph.vertices.find(sources.row(i));
+        YGG_ASSUME(source.has_value());  // every source was inserted above
+        const auto& state = add_source(*source);
         for (const auto target : m_targets)
             if (state.distances[target] != infinity)
                 m_result.insert(database::detail::make_distance_row(m_graph, state.root, target, state.distances[target], m_plan, m_row));

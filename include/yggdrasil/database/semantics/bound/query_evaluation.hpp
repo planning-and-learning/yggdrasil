@@ -7,6 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_BOUND_QUERY_EVALUATION_HPP_
 
 #include "yggdrasil/containers/unordered_multi_map.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/bound/conjunctive_plan.hpp"
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 #include "yggdrasil/database/semantics/details/join_index.hpp"
@@ -106,14 +107,16 @@ public:
                 throw std::invalid_argument("bound::QueryEvaluator: added row is already present in the input.");
         for (size_t r = 0; r < removed.size(); ++r)
         {
-            const auto position = snapshot.find(Row(removed.row(r), columns));
+            const auto found = snapshot.find(Row(removed.row(r), columns));
+            YGG_ASSUME(found.has_value());  // every removed row was checked present above
+            const auto position = *found;
             const auto last = to_uint_t(snapshot.size() - 1);
-            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.erase(database::detail::join_key_hash(snapshot.row(*position), entry.keys), *position); });
-            snapshot.erase(*position);
-            if (*position != last)
+            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.erase(database::detail::join_key_hash(snapshot.row(position), entry.keys), position); });
+            snapshot.erase(position);
+            if (position != last)
                 for_each_index(slot,
                                [&](KeyIndex& entry)
-                               { entry.rows.replace(database::detail::join_key_hash(snapshot.row(*position), entry.keys), last, *position); });
+                               { entry.rows.replace(database::detail::join_key_hash(snapshot.row(position), entry.keys), last, position); });
         }
         for (size_t r = 0; r < added.size(); ++r)
         {

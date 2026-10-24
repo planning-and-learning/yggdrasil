@@ -215,7 +215,7 @@ TEST(YggdrasilTests, DatabaseColumnsInternOrderedSchemasThroughBuilderDataAndInd
     EXPECT_TRUE(EqualTo<ColumnsIndexView> {}(original, duplicate));
     EXPECT_EQ(Hash<ColumnsIndexView> {}(original), Hash<ColumnsIndexView> {}(duplicate));
     ASSERT_TRUE(repository.find(pending));
-    EXPECT_EQ(repository.find(pending)->get_index(), original.get_index());
+    EXPECT_EQ(repository.find(pending).value().get_index(), original.get_index());
 
     const std::array<ColumnIndex, 2> reversed { ColumnIndex(3), ColumnIndex(8) };
     builder.assign(std::span(reversed));

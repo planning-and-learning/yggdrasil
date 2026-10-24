@@ -7,6 +7,7 @@
 #define YGG_CONTAINERS_UNORDERED_MULTI_MAP_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
 #include "yggdrasil/semantics/hash.hpp"
 
@@ -38,8 +39,20 @@ private:
 
     struct Entry
     {
-        std::optional<Value> value;
+        std::optional<Value> value;  ///< Empty only while the slot is free.
         size_t next;
+
+        /// The value of a slot in a key's chain, which always has one.
+        Value& get() noexcept
+        {
+            YGG_ASSUME(value.has_value());
+            return *value;
+        }
+        const Value& get() const noexcept
+        {
+            YGG_ASSUME(value.has_value());
+            return *value;
+        }
     };
 
     UnorderedMap<Key, size_t> m_heads;
@@ -65,7 +78,7 @@ public:
         using iterator_category = std::forward_iterator_tag;
 
         ValueIterator() = default;
-        reference operator*() const noexcept { return *m_entries[m_index].value; }
+        reference operator*() const noexcept { return m_entries[m_index].get(); }
         pointer operator->() const noexcept { return std::addressof(operator*()); }
         ValueIterator& operator++() noexcept
         {
@@ -148,7 +161,7 @@ public:
         {
             const auto position = *link;
             auto& entry = m_entries[position];
-            if (EqualTo<Value> {}(*entry.value, value))
+            if (EqualTo<Value> {}(entry.get(), value))
             {
                 if (position == head->second && entry.next == npos)
                     m_heads.erase(head);
@@ -173,9 +186,9 @@ public:
         if (head == m_heads.end())
             return false;
         for (auto position = head->second; position != npos; position = m_entries[position].next)
-            if (EqualTo<Value> {}(*m_entries[position].value, old_value))
+            if (EqualTo<Value> {}(m_entries[position].get(), old_value))
             {
-                *m_entries[position].value = std::move(new_value);
+                m_entries[position].get() = std::move(new_value);
                 return true;
             }
         return false;

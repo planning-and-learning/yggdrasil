@@ -7,6 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_RELATION_VIEW_HPP_
 
 #include "yggdrasil/containers/span.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 #include "yggdrasil/database/semantics/relation_data.hpp"
 
@@ -73,8 +74,14 @@ template<RelationViewConcept V>
     requires std::copyable<V> && requires(const V& view, size_t position) { view[position]; }
 class RelationIterator
 {
-    std::optional<V> m_view;
+    std::optional<V> m_view;  ///< Empty only in a default-constructed iterator, which is never dereferenced.
     std::ptrdiff_t m_position = 0;
+
+    const V& view() const noexcept
+    {
+        YGG_ASSUME(m_view.has_value());
+        return *m_view;
+    }
 
 public:
     using difference_type = std::ptrdiff_t;
@@ -90,8 +97,8 @@ public:
         m_position(static_cast<difference_type>(position))
     {
     }
-    reference operator*() const { return (*m_view)[static_cast<size_t>(m_position)]; }
-    reference operator[](difference_type n) const { return (*m_view)[static_cast<size_t>(m_position + n)]; }
+    reference operator*() const { return view()[static_cast<size_t>(m_position)]; }
+    reference operator[](difference_type n) const { return view()[static_cast<size_t>(m_position + n)]; }
     RelationIterator& operator++() noexcept
     {
         ++m_position;
