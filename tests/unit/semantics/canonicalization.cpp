@@ -77,8 +77,8 @@ namespace
 struct InvalidCanonicalizationContext
 {
 };
-int get_canonical_context(const ygg::Index<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&);
-int get_canonical_context(const ygg::Data<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&);
+[[maybe_unused]] int get_canonical_context(const ygg::Index<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&) { return 0; }
+[[maybe_unused]] int get_canonical_context(const ygg::Data<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&) { return 0; }
 }  // namespace
 
 namespace

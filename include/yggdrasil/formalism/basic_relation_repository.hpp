@@ -25,7 +25,6 @@
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
-#include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/ids/index_coder.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"

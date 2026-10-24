@@ -352,7 +352,7 @@ struct WrongAdlViewContext
 {
     const Data<RepositoryTypesElement>& operator[](Index<RepositoryTypesElement>) const;
 };
-int get_canonical_context(Index<RepositoryTypesElement>, const WrongAdlViewContext&);
+[[maybe_unused]] int get_canonical_context(Index<RepositoryTypesElement>, const WrongAdlViewContext&) { return 0; }
 }  // namespace
 
 template<typename Context>
@@ -506,7 +506,7 @@ struct WrongPreparationRepository
 {
     std::pair<View<Index<RepositoryTypesElement>, WrongPreparationRepository>, bool> insert(Data<RepositoryTypesElement>&);
 };
-int prepare_for_insert(WrongPreparationRepository&, Data<RepositoryTypesElement>&);
+[[maybe_unused]] int prepare_for_insert(WrongPreparationRepository&, Data<RepositoryTypesElement>&) { return 0; }
 }  // namespace
 namespace
 {
@@ -514,7 +514,7 @@ struct WrongInterningResultRepository
 {
     Index<RepositoryTypesElement> insert(Data<RepositoryTypesElement>&);
 };
-void prepare_for_insert(WrongInterningResultRepository&, Data<RepositoryTypesElement>&);
+[[maybe_unused]] void prepare_for_insert(WrongInterningResultRepository&, Data<RepositoryTypesElement>&) {}
 }  // namespace
 
 static void prepare_for_insert(ContractRepository&, Data<ContractBinding>&) noexcept {}

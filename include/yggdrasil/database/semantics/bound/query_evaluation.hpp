@@ -10,7 +10,7 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/semantics/bound/conjunctive_plan.hpp"
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
-#include "yggdrasil/database/semantics/details/join_index.hpp"
+#include "yggdrasil/database/semantics/join_index.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"

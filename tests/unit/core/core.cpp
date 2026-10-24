@@ -145,7 +145,7 @@ struct MutableAppendList
 {
     void clear();
 };
-void append(MutableAppendValue&, MutableAppendList&);
+[[maybe_unused]] void append(MutableAppendValue&, MutableAppendList&) {}
 }  // namespace
 
 static_assert(!CanExtendCoreRange<std::span<MutableAppendValue>, MutableAppendList>);

@@ -20,7 +20,6 @@
 
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/core/types_utils.hpp"
-#include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 
 #include <tuple>

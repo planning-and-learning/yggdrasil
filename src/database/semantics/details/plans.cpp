@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/details/plans.hpp"
+#include "yggdrasil/database/semantics/plans.hpp"
 
 namespace ygg::database::detail
 {

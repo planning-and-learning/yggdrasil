@@ -22,7 +22,6 @@
 #include "yggdrasil/containers/vector.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
-#include "yggdrasil/formalism/binding_index.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/semantics/containers/block_array_ordering.hpp"
 

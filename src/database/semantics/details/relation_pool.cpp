@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/details/relation_pool.hpp"
+#include "yggdrasil/database/semantics/relation_pool.hpp"
 
 namespace ygg::database
 {

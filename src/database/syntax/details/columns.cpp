@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/syntax/details/columns.hpp"
+#include "yggdrasil/database/syntax/columns.hpp"
 
 namespace ygg::database::detail
 {

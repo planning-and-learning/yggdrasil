@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/details/operations.hpp"
+#include "yggdrasil/database/semantics/operations.hpp"
 
 namespace ygg::database::detail
 {

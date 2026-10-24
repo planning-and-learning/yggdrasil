@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/syntax/copy.hpp"
+#include "yggdrasil/database/syntax/query.hpp"
 
 namespace ygg::database
 {

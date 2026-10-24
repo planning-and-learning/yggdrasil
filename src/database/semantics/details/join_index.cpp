@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/details/join_index.hpp"
+#include "yggdrasil/database/semantics/join_index.hpp"
 
 namespace ygg::database::detail
 {

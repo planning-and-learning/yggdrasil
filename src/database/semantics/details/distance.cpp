@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/details/distance.hpp"
+#include "yggdrasil/database/semantics/distance.hpp"
 
 #include <span>
 
