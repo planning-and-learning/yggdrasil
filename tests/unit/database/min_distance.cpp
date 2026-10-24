@@ -235,8 +235,8 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
     const auto value = [&] { return static_cast<uint_t>(random() % n); };
     const auto toggle = [](Relation& relation, auto row)
     {
-        if (relation.contains(row))
-            relation.erase(*relation.find(row));
+        if (const auto position = relation.find(row))
+            relation.erase(*position);
         else
             relation.insert(row);
     };

@@ -5,6 +5,8 @@
 
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
 
+#include "yggdrasil/core/config.hpp"
+
 namespace ygg::database::incremental
 {
 DistanceEvaluator::DistanceEvaluator(DistancePlan plan) :
@@ -90,7 +92,7 @@ void DistanceEvaluator::remove_result(uint_t source, uint_t target, uint_t lengt
         return;
     const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_plan, m_row);
     const auto position = m_result.find(row);
-    assert(position);
+    YGG_ASSUME(position.has_value());  // only rows of the result are retracted
     m_delta.removed.insert(row);
     m_result.erase(*position);
 }

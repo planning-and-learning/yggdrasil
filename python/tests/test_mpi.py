@@ -10,8 +10,6 @@ import textwrap
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
-import pytest
-
 import pyyggdrasil
 
 
@@ -204,7 +202,8 @@ def _run_smoke_test(root: Path) -> None:
     ]
     tool = shutil.which("otool" if platform.system() == "Darwin" else "readelf")
     if tool is None:
-        pytest.skip("otool or readelf is needed to read the libraries' search paths")
+        msg = "otool or readelf is needed to read the libraries' search paths"
+        raise RuntimeError(msg)
     for library in native_libraries:
         if platform.system() == "Darwin":
             metadata = subprocess.run(
