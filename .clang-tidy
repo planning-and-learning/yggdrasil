@@ -1,7 +1,9 @@
 # clang-tidy for plumbcheck: every bugprone, cppcoreguidelines and performance check is on,
 # except where the check is wrong for any code, not just for today's:
 # - unchecked container access, constant array index: the only fix, .at(), puts a bounds
-#   check into hot loops;
+#   check into hot loops. Debug builds check those bounds instead: YGGDRASIL_STDLIB_ASSERTIONS
+#   (CMakeLists.txt) defines _GLIBCXX_ASSERTIONS, so operator[] of std::vector, std::array and
+#   std::span asserts its index there, at no cost in Release;
 # - std-namespace-modification: std::ranges::enable_borrowed_range must be specialized in std;
 # - easily-swappable-parameters: a heuristic without a clear fix.
 # tests/ and profiling/ turn off three more in their own files.
