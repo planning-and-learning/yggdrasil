@@ -115,6 +115,8 @@ decltype(auto) visit_type_id(TypeId id, Visitor visitor)
             return call(std::type_identity<double> {});
         case TypeId::boolean:
             return call(std::type_identity<bool> {});
+        case TypeId::none:
+            break;
     }
     throw std::invalid_argument("visit_type_id: invalid type id.");
 }
@@ -138,6 +140,8 @@ constexpr std::size_t byte_size(TypeId id) noexcept
             return ByteCodec<double>::size;
         case TypeId::boolean:
             return ByteCodec<bool>::size;
+        case TypeId::none:
+            break;
     }
     return 0;
 }

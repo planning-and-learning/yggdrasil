@@ -156,7 +156,7 @@ select_value(database::QueryRepository& repository, database::QueryView<> arg, I
 {
     if (arg.columns()[database::column_index(arg.columns(), column)].type != ygg::type_id<T>)
         throw std::invalid_argument("Query: constant type does not match selected column.");
-    std::array<std::byte, ygg::ByteCodec<T>::size> bytes;
+    std::array<std::byte, ygg::ByteCodec<T>::size> bytes {};
     ygg::ByteCodec<T>::encode(value, bytes);
     return select_encoded(repository, arg, column, bytes);
 }

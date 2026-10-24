@@ -86,8 +86,8 @@ TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmpty
     Relation two(columns.span()), four(columns.span()), empty(columns.span());
     two.insert(std::tuple { 0.0, 0.0 });
     two.insert(std::tuple { 0.0, 1.0 });
-    for (double i = 0; i < 4; ++i)
-        four.insert(std::tuple { i, 0.0 });
+    for (int i = 0; i < 4; ++i)
+        four.insert(std::tuple { static_cast<double>(i), 0.0 });
 
     auto accumulator = ygg::database::StatisticsAccumulator<std::string>();
     for (const auto* sample : { &two, &four, &empty })
@@ -482,6 +482,9 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
                     break;
                 case 8:
                     root = ygg::tests::qb::antijoin(queries, root, leaves[random() % leaves.size()]);
+                    break;
+                default:
+                    ADD_FAILURE() << "random() % 9 is below 9";
                     break;
             }
         }

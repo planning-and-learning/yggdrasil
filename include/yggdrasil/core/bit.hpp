@@ -113,8 +113,8 @@ constexpr void write_int(Block* word, Block x, uint8_t offset, const uint8_t len
     {
         *word &= ((lo_set<Block>[offset]));
         *word |= (x << offset);
-        if ((offset = (offset + len) & (digits - 1)))  // Number of bits written into
-                                                       // word[1]; zero on exact boundary
+        offset = (offset + len) & (digits - 1);  // Number of bits written into word[1]; zero on exact boundary
+        if (offset != 0)
         {
             *(word + 1) &= (~lo_set<Block>[offset]);
             *(word + 1) |= (x >> (len - offset));

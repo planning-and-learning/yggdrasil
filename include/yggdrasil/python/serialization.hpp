@@ -85,7 +85,7 @@ inline nanobind::object to_python(const boost::json::value& value)
 }
 
 using NativeSerializer = boost::json::value (*)(serialization::Dictionaries&, nanobind::handle);
-inline constexpr char native_serializer_capsule_name[] = "ygg.native_serializer.v1";
+inline constexpr const char* native_serializer_capsule_name = "ygg.native_serializer.v1";
 
 template<typename T>
 void bind_native_serializer()
@@ -216,7 +216,14 @@ template<typename... Ts>
 nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::handle value, TypeList<Ts...>)
 {
     nanobind::object result;
-    if (!((nanobind::isinstance<Ts>(value) && (result = to_python(dictionaries.serialize(nanobind::cast<const Ts&>(value))), true)) || ...))
+    const auto serialize_as = [&]<typename T>()
+    {
+        if (!nanobind::isinstance<T>(value))
+            return false;
+        result = to_python(dictionaries.serialize(nanobind::cast<const T&>(value)));
+        return true;
+    };
+    if (!(serialize_as.template operator()<Ts>() || ...))
         throw nanobind::type_error("this native type does not support serialization");
     return result;
 }
@@ -225,7 +232,14 @@ template<typename... Ts>
 nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, TypeList<Ts...>)
 {
     nanobind::object result;
-    if (!((native_type.is(nanobind::type<Ts>()) && (result = to_python(dictionaries.table<Ts>()), true)) || ...))
+    const auto table_of = [&]<typename T>()
+    {
+        if (!native_type.is(nanobind::type<T>()))
+            return false;
+        result = to_python(dictionaries.table<T>());
+        return true;
+    };
+    if (!(table_of.template operator()<Ts>() || ...))
         throw nanobind::type_error("this native type cannot be registered as a table");
     return result;
 }

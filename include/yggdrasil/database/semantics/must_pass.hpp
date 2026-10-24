@@ -132,7 +132,7 @@ private:
     /// Vertices of the current key by id, as a VertexRange.
     struct Vertices
     {
-        const VertexSet* set;
+        const VertexSet* set = nullptr;
         std::span<const uint_t> ids;
 
         size_t size() const noexcept { return ids.size(); }

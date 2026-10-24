@@ -1090,7 +1090,7 @@ TEST(YggdrasilTests, DatabaseNaturalJoinMatchesSmallReferenceAcrossSchemas)
             database::project(result, project_plan, projected, workspace);
             std::set<std::vector<uint_t>> expected_projection;
             for (const auto& row : expected)
-                expected_projection.emplace(row.begin(), row.begin() + left_columns.size());
+                expected_projection.emplace(row.begin(), row.begin() + static_cast<std::ptrdiff_t>(left_columns.size()));
             ASSERT_EQ(projected.size(), expected_projection.size());
             for (const auto& row : expected_projection)
                 EXPECT_TRUE(projected.contains(packed(std::span<const uint_t>(row))));

@@ -5,6 +5,7 @@
 
 #include "yggdrasil/core/counting_memory_resource.hpp"
 
+#include <bit>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <memory_resource>
@@ -24,7 +25,7 @@ TEST(YggdrasilTests, CountingMemoryResourceForwardsAndCountsAllocations)
     auto* first = memory.allocate(64, 64);
     auto* second = memory.allocate(17, 1);
 
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(first) % 64, 0U);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(first) % 64, 0U);
     EXPECT_EQ(memory.memory_usage(), 81U);
     EXPECT_EQ(upstream.memory_usage(), 81U);
     memory.deallocate(first, 64, 64);

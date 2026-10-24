@@ -332,8 +332,8 @@ inline hash_t hash_range(Range&& range)
     if constexpr (std::ranges::sized_range<Range>)
         seed = std::ranges::size(range);
 
-    for (const std::ranges::range_value_t<Range>& value : std::forward<Range>(range))
-        ygg::hash_combine(seed, value);
+    for (const auto& value : std::forward<Range>(range))
+        ygg::hash_combine<std::ranges::range_value_t<Range>>(seed, value);  // converts proxy elements
 
     return seed;
 }

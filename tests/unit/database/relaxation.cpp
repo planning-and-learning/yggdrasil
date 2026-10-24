@@ -149,6 +149,9 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
                 case 8:
                     root = qb::antijoin(queries, root, leaves[random() % leaves.size()]);
                     break;
+                default:
+                    ADD_FAILURE() << "no operation " << operation;
+                    break;
             }
         }
         SCOPED_TRACE(expression);

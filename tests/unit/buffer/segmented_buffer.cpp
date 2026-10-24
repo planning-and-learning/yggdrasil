@@ -18,6 +18,7 @@
 #include "yggdrasil/buffer/segmented_buffer.hpp"
 
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
@@ -77,7 +78,7 @@ TEST(YggdrasilTests, BufferSegmentedBufferHonorsAlignmentAndMovesToNewSegments)
     const auto* first_position = arena.write(byte.data(), byte.size());
     const auto aligned_position = arena.write(aligned.data(), aligned.size(), 4);
 
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(aligned_position) % 4, 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(aligned_position) % 4, 0);
     EXPECT_EQ(aligned_position[0], 2);
     EXPECT_EQ(aligned_position[3], 5);
     EXPECT_EQ(arena.size(), 8);

@@ -47,7 +47,7 @@ struct GeometricSegmentLayout
     {
         const auto quotient = index >> shift;
         const auto remainder = index & static_cast<Index>(FirstSegmentSize - 1);
-        return static_cast<size_t>(((quotient - ((Index { 1 } << segment) - 1)) << shift) + remainder);
+        return (static_cast<size_t>(quotient - ((Index { 1 } << segment) - 1)) << shift) + static_cast<size_t>(remainder);
     }
 
     static constexpr size_t segment_capacity(size_t segment) noexcept { return FirstSegmentSize << segment; }

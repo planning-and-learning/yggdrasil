@@ -268,7 +268,8 @@ TEST(YggdrasilTests, CommonTreeBitsetSetRandomDeltaChainsMatchFullInsert)
                     if (mask == 0)
                         continue;
                     flip_list.push_back(Flip { p, mask });
-                    if ((words[p] ^= mask) == 0)
+                    words[p] ^= mask;
+                    if (words[p] == 0)
                         words.erase(p);
                 }
 
@@ -414,7 +415,8 @@ void expect_random_delta_chains_match_full_insert()
                     if (mask == 0)
                         continue;
                     flip_list.push_back(Flip { p, mask });
-                    if ((words[p] ^= mask) == 0)
+                    words[p] ^= mask;
+                    if (words[p] == 0)
                         words.erase(p);
                 }
 

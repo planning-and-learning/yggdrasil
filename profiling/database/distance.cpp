@@ -9,6 +9,7 @@
 
 #include <benchmark/benchmark.h>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <tuple>
@@ -55,7 +56,7 @@ void insert_edge(RelationBuilder& relation, size_t arity, uint_t from, uint_t to
     relation.insert(std::span<const std::byte>(bytes));
 }
 
-enum class TraceKind
+enum class TraceKind : std::uint8_t
 {
     shortcuts,
     self_loops,

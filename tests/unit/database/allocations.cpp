@@ -207,7 +207,7 @@ auto cells(Args... values)
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * ygg::ByteCodec<T>::size> result;
+    std::array<std::byte, N * ygg::ByteCodec<T>::size> result {};
     for (size_t i = 0; i < N; ++i)
         ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
     return result;

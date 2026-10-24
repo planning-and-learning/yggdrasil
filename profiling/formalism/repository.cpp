@@ -174,7 +174,8 @@ void report_symbol(benchmark::State& state, std::uint64_t created)
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);
-    state.counters["bytes/entry"] = benchmark::Counter(entries ? static_cast<double>(bytes) / entries : 0.0, benchmark::Counter::kAvgThreads);
+    state.counters["bytes/entry"] =
+        benchmark::Counter(entries ? static_cast<double>(bytes) / static_cast<double>(entries) : 0.0, benchmark::Counter::kAvgThreads);
 }
 
 template<typename Repository, typename Binding>
@@ -188,7 +189,8 @@ void report_relation(benchmark::State& state, std::uint64_t created, bool per_th
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);
-    state.counters["bytes/entry"] = benchmark::Counter(entries ? static_cast<double>(bytes) / entries : 0.0, benchmark::Counter::kAvgThreads);
+    state.counters["bytes/entry"] =
+        benchmark::Counter(entries ? static_cast<double>(bytes) / static_cast<double>(entries) : 0.0, benchmark::Counter::kAvgThreads);
 }
 
 template<typename Repository, typename Symbol>

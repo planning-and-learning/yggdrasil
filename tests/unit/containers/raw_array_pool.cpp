@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <concepts>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -230,10 +231,10 @@ TEST(YggdrasilTests, CommonRawArrayPoolErasePreservesAlignmentAndNoncopyableValu
     ASSERT_EQ(pool.size(), 1);
     EXPECT_EQ(pool[0][0].value, 21);
     EXPECT_EQ(pool[0][1].value, 22);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[0].data()) % alignof(Value), 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(pool[0].data()) % alignof(Value), 0);
     EXPECT_EQ(pool.insert(first), 1);
     EXPECT_EQ(pool[1].data(), reused);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(pool[1].data()) % alignof(Value), 0);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(pool[1].data()) % alignof(Value), 0);
     EXPECT_EQ(pool[1][0].value, 11);
     EXPECT_EQ(pool.memory_usage(), retained);
 }
@@ -368,7 +369,7 @@ TEST(YggdrasilTests, CommonRawArrayPoolFailedRangeFillPreservesNextIndex)
     test_raw_array_pool_failed_fill<true>();
 }
 
-enum class PoolRangeOperation
+enum class PoolRangeOperation : std::uint8_t
 {
     None,
     Begin,

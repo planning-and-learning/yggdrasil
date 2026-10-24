@@ -410,7 +410,7 @@ template<std::unsigned_integral Block, std::unsigned_integral BitsetBlock, typen
     requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
 void append_blocks(const boost::dynamic_bitset<BitsetBlock, Allocator>& bitset, std::vector<Block>& blocks)
 {
-    constexpr auto parts = sizeof(BitsetBlock) / sizeof(Block);
+    constexpr auto parts = std::numeric_limits<BitsetBlock>::digits / std::numeric_limits<Block>::digits;
     boost::to_block_range(bitset,
                           boost::make_function_output_iterator(
                               [&](BitsetBlock block)
@@ -433,7 +433,7 @@ template<std::unsigned_integral Block, std::unsigned_integral BitsetBlock, typen
     requires(sizeof(BitsetBlock) % sizeof(Block) == 0)
 void assign_blocks(std::span<const Block> blocks, boost::dynamic_bitset<BitsetBlock, Allocator>& bitset)
 {
-    constexpr auto parts = sizeof(BitsetBlock) / sizeof(Block);
+    constexpr auto parts = std::numeric_limits<BitsetBlock>::digits / std::numeric_limits<Block>::digits;
     bitset.clear();
     for (size_t i = 0; i < blocks.size(); i += parts)
     {

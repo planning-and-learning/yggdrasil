@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -34,7 +35,7 @@ namespace detail
 
 /// Which side of R a relaxation bounds: the over-approximation R̂ contains every possible answer, the
 /// under-approximation Ř only certain ones (see relax() below). A subtrahend is bounded on the other side.
-enum class Polarity
+enum class Polarity : std::uint8_t
 {
     over,
     under

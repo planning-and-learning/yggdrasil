@@ -221,7 +221,7 @@ struct Data<database::Query<database::QuerySelectValueTag>>
     Index<database::Column> column;
     cista::offset::vector<std::byte> constant;
     /// The type of the encoded constant.
-    ygg::TypeId constant_type {};
+    ygg::TypeId constant_type = ygg::TypeId::none;
     cista::offset::vector<database::ColumnLayout> columns;
     size_t column_position = 0;
 
@@ -230,7 +230,7 @@ struct Data<database::Query<database::QuerySelectValueTag>>
     template<ygg::ByteCodable T>
     Data(Index<database::Query<>> arg_, Index<database::Column> column_, T value) : arg(arg_), column(column_), constant_type(ygg::type_id<T>)
     {
-        std::array<std::byte, ygg::ByteCodec<T>::size> bytes;
+        std::array<std::byte, ygg::ByteCodec<T>::size> bytes {};
         ygg::ByteCodec<T>::encode(value, bytes);
         constant.set(bytes.begin(), bytes.end());
     }

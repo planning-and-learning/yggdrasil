@@ -124,7 +124,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
     schemas.reserve(inputs.size());
     for (const auto input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
-    do
+    for (bool more = true; more; more = std::ranges::next_permutation(variables).found)
     {
         const database::GenericJoinPlan plan(schemas, variables, output);
         database::GenericJoinWorkspace workspace(plan);
@@ -136,7 +136,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
         database::generic_join(inputs, plan, result, workspace);
         expect_same(result, expected);
         EXPECT_GT(workspace.memory_usage(), 0);
-    } while (std::ranges::next_permutation(variables).found);
+    }
 }
 
 #ifdef YGG_GENERIC_JOIN_INSTRUMENTATION
@@ -166,7 +166,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
             schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
         std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
         const auto output = variables;
-        do
+        for (bool more = true; more; more = std::ranges::next_permutation(variables).found)
         {
             const database::GenericJoinPlan plan(schemas, variables, output);
             database::GenericJoinWorkspace workspace(plan);
@@ -181,7 +181,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
             EXPECT_LE(work.candidate_keys, 3 * count);
             EXPECT_LE(work.probes, 3 * count);
             EXPECT_LE(work.prefixes, 3 * count + 1);
-        } while (std::ranges::next_permutation(variables).found);
+        }
     }
 }
 #endif

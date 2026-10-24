@@ -142,7 +142,8 @@ public:
 
     size_t memory_usage() const noexcept
     {
-        size_t result = m_tries.capacity() * sizeof(detail::GenericJoinTrie) + m_cursors.capacity() * sizeof(m_cursors[0]) + m_row.capacity();
+        size_t result =
+            m_tries.capacity() * sizeof(detail::GenericJoinTrie) + m_cursors.capacity() * sizeof(typename decltype(m_cursors)::value_type) + m_row.capacity();
         for (const auto& trie : m_tries)
             result += trie.memory_usage();
         return result;

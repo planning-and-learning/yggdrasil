@@ -43,7 +43,7 @@ static_assert(!CanCopyBytes<std::string>);
 
 TEST(YggdrasilTests, CommonBytesCopiesUnalignedNativeRepresentation)
 {
-    alignas(uint64_t) std::array<std::byte, sizeof(uint64_t) + 2> storage;
+    alignas(uint64_t) std::array<std::byte, sizeof(uint64_t) + 2> storage {};
     storage.fill(std::byte { 0xA5 });
     const auto bytes = std::span(storage).subspan(1, sizeof(uint64_t));
     constexpr auto value = uint64_t { 0x0123456789ABCDEF };

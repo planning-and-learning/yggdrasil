@@ -36,7 +36,7 @@ using Handler = diagnostics::ErrorHandler<std::string::const_iterator>;
 struct NumberRule : diagnostics::ErrorHandlerBase
 {
 };
-const auto number = boost::spirit::x3::rule<NumberRule, Number> { "number" } = '(' > boost::spirit::x3::int_ > ')';
+const auto number = boost::spirit::x3::rule<NumberRule, Number> { "number" } = ('(' > boost::spirit::x3::int_) > ')';
 
 TEST(YggdrasilX3Diagnostics, GrammarSuccessTagsAstWithItsSourceRange)
 {
@@ -142,9 +142,9 @@ TEST(YggdrasilX3Diagnostics, MaterializedDiagnosticsShareSourceAndOutliveParser)
 TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttributes)
 {
     const auto inner = diagnostics::context(
-        ":values")[(boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":values")) > boost::spirit::x3::int_ > boost::spirit::x3::lit(')')];
+        ":values")[((boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":values")) > boost::spirit::x3::int_) > boost::spirit::x3::lit(')')];
     const auto grammar = boost::spirit::x3::rule<NumberRule, Number> { "context_number" } =
-        diagnostics::context(":outer")[(boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":outer")) > inner > boost::spirit::x3::lit(')')];
+        diagnostics::context(":outer")[((boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":outer")) > inner) > boost::spirit::x3::lit(')')];
     const auto source = std::string("  (:outer\n (:values 42");
     auto first = source.cbegin();
     auto output = std::ostringstream {};
@@ -183,8 +183,8 @@ TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttr
 
 TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
 {
-    const auto child = (boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":child")) > boost::spirit::x3::int_ > boost::spirit::x3::lit(')');
-    const auto body = (boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":outer")) > child > boost::spirit::x3::lit(')');
+    const auto child = ((boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":child")) > boost::spirit::x3::int_) > boost::spirit::x3::lit(')');
+    const auto body = ((boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":outer")) > child) > boost::spirit::x3::lit(')');
     const auto skipper =
         boost::spirit::x3::ascii::space | (';' >> *(boost::spirit::x3::char_ - boost::spirit::x3::eol) >> (boost::spirit::x3::eol | boost::spirit::x3::eoi));
     for (const auto contextual : { false, true })
@@ -220,10 +220,10 @@ TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
 TEST(YggdrasilX3Diagnostics, ExpectedContextUsesItsNameWithoutChangingErrorOwnership)
 {
     const auto child = diagnostics::context(
-        ":values")[(boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":values")) > boost::spirit::x3::int_ > boost::spirit::x3::lit(')')];
+        ":values")[((boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":values")) > boost::spirit::x3::int_) > boost::spirit::x3::lit(')')];
     EXPECT_EQ(boost::spirit::x3::what(child), ":values");
     const auto grammar = boost::spirit::x3::rule<NumberRule, Number> { "outer" } =
-        diagnostics::context(":outer")[(boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":outer")) > child > boost::spirit::x3::lit(')')];
+        diagnostics::context(":outer")[((boost::spirit::x3::lit('(') >> boost::spirit::x3::lit(":outer")) > child) > boost::spirit::x3::lit(')')];
     const auto source = std::string("(:outer (:unknown 42))");
     auto first = source.cbegin();
     auto output = std::ostringstream {};

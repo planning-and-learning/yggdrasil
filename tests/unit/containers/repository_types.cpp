@@ -1183,7 +1183,7 @@ static_assert(CanMakeRandomAccessBindingRange<const std::vector<Index<formalism:
 
 struct ThrowingBindingRows
 {
-    enum class Failure
+    enum class Failure : std::uint8_t
     {
         NONE,
         BEGIN,

@@ -54,7 +54,11 @@ TEST(YggdrasilDiagnostics, RecognizesLineEndingsAndEof)
     for (const auto& ending : { std::string("\n"), std::string("\r\n"), std::string("\r") })
     {
         SCOPED_TRACE(ending);
-        const auto source = std::make_shared<const diagnostics::Source>("a" + ending + "b" + ending);
+        auto text = std::string("a");
+        text += ending;
+        text += 'b';
+        text += ending;
+        const auto source = std::make_shared<const diagnostics::Source>(std::move(text));
         const auto newline = diagnostics::SourceSpan(source, 1, 1);
         EXPECT_EQ(newline.line(), 1);
         EXPECT_EQ(newline.column(), 2);

@@ -4,12 +4,13 @@
  */
 #include "yggdrasil/database/semantics/incremental/query.hpp"
 
-#include "yggdrasil/database/semantics/generic_join.hpp"
 #include "yggdrasil/database/optimization/optimization.hpp"
+#include "yggdrasil/database/semantics/generic_join.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
 
 #include <array>
 #include <benchmark/benchmark.h>
+#include <cstdint>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -106,7 +107,7 @@ bool exact_delta(const database::incremental::Delta& delta, const Relation& befo
     return added == delta.added.size() && removed == delta.removed.size();
 }
 
-enum class Planning
+enum class Planning : std::uint8_t
 {
     original,
     structural,
