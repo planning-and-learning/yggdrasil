@@ -22,6 +22,7 @@
 #include "yggdrasil/buffer/indexed_hash_set.hpp"
 #include "yggdrasil/buffer/segmented_buffer.hpp"
 #include "yggdrasil/containers/indexed_hash_set.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
@@ -52,7 +53,7 @@ private:
     template<typename U>
     struct Slot<U, true>
     {
-        using Container = ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe>;
+        using Container = ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, ::ygg::default_first_segment_size, ThreadSafe>;
 
         Container container;
         size_t parent_size = 0;
@@ -68,7 +69,7 @@ private:
     {
         std::unique_ptr<ygg::buffer::SegmentedBuffer> arena;
         std::unique_ptr<ygg::buffer::Buffer> buffer;
-        using Container = ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, 32, ThreadSafe>;
+        using Container = ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, ::ygg::default_first_segment_size, ThreadSafe>;
 
         Container container;
         size_t parent_size = 0;

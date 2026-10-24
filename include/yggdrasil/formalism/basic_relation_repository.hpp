@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/bit_packed_array_set.hpp"
 #include "yggdrasil/containers/block_array_set.hpp"
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/tuple.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
@@ -64,7 +65,7 @@ struct BlockArraySetStorage
 {
 private:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
-    using container_type = ygg::BlockArraySet<Block, Coder, 16, ThreadSafe>;
+    using container_type = ygg::BlockArraySet<Block, Coder, ::ygg::default_first_array_segment_size, ThreadSafe>;
 
 public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
@@ -78,7 +79,7 @@ struct BitPackedArraySetStorage
 {
 private:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>
-    using container_type = ygg::BitPackedArraySet<Block, Coder, 16, ThreadSafe>;
+    using container_type = ygg::BitPackedArraySet<Block, Coder, ::ygg::default_first_array_segment_size, ThreadSafe>;
 
 public:
     template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder, bool ThreadSafe>

@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
 #include "yggdrasil/containers/detail/segmented_rows.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 
 #include <array>
 #include <atomic>
@@ -44,7 +45,7 @@ namespace ygg
 /// destruction, and mutation of published elements require quiescence or
 /// external locking.
 /// Index bounds the number of addressable elements and hence the number of segment slots kept inline.
-template<typename T, size_t FirstSegmentSize = 32, bool ThreadSafe = false, std::unsigned_integral Index = size_t>
+template<typename T, size_t FirstSegmentSize = default_first_segment_size, bool ThreadSafe = false, std::unsigned_integral Index = size_t>
 class SegmentedVector
 {
 private:

@@ -42,7 +42,8 @@ private:
     Index<database::Relation> m_index;
     size_t m_storage_index = std::numeric_limits<size_t>::max();
     Builder<database::Columns> m_columns;
-    RawArraySet<std::byte, 64> m_rows;
+    static constexpr size_t first_segment_bytes = 64;
+    RawArraySet<std::byte, first_segment_bytes> m_rows;
 
     template<database::ColumnSchema Schema>
     void reinitialize(size_t width, Schema columns);

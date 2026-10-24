@@ -124,7 +124,7 @@ private:
     Interval m_interval;
 };
 
-static_assert(sizeof(ClosedInterval<double>) == 16);
+static_assert(sizeof(ClosedInterval<double>) == 2 * sizeof(double));
 
 /**
  * Pretty printing

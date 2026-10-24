@@ -20,6 +20,7 @@
 
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/bit.hpp"
 
@@ -320,7 +321,10 @@ private:
 /// size() or external synchronization. Clear, pop_back, iteration, segment or
 /// memory inspection, move, destruction, and mutation of published arrays
 /// require quiescence or external locking.
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
+template<std::unsigned_integral Block,
+         bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>,
+         size_t FirstSegmentSize = default_first_array_segment_size,
+         bool ThreadSafe = false>
 class BlockArrayPool
 {
 public:

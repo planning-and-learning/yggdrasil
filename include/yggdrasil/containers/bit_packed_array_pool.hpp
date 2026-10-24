@@ -21,6 +21,7 @@
 #include "yggdrasil/containers/detail/bit_packed_layout.hpp"
 #include "yggdrasil/containers/detail/geometric_segment_layout.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/containers/segmented_vector.hpp"
 #include "yggdrasil/core/atomic_bit.hpp"
 
@@ -433,7 +434,10 @@ private:
 /// destruction, and mutation of published arrays require quiescence or external
 /// locking. Atomic packed access prevents neighboring-array races but does not
 /// make a multi-block logical mutation atomic.
-template<std::unsigned_integral Block, bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>, size_t FirstSegmentSize = 16, bool ThreadSafe = false>
+template<std::unsigned_integral Block,
+         bit::BlockCoder<Block> Coder = bit::ForwardingBlockCoder<Block>,
+         size_t FirstSegmentSize = default_first_array_segment_size,
+         bool ThreadSafe = false>
 class BitPackedArrayPool
 {
 public:

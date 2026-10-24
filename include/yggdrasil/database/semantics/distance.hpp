@@ -23,7 +23,8 @@ namespace detail
 /// Append-only tuple IDs remain valid until clear(); adjacency stores IDs only.
 struct DistanceGraph
 {
-    RawArraySet<std::byte, 64> vertices;
+    static constexpr size_t first_segment_bytes = 64;
+    RawArraySet<std::byte, first_segment_bytes> vertices;
     UnorderedMultiMap<uint_t, uint_t> outgoing;
 
     explicit DistanceGraph(size_t tuple_bytes);

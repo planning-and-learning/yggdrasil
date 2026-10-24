@@ -19,6 +19,7 @@
 #define YGG_CONTAINERS_INDEXED_HASH_SET_HPP_
 
 #include "yggdrasil/containers/detail/segmented_rows.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/semantics/equal_to.hpp"
@@ -46,7 +47,7 @@ namespace ygg
 template<typename Tag,
          HashFor<Data<Tag>> H = Hash<Data<Tag>>,
          EqualToFor<Data<Tag>> E = EqualTo<Data<Tag>>,
-         size_t FirstSegmentSize = 32,
+         size_t FirstSegmentSize = default_first_segment_size,
          bool ThreadSafe = false>
 class IndexedHashSet
 {

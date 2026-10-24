@@ -18,6 +18,7 @@
 #ifndef YGG_BUFFER_SEGMENTED_BUFFER_HPP_
 #define YGG_BUFFER_SEGMENTED_BUFFER_HPP_
 
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/core/bit.hpp"
 
 #include <algorithm>
@@ -121,7 +122,7 @@ private:
     }
 
 public:
-    explicit SegmentedBuffer(size_t seg_size = 1024) : m_seg_size(seg_size), m_segments()
+    explicit SegmentedBuffer(size_t seg_size = default_first_segment_bytes) : m_seg_size(seg_size), m_segments()
     {
         if (!ygg::bit::is_power_of_two(seg_size))
         {

@@ -12,6 +12,7 @@
 
 #include "yggdrasil/containers/detail/geometric_byte_storage.hpp"
 #include "yggdrasil/containers/detail/threading.hpp"
+#include "yggdrasil/containers/segment_sizes.hpp"
 #include "yggdrasil/core/concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 
@@ -30,7 +31,7 @@ namespace ygg
 /// ThreadSafe permits concurrent insertion, size queries, and reads after
 /// publication was observed through size() or external synchronization.
 /// Clear, memory inspection, move, and destruction require quiescence.
-template<TriviallyCopyable T, size_t FirstSegmentSize = 1024, bool ThreadSafe = false>
+template<TriviallyCopyable T, size_t FirstSegmentSize = default_first_segment_bytes, bool ThreadSafe = false>
 class RawArrayPool
 {
 public:
