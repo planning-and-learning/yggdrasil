@@ -7,10 +7,12 @@ import tomllib as _tomllib
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from pyyggdrasil import database as database
-from pyyggdrasil import diagnostics as diagnostics
-from pyyggdrasil import execution as execution
-from pyyggdrasil import serialization as serialization
+from pyyggdrasil import (
+    database as database,
+    diagnostics as diagnostics,
+    execution as execution,
+    serialization as serialization,
+)
 
 
 def _has_yggdrasil_headers(path: Path) -> bool:
