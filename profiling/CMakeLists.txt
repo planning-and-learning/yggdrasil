@@ -82,3 +82,11 @@ target_include_directories(must_pass_sokoban PRIVATE
 target_include_directories(must_pass_sokoban SYSTEM PRIVATE
     "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
+
+add_executable(database_datalog_benchmark "database/datalog.cpp")
+target_compile_features(database_datalog_benchmark PRIVATE cxx_std_20)
+target_include_directories(database_datalog_benchmark PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    "${YGGDRASIL_NATIVE_PREFIX}/include"
+)
+target_link_libraries(database_datalog_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Threads::Threads)

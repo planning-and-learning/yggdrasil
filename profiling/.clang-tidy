@@ -1,9 +1,11 @@
 # Benchmarks: literal values are the benchmark sizes and data, and benchmarks register
 # themselves during static initialization, which may throw. They run on Linux, so
 # thread safety follows glibc, whose getenv is thread-safe (no benchmark calls setenv).
+# Random workloads use a constant seed, so that every run measures the same data.
 InheritParentConfig: true
 Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
-  -bugprone-throwing-static-initialization
+  -bugprone-throwing-static-initialization,
+  -bugprone-random-generator-seed
 CheckOptions:
   concurrency-mt-unsafe.FunctionSet: glibc

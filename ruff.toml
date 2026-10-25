@@ -36,8 +36,10 @@ combine-as-imports = true
 [lint.per-file-ignores]
 # Tests: pytest asserts with `assert`, literal values are the test data, test names
 # document the behavior, pytest passes parametrized values by name, every assertion
-# counts as a branch, and the test folders are not packages.
-"{python/tests,tests/python}/**" = ["S101", "PLR2004", "D1", "FBT001", "C901", "PLR0912", "PLR0915", "INP001"]
+# counts as a branch, the test folders are not packages, and random test data comes from
+# seeded generators.
+"{python/tests,tests/python}/**" = ["S101", "PLR2004", "D1", "FBT001", "C901", "PLR0912", "PLR0915", "INP001", "S311"]
+
 # Scripts that CTest runs without pytest: pytest's style rules do not apply, and their
 # imports follow putting the freshly built package on sys.path.
 "tests/python/**" = ["PT", "PLC0415"]

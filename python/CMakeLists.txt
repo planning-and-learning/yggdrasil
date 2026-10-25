@@ -43,6 +43,7 @@ nanobind_add_module(_pyyggdrasil NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_ba
     src/pyyggdrasil/database/query/generic_join.cpp
     src/pyyggdrasil/database/query/semijoin.cpp
     src/pyyggdrasil/database/query/antijoin.cpp
+    src/pyyggdrasil/database/datalog.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
     src/pyyggdrasil/serialization/module.cpp

@@ -22,6 +22,7 @@ void bind_database_distance(nb::module_& m);
 void bind_database_evaluation(nb::module_& m);
 void bind_database_optimization(nb::module_& m);
 void bind_database_queries(nb::module_& m);
+void bind_database_datalog(nb::module_& m);
 
 }  // namespace yggdrasil
 

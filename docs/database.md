@@ -762,3 +762,40 @@ The cold/warm Generic Join cases include full trie construction; warm means
 reusing the evaluator's allocated workspace, not skipping input indexing. The
 initial triangle fixture is a reproducible correctness and performance smoke
 workload, not a broad claim about optimizer quality.
+
+## Datalog
+
+`<yggdrasil/database/datalog/>` is a stratified Datalog engine over relations of object columns, with aggregates. Its
+records are interned in a `DatalogRepository` (`repository.hpp`), built with `checkout`/`insert` and validated by
+`prepare_for_insert` (`construction.hpp`):
+
+- a relation: an input (with an input slot of the evaluator) or a derived relation (with an id);
+- an atom: a relation applied to terms, each a variable numbered within its rule or an object constant;
+- an aggregate: `result = function value : atoms, not negated, comparisons`, grouped by the variables that the
+  enclosing rule's positive atoms bind; COUNT and SUM are 0 for a group without rows;
+- a rule: `head ← atoms, not negated, comparisons, aggregates`, with a derived head of distinct variables and every
+  variable bound by a positive atom or an aggregate's result;
+- a program: rules, stratified by the strongly connected components of their dependencies (`stratification.hpp`).
+
+`Evaluator(program, outputs, static_slots)` (`evaluator.hpp`) evaluates the requested relations rule by rule over
+indexed relations, without intermediate relations:
+
+- only the strata the outputs depend on are evaluated, and only the inputs they read are read;
+- each rule is an index nested-loop join, planned once per literal that reads a change, with the most bound literal
+  next (ties go to relations outside the rule's stratum); hash indexes are chosen per access pattern;
+- atoms whose only unbound variables are those a step binds are intersected with it: the one with the fewest matches
+  for its key enumerates, the others are checked (Generic Join [NRR13]), so cyclic bodies stay worst-case optimal;
+- `evaluate(inputs)` is stratified and semi-naive;
+- `initialize(inputs)` and `update(changes)` maintain the relations: a stratum without recursion by derivation counts,
+  a recursive one by Delete and Rederive [Gupta93]; when the over-deleted rows exceed a tenth of the stratum's rows,
+  the stratum is evaluated anew and its change is the difference to the old rows;
+- an aggregate keeps the satisfying assignments of its body by counting and its groups incrementally;
+- static input slots are read once.
+
+Python exposes the records as `DatalogRelationData`, `DatalogAtomData`, `DatalogAggregateData`, `DatalogRuleData`,
+`DatalogProgramData` and the evaluator as `DatalogEvaluator`.
+
+`database_datalog_benchmark` (`YGGDRASIL_BUILD_PROFILING`) measures the per-state cost of planning-like programs: full
+evaluation per state, and maintenance between two successor states.
+
+[Gupta93] A. Gupta, I. S. Mumick, V. S. Subrahmanian, *Maintaining Views Incrementally*, SIGMOD 1993.
