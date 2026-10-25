@@ -168,11 +168,11 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
             auto edge_columns = std::vector<Column> { key };
             for (size_t c = 0; c < k; ++c)
             {
-                vertex_columns.push_back(Column(static_cast<ygg::uint_t>(c)));
-                edge_columns.push_back(Column(static_cast<ygg::uint_t>(c)));
+                vertex_columns.emplace_back(static_cast<ygg::uint_t>(c));
+                edge_columns.emplace_back(static_cast<ygg::uint_t>(c));
             }
             for (size_t c = 0; c < k; ++c)
-                edge_columns.push_back(Column(static_cast<ygg::uint_t>(k + c)));
+                edge_columns.emplace_back(static_cast<ygg::uint_t>(k + c));
             auto edge_list = std::vector<std::tuple<uint_t, Vertex, Vertex>>();
             auto source_list = std::vector<std::pair<uint_t, Vertex>>();
             auto target_list = std::vector<std::pair<uint_t, Vertex>>();

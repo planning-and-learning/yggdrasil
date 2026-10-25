@@ -536,8 +536,8 @@ void expect_dynamic_bitset_adapters()
 
 TEST(YggdrasilTests, CommonTreeBitsetSetDynamicBitsetAdaptersRoundTrip)
 {
-    expect_dynamic_bitset_adapters<unsigned long, 2>();
-    expect_dynamic_bitset_adapters<unsigned long, 4>();
+    expect_dynamic_bitset_adapters<std::uint64_t, 2>();
+    expect_dynamic_bitset_adapters<std::uint64_t, 4>();
     expect_dynamic_bitset_adapters<std::uint32_t, 4>();
 }
 

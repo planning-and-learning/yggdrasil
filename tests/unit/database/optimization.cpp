@@ -375,12 +375,12 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
         for (auto& input : inputs)
         {
             deltas.emplace_back(input.columns().span());
-            for (ygg::uint_t a = 0; a < 4; ++a)
-                for (ygg::uint_t b = 0; b < 4; ++b)
+            for (ygg::uint_t first = 0; first < 4; ++first)
+                for (ygg::uint_t second = 0; second < 4; ++second)
                 {
                     if (random() % 4 != 0)
                         continue;
-                    const auto row = std::tuple { a, b };
+                    const auto row = std::tuple { first, second };
                     if (const auto position = input.find(row))
                     {
                         deltas.back().removed.insert(row);
@@ -396,7 +396,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
         std::vector<Change> changes;
         changes.reserve(deltas.size());
         for (const auto& change : deltas)
-            changes.push_back({ borrow(change.added), borrow(change.removed) });
+            changes.emplace_back(borrow(change.added), borrow(change.removed));
         incremental.update(changes);
         reference.evaluate(refs);
         for (size_t root = 0; root < roots.size(); ++root)

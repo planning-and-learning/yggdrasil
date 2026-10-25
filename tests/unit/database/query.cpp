@@ -427,7 +427,7 @@ TEST(DatabaseQuery, RandomizedSharedSetDagMaintainsExactNetChanges)
         std::vector<Change> delta_refs;
         delta_refs.reserve(changes.size());
         for (const auto& change : changes)
-            delta_refs.push_back({ borrow(change.added), borrow(change.removed) });
+            delta_refs.emplace_back(borrow(change.added), borrow(change.removed));
         incremental.update(delta_refs);
         full.evaluate(refs);
         for (size_t root = 0; root < roots.size(); ++root)

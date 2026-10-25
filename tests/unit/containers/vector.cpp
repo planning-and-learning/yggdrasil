@@ -49,9 +49,9 @@ struct View<tests::VectorViewElement, tests::VectorViewContext>
 {
     const tests::VectorViewElement* element;
     const tests::VectorViewContext* context;
-    View(const tests::VectorViewElement& element, const tests::VectorViewContext& context) : element(&element), context(&context)
+    View(const tests::VectorViewElement& element_, const tests::VectorViewContext& context_) : element(&element_), context(&context_)
     {
-        if (context.fail)
+        if (context_.fail)
             throw std::runtime_error("view construction");
     }
     [[nodiscard]] const auto& get_data() const { return *element; }

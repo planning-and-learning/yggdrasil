@@ -27,8 +27,6 @@
 #include <cista/containers/vector.h>
 #include <nanobind/nanobind.h>
 
-namespace nb = nanobind;
-
 void bind_type_casters_test(nanobind::module_& m)
 {
     using Interval = ygg::ClosedInterval<ygg::float_t>;

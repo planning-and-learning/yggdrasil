@@ -48,7 +48,7 @@ struct Value : ygg::comparison::Mixin<Value>
 {
     int value;
 
-    constexpr explicit Value(int value) noexcept : value(value) {}
+    constexpr explicit Value(int value_) noexcept : value(value_) {}
 
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Value::value> {}; }
 };
@@ -68,7 +68,7 @@ struct ComparisonOwnedValue
 {
     int value;
 
-    constexpr explicit ComparisonOwnedValue(int value) noexcept : value(value) {}
+    constexpr explicit ComparisonOwnedValue(int value_) noexcept : value(value_) {}
 
     static constexpr auto identifying_members() noexcept { return ygg::Members<&ComparisonOwnedValue::value> {}; }
 };

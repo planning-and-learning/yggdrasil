@@ -24,6 +24,7 @@
 #include "yggdrasil/semantics/hash.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <iterator>
 #include <memory>
@@ -82,8 +83,8 @@ struct ThrowingRangeData
 
 struct MutableOnlyRange
 {
-    const int* begin();
-    const int* end();
+    const int* begin() { return nullptr; }
+    const int* end() { return nullptr; }
     size_t size();
 };
 }  // namespace
@@ -109,7 +110,7 @@ static_assert(SizedForwardRangeOf<std::vector<int>, int>);
 static_assert(SizedForwardRangeOf<std::ranges::subrange<std::vector<bool>::iterator>, bool>);
 static_assert(SizedForwardRangeOf<const std::ranges::subrange<std::vector<bool>::iterator>&, bool>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<>, int>);
-static_assert(!SizedForwardRangeOf<std::span<const int>, long>);
+static_assert(!SizedForwardRangeOf<std::span<const int>, std::int64_t>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<false>, int>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<true, false>, int>);
 static_assert(SizedForwardRangeOf<RangeContractFixture<true, true, false>, int>);
@@ -249,7 +250,7 @@ TEST(YggdrasilTests, CommonConceptsHeaderExposesReusableConcepts)
     static_assert(SameAsIgnoringCvref<int, const int&>);
     static_assert(SameAsIgnoringConst<const unsigned int, unsigned int>);
     static_assert(SameAsIgnoringConst<unsigned int, const unsigned int>);
-    static_assert(!SameAsIgnoringConst<unsigned int, unsigned long>);
+    static_assert(!SameAsIgnoringConst<unsigned int, std::uint64_t>);
     static_assert(!SameAsIgnoringCvref<const int&, double>);
     static_assert(!TriviallyCopyable<std::vector<int>>);
     static_assert(HashFor<ygg::Hash<int>, int>);

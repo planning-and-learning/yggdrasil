@@ -37,7 +37,7 @@ inline std::ostream& print_indent(std::ostream& os)
     auto level = os.iword(indent_index());
     if (level < 0)
         level = 0;
-    for (long i = 0; i < level * INDENT_WIDTH; ++i)
+    for (auto i = decltype(level) { 0 }; i < level * INDENT_WIDTH; ++i)
         os.put(' ');
     return os;
 }
@@ -61,7 +61,7 @@ inline std::ostream& indent_down(std::ostream& os)
 struct IndentScope
 {
     std::ostream& os;
-    explicit IndentScope(std::ostream& os) : os(os) { indent_up(os); }
+    explicit IndentScope(std::ostream& os_) : os(os_) { indent_up(os_); }
 
     IndentScope(const IndentScope&) = delete;
     IndentScope& operator=(const IndentScope&) = delete;

@@ -92,7 +92,7 @@ public:
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), ptr() {}
-        const_iterator(Base ptr, const C& ctx) noexcept : ctx(&ctx), ptr(ptr) {}
+        const_iterator(Base ptr_, const C& ctx_) noexcept : ctx(&ctx_), ptr(ptr_) {}
 
         decltype(auto) operator*() const
         {

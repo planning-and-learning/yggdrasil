@@ -366,10 +366,12 @@ int run(std::span<char*> args)
         std::ranges::sort(timings, std::greater<>());
         for (size_t i = 0; i < std::min<size_t>(std::getenv("TOP") ? std::stoul(std::getenv("TOP")) : 5, timings.size()); ++i)
             fmt::print("  {:<22} {:8.3f} s {:10} expanded\n", std::get<2>(timings[i]).c_str(), std::get<0>(timings[i]), std::get<1>(timings[i]));
-        auto total = 0.0;
+        auto alone_total = 0.0;
         for (const auto& timing : timings)
-            total += std::get<0>(timing);
-        fmt::print("  all keys alone: {:.3f} s; top 5: {:.3f} s\n", total, std::get<0>(timings[0]) + (timings.size() > 1 ? std::get<0>(timings[1]) : 0.0));
+            alone_total += std::get<0>(timing);
+        fmt::print("  all keys alone: {:.3f} s; top 5: {:.3f} s\n",
+                   alone_total,
+                   std::get<0>(timings[0]) + (timings.size() > 1 ? std::get<0>(timings[1]) : 0.0));
     }
     const auto& statistics = must_pass.statistics();
     fmt::print("boxes {} unfinished {} locations {}: {:.3f} s per call; keys {}, expanded {}, edges {}, removal searches {}, backward expanded {} (over "

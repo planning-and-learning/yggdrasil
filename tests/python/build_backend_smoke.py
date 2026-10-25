@@ -15,39 +15,25 @@ import types
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class BackendModule(types.ModuleType):
-    _num_jobs: Callable[[], int]
-    _prepend_cmake_args: Callable[[str, str], None]
-    _is_disabled: Callable[[str], bool]
-    _should_strip: Callable[[Path], bool]
-    _rewrite_record: Callable[[Path], None]
-    _strip_wheel_native_libraries: Callable[[Path], None]
+@runtime_checkable
+class Backend(Protocol):
+    """The build backend's helpers that these tests call."""
 
-    def num_jobs(self) -> int:
-        return self._num_jobs()
-
-    def prepend_cmake_args(self, first: str, second: str) -> None:
-        self._prepend_cmake_args(first, second)
-
-    def is_disabled(self, value: str) -> bool:
-        return self._is_disabled(value)
-
-    def should_strip(self, path: Path) -> bool:
-        return self._should_strip(path)
-
-    def rewrite_record(self, wheel_root: Path) -> None:
-        self._rewrite_record(wheel_root)
-
-    def strip_wheel_native_libraries(self, wheel_path: Path) -> None:
-        self._strip_wheel_native_libraries(wheel_path)
+    def num_jobs(self) -> int: ...
+    def prepend_cmake_args(self, *args: str) -> None: ...
+    def is_disabled(self, value: str) -> bool: ...
+    def should_strip(self, path: Path) -> bool: ...
+    def rewrite_record(self, wheel_root: Path) -> None: ...
+    def strip_wheel_native_libraries(self, wheel_path: Path) -> None: ...
 
 
-def load_backend() -> BackendModule:
+def load_backend() -> Backend:
     fake_scikit_build_core = types.ModuleType("scikit_build_core")
     fake_scikit_build_core.__dict__["build"] = types.SimpleNamespace()
     sys.modules["scikit_build_core"] = fake_scikit_build_core
@@ -58,12 +44,15 @@ def load_backend() -> BackendModule:
     assert spec is not None
     assert spec.loader is not None
     assert spec.origin is not None
-    module = BackendModule(spec.name)
+    module = types.ModuleType(spec.name)
     module.__file__ = spec.origin
     module.__loader__ = spec.loader
     module.__package__ = spec.parent
     module.__spec__ = spec
     spec.loader.exec_module(module)
+    if not isinstance(module, Backend):
+        msg = "the build backend lacks a helper these tests call"
+        raise TypeError(msg)
     return module
 
 
@@ -102,7 +91,7 @@ def expect_raises_message(expected: type[BaseException], message_fragment: str, 
     raise AssertionError(msg)
 
 
-def test_job_count(backend: BackendModule) -> None:
+def test_job_count(backend: Backend) -> None:
     old = with_env("YGGDRASIL_JOBS", None)
     try:
         assert backend.num_jobs() == (os.cpu_count() or 1)
@@ -115,7 +104,7 @@ def test_job_count(backend: BackendModule) -> None:
         restore_env("YGGDRASIL_JOBS", old)
 
 
-def test_cmake_arg_prepend(backend: BackendModule) -> None:
+def test_cmake_arg_prepend(backend: Backend) -> None:
     old = with_env("CMAKE_ARGS", '-DOLD_PATH="/tmp/old path" -DKEEP=1')
     try:
         backend.prepend_cmake_args("-DNEW_PATH=/tmp/new path", "-DENABLED=ON")
@@ -129,7 +118,7 @@ def test_cmake_arg_prepend(backend: BackendModule) -> None:
         restore_env("CMAKE_ARGS", old)
 
 
-def test_disabled_value_parsing(backend: BackendModule) -> None:
+def test_disabled_value_parsing(backend: Backend) -> None:
     for value in ("0", "false", "False", "OFF", "no"):
         assert backend.is_disabled(value)
 
@@ -137,7 +126,7 @@ def test_disabled_value_parsing(backend: BackendModule) -> None:
         assert not backend.is_disabled(value)
 
 
-def test_strip_candidate_detection(backend: BackendModule) -> None:
+def test_strip_candidate_detection(backend: Backend) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         assert backend.should_strip(root / "module.so")
@@ -163,7 +152,7 @@ def read_record(wheel: zipfile.ZipFile) -> dict[str, list[str]]:
     }
 
 
-def test_rewrite_record(backend: BackendModule) -> None:
+def test_rewrite_record(backend: Backend) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wheel_root = Path(tmp) / "wheel"
         dist_info = wheel_root / "pyyggdrasil-0.0.0.dist-info"
@@ -190,7 +179,7 @@ def read_record_from_path(record: Path) -> dict[str, list[str]]:
 
 
 def test_rewrite_record_requires_exactly_one_record_file(
-    backend: BackendModule,
+    backend: Backend,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wheel_root = Path(tmp) / "wheel"
@@ -216,7 +205,7 @@ def test_rewrite_record_requires_exactly_one_record_file(
         )
 
 
-def test_strip_wheel_native_libraries(backend: BackendModule) -> None:
+def test_strip_wheel_native_libraries(backend: Backend) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         wheel_path = Path(tmp) / "pyyggdrasil-0.0.0-py3-none-any.whl"
         executable = zipfile.ZipInfo("pyyggdrasil/bin/mpiexec")
@@ -226,8 +215,8 @@ def test_strip_wheel_native_libraries(backend: BackendModule) -> None:
             wheel.writestr("pyyggdrasil-0.0.0.dist-info/RECORD", "")
 
         with (
-            mock.patch.object(backend.shutil, "which", return_value="/usr/bin/strip"),
-            mock.patch.object(backend.subprocess, "run") as strip,
+            mock.patch("shutil.which", return_value="/usr/bin/strip"),
+            mock.patch("subprocess.run") as strip,
         ):
             backend.strip_wheel_native_libraries(wheel_path)
 

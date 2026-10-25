@@ -93,7 +93,7 @@ public:
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(typename std::span<const T>::iterator it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(typename std::span<const T>::iterator it_, const C& ctx_) noexcept : ctx(&ctx_), it(it_) {}
 
         decltype(auto) operator*() const
         {
@@ -138,22 +138,22 @@ public:
             return *this;
         }
 
-        friend const_iterator operator+(const_iterator it, difference_type n) noexcept
+        friend const_iterator operator+(const_iterator iter, difference_type n) noexcept
         {
-            it += n;
-            return it;
+            iter += n;
+            return iter;
         }
 
-        friend const_iterator operator+(difference_type n, const_iterator it) noexcept
+        friend const_iterator operator+(difference_type n, const_iterator iter) noexcept
         {
-            it += n;
-            return it;
+            iter += n;
+            return iter;
         }
 
-        friend const_iterator operator-(const_iterator it, difference_type n) noexcept
+        friend const_iterator operator-(const_iterator iter, difference_type n) noexcept
         {
-            it -= n;
-            return it;
+            iter -= n;
+            return iter;
         }
 
         friend difference_type operator-(const_iterator lhs, const_iterator rhs) noexcept { return lhs.it - rhs.it; }
@@ -243,7 +243,7 @@ public:
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(ContainerConstIterator<Container> it_, const C& ctx_) noexcept : ctx(&ctx_), it(it_) {}
 
         decltype(auto) operator*() const
         {
@@ -292,22 +292,22 @@ public:
         }
 
         // + / -
-        friend const_iterator operator+(const_iterator it, difference_type n) noexcept
+        friend const_iterator operator+(const_iterator iter, difference_type n) noexcept
         {
-            it += n;
-            return it;
+            iter += n;
+            return iter;
         }
 
-        friend const_iterator operator+(difference_type n, const_iterator it) noexcept
+        friend const_iterator operator+(difference_type n, const_iterator iter) noexcept
         {
-            it += n;
-            return it;
+            iter += n;
+            return iter;
         }
 
-        friend const_iterator operator-(const_iterator it, difference_type n) noexcept
+        friend const_iterator operator-(const_iterator iter, difference_type n) noexcept
         {
-            it -= n;
-            return it;
+            iter -= n;
+            return iter;
         }
 
         // iterator - iterator
@@ -393,7 +393,7 @@ public:
         using iterator_concept = std::random_access_iterator_tag;
 
         const_iterator() noexcept : ctx(nullptr), it() {}
-        const_iterator(ContainerConstIterator<Container> it, const C& ctx) noexcept : ctx(&ctx), it(it) {}
+        const_iterator(ContainerConstIterator<Container> it_, const C& ctx_) noexcept : ctx(&ctx_), it(it_) {}
 
         decltype(auto) operator*() const
         {
@@ -442,22 +442,22 @@ public:
         }
 
         // + / -
-        friend const_iterator operator+(const_iterator it, difference_type n) noexcept
+        friend const_iterator operator+(const_iterator iter, difference_type n) noexcept
         {
-            it += n;
-            return it;
+            iter += n;
+            return iter;
         }
 
-        friend const_iterator operator+(difference_type n, const_iterator it) noexcept
+        friend const_iterator operator+(difference_type n, const_iterator iter) noexcept
         {
-            it += n;
-            return it;
+            iter += n;
+            return iter;
         }
 
-        friend const_iterator operator-(const_iterator it, difference_type n) noexcept
+        friend const_iterator operator-(const_iterator iter, difference_type n) noexcept
         {
-            it -= n;
-            return it;
+            iter -= n;
+            return iter;
         }
 
         // iterator - iterator

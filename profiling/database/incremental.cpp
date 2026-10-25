@@ -72,11 +72,11 @@ struct Trace
     size_t witnesses;
     bool changing_keys;
 
-    Trace(size_t rows, size_t changed_rows, size_t witnesses, bool changing_keys) :
-        rows(rows),
-        changed_rows(changed_rows),
-        witnesses(witnesses),
-        changing_keys(changing_keys)
+    Trace(size_t rows_, size_t changed_rows_, size_t witnesses_, bool changing_keys_) :
+        rows(rows_),
+        changed_rows(changed_rows_),
+        witnesses(witnesses_),
+        changing_keys(changing_keys_)
     {
         if (rows == 0 || witnesses == 0 || changed_rows > rows / 3)
             throw std::invalid_argument("Benchmark trace requires positive rows/witnesses and three disjoint change blocks.");
@@ -130,10 +130,10 @@ struct JoinTrace
     size_t rows;
     std::array<size_t, 6> transitions { 0, 1, 2, 3, 4, 5 };
 
-    JoinTrace(size_t rows, size_t changed_rows, size_t witnesses) :
-        lhs(rows, changed_rows, witnesses, true),
-        rhs(rows, changed_rows, witnesses, true),
-        rows(rows)
+    JoinTrace(size_t rows_, size_t changed_rows, size_t witnesses) :
+        lhs(rows_, changed_rows, witnesses, true),
+        rhs(rows_, changed_rows, witnesses, true),
+        rows(rows_)
     {
         const std::array columns { ColumnIndex(1), ColumnIndex(3) };
         rhs.initial.rename(columns);

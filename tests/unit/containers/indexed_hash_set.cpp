@@ -56,10 +56,6 @@ struct Data<ygg::tests::IndexedHashSetTestTag>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
 };
 
-static inline bool is_canonical(const Data<ygg::tests::IndexedHashSetTestTag>&) { return true; }
-
-static inline void canonicalize(Data<ygg::tests::IndexedHashSetTestTag>&) {}
-
 }  // namespace ygg
 
 namespace ygg::tests

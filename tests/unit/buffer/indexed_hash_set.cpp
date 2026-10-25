@@ -43,8 +43,6 @@ struct Data<tests::BufferIndexedHashSetTag>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::symbol, &Data::arity> {}; }
 };
 
-static inline bool is_canonical(const Data<tests::BufferIndexedHashSetTag>&) { return true; }
-
 static inline void canonicalize(Data<tests::BufferIndexedHashSetTag>&) {}
 }  // namespace ygg
 

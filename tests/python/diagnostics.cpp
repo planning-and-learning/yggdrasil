@@ -11,8 +11,6 @@
 
 #include "yggdrasil/python/diagnostics.hpp"
 
-namespace nb = nanobind;
-
 namespace
 {
 

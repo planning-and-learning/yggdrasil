@@ -48,10 +48,10 @@ nanobind::exception<Error> bind_diagnostic_exception(nanobind::handle scope, con
             }
             catch (const Error& error)
             {
-                auto type = nb::borrow<nb::object>(static_cast<PyObject*>(payload));
-                auto instance = type(error.what());
+                auto error_type = nb::borrow<nb::object>(static_cast<PyObject*>(payload));
+                auto instance = error_type(error.what());
                 instance.attr("_diagnostic") = nb::cast(error.diagnostic(), nb::rv_policy::copy);
-                PyErr_SetObject(type.ptr(), instance.ptr());
+                PyErr_SetObject(error_type.ptr(), instance.ptr());
             }
         },
         type.ptr());

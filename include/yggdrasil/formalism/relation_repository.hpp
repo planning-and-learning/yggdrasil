@@ -256,7 +256,7 @@ public:
      */
 
     /// Parent layers must remain frozen and outlive this repository.
-    RelationRepositoryBase(size_t index, const Repository* parent = nullptr) : RelationRepositoryBase(index, parent, RelationRepositoryConfig()) {}
+    explicit RelationRepositoryBase(size_t index, const Repository* parent = nullptr) : RelationRepositoryBase(index, parent, RelationRepositoryConfig()) {}
 
     RelationRepositoryBase(size_t index, const Repository* parent, RelationRepositoryConfig config) :
         BasicRelationRepository<ObjectTag, Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr, config)...,
@@ -292,7 +292,7 @@ class RelationRepository : public detail::RelationRepositoryBase<RelationReposit
     using Base = detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>;
 
 public:
-    RelationRepository(size_t index, const RelationRepository* parent = nullptr) : Base(index, parent) {}
+    explicit RelationRepository(size_t index, const RelationRepository* parent = nullptr) : Base(index, parent) {}
     RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
 };
 
@@ -302,7 +302,7 @@ class ConcurrentRelationRepository : public detail::RelationRepositoryBase<Concu
     using Base = detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>;
 
 public:
-    ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent = nullptr) : Base(index, parent) {}
+    explicit ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent = nullptr) : Base(index, parent) {}
     ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
 };
 }  // namespace ygg::formalism

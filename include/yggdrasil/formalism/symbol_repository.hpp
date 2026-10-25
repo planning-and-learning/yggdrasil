@@ -251,8 +251,10 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
+    SymbolRepositoryBase() : SymbolRepositoryBase(nullptr) {}
+
     /// Parent layers must remain frozen and outlive this repository.
-    SymbolRepositoryBase(const Repository* parent = nullptr) :
+    explicit SymbolRepositoryBase(const Repository* parent) :
         BasicSymbolRepository<Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr)...,
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this)
@@ -281,7 +283,8 @@ class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, Ty
     using Base = SymbolRepositoryBase<SymbolRepository<Ts...>, TypeList<Ts...>>;
 
 public:
-    SymbolRepository(const SymbolRepository* parent = nullptr) : Base(parent) {}
+    SymbolRepository() : Base(nullptr) {}
+    explicit SymbolRepository(const SymbolRepository* parent) : Base(parent) {}
 
     friend const SymbolRepository& get_repository(const SymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };
@@ -292,7 +295,8 @@ class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolR
     using Base = SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, TypeList<Ts...>, true>;
 
 public:
-    ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent = nullptr) : Base(parent) {}
+    ConcurrentSymbolRepository() : Base(nullptr) {}
+    explicit ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent) : Base(parent) {}
 
     friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
 };

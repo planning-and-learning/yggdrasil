@@ -596,16 +596,16 @@ TEST(YggdrasilTests, UnorderedMultiMapWarmedRebuildsAllocateAndFreeNothing)
             {
                 map.clear();
                 map.reserve(count);  // Includes reserve(0) on retained storage.
-                const auto key_count = duplicates ? std::min(count, static_cast<size_t>(17)) : count;
+                const auto distinct = duplicates ? std::min(count, static_cast<size_t>(17)) : count;
                 const auto offset = repeat * 2000;
                 for (size_t i = 0; i < count; ++i)
-                    map.insert(offset + i % key_count, i);
+                    map.insert(offset + i % distinct, i);
                 size_t seen = 0;
                 size_t sum = 0;
-                for (size_t key = 0; key < key_count; ++key)
+                for (size_t key = 0; key < distinct; ++key)
                     for (const auto value : map.values(offset + key))
                     {
-                        valid &= value % key_count == key;
+                        valid &= value % distinct == key;
                         ++seen;
                         sum += value;
                     }

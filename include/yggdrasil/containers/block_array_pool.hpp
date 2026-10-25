@@ -380,7 +380,7 @@ private:
     {
         const size_t seg_idx = SegmentLayout::segment_index(index);
         const size_t seg_pos = SegmentLayout::segment_offset(index, seg_idx);
-        auto* data = std::span(m_segments[seg_idx]).subspan(seg_pos * static_cast<size_t>(m_length), m_length).data();
+        auto* data = std::span(m_segments[seg_idx]).subspan(seg_pos * m_length, m_length).data();
 
         return ArrayView(data, m_length, typename ArrayView::UncheckedTag {});
     }

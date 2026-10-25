@@ -158,7 +158,7 @@ struct BlockingValue
     ~BlockingValue() = default;
 
 private:
-    void on_transfer() noexcept
+    void on_transfer() const noexcept
     {
         if (!copies || copies->fetch_add(1, std::memory_order_relaxed) != 1)
             return;

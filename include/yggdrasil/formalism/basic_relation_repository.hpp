@@ -51,9 +51,9 @@ struct RelationRepositoryConfig
 {
     static constexpr std::uint8_t default_object_index_width = static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits);
 
-    explicit RelationRepositoryConfig(std::uint8_t object_index_width = default_object_index_width) : object_index_width(object_index_width)
+    explicit RelationRepositoryConfig(std::uint8_t object_index_width_ = default_object_index_width) : object_index_width(object_index_width_)
     {
-        if (object_index_width == 0 || object_index_width > default_object_index_width)
+        if (object_index_width_ == 0 || object_index_width_ > default_object_index_width)
             throw std::invalid_argument("RelationRepositoryConfig: object index width must be between 1 and the encoded object width.");
     }
 
@@ -109,10 +109,10 @@ private:
         size_t parent_size = 0;
         Index<T> g;
 
-        Slot(Index<T> g, size_t arity, size_t parent_size, std::uint8_t object_index_width) :
+        Slot(Index<T> g_, size_t arity, size_t parent_size_, std::uint8_t object_index_width) :
             container(make_container(arity, object_index_width)),
-            parent_size(parent_size),
-            g(g)
+            parent_size(parent_size_),
+            g(g_)
         {
         }
     };
@@ -178,9 +178,9 @@ private:
 
         struct Segment
         {
-            explicit Segment(size_t size) : entries(std::make_unique<std::atomic<Slot*>[]>(size)), size(size)
+            explicit Segment(size_t size_) : entries(std::make_unique<std::atomic<Slot*>[]>(size_)), size(size_)
             {
-                for (size_t i = 0; i < size; ++i)
+                for (size_t i = 0; i < size_; ++i)
                     entries[i].store(nullptr, std::memory_order_relaxed);
             }
 
@@ -476,7 +476,8 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    BasicRelationRepository(const BasicRelationRepository* parent = nullptr) : BasicRelationRepository(parent, RelationRepositoryConfig()) {}
+    BasicRelationRepository() : BasicRelationRepository(nullptr) {}
+    explicit BasicRelationRepository(const BasicRelationRepository* parent) : BasicRelationRepository(parent, RelationRepositoryConfig()) {}
 
     BasicRelationRepository(const BasicRelationRepository* parent, RelationRepositoryConfig config) :
         m_parent(parent),

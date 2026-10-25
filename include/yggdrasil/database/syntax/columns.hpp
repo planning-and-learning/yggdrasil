@@ -196,8 +196,6 @@ void write_column(std::span<std::byte> bytes, std::span<const ColumnLayout> colu
 }
 }  // namespace detail
 
-void validate_columns(std::span<const ColumnLayout> columns);
-
 namespace detail
 {
 /// A relabeled schema keeps the arity and the column types.
@@ -206,12 +204,6 @@ void validate_relabel(std::span<const ColumnLayout> previous, std::span<const Co
 /// Replaces the schema, retaining capacity; the columns may be a slice of the replaced schema.
 void assign_columns(Data<Columns>& data, std::span<const ColumnLayout> columns);
 }  // namespace detail
-
-size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column);
-
-bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept;
-
-std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns);
 
 inline size_t row_size(std::span<const ColumnLayout> columns) noexcept { return columns.empty() ? 0 : columns.back().offset + columns.back().size; }
 }  // namespace ygg::database

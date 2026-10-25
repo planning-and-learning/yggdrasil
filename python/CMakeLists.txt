@@ -22,7 +22,7 @@ file(GLOB_RECURSE YGGDRASIL_PUBLIC_HEADERS CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/include/yggdrasil/*.hpp"
 )
 
-nanobind_add_module(_pyyggdrasil BACKEND_MODULE nanobind_backend
+nanobind_add_module(_pyyggdrasil NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
     src/pyyggdrasil/database/module.cpp

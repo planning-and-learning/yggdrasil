@@ -116,7 +116,7 @@ struct ThrowingValue
 {
     static inline bool fail = false;
     int value;
-    explicit ThrowingValue(int value) : value(value) {}
+    explicit ThrowingValue(int value_) : value(value_) {}
     ThrowingValue(const ThrowingValue&) = default;
     friend bool operator==(const ThrowingValue&, const ThrowingValue&) = default;
     ThrowingValue(ThrowingValue&& other) : value(other.value)

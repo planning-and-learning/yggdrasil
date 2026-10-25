@@ -415,7 +415,7 @@ struct MutableRelationRows : AliasFreeRelationRows
 
 struct MutableRelationContext
 {
-    friend const AliasFreeRelationRows& get_repository(MutableRelationContext&);
+    friend const AliasFreeRelationRows& get_repository(const MutableRelationContext&) = delete;
 };
 }  // namespace
 
@@ -427,6 +427,12 @@ static_assert(!formalism::RelationRepositoryFor<AliasFreeRelationRows, Repositor
 static_assert(!formalism::RelationRepositoryFor<MutableRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationContextFor<MutableRelationContext&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationRepositoryFor<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+
+TEST(YggdrasilTests, CommonRelationRowsAreTheirOwnRepository)
+{
+    const auto rows = AliasFreeRelationRows {};
+    EXPECT_EQ(&get_repository(rows), &rows);
+}
 
 template<typename Relations>
 static void expect_binding_access_for_each_relation_type()
@@ -1190,8 +1196,8 @@ namespace
 {
 struct MutableOnlyBindingRows
 {
-    Index<formalism::Row>* begin();
-    Index<formalism::Row>* end();
+    Index<formalism::Row>* begin() { return nullptr; }
+    Index<formalism::Row>* end() { return nullptr; }
 };
 }  // namespace
 

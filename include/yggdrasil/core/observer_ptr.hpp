@@ -34,7 +34,7 @@ class ObserverPtr
 {
 public:
     ObserverPtr() noexcept : ptr(nullptr) {}
-    ObserverPtr(T* ptr) noexcept : ptr(ptr) {}  ///< allow implicit conversion from raw pointer
+    ObserverPtr(T* ptr_) noexcept : ptr(ptr_) {}  ///< allow implicit conversion from raw pointer
     ObserverPtr(const ObserverPtr& other) = default;
     ObserverPtr& operator=(const ObserverPtr& other) = default;
     ObserverPtr(ObserverPtr&& other) noexcept = default;

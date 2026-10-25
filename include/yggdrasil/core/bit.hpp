@@ -254,7 +254,7 @@ struct bit_reference
     std::span<Block> data;
     size_t bit;
 
-    bit_reference(std::span<Block> data, size_t bit) noexcept : data(data), bit(bit) {}
+    bit_reference(std::span<Block> data_, size_t bit_) noexcept : data(data_), bit(bit_) {}
 
     static constexpr size_t bits_per_block = std::numeric_limits<Block>::digits;
 

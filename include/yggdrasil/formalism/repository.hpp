@@ -326,7 +326,7 @@ public:
      */
 
     /// Parent layers must remain frozen and outlive this repository.
-    Repository(size_t index, const Repository* parent = nullptr) :
+    explicit Repository(size_t index, const Repository* parent = nullptr) :
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),
         m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),

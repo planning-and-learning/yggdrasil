@@ -38,7 +38,7 @@ template<typename Rep, typename Period>
 template<typename T>
 struct StopwatchScope
 {
-    StopwatchScope(T& cur_time) : m_cur_time(cur_time), m_start(std::chrono::steady_clock::now()) {}
+    explicit StopwatchScope(T& cur_time) : m_cur_time(cur_time), m_start(std::chrono::steady_clock::now()) {}
 
     StopwatchScope(const StopwatchScope&) = delete;
     StopwatchScope& operator=(const StopwatchScope&) = delete;

@@ -90,7 +90,7 @@ struct Data<detail::TreeVectorLeaf<T>>
     T value;
 
     Data() = default;
-    Data(T value_) : value(std::move(value_)) {}
+    explicit Data(T value_) : value(std::move(value_)) {}
 
     static constexpr auto cista_members() noexcept { return ygg::Members<&Data::value> {}; }
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }

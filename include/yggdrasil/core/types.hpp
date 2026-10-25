@@ -56,7 +56,7 @@ struct Index
     static constexpr value_type MAX = std::numeric_limits<value_type>::max();
 
     constexpr Index() noexcept : value(MAX) {}
-    constexpr explicit Index(value_type value) noexcept : value(value) {}
+    constexpr explicit Index(value_type value_) noexcept : value(value_) {}
 
     static constexpr Index max() noexcept { return Index(MAX); }
 

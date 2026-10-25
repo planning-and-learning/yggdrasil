@@ -14,12 +14,21 @@
 #   const blocks cast;
 # - crtp-constructor-accessibility: private mixin constructors break inheriting constructors
 #   (using Base::Base) and aggregate initialization of derived types.
-# From the other families, the checks that find defects rather than enforce a style:
-# the static analyzer (clang-analyzer-*), concurrency, include cycles, redundant expressions, external linkage of file-local
-# functions, discarded results, nested namespace syntax and C-style casts. Not
-# misc-const-correctness: in templates it reports variables as never modified that an
-# overload chosen at instantiation does modify (hash_combine's seed, fold-expression
-# counters); following it made hash_combine recurse forever.
+# From the other families, the checks that find defects rather than enforce a style: the static
+# analyzer (clang-analyzer-*), concurrency, include cycles, redundant expressions, external linkage
+# of file-local functions, discarded results, nested namespace syntax, C-style casts, declarations
+# whose parameter names differ from the definition, non-inline definitions in headers (ODR), ignored
+# C return values, virtual members of templates that other compilers instantiate, dead code (unused
+# declarations and parameters, redundant declarations and casts, member functions that could be
+# const) and the modern forms that rule out a defect class (override, nullptr, make_unique, deleted
+# and defaulted members, misleading identifiers and indentation). Not misc-const-correctness: in
+# templates it reports variables as never modified that an overload chosen at instantiation does
+# modify (hash_combine's seed, fold-expression counters); following it made hash_combine recurse
+# forever.
+# Not google-explicit-constructor: the standard library's own idioms need implicit conversions
+# that it forbids, with no option to allow them: proxy references convert to their value (as
+# std::vector<bool>::reference does, and iterator concepts require it), and views of mutable
+# elements convert to views of const ones (as std::span does).
 # tests/, profiling/ and python/src/ turn off more in their own files, each with its reason.
 Checks: >
   -*,
@@ -34,6 +43,37 @@ Checks: >
   modernize-use-nodiscard,
   modernize-concat-nested-namespaces,
   modernize-avoid-c-style-cast,
+  google-runtime-int,
+  readability-inconsistent-declaration-parameter-name,
+  misc-definitions-in-headers,
+  cert-err33-c,
+  portability-template-virtual-member-function,
+  misc-unused-using-decls,
+  misc-unused-alias-decls,
+  misc-unused-parameters,
+  readability-redundant-declaration,
+  readability-redundant-casting,
+  readability-redundant-string-cstr,
+  readability-make-member-function-const,
+  modernize-use-emplace,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-use-using,
+  modernize-make-unique,
+  modernize-make-shared,
+  misc-misplaced-const,
+  misc-throw-by-value-catch-by-reference,
+  misc-unconventional-assign-operator,
+  misc-non-copyable-objects,
+  misc-confusable-identifiers,
+  misc-misleading-bidirectional,
+  misc-misleading-identifier,
+  readability-misleading-indentation,
+  readability-duplicate-include,
+  readability-non-const-parameter,
+  hicpp-multiway-paths-covered,
   -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
   -cppcoreguidelines-pro-bounds-constant-array-index,
   -bugprone-std-namespace-modification,

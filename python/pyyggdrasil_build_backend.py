@@ -36,7 +36,8 @@ def _build_type() -> str:
     return os.environ.get("YGGDRASIL_BUILD_TYPE", "Release")
 
 
-def _num_jobs() -> int:
+def num_jobs() -> int:
+    """The build's parallel job count: YGGDRASIL_JOBS, else the CPU count."""
     raw_value = os.environ.get("YGGDRASIL_JOBS", str(os.cpu_count() or 1))
     try:
         jobs = int(raw_value)
@@ -51,13 +52,14 @@ def _num_jobs() -> int:
     return jobs
 
 
-def _is_disabled(value: str) -> bool:
+def is_disabled(value: str) -> bool:
+    """Whether an environment switch's value turns its feature off."""
     return value.upper() in {"0", "FALSE", "OFF", "NO"}
 
 
 def configure_and_install_dependencies() -> None:
     """Build and install the native dependencies (src/) into the native prefix, unless disabled."""
-    if _is_disabled(os.environ.get("YGGDRASIL_BUILD_NATIVE", "ON")):
+    if is_disabled(os.environ.get("YGGDRASIL_BUILD_NATIVE", "ON")):
         return
 
     cmake = shutil.which("cmake")
@@ -99,24 +101,25 @@ def configure_and_install_dependencies() -> None:
         f"-DCMAKE_BUILD_TYPE={_build_type()}",
         f"-DCMAKE_INSTALL_PREFIX={native_prefix}",
         "-DCMAKE_INSTALL_LIBDIR=lib",
-        f"-DYGGDRASIL_JOBS={_num_jobs()}",
+        f"-DYGGDRASIL_JOBS={num_jobs()}",
         f"-DPython_EXECUTABLE={sys.executable}",
     ]
 
     subprocess.run(cmake_args, cwd=ROOT_DIR, check=True)
-    subprocess.run([cmake, "--build", str(YGGDRASIL_BUILD_DIR), f"-j{_num_jobs()}"], cwd=ROOT_DIR, check=True)
+    subprocess.run([cmake, "--build", str(YGGDRASIL_BUILD_DIR), f"-j{num_jobs()}"], cwd=ROOT_DIR, check=True)
     subprocess.run([cmake, "--install", str(YGGDRASIL_BUILD_DIR)], cwd=ROOT_DIR, check=True)
 
 
-def _prepend_cmake_args(*args: str) -> None:
+def prepend_cmake_args(*args: str) -> None:
+    """Put ``args`` before the arguments already in CMAKE_ARGS."""
     existing = shlex.split(os.environ.get("CMAKE_ARGS", ""))
     os.environ["CMAKE_ARGS"] = shlex.join([*args, *existing])
 
 
 def _prepare_native_build() -> None:
     configure_and_install_dependencies()
-    os.environ.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(_num_jobs()))
-    _prepend_cmake_args(
+    os.environ.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(num_jobs()))
+    prepend_cmake_args(
         f"-DYGGDRASIL_NATIVE_PREFIX={_native_prefix()}",
         "-DCMAKE_INSTALL_LIBDIR=lib",
     )
@@ -131,7 +134,8 @@ def _is_versioned_shared_object(name: str) -> bool:
     return bool(version) and all(component.isdigit() for component in version.split("."))
 
 
-def _should_strip(path: Path) -> bool:
+def should_strip(path: Path) -> bool:
+    """Whether ``path`` is a native library whose symbols the wheel strips."""
     name = path.name
     return (
         name.endswith((".so", ".dylib", ".pyd", ".dll"))
@@ -152,7 +156,8 @@ def _record_digest(path: Path) -> tuple[str, str]:
     return f"sha256={digest}", str(len(content))
 
 
-def _rewrite_record(wheel_root: Path) -> None:
+def rewrite_record(wheel_root: Path) -> None:
+    """Recompute the hashes and sizes in the unpacked wheel's RECORD."""
     record_files = list(wheel_root.glob("*.dist-info/RECORD"))
     if len(record_files) != 1:
         msg = f"expected exactly one RECORD file, found {len(record_files)}"
@@ -175,8 +180,9 @@ def _rewrite_record(wheel_root: Path) -> None:
         csv.writer(out).writerows(rows)
 
 
-def _strip_wheel_native_libraries(wheel_path: Path) -> None:
-    if _is_disabled(os.environ.get("YGGDRASIL_STRIP_WHEEL", "ON")):
+def strip_wheel_native_libraries(wheel_path: Path) -> None:
+    """Strip the native libraries inside the wheel, unless YGGDRASIL_STRIP_WHEEL is off."""
+    if is_disabled(os.environ.get("YGGDRASIL_STRIP_WHEEL", "ON")):
         return
 
     strip = shutil.which("strip")
@@ -192,7 +198,7 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
                     path.chmod(mode)
 
         for path in wheel_root.rglob("*"):
-            if path.is_file() and _should_strip(path):
+            if path.is_file() and should_strip(path):
                 subprocess.run(
                     [strip, *_strip_args(), str(path)],
                     check=False,
@@ -200,7 +206,7 @@ def _strip_wheel_native_libraries(wheel_path: Path) -> None:
                     stderr=subprocess.DEVNULL,
                 )
 
-        _rewrite_record(wheel_root)
+        rewrite_record(wheel_root)
         replacement_path = wheel_path.with_suffix(".tmp")
         with zipfile.ZipFile(replacement_path, "w", compression=zipfile.ZIP_DEFLATED) as wheel:
             for path in sorted(wheel_root.rglob("*")):
@@ -233,7 +239,7 @@ def build_wheel(
     _prepare_native_build()
     wheel_filename = scikit_build.build_wheel(wheel_directory, config_settings, metadata_directory)
     wheel_path = Path(wheel_directory) / wheel_filename
-    _strip_wheel_native_libraries(wheel_path)
+    strip_wheel_native_libraries(wheel_path)
     return wheel_filename
 
 

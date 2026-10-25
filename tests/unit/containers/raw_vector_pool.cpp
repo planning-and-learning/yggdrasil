@@ -61,7 +61,7 @@ TEST(YggdrasilTests, CommonRawVectorPoolRejectsInvalidInsertArguments)
 {
     auto pool = ygg::RawVectorPool<uint8_t, int, 32>();
     const auto too_large = std::vector<int>(static_cast<size_t>(std::numeric_limits<uint8_t>::max()) + 1);
-    const auto value = int { 0 };
+    const auto value = 0;
 
     EXPECT_THROW(pool.insert(too_large), std::out_of_range);
     EXPECT_THROW(pool.insert(nullptr, 1), std::invalid_argument);

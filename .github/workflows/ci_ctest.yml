@@ -63,9 +63,11 @@ jobs:
           cmake --build dependencies-build --parallel 2
           cmake --install dependencies-build
 
+      # Every compiler warning fails the build here, so none goes unnoticed.
       - name: Configure and Build Yggdrasil
         run: |
           cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
                 -DYGGDRASIL_BUILD_TESTS=ON \
                 -DYGGDRASIL_BUILD_PROFILING=ON \
                 -DYGGDRASIL_NATIVE_PREFIX="$PWD/dependencies-install" \

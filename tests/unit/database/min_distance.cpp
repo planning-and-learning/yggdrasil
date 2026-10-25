@@ -10,6 +10,7 @@
 #include "yggdrasil/database/semantics/relation_repository.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <map>
@@ -77,8 +78,8 @@ std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const 
         for (size_t i = 0; i < edges.size(); ++i)
         {
             const auto edge = decode(edges.row(i), edges.columns().span());
-            const auto from = std::vector<uint_t>(edge.begin(), edge.begin() + static_cast<long>(k));
-            const auto to = std::vector<uint_t>(edge.begin() + static_cast<long>(k), edge.end());
+            const auto from = std::vector<uint_t>(edge.begin(), edge.begin() + static_cast<std::ptrdiff_t>(k));
+            const auto to = std::vector<uint_t>(edge.begin() + static_cast<std::ptrdiff_t>(k), edge.end());
             if (std::ranges::find(frontier, to) != frontier.end() && result.emplace(from, level).second)
                 next.push_back(from);
         }
@@ -346,7 +347,7 @@ struct ListGraph
     static void each(const std::vector<uint_t>& vertices, const OnVertex& on_vertex)
     {
         for (const auto w : vertices)
-            if (const auto b = bytes(w); !on_vertex(std::span<const std::byte>(b)))
+            if (const auto encoded = bytes(w); !on_vertex(std::span<const std::byte>(encoded)))
                 return;
     }
     template<typename OnVertex>

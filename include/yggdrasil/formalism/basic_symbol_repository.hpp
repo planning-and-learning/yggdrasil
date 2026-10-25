@@ -166,7 +166,8 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    BasicSymbolRepository(const BasicSymbolRepository* parent = nullptr);
+    BasicSymbolRepository() : BasicSymbolRepository(nullptr) {}
+    explicit BasicSymbolRepository(const BasicSymbolRepository* parent);
     ~BasicSymbolRepository();
 
     BasicSymbolRepository(const BasicSymbolRepository&) = delete;
