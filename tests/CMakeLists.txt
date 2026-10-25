@@ -9,17 +9,15 @@ add_subdirectory(unit)
 
 nanobind_add_module(yggdrasil_type_casters_test NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend python/type_casters.cpp python/type_casters_module.cpp)
 target_compile_features(yggdrasil_type_casters_test PRIVATE cxx_std_20)
-target_include_directories(yggdrasil_type_casters_test PRIVATE
-    "${PROJECT_SOURCE_DIR}/include"
-    "${YGGDRASIL_NATIVE_PREFIX}/include"
-)
+target_include_directories(yggdrasil_type_casters_test PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# The dependencies' headers are system headers, so the build's warnings cover only this project.
+target_include_directories(yggdrasil_type_casters_test SYSTEM PRIVATE "${YGGDRASIL_NATIVE_PREFIX}/include")
 
 nanobind_add_module(yggdrasil_diagnostics_test NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend python/diagnostics.cpp python/diagnostics_module.cpp)
 target_compile_features(yggdrasil_diagnostics_test PRIVATE cxx_std_20)
-target_include_directories(yggdrasil_diagnostics_test PRIVATE
-    "${PROJECT_SOURCE_DIR}/include"
-    "${YGGDRASIL_NATIVE_PREFIX}/include"
-)
+target_include_directories(yggdrasil_diagnostics_test PRIVATE "${PROJECT_SOURCE_DIR}/include")
+# The dependencies' headers are system headers, so the build's warnings cover only this project.
+target_include_directories(yggdrasil_diagnostics_test SYSTEM PRIVATE "${YGGDRASIL_NATIVE_PREFIX}/include")
 
 # Test registration
 

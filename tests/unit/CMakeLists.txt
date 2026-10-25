@@ -15,6 +15,8 @@ function(add_yggdrasil_gtest test_name source_file)
     target_compile_features(${test_name} PRIVATE cxx_std_20)
     target_include_directories(${test_name} PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+    )
+    target_include_directories(${test_name} SYSTEM PRIVATE
         "${YGGDRASIL_NATIVE_PREFIX}/include"
     )
     target_compile_definitions(${test_name} PRIVATE ROOT_DIR="${PROJECT_SOURCE_DIR}")
@@ -130,8 +132,10 @@ add_library(serialization_dictionaries_library SHARED "serialization/dictionarie
 target_compile_features(serialization_dictionaries_library PRIVATE cxx_std_20)
 target_include_directories(serialization_dictionaries_library PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
-    "${YGGDRASIL_NATIVE_PREFIX}/include"
     "${CMAKE_CURRENT_BINARY_DIR}"
+)
+target_include_directories(serialization_dictionaries_library SYSTEM PRIVATE
+    "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(serialization_dictionaries_library PRIVATE Boost::json fmt::fmt)
 include(GenerateExportHeader)

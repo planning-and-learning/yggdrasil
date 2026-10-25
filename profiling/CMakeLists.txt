@@ -11,6 +11,10 @@ target_include_directories(
     tree_vector_set
     PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+)
+target_include_directories(
+    tree_vector_set
+    SYSTEM PRIVATE
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(tree_vector_set PRIVATE benchmark::benchmark_main Threads::Threads)
@@ -21,6 +25,10 @@ target_include_directories(
     formalism_repository
     PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+)
+target_include_directories(
+    formalism_repository
+    SYSTEM PRIVATE
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(formalism_repository PRIVATE benchmark::benchmark_main TBB::tbb Threads::Threads)
@@ -31,6 +39,10 @@ target_include_directories(
     database_incremental_benchmark
     PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+)
+target_include_directories(
+    database_incremental_benchmark
+    SYSTEM PRIVATE
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(database_incremental_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Threads::Threads)
@@ -41,6 +53,10 @@ target_include_directories(
     database_distance_benchmark
     PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+)
+target_include_directories(
+    database_distance_benchmark
+    SYSTEM PRIVATE
         "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(database_distance_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Boost::heap Threads::Threads)
@@ -49,6 +65,8 @@ add_executable(database_query_benchmark "database/query.cpp")
 target_compile_features(database_query_benchmark PRIVATE cxx_std_20)
 target_include_directories(database_query_benchmark PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
+)
+target_include_directories(database_query_benchmark SYSTEM PRIVATE
     "${YGGDRASIL_NATIVE_PREFIX}/include"
 )
 target_link_libraries(database_query_benchmark PRIVATE yggdrasil::database benchmark::benchmark_main Boost::heap Threads::Threads)
@@ -60,5 +78,7 @@ target_compile_features(must_pass_sokoban PRIVATE cxx_std_20)
 target_compile_options(must_pass_sokoban PRIVATE -O2 -DNDEBUG)
 target_include_directories(must_pass_sokoban PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
+)
+target_include_directories(must_pass_sokoban SYSTEM PRIVATE
     "${YGGDRASIL_NATIVE_PREFIX}/include"
 )

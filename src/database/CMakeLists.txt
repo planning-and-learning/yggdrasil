@@ -24,8 +24,12 @@ function(yggdrasil_add_database_library target)
         ${target}
         PUBLIC
             "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
-            "$<BUILD_INTERFACE:${YGGDRASIL_NATIVE_PREFIX}/include>"
             "$<INSTALL_INTERFACE:pyyggdrasil/include>"
+    )
+    target_include_directories(
+        ${target}
+        SYSTEM PUBLIC
+            "$<BUILD_INTERFACE:${YGGDRASIL_NATIVE_PREFIX}/include>"
     )
     target_link_libraries(${target} PUBLIC fmt::fmt TBB::tbb)
     # Sources share the headers that dominate their cost; batches compile them once (docs/TEMPLATE_RULES.md, rule 11).
