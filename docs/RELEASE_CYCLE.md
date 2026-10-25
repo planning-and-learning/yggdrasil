@@ -46,6 +46,14 @@ it is updated in both places to `>=<new version>,<<next minor>>`, for example
 `"pyyggdrasil>=0.5.0,<0.6"`, also when the new upstream version is only a patch: the
 downstream release is built and tested against it and must not resolve to an older one.
 
+The same versions appear outside `pyproject.toml`, and they move with it:
+
+- the `*_REQUIRED_VERSION` variables in the top-level `CMakeLists.txt` (for example
+  `TYR_LOKI_REQUIRED_VERSION`), which `find_package` checks: after a minor bump it
+  rejects the new upstream until they are raised;
+- the packages that the `peachycheck` workflow's `prepare` step installs;
+- install commands in the READMEs and in `docs/`.
+
 ## Apptainer images
 
 loki and tyr also build an Apptainer image (`Apptainer` recipe, `apptainer` workflow) on
