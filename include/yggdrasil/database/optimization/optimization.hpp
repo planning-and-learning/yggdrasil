@@ -5,11 +5,11 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
-#include "yggdrasil/database/optimization/details/optimization.hpp"
+#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/optimization/detail/optimization.hpp"
 #include "yggdrasil/database/optimization/statistics.hpp"
-#include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/relation_view.hpp"
-#include "yggdrasil/database/syntax/query.hpp"
+#include "yggdrasil/database/query/query.hpp"
+#include "yggdrasil/database/relation/relation_view.hpp"
 #include "yggdrasil/diagnostics/warnings.hpp"
 
 #include <algorithm>

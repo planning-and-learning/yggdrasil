@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/datalog/details/program.hpp"
+#include "yggdrasil/database/datalog/detail/program.hpp"
 
 #include <algorithm>
 #include <optional>

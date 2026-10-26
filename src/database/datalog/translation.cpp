@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/datalog/details/program.hpp"
-#include "yggdrasil/database/datalog/details/stratification.hpp"
+#include "yggdrasil/database/datalog/detail/program.hpp"
+#include "yggdrasil/database/datalog/detail/stratification.hpp"
 
 #include <algorithm>
 #include <map>

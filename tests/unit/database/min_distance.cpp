@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/min_distance.hpp"
+#include "yggdrasil/database/search/min_distance.hpp"
 
 #include "query_helpers.hpp"
-#include "yggdrasil/database/semantics/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/evaluation/full.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
 
 #include <array>
 #include <cstddef>

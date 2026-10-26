@@ -2,7 +2,7 @@
 #define PYYGGDRASIL_DATABASE_QUERY_BINDINGS_HPP_
 
 #include "../module.hpp"
-#include "yggdrasil/database/syntax/query.hpp"
+#include "yggdrasil/database/query/query.hpp"
 #include "yggdrasil/python/bindings.hpp"
 #include "yggdrasil/python/type_casters.hpp"
 

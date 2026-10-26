@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/must_pass.hpp"
+#include "yggdrasil/database/search/must_pass.hpp"
 
 #include "query_helpers.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
-#include "yggdrasil/database/syntax/row.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
+#include "yggdrasil/database/relation/row.hpp"
 
 #include <gtest/gtest.h>
 #include <map>

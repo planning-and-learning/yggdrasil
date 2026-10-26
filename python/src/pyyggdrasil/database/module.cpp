@@ -1,8 +1,8 @@
 #include "module.hpp"
 
-#include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/relation/relation_pool.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
 #include "yggdrasil/python/bindings.hpp"
 #include "yggdrasil/python/owner.hpp"
 

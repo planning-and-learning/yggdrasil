@@ -49,7 +49,7 @@ Witness-only replacement avoids this growth and avoids result erasure entirely.
 
 ## Natural join
 
-Include `incremental/join.hpp` and construct `JoinEvaluator<Values>(plan)`. The
+Include `operators/relational/incremental/join.hpp` and construct `JoinEvaluator<Values>(plan)`. The
 interface accepts existing relation builders or views:
 
 ```cpp

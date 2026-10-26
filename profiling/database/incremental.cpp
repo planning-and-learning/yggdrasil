@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/relation_builder.hpp"
+#include "yggdrasil/database/relation/relation_builder.hpp"
 
 #ifndef YGG_DATABASE_APPEND_ONLY_PROFILE
-#include "yggdrasil/database/semantics/incremental/join.hpp"
-#include "yggdrasil/database/semantics/incremental/projection.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
+#include "yggdrasil/database/operators/relational/incremental/join.hpp"
+#include "yggdrasil/database/operators/relational/incremental/projection.hpp"
+#include "yggdrasil/database/relation/relation_pool.hpp"
 #endif
 
 #include <algorithm>

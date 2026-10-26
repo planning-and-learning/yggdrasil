@@ -4,9 +4,9 @@
  */
 
 #include "query_helpers.hpp"
-#include "yggdrasil/database/semantics/incremental/min_distance.hpp"
-#include "yggdrasil/database/semantics/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/evaluation/full.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
+#include "yggdrasil/database/search/incremental/min_distance.hpp"
 
 #include <cstddef>
 #include <gtest/gtest.h>

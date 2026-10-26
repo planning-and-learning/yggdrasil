@@ -1,9 +1,27 @@
 # Relational algebra
 
-`<yggdrasil/database/semantics/operations.hpp>` provides header-only set operations in
+`<yggdrasil/database/operators/relational/operations.hpp>` provides header-only set operations in
 `ygg::database`. Relations have a runtime schema and packed, fixed-width rows.
 Different columns can hold different types without a tag or variant in every cell.
 Nullary relations and runtime arities remain supported.
+
+## Layout
+
+`<yggdrasil/database/>` has one directory per responsibility. Dependencies point one way, down this table (`datalog/`
+depends only on `relation/`):
+
+| directory | responsibility |
+|---|---|
+| `relation/` | schemas, rows, relations, their pools and repositories, and changes (`Delta`) |
+| `operators/<family>/` | one family of operators: its plans (`plan.hpp`), full evaluation, and `incremental/`; `relational/` (select, project, join, semijoin, union, difference), `generic_join/`, `distance/` |
+| `query/` | query operators as interned records, which hold their operators' plans: tags in `declarations.hpp`, data, views, construction, formatting; `query/rewrite/` holds relaxation and union normal form |
+| `optimization/` | `optimize()`, statistics and the planning passes |
+| `evaluation/` | evaluators of query DAGs: `full.hpp`, `bound.hpp`, `incremental.hpp`, `incremental_bound.hpp` |
+| `search/` | searches over a query's edges: minimum distance, must-pass objects, A* and its trees |
+| `datalog/` | the Datalog front end and its rule-level evaluator |
+
+`query/` reads only the `plan.hpp` headers of `operators/`. `detail/` holds headers that only the headers of its
+directory include (namespace `detail`). `src/database/` mirrors `include/yggdrasil/database/`.
 
 ## Types and schemas
 
@@ -15,7 +33,7 @@ Indices are stored as `uint_t` (`index.get_value()`); the code that owns a relat
 knows which tag a column holds and converts back with `Index<Tag>(value)`.
 
 ```cpp
-#include <yggdrasil/database/semantics/operations.hpp>
+#include <yggdrasil/database/operators/relational/operations.hpp>
 
 using namespace ygg::database;
 const ygg::Index<Column> source(0), target(1), distance(2);
@@ -163,11 +181,11 @@ object domain needs no special-case representation.
 
 ## Incremental evaluation
 
-`database/incremental/projection.hpp` and `database/incremental/join.hpp` retain
+`database/operators/relational/incremental/projection.hpp` and `database/operators/relational/incremental/join.hpp` retain
 current results and maintain added/removed row sets. Deltas use the same typed
 schemas and packed rows. Projection tracks witnesses; a change that replaces a
 witness without changing membership produces no output delta. Join supports
-updates to either or both operands. `database/incremental/semijoin.hpp`
+updates to either or both operands. `database/operators/relational/incremental/semijoin.hpp`
 maintains semijoins and antijoins: only the changed lhs rows and the lhs rows
 sharing a key with a changed rhs row can change membership. Every incremental evaluator's `update` takes
 one change per input: an `(added, removed)` pair read with `std::get`, such as
@@ -215,7 +233,7 @@ mixed-type behavior are covered in `python/tests/test_database.py`.
 
 ## Tuple distances
 
-`<yggdrasil/database/semantics/distance.hpp>` computes directed, unweighted shortest-path
+`<yggdrasil/database/operators/distance/distance.hpp>` computes directed, unweighted shortest-path
 distances between tuple-valued vertices. Sources and targets have `k` columns;
 an edge has `2k`, with its source tuple first and target tuple second. All four
 vertex positions must have matching field types in the same order. Their column
@@ -267,7 +285,7 @@ internally for infinity; attempting to exceed the supported vertex count throws.
 
 ### Incremental distance
 
-Include `<yggdrasil/database/semantics/incremental/distance.hpp>` and retain one evaluator:
+Include `<yggdrasil/database/operators/distance/incremental/distance.hpp>` and retain one evaluator:
 
 ```cpp
 incremental::DistanceEvaluator<> evaluator(plan);
@@ -396,7 +414,7 @@ reveals the next one. Memory follows the wrapped evaluator, plus one counter per
 
 ### Must-pass objects
 
-`MustPass` (`semantics/must_pass.hpp`) finds, per key, the probe objects that every path from the key's
+`MustPass` (`search/must_pass.hpp`) finds, per key, the probe objects that every path from the key's
 sources to its targets passes in some vertex: the landmarks of the key's graph (Hoffmann, Porteous &
 Sebastia, JAIR 2004). Sources, edges and targets start with the same key columns; a vertex has k columns;
 probes have one column, and a vertex contains an object if one of its columns of the probes' type holds it:
@@ -463,7 +481,7 @@ one `(added, removed)` tuple per input.
 
 ## Query graphs and optimization
 
-`<yggdrasil/database/syntax/query_repository.hpp>` adds an interned relational query graph without
+`<yggdrasil/database/query/query_repository.hpp>` adds an interned relational query graph without
 capturing input rows. A `QueryRepository` only stores and interns query
 records; create repositories with a `QueryRepositoryFactory`, whose
 repositories have distinct identities. Queries are built like other interned
@@ -508,7 +526,7 @@ after its source repository is destroyed. `node_count()`, `root_count()`, and
 `roots()` expose its shape; indexing by a root query index returns an ordinary
 `QueryView`. Row enumeration order is not a query guarantee.
 
-Include `<yggdrasil/database/syntax/formatter.hpp>` to format a plan with
+Include `<yggdrasil/database/query/formatter.hpp>` to format a plan with
 `fmt::format("{}", plan)`, `ygg::to_string(plan)`, or `explain(plan)`.
 Python's `plan.explain()` uses the same rendering. The `fmt::formatter`
 specialization follows `YGG_ENABLE_FMT_FORMATTERS`; `explain()` remains available
@@ -608,7 +626,7 @@ belong to one repository.
 
 ### Relaxation
 
-`relax(roots, known, repository, builder)` (`syntax/translations/relaxation.hpp`) over-approximates queries whose
+`relax(roots, known, repository, builder)` (`query/rewrite/relaxation.hpp`) over-approximates queries whose
 inputs not marked `known(slot)` may hold any rows. Each result Q̂ reads only the known inputs, which are renumbered once
 for all roots into `Relaxation::slots`, and has a subset S' of the query's labels. For all inputs, Q ⊆ Q̂ × U^(labels
 not in S'), and `nullopt` means nothing is constrained.
@@ -646,25 +664,25 @@ empty relation.
 
 Evaluators differ along two independent axes: what they return, the whole result (*full*, the default) or answers to
 lookups with some output columns given (*bound*); and whether they follow input changes (*incremental*) or evaluate
-the current inputs only (*one-shot*, the default). A namespace exists only for a non-default mode, its directory under
-`<yggdrasil/database/semantics/>` has the same name, and the class is always `QueryEvaluator`:
+the current inputs only (*one-shot*, the default). A namespace exists only for a non-default mode, its header under
+`<yggdrasil/database/evaluation/>` has the same name, and the class is always `QueryEvaluator`:
 
 | | one-shot | incremental |
 |---|---|---|
-| full | `QueryEvaluator` (`query_evaluation.hpp`) | `incremental::QueryEvaluator` (`incremental/query.hpp`) |
-| bound | `bound::QueryEvaluator` (`bound/query_evaluation.hpp`) | `incremental::bound::QueryEvaluator` (`incremental/bound/query_evaluation.hpp`) |
+| full | `QueryEvaluator` (`full.hpp`) | `incremental::QueryEvaluator` (`incremental.hpp`) |
+| bound | `bound::QueryEvaluator` (`bound.hpp`) | `incremental::bound::QueryEvaluator` (`incremental_bound.hpp`) |
 
 Use full evaluation for a whole result, bound evaluation for many selective lookups against the same inputs (the edge
 oracle of the distance search), and an incremental evaluator when the inputs change between uses. Bound evaluation
-compiles the query into union normal form (`bound/union_normal_form.hpp`) and plans each branch per set of bound
-columns (`bound/conjunctive_plan.hpp`). Every incremental evaluator takes its first inputs with `initialize` and exact
+compiles the query into union normal form (`query/rewrite/union_normal_form.hpp`) and plans each branch per set of bound
+columns (`evaluation/conjunctive_plan.hpp`). Every incremental evaluator takes its first inputs with `initialize` and exact
 changes with `update`; the bound ones also offer `bind`, which diffs the inputs when the changes are unknown, and
 `seed`, which reports the answers a change can add. The operator plans of the query records (`JoinPlan`, `ProjectionPlan`,
 `GenericJoinPlan`, `DistancePlan`) are shared by all evaluators and stay in `ygg::database`.
 
-`<yggdrasil/database/semantics/query_evaluation.hpp>` provides `QueryEvaluator`.
+`<yggdrasil/database/evaluation/full.hpp>` provides `QueryEvaluator`.
 `evaluate(bindings)` computes all roots, reusing retained output and scratch
-storage. `<yggdrasil/database/semantics/incremental/query.hpp>` provides
+storage. `<yggdrasil/database/evaluation/incremental.hpp>` provides
 `incremental::QueryEvaluator`. Initialize it once with input bindings,
 then call `update(changes)` with one `(added, removed)` pair of relation views per
 input slot. Each pair contains actual set additions and removals in that input's ordered typed schema.
@@ -681,8 +699,8 @@ retained evaluator storage; it is distinct from the optimizer's estimate.
 
 #### Distance search
 
-`MinDistance<H>` (`min_distance.hpp`) and `incremental::MinDistance<H>`
-(`incremental/min_distance.hpp`) compute the exact minimum distance from any source to any
+`MinDistance<H>` (`search/min_distance.hpp`) and `incremental::MinDistance<H>`
+(`search/incremental/min_distance.hpp`) compute the exact minimum distance from any source to any
 target over edges given by a query over input slots (or by one edge relation), and return
 `uint_t`'s maximum when no target is reachable. Edges are never materialized: a bound
 evaluator answers successor, predecessor and edge-check lookups, and A* (a binary heap
@@ -775,7 +793,7 @@ records are interned in a `DatalogRepository` (`repository.hpp`), built with `ch
   enclosing rule's positive atoms bind; COUNT and SUM are 0 for a group without rows;
 - a rule: `head ← atoms, not negated, comparisons, aggregates`, with a derived head of distinct variables and every
   variable bound by a positive atom or an aggregate's result;
-- a program: rules, stratified by the strongly connected components of their dependencies (`stratification.hpp`).
+- a program: rules, stratified by the strongly connected components of their dependencies (`detail/stratification.hpp`).
 
 `Evaluator(program, outputs, static_slots)` (`evaluator.hpp`) evaluates the requested relations rule by rule over
 indexed relations, without intermediate relations:

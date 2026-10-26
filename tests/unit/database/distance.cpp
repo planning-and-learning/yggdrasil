@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/incremental/distance.hpp"
+#include "yggdrasil/database/operators/distance/incremental/distance.hpp"
 
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
 
 #include <algorithm>
 #include <array>

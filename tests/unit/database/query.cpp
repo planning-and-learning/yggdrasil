@@ -7,10 +7,10 @@
 #include <memory>
 #include <random>
 #include <vector>
-#include <yggdrasil/database/semantics/incremental/query.hpp>
-#include <yggdrasil/database/semantics/query_evaluation.hpp>
-#include <yggdrasil/database/semantics/relation_repository.hpp>
-#include <yggdrasil/database/syntax/query_repository.hpp>
+#include <yggdrasil/database/evaluation/full.hpp>
+#include <yggdrasil/database/evaluation/incremental.hpp>
+#include <yggdrasil/database/query/query_repository.hpp>
+#include <yggdrasil/database/relation/relation_repository.hpp>
 
 namespace
 {

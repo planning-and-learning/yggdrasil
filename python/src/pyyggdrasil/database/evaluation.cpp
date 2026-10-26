@@ -1,7 +1,7 @@
 #include "module.hpp"
+#include "yggdrasil/database/evaluation/full.hpp"
+#include "yggdrasil/database/evaluation/incremental.hpp"
 #include "yggdrasil/database/optimization/optimization.hpp"
-#include "yggdrasil/database/semantics/incremental/query.hpp"
-#include "yggdrasil/database/semantics/query_evaluation.hpp"
 
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/vector.h>

@@ -13,12 +13,12 @@
 // state.txt replaces the initial state: a line "robot <location>", then lines "<box> <location>".
 
 #include "../../tests/unit/database/query_helpers.hpp"
+#include "yggdrasil/database/evaluation/bound.hpp"
+#include "yggdrasil/database/evaluation/full.hpp"
 #include "yggdrasil/database/optimization/optimization.hpp"
-#include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/must_pass.hpp"
-#include "yggdrasil/database/semantics/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
-#include "yggdrasil/database/syntax/row.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
+#include "yggdrasil/database/relation/row.hpp"
+#include "yggdrasil/database/search/must_pass.hpp"
 
 #include <algorithm>
 #include <array>

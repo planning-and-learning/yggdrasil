@@ -6,13 +6,13 @@
 #include <limits>
 #include <random>
 #include <vector>
-#include <yggdrasil/database/semantics/bound/query_evaluation.hpp>
-#include <yggdrasil/database/semantics/operations.hpp>
-#include <yggdrasil/database/semantics/query_evaluation.hpp>
-#include <yggdrasil/database/semantics/relation_repository.hpp>
-#include <yggdrasil/database/syntax/formatter.hpp>
-#include <yggdrasil/database/syntax/row.hpp>
-#include <yggdrasil/database/syntax/translations/relaxation.hpp>
+#include <yggdrasil/database/evaluation/bound.hpp>
+#include <yggdrasil/database/evaluation/full.hpp>
+#include <yggdrasil/database/operators/relational/operations.hpp>
+#include <yggdrasil/database/query/formatter.hpp>
+#include <yggdrasil/database/query/rewrite/relaxation.hpp>
+#include <yggdrasil/database/relation/relation_repository.hpp>
+#include <yggdrasil/database/relation/row.hpp>
 
 namespace
 {

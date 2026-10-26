@@ -5,9 +5,9 @@
 
 #include "yggdrasil/database/datalog/evaluator.hpp"
 
-#include "yggdrasil/database/datalog/details/executor.hpp"
-#include "yggdrasil/database/datalog/details/fixpoint.hpp"
-#include "yggdrasil/database/datalog/details/program.hpp"
+#include "yggdrasil/database/datalog/detail/executor.hpp"
+#include "yggdrasil/database/datalog/detail/fixpoint.hpp"
+#include "yggdrasil/database/datalog/detail/program.hpp"
 
 #include <algorithm>
 #include <stdexcept>

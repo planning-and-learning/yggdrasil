@@ -4,13 +4,13 @@
  */
 
 #include "yggdrasil/containers/bit_packed_array_pool.hpp"
-#include "yggdrasil/database/semantics/distance.hpp"
-#include "yggdrasil/database/semantics/incremental/distance.hpp"
-#include "yggdrasil/database/semantics/incremental/join.hpp"
-#include "yggdrasil/database/semantics/incremental/projection.hpp"
-#include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/operators/distance/distance.hpp"
+#include "yggdrasil/database/operators/distance/incremental/distance.hpp"
+#include "yggdrasil/database/operators/relational/incremental/join.hpp"
+#include "yggdrasil/database/operators/relational/incremental/projection.hpp"
+#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/relation/relation_pool.hpp"
+#include "yggdrasil/database/relation/relation_repository.hpp"
 #include "yggdrasil/ids/index_coder.hpp"
 
 #include <algorithm>

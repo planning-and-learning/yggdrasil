@@ -15,7 +15,7 @@
 #include <vector>
 #include <yggdrasil/database/datalog/construction.hpp>
 #include <yggdrasil/database/datalog/evaluator.hpp>
-#include <yggdrasil/database/semantics/relation_repository.hpp>
+#include <yggdrasil/database/relation/relation_repository.hpp>
 
 namespace
 {

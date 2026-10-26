@@ -6,9 +6,9 @@
 #define YGG_DATABASE_OPTIMIZATION_STATISTICS_HPP_
 
 #include "yggdrasil/containers/associative_containers.hpp"
-#include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/relation_view.hpp"
-#include "yggdrasil/database/syntax/query.hpp"
+#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/query/query.hpp"
+#include "yggdrasil/database/relation/relation_view.hpp"
 
 #include <optional>
 

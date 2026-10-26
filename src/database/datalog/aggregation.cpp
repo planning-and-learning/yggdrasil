@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/datalog/details/fixpoint.hpp"
+#include "yggdrasil/database/datalog/detail/fixpoint.hpp"
 
 #include <optional>
 #include <set>

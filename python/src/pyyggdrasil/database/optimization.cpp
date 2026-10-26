@@ -1,8 +1,8 @@
 #include "yggdrasil/database/optimization/optimization.hpp"
 
 #include "module.hpp"
-#include "yggdrasil/database/syntax/formatter.hpp"
-#include "yggdrasil/database/syntax/query.hpp"
+#include "yggdrasil/database/query/formatter.hpp"
+#include "yggdrasil/database/query/query.hpp"
 #include "yggdrasil/python/type_casters.hpp"
 #include "yggdrasil/python/type_casters/unordered_map.hpp"
 

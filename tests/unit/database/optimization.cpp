@@ -9,13 +9,13 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <yggdrasil/database/evaluation/bound.hpp>
+#include <yggdrasil/database/evaluation/full.hpp>
+#include <yggdrasil/database/evaluation/incremental.hpp>
 #include <yggdrasil/database/optimization/optimization.hpp>
-#include <yggdrasil/database/semantics/bound/query_evaluation.hpp>
-#include <yggdrasil/database/semantics/incremental/query.hpp>
-#include <yggdrasil/database/semantics/query_evaluation.hpp>
-#include <yggdrasil/database/semantics/relation_repository.hpp>
-#include <yggdrasil/database/syntax/formatter.hpp>
-#include <yggdrasil/database/syntax/row.hpp>
+#include <yggdrasil/database/query/formatter.hpp>
+#include <yggdrasil/database/relation/relation_repository.hpp>
+#include <yggdrasil/database/relation/row.hpp>
 
 namespace
 {

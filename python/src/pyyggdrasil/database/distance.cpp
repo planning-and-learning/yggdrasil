@@ -1,8 +1,8 @@
-#include "yggdrasil/database/semantics/distance.hpp"
+#include "yggdrasil/database/operators/distance/distance.hpp"
 
 #include "module.hpp"
-#include "yggdrasil/database/semantics/incremental/distance.hpp"
-#include "yggdrasil/database/semantics/relation.hpp"
+#include "yggdrasil/database/operators/distance/incremental/distance.hpp"
+#include "yggdrasil/database/relation/relation.hpp"
 
 #include <nanobind/stl/pair.h>
 #include <span>
