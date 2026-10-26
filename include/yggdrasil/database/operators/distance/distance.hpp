@@ -6,10 +6,12 @@
 #ifndef YGG_DATABASE_OPERATORS_DISTANCE_DISTANCE_HPP_
 #define YGG_DATABASE_OPERATORS_DISTANCE_DISTANCE_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/containers/raw_array_set.hpp"
+#include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/operators/distance/plan.hpp"
-#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/operators/relational/common.hpp"
 
 #include <algorithm>
 #include <cassert>

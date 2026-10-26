@@ -5,7 +5,7 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
-#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/operators/relational/common.hpp"
 #include "yggdrasil/database/optimization/detail/optimization.hpp"
 #include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/query/query.hpp"

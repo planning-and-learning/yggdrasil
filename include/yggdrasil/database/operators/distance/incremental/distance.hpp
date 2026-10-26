@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_OPERATORS_DISTANCE_INCREMENTAL_DISTANCE_HPP_
 #define YGG_DATABASE_OPERATORS_DISTANCE_INCREMENTAL_DISTANCE_HPP_
 
+#include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/operators/distance/distance.hpp"
 #include "yggdrasil/database/operators/distance/incremental/detail/distance_repair.hpp"

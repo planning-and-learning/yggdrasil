@@ -1,8 +1,9 @@
 # Relational algebra
 
-`<yggdrasil/database/operators/relational/operations.hpp>` provides header-only set operations in
-`ygg::database`. Relations have a runtime schema and packed, fixed-width rows.
-Different columns can hold different types without a tag or variant in every cell.
+`<yggdrasil/database/operators/relational/>` provides header-only relational operations in `ygg::database`, one header
+per operator: `select.hpp`, `project.hpp` (with `assign`), `join.hpp`, `set.hpp` (`union_`, `difference`) and
+`semijoin.hpp` (semijoins and antijoins), sharing `common.hpp`. Relations have a runtime schema and packed,
+fixed-width rows. Different columns can hold different types without a tag or variant in every cell.
 Nullary relations and runtime arities remain supported.
 
 ## Layout
@@ -33,7 +34,8 @@ Indices are stored as `uint_t` (`index.get_value()`); the code that owns a relat
 knows which tag a column holds and converts back with `Index<Tag>(value)`.
 
 ```cpp
-#include <yggdrasil/database/operators/relational/operations.hpp>
+#include <yggdrasil/database/operators/relational/project.hpp>
+#include <yggdrasil/database/operators/relational/select.hpp>
 
 using namespace ygg::database;
 const ygg::Index<Column> source(0), target(1), distance(2);

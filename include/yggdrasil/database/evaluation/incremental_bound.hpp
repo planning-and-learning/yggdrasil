@@ -8,7 +8,8 @@
 
 #include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/evaluation/bound.hpp"
-#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/operators/relational/project.hpp"
+#include "yggdrasil/database/operators/relational/set.hpp"
 #include "yggdrasil/database/relation/relation_view.hpp"
 
 #include <algorithm>

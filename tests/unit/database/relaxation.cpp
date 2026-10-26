@@ -8,7 +8,10 @@
 #include <vector>
 #include <yggdrasil/database/evaluation/bound.hpp>
 #include <yggdrasil/database/evaluation/full.hpp>
-#include <yggdrasil/database/operators/relational/operations.hpp>
+#include <yggdrasil/database/operators/relational/join.hpp>
+#include <yggdrasil/database/operators/relational/project.hpp>
+#include <yggdrasil/database/operators/relational/semijoin.hpp>
+#include <yggdrasil/database/operators/relational/set.hpp>
 #include <yggdrasil/database/query/formatter.hpp>
 #include <yggdrasil/database/query/rewrite/relaxation.hpp>
 #include <yggdrasil/database/relation/relation_repository.hpp>

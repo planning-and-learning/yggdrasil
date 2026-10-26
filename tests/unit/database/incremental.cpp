@@ -5,6 +5,8 @@
 
 #include "yggdrasil/database/operators/relational/incremental/join.hpp"
 #include "yggdrasil/database/operators/relational/incremental/projection.hpp"
+#include "yggdrasil/database/operators/relational/join.hpp"
+#include "yggdrasil/database/operators/relational/project.hpp"
 #include "yggdrasil/database/relation/relation_repository.hpp"
 
 #include <algorithm>

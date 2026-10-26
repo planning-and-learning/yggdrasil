@@ -7,6 +7,11 @@
 
 #include "yggdrasil/database/operators/distance/distance.hpp"
 #include "yggdrasil/database/operators/generic_join/generic_join.hpp"
+#include "yggdrasil/database/operators/relational/join.hpp"
+#include "yggdrasil/database/operators/relational/project.hpp"
+#include "yggdrasil/database/operators/relational/select.hpp"
+#include "yggdrasil/database/operators/relational/semijoin.hpp"
+#include "yggdrasil/database/operators/relational/set.hpp"
 #include "yggdrasil/database/query/query.hpp"
 
 #include <algorithm>

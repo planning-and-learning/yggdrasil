@@ -8,7 +8,7 @@
 
 #include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/database/operators/incremental.hpp"
-#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/operators/relational/join.hpp"
 
 #include <cassert>
 #include <utility>

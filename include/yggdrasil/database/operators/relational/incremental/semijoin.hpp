@@ -8,8 +8,8 @@
 
 #include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/database/operators/incremental.hpp"
+#include "yggdrasil/database/operators/relational/common.hpp"
 #include "yggdrasil/database/operators/relational/incremental/join.hpp"
-#include "yggdrasil/database/operators/relational/operations.hpp"
 
 #include <span>
 #include <utility>

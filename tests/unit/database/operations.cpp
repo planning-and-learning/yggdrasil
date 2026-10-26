@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/operators/relational/operations.hpp"
-
+#include "yggdrasil/database/operators/relational/join.hpp"
+#include "yggdrasil/database/operators/relational/project.hpp"
+#include "yggdrasil/database/operators/relational/select.hpp"
+#include "yggdrasil/database/operators/relational/set.hpp"
 #include "yggdrasil/database/relation/relation_pool.hpp"
 #include "yggdrasil/database/relation/relation_repository.hpp"
 

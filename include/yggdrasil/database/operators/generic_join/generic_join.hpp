@@ -6,8 +6,9 @@
 #ifndef YGG_DATABASE_OPERATORS_GENERIC_JOIN_GENERIC_JOIN_HPP_
 #define YGG_DATABASE_OPERATORS_GENERIC_JOIN_GENERIC_JOIN_HPP_
 
+#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/operators/generic_join/plan.hpp"
-#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/operators/relational/common.hpp"
 
 #include <cista/containers/vector.h>
 #include <memory>

@@ -1,6 +1,6 @@
 #include "module.hpp"
 
-#include "yggdrasil/database/operators/relational/operations.hpp"
+#include "yggdrasil/database/operators/relational/project.hpp"
 #include "yggdrasil/database/relation/relation_pool.hpp"
 #include "yggdrasil/database/relation/relation_repository.hpp"
 #include "yggdrasil/python/bindings.hpp"
