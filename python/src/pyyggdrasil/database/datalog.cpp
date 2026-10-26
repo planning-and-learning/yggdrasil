@@ -93,13 +93,15 @@ void bind_database_datalog(nb::module_& m)
         ygg::bind_data<V>(m, "DatalogRelationData")
             .def(
                 "__init__",
-                [](V* self, size_t id, size_t arity, std::optional<size_t> input_slot, const std::string& name)
-                { new (self) V(id, arity, input_slot.value_or(V::derived), name); },
+                [](V* self, size_t id, size_t arity, std::optional<size_t> input_slot, const std::string& name, bool weighted)
+                { new (self) V(id, arity, input_slot.value_or(V::derived), name, weighted); },
                 "id"_a,
                 "arity"_a,
                 "input_slot"_a = std::nullopt,
                 "name"_a = "",
-                "An input relation (with its input slot) or a derived relation.");
+                "weighted"_a = false,
+                "An input relation (with its input slot) or a derived relation; a weighted one keeps the least last column per row "
+                "of the others.");
         using W = DatalogView<dl::Relation>;
         auto cls = nb::class_<W>(m, "DatalogRelation");
         cls.def("get_index", &W::get_index)
@@ -107,6 +109,7 @@ void bind_database_datalog(nb::module_& m)
             .def("get_arity", &W::get_arity)
             .def("get_name", [](const W& self) { return std::string(self.get_name().view()); })
             .def("is_input", &W::is_input)
+            .def("is_weighted", &W::is_weighted)
             .def("get_input_slot", &W::get_input_slot);
         ygg::add_comparison(cls);
         ygg::add_hash(cls);

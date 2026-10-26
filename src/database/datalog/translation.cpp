@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <map>
+#include <ranges>
 #include <set>
+#include <stdexcept>
 #include <vector>
 
 /// Translates a program's records into tables and rules over variable slots, and groups them into strata.
@@ -30,6 +32,7 @@ public:
         if (const auto it = map.find(key); it != map.end())
             return it->second;
         const auto table = add_table(relation.get_arity());
+        m_program.tables[table]->weighted = relation.is_weighted();
         map.emplace(key, table);
         if (relation.is_input())
         {
@@ -64,7 +67,7 @@ public:
         const auto head = view.get_head();
         rule.head = table_of(head.get_relation());
         for (const auto t : head.get_terms())
-            rule.head_terms.push_back(Term::variable(slot_of.at(t.value)));
+            rule.head_terms.push_back(t.is_variable() ? Term::variable(slot_of.at(t.value)) : t);
         rule.slots = slot_of.size();
         finish_rule(std::move(rule));
     }
@@ -173,6 +176,68 @@ private:
     }
 };
 
+/// Knuth's algorithm needs the weight of a weighted rule's head to be non-decreasing in, and at least, the weights of
+/// its body atoms of the stratum (Felzenszwalb & McAllester 2007, §3): those weights may only flow, through + and max,
+/// into the head's weight, never into a filter, a join or another operation.
+void require_superior(const StratumInfo& stratum, const CompiledRule& rule)
+{
+    const auto fail = []
+    { throw std::invalid_argument("Datalog: a weighted rule's weight must be the sum or maximum of its weighted atoms' weights and other terms."); };
+    auto weights = std::set<uint_t>();
+    for (const auto& literal : rule.literals)
+        if (literal.kind == Literal::Kind::POSITIVE && stratum.contains(literal.table))
+        {
+            const auto weight = literal.terms.back();
+            if (!weight.is_variable() || !weights.insert(weight.value).second)
+                fail();
+        }
+    const auto stratum_weights = weights;
+    // Results of + and max over weights are weights.
+    for (bool grew = true; grew;)
+    {
+        grew = false;
+        for (const auto& literal : rule.literals)
+            if (literal.kind == Literal::Kind::ARITHMETIC
+                && (literal.operation == Arithmetic::Operation::ADD || literal.operation == Arithmetic::Operation::MAX)
+                && std::ranges::any_of(literal.terms | std::views::take(2), [&](Term t) { return t.is_variable() && weights.contains(t.value); }))
+                grew = weights.insert(literal.terms[2].value).second || grew;
+    }
+    // A weight occurs only as a stratum atom's weight column, as an operand or result of + and max, or as the head's weight.
+    for (const auto& literal : rule.literals)
+        for (size_t i = 0; i < literal.terms.size(); ++i)
+        {
+            const auto t = literal.terms[i];
+            if (!t.is_variable() || !weights.contains(t.value))
+                continue;
+            const bool weight_column = literal.kind == Literal::Kind::POSITIVE && stratum.contains(literal.table) && i + 1 == literal.terms.size();
+            const bool combined = literal.kind == Literal::Kind::ARITHMETIC
+                                  && (literal.operation == Arithmetic::Operation::ADD || literal.operation == Arithmetic::Operation::MAX);
+            if (!weight_column && !combined)
+                fail();
+        }
+    for (size_t i = 0; i + 1 < rule.head_terms.size(); ++i)
+        if (rule.head_terms[i].is_variable() && weights.contains(rule.head_terms[i].value))
+            fail();
+    // Every stratum weight flows into the head's weight.
+    const auto head = rule.head_terms.back();
+    if (stratum_weights.empty())
+        return;
+    if (!head.is_variable() || !weights.contains(head.value))
+        fail();
+    auto reaching = std::set<uint_t> { head.value };
+    for (bool grew = true; grew;)
+    {
+        grew = false;
+        for (const auto& literal : rule.literals)
+            if (literal.kind == Literal::Kind::ARITHMETIC && reaching.contains(literal.terms[2].value))
+                for (const auto t : literal.terms | std::views::take(2))
+                    if (t.is_variable())
+                        grew = reaching.insert(t.value).second || grew;
+    }
+    if (!std::ranges::includes(reaching, stratum_weights))
+        fail();
+}
+
 /// The tables the outputs depend on.
 std::vector<bool> needed_tables(const CompiledProgram& program, std::span<const Dependency> dependencies)
 {
@@ -249,7 +314,16 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
     for (size_t s = 0; s < infos.size(); ++s)
     {
         auto& info = infos[s];
-        if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
+        const auto weighted = std::ranges::count_if(info.tables, [&](size_t t) { return program.tables[t]->weighted; });
+        if (weighted > 0)
+        {
+            if (static_cast<size_t>(weighted) != info.tables.size())
+                throw std::invalid_argument("Datalog: a weighted relation is recursive with an unweighted one.");
+            for (const auto r : info.rules)
+                require_superior(info, program.rules[r]);
+            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program));
+        }
+        else if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
         {
             auto& aggregate = aggregates[aggregate_of.at(info.tables.front())];
             info.reads.push_back(aggregate.source);

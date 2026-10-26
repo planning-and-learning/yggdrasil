@@ -44,6 +44,15 @@ struct Programs
         data->input_slot = slot;
         return dl::insert(repository, *data).first;
     }
+    /// A derived relation whose last column is a weight, least per row of the other columns.
+    dl::RelationView weighted(size_t id, size_t arity)
+    {
+        auto data = dl::checkout<dl::Relation>(builder);
+        data->id = id;
+        data->arity = arity;
+        data->weighted = true;
+        return dl::insert(repository, *data).first;
+    }
     dl::AtomView atom(dl::RelationView relation, std::initializer_list<dl::Term> terms)
     {
         auto data = dl::checkout<dl::Atom>(builder);
@@ -236,9 +245,27 @@ class Interpreter
                       derived.insert(tuple);
                   });
         auto& target = m_relations[head.get_relation().get_id()];
-        const auto size = target.size();
+        const auto before = target;
         target.insert(derived.begin(), derived.end());
-        return target.size() != size;
+        if (head.get_relation().is_weighted())
+        {
+            // The least weight per row of the other columns (Bellman-Ford over the rounds).
+            auto least = std::map<Tuple, uint_t>();
+            for (const auto& tuple : target)
+            {
+                const auto key = Tuple(tuple.begin(), tuple.end() - 1);
+                if (const auto it = least.find(key); it == least.end() || tuple.back() < it->second)
+                    least[key] = tuple.back();
+            }
+            target.clear();
+            for (const auto& [key, weight] : least)
+            {
+                auto tuple = key;
+                tuple.push_back(weight);
+                target.insert(tuple);
+            }
+        }
+        return target != before;
     }
 
 public:
@@ -345,9 +372,10 @@ struct Fixture
                      edges = p.relation(10, 1), largest = p.relation(11, 2), smallest = p.relation(12, 2), weight = p.relation(13, 2),
                      reach = p.relation(14, 2), isolated = p.relation(15, 1), has_out = p.relation(16, 1), triangle = p.relation(17, 3),
                      cycle = p.relation(18, 2), sums = p.relation(19, 3), ascending = p.relation(20, 2), sparse = p.relation(21, 2), gaps = p.relation(22, 2),
-                     doubled = p.relation(23, 2);
-    std::vector<dl::RelationView> outputs { tc,       tc2,    odd,   even,     unreachable, loops, from3, distinct,  into2,  degree, edges,  largest,
-                                            smallest, weight, reach, isolated, triangle,    cycle, sums,  ascending, sparse, gaps,   doubled };
+                     doubled = p.relation(23, 2), dist = p.weighted(24, 2), costly = p.weighted(25, 2), wide = p.weighted(26, 2), far = p.relation(27, 1);
+    std::vector<dl::RelationView> outputs { tc,     tc2,       odd,     even,     unreachable, loops, from3,    distinct, into2,
+                                            degree, edges,     largest, smallest, weight,      reach, isolated, triangle, cycle,
+                                            sums,   ascending, sparse,  gaps,     doubled,     dist,  costly,   wide,     far };
     dl::ProgramView program = make();
 
     dl::ProgramView make()
@@ -433,6 +461,35 @@ struct Fixture
                    {},
                    {},
                    { p.aggregate(Function::SUM, n, m, { p.atom(e, { var(x), var(y) }) }, {}, { dl::Arithmetic { Operation::MULTIPLY, var(y), obj(2), m } }) }),
+            // Weighted relations: unit distances from 0, distances with computed edge costs from 1, the widest bottleneck
+            // (max) from 2, and a higher stratum reading weights as values.
+            p.rule(p.atom(dist, { var(x), obj(0) }), { p.atom(v, { var(x) }) }, {}, { dl::Comparison { EQUAL, var(x), obj(0) } }),
+            p.rule(p.atom(dist, { var(z), var(m) }),
+                   { p.atom(dist, { var(y), var(n) }), p.atom(e, { var(y), var(z) }) },
+                   {},
+                   {},
+                   {},
+                   { dl::Arithmetic { Operation::ADD, var(n), obj(1), m } }),
+            p.rule(p.atom(costly, { var(x), obj(0) }), { p.atom(v, { var(x) }) }, {}, { dl::Comparison { EQUAL, var(x), obj(1) } }),
+            p.rule(p.atom(costly, { var(z), var(m) }),
+                   { p.atom(costly, { var(y), var(n) }), p.atom(e, { var(y), var(z) }) },
+                   {},
+                   {},
+                   {},
+                   { dl::Arithmetic { Operation::ADD, var(y), var(z), x }, dl::Arithmetic { Operation::ADD, var(n), var(x), m } }),
+            p.rule(p.atom(wide, { var(x), var(m) }),
+                   { p.atom(v, { var(x) }) },
+                   {},
+                   { dl::Comparison { EQUAL, var(x), obj(2) } },
+                   {},
+                   { dl::Arithmetic { Operation::ADD, var(x), obj(0), m } }),
+            p.rule(p.atom(wide, { var(z), var(m) }),
+                   { p.atom(wide, { var(y), var(n) }), p.atom(e, { var(y), var(z) }) },
+                   {},
+                   {},
+                   {},
+                   { dl::Arithmetic { Operation::MAX, var(n), var(z), m } }),
+            p.rule(p.atom(far, { var(x) }), { p.atom(dist, { var(x), var(n) }) }, {}, { dl::Comparison { LESS, obj(1), var(n) } }),
         });
     }
 };
@@ -622,4 +679,29 @@ TEST(DatabaseDatalog, RejectsInvalidRules)
     // Not stratified: r depends on itself through negation.
     const auto program = p.program({ p.rule(p.atom(s, { var(x) }), { p.atom(e, { var(x), var(y) }) }, { p.atom(s, { var(y) }) }) });
     EXPECT_THROW(dl::Evaluator(program, std::array { s }), std::invalid_argument);
+
+    // A weighted rule must not filter on, join on or subtract from a weight, nor ignore one; weighted and unweighted
+    // relations are not recursive together.
+    using Operation = dl::Arithmetic::Operation;
+    const auto d = p.weighted(40, 2), u = p.relation(41, 1);
+    const auto base = p.rule(p.atom(d, { var(x), obj(0) }), { p.atom(e, { var(x), var(y) }) });
+    const auto invalid = [&](dl::RuleView rule) { EXPECT_THROW(dl::Evaluator(p.program({ base, rule }), std::array { d }), std::invalid_argument); };
+    invalid(p.rule(p.atom(d, { var(z), var(n) }),
+                   { p.atom(d, { var(y), var(x) }), p.atom(e, { var(y), var(z) }) },
+                   {},
+                   { dl::Comparison { dl::Comparison::Kind::LESS, var(x), obj(3) } },
+                   {},
+                   { dl::Arithmetic { Operation::ADD, var(x), obj(1), n } }));
+    invalid(p.rule(p.atom(d, { var(z), var(n) }),
+                   { p.atom(d, { var(y), var(x) }), p.atom(e, { var(y), var(z) }) },
+                   {},
+                   {},
+                   {},
+                   { dl::Arithmetic { Operation::SUBTRACT, var(x), obj(1), n } }));
+    invalid(p.rule(p.atom(d, { var(z), obj(1) }), { p.atom(d, { var(y), var(x) }), p.atom(e, { var(y), var(z) }) }));
+    invalid(p.rule(p.atom(d, { var(y), var(x) }), { p.atom(d, { var(y), var(x) }), p.atom(e, { var(x), var(y) }) }));
+    const auto mixed = p.program({ base,
+                                   p.rule(p.atom(u, { var(y) }), { p.atom(d, { var(y), var(x) }) }),
+                                   p.rule(p.atom(d, { var(y), var(x) }), { p.atom(u, { var(y) }), p.atom(e, { var(y), var(x) }) }) });
+    EXPECT_THROW(dl::Evaluator(mixed, std::array { d }), std::invalid_argument);
 }

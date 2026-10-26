@@ -53,6 +53,12 @@ void require_bound(const Atoms& atoms, std::span<const Comparison> comparisons, 
 }
 }  // namespace
 
+void prepare_for_insert(DatalogRepository&, Data<Relation>& data)
+{
+    if (data.weighted && (data.input_slot != Data<Relation>::derived || data.arity == 0))
+        throw std::invalid_argument("Datalog: a weighted relation is derived and has a weight column.");
+}
+
 void prepare_for_insert(DatalogRepository& repository, Data<Atom>& data)
 {
     if (make_view(data.relation, repository).get_arity() != data.terms.size())
@@ -80,11 +86,15 @@ void prepare_for_insert(DatalogRepository& repository, Data<Rule>& data)
     if (head.get_relation().is_input())
         throw std::invalid_argument("Datalog: a rule's head is an input relation.");
     auto head_variables = std::vector<uint_t>();
-    for (const auto term : head.get_terms())
+    const auto terms = head.get_terms();
+    for (size_t i = 0; i < terms.size(); ++i)
     {
-        if (!term.is_variable() || std::ranges::find(head_variables, term.value) != head_variables.end())
+        // A weighted head's weight may be a constant, the weight of a base case.
+        if (!terms[i].is_variable() && head.get_relation().is_weighted() && i + 1 == terms.size())
+            continue;
+        if (!terms[i].is_variable() || std::ranges::find(head_variables, terms[i].value) != head_variables.end())
             throw std::invalid_argument("Datalog: a rule's head must have distinct variables.");
-        head_variables.push_back(term.value);
+        head_variables.push_back(terms[i].value);
     }
     auto bound = std::vector<uint_t>();
     for (const auto atom : make_view(data.atoms, repository))

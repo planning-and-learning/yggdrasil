@@ -16,7 +16,7 @@ using DatalogBuilder = ApplyTypeListT<formalism::BuilderStorage, DatalogSymbolTy
 using formalism::checkout;
 using formalism::insert;
 
-inline void prepare_for_insert(DatalogRepository&, Data<Relation>&) {}
+void prepare_for_insert(DatalogRepository& repository, Data<Relation>& data);
 
 /// Requires as many terms as the relation's arity.
 void prepare_for_insert(DatalogRepository& repository, Data<Atom>& data);

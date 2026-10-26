@@ -28,14 +28,22 @@ struct Data<database::datalog::Relation>
     /// The input slot of an input relation, or `derived`.
     size_t input_slot = derived;
     ::cista::offset::string name;
+    /// A derived relation whose last column is a weight: per row of the other columns, the least derivable weight.
+    bool weighted = false;
 
     Data() = default;
-    Data(size_t id_, size_t arity_, size_t input_slot_ = derived, const std::string& name_ = {}) : id(id_), arity(arity_), input_slot(input_slot_), name(name_)
+    Data(size_t id_, size_t arity_, size_t input_slot_ = derived, const std::string& name_ = {}, bool weighted_ = false) :
+        id(id_),
+        arity(arity_),
+        input_slot(input_slot_),
+        name(name_),
+        weighted(weighted_)
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::id, &Data::arity, &Data::input_slot, &Data::name> {}; }
-    static constexpr auto cista_members() noexcept { return Members<&Data::index, &Data::id, &Data::arity, &Data::input_slot, &Data::name> {}; }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::id, &Data::arity, &Data::input_slot, &Data::name, &Data::weighted> {}; }
+    static constexpr auto cista_members() noexcept
+    { return Members<&Data::index, &Data::id, &Data::arity, &Data::input_slot, &Data::name, &Data::weighted> {}; }
     void clear() noexcept
     {
         clear_members(*this);

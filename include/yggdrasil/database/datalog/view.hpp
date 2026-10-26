@@ -23,6 +23,7 @@ public:
     [[nodiscard]] bool is_input() const { return this->get_data().input_slot != Data<database::datalog::Relation>::derived; }
     [[nodiscard]] size_t get_input_slot() const { return this->get_data().input_slot; }
     [[nodiscard]] const auto& get_name() const noexcept { return this->get_data().name; }
+    [[nodiscard]] bool is_weighted() const { return this->get_data().weighted; }
 };
 
 template<typename C>

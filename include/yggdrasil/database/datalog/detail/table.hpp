@@ -38,6 +38,8 @@ struct Table
     size_t arity;
     std::optional<size_t> slot;
     bool is_static = false;
+    /// The last column is a weight, least per row of the other columns.
+    bool weighted = false;
     bool loaded = false;
     IndexedTuples current, added, removed, frontier;
     /// An aggregate's value of an absent group (COUNT and SUM: 0); its last column holds the value.

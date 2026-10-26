@@ -143,6 +143,42 @@ private:
     void recompute(CompiledProgram& program, Executor& executor);
 };
 
+/// A stratum of weighted relations: each keeps, per row of its other columns, the least weight derivable by rules whose
+/// head weight is the sum or maximum of their weighted atoms' weights and other terms. Evaluated by Knuth's lightest
+/// derivation algorithm (Felzenszwalb & McAllester 2007, §3): rows are settled in order of weight from a priority queue,
+/// each settled row expanded by the rules that read it with the settled rows (weighted.cpp). An update evaluates the
+/// stratum anew and records the difference to its old rows.
+class WeightedStratum final : public Stratum
+{
+public:
+    WeightedStratum(StratumInfo stratum, const CompiledProgram& program);
+
+    void evaluate(CompiledProgram& program, Executor& executor) override;
+    void update(CompiledProgram& program, Executor& executor) override;
+
+private:
+    [[nodiscard]] size_t state_memory_usage() const noexcept override;
+
+    /// A derived row of a table of the stratum, waiting to be settled.
+    struct Candidate
+    {
+        uint_t weight;
+        size_t position;
+        std::vector<uint_t> row;
+        friend bool operator>(const Candidate& lhs, const Candidate& rhs) noexcept { return lhs.weight > rhs.weight; }
+    };
+    /// Per table of the stratum: the rows of the other columns settled, and the least weight queued per such row.
+    std::vector<RawArraySet<uint_t>> m_settled;
+    std::vector<RawArraySet<uint_t>> m_queued;
+    std::vector<std::vector<uint_t>> m_best;
+    std::vector<Candidate> m_queue;
+    std::vector<RawArraySet<uint_t>> m_snapshot;
+
+    /// Queues a derived row of the stratum's table at `position` unless a lighter one is settled or queued.
+    void offer(size_t position, std::span<const uint_t> row);
+    void derive(CompiledProgram& program, Executor& executor);
+};
+
 /// The groups of an aggregate, kept from its body's table (its satisfying assignments) (aggregate.cpp).
 struct AggregateTable
 {

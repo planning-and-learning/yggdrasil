@@ -798,6 +798,10 @@ records are interned in a `DatalogRepository` (`repository.hpp`), built with `ch
 - comparisons `=`, `≠`, `<`, `≤` over values, and arithmetic `result = lhs op rhs` (`+ − × ÷ min max`, in order, each
   reading the variables bound before it) over {0, …, M − 1} ∪ {∞} with M the largest `uint_t` as ∞: `+` and `×`
   saturate to ∞, `−` at 0, `÷ 0` is ∞ (runir's numerical semantics);
+- a weighted relation: a derived relation whose last column is a weight, keeping per row of its other columns the least
+  weight derived; a rule into it computes the head's weight as the sum or maximum (`+`, `max`) of its weighted atoms'
+  weights and other terms, and uses those weights nowhere else (no filters or joins on them), so that the weight
+  functions are non-decreasing and superior; weighted and unweighted relations are not recursive together;
 - a program: rules, stratified by the strongly connected components of their dependencies (`detail/stratification.hpp`).
 
 `Evaluator(program, outputs, static_slots)` (`evaluator.hpp`) evaluates the requested relations rule by rule over
@@ -814,6 +818,9 @@ indexed relations, without intermediate relations:
   a recursive one by Delete and Rederive [Gupta93]; when the over-deleted rows exceed a tenth of the stratum's rows,
   the stratum is evaluated anew and its change is the difference to the old rows;
 - an aggregate keeps the satisfying assignments of its body by counting and its groups incrementally;
+- a stratum of weighted relations is evaluated by Knuth's lightest derivation algorithm [Knuth77, as stated in FM07 §3]:
+  rows settle in order of weight from a priority queue, each expanded by the rules that read it with the settled rows;
+  an update evaluates the stratum anew;
 - static input slots are read once.
 
 Python exposes the records as `DatalogRelationData`, `DatalogAtomData`, `DatalogAggregateData`, `DatalogRuleData`,
@@ -823,3 +830,5 @@ Python exposes the records as `DatalogRelationData`, `DatalogAtomData`, `Datalog
 evaluation per state, and maintenance between two successor states.
 
 [Gupta93] A. Gupta, I. S. Mumick, V. S. Subrahmanian, *Maintaining Views Incrementally*, SIGMOD 1993.
+[FM07] P. F. Felzenszwalb, D. McAllester, *The Generalized A\* Architecture*, JAIR 29, 2007.
+[Knuth77] D. E. Knuth, *A Generalization of Dijkstra's Algorithm*, Information Processing Letters 6(1), 1977.

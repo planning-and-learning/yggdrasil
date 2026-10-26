@@ -106,6 +106,30 @@ def test_arithmetic_and_order() -> None:
     assert rows(evaluator.get_result(0)) == {(a, b, a + b) for a, b in edges if a < b}
 
 
+def test_weighted_shortest_paths() -> None:
+    # dist(x, w): the least number of edges from 0; the weight is the last column, least per vertex.
+    p = Programs()
+    e, start = p.relation(100, 2, 0), p.relation(101, 1, 1)
+    dist = p.repository.insert(db.DatalogRelationData(0, 2, weighted=True))[0]
+    assert dist.is_weighted()
+    x, y, w, v = 0, 1, 2, 3
+    var, const = db.DatalogTerm.variable, db.DatalogTerm.constant
+    base = p.repository.insert(
+        db.DatalogRuleData(p.repository.insert(db.DatalogAtomData(dist, [var(x), const(0)]))[0], [p.atom(start, x)])
+    )[0]
+    step = p.repository.insert(
+        db.DatalogRuleData(
+            p.atom(dist, y, v),
+            [p.atom(dist, x, w), p.atom(e, x, y)],
+            arithmetic=[db.DatalogArithmetic(db.DatalogArithmeticOperation.ADD, var(w), const(1), v)],
+        )
+    )[0]
+    evaluator = db.DatalogEvaluator(p.program([base, step]), [dist])
+    edges = {(0, 1), (1, 2), (0, 2), (2, 3), (3, 0)}
+    evaluator.evaluate([db.BorrowedRelation(relation(2, edges)), db.BorrowedRelation(relation(1, {(0,)}))])
+    assert rows(evaluator.get_result(0)) == {(0, 0), (1, 1), (2, 1), (3, 2)}
+
+
 def test_rejects_unsafe_rules() -> None:
     p = Programs()
     e, r = p.relation(100, 2, 0), p.relation(0, 2)
