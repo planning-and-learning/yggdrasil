@@ -11,7 +11,7 @@
 
 namespace ygg::database::datalog::detail
 {
-std::vector<Stratum> stratify(size_t relations, std::span<const Dependency> dependencies)
+std::vector<Component> stratify(size_t relations, std::span<const Dependency> dependencies)
 {
     // Tarjan's algorithm emits components in reverse topological order of the "reads" edges, i.e. dependencies first.
     auto edges = std::vector<std::vector<size_t>>(relations);
@@ -23,7 +23,7 @@ std::vector<Stratum> stratify(size_t relations, std::span<const Dependency> depe
     auto on_stack = std::vector<bool>(relations);
     auto stack = std::vector<size_t>();
     auto component = std::vector<size_t>(relations);
-    auto result = std::vector<Stratum>();
+    auto result = std::vector<Component>();
     size_t counter = 0;
     // Iterative DFS: (node, next edge).
     auto frames = std::vector<std::pair<size_t, size_t>>();

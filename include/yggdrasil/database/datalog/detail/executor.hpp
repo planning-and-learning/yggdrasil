@@ -13,8 +13,8 @@
 
 namespace ygg::database::datalog::detail
 {
-/// Runs a rule's plan as an index nested-loop join over the program's tables, each literal reading the version set in
-/// set_versions() and set_version(), and emits the head of every satisfying assignment.
+/// Runs a rule's plan as an index nested-loop join over the program's tables, literal i reading version reads[i] of its
+/// table, and emits the head of every satisfying assignment.
 class Executor
 {
 public:
@@ -26,20 +26,18 @@ public:
         m_keys.resize(depth);
     }
 
-    /// Which rows each literal of the next run's rule reads.
-    void set_versions(const CompiledRule& rule, Version all) { m_versions.assign(rule.literals.size(), all); }
-    void set_version(size_t literal, Version version) { m_versions[literal] = version; }
-
     template<typename Emit>
-    void run(const CompiledRule& rule, const Plan& plan, const Emit& emit)
+    void run(const CompiledRule& rule, const Plan& plan, std::span<const Version> reads, const Emit& emit)
     {
+        m_reads = reads;
         m_slots.assign(rule.slots, 0);
         m_stop = false;
         step(rule, plan, 0, emit);
     }
     /// Whether the plan derives the row, with the rule's head variables bound to it.
-    bool derives(const CompiledRule& rule, const Plan& plan, std::span<const uint_t> row)
+    bool derives(const CompiledRule& rule, const Plan& plan, std::span<const Version> reads, std::span<const uint_t> row)
     {
+        m_reads = reads;
         m_slots.assign(rule.slots, 0);
         for (size_t c = 0; c < row.size(); ++c)
             m_slots[rule.head_terms[c].value] = row[c];
@@ -52,7 +50,8 @@ public:
 
 private:
     CompiledProgram* m_program;
-    std::vector<Version> m_versions;
+    /// The reads of the current run.
+    std::span<const Version> m_reads;
 
     std::vector<uint_t> m_slots;
     std::vector<std::vector<uint_t>> m_keys;
@@ -78,7 +77,7 @@ private:
         }
         const auto& s = plan.steps[i];
         const auto& literal = rule.literals[s.literal];
-        const auto version = m_versions[s.literal];
+        const auto version = m_reads[s.literal];
         if (s.generator || literal.kind == Literal::Kind::AGGREGATE)
         {
             auto& key = m_keys[i];
@@ -97,7 +96,7 @@ private:
                 for (const auto& peer : s.peers)
                 {
                     fill(peer);
-                    if (const auto n = table_of(rule, peer.literal).count(m_versions[peer.literal], peer.index, key); n < fewest)
+                    if (const auto n = table_of(rule, peer.literal).count(m_reads[peer.literal], peer.index, key); n < fewest)
                     {
                         chosen = &peer;
                         fewest = n;
@@ -107,7 +106,7 @@ private:
             fill(*chosen);
             bool found = false;
             table_of(rule, chosen->literal)
-                .lookup(m_versions[chosen->literal],
+                .lookup(m_reads[chosen->literal],
                         chosen->index,
                         key,
                         [&](std::span<const uint_t> row)
@@ -162,7 +161,7 @@ private:
             m_probe.clear();
             for (const auto t : rule.literals[member.literal].terms)
                 m_probe.push_back(value(t));
-            return table_of(rule, member.literal).contains(m_versions[member.literal], m_probe);
+            return table_of(rule, member.literal).contains(m_reads[member.literal], m_probe);
         };
         return holds(s) && std::ranges::all_of(s.peers, holds);
     }

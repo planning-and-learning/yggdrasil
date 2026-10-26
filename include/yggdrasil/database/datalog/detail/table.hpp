@@ -31,43 +31,24 @@ enum class Version : uint8_t
     OLD,
 };
 
-/// The rows of a relation (an input, a derived relation, or an aggregate's body or groups), its changes of the current
-/// update, and the staging sets of semi-naive iterations, all indexed on the same access patterns.
+/// The rows of a relation (an input, a derived relation, or an aggregate's body or groups) in each version a literal
+/// can read, all indexed on the same access patterns. The state of how a stratum maintains them is the stratum's.
 struct Table
 {
     size_t arity;
     std::optional<size_t> slot;
     bool is_static = false;
     bool loaded = false;
-    IndexedTuples current, added, removed, frontier, next;
-    /// The derivation count of each row, for strata without recursion.
-    bool counted = false;
-    RawArraySet<uint_t> count_rows;
-    std::vector<int64_t> counts;
-    RawArraySet<uint_t> pending_rows;
-    /// The rows before a recursive stratum is evaluated anew.
-    RawArraySet<uint_t> snapshot;
-    std::vector<int64_t> pending;
+    IndexedTuples current, added, removed, frontier;
     /// An aggregate's value of an absent group (COUNT and SUM: 0); its last column holds the value.
     std::optional<uint_t> fallback;
 
-    explicit Table(size_t arity_) :
-        arity(arity_),
-        current(arity_),
-        added(arity_),
-        removed(arity_),
-        frontier(arity_),
-        next(arity_),
-        count_rows(arity_),
-        pending_rows(arity_),
-        snapshot(arity_)
-    {
-    }
+    explicit Table(size_t arity_) : arity(arity_), current(arity_), added(arity_), removed(arity_), frontier(arity_) {}
 
     size_t add_index(const std::vector<size_t>& columns)
     {
         const auto index = current.add_index(columns);
-        for (auto* set : { &added, &removed, &frontier, &next })
+        for (auto* set : { &added, &removed, &frontier })
             set->add_index(columns);
         return index;
     }
@@ -79,10 +60,8 @@ struct Table
     }
     void clear() noexcept
     {
-        for (auto* set : { &current, &added, &removed, &frontier, &next })
+        for (auto* set : { &current, &added, &removed, &frontier })
             set->clear();
-        count_rows.clear();
-        counts.clear();
     }
 
     /// The row set of a version other than OLD.
@@ -127,9 +106,8 @@ struct Table
     }
     [[nodiscard]] size_t memory_usage() const noexcept
     {
-        size_t result =
-            count_rows.memory_usage() + pending_rows.memory_usage() + snapshot.memory_usage() + (counts.capacity() + pending.capacity()) * sizeof(int64_t);
-        for (const auto* set : { &current, &added, &removed, &frontier, &next })
+        size_t result = 0;
+        for (const auto* set : { &current, &added, &removed, &frontier })
             result += set->memory_usage();
         return result;
     }

@@ -21,6 +21,7 @@ class Translator
 public:
     [[nodiscard]] CompiledProgram& program() noexcept { return m_program; }
     [[nodiscard]] const std::vector<Dependency>& dependencies() const noexcept { return m_dependencies; }
+    [[nodiscard]] std::vector<AggregateTable>& aggregates() noexcept { return m_aggregates; }
 
     size_t table_of(RelationView relation)
     {
@@ -71,6 +72,7 @@ public:
 private:
     CompiledProgram m_program;
     std::vector<Dependency> m_dependencies;
+    std::vector<AggregateTable> m_aggregates;
     std::map<size_t, size_t> m_derived_tables;
     std::map<size_t, size_t> m_input_tables;
 
@@ -149,14 +151,13 @@ private:
         if (view.get_function() != AggregateFunction::COUNT)
             aggregate.value = inner_slots.at(view.get_value());
         aggregate.table = add_table(aggregate.group.size() + 1);
-        aggregate.groups = std::make_unique<RawArraySet<uint_t>>(aggregate.group.size());
         if (view.get_function() == AggregateFunction::COUNT || view.get_function() == AggregateFunction::SUM)
             m_program.tables[aggregate.table]->fallback = 0;
         const auto [result, inserted] = outer_slots.try_emplace(view.get_result(), to_uint_t(outer_slots.size()));
         literal.terms.push_back(Term::variable(result->second));
         literal.table = aggregate.table;
         m_dependencies.push_back(Dependency { aggregate.table, source, true });
-        m_program.aggregates.push_back(std::move(aggregate));
+        m_aggregates.push_back(std::move(aggregate));
         return literal;
     }
 };
@@ -202,48 +203,55 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
         if (slot < program.slot_tables.size() && program.slot_tables[slot] != npos)
             program.tables[program.slot_tables[slot]]->is_static = true;
 
-    const auto strata = stratify(program.tables.size(), translator.dependencies());
+    const auto components = stratify(program.tables.size(), translator.dependencies());
 
     auto stratum_of = std::vector<size_t>(program.tables.size());
     program.recursive_tables.assign(program.tables.size(), false);
+    auto& aggregates = translator.aggregates();
     auto aggregate_of = std::map<size_t, size_t>();
-    for (size_t a = 0; a < program.aggregates.size(); ++a)
-        aggregate_of.emplace(program.aggregates[a].table, a);
-    for (const auto& stratum : strata)
+    for (size_t a = 0; a < aggregates.size(); ++a)
+        aggregate_of.emplace(aggregates[a].table, a);
+    // The strata the outputs need, their rules and the tables those read; then one object per stratum.
+    auto needed_components = std::vector<const Component*>();
+    auto infos = std::vector<StratumInfo>();
+    for (const auto& component : components)
     {
-        // A stratum's relations depend on each other, so either all of them are needed or none.
-        if (!needed[stratum.relations.front()])
+        // A component's relations depend on each other, so either all of them are needed or none.
+        if (!needed[component.relations.front()])
             continue;
         // Input relations have no rules and no stratum.
-        if (std::ranges::all_of(stratum.relations, [&](size_t t) { return program.tables[t]->slot.has_value(); }))
+        if (std::ranges::all_of(component.relations, [&](size_t t) { return program.tables[t]->slot.has_value(); }))
             continue;
-        auto info = StratumInfo { StratumInfo::Kind::PLAIN, stratum.relations, {}, {}, npos };
-        for (const auto table : info.tables)
-            stratum_of[table] = program.strata.size();
-        if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
-        {
-            info.kind = StratumInfo::Kind::AGGREGATE;
-            info.aggregate = aggregate_of.at(info.tables.front());
-            info.reads.push_back(program.aggregates[info.aggregate].source);
-        }
-        else if (stratum.recursive)
-        {
-            info.kind = StratumInfo::Kind::RECURSIVE;
-            for (const auto table : info.tables)
-                program.recursive_tables[table] = true;
-        }
-        else
-            for (const auto table : info.tables)
-                program.tables[table]->counted = true;
-        program.strata.push_back(std::move(info));
+        for (const auto table : component.relations)
+            stratum_of[table] = infos.size();
+        needed_components.push_back(&component);
+        infos.push_back(StratumInfo { component.relations, {}, {} });
     }
     for (size_t r = 0; r < program.rules.size(); ++r)
     {
-        auto& stratum = program.strata[stratum_of[program.rules[r].head]];
-        stratum.rules.push_back(r);
+        auto& info = infos[stratum_of[program.rules[r].head]];
+        info.rules.push_back(r);
         for (const auto& literal : program.rules[r].literals)
-            if (literal.table != npos && std::ranges::find(stratum.reads, literal.table) == stratum.reads.end())
-                stratum.reads.push_back(literal.table);
+            if (literal.table != npos && std::ranges::find(info.reads, literal.table) == info.reads.end())
+                info.reads.push_back(literal.table);
+    }
+    for (size_t s = 0; s < infos.size(); ++s)
+    {
+        auto& info = infos[s];
+        if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
+        {
+            auto& aggregate = aggregates[aggregate_of.at(info.tables.front())];
+            info.reads.push_back(aggregate.source);
+            program.strata.push_back(std::make_unique<AggregateStratum>(std::move(info), std::move(aggregate)));
+        }
+        else if (needed_components[s]->recursive)
+        {
+            for (const auto table : info.tables)
+                program.recursive_tables[table] = true;
+            program.strata.push_back(std::make_unique<RecursiveStratum>(std::move(info), program));
+        }
+        else
+            program.strata.push_back(std::make_unique<PlainStratum>(std::move(info), program));
     }
     plan_rules(program);
     return std::move(program);

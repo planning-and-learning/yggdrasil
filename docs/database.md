@@ -798,7 +798,8 @@ records are interned in a `DatalogRepository` (`repository.hpp`), built with `ch
 `Evaluator(program, outputs, static_slots)` (`evaluator.hpp`) evaluates the requested relations rule by rule over
 indexed relations, without intermediate relations:
 
-- only the strata the outputs depend on are evaluated, and only the inputs they read are read;
+- only the strata the outputs depend on are evaluated, and only the inputs they read are read; each stratum is one
+  object of its kind (`detail/strata.hpp`: plain, recursive, or an aggregate's), which owns the state it maintains;
 - each rule is an index nested-loop join, planned once per literal that reads a change, with the most bound literal
   next (ties go to relations outside the rule's stratum); hash indexes are chosen per access pattern;
 - atoms whose only unbound variables are those a step binds are intersected with it: the one with the fewest matches

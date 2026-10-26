@@ -20,7 +20,8 @@ struct Dependency
     bool negative = false;
 };
 
-struct Stratum
+/// A strongly connected component of the dependencies, a stratum of the program.
+struct Component
 {
     std::vector<size_t> relations;
     /// Whether a relation of the stratum reads one of the stratum's relations, itself included.
@@ -30,7 +31,7 @@ struct Stratum
 /// The strongly connected components of the relations' dependencies, in dependency order. Relations are 0, ..., n - 1;
 /// dependencies on other relations (inputs) are ignored. Throws std::invalid_argument if a negative dependency lies on
 /// a cycle.
-std::vector<Stratum> stratify(size_t relations, std::span<const Dependency> dependencies);
+std::vector<Component> stratify(size_t relations, std::span<const Dependency> dependencies);
 }  // namespace ygg::database::datalog::detail
 
 #endif

@@ -508,6 +508,30 @@ TEST(DatabaseDatalog, DeleteAndRederiveDropsRowsThatOnlySupportEachOther)
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 }
 
+TEST(DatabaseDatalog, DeleteAndRederiveKeepsRowsWithAnotherDerivation)
+{
+    // reach over the path 0 -> 1 -> ... -> 199 with a shortcut 190 -> 195. Cutting 192 -> 193 over-deletes 193, ..., 199,
+    // few enough of the rows to rederive instead of evaluating anew; 195, ..., 199 are rederived through the shortcut.
+    Programs p;
+    const auto e = p.relation(100, 2, 0), start = p.relation(101, 1, 1), reach = p.relation(0, 1);
+    constexpr uint_t x = 0, y = 1, n = 200;
+    const auto program = p.program({ p.rule(p.atom(reach, { var(x) }), { p.atom(start, { var(x) }) }),
+                                     p.rule(p.atom(reach, { var(y) }), { p.atom(reach, { var(x) }), p.atom(e, { var(x), var(y) }) }) });
+    dl::Evaluator evaluator(program, std::array { reach });
+    auto path = Tuples {};
+    for (uint_t v = 0; v + 1 < n; ++v)
+        path.insert({ v, v + 1 });
+    path.insert({ 190, 195 });
+    const auto edges = relation_of(path, 2), starts = relation_of({ { 0 } }, 1);
+    evaluator.initialize(std::array { borrow(edges), borrow(starts) });
+    EXPECT_EQ(evaluator.get_result().size(), n);
+    const auto none2 = relation_of({}, 2), none1 = relation_of({}, 1), cut = relation_of({ { 192, 193 } }, 2);
+    evaluator.update(std::array { Change { borrow(none2), borrow(cut) }, Change { borrow(none1), borrow(none1) } });
+    EXPECT_EQ(tuples_of(evaluator.get_delta().removed), (Tuples { { 193 }, { 194 } }));
+    EXPECT_TRUE(evaluator.get_delta().added.empty());
+    EXPECT_EQ(evaluator.get_result().size(), n - 2);
+}
+
 TEST(DatabaseDatalog, RejectsInvalidRules)
 {
     Programs p;

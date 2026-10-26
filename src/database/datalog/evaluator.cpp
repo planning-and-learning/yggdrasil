@@ -6,7 +6,6 @@
 #include "yggdrasil/database/datalog/evaluator.hpp"
 
 #include "yggdrasil/database/datalog/detail/executor.hpp"
-#include "yggdrasil/database/datalog/detail/fixpoint.hpp"
 #include "yggdrasil/database/datalog/detail/program.hpp"
 
 #include <algorithm>
@@ -40,46 +39,27 @@ struct Evaluator::Impl
         }
     }
 
-    void evaluate(bool counting)
+    /// Full evaluation; `maintained` keeps what update() needs.
+    void evaluate(bool maintained)
     {
         for (auto& table : program.tables)
             if (table->slot)
                 table->loaded = true;
         for (const auto& stratum : program.strata)
-            switch (stratum.kind)
-            {
-                case StratumInfo::Kind::AGGREGATE:
-                    evaluate_aggregate(program, stratum);
-                    break;
-                case StratumInfo::Kind::PLAIN:
-                    evaluate_plain(program, executor, stratum, counting);
-                    break;
-                case StratumInfo::Kind::RECURSIVE:
-                    evaluate_recursive(program, executor, stratum);
-                    break;
-            }
+        {
+            if (maintained)
+                stratum->initialize(program, executor);
+            else
+                stratum->evaluate(program, executor);
+        }
         publish(false);
     }
 
     void update()
     {
         for (const auto& stratum : program.strata)
-        {
-            if (std::ranges::none_of(stratum.reads, [&](size_t t) { return program.tables[t]->changed(); }))
-                continue;
-            switch (stratum.kind)
-            {
-                case StratumInfo::Kind::AGGREGATE:
-                    update_aggregate(program, stratum);
-                    break;
-                case StratumInfo::Kind::PLAIN:
-                    update_plain(program, executor, stratum);
-                    break;
-                case StratumInfo::Kind::RECURSIVE:
-                    update_recursive(program, executor, stratum);
-                    break;
-            }
-        }
+            if (std::ranges::any_of(stratum->info().reads, [&](size_t t) { return program.tables[t]->changed(); }))
+                stratum->update(program, executor);
         publish(true);
     }
 
@@ -216,6 +196,8 @@ size_t Evaluator::memory_usage() const noexcept
     size_t result = 0;
     for (const auto& table : m_impl->program.tables)
         result += table->memory_usage();
+    for (const auto& stratum : m_impl->program.strata)
+        result += stratum->memory_usage();
     for (const auto& output : m_impl->results)
         result += output.memory_usage();
     return result;
