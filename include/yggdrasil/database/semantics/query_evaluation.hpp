@@ -5,7 +5,6 @@
 #ifndef YGG_DATABASE_SEMANTICS_QUERY_EVALUATION_HPP_
 #define YGG_DATABASE_SEMANTICS_QUERY_EVALUATION_HPP_
 
-#include "yggdrasil/database/semantics/incremental/fixpoint.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -85,14 +84,7 @@ class QueryEvaluator
 {
     using NodeId = Index<Query<>>;
     using DistanceState = detail::QueryDistanceWorkspace;
-    /// The circuit of a fixpoint's component, shared by its fixpoints and evaluated by the first (the owner).
-    struct FixpointState
-    {
-        std::shared_ptr<incremental::FixpointCircuit> circuit;
-        bool owner = true;
-        [[nodiscard]] size_t memory_usage() const noexcept { return owner ? circuit->memory_usage() : 0; }
-    };
-    using State = std::variant<std::monostate, GenericJoinWorkspace, DistanceState, FixpointState>;
+    using State = std::variant<std::monostate, GenericJoinWorkspace, DistanceState>;
     struct Node
     {
         Builder<Relation> result;
@@ -106,8 +98,6 @@ class QueryEvaluator
                         return GenericJoinWorkspace(operation.get_plan());
                     else if constexpr (std::same_as<Tag, QueryDistanceTag>)
                         return DistanceState(operation.get_plan());
-                    else if constexpr (std::same_as<Tag, QueryFixpointTag>)
-                        return FixpointState { std::make_shared<incremental::FixpointCircuit>(operation), true };
                     else
                         return std::monostate {};
                 },
@@ -117,30 +107,15 @@ class QueryEvaluator
     };
     QueryPlan m_plan;
     std::vector<Node> m_nodes;
-    /// Per node, whether its fixpoint's circuit evaluates it.
-    std::vector<bool> m_nested;
     Workspace m_workspace;
     bool m_ready = false;
 
 public:
-    explicit QueryEvaluator(QueryPlan plan) : m_plan(std::move(plan)), m_nested(incremental::nested_queries(m_plan))
+    explicit QueryEvaluator(QueryPlan plan) : m_plan(std::move(plan))
     {
         m_nodes.reserve(m_plan.node_count());
         for (size_t i = 0; i < m_plan.node_count(); ++i)
             m_nodes.emplace_back(m_plan[NodeId(to_uint_t(i))]);
-        auto owners = std::vector<FixpointState*>();
-        for (auto& node : m_nodes)
-            if (auto* state = std::get_if<FixpointState>(&node.state))
-            {
-                const auto owner = std::ranges::find_if(
-                    owners,
-                    [&](const FixpointState* other)
-                    { return other->circuit->scope() == state->circuit->scope() && std::ranges::equal(other->circuit->bodies(), state->circuit->bodies()); });
-                if (owner == owners.end())
-                    owners.push_back(state);
-                else
-                    *state = FixpointState { (*owner)->circuit, false };
-            }
     }
     template<RelationViewRange R>
     void evaluate(const R& bindings)
@@ -152,8 +127,6 @@ public:
         m_ready = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
         {
-            if (m_nested[i])
-                continue;
             auto& state = m_nodes[i];
             auto& out = state.result;
             const auto child = [&](QueryView<> query) -> const auto& { return m_nodes[query.get_index().get_value()].result; };
@@ -170,23 +143,12 @@ public:
                         database::antijoin(child(operation.get_lhs()), child(operation.get_rhs()), operation.get_plan(), out, m_workspace);
                     else if constexpr (std::same_as<Tag, QueryProjectTag>)
                         database::project(child(operation.get_arg()), operation.get_plan(), out, m_workspace);
-                    else if constexpr (std::same_as<Tag, QueryAggregateTag>)
-                        database::aggregate(child(operation.get_arg()), child(operation.get_groups()), operation.get_plan(), out);
                     else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                     {
                         const auto inputs =
                             operation.get_inputs() | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.get_value()].result; });
                         generic_join(inputs, operation.get_plan(), out, std::get<GenericJoinWorkspace>(state.state));
                     }
-                    else if constexpr (std::same_as<Tag, QueryFixpointTag>)
-                    {
-                        const auto& fixpoint = std::get<FixpointState>(state.state);
-                        if (fixpoint.owner)
-                            fixpoint.circuit->initialize([&](size_t import) -> const auto& { return child(fixpoint.circuit->imports()[import]); });
-                        database::assign(out, fixpoint.circuit->result(operation.get_variable()));
-                    }
-                    else if constexpr (std::same_as<Tag, QueryRecursionTag>)
-                        throw std::logic_error("Query: a recursion leaf is evaluated by its fixpoint.");
                     else
                     {
                         static_assert(std::same_as<Tag, QueryDistanceTag>);

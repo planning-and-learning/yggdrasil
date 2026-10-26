@@ -194,18 +194,6 @@ Estimate estimate_operation(QueryView<Tag> query, FactorIdentity identity, GetEs
     const auto rows = std::same_as<Tag, QuerySemijoinTag> ? matched : std::max(0.0, lhs.rows - matched);
     return factor(capped({ rows, lhs.distinct }), query.columns(), identity);
 }
-/// One row per group of the groups input, whose estimate it keeps (GMUW 15.2: grouping yields one row per group).
-template<class GetEstimate>
-Estimate estimate_operation(QueryView<QueryAggregateTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
-{
-    const auto groups = child(query.get_groups());
-    return factor(capped({ groups.rows, groups.distinct }), query.columns(), identity);
-}
-/// Fixpoints and their recursion leaves have no System R estimate; they are only known when observed.
-template<typename Tag, class GetEstimate>
-    requires(std::same_as<Tag, QueryRecursionTag> || std::same_as<Tag, QueryFixpointTag>)
-Estimate estimate_operation(QueryView<Tag>, FactorIdentity, GetEstimate&&, const Statistics&)
-{ throw std::logic_error("Optimizer: fixpoints have no estimate unless observed."); }
 /// The literature has no estimate for distances; they are only known when observed.
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryDistanceTag>, FactorIdentity, GetEstimate&&, const Statistics&)

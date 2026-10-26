@@ -11,7 +11,6 @@
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -20,56 +19,70 @@
 
 namespace ygg::database::datalog
 {
-/// Evaluates the requested relations of a stratified program, fully or incrementally, by compiling it into a query DAG
-/// (details/compile.hpp) maintained by incremental::QueryEvaluator, following DBSP [Budiu23]: relations without
-/// recursion are queries over their rules, a recursive component is a fixpoint whose updates are exact for additions
-/// and removals alike (nested streams, §6), and aggregates are maintained per group. Only what the outputs depend on is
-/// compiled, and only the input slots it reads are read.
+/// Evaluates a program rule by rule over indexed relations, without intermediate relations: each rule is an index
+/// nested-loop join compiled once per literal that reads a change (semi-naive evaluation, counting, DRed). Atoms that
+/// a step's new variables complete are intersected, the one with the fewest matches enumerating (Generic Join
+/// [Ngo13]), so cyclic bodies such as triangles stay worst-case optimal. Relations are strata of strongly connected
+/// components (stratification.hpp), evaluated in dependency order:
 ///
-/// Columns are uint_t; relation i of the outputs has columns labeled 0, ..., arity − 1, and an input is read
-/// positionally. Input slot s is binding s; static slots are read by the first evaluate() or initialize() only.
+/// - evaluate(): a stratum without recursion in one pass, a recursive one semi-naively, a rule once per atom of the
+///   stratum reading the rows found last;
+/// - update(), after initialize(): a stratum without recursion keeps derivation counts, adjusted by the rule with one
+///   changed literal reading its added or removed rows, earlier literals the new and later ones the old relations
+///   [Gupta93, counting]; a recursive stratum uses Delete and Rederive [Gupta93]: delete every row with a derivation
+///   through a removed row (with the old relations), rederive the deleted rows that the remaining rows still derive
+///   (the rule with its head bound), then insert semi-naively from the additions and the rederived rows.
 ///
-/// [Budiu23] M. Budiu, F. McSherry, L. Ryzhyk, V. Tannen, DBSP: Automatic Incremental View Maintenance for Rich Query
-///   Languages, PVLDB 16(7), 2023.
+/// Only the strata the requested outputs depend on are evaluated, and only the input slots they read are read.
+///
+/// An aggregate reads a relation of the satisfying assignments of its body, kept by counting, whose groups it keeps
+/// incrementally; COUNT and SUM are 0 for a group without rows. Columns are uint_t; relation i of the outputs has
+/// columns labeled 0, ..., arity - 1. Input slot s is binding s; static slots are read by the first evaluate() or
+/// initialize() only.
+///
+/// [Gupta93] A. Gupta, I. S. Mumick, V. S. Subrahmanian, Maintaining Views Incrementally, SIGMOD 1993.
+/// [Ngo13] H. Q. Ngo, C. Ré, A. Rudra, Skew Strikes Back: New Developments in the Theory of Join Algorithms, SIGMOD
+///   Record 2013.
 class Evaluator
 {
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 
     [[nodiscard]] bool reads(size_t slot) const;
-    /// The rows of an input slot, cleared to be read anew.
-    Builder<database::Relation>& input(size_t slot);
-    /// The change of an input slot, cleared to be read anew.
-    incremental::Delta& change(size_t slot);
+    [[nodiscard]] size_t input_arity(size_t slot) const;
+    /// Starts reading inputs anew, or (`updating`) their changes.
+    void begin(bool updating);
+    void input_row(size_t slot, std::span<const uint_t> row);
+    void change_row(size_t slot, bool added, std::span<const uint_t> row);
+    void finish_evaluate();
     void finish_initialize();
     void finish_update();
 
-    /// Appends the rows of `relation` to `out` positionally: column c of `relation` is column c of `out`.
-    template<RelationViewConcept V>
-    static void copy_rows(const V& relation, Builder<database::Relation>& out)
+    template<RelationViewConcept V, typename F>
+    void decode(size_t slot, const V& relation, const F& f)
     {
-        const auto from = relation.columns().span();
-        const auto to = out.columns().span();
-        if (from.size() != to.size())
+        const auto arity = input_arity(slot);
+        if (relation.columns().size() != arity)
             throw std::invalid_argument("Datalog evaluator: an input does not have its relation's arity.");
-        for (const auto& column : from)
+        for (const auto& column : relation.columns().span())
             if (column.type != type_id<uint_t>)
                 throw std::invalid_argument("Datalog evaluator: input columns must be uint_t.");
-        auto row = std::vector<std::byte>(to.size() * sizeof(uint_t));
+        auto row = std::vector<uint_t>(arity);
         for (size_t i = 0; i < relation.size(); ++i)
         {
             const auto bytes = relation.row(i);
-            for (size_t c = 0; c < to.size(); ++c)
-                std::ranges::copy(bytes.subspan(from[c].offset, sizeof(uint_t)), std::span(row).subspan(to[c].offset).begin());
-            out.insert(std::span<const std::byte>(row));
+            for (size_t c = 0; c < arity; ++c)
+                row[c] = ByteCodec<uint_t>::decode(bytes.subspan(relation.columns().span()[c].offset, ByteCodec<uint_t>::size));
+            f(std::span<const uint_t>(row));
         }
     }
     template<RelationViewRange R>
     void read_inputs(const R& inputs)
     {
+        begin(false);
         for (size_t slot = 0; slot < std::ranges::size(inputs); ++slot)
             if (reads(slot))
-                copy_rows(inputs[slot], input(slot));
+                decode(slot, inputs[slot], [&](std::span<const uint_t> row) { input_row(slot, row); });
     }
 
 public:
@@ -81,10 +94,14 @@ public:
     Evaluator(Evaluator&&) noexcept;
     Evaluator& operator=(Evaluator&&) noexcept;
 
-    /// Full evaluation of the inputs, which update() can then maintain.
+    /// Full evaluation of the inputs.
     template<RelationViewRange R>
     void evaluate(const R& inputs)
-    { initialize(inputs); }
+    {
+        read_inputs(inputs);
+        finish_evaluate();
+    }
+    /// Full evaluation that keeps what update() maintains.
     template<RelationViewRange R>
     void initialize(const R& inputs)
     {
@@ -95,13 +112,13 @@ public:
     template<incremental::RelationDeltaRange R>
     void update(const R& changes)
     {
+        begin(true);
         for (size_t slot = 0; slot < std::ranges::size(changes); ++slot)
             if (reads(slot))
             {
                 const auto& [added, removed] = changes[slot];
-                auto& delta = change(slot);
-                copy_rows(added, delta.added);
-                copy_rows(removed, delta.removed);
+                decode(slot, removed, [&](std::span<const uint_t> row) { change_row(slot, false, row); });
+                decode(slot, added, [&](std::span<const uint_t> row) { change_row(slot, true, row); });
             }
         finish_update();
     }

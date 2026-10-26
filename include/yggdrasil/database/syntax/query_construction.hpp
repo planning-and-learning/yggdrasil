@@ -57,14 +57,6 @@ void prepare(Data<Query<QueryDistanceTag>>& data, const QueryRepository& reposit
 
 /// An omitted output order is canonicalized to first occurrence order.
 void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repository);
-
-void prepare(Data<Query<QueryAggregateTag>>& data, const QueryRepository& repository);
-
-void prepare(Data<Query<QueryRecursionTag>>& data, const QueryRepository& repository);
-
-/// The bodies' recursion leaves of the fixpoint's scope must name a body and have its columns; no other scope's leaves
-/// may occur in them outside a nested fixpoint.
-void prepare(Data<Query<QueryFixpointTag>>& data, const QueryRepository& repository);
 }  // namespace detail
 
 /// Validates operands and derives the prepared metadata stored in the record.

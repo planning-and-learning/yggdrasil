@@ -29,8 +29,7 @@ public:
         if constexpr (std::same_as<Tag, void>)
             return ygg::visit([](auto concrete) { return concrete.columns(); }, get_variant());
         else if constexpr (std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryProjectTag>
-                           || std::same_as<Tag, database::QueryDistanceTag> || std::same_as<Tag, database::QueryGenericJoinTag>
-                           || std::same_as<Tag, database::QueryAggregateTag>)
+                           || std::same_as<Tag, database::QueryDistanceTag> || std::same_as<Tag, database::QueryGenericJoinTag>)
             return get_plan().output_columns().span();
         else if constexpr (std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
             return get_plan().lhs_columns().span();
@@ -39,20 +38,8 @@ public:
     }
     [[nodiscard]] auto get_arg() const
         requires(std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryRenameTag> || std::same_as<Tag, database::QuerySelectEqualTag>
-                 || std::same_as<Tag, database::QuerySelectValueTag> || std::same_as<Tag, database::QueryAggregateTag>)
+                 || std::same_as<Tag, database::QuerySelectValueTag>)
     { return make_view(this->get_data().arg, this->get_context()); }
-    [[nodiscard]] auto get_groups() const
-        requires std::same_as<Tag, database::QueryAggregateTag>
-    { return make_view(this->get_data().groups, this->get_context()); }
-    [[nodiscard]] auto get_function() const
-        requires std::same_as<Tag, database::QueryAggregateTag>
-    { return this->get_data().function; }
-    [[nodiscard]] auto get_value() const
-        requires std::same_as<Tag, database::QueryAggregateTag>
-    { return this->get_data().value; }
-    [[nodiscard]] auto get_result() const
-        requires std::same_as<Tag, database::QueryAggregateTag>
-    { return this->get_data().result; }
     [[nodiscard]] auto get_lhs() const
         requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>
                  || std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
@@ -73,15 +60,6 @@ public:
     [[nodiscard]] auto get_input_slot() const
         requires std::same_as<Tag, database::QueryInputTag>
     { return this->get_data().input_slot; }
-    [[nodiscard]] size_t get_scope() const
-        requires(std::same_as<Tag, database::QueryRecursionTag> || std::same_as<Tag, database::QueryFixpointTag>)
-    { return this->get_data().scope; }
-    [[nodiscard]] size_t get_variable() const
-        requires(std::same_as<Tag, database::QueryRecursionTag> || std::same_as<Tag, database::QueryFixpointTag>)
-    { return this->get_data().variable; }
-    [[nodiscard]] auto get_bodies() const
-        requires std::same_as<Tag, database::QueryFixpointTag>
-    { return std::span<const Index<database::Query<>>>(this->get_data().bodies.data(), this->get_data().bodies.size()); }
     [[nodiscard]] auto get_labels() const
         requires(std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryRenameTag>)
     { return std::span<const Index<database::Column>>(this->get_data().labels.data(), this->get_data().labels.size()); }
@@ -103,7 +81,7 @@ public:
     [[nodiscard]] const auto& get_plan() const
         requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QueryProjectTag> || std::same_as<Tag, database::QueryDistanceTag>
                  || std::same_as<Tag, database::QueryGenericJoinTag> || std::same_as<Tag, database::QuerySemijoinTag>
-                 || std::same_as<Tag, database::QueryAntijoinTag> || std::same_as<Tag, database::QueryAggregateTag>)
+                 || std::same_as<Tag, database::QueryAntijoinTag>)
     { return this->get_data().plan; }
     [[nodiscard]] size_t get_lhs_position() const
         requires std::same_as<Tag, database::QuerySelectEqualTag>

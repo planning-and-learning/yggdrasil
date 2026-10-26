@@ -249,10 +249,9 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWit
     invalid.added.insert(cells(7, 12));
     invalid.added.insert(cells(7, 13));  // Net support change is zero, but removal is invalid.
     EXPECT_THROW(evaluator.update(invalid.change(), workspace), std::invalid_argument);
-    // Rejected before any change: the evaluation is preserved.
     Builder<database::Relation> empty(input.columns());
-    EXPECT_NO_THROW(evaluator.update(std::tie(empty, empty), workspace));
-    EXPECT_TRUE(evaluator.get_result().contains(cells(7)));
+    EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
+    evaluator.initialize(input, workspace);
     database::incremental::Delta valid(input.columns());
     valid.removed.insert(cells(7, 10));
     valid.added.insert(cells(7, 12));

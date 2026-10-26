@@ -6,9 +6,7 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_QUERY_HPP_
 
 #include "yggdrasil/core/type_list.hpp"
-#include "yggdrasil/database/semantics/incremental/aggregate.hpp"
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
-#include "yggdrasil/database/semantics/incremental/fixpoint.hpp"
 #include "yggdrasil/database/semantics/incremental/generic_join.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
@@ -190,73 +188,6 @@ struct NodeRules<QueryDistanceTag>
     { state.apply(graph.delta(operation.get_sources()).change(), graph.delta(operation.get_edges()).change(), graph.delta(operation.get_targets()).change()); }
 };
 
-template<>
-struct NodeRules<QueryAggregateTag>
-{
-    using State = AggregateEvaluator;
-
-    static State make(QueryView<QueryAggregateTag> operation) { return State(operation.get_plan()); }
-    template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
-    static void initialize(State& state, QueryView<QueryAggregateTag> operation, const Graph& graph, const R&, Workspace&)
-    { state.initialize(graph.result(operation.get_arg()), graph.result(operation.get_groups())); }
-    template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
-    static void update(State& state, QueryView<QueryAggregateTag> operation, const Graph& graph, const R&, Workspace&)
-    { state.apply(graph.delta(operation.get_arg()).change(), graph.delta(operation.get_groups()).change()); }
-};
-
-/// A relation of a fixpoint. The fixpoints of one component share their circuit, which its first node (the owner)
-/// runs; the others read their relation from it.
-struct FixpointNode
-{
-    std::shared_ptr<FixpointCircuit> circuit;
-    size_t variable = 0;
-    bool owner = true;
-    [[nodiscard]] const Builder<Relation>& get_result() const { return circuit->result(variable); }
-    [[nodiscard]] const Delta& get_delta() const { return circuit->delta(variable); }
-    [[nodiscard]] size_t memory_usage() const noexcept { return owner ? circuit->memory_usage() : 0; }
-};
-
-template<>
-struct NodeRules<QueryFixpointTag>
-{
-    using State = FixpointNode;
-
-    static State make(QueryView<QueryFixpointTag> operation) { return State { std::make_shared<FixpointCircuit>(operation), operation.get_variable(), true }; }
-    template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
-    static void initialize(State& state, QueryView<QueryFixpointTag>, const Graph& graph, const R&, Workspace&)
-    {
-        if (state.owner)
-            state.circuit->initialize([&](size_t i) -> const auto& { return graph.result(state.circuit->imports()[i]); });
-    }
-    template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
-    static void update(State& state, QueryView<QueryFixpointTag>, const Graph& graph, const R&, Workspace&)
-    {
-        if (state.owner)
-            state.circuit->update([&](size_t i) { return graph.delta(state.circuit->imports()[i]).change(); });
-    }
-};
-
-/// Recursion leaves are evaluated by their fixpoint's circuit, never by the root circuit.
-template<>
-struct NodeRules<QueryRecursionTag>
-{
-    struct State
-    {
-        [[nodiscard]] const Builder<Relation>& get_result() const { throw std::logic_error("Incremental query: a recursion leaf has no root value."); }
-        [[nodiscard]] const Delta& get_delta() const { throw std::logic_error("Incremental query: a recursion leaf has no root value."); }
-        [[nodiscard]] size_t memory_usage() const noexcept { return 0; }
-    };
-    static State make(QueryView<QueryRecursionTag>) { return {}; }
-    template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
-    static void initialize(State&, QueryView<QueryRecursionTag>, const Graph&, const R&, Workspace&)
-    {
-    }
-    template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
-    static void update(State&, QueryView<QueryRecursionTag>, const Graph&, const R&, Workspace&)
-    {
-    }
-};
-
 /// The node of one operator; the tag keeps the states of different operators distinct.
 template<typename Tag>
 struct QueryNode
@@ -277,33 +208,9 @@ class QueryEvaluator
     using Node = ApplyTypeListT<std::variant, MapTypeListT<detail::QueryNode, QueryConstructorTags>>;
     QueryPlan m_plan;
     std::vector<Node> m_nodes;
-    /// Per node, whether its fixpoint's circuit evaluates it.
-    std::vector<bool> m_nested;
     Workspace m_workspace;
     std::vector<const void*> m_storage_addresses;
     bool m_initialized = false;
-
-    /// The fixpoints of one component (same scope and bodies) share the first one's circuit.
-    void share_fixpoints()
-    {
-        auto owners = std::vector<detail::FixpointNode*>();
-        for (auto& node : m_nodes)
-            if (auto* fixpoint = std::get_if<detail::QueryNode<QueryFixpointTag>>(&node))
-            {
-                auto& state = fixpoint->state;
-                const auto owner = std::ranges::find_if(
-                    owners,
-                    [&](const detail::FixpointNode* other)
-                    { return other->circuit->scope() == state.circuit->scope() && std::ranges::equal(other->circuit->bodies(), state.circuit->bodies()); });
-                if (owner == owners.end())
-                    owners.push_back(&state);
-                else
-                {
-                    state.circuit = (*owner)->circuit;
-                    state.owner = false;
-                }
-            }
-    }
 
     template<typename>
     friend struct detail::NodeRules;
@@ -321,14 +228,13 @@ class QueryEvaluator
     bool is_internal(const void* address) const { return std::ranges::find(m_storage_addresses, address) != m_storage_addresses.end(); }
 
 public:
-    explicit QueryEvaluator(QueryPlan plan) : m_plan(std::move(plan)), m_nested(nested_queries(m_plan))
+    explicit QueryEvaluator(QueryPlan plan) : m_plan(std::move(plan))
     {
         m_nodes.reserve(m_plan.node_count());
         for (size_t i = 0; i < m_plan.node_count(); ++i)
             ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
                        { m_nodes.emplace_back(std::in_place_type<detail::QueryNode<Tag>>, Rules<Tag>::make(operation)); },
                        m_plan[NodeId(to_uint_t(i))].get_variant());
-        share_fixpoints();
     }
     template<RelationViewRange R>
     void initialize(const R& bindings)
@@ -336,16 +242,13 @@ public:
         database::detail::validate_bindings(m_plan, bindings, [&](const void* address) { return is_internal(address); });
         m_initialized = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
-            if (!m_nested[i])
-                ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
-                           { Rules<Tag>::initialize(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, bindings, m_workspace); },
-                           m_plan[NodeId(to_uint_t(i))].get_variant());
+            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+                       { Rules<Tag>::initialize(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, bindings, m_workspace); },
+                       m_plan[NodeId(to_uint_t(i))].get_variant());
         // Fixed-schema builders retain their storage identity, including after a failed update.
         m_storage_addresses.clear();
         for (size_t i = 0; i < m_nodes.size(); ++i)
         {
-            if (m_nested[i])
-                continue;
             const NodeId id(to_uint_t(i));
             m_storage_addresses.push_back(result(id).get_storage_address());
             m_storage_addresses.push_back(delta(id).added.get_storage_address());
@@ -380,10 +283,9 @@ public:
         }
         m_initialized = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
-            if (!m_nested[i])
-                ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
-                           { Rules<Tag>::update(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, changes, m_workspace); },
-                           m_plan[NodeId(to_uint_t(i))].get_variant());
+            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+                       { Rules<Tag>::update(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, changes, m_workspace); },
+                       m_plan[NodeId(to_uint_t(i))].get_variant());
         m_initialized = true;
     }
     [[nodiscard]] const Builder<Relation>& get_result(size_t root = 0) const&

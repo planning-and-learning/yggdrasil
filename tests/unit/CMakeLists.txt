@@ -91,8 +91,6 @@ add_yggdrasil_gtest(database_relation_repository "database/relation_repository.c
 add_yggdrasil_gtest(database_query "database/query.cpp")
 target_link_libraries(database_query PRIVATE Boost::heap)
 add_yggdrasil_gtest(database_datalog "database/datalog.cpp")
-add_yggdrasil_gtest(database_zset "database/zset.cpp")
-add_yggdrasil_gtest(database_aggregate "database/aggregate.cpp")
 add_yggdrasil_gtest(database_generic_join "database/generic_join.cpp")
 add_yggdrasil_gtest(database_dpccp "database/dpccp.cpp")
 add_yggdrasil_gtest(database_optimization "database/optimization.cpp")
@@ -104,7 +102,7 @@ foreach(
     IN ITEMS
         containers_block_array_set database_operations database_typed_operations database_min_distance database_must_pass
         database_relaxation database_incremental_min_distance database_incremental database_allocations
-        database_relation_repository database_query database_datalog database_zset database_aggregate database_dpccp database_optimization database_optimization_estimates
+        database_relation_repository database_query database_datalog database_dpccp database_optimization database_optimization_estimates
 )
     target_link_libraries(${database_test} PRIVATE yggdrasil::database)
 endforeach()

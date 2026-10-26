@@ -38,6 +38,3 @@ template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::d
 template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryGenericJoinTag>, false>;
 template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySemijoinTag>, false>;
 template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAntijoinTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAggregateTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryRecursionTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryFixpointTag>, false>;

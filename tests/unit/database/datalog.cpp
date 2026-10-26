@@ -14,10 +14,7 @@
 #include <tuple>
 #include <vector>
 #include <yggdrasil/database/datalog/construction.hpp>
-#include <yggdrasil/database/datalog/details/compile.hpp>
 #include <yggdrasil/database/datalog/evaluator.hpp>
-#include <yggdrasil/database/semantics/incremental/query.hpp>
-#include <yggdrasil/database/semantics/query_evaluation.hpp>
 #include <yggdrasil/database/semantics/relation_repository.hpp>
 
 namespace
@@ -414,48 +411,6 @@ TEST(DatabaseDatalog, EvaluatorEqualsNaiveEvaluation)
         for (size_t i = 0; i < fixture.outputs.size(); ++i)
             EXPECT_EQ(tuples_of(evaluator.get_result(i)), expected.get(fixture.outputs[i].get_id()))
                 << "trial " << trial << ", relation " << fixture.outputs[i].get_id();
-    }
-}
-
-TEST(DatabaseDatalog, CompiledQueriesEqualNaiveEvaluation)
-{
-    Fixture fixture;
-    const auto& outputs = fixture.outputs;
-    const auto compiled = dl::detail::compile(fixture.program, outputs);
-    ASSERT_EQ(compiled.unit_slot, 2);
-    ygg::database::QueryEvaluator full(compiled.plan);
-    ygg::database::incremental::QueryEvaluator incremental(compiled.plan);
-    auto unit = Relation(std::span<const ygg::Index<ygg::database::Column>>());
-    unit.insert(std::span<const std::byte>());
-    std::mt19937 random(5);
-    std::vector<Tuples> current(2);
-    incremental.initialize(std::array { borrow(relation_of(current[0], 2)), borrow(relation_of(current[1], 1)), borrow(unit) });
-    for (size_t trial = 0; trial < 60; ++trial)
-    {
-        std::vector<Tuples> inputs(2);
-        for (size_t i = 0, count = random() % 14; i < count; ++i)
-            inputs[0].insert({ static_cast<uint_t>(random() % 6), static_cast<uint_t>(random() % 6) });
-        for (uint_t vertex = 0; vertex < 6; ++vertex)
-            if (random() % 4 != 0)
-                inputs[1].insert({ vertex });
-        const auto e = relation_of(inputs[0], 2), v = relation_of(inputs[1], 1);
-        full.evaluate(std::array { borrow(e), borrow(v), borrow(unit) });
-        std::vector<Tuples> added(2), removed(2);
-        for (size_t slot = 0; slot < 2; ++slot)
-        {
-            std::ranges::set_difference(inputs[slot], current[slot], std::inserter(added[slot], added[slot].end()));
-            std::ranges::set_difference(current[slot], inputs[slot], std::inserter(removed[slot], removed[slot].end()));
-        }
-        const auto ea = relation_of(added[0], 2), er = relation_of(removed[0], 2), va = relation_of(added[1], 1), vr = relation_of(removed[1], 1);
-        const auto none = Relation(std::span<const ygg::Index<ygg::database::Column>>());
-        incremental.update(std::array { Change { borrow(ea), borrow(er) }, Change { borrow(va), borrow(vr) }, Change { borrow(none), borrow(none) } });
-        current = inputs;
-        const Interpreter expected(fixture.program, inputs);
-        for (size_t i = 0; i < outputs.size(); ++i)
-        {
-            EXPECT_EQ(tuples_of(full.get_result(i)), expected.get(outputs[i].get_id())) << "trial " << trial << ", relation " << outputs[i].get_id();
-            EXPECT_EQ(tuples_of(incremental.get_result(i)), expected.get(outputs[i].get_id())) << "trial " << trial << ", relation " << outputs[i].get_id();
-        }
     }
 }
 

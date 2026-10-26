@@ -65,7 +65,7 @@ bool Planner::known(QueryView<> plan)
     bool result = false;
     if (const auto caller = source(plan); caller && m_statistics->expressions.contains(*caller))
         result = true;
-    else if (is<QueryDistanceTag>(plan) || is<QueryRecursionTag>(plan) || is<QueryFixpointTag>(plan))
+    else if (is<QueryDistanceTag>(plan))
         result = false;
     else if (is<QueryInputTag>(plan))
         result = m_statistics->inputs.contains(as<QueryInputTag>(plan).get_input_slot());
@@ -75,20 +75,6 @@ bool Planner::known(QueryView<> plan)
         for_each_child(plan, [&](QueryView<> child) { result = result && known(child); });
     }
     slot(m_known, plan) = result;
-    return result;
-}
-}
-
-namespace ygg::database::detail
-{
-bool Planner::nested(QueryView<> query)
-{
-    if (const auto cached = slot(m_nested, query))
-        return *cached;
-    bool result = is<QueryRecursionTag>(query);
-    if (!is<QueryFixpointTag>(query))
-        for_each_child(query, [&](QueryView<> child) { result = nested(child) || result; });
-    slot(m_nested, query) = result;
     return result;
 }
 }
@@ -118,9 +104,9 @@ QueryView<> Planner::plan(QueryView<> normalized)
         return *planned;
     QueryView<> result = [&]
     {
-        if (joins(normalized) && !nested(normalized))
+        if (joins(normalized))
             return plan_block(normalized, normalized.columns());
-        if (is<QueryProjectTag>(normalized) && !nested(normalized))
+        if (is<QueryProjectTag>(normalized))
         {
             if (const auto projection = as<QueryProjectTag>(normalized); joins(projection.get_arg()))
                 return plan_block(projection.get_arg(), normalized.columns());

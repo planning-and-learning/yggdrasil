@@ -8,17 +8,19 @@
 
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/zset.hpp"
 
+#include <algorithm>
+#include <functional>
+#include <limits>
 #include <utility>
+#include <vector>
 
 namespace ygg::database::incremental
 {
 
-/// Maintains set projection and the number of input rows supporting each output: a Z-set whose rows are the result.
+/// Maintains set projection and the number of input rows supporting each output.
 /// Support counting follows Gupta, Mumick and Subrahmanian, "Maintaining Views
-/// Incrementally" (SIGMOD 1993), Sections 4-5: https://doi.org/10.1145/170035.170066;
-/// the delta inspects final supports only (DBSP, Proposition 4.7).
+/// Incrementally" (SIGMOD 1993), Sections 4-5: https://doi.org/10.1145/170035.170066.
 /// Inputs are borrowed only for each call and must not alias this evaluator's
 /// result/delta or the sequential caller workspace. Results and deltas are borrowed
 /// until the next mutation. Rejected schema/overlap checks preserve the previous
@@ -27,16 +29,15 @@ namespace ygg::database::incremental
 class ProjectionEvaluator
 {
     ProjectionPlan m_plan;
-    ZSet m_supports;
+    Builder<Relation> m_result;
+    std::vector<size_t> m_supports;
     Delta m_delta;
-    /// The removals per output row of the change update() validates; kept for its storage.
-    ZSet m_removals;
+    std::vector<uint_t> m_pending_removals;
     bool m_initialized = false;
 
     std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace& workspace) const;
-    /// Throws unless every removed row's projection has as many witnesses as removals.
-    template<RelationViewConcept V>
-    void require_witnesses(const V& removed, Workspace& workspace);
+    bool add(std::span<const std::byte> row);
+    void remove(std::span<const std::byte> row);
     /// Applies a change that is known to be valid.
     template<RelationChange C>
     void apply(const C& change, Workspace& workspace);
@@ -51,7 +52,7 @@ public:
     void initialize(const V& input, Workspace& workspace);
 
     /// The change must describe an actual change to the initialized input set.
-    /// Schema, overlap, aliasing and witness errors are rejected before changing the result.
+    /// Schema, overlap, and aliasing errors are rejected before changing the result.
     template<RelationChange C>
     void update(const C& change, Workspace& workspace);
 
@@ -68,12 +69,14 @@ template<RelationViewConcept V>
 void ProjectionEvaluator::initialize(const V& input, Workspace& workspace)
 {
     database::detail::require_plan_columns(input.columns().span(), m_plan.input_columns().span());
-    detail::require_unaliased(input, m_supports.rows(), m_delta);
+    detail::require_unaliased(input, m_result, m_delta);
     m_initialized = false;
+    m_result.clear();
     m_supports.clear();
     m_delta.clear();
+    m_pending_removals.clear();
     for (size_t i = 0; i < input.size(); ++i)
-        m_supports.add(project_row(input.row(i), workspace), 1);
+        add(project_row(input.row(i), workspace));
     m_initialized = true;
 }
 
@@ -81,20 +84,8 @@ template<RelationChange C>
 void ProjectionEvaluator::update(const C& change, Workspace& workspace)
 {
     detail::require_initialized(m_initialized);
-    detail::require_change(change, m_plan.input_columns().span(), m_supports.rows(), m_delta);
-    require_witnesses(std::get<1>(change), workspace);
+    detail::require_change(change, m_plan.input_columns().span(), m_result, m_delta);
     apply(change, workspace);
-}
-
-template<RelationViewConcept V>
-void ProjectionEvaluator::require_witnesses(const V& removed, Workspace& workspace)
-{
-    m_removals.clear();
-    for (size_t i = 0; i < removed.size(); ++i)
-        m_removals.add(project_row(removed.row(i), workspace), 1);
-    for (size_t i = 0; i < m_removals.size(); ++i)
-        if (m_removals.weight(i) > m_supports.weight(m_removals.row(i)))
-            throw std::invalid_argument("Incremental projection: removal has no supporting row.");
 }
 
 template<RelationChange C>
@@ -103,20 +94,27 @@ void ProjectionEvaluator::apply(const C& change, Workspace& workspace)
     const auto& [added, removed] = change;
     m_initialized = false;
     m_delta.clear();
-    // Additions first: a support then reaches zero only if it ends at zero, so an output whose witness is replaced keeps
-    // its position, and no row is both added and removed.
+    m_pending_removals.clear();
+    for (size_t i = 0; i < removed.size(); ++i)
+        remove(project_row(removed.row(i), workspace));
     for (size_t i = 0; i < added.size(); ++i)
     {
         const auto row = project_row(added.row(i), workspace);
-        if (m_supports.add(row, 1) == 1)
+        if (add(row))
             m_delta.added.insert(Row(row, m_plan.output_columns().span()));
     }
-    for (size_t i = 0; i < removed.size(); ++i)
-    {
-        const auto row = project_row(removed.row(i), workspace);
-        if (m_supports.add(row, -1) == 0)
-            m_delta.removed.insert(Row(row, m_plan.output_columns().span()));
-    }
+    // Inspect final support counts only (DBSP, Proposition 4.7). A replaced
+    // witness revives its existing row without an erase/insert cycle.
+    // Descending positions keep pending indices valid during swap-and-pop.
+    std::ranges::sort(m_pending_removals, std::greater {});
+    for (const auto position : m_pending_removals)
+        if (m_supports[position] == 0)
+        {
+            m_delta.removed.insert(Row(m_result.row(position), m_plan.output_columns().span()));
+            m_result.erase(position);
+            m_supports[position] = m_supports.back();
+            m_supports.pop_back();
+        }
     m_initialized = true;
 }
 

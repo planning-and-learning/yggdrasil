@@ -43,12 +43,6 @@ constexpr const char* query_operation_name(QueryView<Tag>)
         return "semijoin";
     else if constexpr (std::same_as<Concrete, QueryView<QueryAntijoinTag>>)
         return "antijoin";
-    else if constexpr (std::same_as<Concrete, QueryView<QueryAggregateTag>>)
-        return "aggregate";
-    else if constexpr (std::same_as<Concrete, QueryView<QueryRecursionTag>>)
-        return "recursion";
-    else if constexpr (std::same_as<Concrete, QueryView<QueryFixpointTag>>)
-        return "fixpoint";
     else
     {
         static_assert(std::same_as<Concrete, QueryView<QueryGenericJoinTag>>);
@@ -75,8 +69,6 @@ OutputIt format_query_plan(OutputIt out, const QueryPlan& plan)
                 out = fmt::format_to(out, "{}: {}({}) columns=[{}]", id, query_operation_name(operation), fmt::join(children, ","), fmt::join(columns, ","));
                 if constexpr (std::same_as<Concrete, QueryView<QueryInputTag>>)
                     out = fmt::format_to(out, " slot={}", operation.get_input_slot());
-                if constexpr (std::same_as<Concrete, QueryView<QueryRecursionTag>> || std::same_as<Concrete, QueryView<QueryFixpointTag>>)
-                    out = fmt::format_to(out, " scope={} variable={}", operation.get_scope(), operation.get_variable());
                 if constexpr (std::same_as<Concrete, QueryView<QueryGenericJoinTag>>)
                     out = fmt::format_to(out, " variables=[{}]", fmt::join(operation.get_variable_order() | std::views::transform(value), ","));
                 out = fmt::format_to(out, "\n");
