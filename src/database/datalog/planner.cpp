@@ -151,21 +151,25 @@ Plan plan(CompiledProgram& program, const CompiledRule& rule, std::optional<size
 }
 }  // namespace
 
+void plan_rule(CompiledProgram& program, CompiledRule& rule)
+{
+    const auto none = std::vector<bool>(rule.slots);
+    rule.plain = plan(program, rule, std::nullopt, none);
+    rule.by_source.clear();
+    for (size_t j = 0; j < rule.literals.size(); ++j)
+        rule.by_source.push_back(is_generator_kind(rule.literals[j].kind) ? plan(program, rule, j, none) : Plan {});
+    if (program.recursive_tables[rule.head])
+    {
+        auto bound = none;
+        for (const auto t : rule.head_terms)
+            bound[t.value] = true;
+        rule.rederive = plan(program, rule, std::nullopt, bound);
+    }
+}
+
 void plan_rules(CompiledProgram& program)
 {
     for (auto& rule : program.rules)
-    {
-        const auto none = std::vector<bool>(rule.slots);
-        rule.plain = plan(program, rule, std::nullopt, none);
-        for (size_t j = 0; j < rule.literals.size(); ++j)
-            rule.by_source.push_back(is_generator_kind(rule.literals[j].kind) ? plan(program, rule, j, none) : Plan {});
-        if (program.recursive_tables[rule.head])
-        {
-            auto bound = none;
-            for (const auto t : rule.head_terms)
-                bound[t.value] = true;
-            rule.rederive = plan(program, rule, std::nullopt, bound);
-        }
-    }
+        plan_rule(program, rule);
 }
 }  // namespace ygg::database::datalog::detail

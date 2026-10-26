@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <span>
 #include <vector>
@@ -21,6 +22,7 @@ namespace ygg::database::datalog::detail
 struct CompiledProgram;
 struct CompiledRule;
 class Executor;
+class GoalHeuristic;
 
 /// The relations of a stratum, the rules that derive them, and the tables they read.
 struct StratumInfo
@@ -148,14 +150,21 @@ private:
 /// derivation algorithm (Felzenszwalb & McAllester 2007, §3): rows are settled in order of weight from a priority queue,
 /// each settled row expanded by the rules that read it with the settled rows (weighted.cpp). If only goal rules read the
 /// stratum (a min head without key columns over one of its relations and the targets), it stops once every goal holds:
-/// the first settled row a goal reads has the least weight. An update evaluates the stratum anew and records the
-/// difference to its old rows.
+/// the first settled row a goal reads has the least weight; with a heuristic derived from its rules (heuristic.hpp), rows
+/// settle in order of weight plus the heuristic (A*, Felzenszwalb & McAllester 2007, §4), which keeps that order
+/// correct since the heuristic is monotone. An update evaluates the stratum anew and records the difference to its
+/// old rows.
 class WeightedStratum final : public Stratum
 {
 public:
     /// `goals`: the rules of higher strata that read the stratum, if all of them are goals; empty, the stratum is
     /// evaluated completely.
-    WeightedStratum(StratumInfo stratum, const CompiledProgram& program, std::vector<size_t> goals);
+    WeightedStratum(StratumInfo stratum, const CompiledProgram& program, std::vector<size_t> goals, std::unique_ptr<GoalHeuristic> heuristic);
+    WeightedStratum(const WeightedStratum&) = delete;
+    WeightedStratum& operator=(const WeightedStratum&) = delete;
+    WeightedStratum(WeightedStratum&&) = delete;
+    WeightedStratum& operator=(WeightedStratum&&) = delete;
+    ~WeightedStratum() override;
 
     void evaluate(CompiledProgram& program, Executor& executor) override;
     void update(CompiledProgram& program, Executor& executor) override;
@@ -163,13 +172,13 @@ public:
 private:
     [[nodiscard]] size_t state_memory_usage() const noexcept override;
 
-    /// A derived row of a table of the stratum, waiting to be settled.
+    /// A derived row of a table of the stratum, waiting to be settled, by its weight plus the heuristic.
     struct Candidate
     {
-        uint_t weight;
+        uint_t priority;
         size_t position;
         std::vector<uint_t> row;
-        friend bool operator>(const Candidate& lhs, const Candidate& rhs) noexcept { return lhs.weight > rhs.weight; }
+        friend bool operator>(const Candidate& lhs, const Candidate& rhs) noexcept { return lhs.priority > rhs.priority; }
     };
     /// Per table of the stratum: the rows of the other columns settled, and the least weight queued per such row.
     std::vector<RawArraySet<uint_t>> m_settled;
@@ -179,11 +188,16 @@ private:
     std::vector<RawArraySet<uint_t>> m_snapshot;
     std::vector<size_t> m_goals;
     std::vector<bool> m_holds;
+    std::unique_ptr<GoalHeuristic> m_heuristic;
+    /// The rows a run derived, offered after it: the heuristic runs rules itself.
+    std::vector<std::pair<size_t, std::vector<uint_t>>> m_derived;
 
     /// Whether the settled row (the frontier of its table) makes every goal hold.
     bool goals_hold(CompiledProgram& program, Executor& executor, size_t table);
-    /// Queues a derived row of the stratum's table at `position` unless a lighter one is settled or queued.
-    void offer(size_t position, std::span<const uint_t> row);
+    /// Queues a derived row of the stratum's table at `position` unless a lighter one is settled or queued, or the
+    /// heuristic shows that it reaches no target.
+    void offer(CompiledProgram& program, Executor& executor, size_t position, std::span<const uint_t> row);
+    void offer_derived(CompiledProgram& program, Executor& executor);
     void derive(CompiledProgram& program, Executor& executor);
 };
 

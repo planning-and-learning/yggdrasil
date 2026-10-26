@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "yggdrasil/database/datalog/detail/heuristic.hpp"
 #include "yggdrasil/database/datalog/detail/program.hpp"
 #include "yggdrasil/database/datalog/detail/stratification.hpp"
 
@@ -353,7 +354,8 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             for (const auto r : info.rules)
                 require_superior(info, program.rules[r]);
             auto goals = goal_rules(s);
-            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals)));
+            auto heuristic = GoalHeuristic::make(program, info, goals);
+            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals), std::move(heuristic)));
         }
         else if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
         {

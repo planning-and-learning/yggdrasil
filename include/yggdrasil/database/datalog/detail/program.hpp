@@ -95,6 +95,8 @@ struct CompiledProgram
 /// Translates the program (translation.cpp) and plans its rules (planner.cpp).
 CompiledProgram translate(ProgramView view, std::span<const RelationView> outputs, std::span<const size_t> static_slots);
 void plan_rules(CompiledProgram& program);
+/// Plans one rule, also one that is not among the program's rules.
+void plan_rule(CompiledProgram& program, CompiledRule& rule);
 }  // namespace ygg::database::datalog::detail
 
 #endif
