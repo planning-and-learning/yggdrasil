@@ -47,7 +47,7 @@ public:
         auto slot_of = std::map<uint_t, uint_t>();
         // Positive atoms first, so that the outer variables an aggregate groups by are known.
         auto positives = std::vector<Literal>();
-        body(view.get_atoms(), std::span<const AtomView>(), {}, slot_of, positives);
+        body(view.get_atoms(), std::span<const AtomView>(), {}, {}, slot_of, positives);
         auto outer = std::set<uint_t>();
         for (const auto atom : view.get_atoms())
             for (const auto t : atom.get_terms())
@@ -57,7 +57,7 @@ public:
         for (const auto aggregate : view.get_aggregates())
             aggregate_literals.push_back(add_aggregate(aggregate, outer, slot_of));
         auto others = std::vector<Literal>();
-        body(std::span<const AtomView>(), view.get_negated(), view.get_comparisons(), slot_of, others);
+        body(std::span<const AtomView>(), view.get_negated(), view.get_comparisons(), view.get_arithmetic(), slot_of, others);
         rule.literals = std::move(positives);
         rule.literals.insert(rule.literals.end(), aggregate_literals.begin(), aggregate_literals.end());
         rule.literals.insert(rule.literals.end(), others.begin(), others.end());
@@ -84,7 +84,12 @@ private:
 
     /// The literals of a body; variables get slots of `slot_of`.
     template<typename Atoms, typename Negated>
-    void body(const Atoms& atoms, const Negated& negated, std::span<const Comparison> comparisons, std::map<uint_t, uint_t>& slot_of, std::vector<Literal>& out)
+    void body(const Atoms& atoms,
+              const Negated& negated,
+              std::span<const Comparison> comparisons,
+              std::span<const Arithmetic> arithmetic,
+              std::map<uint_t, uint_t>& slot_of,
+              std::vector<Literal>& out)
     {
         const auto term = [&](Term t)
         {
@@ -104,6 +109,12 @@ private:
             out.push_back(literal(Literal::Kind::POSITIVE, atom));
         for (const auto atom : negated)
             out.push_back(literal(Literal::Kind::NEGATED, atom));
+        for (const auto& operation : arithmetic)
+        {
+            auto result = Literal { Literal::Kind::ARITHMETIC, npos, { term(operation.lhs), term(operation.rhs), term(Term::variable(operation.result)) } };
+            result.operation = operation.operation;
+            out.push_back(std::move(result));
+        }
         for (const auto& comparison : comparisons)
         {
             auto result = Literal { Literal::Kind::COMPARISON, npos, { term(comparison.lhs), term(comparison.rhs) } };
@@ -126,7 +137,7 @@ private:
     {
         auto inner_slots = std::map<uint_t, uint_t>();
         auto inner = CompiledRule {};
-        body(view.get_atoms(), view.get_negated(), view.get_comparisons(), inner_slots, inner.literals);
+        body(view.get_atoms(), view.get_negated(), view.get_comparisons(), view.get_arithmetic(), inner_slots, inner.literals);
         auto variables = std::vector<uint_t>();  // In slot order.
         variables.resize(inner_slots.size());
         for (const auto& [variable, slot] : inner_slots)

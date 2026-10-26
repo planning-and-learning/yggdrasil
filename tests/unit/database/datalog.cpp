@@ -52,8 +52,12 @@ struct Programs
             data->terms.push_back(term);
         return dl::insert(repository, *data).first;
     }
-    dl::AggregateView
-    aggregate(Function function, uint_t result, uint_t value, std::initializer_list<dl::AtomView> atoms, std::initializer_list<dl::AtomView> negated = {})
+    dl::AggregateView aggregate(Function function,
+                                uint_t result,
+                                uint_t value,
+                                std::initializer_list<dl::AtomView> atoms,
+                                std::initializer_list<dl::AtomView> negated = {},
+                                std::initializer_list<dl::Arithmetic> arithmetic = {})
     {
         auto data = dl::checkout<dl::Aggregate>(builder);
         data->function = function;
@@ -63,13 +67,16 @@ struct Programs
             data->atoms.push_back(atom.get_index());
         for (const auto atom : negated)
             data->negated.push_back(atom.get_index());
+        for (const auto& operation : arithmetic)
+            data->arithmetic.push_back(operation);
         return dl::insert(repository, *data).first;
     }
     dl::RuleView rule(dl::AtomView head,
                       std::initializer_list<dl::AtomView> atoms,
                       std::initializer_list<dl::AtomView> negated = {},
                       std::initializer_list<dl::Comparison> comparisons = {},
-                      std::initializer_list<dl::AggregateView> aggregates = {})
+                      std::initializer_list<dl::AggregateView> aggregates = {},
+                      std::initializer_list<dl::Arithmetic> arithmetic = {})
     {
         auto data = dl::checkout<dl::Rule>(builder);
         data->head = head.get_index();
@@ -81,6 +88,8 @@ struct Programs
             data->comparisons.push_back(comparison);
         for (const auto aggregate : aggregates)
             data->aggregates.push_back(aggregate.get_index());
+        for (const auto& operation : arithmetic)
+            data->arithmetic.push_back(operation);
         return dl::insert(repository, *data).first;
     }
     dl::ProgramView program(std::initializer_list<dl::RuleView> rules)
@@ -146,7 +155,7 @@ class Interpreter
     [[nodiscard]] bool passes(const Negated& negated, std::span<const dl::Comparison> comparisons, const std::map<uint_t, uint_t>& assignment) const
     {
         for (const auto& comparison : comparisons)
-            if ((value(comparison.lhs, assignment).value() == value(comparison.rhs, assignment).value()) != (comparison.kind == dl::Comparison::Kind::EQUAL))
+            if (!comparison.holds(value(comparison.lhs, assignment).value(), value(comparison.rhs, assignment).value()))
                 return false;
         for (const auto atom : negated)
         {
@@ -158,6 +167,11 @@ class Interpreter
         }
         return true;
     }
+    static void bind(std::span<const dl::Arithmetic> arithmetic, std::map<uint_t, uint_t>& assignment)
+    {
+        for (const auto& operation : arithmetic)
+            assignment[operation.result] = operation.apply(value(operation.lhs, assignment).value(), value(operation.rhs, assignment).value());
+    }
     /// The aggregate over the assignments of its variables that extend `outer` on the variables both bind.
     [[nodiscard]] std::optional<uint_t> aggregate(dl::AggregateView aggregate, const std::map<uint_t, uint_t>& outer) const
     {
@@ -167,8 +181,10 @@ class Interpreter
         enumerate(atoms,
                   0,
                   {},
-                  [&](const auto& inner)
+                  [&](const auto& matched)
                   {
+                      auto inner = matched;
+                      bind(aggregate.get_arithmetic(), inner);
                       for (const auto& [variable, object] : inner)
                           if (const auto it = outer.find(variable); it != outer.end() && it->second != object)
                               return;
@@ -211,6 +227,7 @@ class Interpreter
                               return;
                           assignment[aggregate.get_result()] = *result;
                       }
+                      bind(rule.get_arithmetic(), assignment);
                       if (!passes(negated, rule.get_comparisons(), assignment))
                           return;
                       auto tuple = Tuple();
@@ -327,15 +344,17 @@ struct Fixture
                      loops = p.relation(5, 1), from3 = p.relation(6, 1), distinct = p.relation(7, 2), into2 = p.relation(8, 1), degree = p.relation(9, 2),
                      edges = p.relation(10, 1), largest = p.relation(11, 2), smallest = p.relation(12, 2), weight = p.relation(13, 2),
                      reach = p.relation(14, 2), isolated = p.relation(15, 1), has_out = p.relation(16, 1), triangle = p.relation(17, 3),
-                     cycle = p.relation(18, 2);
-    std::vector<dl::RelationView> outputs { tc,     tc2,   odd,     even,     unreachable, loops, from3,    distinct, into2,
-                                            degree, edges, largest, smallest, weight,      reach, isolated, triangle, cycle };
+                     cycle = p.relation(18, 2), sums = p.relation(19, 3), ascending = p.relation(20, 2), sparse = p.relation(21, 2), gaps = p.relation(22, 2),
+                     doubled = p.relation(23, 2);
+    std::vector<dl::RelationView> outputs { tc,       tc2,    odd,   even,     unreachable, loops, from3, distinct,  into2,  degree, edges,  largest,
+                                            smallest, weight, reach, isolated, triangle,    cycle, sums,  ascending, sparse, gaps,   doubled };
     dl::ProgramView program = make();
 
     dl::ProgramView make()
     {
-        constexpr uint_t x = 0, y = 1, z = 2, n = 3;
+        constexpr uint_t x = 0, y = 1, z = 2, n = 3, m = 4;
         using enum dl::Comparison::Kind;
+        using Operation = dl::Arithmetic::Operation;
         return p.program({
             // Transitive closure, linear and nonlinear.
             p.rule(p.atom(tc, { var(x), var(y) }), { p.atom(e, { var(x), var(y) }) }),
@@ -387,10 +406,62 @@ struct Fixture
                    {},
                    {},
                    { p.aggregate(Function::COUNT, n, 0, { p.atom(tc, { var(x), var(y) }) }) }),
+            // Arithmetic and order: results in heads, read by comparisons, by later arithmetic and as an aggregate's value;
+            // a recursive relation over a computed value.
+            p.rule(p.atom(sums, { var(x), var(y), var(n) }),
+                   { p.atom(e, { var(x), var(y) }) },
+                   {},
+                   {},
+                   {},
+                   { dl::Arithmetic { Operation::ADD, var(x), var(y), n } }),
+            p.rule(p.atom(ascending, { var(x), var(y) }), { p.atom(e, { var(x), var(y) }) }, {}, { dl::Comparison { LESS, var(x), var(y) } }),
+            p.rule(p.atom(sparse, { var(x), var(n) }), { p.atom(degree, { var(x), var(n) }) }, {}, { dl::Comparison { LESS_EQUAL, var(n), obj(1) } }),
+            p.rule(p.atom(gaps, { var(x), var(m) }),
+                   { p.atom(e, { var(x), var(y) }) },
+                   {},
+                   { dl::Comparison { NOT_EQUAL, var(m), obj(0) } },
+                   {},
+                   { dl::Arithmetic { Operation::SUBTRACT, var(y), var(x), n }, dl::Arithmetic { Operation::MAX, var(n), obj(1), m } }),
+            p.rule(p.atom(gaps, { var(x), var(m) }),
+                   { p.atom(gaps, { var(x), var(n) }) },
+                   {},
+                   { dl::Comparison { LESS, var(n), obj(4) } },
+                   {},
+                   { dl::Arithmetic { Operation::MULTIPLY, var(n), obj(2), m } }),
+            p.rule(p.atom(doubled, { var(x), var(n) }),
+                   { p.atom(v, { var(x) }) },
+                   {},
+                   {},
+                   { p.aggregate(Function::SUM, n, m, { p.atom(e, { var(x), var(y) }) }, {}, { dl::Arithmetic { Operation::MULTIPLY, var(y), obj(2), m } }) }),
         });
     }
 };
 }  // namespace
+
+TEST(DatabaseDatalog, ArithmeticSaturatesAndInfinityIsTheLargestValue)
+{
+    using Operation = dl::Arithmetic::Operation;
+    constexpr auto inf = dl::Arithmetic::infinity;
+    const auto apply = [](Operation operation, uint_t a, uint_t b) { return dl::Arithmetic { operation, {}, {}, 0 }.apply(a, b); };
+    EXPECT_EQ(apply(Operation::ADD, 2, 3), 5);
+    EXPECT_EQ(apply(Operation::ADD, inf - 1, 1), inf);
+    EXPECT_EQ(apply(Operation::ADD, inf, 0), inf);
+    EXPECT_EQ(apply(Operation::SUBTRACT, 2, 3), 0);
+    EXPECT_EQ(apply(Operation::SUBTRACT, 3, inf), 0);
+    EXPECT_EQ(apply(Operation::SUBTRACT, inf, inf), inf);
+    EXPECT_EQ(apply(Operation::MULTIPLY, 0, inf), 0);
+    EXPECT_EQ(apply(Operation::MULTIPLY, 2, inf), inf);
+    EXPECT_EQ(apply(Operation::MULTIPLY, inf / 2 + 1, 2), inf);
+    EXPECT_EQ(apply(Operation::DIVIDE, 7, 2), 3);
+    EXPECT_EQ(apply(Operation::DIVIDE, 7, 0), inf);
+    EXPECT_EQ(apply(Operation::DIVIDE, 7, inf), 0);
+    EXPECT_EQ(apply(Operation::DIVIDE, inf, inf), inf);
+    EXPECT_EQ(apply(Operation::MIN, 4, inf), 4);
+    EXPECT_EQ(apply(Operation::MAX, 4, inf), inf);
+    EXPECT_TRUE((dl::Comparison { dl::Comparison::Kind::LESS, {}, {} }.holds(4, inf)));
+    EXPECT_FALSE((dl::Comparison { dl::Comparison::Kind::LESS, {}, {} }.holds(4, 4)));
+    EXPECT_TRUE((dl::Comparison { dl::Comparison::Kind::LESS_EQUAL, {}, {} }.holds(4, 4)));
+}
 
 TEST(DatabaseDatalog, EvaluatorEqualsNaiveEvaluation)
 {

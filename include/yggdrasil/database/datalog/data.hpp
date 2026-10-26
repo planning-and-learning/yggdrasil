@@ -67,11 +67,13 @@ struct Data<database::datalog::Aggregate>
     IndexList<database::datalog::Atom> atoms;
     IndexList<database::datalog::Atom> negated;
     cista::offset::vector<database::datalog::Comparison> comparisons;
+    /// In order; each may read the atoms' variables and the earlier results.
+    cista::offset::vector<database::datalog::Arithmetic> arithmetic;
 
     static constexpr auto identifying_members() noexcept
-    { return Members<&Data::function, &Data::result, &Data::value, &Data::atoms, &Data::negated, &Data::comparisons> {}; }
+    { return Members<&Data::function, &Data::result, &Data::value, &Data::atoms, &Data::negated, &Data::comparisons, &Data::arithmetic> {}; }
     static constexpr auto cista_members() noexcept
-    { return Members<&Data::index, &Data::function, &Data::result, &Data::value, &Data::atoms, &Data::negated, &Data::comparisons> {}; }
+    { return Members<&Data::index, &Data::function, &Data::result, &Data::value, &Data::atoms, &Data::negated, &Data::comparisons, &Data::arithmetic> {}; }
     void clear() noexcept { clear_members(*this); }
 };
 
@@ -84,11 +86,13 @@ struct Data<database::datalog::Rule>
     IndexList<database::datalog::Atom> negated;
     cista::offset::vector<database::datalog::Comparison> comparisons;
     IndexList<database::datalog::Aggregate> aggregates;
+    /// In order, after the aggregates; each may read the variables bound before it.
+    cista::offset::vector<database::datalog::Arithmetic> arithmetic;
 
     static constexpr auto identifying_members() noexcept
-    { return Members<&Data::head, &Data::atoms, &Data::negated, &Data::comparisons, &Data::aggregates> {}; }
+    { return Members<&Data::head, &Data::atoms, &Data::negated, &Data::comparisons, &Data::aggregates, &Data::arithmetic> {}; }
     static constexpr auto cista_members() noexcept
-    { return Members<&Data::index, &Data::head, &Data::atoms, &Data::negated, &Data::comparisons, &Data::aggregates> {}; }
+    { return Members<&Data::index, &Data::head, &Data::atoms, &Data::negated, &Data::comparisons, &Data::aggregates, &Data::arithmetic> {}; }
     void clear() noexcept { clear_members(*this); }
 };
 

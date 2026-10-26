@@ -46,7 +46,11 @@ void bind_database_datalog(nb::module_& m)
         .def_ro("value", &dl::Term::value);
     ygg::add_comparison(term);
 
-    nb::enum_<dl::Comparison::Kind>(m, "DatalogComparisonKind").value("EQUAL", dl::Comparison::Kind::EQUAL).value("NOT_EQUAL", dl::Comparison::Kind::NOT_EQUAL);
+    nb::enum_<dl::Comparison::Kind>(m, "DatalogComparisonKind")
+        .value("EQUAL", dl::Comparison::Kind::EQUAL)
+        .value("NOT_EQUAL", dl::Comparison::Kind::NOT_EQUAL)
+        .value("LESS", dl::Comparison::Kind::LESS)
+        .value("LESS_EQUAL", dl::Comparison::Kind::LESS_EQUAL);
     nb::class_<dl::Comparison>(m, "DatalogComparison")
         .def(
             "__init__",
@@ -57,6 +61,27 @@ void bind_database_datalog(nb::module_& m)
         .def_ro("kind", &dl::Comparison::kind)
         .def_ro("lhs", &dl::Comparison::lhs)
         .def_ro("rhs", &dl::Comparison::rhs);
+
+    nb::enum_<dl::Arithmetic::Operation>(m, "DatalogArithmeticOperation")
+        .value("ADD", dl::Arithmetic::Operation::ADD)
+        .value("SUBTRACT", dl::Arithmetic::Operation::SUBTRACT)
+        .value("MULTIPLY", dl::Arithmetic::Operation::MULTIPLY)
+        .value("DIVIDE", dl::Arithmetic::Operation::DIVIDE)
+        .value("MIN", dl::Arithmetic::Operation::MIN)
+        .value("MAX", dl::Arithmetic::Operation::MAX);
+    nb::class_<dl::Arithmetic>(m, "DatalogArithmetic", "result = lhs operation rhs over saturating numbers; the largest value is infinity.")
+        .def(
+            "__init__",
+            [](dl::Arithmetic* self, dl::Arithmetic::Operation operation, dl::Term lhs, dl::Term rhs, ygg::uint_t result)
+            { new (self) dl::Arithmetic { operation, lhs, rhs, result }; },
+            "operation"_a,
+            "lhs"_a,
+            "rhs"_a,
+            "result"_a)
+        .def_ro("operation", &dl::Arithmetic::operation)
+        .def_ro("lhs", &dl::Arithmetic::lhs)
+        .def_ro("rhs", &dl::Arithmetic::rhs)
+        .def_ro("result", &dl::Arithmetic::result);
 
     nb::class_<dl::DatalogRepositoryFactory>(m, "DatalogRepositoryFactory", "Creates Datalog repositories with distinct identities within this factory.")
         .def(nb::init<>())
@@ -120,7 +145,8 @@ void bind_database_datalog(nb::module_& m)
                    ygg::uint_t value,
                    const std::vector<DatalogView<dl::Atom>>& atoms,
                    const std::vector<DatalogView<dl::Atom>>& negated,
-                   const std::vector<dl::Comparison>& comparisons)
+                   const std::vector<dl::Comparison>& comparisons,
+                   const std::vector<dl::Arithmetic>& arithmetic)
                 {
                     new (self) V();
                     self->function = function;
@@ -129,6 +155,7 @@ void bind_database_datalog(nb::module_& m)
                     set_indices(self->atoms, atoms);
                     set_indices(self->negated, negated);
                     self->comparisons.set(comparisons.begin(), comparisons.end());
+                    self->arithmetic.set(arithmetic.begin(), arithmetic.end());
                 },
                 "function"_a,
                 "result"_a,
@@ -136,7 +163,8 @@ void bind_database_datalog(nb::module_& m)
                 "atoms"_a,
                 "negated"_a = std::vector<DatalogView<dl::Atom>> {},
                 "comparisons"_a = std::vector<dl::Comparison> {},
-                "result = function value : atoms, not negated, comparisons; COUNT ignores value.");
+                "arithmetic"_a = std::vector<dl::Arithmetic> {},
+                "result = function value : atoms, arithmetic, not negated, comparisons; COUNT ignores value.");
         using W = DatalogView<dl::Aggregate>;
         auto cls = nb::class_<W>(m, "DatalogAggregate");
         cls.def("get_index", &W::get_index).def("get_function", &W::get_function).def("get_result", &W::get_result).def("get_value", &W::get_value);
@@ -154,7 +182,8 @@ void bind_database_datalog(nb::module_& m)
                    const std::vector<DatalogView<dl::Atom>>& atoms,
                    const std::vector<DatalogView<dl::Atom>>& negated,
                    const std::vector<dl::Comparison>& comparisons,
-                   const std::vector<DatalogView<dl::Aggregate>>& aggregates)
+                   const std::vector<DatalogView<dl::Aggregate>>& aggregates,
+                   const std::vector<dl::Arithmetic>& arithmetic)
                 {
                     new (self) V();
                     self->head = head.get_index();
@@ -162,12 +191,14 @@ void bind_database_datalog(nb::module_& m)
                     set_indices(self->negated, negated);
                     self->comparisons.set(comparisons.begin(), comparisons.end());
                     set_indices(self->aggregates, aggregates);
+                    self->arithmetic.set(arithmetic.begin(), arithmetic.end());
                 },
                 "head"_a,
                 "atoms"_a,
                 "negated"_a = std::vector<DatalogView<dl::Atom>> {},
                 "comparisons"_a = std::vector<dl::Comparison> {},
-                "aggregates"_a = std::vector<DatalogView<dl::Aggregate>> {});
+                "aggregates"_a = std::vector<DatalogView<dl::Aggregate>> {},
+                "arithmetic"_a = std::vector<dl::Arithmetic> {});
         using W = DatalogView<dl::Rule>;
         auto cls = nb::class_<W>(m, "DatalogRule");
         cls.def("get_index", &W::get_index).def("get_head", &W::get_head, nb::keep_alive<0, 1>());

@@ -86,6 +86,26 @@ def test_closure_degree_and_negation() -> None:
         assert rows(full.get_result(2)) == {(i,) for i in range(6) if all(a != i for a, _ in edges)}
 
 
+def test_arithmetic_and_order() -> None:
+    # sums(x, y, x + y) for edges x < y; the sum is computed before the comparison reads it.
+    p = Programs()
+    e, sums = p.relation(100, 2, 0), p.relation(0, 3)
+    x, y, n = 0, 1, 2
+    var = db.DatalogTerm.variable
+    rule = p.repository.insert(
+        db.DatalogRuleData(
+            p.atom(sums, x, y, n),
+            [p.atom(e, x, y)],
+            comparisons=[db.DatalogComparison(db.DatalogComparisonKind.LESS, var(x), var(y))],
+            arithmetic=[db.DatalogArithmetic(db.DatalogArithmeticOperation.ADD, var(x), var(y), n)],
+        )
+    )[0]
+    evaluator = db.DatalogEvaluator(p.program([rule]), [sums])
+    edges = {(1, 2), (3, 1), (2, 5), (4, 4)}
+    evaluator.evaluate([db.BorrowedRelation(relation(2, edges))])
+    assert rows(evaluator.get_result(0)) == {(a, b, a + b) for a, b in edges if a < b}
+
+
 def test_rejects_unsafe_rules() -> None:
     p = Programs()
     e, r = p.relation(100, 2, 0), p.relation(0, 2)

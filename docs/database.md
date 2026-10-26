@@ -793,8 +793,11 @@ records are interned in a `DatalogRepository` (`repository.hpp`), built with `ch
 - an atom: a relation applied to terms, each a variable numbered within its rule or an object constant;
 - an aggregate: `result = function value : atoms, not negated, comparisons`, grouped by the variables that the
   enclosing rule's positive atoms bind; COUNT and SUM are 0 for a group without rows;
-- a rule: `head ← atoms, not negated, comparisons, aggregates`, with a derived head of distinct variables and every
-  variable bound by a positive atom or an aggregate's result;
+- a rule: `head ← atoms, not negated, comparisons, aggregates, arithmetic`, with a derived head of distinct variables
+  and every variable bound by a positive atom, an aggregate's result or an arithmetic result;
+- comparisons `=`, `≠`, `<`, `≤` over values, and arithmetic `result = lhs op rhs` (`+ − × ÷ min max`, in order, each
+  reading the variables bound before it) over {0, …, M − 1} ∪ {∞} with M the largest `uint_t` as ∞: `+` and `×`
+  saturate to ∞, `−` at 0, `÷ 0` is ∞ (runir's numerical semantics);
 - a program: rules, stratified by the strongly connected components of their dependencies (`detail/stratification.hpp`).
 
 `Evaluator(program, outputs, static_slots)` (`evaluator.hpp`) evaluates the requested relations rule by rule over

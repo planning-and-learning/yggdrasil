@@ -48,6 +48,8 @@ public:
     [[nodiscard]] auto get_negated() const { return make_view(this->get_data().negated, this->get_context()); }
     [[nodiscard]] std::span<const database::datalog::Comparison> get_comparisons() const
     { return { this->get_data().comparisons.data(), this->get_data().comparisons.size() }; }
+    [[nodiscard]] std::span<const database::datalog::Arithmetic> get_arithmetic() const
+    { return { this->get_data().arithmetic.data(), this->get_data().arithmetic.size() }; }
 };
 
 template<typename C>
@@ -61,6 +63,8 @@ public:
     [[nodiscard]] auto get_negated() const { return make_view(this->get_data().negated, this->get_context()); }
     [[nodiscard]] std::span<const database::datalog::Comparison> get_comparisons() const
     { return { this->get_data().comparisons.data(), this->get_data().comparisons.size() }; }
+    [[nodiscard]] std::span<const database::datalog::Arithmetic> get_arithmetic() const
+    { return { this->get_data().arithmetic.data(), this->get_data().arithmetic.size() }; }
     [[nodiscard]] auto get_aggregates() const { return make_view(this->get_data().aggregates, this->get_context()); }
 };
 

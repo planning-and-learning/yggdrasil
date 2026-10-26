@@ -20,6 +20,20 @@ void add_variables(AtomView atom, std::vector<uint_t>& variables)
             variables.push_back(term.value);
 }
 
+/// Binds the results of `arithmetic` in order; its operands must be bound and its results fresh.
+void bind_arithmetic(std::span<const Arithmetic> arithmetic, std::vector<uint_t>& bound, const char* what)
+{
+    for (const auto& operation : arithmetic)
+    {
+        for (const auto term : { operation.lhs, operation.rhs })
+            if (term.is_variable() && std::ranges::find(bound, term.value) == bound.end())
+                throw std::invalid_argument(std::string("Datalog: an operand of an arithmetic literal of ") + what + " is not bound before it.");
+        if (std::ranges::find(bound, operation.result) != bound.end())
+            throw std::invalid_argument(std::string("Datalog: the result of an arithmetic literal of ") + what + " is bound before it.");
+        bound.push_back(operation.result);
+    }
+}
+
 template<typename Atoms>
 void require_bound(const Atoms& atoms, std::span<const Comparison> comparisons, const std::vector<uint_t>& bound, const char* what)
 {
@@ -50,11 +64,12 @@ void prepare_for_insert(DatalogRepository& repository, Data<Aggregate>& data)
     auto bound = std::vector<uint_t>();
     for (const auto atom : make_view(data.atoms, repository))
         add_variables(atom, bound);
+    bind_arithmetic({ data.arithmetic.data(), data.arithmetic.size() }, bound, "an aggregate");
     require_bound(make_view(data.negated, repository), { data.comparisons.data(), data.comparisons.size() }, bound, "an aggregate");
     if (data.function == AggregateFunction::COUNT)
         data.value = 0;
     else if (std::ranges::find(bound, data.value) == bound.end())
-        throw std::invalid_argument("Datalog: an aggregate's value is not bound by its positive atoms.");
+        throw std::invalid_argument("Datalog: an aggregate's value is not bound by its positive atoms or arithmetic.");
     if (std::ranges::find(bound, data.result) != bound.end())
         throw std::invalid_argument("Datalog: an aggregate's result is a variable of its atoms.");
 }
@@ -80,6 +95,7 @@ void prepare_for_insert(DatalogRepository& repository, Data<Rule>& data)
             throw std::invalid_argument("Datalog: an aggregate's result is a variable of the rule's atoms or another result.");
         bound.push_back(aggregate.get_result());
     }
+    bind_arithmetic({ data.arithmetic.data(), data.arithmetic.size() }, bound, "a rule");
     require_bound(std::vector<AtomView> { head }, {}, bound, "a rule's head");
     require_bound(make_view(data.negated, repository), { data.comparisons.data(), data.comparisons.size() }, bound, "a rule");
 }

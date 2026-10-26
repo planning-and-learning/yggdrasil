@@ -30,15 +30,19 @@ struct Literal
         /// The aggregate's table, read with the group's terms followed by the result variable.
         AGGREGATE,
         COMPARISON,
+        /// Terms lhs, rhs and the result variable, which it binds (or checks, if a plan binds it earlier).
+        ARITHMETIC,
     };
     Kind kind;
     size_t table = npos;
     /// A variable's term holds its slot in the rule.
     std::vector<Term> terms;
     Comparison::Kind comparison = Comparison::Kind::EQUAL;
+    Arithmetic::Operation operation = Arithmetic::Operation::ADD;
 };
 
-inline bool is_generator_kind(Literal::Kind kind) { return kind != Literal::Kind::COMPARISON; }
+/// Whether the literal reads a table, so that a plan can start with it.
+inline bool is_generator_kind(Literal::Kind kind) { return kind != Literal::Kind::COMPARISON && kind != Literal::Kind::ARITHMETIC; }
 
 /// One literal of a plan: a generator enumerates the rows of its table that match the bound terms (an index lookup,
 /// or a scan without bound terms) and binds the others; a filter tests a fully bound literal.

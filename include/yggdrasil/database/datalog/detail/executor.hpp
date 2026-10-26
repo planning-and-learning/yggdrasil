@@ -146,8 +146,17 @@ private:
                 step(rule, plan, i + 1, emit);
             return;
         }
-        const bool equal = value(literal.terms[0]) == value(literal.terms[1]);
-        if (equal == (literal.comparison == Comparison::Kind::EQUAL))
+        if (literal.kind == Literal::Kind::ARITHMETIC)
+        {
+            const auto result = Arithmetic { literal.operation, {}, {}, 0 }.apply(value(literal.terms[0]), value(literal.terms[1]));
+            if (!s.checks.empty() && m_slots[s.checks.front().second] != result)
+                return;
+            for (const auto& [term, slot] : s.binds)
+                m_slots[slot] = result;
+            step(rule, plan, i + 1, emit);
+            return;
+        }
+        if (Comparison { literal.comparison, {}, {} }.holds(value(literal.terms[0]), value(literal.terms[1])))
             step(rule, plan, i + 1, emit);
     }
 

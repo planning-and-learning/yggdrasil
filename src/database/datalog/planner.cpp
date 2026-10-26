@@ -71,6 +71,18 @@ Plan plan(CompiledProgram& program, const CompiledRule& rule, std::optional<size
                 result.steps.emplace_back(j, false);
                 placed[j] = progressed = true;
             }
+            else if (literal.kind == Literal::Kind::ARITHMETIC && all_bound(literal.terms, 2))
+            {
+                auto step = Step { j, false };
+                const auto slot = literal.terms[2].value;
+                if (bound[slot])
+                    step.checks.emplace_back(2, slot);
+                else
+                    step.binds.emplace_back(2, slot);
+                bound[slot] = true;
+                result.steps.push_back(std::move(step));
+                placed[j] = progressed = true;
+            }
             else if (literal.kind == Literal::Kind::AGGREGATE && all_bound(literal.terms, literal.terms.size() - 1))
             {
                 // Look up the group; the result is bound from its row.
