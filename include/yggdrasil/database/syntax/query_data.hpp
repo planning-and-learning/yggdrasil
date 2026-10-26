@@ -10,6 +10,7 @@
 #include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/core/types_utils.hpp"
 #include "yggdrasil/database/declarations.hpp"
+#include "yggdrasil/database/semantics/aggregate.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/generic_join.hpp"
 
@@ -289,6 +290,74 @@ struct Data<database::Query<database::QueryGenericJoinTag>>
     static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::inputs, &Data::variable_order, &Data::output_order> {}; }
     static constexpr auto cista_members() noexcept
     { return ygg::Members<&Data::index, &Data::inputs, &Data::variable_order, &Data::output_order, &Data::plan> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
+};
+template<>
+struct Data<database::Query<database::QueryAggregateTag>>
+{
+    Index<database::Query<database::QueryAggregateTag>> index;
+    Index<database::Query<>> arg;
+    Index<database::Query<>> groups;
+    database::AggregateFunction function = database::AggregateFunction::COUNT;
+    /// The aggregated column of the argument; unused by COUNT.
+    Index<database::Column> value;
+    Index<database::Column> result;
+    database::AggregatePlan plan;
+
+    Data() = default;
+    Data(Index<database::Query<>> arg_,
+         Index<database::Query<>> groups_,
+         database::AggregateFunction function_,
+         Index<database::Column> value_,
+         Index<database::Column> result_) :
+        arg(arg_),
+        groups(groups_),
+        function(function_),
+        value(value_),
+        result(result_)
+    {
+    }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::groups, &Data::function, &Data::value, &Data::result> {}; }
+    static constexpr auto cista_members() noexcept
+    { return ygg::Members<&Data::index, &Data::arg, &Data::groups, &Data::function, &Data::value, &Data::result, &Data::plan> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
+};
+
+template<>
+struct Data<database::Query<database::QueryRecursionTag>>
+{
+    Index<database::Query<database::QueryRecursionTag>> index;
+    /// Identifies the fixpoint whose bodies the leaf is in.
+    size_t scope = 0;
+    size_t variable = 0;
+    cista::offset::vector<database::ColumnLayout> columns;
+
+    Data() = default;
+    Data(size_t scope_, size_t variable_, std::span<const database::ColumnLayout> columns_) : scope(scope_), variable(variable_)
+    { columns.set(columns_.begin(), columns_.end()); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::scope, &Data::variable, &Data::columns> {}; }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::scope, &Data::variable, &Data::columns> {}; }
+    void clear() noexcept { ygg::clear_members(*this); }
+};
+
+template<>
+struct Data<database::Query<database::QueryFixpointTag>>
+{
+    Index<database::Query<database::QueryFixpointTag>> index;
+    /// The scope of the bodies' recursion leaves.
+    size_t scope = 0;
+    cista::offset::vector<Index<database::Query<>>> bodies;
+    size_t variable = 0;
+    cista::offset::vector<database::ColumnLayout> columns;
+
+    Data() = default;
+    Data(size_t scope_, std::span<const Index<database::Query<>>> bodies_, size_t variable_) : scope(scope_), variable(variable_)
+    { bodies.set(bodies_.begin(), bodies_.end()); }
+
+    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::scope, &Data::bodies, &Data::variable> {}; }
+    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::scope, &Data::bodies, &Data::variable, &Data::columns> {}; }
     void clear() noexcept { ygg::clear_members(*this); }
 };
 }  // namespace ygg

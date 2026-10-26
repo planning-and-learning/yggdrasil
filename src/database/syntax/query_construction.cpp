@@ -5,6 +5,8 @@
 
 #include "yggdrasil/database/syntax/query_construction.hpp"
 
+#include "yggdrasil/database/syntax/query.hpp"
+
 namespace ygg::database::detail
 {
 std::span<const ColumnLayout> child_columns(Index<Query<>> child, const QueryRepository& repository)
@@ -85,6 +87,56 @@ void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repo
                 if (std::ranges::find(data.output_order, column.label) == data.output_order.end())
                     data.output_order.push_back(column.label);
     data.plan = GenericJoinPlan(schemas, { data.variable_order.data(), data.variable_order.size() }, { data.output_order.data(), data.output_order.size() });
+}
+}
+
+namespace ygg::database::detail
+{
+void prepare(Data<Query<QueryAggregateTag>>& data, const QueryRepository& repository)
+{ data.plan = AggregatePlan(child_columns(data.arg, repository), child_columns(data.groups, repository), data.function, data.value, data.result); }
+}
+
+namespace ygg::database::detail
+{
+void prepare(Data<Query<QueryRecursionTag>>& data, const QueryRepository&) { validate_columns({ data.columns.data(), data.columns.size() }); }
+}
+
+namespace ygg::database::detail
+{
+void prepare(Data<Query<QueryFixpointTag>>& data, const QueryRepository& repository)
+{
+    if (data.variable >= data.bodies.size())
+        throw std::invalid_argument("Query: a fixpoint's variable must name one of its bodies.");
+    for (const auto body : data.bodies)
+        child_columns(body, repository);
+    const auto columns = child_columns(data.bodies[data.variable], repository);
+    data.columns.set(columns.begin(), columns.end());
+    // The bodies' recursion leaves, not looking into other fixpoints, whose bodies are their own scopes.
+    auto seen = std::vector<bool>(repository.size());
+    auto pending = std::vector<QueryView<>>();
+    for (const auto body : data.bodies)
+        pending.emplace_back(body, repository);
+    while (!pending.empty())
+    {
+        const auto query = pending.back();
+        pending.pop_back();
+        if (seen[query.get_index().get_value()])
+            continue;
+        seen[query.get_index().get_value()] = true;
+        if (is<QueryFixpointTag>(query))
+            continue;
+        if (is<QueryRecursionTag>(query))
+        {
+            const auto leaf = as<QueryRecursionTag>(query);
+            if (leaf.get_scope() != data.scope)
+                throw std::invalid_argument("Query: a recursion leaf occurs outside the bodies of its fixpoint.");
+            if (leaf.get_variable() >= data.bodies.size())
+                throw std::invalid_argument("Query: a recursion leaf must name one of its fixpoint's bodies.");
+            require_plan_columns(leaf.columns(), child_columns(data.bodies[leaf.get_variable()], repository));
+            continue;
+        }
+        for_each_child(query, [&](QueryView<> child) { pending.push_back(child); });
+    }
 }
 }
 

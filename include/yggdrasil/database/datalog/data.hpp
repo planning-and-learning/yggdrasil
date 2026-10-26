@@ -8,9 +8,11 @@
 #include "yggdrasil/core/types_utils.hpp"
 #include "yggdrasil/database/datalog/declarations.hpp"
 
+#include <cista/containers/string.h>
 #include <cista/containers/vector.h>
 #include <cstddef>
 #include <limits>
+#include <string>
 
 namespace ygg
 {
@@ -20,17 +22,20 @@ struct Data<database::datalog::Relation>
     static constexpr size_t derived = std::numeric_limits<size_t>::max();
 
     Index<database::datalog::Relation> index;
-    /// Names the relation; a derived relation's id is its relation in the compiled program.
+    /// A derived relation's id is its relation in the compiled program.
     size_t id = 0;
     size_t arity = 0;
     /// The input slot of an input relation, or `derived`.
     size_t input_slot = derived;
+    ::cista::offset::string name;
 
     Data() = default;
-    Data(size_t id_, size_t arity_, size_t input_slot_ = derived) : id(id_), arity(arity_), input_slot(input_slot_) {}
+    Data(size_t id_, size_t arity_, size_t input_slot_ = derived, const std::string& name_ = {}) : id(id_), arity(arity_), input_slot(input_slot_), name(name_)
+    {
+    }
 
-    static constexpr auto identifying_members() noexcept { return Members<&Data::id, &Data::arity, &Data::input_slot> {}; }
-    static constexpr auto cista_members() noexcept { return Members<&Data::index, &Data::id, &Data::arity, &Data::input_slot> {}; }
+    static constexpr auto identifying_members() noexcept { return Members<&Data::id, &Data::arity, &Data::input_slot, &Data::name> {}; }
+    static constexpr auto cista_members() noexcept { return Members<&Data::index, &Data::id, &Data::arity, &Data::input_slot, &Data::name> {}; }
     void clear() noexcept
     {
         clear_members(*this);

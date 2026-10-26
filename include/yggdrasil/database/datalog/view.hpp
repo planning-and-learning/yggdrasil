@@ -22,6 +22,7 @@ public:
     [[nodiscard]] size_t get_arity() const { return this->get_data().arity; }
     [[nodiscard]] bool is_input() const { return this->get_data().input_slot != Data<database::datalog::Relation>::derived; }
     [[nodiscard]] size_t get_input_slot() const { return this->get_data().input_slot; }
+    [[nodiscard]] const auto& get_name() const noexcept { return this->get_data().name; }
 };
 
 template<typename C>

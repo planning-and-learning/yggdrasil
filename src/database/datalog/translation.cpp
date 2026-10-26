@@ -4,7 +4,7 @@
  */
 
 #include "yggdrasil/database/datalog/details/program.hpp"
-#include "yggdrasil/database/datalog/stratification.hpp"
+#include "yggdrasil/database/datalog/details/stratification.hpp"
 
 #include <algorithm>
 #include <map>
@@ -149,7 +149,7 @@ private:
         if (view.get_function() != AggregateFunction::COUNT)
             aggregate.value = inner_slots.at(view.get_value());
         aggregate.table = add_table(aggregate.group.size() + 1);
-        aggregate.groups = std::make_unique<TupleSet>(aggregate.group.size());
+        aggregate.groups = std::make_unique<RawArraySet<uint_t>>(aggregate.group.size());
         if (view.get_function() == AggregateFunction::COUNT || view.get_function() == AggregateFunction::SUM)
             m_program.tables[aggregate.table]->fallback = 0;
         const auto [result, inserted] = outer_slots.try_emplace(view.get_result(), to_uint_t(outer_slots.size()));
@@ -214,12 +214,13 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
         // A stratum's relations depend on each other, so either all of them are needed or none.
         if (!needed[stratum.relations.front()])
             continue;
+        // Input relations have no rules and no stratum.
+        if (std::ranges::all_of(stratum.relations, [&](size_t t) { return program.tables[t]->slot.has_value(); }))
+            continue;
         auto info = StratumInfo { StratumInfo::Kind::PLAIN, stratum.relations, {}, {}, npos };
         for (const auto table : info.tables)
             stratum_of[table] = program.strata.size();
-        if (std::ranges::all_of(info.tables, [&](size_t t) { return program.tables[t]->slot.has_value(); }))
-            info.kind = StratumInfo::Kind::INPUT;
-        else if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
+        if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
         {
             info.kind = StratumInfo::Kind::AGGREGATE;
             info.aggregate = aggregate_of.at(info.tables.front());

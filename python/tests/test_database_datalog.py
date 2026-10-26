@@ -64,7 +64,7 @@ def test_closure_degree_and_negation() -> None:
     tc, degree, sink = p.relation(0, 2), p.relation(1, 2), p.relation(2, 1)
     has_out = p.relation(3, 1)
     x, y, z, n = 0, 1, 2, 3
-    count = p.repository.insert(db.DatalogAggregateData(db.AggregateFunction.COUNT, n, 0, [p.atom(e, x, y)]))[0]
+    count = p.repository.insert(db.DatalogAggregateData(db.DatalogAggregateFunction.COUNT, n, 0, [p.atom(e, x, y)]))[0]
     program = p.program(
         [
             p.rule(p.atom(tc, x, y), [p.atom(e, x, y)]),

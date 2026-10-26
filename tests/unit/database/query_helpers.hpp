@@ -147,6 +147,22 @@ inline database::QueryView<> distance(database::QueryRepository& repository,
     return database::insert_query(repository, builder(), *data);
 }
 
+inline database::QueryView<> aggregate(database::QueryRepository& repository,
+                                       database::QueryView<> arg,
+                                       database::QueryView<> groups,
+                                       database::AggregateFunction function,
+                                       Index<database::Column> value,
+                                       Index<database::Column> result)
+{
+    auto data = database::checkout<database::Query<database::QueryAggregateTag>>(builder());
+    data->arg = require(repository, arg);
+    data->groups = require(repository, groups);
+    data->function = function;
+    data->value = value;
+    data->result = result;
+    return database::insert_query(repository, builder(), *data);
+}
+
 inline database::QueryView<> generic_join(database::QueryRepository& repository,
                                           std::span<const database::QueryView<>> inputs,
                                           std::span<const Index<database::Column>> variable_order,

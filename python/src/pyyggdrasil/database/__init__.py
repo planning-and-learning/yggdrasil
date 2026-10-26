@@ -4,7 +4,6 @@
 """Relations, queries and their evaluation."""
 
 from pyyggdrasil._pyyggdrasil.database import (
-    AggregateFunction,
     BorrowedRelation,
     ColumnIndex,
     ColumnIndices,
@@ -12,6 +11,7 @@ from pyyggdrasil._pyyggdrasil.database import (
     ColumnType,
     DatalogAggregate,
     DatalogAggregateData,
+    DatalogAggregateFunction,
     DatalogAtom,
     DatalogAtomData,
     DatalogComparison,
@@ -95,7 +95,6 @@ from pyyggdrasil._pyyggdrasil.database import (
 )
 
 __all__ = [
-    "AggregateFunction",
     "BorrowedRelation",
     "ColumnIndex",
     "ColumnIndices",
@@ -103,6 +102,7 @@ __all__ = [
     "Columns",
     "DatalogAggregate",
     "DatalogAggregateData",
+    "DatalogAggregateFunction",
     "DatalogAtom",
     "DatalogAtomData",
     "DatalogComparison",

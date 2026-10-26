@@ -8,6 +8,7 @@
 #include "yggdrasil/core/types.hpp"
 #include "yggdrasil/database/datalog/details/tuples.hpp"
 
+#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -18,16 +19,16 @@ namespace ygg::database::datalog::detail
 {
 constexpr size_t npos = std::numeric_limits<size_t>::max();
 
-/// Which rows of a table a literal reads.
+/// Which rows of a table a literal reads: one of the table's row sets, or OLD, the rows before the update (the current
+/// ones without the added, with the removed).
 enum class Version : uint8_t
 {
-    NEW,
-    /// The rows before the update: the current ones without the added, with the removed.
-    OLD,
+    CURRENT,
     ADDED,
     REMOVED,
     /// The rows found last by a semi-naive iteration (insertion or over-deletion).
     FRONTIER,
+    OLD,
 };
 
 /// The rows of a relation (an input, a derived relation, or an aggregate's body or groups), its changes of the current
@@ -41,11 +42,11 @@ struct Table
     IndexedTuples current, added, removed, frontier, next;
     /// The derivation count of each row, for strata without recursion.
     bool counted = false;
-    TupleSet count_rows;
+    RawArraySet<uint_t> count_rows;
     std::vector<int64_t> counts;
-    TupleSet pending_rows;
+    RawArraySet<uint_t> pending_rows;
     /// The rows before a recursive stratum is evaluated anew.
-    TupleSet snapshot;
+    RawArraySet<uint_t> snapshot;
     std::vector<int64_t> pending;
     /// An aggregate's value of an absent group (COUNT and SUM: 0); its last column holds the value.
     std::optional<uint_t> fallback;
@@ -84,70 +85,45 @@ struct Table
         counts.clear();
     }
 
+    /// The row set of a version other than OLD.
+    [[nodiscard]] const IndexedTuples& rows(Version version) const noexcept
+    {
+        assert(version != Version::OLD);
+        return version == Version::ADDED ? added : version == Version::REMOVED ? removed : version == Version::FRONTIER ? frontier : current;
+    }
+    /// Calls f(row) for the rows of the version that match the key on the index (all rows without an index).
     template<typename F>
     void lookup(Version version, size_t index, std::span<const uint_t> key, const F& f) const
     {
-        const auto each = [&](const IndexedTuples& rows, auto&& g)
+        const auto each = [&](const IndexedTuples& set, auto&& g)
         {
             if (index == npos)
-                rows.for_each(g);
+                set.for_each(g);
             else
-                rows.for_each_match(index, key, g);
+                set.for_each_match(index, key, g);
         };
-        switch (version)
-        {
-            case Version::NEW:
-                return each(current, f);
-            case Version::ADDED:
-                return each(added, f);
-            case Version::REMOVED:
-                return each(removed, f);
-            case Version::FRONTIER:
-                return each(frontier, f);
-            case Version::OLD:
-                each(current,
-                     [&](std::span<const uint_t> row)
-                     {
-                         if (!added.contains(row))
-                             f(row);
-                     });
-                return each(removed, f);
-        }
+        if (version != Version::OLD)
+            return each(rows(version), f);
+        each(current,
+             [&](std::span<const uint_t> row)
+             {
+                 if (!added.contains(row))
+                     f(row);
+             });
+        each(removed, f);
     }
     /// About the number of rows lookup() visits.
     [[nodiscard]] size_t count(Version version, size_t index, std::span<const uint_t> key) const
     {
-        switch (version)
-        {
-            case Version::NEW:
-                return current.count(index, key);
-            case Version::ADDED:
-                return added.count(index, key);
-            case Version::REMOVED:
-                return removed.count(index, key);
-            case Version::FRONTIER:
-                return frontier.count(index, key);
-            case Version::OLD:
-                return current.count(index, key) + removed.count(index, key);
-        }
-        return 0;
+        if (version != Version::OLD)
+            return rows(version).count(index, key);
+        return current.count(index, key) + removed.count(index, key);
     }
     [[nodiscard]] bool contains(Version version, std::span<const uint_t> row) const
     {
-        switch (version)
-        {
-            case Version::NEW:
-                return current.contains(row);
-            case Version::ADDED:
-                return added.contains(row);
-            case Version::REMOVED:
-                return removed.contains(row);
-            case Version::FRONTIER:
-                return frontier.contains(row);
-            case Version::OLD:
-                return (current.contains(row) && !added.contains(row)) || removed.contains(row);
-        }
-        return false;
+        if (version != Version::OLD)
+            return rows(version).contains(row);
+        return (current.contains(row) && !added.contains(row)) || removed.contains(row);
     }
     [[nodiscard]] size_t memory_usage() const noexcept
     {

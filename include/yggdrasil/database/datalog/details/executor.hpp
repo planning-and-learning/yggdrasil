@@ -126,7 +126,7 @@ private:
                         });
             // An aggregate's absent group reads as its fallback value.
             const auto& fallback = table_of(rule, s.literal).fallback;
-            if (!s.generator && !found && fallback && (version == Version::NEW || version == Version::OLD))
+            if (!s.generator && !found && fallback && (version == Version::CURRENT || version == Version::OLD))
             {
                 const auto slot = s.binds.empty() ? s.checks.front().second : s.binds.front().second;
                 if (!s.binds.empty())

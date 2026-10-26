@@ -64,6 +64,32 @@ struct QuerySemijoinTag
 struct QueryAntijoinTag
 {
 };
+/// Per row of a groups input, an aggregate (COUNT, SUM, MIN, MAX) of the argument's rows that agree with it.
+struct QueryAggregateTag
+{
+};
+/// Inside the bodies of a fixpoint (its scope), relation `variable` of that fixpoint as of the previous iteration: the
+/// feedback edge z⁻¹ of DBSP's fixpoint circuit [Budiu23, §5].
+struct QueryRecursionTag
+{
+};
+/// Relation `variable` of the least fixpoint of its bodies: relation v is body v, whose recursion leaves of the same
+/// scope read the relations of the previous iteration, starting empty.
+struct QueryFixpointTag
+{
+};
+
+enum class AggregateFunction : uint8_t
+{
+    /// The number of rows; 0 for a group without rows.
+    COUNT,
+    /// The sum of a column; 0 for a group without rows.
+    SUM,
+    /// The least value of a column; a group without rows has none.
+    MIN,
+    /// The greatest value of a column; a group without rows has none.
+    MAX,
+};
 
 using QueryConstructorTags = TypeList<QueryInputTag,
                                       QueryEmptyTag,
@@ -77,7 +103,10 @@ using QueryConstructorTags = TypeList<QueryInputTag,
                                       QueryDistanceTag,
                                       QueryGenericJoinTag,
                                       QuerySemijoinTag,
-                                      QueryAntijoinTag>;
+                                      QueryAntijoinTag,
+                                      QueryAggregateTag,
+                                      QueryRecursionTag,
+                                      QueryFixpointTag>;
 
 /// Tag void is the type-erased query holding one of the concrete query records.
 template<typename Tag = void>
@@ -97,7 +126,6 @@ struct RelationRow
 struct RelationRowSet
 {
 };
-class Row;
 class RelationPool;
 class RelationPoolFactory;
 class RelationRepository;

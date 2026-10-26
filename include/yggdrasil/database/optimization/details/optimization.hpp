@@ -49,6 +49,7 @@ class Planner
     std::vector<std::optional<QueryIndex>> m_sources;
     std::vector<std::optional<Estimate>> m_estimates;
     std::vector<std::optional<bool>> m_known;
+    std::vector<std::optional<bool>> m_nested;
 
     template<class T>
     static std::optional<T>& slot(std::vector<std::optional<T>>& memo, QueryView<> query)
@@ -67,6 +68,10 @@ class Planner
     }
     /// Whether the plan query's rows are measured or derivable from measured inputs.
     bool known(QueryView<> plan);
+    /// Whether the query reads a recursion leaf of an enclosing fixpoint. Such a query is evaluated incrementally per
+    /// iteration, where the binary joins built by the caller are semi-naive delta joins and block plans made for full
+    /// evaluation do not apply.
+    bool nested(QueryView<> query);
     Estimate estimate(QueryView<> plan)
     {
         if (const auto& cached = slot(m_estimates, plan))

@@ -30,7 +30,7 @@ void seed(CompiledProgram& program, Executor& executor, const StratumInfo& strat
             executor.set_versions(rule, others);
             for (size_t i = 0; i < rule.literals.size(); ++i)
                 if (rule.literals[i].table != npos && stratum.contains(rule.literals[i].table))
-                    executor.set_version(i, Version::NEW);
+                    executor.set_version(i, Version::CURRENT);
             executor.set_version(j, set(literal.kind));
             executor.run(rule,
                          rule.by_source[j],
@@ -73,7 +73,7 @@ bool iterate_deletions(CompiledProgram& program, Executor& executor, const Strat
                 executor.set_versions(rule, Version::OLD);
                 for (size_t i = 0; i < rule.literals.size(); ++i)
                     if (rule.literals[i].table != npos && stratum.contains(rule.literals[i].table))
-                        executor.set_version(i, Version::NEW);
+                        executor.set_version(i, Version::CURRENT);
                 executor.set_version(j, Version::FRONTIER);
                 executor.run(rule,
                              rule.by_source[j],
@@ -149,7 +149,7 @@ void update_recursive(CompiledProgram& program, Executor& executor, const Stratu
     {
         const auto& rule = program.rules[r];
         auto& head = *program.tables[rule.head];
-        executor.set_versions(rule, Version::NEW);
+        executor.set_versions(rule, Version::CURRENT);
         head.removed.for_each(
             [&](std::span<const uint_t> row)
             {
@@ -182,7 +182,7 @@ void update_recursive(CompiledProgram& program, Executor& executor, const Stratu
         program,
         executor,
         stratum,
-        Version::NEW,
+        Version::CURRENT,
         [](Literal::Kind kind) { return kind == Literal::Kind::NEGATED ? Version::REMOVED : Version::ADDED; },
         absent);
     for (const auto t : stratum.tables)
@@ -196,7 +196,7 @@ void update_recursive(CompiledProgram& program, Executor& executor, const Stratu
             });
         table.next.clear();
     }
-    iterate(program, executor, stratum, Version::NEW, absent, inserted);
+    iterate(program, executor, stratum, Version::CURRENT, absent, inserted);
     for (const auto t : stratum.tables)
         program.tables[t]->frontier.clear();
 }

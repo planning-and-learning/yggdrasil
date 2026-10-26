@@ -122,8 +122,10 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
             }
             else
             {
-                static_assert(std::same_as<Tag, QueryDistanceTag>, "unhandled query operator");
-                throw std::invalid_argument("Union normal form: distances are not first-order queries.");
+                static_assert(std::same_as<Tag, QueryDistanceTag> || std::same_as<Tag, QueryAggregateTag> || std::same_as<Tag, QueryRecursionTag>
+                                  || std::same_as<Tag, QueryFixpointTag>,
+                              "unhandled query operator");
+                throw std::invalid_argument("Union normal form: distances, aggregates and fixpoints are not first-order queries.");
             }
         },
         query.get_variant());

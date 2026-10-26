@@ -25,13 +25,13 @@ void derive_recursive(CompiledProgram& program, Executor& executor, const Stratu
         auto& head = *program.tables[rule.head];
         if (std::ranges::any_of(rule.literals, [&](const Literal& l) { return l.kind == Literal::Kind::POSITIVE && stratum.contains(l.table); }))
             continue;
-        executor.set_versions(rule, Version::NEW);
+        executor.set_versions(rule, Version::CURRENT);
         executor.run(rule, rule.plain, [&](std::span<const uint_t> row) { head.next.insert(row); });
     }
     const auto add = [&](Table& table, std::span<const uint_t> row) { table.current.insert(row); };
     const auto absent = [&](Table& table, std::span<const uint_t> row) { return !table.current.contains(row); };
     merge(program, stratum, add);
-    iterate(program, executor, stratum, Version::NEW, absent, add);
+    iterate(program, executor, stratum, Version::CURRENT, absent, add);
     for (const auto table : stratum.tables)
         program.tables[table]->frontier.clear();
 }

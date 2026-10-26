@@ -30,17 +30,7 @@ using DatalogSymbolTypes = TypeList<Relation, Atom, Aggregate, Rule, Program>;
 
 class DatalogRepository;
 
-enum class AggregateFunction : uint8_t
-{
-    /// The number of rows; 0 for a group without rows.
-    COUNT,
-    /// The sum of a column; 0 for a group without rows.
-    SUM,
-    /// The least value of a column; a group without rows has none.
-    MIN,
-    /// The greatest value of a column; a group without rows has none.
-    MAX,
-};
+using AggregateFunction = database::AggregateFunction;
 
 /// A variable, numbered within its rule, or an object constant.
 struct Term

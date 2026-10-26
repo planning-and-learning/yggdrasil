@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/datalog/stratification.hpp"
+#include "yggdrasil/database/datalog/details/stratification.hpp"
 
 #include <algorithm>
 #include <optional>
 #include <stdexcept>
 
-namespace ygg::database::datalog
+namespace ygg::database::datalog::detail
 {
 std::vector<Stratum> stratify(size_t relations, std::span<const Dependency> dependencies)
 {
@@ -79,4 +79,4 @@ std::vector<Stratum> stratify(size_t relations, std::span<const Dependency> depe
     }
     return result;
 }
-}  // namespace ygg::database::datalog
+}  // namespace ygg::database::datalog::detail

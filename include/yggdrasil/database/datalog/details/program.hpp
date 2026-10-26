@@ -88,7 +88,7 @@ struct AggregateTable
         uint64_t sum = 0;
         std::map<uint_t, size_t> values;
     };
-    std::unique_ptr<TupleSet> groups;
+    std::unique_ptr<RawArraySet<uint_t>> groups;
     std::vector<Group> states;
 
     [[nodiscard]] std::optional<uint_t> value_of(const Group& state) const
@@ -114,7 +114,6 @@ struct StratumInfo
 {
     enum class Kind : uint8_t
     {
-        INPUT,
         AGGREGATE,
         PLAIN,
         RECURSIVE,

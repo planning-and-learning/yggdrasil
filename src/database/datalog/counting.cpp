@@ -14,8 +14,8 @@ namespace
 {
 void count(Table& table, std::span<const uint_t> row, int64_t change)
 {
-    const auto [position, inserted] = table.pending_rows.insert(row);
-    if (inserted)
+    const auto position = table.pending_rows.insert(row);
+    if (position == table.pending.size())
         table.pending.push_back(0);
     table.pending[position] += change;
 }
@@ -73,7 +73,7 @@ void evaluate_plain(CompiledProgram& program, Executor& executor, const StratumI
     {
         const auto& rule = program.rules[r];
         auto& head = *program.tables[rule.head];
-        executor.set_versions(rule, Version::NEW);
+        executor.set_versions(rule, Version::CURRENT);
         executor.run(rule,
                      rule.plain,
                      [&](std::span<const uint_t> row)
@@ -105,7 +105,7 @@ void update_plain(CompiledProgram& program, Executor& executor, const StratumInf
             {
                 const bool positive = literal.kind != Literal::Kind::NEGATED;
                 const int64_t sign = (change == Version::ADDED) == positive ? 1 : -1;
-                executor.set_versions(rule, Version::NEW);
+                executor.set_versions(rule, Version::CURRENT);
                 for (size_t i = j + 1; i < rule.literals.size(); ++i)
                     executor.set_version(i, Version::OLD);
                 executor.set_version(j, change);

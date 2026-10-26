@@ -55,8 +55,8 @@ void evaluate_aggregate(CompiledProgram& program, const StratumInfo& stratum)
     program.tables[aggregate.source]->current.for_each(
         [&](std::span<const uint_t> row)
         {
-            const auto [position, inserted] = aggregate.groups->insert(group_key(aggregate, row));
-            if (inserted)
+            const auto position = aggregate.groups->insert(group_key(aggregate, row));
+            if (position == aggregate.states.size())
                 aggregate.states.emplace_back();
             change_group(aggregate, aggregate.states[position], row, true);
         });
@@ -75,8 +75,8 @@ void update_aggregate(CompiledProgram& program, const StratumInfo& stratum)
     auto is_touched = std::set<uint_t>();
     const auto apply = [&](std::span<const uint_t> row, bool add)
     {
-        const auto [position, inserted] = aggregate.groups->insert(group_key(aggregate, row));
-        if (inserted)
+        const auto position = aggregate.groups->insert(group_key(aggregate, row));
+        if (position == aggregate.states.size())
             aggregate.states.emplace_back();
         if (is_touched.insert(position).second)
             touched.emplace_back(position, aggregate.value_of(aggregate.states[position]));

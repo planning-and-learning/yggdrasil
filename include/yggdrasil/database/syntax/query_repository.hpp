@@ -114,5 +114,8 @@ extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query
 extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryGenericJoinTag>, false>;
 extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySemijoinTag>, false>;
 extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAntijoinTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAggregateTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryRecursionTag>, false>;
+extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryFixpointTag>, false>;
 
 #endif

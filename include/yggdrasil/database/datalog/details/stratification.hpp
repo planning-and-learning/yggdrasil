@@ -2,14 +2,14 @@
  * Copyright (C) 2026 Dominik Drexler
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#ifndef YGG_DATABASE_DATALOG_STRATIFICATION_HPP_
-#define YGG_DATABASE_DATALOG_STRATIFICATION_HPP_
+#ifndef YGG_DATABASE_DATALOG_DETAILS_STRATIFICATION_HPP_
+#define YGG_DATABASE_DATALOG_DETAILS_STRATIFICATION_HPP_
 
 #include <cstddef>
 #include <span>
 #include <vector>
 
-namespace ygg::database::datalog
+namespace ygg::database::datalog::detail
 {
 /// The head of a rule reads the body relation; negatively through negation or aggregation.
 struct Dependency
@@ -31,6 +31,6 @@ struct Stratum
 /// dependencies on other relations (inputs) are ignored. Throws std::invalid_argument if a negative dependency lies on
 /// a cycle.
 std::vector<Stratum> stratify(size_t relations, std::span<const Dependency> dependencies);
-}  // namespace ygg::database::datalog
+}  // namespace ygg::database::datalog::detail
 
 #endif

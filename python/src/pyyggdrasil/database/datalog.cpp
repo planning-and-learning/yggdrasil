@@ -33,7 +33,7 @@ void bind_database_datalog(nb::module_& m)
 {
     using namespace nb::literals;
 
-    nb::enum_<dl::AggregateFunction>(m, "AggregateFunction")
+    nb::enum_<dl::AggregateFunction>(m, "DatalogAggregateFunction")
         .value("COUNT", dl::AggregateFunction::COUNT)
         .value("SUM", dl::AggregateFunction::SUM)
         .value("MIN", dl::AggregateFunction::MIN)
@@ -68,16 +68,19 @@ void bind_database_datalog(nb::module_& m)
         ygg::bind_data<V>(m, "DatalogRelationData")
             .def(
                 "__init__",
-                [](V* self, size_t id, size_t arity, std::optional<size_t> input_slot) { new (self) V(id, arity, input_slot.value_or(V::derived)); },
+                [](V* self, size_t id, size_t arity, std::optional<size_t> input_slot, const std::string& name)
+                { new (self) V(id, arity, input_slot.value_or(V::derived), name); },
                 "id"_a,
                 "arity"_a,
                 "input_slot"_a = std::nullopt,
+                "name"_a = "",
                 "An input relation (with its input slot) or a derived relation.");
         using W = DatalogView<dl::Relation>;
         auto cls = nb::class_<W>(m, "DatalogRelation");
         cls.def("get_index", &W::get_index)
             .def("get_id", &W::get_id)
             .def("get_arity", &W::get_arity)
+            .def("get_name", [](const W& self) { return std::string(self.get_name().view()); })
             .def("is_input", &W::is_input)
             .def("get_input_slot", &W::get_input_slot);
         ygg::add_comparison(cls);
