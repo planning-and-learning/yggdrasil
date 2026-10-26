@@ -11,7 +11,10 @@
 
 namespace ygg::database::datalog::detail
 {
-WeightedStratum::WeightedStratum(StratumInfo stratum, const CompiledProgram& program) : Stratum(std::move(stratum))
+WeightedStratum::WeightedStratum(StratumInfo stratum, const CompiledProgram& program, std::vector<size_t> goals) :
+    Stratum(std::move(stratum)),
+    m_goals(std::move(goals)),
+    m_holds(m_goals.size())
 {
     for (const auto table : info().tables)
     {
@@ -43,8 +46,28 @@ void WeightedStratum::offer(size_t position, std::span<const uint_t> row)
     std::ranges::push_heap(m_queue, std::greater {});
 }
 
+bool WeightedStratum::goals_hold(CompiledProgram& program, Executor& executor, size_t table)
+{
+    for (size_t g = 0; g < m_goals.size(); ++g)
+    {
+        if (m_holds[g])
+            continue;
+        const auto& rule = program.rules[m_goals[g]];
+        for (size_t j = 0; j < rule.literals.size() && !m_holds[g]; ++j)
+        {
+            if (rule.literals[j].table != table)
+                continue;
+            auto& read = reads(rule, Version::CURRENT);
+            read[j] = Version::FRONTIER;
+            executor.run(rule, rule.by_source[j], read, [&](std::span<const uint_t>) { m_holds[g] = true; });
+        }
+    }
+    return std::ranges::all_of(m_holds, [](bool holds) { return holds; });
+}
+
 void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
 {
+    m_holds.assign(m_goals.size(), false);
     for (size_t i = 0; i < info().tables.size(); ++i)
     {
         program.tables[info().tables[i]]->clear();
@@ -94,8 +117,12 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
                 executor.run(rule, rule.by_source[j], read, [&](std::span<const uint_t> derived) { offer(position, derived); });
             }
         }
+        const bool done = !m_goals.empty() && goals_hold(program, executor, table_index);
         table.frontier.clear();
+        if (done)
+            break;
     }
+    m_queue.clear();
 }
 
 void WeightedStratum::evaluate(CompiledProgram& program, Executor& executor) { derive(program, executor); }

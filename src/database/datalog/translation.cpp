@@ -311,6 +311,37 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             if (literal.table != npos && std::ranges::find(info.reads, literal.table) == info.reads.end())
                 info.reads.push_back(literal.table);
     }
+    // The rules that read a weighted stratum s, if all of them are goals: a min head without key columns that copies the
+    // weight of its one atom of s, with its other literals in earlier strata (the targets); then s may stop once each
+    // goal holds, since rows settle in order of weight. None if s has an output or another reader.
+    const auto goal_rules = [&](size_t s) -> std::vector<size_t>
+    {
+        const auto& info = infos[s];
+        if (std::ranges::any_of(info.tables, [&](size_t t) { return std::ranges::find(program.outputs, t) != program.outputs.end(); }))
+            return {};
+        auto goals = std::vector<size_t>();
+        for (size_t r = 0; r < program.rules.size(); ++r)
+        {
+            const auto& rule = program.rules[r];
+            if (stratum_of[rule.head] == s)
+                continue;
+            auto reading = std::vector<size_t>();
+            for (size_t j = 0; j < rule.literals.size(); ++j)
+                if (rule.literals[j].table != npos && info.contains(rule.literals[j].table))
+                    reading.push_back(j);
+            if (reading.empty())
+                continue;
+            const auto& head = *program.tables[rule.head];
+            if (reading.size() != 1 || rule.literals[reading.front()].kind != Literal::Kind::POSITIVE || !head.weighted || head.arity != 1
+                || rule.head_terms.back() != rule.literals[reading.front()].terms.back())
+                return {};
+            for (const auto& literal : rule.literals)
+                if (literal.table != npos && !info.contains(literal.table) && !program.tables[literal.table]->slot && stratum_of[literal.table] >= s)
+                    return {};
+            goals.push_back(r);
+        }
+        return goals;
+    };
     for (size_t s = 0; s < infos.size(); ++s)
     {
         auto& info = infos[s];
@@ -321,7 +352,8 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
                 throw std::invalid_argument("Datalog: a weighted relation is recursive with an unweighted one.");
             for (const auto r : info.rules)
                 require_superior(info, program.rules[r]);
-            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program));
+            auto goals = goal_rules(s);
+            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals)));
         }
         else if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
         {

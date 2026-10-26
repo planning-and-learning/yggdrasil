@@ -146,12 +146,16 @@ private:
 /// A stratum of weighted relations: each keeps, per row of its other columns, the least weight derivable by rules whose
 /// head weight is the sum or maximum of their weighted atoms' weights and other terms. Evaluated by Knuth's lightest
 /// derivation algorithm (Felzenszwalb & McAllester 2007, §3): rows are settled in order of weight from a priority queue,
-/// each settled row expanded by the rules that read it with the settled rows (weighted.cpp). An update evaluates the
-/// stratum anew and records the difference to its old rows.
+/// each settled row expanded by the rules that read it with the settled rows (weighted.cpp). If only goal rules read the
+/// stratum (a min head without key columns over one of its relations and the targets), it stops once every goal holds:
+/// the first settled row a goal reads has the least weight. An update evaluates the stratum anew and records the
+/// difference to its old rows.
 class WeightedStratum final : public Stratum
 {
 public:
-    WeightedStratum(StratumInfo stratum, const CompiledProgram& program);
+    /// `goals`: the rules of higher strata that read the stratum, if all of them are goals; empty, the stratum is
+    /// evaluated completely.
+    WeightedStratum(StratumInfo stratum, const CompiledProgram& program, std::vector<size_t> goals);
 
     void evaluate(CompiledProgram& program, Executor& executor) override;
     void update(CompiledProgram& program, Executor& executor) override;
@@ -173,7 +177,11 @@ private:
     std::vector<std::vector<uint_t>> m_best;
     std::vector<Candidate> m_queue;
     std::vector<RawArraySet<uint_t>> m_snapshot;
+    std::vector<size_t> m_goals;
+    std::vector<bool> m_holds;
 
+    /// Whether the settled row (the frontier of its table) makes every goal hold.
+    bool goals_hold(CompiledProgram& program, Executor& executor, size_t table);
     /// Queues a derived row of the stratum's table at `position` unless a lighter one is settled or queued.
     void offer(size_t position, std::span<const uint_t> row);
     void derive(CompiledProgram& program, Executor& executor);
