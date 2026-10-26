@@ -7,7 +7,7 @@
 #define YGG_DATABASE_OPERATORS_GENERIC_JOIN_INCREMENTAL_GENERIC_JOIN_HPP_
 
 #include "yggdrasil/database/operators/generic_join/generic_join.hpp"
-#include "yggdrasil/database/relation/delta.hpp"
+#include "yggdrasil/database/operators/incremental.hpp"
 
 namespace ygg::database::incremental
 {

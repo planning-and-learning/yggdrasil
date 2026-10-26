@@ -7,8 +7,8 @@
 #define YGG_DATABASE_OPERATORS_RELATIONAL_INCREMENTAL_JOIN_HPP_
 
 #include "yggdrasil/containers/unordered_multi_map.hpp"
+#include "yggdrasil/database/operators/incremental.hpp"
 #include "yggdrasil/database/operators/relational/operations.hpp"
-#include "yggdrasil/database/relation/delta.hpp"
 
 #include <cassert>
 #include <utility>

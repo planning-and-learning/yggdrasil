@@ -20,7 +20,7 @@ struct Evaluator::Impl
     CompiledProgram program;
     Executor executor;
     std::vector<Builder<database::Relation>> results;
-    std::vector<incremental::Delta> deltas;
+    std::vector<Delta> deltas;
     bool ready = false;
     bool initialized = false;
     std::vector<std::byte> bytes;
@@ -184,7 +184,7 @@ const Builder<database::Relation>& Evaluator::get_result(size_t output) const
     return m_impl->results.at(output);
 }
 
-const incremental::Delta& Evaluator::get_delta(size_t output) const
+const Delta& Evaluator::get_delta(size_t output) const
 {
     if (!m_impl->ready)
         throw std::logic_error("Datalog evaluator: evaluate before reading results.");

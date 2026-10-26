@@ -22,7 +22,7 @@ namespace
 using Column = ygg::Index<ygg::database::Column>;
 using PlanId = ygg::Index<ygg::database::Query<>>;
 using Relation = ygg::Builder<ygg::database::Relation>;
-using Delta = ygg::database::incremental::Delta;
+using Delta = ygg::database::Delta;
 using Change = std::pair<ygg::database::BorrowedRelationView, ygg::database::BorrowedRelationView>;
 
 // Borrowed views use a relation repository only as their context.

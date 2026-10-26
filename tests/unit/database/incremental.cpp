@@ -132,14 +132,14 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
-    database::incremental::Delta replacement(input.columns());
+    database::Delta replacement(input.columns());
     replacement.removed.insert(cells(1, 10, 7));
     replacement.removed.insert(cells(1, 11, 7));
     replacement.added.insert(cells(1, 12, 7));
-    database::incremental::Delta erase_first(input.columns());
+    database::Delta erase_first(input.columns());
     erase_first.removed.insert(cells(1, 12, 7));
     erase_first.added.insert(cells(4, 1, 10));
-    database::incremental::Delta erase_moved(input.columns());
+    database::Delta erase_moved(input.columns());
     erase_moved.removed.insert(cells(3, 10, 9));
     erase_moved.added.insert(cells(2, 11, 8));
     const auto update = [&](const auto& added, const auto& removed)
@@ -197,7 +197,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     Builder<database::Relation> reference(plan.output_columns());
     evaluator.initialize(input, workspace);
     database::project(input, plan, reference, workspace);
-    database::incremental::Delta delta(input.columns());
+    database::Delta delta(input.columns());
     delta.removed.insert(cells(1, 10));
     delta.removed.insert(cells(1, 11));
     delta.added.insert(cells(1, 13));  // Fewer witnesses, same output.
@@ -243,7 +243,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWit
     database::incremental::ProjectionEvaluator evaluator(database::ProjectionPlan(input.columns(), { ColumnIndex(1) }));
     database::Workspace workspace;
     evaluator.initialize(input, workspace);
-    database::incremental::Delta invalid(input.columns());
+    database::Delta invalid(input.columns());
     invalid.removed.insert(cells(7, 10));
     invalid.removed.insert(cells(7, 11));  // Only one existing witness is available.
     invalid.added.insert(cells(7, 12));
@@ -252,7 +252,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWit
     Builder<database::Relation> empty(input.columns());
     EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
     evaluator.initialize(input, workspace);
-    database::incremental::Delta valid(input.columns());
+    database::Delta valid(input.columns());
     valid.removed.insert(cells(7, 10));
     valid.added.insert(cells(7, 12));
     evaluator.update(valid.change(), workspace);
@@ -273,7 +273,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
     Builder<database::Relation> reference;
     evaluator.initialize(input, workspace);
     EXPECT_TRUE(evaluator.get_result().empty());
-    database::incremental::Delta delta(input.columns());
+    database::Delta delta(input.columns());
     delta.added.insert(cells(1));
     delta.added.insert(cells(2));
     const auto update = [&]
@@ -300,7 +300,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
     Builder<database::Relation> nullary;
-    database::incremental::Delta nullary_delta({});
+    database::Delta nullary_delta({});
     database::incremental::ProjectionEvaluator identity(database::ProjectionPlan({}, {}));
     identity.initialize(nullary, workspace);
     nullary_delta.added.insert(cells());
@@ -337,7 +337,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
         EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
         EXPECT_TRUE(evaluator.get_delta().added.empty());
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
-        database::incremental::Delta delta(dynamic.columns());
+        database::Delta delta(dynamic.columns());
         delta.removed.insert(dynamic.row(0));
         if (!change_left)
             delta.added.insert(cells(3, 30, 2));
@@ -380,7 +380,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinAcceptsInternedWideInputs)
     evaluator.initialize(dynamic, view, workspace);
     database::join(dynamic, immutable, plan, reference, workspace);
     EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(reference));
-    database::incremental::Delta delta(dynamic.columns());
+    database::Delta delta(dynamic.columns());
     delta.removed.insert(std::tuple { Value { 1 }, Value { 10 } });
     delta.added.insert(std::tuple { Value { 2 }, Value { 20 } });
     delta.added.insert(std::tuple { Value { 3 }, Value { 40 } });
@@ -413,7 +413,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    database::incremental::Delta delta(input.columns());
+    database::Delta delta(input.columns());
     delta.added.insert(cells(1));
     delta.removed.insert(cells(2));
     const auto memory = delta.added.memory_usage() + delta.removed.memory_usage();
@@ -467,8 +467,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
         expect_update(evaluator, before, reference);
         expect_update(projected, projection_before, reference_projection);
     };
-    database::incremental::Delta lhs_a(lhs.columns());
-    database::incremental::Delta rhs_a(rhs.columns());
+    database::Delta lhs_a(lhs.columns());
+    database::Delta rhs_a(rhs.columns());
     lhs_a.removed.insert(cells(1, 10, 100));
     lhs_a.removed.insert(cells(3, 20, 200));
     lhs_a.added.insert(cells(5, 40, 400));
@@ -482,8 +482,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     EXPECT_TRUE(evaluator.get_delta().added.contains(cells(5, 40, 400, 10)));
     EXPECT_FALSE(evaluator.get_delta().added.contains(cells(1, 10, 100, 11)));
     EXPECT_FALSE(evaluator.get_delta().added.contains(cells(6, 10, 100, 8)));
-    database::incremental::Delta lhs_b(lhs.columns());
-    database::incremental::Delta rhs_b(rhs.columns());
+    database::Delta lhs_b(lhs.columns());
+    database::Delta rhs_b(rhs.columns());
     lhs_b.removed.insert(cells(4, 30, 300));
     lhs_b.added.insert(cells(7, 40, 400));
     rhs_b.removed.insert(cells(300, 9, 30));
@@ -493,8 +493,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     update(lhs_a.removed, lhs_a.added, rhs_a.removed, rhs_a.added);
     EXPECT_EQ(rows<uint_t>(lhs), initial_lhs);
     EXPECT_EQ(rows<uint_t>(rhs), initial_rhs);
-    database::incremental::Delta sibling(lhs.columns());
-    database::incremental::Delta unchanged(rhs.columns());
+    database::Delta sibling(lhs.columns());
+    database::Delta unchanged(rhs.columns());
     sibling.removed.insert(cells(2, 10, 100));
     sibling.added.insert(cells(8, 30, 300));
     update(sibling.added, sibling.removed, unchanged.added, unchanged.removed);
@@ -524,8 +524,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsWideIndexesAcrossRowCompact
     evaluator.initialize(lhs, rhs, workspace);
     database::join(lhs, rhs, plan, reference, workspace);
     EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(reference));
-    database::incremental::Delta lhs_delta(lhs.columns());
-    database::incremental::Delta rhs_delta(rhs.columns());
+    database::Delta lhs_delta(lhs.columns());
+    database::Delta rhs_delta(rhs.columns());
     for (uint_t generation = 0; generation < 24; ++generation)
     {
         lhs_delta.clear();
@@ -565,8 +565,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
         Builder<database::Relation> reference(plan.output_columns());
         evaluator.initialize(lhs, rhs, workspace);
         EXPECT_TRUE(evaluator.get_result().empty());
-        database::incremental::Delta lhs_delta(lhs.columns());
-        database::incremental::Delta rhs_delta(rhs.columns());
+        database::Delta lhs_delta(lhs.columns());
+        database::Delta rhs_delta(rhs.columns());
         if (lhs.arity() == 0)
             lhs_delta.added.insert(cells());
         else
@@ -591,8 +591,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
             expect_update(evaluator, before, reference);
         };
         update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed);
-        database::incremental::Delta lhs_remove(lhs.columns());
-        database::incremental::Delta rhs_remove(rhs.columns());
+        database::Delta lhs_remove(lhs.columns());
+        database::Delta rhs_remove(rhs.columns());
         lhs_remove.removed.insert(lhs.row(0));
         rhs_remove.removed.insert(rhs.row(0));
         update(lhs_remove.added, lhs_remove.removed, rhs_remove.added, rhs_remove.removed);

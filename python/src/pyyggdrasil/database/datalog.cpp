@@ -217,7 +217,7 @@ void bind_database_datalog(nb::module_& m)
                 "Borrowed result; the next evaluate, initialize or update invalidates it.")
             .def(
                 "get_delta",
-                [](const E& evaluator, size_t output) -> const ygg::database::incremental::Delta& { return evaluator.get_delta(output); },
+                [](const E& evaluator, size_t output) -> const ygg::database::Delta& { return evaluator.get_delta(output); },
                 "output"_a = 0,
                 nb::rv_policy::reference_internal)
             .def("memory_usage", &E::memory_usage);

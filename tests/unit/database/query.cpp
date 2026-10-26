@@ -16,7 +16,7 @@ namespace
 {
 using Column = ygg::Index<ygg::database::Column>;
 using Relation = ygg::Builder<ygg::database::Relation>;
-using Delta = ygg::database::incremental::Delta;
+using Delta = ygg::database::Delta;
 using Change = std::pair<ygg::database::BorrowedRelationView, ygg::database::BorrowedRelationView>;
 
 // Borrowed views use a relation repository only as their context.
@@ -340,7 +340,7 @@ TEST(DatabaseQuery, RejectsInvalidBatchesBeforeMutatingAndSupportsNonDistanceTyp
     const auto inputs = std::array { borrow(relation) };
     full.evaluate(inputs);
     incremental.initialize(inputs);
-    ygg::database::incremental::Delta invalid(relation.columns().span());
+    ygg::database::Delta invalid(relation.columns().span());
     invalid.added.insert(std::tuple { 1.0 });
     const auto changes = std::array { std::pair { borrow(invalid.added), borrow(invalid.removed) } };
     EXPECT_THROW(incremental.update(changes), std::invalid_argument);

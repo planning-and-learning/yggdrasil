@@ -109,7 +109,7 @@ public:
         finish_initialize();
     }
     /// One exact (added, removed) change per input slot; static slots must not change.
-    template<incremental::RelationDeltaRange R>
+    template<RelationDeltaRange R>
     void update(const R& changes)
     {
         begin(true);
@@ -125,7 +125,7 @@ public:
 
     [[nodiscard]] const Builder<database::Relation>& get_result(size_t output = 0) const;
     /// The last update's exact change of an output.
-    [[nodiscard]] const incremental::Delta& get_delta(size_t output = 0) const;
+    [[nodiscard]] const Delta& get_delta(size_t output = 0) const;
     [[nodiscard]] size_t memory_usage() const noexcept;
 };
 }  // namespace ygg::database::datalog

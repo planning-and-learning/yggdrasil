@@ -21,7 +21,7 @@ incremental::ProjectionEvaluator<> projection(
     ProjectionPlan<>(input.columns().span(), { Index<Column>(0) }));
 projection.initialize(input, workspace);
 
-incremental::Delta<> change(input.columns().span());
+Delta change(input.columns().span());
 change.removed.insert(std::tuple { uint_t(7), uint_t(10) });
 projection.update(change.added, change.removed, workspace);
 // (7) still has one witness, so get_delta() is empty and get_result() contains it.

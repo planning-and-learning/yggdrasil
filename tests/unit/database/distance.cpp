@@ -95,7 +95,7 @@ void expect_delta(const database::incremental::DistanceEvaluator& evaluator, con
 }
 
 template<typename Set>
-void changes(database::incremental::Delta& delta, const Set& before, const Set& after)
+void changes(database::Delta& delta, const Set& before, const Set& after)
 {
     Set added, removed;
     for (const auto& value : after)
@@ -189,7 +189,7 @@ TEST(YggdrasilTests, DatabaseDistanceValidatesSchemasBeforeClearingOutput)
     EXPECT_TRUE(sources.contains(std::tuple { uint_t(1) }));
 
     database::incremental::DistanceEvaluator evaluator(plan);
-    database::incremental::Delta source_delta(sources.columns().span()), edge_delta(edges.columns().span()), target_delta(targets.columns().span());
+    database::Delta source_delta(sources.columns().span()), edge_delta(edges.columns().span()), target_delta(targets.columns().span());
     EXPECT_THROW((void) evaluator.get_result(), std::logic_error);
     EXPECT_THROW((void) evaluator.get_delta(), std::logic_error);
     EXPECT_THROW(evaluator.update(source_delta.change(), edge_delta.change(), target_delta.change()), std::logic_error);
@@ -212,7 +212,7 @@ TEST(YggdrasilTests, DatabaseDistanceRejectsChangesThatAreNotActualSetChanges)
     fill(targets, Vertices { 2 });
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     for (size_t input = 0; input < 3; ++input)
         for (const bool removing : { false, true })
         {
@@ -244,7 +244,7 @@ TEST(YggdrasilTests, DatabaseDistanceRepairsAlternateShortestPathsAndDisconnects
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     const Results initial { { 0, 3, 2 }, { 0, 4, 3 } };
     EXPECT_EQ(rows(evaluator.get_result()), initial);
     de.removed.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
@@ -280,7 +280,7 @@ TEST(YggdrasilTests, DatabaseDistanceMixedReplacementLeavesAnUnchangedChainUnpro
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
     const Results expected { { 0, last, last - 1 } };
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     fill(de.removed, Edges { { 1, 3 } });
     fill(de.added, Edges { { 2, 3 } });
     for (const bool undo : { false, true })
@@ -320,7 +320,7 @@ TEST(YggdrasilTests, DatabaseDistanceEqualSupportsDoNotRescanDenseUnchangedNeigh
     const auto before = reference(Vertices { 0 }, edge_set, target_set, 5 + neighbors);
     edge_set.emplace(0, 3);
     const auto after = reference(Vertices { 0 }, edge_set, target_set, 5 + neighbors);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     fill(de.added, Edges { { 0, 3 } });
     for (const bool undo : { false, true })
     {
@@ -346,7 +346,7 @@ TEST(YggdrasilTests, DatabaseDistanceRepairsUnreachableCyclesSelfLoopsAndEdgesIn
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     const std::array<std::pair<Edges, Edges>, 5> batches { {
         { Edges { { 2, 5 } }, Edges { { 0, 1 } } },
         { Edges { { 0, 3 } }, Edges {} },
@@ -397,7 +397,7 @@ TEST(YggdrasilTests, DatabaseDistanceMixedTupleTypesShareCanonicalVertices)
     EXPECT_TRUE(result.contains(std::tuple { uint_t(7), 0.0, true, uint_t(8), 1.5, false, uint_t(1) }));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     de.removed.insert(edges[0]);
     evaluator.update(ds.change(), de.change(), dt.change());
     EXPECT_EQ(evaluator.get_result().size(), 1);
@@ -448,7 +448,7 @@ TEST(YggdrasilTests, DatabaseDistanceGrowsTheSharedDictionaryAndResetsToASmaller
     evaluator.initialize(sources, edges, targets);
     const Results initial { { 1, 1, 0 } };
     EXPECT_EQ(rows(evaluator.get_result()), initial);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     fill(ds.added, Vertices { 33, 65 });
     fill(dt.added, Vertices { 80, 97 });
     Edges expanded_edges;
@@ -490,7 +490,7 @@ TEST(YggdrasilTests, DatabaseDistanceMovesRetainedRepairStorageAndResetsAfterwar
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
     fill(de.added, Edges { { 0, 3 } });
     const Results initial { { 0, 3, 3 }, { 0, 4, 4 } }, shortcut { { 0, 3, 1 }, { 0, 4, 2 } };
     evaluator.update(ds.change(), de.change(), dt.change());
@@ -549,7 +549,7 @@ TEST(YggdrasilTests, DatabaseDistanceRandomBatchesAndUndoMatchIndependentPairwis
         RelationBuilder full(plan.output_columns().span());
         database::incremental::DistanceEvaluator evaluator(plan);
         evaluator.initialize(sources, edges, targets);
-        database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+        database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
         for (size_t step = 0; step < 160; ++step)
         {
             SCOPED_TRACE(step);
@@ -604,7 +604,7 @@ TEST(YggdrasilTests, DatabaseMinDistanceAggregatesTheDistanceColumnFullAndIncrem
     database::DistanceWorkspace workspace(plan);
     RelationBuilder result(plan.output_columns().span());
     database::incremental::SourceMinDistance evaluator(plan);
-    database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
+    database::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
 
     // Each state changes sources, edges, or targets; the minimum moves up, down, to zero and to infinity.
     const std::vector<std::tuple<Vertices, Edges, Vertices>> states {

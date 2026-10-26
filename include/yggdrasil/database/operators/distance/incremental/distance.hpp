@@ -9,7 +9,7 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/operators/distance/distance.hpp"
 #include "yggdrasil/database/operators/distance/incremental/detail/distance_repair.hpp"
-#include "yggdrasil/database/relation/delta.hpp"
+#include "yggdrasil/database/operators/incremental.hpp"
 
 #include <algorithm>
 #include <cassert>

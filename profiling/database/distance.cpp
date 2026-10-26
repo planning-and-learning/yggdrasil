@@ -70,7 +70,7 @@ struct Trace
     RelationBuilder edges;
     RelationBuilder changed_edges;
     RelationBuilder targets;
-    database::incremental::Delta edge_change;
+    database::Delta edge_change;
     RelationBuilder no_sources;
     RelationBuilder no_targets;
 
@@ -171,7 +171,7 @@ bool equal_rows(const RelationBuilder& actual, const RelationBuilder& expected)
     return true;
 }
 
-bool equal_delta(const database::incremental::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
+bool equal_delta(const database::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
     size_t added = 0, removed = 0;
     for (size_t i = 0; i < after.size(); ++i)

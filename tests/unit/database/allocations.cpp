@@ -764,7 +764,7 @@ struct IncrementalEvaluation
     // Every output has eight join witnesses. Replacing a source row exercises
     // both support counts and mutable result storage without retaining history.
     database::incremental::ProjectionEvaluator projecting { database::ProjectionPlan({ ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) }, { ColumnIndex(2) }) };
-    database::incremental::Delta delta { ColumnIndex(1), ColumnIndex(2) };
+    database::Delta delta { ColumnIndex(1), ColumnIndex(2) };
     std::array<uint_t, rows> values {};
     database::Workspace workspace;
 
@@ -860,8 +860,8 @@ struct ChangingJoinEvaluation
     static constexpr size_t changed_rows = 17;
 
     database::incremental::JoinEvaluator joining { database::JoinPlan({ ColumnIndex(1), ColumnIndex(2) }, { ColumnIndex(1), ColumnIndex(3) }) };
-    database::incremental::Delta lhs_delta { ColumnIndex(1), ColumnIndex(2) };
-    database::incremental::Delta rhs_delta { ColumnIndex(1), ColumnIndex(3) };
+    database::Delta lhs_delta { ColumnIndex(1), ColumnIndex(2) };
+    database::Delta rhs_delta { ColumnIndex(1), ColumnIndex(3) };
     std::array<std::array<uint_t, 2>, rows> values {};
     database::Workspace workspace;
 
@@ -1091,7 +1091,7 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceSourceChurnReusesFiniteUniverseStorag
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    std::vector<database::incremental::Delta> changes;
+    std::vector<database::Delta> changes;
     changes.reserve(vertices);
     for (uint_t vertex = 0; vertex < vertices; ++vertex)
     {
@@ -1141,7 +1141,7 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceEdgeRepairAndUndoRetainStorage)
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    database::incremental::Delta change(edges.columns().span());
+    database::Delta change(edges.columns().span());
     change.added.insert(cells(0, 8));
     Builder<database::Relation> no_sources(sources.columns().span()), no_targets(targets.columns().span());
     const auto cycle = [&]
@@ -1188,7 +1188,7 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
     const database::DistancePlan plan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(3));
     database::incremental::DistanceEvaluator evaluator(plan);
     evaluator.initialize(sources, edges, targets);
-    database::incremental::Delta change(edges.columns().span());
+    database::Delta change(edges.columns().span());
     for (uint_t parent = first_parent; parent < first_child; ++parent)
     {
         change.added.insert(cells(0, parent));

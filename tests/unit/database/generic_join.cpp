@@ -20,7 +20,7 @@ namespace
 {
 using Values = TypeList<uint_t>;
 using RelationBuilder = Builder<database::Relation>;
-using Change = database::incremental::Delta;
+using Change = database::Delta;
 using ColumnIndex = Index<database::Column>;
 
 // Borrowed views use a relation repository only as their context.
@@ -255,8 +255,8 @@ TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueCompa
     EXPECT_TRUE(result.contains(std::tuple { false, std::uint64_t { 4 }, 0.0 }));
     database::incremental::GenericJoinEvaluator evaluator(plan);
     evaluator.initialize(inputs);
-    database::incremental::Delta left_change(left_schema.span());
-    database::incremental::Delta right_change(right_schema.span());
+    database::Delta left_change(left_schema.span());
+    database::Delta right_change(right_schema.span());
     left_change.removed.insert(std::tuple { std::uint64_t { 4 }, 0.0 });
     left_change.added.insert(std::tuple { std::uint64_t { 6 }, -0.0 });
     right_change.removed.insert(std::tuple { nan, true });

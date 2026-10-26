@@ -59,7 +59,7 @@ void append_only(benchmark::State& state)
 
 struct Transition
 {
-    database::incremental::Delta delta { ColumnIndex(1), ColumnIndex(2) };
+    database::Delta delta { ColumnIndex(1), ColumnIndex(2) };
     Builder<database::Relation> snapshot { ColumnIndex(1), ColumnIndex(2) };
 };
 
@@ -172,7 +172,7 @@ size_t changed_rows(const Builder<database::Relation>& before, const Builder<dat
     return result;
 }
 
-bool equal_delta(const database::incremental::Delta& delta, const Builder<database::Relation>& before, const Builder<database::Relation>& after)
+bool equal_delta(const database::Delta& delta, const Builder<database::Relation>& before, const Builder<database::Relation>& after)
 {
     size_t added = 0;
     size_t removed = 0;

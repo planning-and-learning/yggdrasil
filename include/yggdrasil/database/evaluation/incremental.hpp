@@ -9,6 +9,7 @@
 #include "yggdrasil/database/evaluation/full.hpp"
 #include "yggdrasil/database/operators/distance/incremental/distance.hpp"
 #include "yggdrasil/database/operators/generic_join/incremental/generic_join.hpp"
+#include "yggdrasil/database/operators/incremental.hpp"
 #include "yggdrasil/database/operators/relational/incremental/join.hpp"
 #include "yggdrasil/database/operators/relational/incremental/projection.hpp"
 #include "yggdrasil/database/operators/relational/incremental/semijoin.hpp"

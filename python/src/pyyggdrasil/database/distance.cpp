@@ -18,7 +18,7 @@ using Column = ygg::Index<ygg::database::Column>;
 using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
 using Plan = ygg::database::DistancePlan;
 using Evaluator = ygg::database::incremental::DistanceEvaluator;
-using Delta = ygg::database::incremental::Delta;
+using Delta = ygg::database::Delta;
 
 /// Binds distance and the evaluator members for one input relation type.
 template<typename Input>

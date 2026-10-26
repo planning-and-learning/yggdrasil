@@ -27,7 +27,7 @@ void expect_same_rows(const RelationBuilder& actual, const RelationBuilder& expe
         EXPECT_TRUE(actual.contains(expected[i]));
 }
 
-void apply_changes(RelationBuilder& input, const database::incremental::Delta& delta, bool undo = false)
+void apply_changes(RelationBuilder& input, const database::Delta& delta, bool undo = false)
 {
     const auto& removed = undo ? delta.added : delta.removed;
     const auto& added = undo ? delta.removed : delta.added;
@@ -37,7 +37,7 @@ void apply_changes(RelationBuilder& input, const database::incremental::Delta& d
         input.insert(added[i]);
 }
 
-void expect_delta(const database::incremental::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
+void expect_delta(const database::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
     RelationBuilder added(after.columns().span());
     RelationBuilder removed(before.columns().span());
@@ -70,7 +70,7 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
     EXPECT_EQ(initial.columns()[1].offset, ygg::ByteCodec<bool>::size);
     EXPECT_TRUE(initial.contains(std::tuple { true, 1.5 }));
 
-    database::incremental::Delta changes(columns.span());
+    database::Delta changes(columns.span());
     changes.removed.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
     changes.removed.insert(std::tuple { static_cast<uint_t>(2), 1.5, true });
     changes.added.insert(std::tuple { static_cast<uint_t>(4), 1.5, true });
@@ -118,8 +118,8 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
     expect_same_rows(evaluator.get_result(), initial);
     ASSERT_EQ(initial.size(), 3);
 
-    database::incremental::Delta left_changes(left_columns.span());
-    database::incremental::Delta right_changes(right_columns.span());
+    database::Delta left_changes(left_columns.span());
+    database::Delta right_changes(right_columns.span());
     left_changes.removed.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
     left_changes.added.insert(std::tuple { static_cast<uint_t>(1), 1.75, true });
     left_changes.added.insert(std::tuple { static_cast<uint_t>(4), 4.5, false });

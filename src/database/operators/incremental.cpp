@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/relation/delta.hpp"
+#include "yggdrasil/database/operators/incremental.hpp"
 
 #include "yggdrasil/core/config.hpp"
 

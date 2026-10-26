@@ -54,7 +54,7 @@ void bind_database_evaluation(nb::module_& m)
             "Borrowed result; the next initialize or update invalidates it.")
         .def(
             "get_delta",
-            [](const IncrementalEvaluator& evaluator, size_t root) -> const ygg::database::incremental::Delta& { return evaluator.get_delta(root); },
+            [](const IncrementalEvaluator& evaluator, size_t root) -> const ygg::database::Delta& { return evaluator.get_delta(root); },
             nb::arg("root") = 0,
             nb::rv_policy::reference_internal)
         .def("memory_usage", &IncrementalEvaluator::memory_usage);

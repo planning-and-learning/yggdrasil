@@ -189,7 +189,7 @@ updates to either or both operands. `database/operators/relational/incremental/s
 maintains semijoins and antijoins: only the changed lhs rows and the lhs rows
 sharing a key with a changed rhs row can change membership. Every incremental evaluator's `update` takes
 one change per input: an `(added, removed)` pair read with `std::get`, such as
-`Delta::change()` or `std::tie(added, removed)`; `incremental::RelationChange`
+`Delta::change()` or `std::tie(added, removed)`; `RelationChange`
 states the requirement. Prepared byte operations are shared with full
 recomputation. Existing reset, apply, undo, and storage ownership rules remain
 unchanged.
@@ -290,9 +290,9 @@ Include `<yggdrasil/database/operators/distance/incremental/distance.hpp>` and r
 ```cpp
 incremental::DistanceEvaluator<> evaluator(plan);
 evaluator.initialize(sources, edges, targets);
-incremental::Delta<> source_change(sources.columns().span());
-incremental::Delta<> edge_change(edges.columns().span());
-incremental::Delta<> target_change(targets.columns().span());
+Delta source_change(sources.columns().span());
+Delta edge_change(edges.columns().span());
+Delta target_change(targets.columns().span());
 edge_change.removed.insert(std::tuple{uint_t(7), uint_t(9)});
 evaluator.update(source_change.change(), edge_change.change(), target_change.change());
 assert(evaluator.get_result().empty());

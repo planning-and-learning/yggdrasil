@@ -86,7 +86,7 @@ bool equal(const Relation& left, const Relation& right)
     return true;
 }
 
-bool exact_delta(const database::incremental::Delta& delta, const Relation& before, const Relation& after)
+bool exact_delta(const database::Delta& delta, const Relation& before, const Relation& after)
 {
     size_t added = 0, removed = 0;
     for (size_t i = 0; i < after.size(); ++i)

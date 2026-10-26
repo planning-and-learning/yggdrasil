@@ -6,8 +6,8 @@
 #ifndef YGG_DATABASE_OPERATORS_RELATIONAL_INCREMENTAL_PROJECTION_HPP_
 #define YGG_DATABASE_OPERATORS_RELATIONAL_INCREMENTAL_PROJECTION_HPP_
 
+#include "yggdrasil/database/operators/incremental.hpp"
 #include "yggdrasil/database/operators/relational/operations.hpp"
-#include "yggdrasil/database/relation/delta.hpp"
 
 #include <algorithm>
 #include <functional>
