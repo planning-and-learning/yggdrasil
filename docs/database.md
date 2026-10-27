@@ -828,7 +828,10 @@ indexed relations, without intermediate relations:
   onto some of its columns (pattern databases [CS98]) one whose distances to the projected current targets, computed
   for every projected key by Dijkstra's algorithm backward from them once per set of targets and kept while the static
   inputs stay the same, bound the weight to the nearest target from below; h is their maximum, and a projection whose
-  backward search exceeds a budget is dropped (implementation decision);
+  backward search exceeds a budget is dropped (implementation decision); with one goal whose targets bind every key
+  column, a breadth-first search per goal key backward from its targets over the rules reversed (all their literals,
+  in the current state) advances with the forward one, and its exhaustion without reaching a source proves that the
+  key's goal has no row (bidirectional search [Pohl71]; implementation decision);
   an update evaluates the stratum anew;
 - static input slots are read once.
 
@@ -839,6 +842,7 @@ Python exposes the records as `DatalogRelationData`, `DatalogAtomData`, `Datalog
 evaluation per state, and maintenance between two successor states.
 
 [CS98] J. C. Culberson, J. Schaeffer, *Pattern Databases*, Computational Intelligence 14(3), 1998.
+[Pohl71] I. Pohl, *Bi-directional Search*, Machine Intelligence 6, 1971.
 [Gupta93] A. Gupta, I. S. Mumick, V. S. Subrahmanian, *Maintaining Views Incrementally*, SIGMOD 1993.
 [FM07] P. F. Felzenszwalb, D. McAllester, *The Generalized A\* Architecture*, JAIR 29, 2007.
 [Knuth77] D. E. Knuth, *A Generalization of Dijkstra's Algorithm*, Information Processing Letters 6(1), 1977.

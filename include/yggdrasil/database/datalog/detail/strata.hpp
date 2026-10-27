@@ -23,6 +23,7 @@ struct CompiledProgram;
 struct CompiledRule;
 class Executor;
 class GoalHeuristic;
+class GoalFrontier;
 
 /// The relations of a stratum, the rules that derive them, and the tables they read.
 struct StratumInfo
@@ -151,7 +152,7 @@ private:
 /// each settled row expanded by the rules that read it with the settled rows (weighted.cpp). If only goal rules read the
 /// stratum (a min head over one of its relations and the targets), it stops once every goal holds: the first settled
 /// row a goal reads has the least weight. A goal with key columns holds per key, and the rows of a key whose goal holds
-/// are no longer queued or settled (the rules keep the key). With a heuristic derived from its rules (heuristic.hpp), rows
+/// are no longer queued or settled (the rules keep the key). With a heuristic derived from its rules (goal_search.hpp), rows
 /// settle in order of weight plus the heuristic (A*, Felzenszwalb & McAllester 2007, §4), which keeps that order
 /// correct since the heuristic is monotone. An update evaluates the stratum anew and records the difference to its
 /// old rows.
@@ -160,7 +161,11 @@ class WeightedStratum final : public Stratum
 public:
     /// `goals`: the rules of higher strata that read the stratum, if all of them are goals; empty, the stratum is
     /// evaluated completely.
-    WeightedStratum(StratumInfo stratum, const CompiledProgram& program, std::vector<size_t> goals, std::unique_ptr<GoalHeuristic> heuristic);
+    WeightedStratum(StratumInfo stratum,
+                    const CompiledProgram& program,
+                    std::vector<size_t> goals,
+                    std::unique_ptr<GoalHeuristic> heuristic,
+                    std::unique_ptr<GoalFrontier> frontier);
     WeightedStratum(const WeightedStratum&) = delete;
     WeightedStratum& operator=(const WeightedStratum&) = delete;
     WeightedStratum(WeightedStratum&&) = delete;
@@ -201,6 +206,7 @@ private:
     std::vector<GoalKeys> m_goal_keys;
     std::vector<uint_t> m_key;
     std::unique_ptr<GoalHeuristic> m_heuristic;
+    std::unique_ptr<GoalFrontier> m_frontier;
     /// The rows a run derived, offered after it.
     std::vector<std::pair<size_t, std::vector<uint_t>>> m_derived;
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/datalog/detail/heuristic.hpp"
+#include "yggdrasil/database/datalog/detail/goal_search.hpp"
 #include "yggdrasil/database/datalog/detail/program.hpp"
 #include "yggdrasil/database/datalog/detail/stratification.hpp"
 
@@ -373,8 +373,10 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
                 for (const auto& literal : program.rules[g].literals)
                     if (literal.table != npos && !info.contains(literal.table) && std::ranges::find(info.reads, literal.table) == info.reads.end())
                         info.reads.push_back(literal.table);
-            auto heuristic = GoalHeuristic::make(program, info, goals);
-            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals), std::move(heuristic)));
+            const auto search = GoalSearch::make(program, info, goals);
+            auto heuristic = search ? GoalHeuristic::make(program, *search) : nullptr;
+            auto frontier = search ? GoalFrontier::make(program, *search) : nullptr;
+            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals), std::move(heuristic), std::move(frontier)));
         }
         else if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
         {

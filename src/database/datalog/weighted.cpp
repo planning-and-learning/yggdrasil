@@ -4,7 +4,7 @@
  */
 
 #include "yggdrasil/database/datalog/detail/executor.hpp"
-#include "yggdrasil/database/datalog/detail/heuristic.hpp"
+#include "yggdrasil/database/datalog/detail/goal_search.hpp"
 #include "yggdrasil/database/datalog/detail/strata.hpp"
 
 #include <algorithm>
@@ -12,11 +12,16 @@
 
 namespace ygg::database::datalog::detail
 {
-WeightedStratum::WeightedStratum(StratumInfo stratum, const CompiledProgram& program, std::vector<size_t> goals, std::unique_ptr<GoalHeuristic> heuristic) :
+WeightedStratum::WeightedStratum(StratumInfo stratum,
+                                 const CompiledProgram& program,
+                                 std::vector<size_t> goals,
+                                 std::unique_ptr<GoalHeuristic> heuristic,
+                                 std::unique_ptr<GoalFrontier> frontier) :
     Stratum(std::move(stratum)),
     m_goals(std::move(goals)),
     m_holds(m_goals.size()),
-    m_heuristic(std::move(heuristic))
+    m_heuristic(std::move(heuristic)),
+    m_frontier(std::move(frontier))
 {
     for (const auto table : info().tables)
     {
@@ -45,7 +50,7 @@ void WeightedStratum::offer(size_t position, std::span<const uint_t> row)
 {
     const auto key = row.first(row.size() - 1);
     const auto weight = row.back();
-    if (m_settled[position].contains(key) || finished(position, row))
+    if (m_settled[position].contains(key) || finished(position, row) || (m_frontier && m_frontier->excluded(key)))
         return;
     const auto estimate = m_heuristic ? (*m_heuristic)(key) : 0;
     if (estimate == Arithmetic::infinity)
@@ -136,6 +141,8 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
     m_queue.clear();
     if (m_heuristic)
         m_heuristic->read_targets(program, executor);
+    if (m_frontier)
+        m_frontier->read_targets(program, executor);
     // Rules that read no relation of the stratum start the queue.
     for (const auto r : info().rules)
     {
@@ -147,6 +154,9 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
                      rule.plain,
                      reads(rule, Version::CURRENT),
                      [&](std::span<const uint_t> row) { m_derived.emplace_back(position, std::vector<uint_t>(row.begin(), row.end())); });
+        if (m_frontier)
+            for (const auto& [_, row] : m_derived)
+                m_frontier->add_source(std::span<const uint_t>(row).first(row.size() - 1));
         offer_derived();
     }
     // Settle rows in order of weight; a settled row is expanded with the rows settled before it.
@@ -160,7 +170,8 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
         auto& settled = m_settled[candidate.position];
         // A lighter derivation of the row was queued after this one, or settled. A queued row has a best weight.
         const auto queued = m_queued[candidate.position].find(key);
-        if (settled.contains(key) || !queued || row.back() != m_best[candidate.position][*queued] || finished(candidate.position, row))
+        if (settled.contains(key) || !queued || row.back() != m_best[candidate.position][*queued] || finished(candidate.position, row)
+            || (m_frontier && m_frontier->excluded(key)))
             continue;
         settled.insert(key);
         const auto table_index = info().tables[candidate.position];
@@ -189,6 +200,9 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
         table.frontier.clear();
         if (done)
             break;
+        // The other side advances as this one does, so that the smaller is exhausted first.
+        if (m_frontier)
+            m_frontier->advance(program, executor, key);
     }
     m_queue.clear();
 }
@@ -223,7 +237,7 @@ void WeightedStratum::update(CompiledProgram& program, Executor& executor)
 
 size_t WeightedStratum::state_memory_usage() const noexcept
 {
-    size_t result = m_queue.capacity() * sizeof(Candidate) + (m_heuristic ? m_heuristic->memory_usage() : 0);
+    size_t result = m_queue.capacity() * sizeof(Candidate) + (m_heuristic ? m_heuristic->memory_usage() : 0) + (m_frontier ? m_frontier->memory_usage() : 0);
     for (const auto& candidate : m_queue)
         result += candidate.row.capacity() * sizeof(uint_t);
     for (size_t i = 0; i < m_settled.size(); ++i)
