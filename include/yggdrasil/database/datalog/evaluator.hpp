@@ -48,7 +48,6 @@ class Evaluator
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 
-    [[nodiscard]] bool reads(size_t slot) const;
     [[nodiscard]] size_t input_arity(size_t slot) const;
     /// Starts reading inputs anew, or (`updating`) their changes.
     void begin(bool updating);
@@ -86,6 +85,8 @@ class Evaluator
     }
 
 public:
+    /// Whether a requested relation depends on the input slot; the others are not read.
+    [[nodiscard]] bool reads(size_t slot) const;
     /// Evaluates the requested relations of a program; static slots hold the same rows in every call.
     Evaluator(ProgramView program, std::span<const RelationView> outputs, std::span<const size_t> static_slots = {});
     ~Evaluator();
