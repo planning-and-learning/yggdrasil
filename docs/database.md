@@ -835,7 +835,8 @@ indexed relations, without intermediate relations:
   graph per key column (single-column pattern databases [CS98], as `n_distance`'s heuristic; rules that keep the column
   are self-loops there and left out), whose distances to the current targets, computed by Dijkstra's algorithm
   backward from them once per set of targets and kept while the static inputs stay the same, bound the weight to the
-  nearest target from below; h is their maximum. With one goal whose targets bind every key column, a breadth-first
+  nearest target from below; h is their maximum. With one goal whose key columns are target columns, each goal key has
+  its own tables, to its own targets (as `n_distance`'s keyed heuristic), computed on its first estimate. With one goal whose targets bind every key column, a breadth-first
   search per goal key backward from its targets over the rules reversed (all their literals, in the current state)
   advances with the forward one, and its exhaustion without reaching a source proves that the key's goal has no row
   (bidirectional search [Pohl71]; implementation decision). With unit costs as well (base rules of weight 0, recursive

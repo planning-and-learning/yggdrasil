@@ -60,14 +60,16 @@ struct GoalSearch
     void read_targets(Executor& executor, std::vector<Version>& reads, RawArraySet<uint_t>& keys) const;
 };
 
-/// A* for a GoalSearch, with a heuristic derived from its rules (Felzenszwalb & McAllester 2007, §5.1): an abstraction
+/// A* for a GoalSearch, with a heuristic derived from its rules (Felzenszwalb & McAllester 2007, §5.1), per goal key to
+/// its own targets where the goal's key columns are target columns (as n_distance's keyed heuristic has tables per key;
+/// pooled targets bound the distance to the nearest target of any key, much weaker): an abstraction
 /// keeps of each recursive rule only its literals over static inputs (and what they compute), so that its derivations
 /// include the concrete ones at the same weights, and of the key only one column (a single-column pattern database, as
 /// n_distance's heuristic: Culberson & Schaeffer 1998). h(key) is the maximum over the target columns of the least
 /// abstract weight from the key's column to a target's; a maximum of consistent heuristics is consistent (Holte et al.,
 /// AIJ 2006). Each column's weights are computed for every value at once, by Dijkstra's algorithm backward from the
-/// targets over its reversed rules, once per set of targets, and kept for as long as the static inputs stay the same
-/// (implementation decision: the targets of a policy's states repeat).
+/// targets over its reversed rules, once per set of targets on the first estimate that needs them, and kept for as long
+/// as the static inputs stay the same (implementation decision: the targets of a policy's states repeat).
 class GoalHeuristic
 {
 public:
@@ -79,8 +81,9 @@ public:
     void read_targets(Executor& executor, bool changed);
     /// The heuristic of the key; Arithmetic::infinity if no target is reachable from it in a projection.
     [[nodiscard]] uint_t operator()(std::span<const uint_t> key);
-    /// Changes whenever read_targets() changes the function, so that bounds learned with it can be discarded.
-    [[nodiscard]] uint64_t generation() const noexcept { return m_generation; }
+    /// Changes whenever read_targets() changes the function for the goal key (the goal's key columns of a key of R), so
+    /// that bounds learned with it can be discarded.
+    [[nodiscard]] uint64_t generation(std::span<const uint_t> goal_key) const;
     [[nodiscard]] size_t memory_usage() const noexcept;
 
 private:
@@ -90,20 +93,33 @@ private:
         std::vector<BoundRule> edges;
         RawArraySet<uint_t> keys;
         /// Per set of projected targets (its sorted rows, flattened), the abstract weight to them of each key in
-        /// `keys`, infinity for keys beyond its size; `current` is that of the current targets.
+        /// `keys`, infinity for keys beyond its size.
         std::map<std::vector<uint_t>, std::vector<uint_t>> weights;
-        const std::vector<uint_t>* current = nullptr;
+        /// Per goal key, its current targets, their key of `weights` (empty without targets) and their weights once
+        /// computed.
+        std::vector<RawArraySet<uint_t>> targets;
+        std::vector<std::vector<uint_t>> wanted;
+        std::vector<const std::vector<uint_t>*> current;
     };
     GoalSearch m_search;
     std::vector<Projection> m_projections;
-    uint64_t m_generation = 0;
+    /// With one goal whose key columns are target columns, their positions in target_columns: each goal key has
+    /// weights to its own targets. Otherwise empty, and one goal key, (0), has every target.
+    std::vector<size_t> m_goal_positions;
+    RawArraySet<uint_t> m_goal_keys;
+    std::vector<uint64_t> m_generations;
+    Executor* m_executor = nullptr;
     bool m_read = false;
     RawArraySet<uint_t> m_target_keys;
     std::vector<Version> m_reads;
     std::vector<std::vector<uint_t>> m_derived;
     std::vector<uint_t> m_key;
 
-    explicit GoalHeuristic(const GoalSearch& search) : m_search(search), m_target_keys(search.target_columns.size()) {}
+    explicit GoalHeuristic(const GoalSearch& search) : m_search(search), m_goal_keys(1), m_target_keys(search.target_columns.size()) {}
+    /// The index of the goal key of a key of R, or of a target's (`target`), if it has targets.
+    std::optional<uint_t> group(std::span<const uint_t> key, bool target);
+    /// The weights of the goal key's current targets, computed on first use; null without targets.
+    const std::vector<uint_t>* weights(Projection& projection, uint_t group);
     /// The abstract weights to the projected targets, by Dijkstra's algorithm backward from them.
     std::vector<uint_t> backward(Executor& executor, Projection& projection, const RawArraySet<uint_t>& targets);
 };
