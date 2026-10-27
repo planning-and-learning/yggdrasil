@@ -354,6 +354,11 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             for (const auto r : info.rules)
                 require_superior(info, program.rules[r]);
             auto goals = goal_rules(s);
+            // Where the stratum stops depends on the targets: a change of them alone updates it.
+            for (const auto g : goals)
+                for (const auto& literal : program.rules[g].literals)
+                    if (literal.table != npos && !info.contains(literal.table) && std::ranges::find(info.reads, literal.table) == info.reads.end())
+                        info.reads.push_back(literal.table);
             auto heuristic = GoalHeuristic::make(program, info, goals);
             program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals), std::move(heuristic)));
         }

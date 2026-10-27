@@ -639,7 +639,8 @@ TEST(DatabaseDatalog, DeleteAndRederiveDropsRowsThatOnlySupportEachOther)
 TEST(DatabaseDatalog, WeightedGoalStopsAtTheLeastTarget)
 {
     // dist: costs y + 1 per edge from the sources; best: the least dist over the targets, the only output, so the
-    // stratum of dist stops once a target settles. Equal to the naive interpreter, in full evaluation and in updates.
+    // stratum of dist stops once a target settles. Equal to the naive interpreter, in full evaluation and in updates,
+    // also of the targets alone.
     Programs p;
     const auto e = p.relation(100, 2, 0), source = p.relation(101, 1, 1), target = p.relation(102, 1, 2);
     const auto dist = p.weighted(0, 2), best = p.weighted(1, 1);
@@ -673,7 +674,12 @@ TEST(DatabaseDatalog, WeightedGoalStopsAtTheLeastTarget)
     evaluator.initialize(std::array { borrow(relation_of(current[0], 2)), borrow(relation_of(current[1], 1)), borrow(relation_of(current[2], 1)) });
     for (size_t trial = 0; trial < 200; ++trial)
     {
-        const auto inputs = std::vector<Tuples> { draw(random() % 16, 2), draw(1 + random() % 2, 1), draw(random() % 3, 1) };
+        auto inputs = std::vector<Tuples> { draw(random() % 16, 2), draw(1 + random() % 2, 1), draw(random() % 3, 1) };
+        if (trial % 4 == 3)  // Only the targets change: where the stratum stopped depends on them.
+        {
+            inputs[0] = current[0];
+            inputs[1] = current[1];
+        }
         auto relations = std::vector<Relation>();
         for (size_t slot = 0; slot < 3; ++slot)
             relations.push_back(relation_of(inputs[slot], slot == 0 ? 2 : 1));
