@@ -720,10 +720,10 @@ ordered by f, then g) runs against a backward breadth-first frontier.
 The stored search tree (`search/search_tree.hpp`) keeps per vertex a learned lower bound and
 a next pointer with its path's length, an upper bound while the path's edges exist. A search
 ends on a stored path whose length meets the vertex's lower bound, or once nothing shorter than
-the best stored path seen can remain. Learned values stay consistent with the heuristic's
-estimates of unstored vertices, which repair after added edges relies on, so the vertices of a
-found path do not learn their exact distances. A* still reopens a vertex reached more cheaply,
-which never happens under a consistent estimate.
+the best stored path seen can remain. A* learns with its whole estimate, the backward frontier's
+bound included: the learned values stay consistent with the estimates of unstored vertices,
+which repair after added edges relies on, and a new frontier forgets them. A* still reopens a
+vertex reached more cheaply, which never happens under a consistent estimate.
 
 The heuristic `H` (`search/concepts.hpp`, `DistanceHeuristic`) must be consistent in every
 graph the inputs can form while the targets stay unchanged: it may depend on the targets and
@@ -843,7 +843,10 @@ indexed relations, without intermediate relations:
   over the rules as edges with learned distances [GAA*], stored paths [MPGAA*] and a backward frontier, kept across
   updates while the key's targets and the heuristic stay the same; the edges an update adds are derived by the rules
   with a changed literal reading its change (columns the rule keeps and leaves unbound stand for every stored key)
-  and repaired, or restart the frontier where they break its bounds; otherwise an update evaluates the stratum anew;
+  and repaired, or restart the frontier where they break its bounds; otherwise an update evaluates the stratum anew.
+  If no weight of the goals' heads can be observed (no output or aggregate reads them, and no rule uses them but by
+  copying them into such a head), a goal holds with any weight, and each search ends at the first path it finds,
+  a valid stored one included (implementation decision);
 - `initialize()` of an initialized evaluator compares its inputs with the rows read last and updates by the difference,
   so that what strata maintain carries over;
 - static input slots are read once.

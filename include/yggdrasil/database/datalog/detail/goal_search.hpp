@@ -43,6 +43,9 @@ struct GoalSearch
     std::vector<std::vector<size_t>> goal_columns;
     /// The tables that the targets' literals read: the targets change only with them.
     std::vector<size_t> target_tables;
+    /// Whether no weight of the goals' heads can be observed (set by the translation): then a goal holds with any
+    /// weight a derivation gives, and a search may stop at the first target it reaches.
+    bool any_path = false;
 
     /// None unless the stratum has this shape.
     static std::optional<GoalSearch> make(CompiledProgram& program, const StratumInfo& stratum, std::span<const size_t> goals);
@@ -166,7 +169,7 @@ private:
 /// removed edges keep the learned distances admissible, and the edges that an update adds (the rules run with a changed
 /// literal reading its change) are repaired (TreeRepair) or restart the frontier; a change these rules cannot express
 /// discards the trees. A search derives only the row of the target it reaches, at the distance: the goals read nothing
-/// else.
+/// else. With GoalSearch::any_path, it derives the row at the length of the first path it finds (AStar's any_path).
 class UnitSearch
 {
 public:

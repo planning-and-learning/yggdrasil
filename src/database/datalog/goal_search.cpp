@@ -98,7 +98,7 @@ std::optional<GoalSearch> GoalSearch::make(CompiledProgram& program, const Strat
 {
     if (goals.empty() || stratum.tables.size() != 1)
         return std::nullopt;
-    auto result = GoalSearch { stratum.tables.front(), {}, {}, {}, {} };
+    auto result = GoalSearch { stratum.tables.front(), {}, {}, {}, {}, {} };
     const auto table = result.table;
     const auto key_arity = program.tables[table]->arity - 1;
     for (const auto r : stratum.rules)
@@ -873,7 +873,7 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
         }
         key.added.clear();
         key.restart = false;
-        auto search = database::AStar<Oracle, Estimate>(oracle, key.tree, key.backward, estimate, key.targets, key.storage, m_version);
+        auto search = database::AStar<Oracle, Estimate>(oracle, key.tree, key.backward, estimate, key.targets, key.storage, m_version, m_search.any_path);
         const auto distance = search.run(Vertices { &key_sources[index] });
         if (distance == database::infinity)
             continue;

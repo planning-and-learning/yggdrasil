@@ -607,9 +607,9 @@ TEST(DatabaseMinDistance, AStarReopensUnderAnInconsistentEstimate)
     auto storage = ygg::database::AStarStorage(sizeof(uint_t));
     auto targets = ygg::database::VertexSet(sizeof(uint_t));
     targets.insert(std::span<const std::byte>(ListGraph::bytes(t)));
-    tree.learn(tree.ensure(std::span<const std::byte>(ListGraph::bytes(a1)), heuristic), 4);  // Its distance.
     auto ids = std::vector<uint_t> { tree.ensure(targets[0], heuristic) };
     backward.start(tree, ids);
+    tree.learn(tree.ensure(std::span<const std::byte>(ListGraph::bytes(a1)), heuristic), 4);  // Its distance.
     auto sources = ListVertices {};
     sources.rows.push_back(ListGraph::bytes(s));
     EXPECT_EQ((ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0).run(sources)), 5);

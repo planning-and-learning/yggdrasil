@@ -59,7 +59,7 @@ public:
             return *stored;
         const auto estimate = heuristic.estimate(vertex);
         const auto id = m_vertices.insert(vertex);
-        m_nodes.push_back(Node { estimate });
+        m_nodes.push_back(Node { .learned = estimate, .era = m_era });
         return id;
     }
     /// The learned distance of a vertex: its stored value, or the heuristic's estimate if it is not stored.
@@ -70,15 +70,18 @@ public:
         return stored ? learned(*stored) : heuristic.estimate(vertex);
     }
 
-    [[nodiscard]] uint_t learned(uint_t id) const noexcept { return m_nodes[id].learned; }
+    /// 0 if forgotten since it was learned.
+    [[nodiscard]] uint_t learned(uint_t id) const noexcept { return m_nodes[id].era == m_era ? m_nodes[id].learned : 0; }
     /// Raises the learned distance to a bound a search established (Generalized Adaptive A*).
-    void learn(uint_t id, uint_t bound) noexcept { m_nodes[id].learned = std::max(m_nodes[id].learned, bound); }
+    void learn(uint_t id, uint_t bound) noexcept { set_learned(id, std::max(learned(id), bound)); }
     /// Lowers the learned distance and drops the next pointer, after edges were added.
     void lower(uint_t id, uint_t bound) noexcept
     {
-        m_nodes[id].learned = bound;
+        set_learned(id, bound);
         set_next(id, none);
     }
+    /// Forgets every learned distance: they may rest on bounds that no longer hold.
+    void forget_learned() noexcept { ++m_era; }
     [[nodiscard]] uint_t next(uint_t id) const noexcept { return m_nodes[id].next; }
     /// The length of the vertex's chain when it was linked; infinity without one.
     [[nodiscard]] uint_t path(uint_t id) const noexcept { return m_nodes[id].path; }
@@ -150,11 +153,17 @@ private:
         uint_t learned = 0;
         uint_t next = none;
         uint_t path = infinity;             ///< The chain's length when it was linked.
+        uint_t era = 0;                     ///< Of learned: forget_learned() calls before it was set.
         uint64_t checked = 0;               ///< Epoch of the last chain check.
         bool valid = false;                 ///< Its result.
         uint64_t edge_version = unchecked;  ///< Graph version at which the edge to next was checked.
     };
 
+    void set_learned(uint_t id, uint_t value) noexcept
+    {
+        m_nodes[id].learned = value;
+        m_nodes[id].era = m_era;
+    }
     /// A new next pointer has an unchecked edge; without one, there is no path.
     void set_next(uint_t id, uint_t next) noexcept
     {
@@ -167,6 +176,7 @@ private:
     VertexSet m_vertices;
     std::vector<Node> m_nodes;
     uint64_t m_epoch = 0;
+    uint_t m_era = 0;
     std::vector<uint_t> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
 };
 

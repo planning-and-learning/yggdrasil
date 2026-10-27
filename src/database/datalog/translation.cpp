@@ -8,6 +8,7 @@
 #include "yggdrasil/database/datalog/detail/stratification.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <ranges>
 #include <set>
@@ -357,6 +358,45 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
         }
         return goals;
     };
+    // Whether the weights of a weighted table can be observed: it is an output or an aggregate's body, or a rule uses
+    // the weight of a row it reads otherwise than by copying it into the weight of a weighted head whose weights cannot
+    // be observed. A table on the walk counts as observed, which keeps cycles conservative.
+    auto observed = std::vector<std::optional<bool>>(program.tables.size());
+    auto weights_observed = std::function<bool(size_t)>();
+    weights_observed = [&](size_t table) -> bool
+    {
+        if (observed[table])
+            return *observed[table];
+        observed[table] = true;
+        auto result = std::ranges::find(program.outputs, table) != program.outputs.end()
+                      || std::ranges::any_of(aggregates, [&](const AggregateTable& aggregate) { return aggregate.source == table; });
+        for (size_t r = 0; r < program.rules.size() && !result; ++r)
+        {
+            const auto& rule = program.rules[r];
+            for (const auto& literal : rule.literals)
+            {
+                if (literal.table != table || (literal.kind != Literal::Kind::POSITIVE && literal.kind != Literal::Kind::NEGATED))
+                    continue;
+                const auto weight = literal.terms.back();
+                if (!weight.is_variable())
+                {
+                    result = true;
+                    break;
+                }
+                auto uses = std::ranges::count(rule.head_terms, weight);
+                for (const auto& other : rule.literals)
+                    uses += std::ranges::count(other.terms, weight);
+                const auto copied = program.tables[rule.head]->weighted && rule.head_terms.back() == weight;
+                if (uses > 2 || (uses == 2 && !(copied && !weights_observed(rule.head))))
+                {
+                    result = true;
+                    break;
+                }
+            }
+        }
+        observed[table] = result;
+        return result;
+    };
     for (size_t s = 0; s < infos.size(); ++s)
     {
         auto& info = infos[s];
@@ -373,7 +413,9 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
                 for (const auto& literal : program.rules[g].literals)
                     if (literal.table != npos && !info.contains(literal.table) && std::ranges::find(info.reads, literal.table) == info.reads.end())
                         info.reads.push_back(literal.table);
-            const auto search = GoalSearch::make(program, info, goals);
+            auto search = GoalSearch::make(program, info, goals);
+            if (search)
+                search->any_path = std::ranges::none_of(goals, [&](size_t g) { return weights_observed(program.rules[g].head); });
             auto heuristic = search ? GoalHeuristic::make(program, *search) : nullptr;
             auto frontier = search ? GoalFrontier::make(program, *search) : nullptr;
             auto unit = search ? UnitSearch::make(program, info, *search) : nullptr;
