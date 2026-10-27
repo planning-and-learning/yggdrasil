@@ -824,8 +824,9 @@ indexed relations, without intermediate relations:
   an output), it stops once the goals hold; a goal with key columns, which the stratum's rules keep, holds per key, and
   the rows of a key whose goal holds are no longer settled (implementation decision, not from [FM07]). It searches by
   A\* [FM07 §4] with a heuristic derived
-  from its rules [FM07 §5.1]: their static literals give an abstract weighted graph whose distances, computed once per
-  key and kept while the static inputs stay the same, bound the weight to the nearest current target from below;
+  from its rules [FM07 §5.1]: their static literals give an abstract weighted graph whose distances to the current
+  targets, computed for every key by Dijkstra's algorithm backward from them once per set of targets and kept while
+  the static inputs stay the same, bound the weight to the nearest target from below;
   an update evaluates the stratum anew;
 - static input slots are read once.
 

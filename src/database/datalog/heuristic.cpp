@@ -38,7 +38,7 @@ std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, con
         return nullptr;
     const auto table = stratum.tables.front();
     const auto arity = program.tables[table]->arity;
-    // The abstract rules read the key they expand from a table of their own.
+    // The reversed rules read the head row they expand from a table of their own.
     program.tables.push_back(std::make_unique<Table>(arity));
     program.recursive_tables.push_back(false);
     auto result = std::unique_ptr<GoalHeuristic>(new GoalHeuristic(program.tables.size() - 1, arity - 1));
@@ -56,52 +56,57 @@ std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, con
             || std::ranges::any_of(rule.literals,
                                    [](const Literal& l) { return l.kind == Literal::Kind::ARITHMETIC && l.operation != Arithmetic::Operation::ADD; }))
             return nullptr;
-        // Keep the static literals and what they bind; dropping the others only adds abstract derivations.
-        auto kept = std::vector<bool>(rule.literals.size());
-        auto bound = std::set<uint_t>();
-        const auto bind = [&](const Literal& l)
+        // Keep the static literals and what they compute; dropping the others only adds abstract derivations. The read
+        // row's weight is taken as 0, so that the head weight is the edge's.
+        const auto& source = rule.literals[sources.front()];
+        const auto zero = [&](Term t) { return t == source.terms.back() ? Term::constant(0) : t; };
+        auto edge = rule;
+        edge.literals.clear();
+        auto head = Literal { Literal::Kind::POSITIVE, result->m_scratch, rule.head_terms };
+        head.terms.back() = Term::variable(static_cast<uint_t>(edge.slots++));
+        edge.literals.push_back(head);
+        for (size_t i = 0; i < rule.literals.size(); ++i)
         {
-            for (const auto t : l.terms)
+            auto literal = rule.literals[i];
+            if (i == sources.front()
+                || !(reads_static_input(program, literal) || literal.kind == Literal::Kind::ARITHMETIC || literal.kind == Literal::Kind::COMPARISON))
+                continue;
+            if (literal.kind == Literal::Kind::ARITHMETIC)
+                for (size_t t = 0; t < 2; ++t)
+                    literal.terms[t] = zero(literal.terms[t]);
+            edge.literals.push_back(literal);
+        }
+        edge.head_terms = source.terms;
+        edge.head_terms.back() = zero(rule.head_terms.back());
+        // From the head row, the static literals and arithmetic must bind the read row and the edge's weight; arithmetic
+        // and comparisons over what they leave unbound are dropped.
+        auto bound = std::set<uint_t>();
+        const auto bind = [&](const auto& terms)
+        {
+            for (const auto t : terms)
                 if (t.is_variable())
                     bound.insert(t.value);
         };
-        kept[sources.front()] = true;
-        bind(rule.literals[sources.front()]);
+        bind(head.terms);
         for (bool grew = true; grew;)
         {
             grew = false;
-            for (size_t i = 0; i < rule.literals.size(); ++i)
+            for (const auto& literal : edge.literals)
             {
-                const auto& literal = rule.literals[i];
-                if (kept[i])
-                    continue;
-                const bool keep = reads_static_input(program, literal)
-                                  || (literal.kind == Literal::Kind::ARITHMETIC && all_bound(literal.terms | std::views::take(2), bound))
-                                  || (literal.kind == Literal::Kind::COMPARISON && all_bound(literal.terms, bound));
-                if (keep)
-                {
-                    kept[i] = grew = true;
-                    bind(literal);
-                }
+                const auto before = bound.size();
+                if (literal.kind == Literal::Kind::POSITIVE)
+                    bind(literal.terms);
+                else if (literal.kind == Literal::Kind::ARITHMETIC && all_bound(literal.terms | std::views::take(2), bound))
+                    bind(literal.terms | std::views::drop(2));
+                grew = grew || bound.size() != before;
             }
         }
-        if (!all_bound(rule.head_terms, bound))
+        std::erase_if(edge.literals,
+                      [&](const Literal& l)
+                      { return (l.kind == Literal::Kind::ARITHMETIC || l.kind == Literal::Kind::COMPARISON) && !all_bound(l.terms, bound); });
+        if (!all_bound(edge.head_terms, bound))
             return nullptr;
-        auto edge = Edge { rule, 0 };
-        edge.rule.literals.clear();
-        for (size_t i = 0; i < rule.literals.size(); ++i)
-            if (kept[i])
-            {
-                if (i == sources.front())
-                {
-                    edge.source = edge.rule.literals.size();
-                    edge.rule.literals.push_back(rule.literals[i]);
-                    edge.rule.literals.back().table = result->m_scratch;
-                }
-                else
-                    edge.rule.literals.push_back(rule.literals[i]);
-            }
-        plan_rule(program, edge.rule);
+        plan_rule(program, edge);
         result->m_edges.push_back(std::move(edge));
     }
     if (result->m_edges.empty())
@@ -135,7 +140,7 @@ std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, con
     return result;
 }
 
-void GoalHeuristic::read_targets(CompiledProgram&, Executor& executor)
+void GoalHeuristic::read_targets(CompiledProgram& program, Executor& executor)
 {
     m_target_keys.clear();
     for (const auto& rule : m_targets)
@@ -143,40 +148,56 @@ void GoalHeuristic::read_targets(CompiledProgram&, Executor& executor)
         m_reads.assign(rule.literals.size(), Version::CURRENT);
         executor.run(rule, rule.plain, m_reads, [&](std::span<const uint_t> key) { m_target_keys.insert(key); });
     }
+    auto rows = std::vector<std::span<const uint_t>>();
+    for (uint_t i = 0; i < m_target_keys.size(); ++i)
+        rows.push_back(m_target_keys[i]);
+    std::ranges::sort(rows, [](auto lhs, auto rhs) { return std::ranges::lexicographical_compare(lhs, rhs); });
+    auto targets = std::vector<uint_t>();
+    for (const auto row : rows)
+        targets.insert(targets.end(), row.begin(), row.end());
+    auto it = m_weights.find(targets);
+    if (it == m_weights.end())
+    {
+        auto weights = backward(program, executor);
+        it = m_weights.emplace(std::move(targets), std::move(weights)).first;
+    }
+    m_current = &it->second;
 }
 
-uint_t GoalHeuristic::operator()(CompiledProgram& program, Executor& executor, std::span<const uint_t> key)
+uint_t GoalHeuristic::operator()(std::span<const uint_t> key) const
 {
-    const auto index = m_keys.insert(key);
-    if (index >= m_rows.size())
-        m_rows.resize(m_keys.size());
-    if (m_rows[index].empty())
-        compute_row(program, executor, index);
-    for (const auto& [weight, reached] : m_rows[index])
-        if (m_target_keys.contains(m_keys[reached]))
-            return weight;
-    return Arithmetic::infinity;
+    const auto index = m_keys.find(key);
+    return index && *index < m_current->size() ? (*m_current)[*index] : Arithmetic::infinity;
 }
 
-void GoalHeuristic::compute_row(CompiledProgram& program, Executor& executor, uint_t index)
+std::vector<uint_t> GoalHeuristic::backward(CompiledProgram& program, Executor& executor)
 {
     auto& scratch = *program.tables[m_scratch];
-    auto best = std::vector<uint_t>(m_keys.size(), Arithmetic::infinity);
-    auto settled = std::vector<bool>(m_keys.size());
-    auto queue = std::vector<std::pair<uint_t, uint_t>> { { 0, index } };
-    best[index] = 0;
-    auto row = std::vector<std::pair<uint_t, uint_t>>();
+    auto best = std::vector<uint_t>();
+    auto queue = std::vector<std::pair<uint_t, uint_t>>();
+    const auto relax = [&](std::span<const uint_t> key, uint_t weight)
+    {
+        const auto index = m_keys.insert(key);
+        if (index >= best.size())
+            best.resize(m_keys.size(), Arithmetic::infinity);
+        if (weight < best[index])
+        {
+            best[index] = weight;
+            queue.emplace_back(weight, index);
+            std::ranges::push_heap(queue, std::greater {});
+        }
+    };
+    for (uint_t i = 0; i < m_target_keys.size(); ++i)
+        relax(m_target_keys[i], 0);
     auto expanded = std::vector<uint_t>();
     while (!queue.empty())
     {
         std::ranges::pop_heap(queue, std::greater {});
         const auto [weight, current] = queue.back();
         queue.pop_back();
-        if (settled[current] || weight != best[current])
+        if (weight != best[current])
             continue;
-        settled[current] = true;
-        row.emplace_back(weight, current);
-        // The abstract successors of the key, from the abstract rules reading the key at weight 0.
+        // The abstract predecessors of the key, with the weights of their edges to it.
         expanded.assign(m_keys[current].begin(), m_keys[current].end());
         expanded.push_back(0);
         scratch.frontier.clear();
@@ -184,42 +205,23 @@ void GoalHeuristic::compute_row(CompiledProgram& program, Executor& executor, ui
         m_derived.clear();
         for (const auto& edge : m_edges)
         {
-            m_reads.assign(edge.rule.literals.size(), Version::CURRENT);
-            m_reads[edge.source] = Version::FRONTIER;
-            executor.run(edge.rule,
-                         edge.rule.by_source[edge.source],
-                         m_reads,
-                         [&](std::span<const uint_t> derived) { m_derived.emplace_back(derived.begin(), derived.end()); });
+            m_reads.assign(edge.literals.size(), Version::CURRENT);
+            m_reads[0] = Version::FRONTIER;
+            executor.run(edge, edge.by_source[0], m_reads, [&](std::span<const uint_t> derived) { m_derived.emplace_back(derived.begin(), derived.end()); });
         }
         scratch.frontier.clear();
         for (const auto& derived : m_derived)
-        {
-            const auto successor = m_keys.insert(std::span<const uint_t>(derived).first(derived.size() - 1));
-            if (successor >= best.size())
-            {
-                best.resize(m_keys.size(), Arithmetic::infinity);
-                settled.resize(m_keys.size());
-            }
-            const auto candidate = Arithmetic { Arithmetic::Operation::ADD, {}, {}, 0 }.apply(weight, derived.back());
-            if (candidate < best[successor])
-            {
-                best[successor] = candidate;
-                queue.emplace_back(candidate, successor);
-                std::ranges::push_heap(queue, std::greater {});
-            }
-        }
+            relax(std::span<const uint_t>(derived).first(derived.size() - 1),
+                  Arithmetic { Arithmetic::Operation::ADD, {}, {}, 0 }.apply(weight, derived.back()));
     }
-    if (index >= m_rows.size())
-        m_rows.resize(m_keys.size());
-    m_rows[index] = std::move(row);
+    return best;
 }
 
 size_t GoalHeuristic::memory_usage() const noexcept
 {
-    using Row = std::vector<std::pair<uint_t, uint_t>>;
-    size_t result = m_target_keys.memory_usage() + m_keys.memory_usage() + m_rows.capacity() * sizeof(Row);
-    for (const auto& row : m_rows)
-        result += row.capacity() * sizeof(Row::value_type);
+    size_t result = m_target_keys.memory_usage() + m_keys.memory_usage();
+    for (const auto& [targets, weights] : m_weights)
+        result += (targets.capacity() + weights.capacity()) * sizeof(uint_t);
     return result;
 }
 }  // namespace ygg::database::datalog::detail

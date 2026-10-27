@@ -201,7 +201,7 @@ private:
     std::vector<GoalKeys> m_goal_keys;
     std::vector<uint_t> m_key;
     std::unique_ptr<GoalHeuristic> m_heuristic;
-    /// The rows a run derived, offered after it: the heuristic runs rules itself.
+    /// The rows a run derived, offered after it.
     std::vector<std::pair<size_t, std::vector<uint_t>>> m_derived;
 
     /// Records the goals that the settled row (the frontier of its table) makes hold; whether every goal holds.
@@ -210,8 +210,8 @@ private:
     [[nodiscard]] bool finished(size_t position, std::span<const uint_t> row);
     /// Queues a derived row of the stratum's table at `position` unless a lighter one is settled or queued, or the
     /// heuristic shows that it reaches no target.
-    void offer(CompiledProgram& program, Executor& executor, size_t position, std::span<const uint_t> row);
-    void offer_derived(CompiledProgram& program, Executor& executor);
+    void offer(size_t position, std::span<const uint_t> row);
+    void offer_derived();
     void derive(CompiledProgram& program, Executor& executor);
 };
 

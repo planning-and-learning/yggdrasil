@@ -41,13 +41,13 @@ WeightedStratum::WeightedStratum(StratumInfo stratum, const CompiledProgram& pro
 
 WeightedStratum::~WeightedStratum() = default;
 
-void WeightedStratum::offer(CompiledProgram& program, Executor& executor, size_t position, std::span<const uint_t> row)
+void WeightedStratum::offer(size_t position, std::span<const uint_t> row)
 {
     const auto key = row.first(row.size() - 1);
     const auto weight = row.back();
     if (m_settled[position].contains(key) || finished(position, row))
         return;
-    const auto estimate = m_heuristic ? (*m_heuristic)(program, executor, key) : 0;
+    const auto estimate = m_heuristic ? (*m_heuristic)(key) : 0;
     if (estimate == Arithmetic::infinity)
         return;
     auto& queued = m_queued[position];
@@ -65,10 +65,10 @@ void WeightedStratum::offer(CompiledProgram& program, Executor& executor, size_t
     std::ranges::push_heap(m_queue, std::greater {});
 }
 
-void WeightedStratum::offer_derived(CompiledProgram& program, Executor& executor)
+void WeightedStratum::offer_derived()
 {
     for (const auto& [position, row] : m_derived)
-        offer(program, executor, position, row);
+        offer(position, row);
     m_derived.clear();
 }
 
@@ -147,7 +147,7 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
                      rule.plain,
                      reads(rule, Version::CURRENT),
                      [&](std::span<const uint_t> row) { m_derived.emplace_back(position, std::vector<uint_t>(row.begin(), row.end())); });
-        offer_derived(program, executor);
+        offer_derived();
     }
     // Settle rows in order of weight; a settled row is expanded with the rows settled before it.
     while (!m_queue.empty())
@@ -184,7 +184,7 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
                              [&](std::span<const uint_t> derived) { m_derived.emplace_back(position, std::vector<uint_t>(derived.begin(), derived.end())); });
             }
         }
-        offer_derived(program, executor);
+        offer_derived();
         const bool done = !m_goals.empty() && goals_hold(program, executor, table_index);
         table.frontier.clear();
         if (done)
