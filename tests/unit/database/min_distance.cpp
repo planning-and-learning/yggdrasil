@@ -402,6 +402,9 @@ bool expect_path(const ListGraph& graph, const ListVertices& sources, const ygg:
     const auto source = static_cast<size_t>(std::ranges::find_if(path, is_source) - path.begin());
     EXPECT_LT(source, path.size());
     EXPECT_EQ(path.size(), distance + 1);
+    auto distinct = path;
+    std::ranges::sort(distinct);
+    EXPECT_EQ(std::ranges::unique(distinct).begin(), distinct.end());
     if (source >= path.size() || path.size() != distance + 1)
         return false;
     for (size_t i = 0; i < source; ++i)
@@ -460,14 +463,13 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
     EXPECT_GT(chains, 0);
 }
 
-/// Searches from many sources over one stored tree and backward frontier, under removed and added edges (repaired by
-/// TreeRepair, with the frontier started anew), find the distances and visit shortest paths: the frontier advances
-/// during later searches and relinks vertices of chains that an earlier search stored, so a chain kept as the incumbent
-/// may stop holding, and learned values must stay consistent for TreeRepair to lower every one that added edges lower.
-TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
+/// With any_path, the searches of AStarPathsHoldAcrossSearchesOfOneTree find a path exactly when a target is reachable,
+/// a simple one: a path that is not a shortest one can meet its generated vertices on the tree path where it ends, and
+/// linking those would make a cycle, on which AStar::path() does not return (larger, denser graphs, where this occurs).
+void search_across_updates(unsigned seed, bool any_path)
 {
-    auto rng = std::mt19937(GetParam());
-    const auto n = static_cast<uint_t>(60);
+    auto rng = std::mt19937(seed);
+    const auto n = static_cast<uint_t>(any_path ? 100 : 60);
     auto chains = static_cast<size_t>(0);
     auto heuristic = ygg::database::BlindDistanceHeuristic {};
     auto tree = ygg::database::SearchTree(sizeof(uint_t));
@@ -477,7 +479,7 @@ TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
     for (size_t trial = 0; trial < 30; ++trial)
     {
         auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
-        for (size_t e = 0; e < 150; ++e)
+        for (size_t e = 0; e < (any_path ? 400U : 150U); ++e)
         {
             const auto u = static_cast<uint_t>(rng() % n);
             const auto v = static_cast<uint_t>(rng() % n);
@@ -495,7 +497,7 @@ TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
         for (size_t i = 0; i < targets.size(); ++i)
             ids.push_back(tree.ensure(targets[static_cast<uint_t>(i)], heuristic));
         backward.start(tree, ids);
-        for (size_t s = 0; s < 40; ++s)
+        for (size_t s = 0; s < (any_path ? 200U : 40U); ++s)
         {
             // Removed edges keep the frontier's levels lower bounds; the version expires the chains' edge checks.
             for (size_t r = 0; r < 2; ++r)
@@ -528,14 +530,29 @@ TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
             auto sources = ListVertices {};
             const auto from = static_cast<uint_t>(rng() % n);
             sources.rows.push_back(ListGraph::bytes(from));
-            auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, s + 1);
+            auto search =
+                ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, s + 1, any_path);
             const auto distance = search.run(sources);
-            ASSERT_EQ(distance, expected[from]) << "trial " << trial << ", search " << s;
+            if (any_path)
+                ASSERT_EQ(distance == std::numeric_limits<uint_t>::max(), expected[from] == std::numeric_limits<uint_t>::max())
+                    << "trial " << trial << ", search " << s;
+            else
+                ASSERT_EQ(distance, expected[from]) << "trial " << trial << ", search " << s;
             if (distance != std::numeric_limits<uint_t>::max())
                 chains += expect_path(graph, sources, targets, search, distance);
         }
     }
     EXPECT_GT(chains, 0);
+}
+
+/// Searches from many sources over one stored tree and backward frontier, under removed and added edges (repaired by
+/// TreeRepair, with the frontier started anew), find the distances and visit shortest paths: the frontier advances
+/// during later searches and relinks vertices of chains that an earlier search stored, so a chain kept as the incumbent
+/// may stop holding, and learned values must stay consistent for TreeRepair to lower every one that added edges lower.
+TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
+{
+    for (const auto any_path : { false, true })
+        search_across_updates(GetParam(), any_path);
 }
 
 /// A second search from the same source over the same graph ends on the stored path at the same distance, without

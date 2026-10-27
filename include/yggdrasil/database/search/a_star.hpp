@@ -401,10 +401,16 @@ private:
         if (id && on_valid_path(*id))
         {
             const auto length = m_tree->path(*id);
-            if (length == current.h || m_any_path)
+            if (length == current.h)
             {
                 ++m_counters.tree_hits;
                 return finish(current.g + length, index);
+            }
+            if (m_any_path)
+            {
+                ++m_counters.tree_hits;
+                const auto last = last_generated(index);
+                return finish(node(last).g + m_tree->path(*stored(last)), last);
             }
             if (current.g + length < m_incumbent)
             {
@@ -414,6 +420,18 @@ private:
         }
         expand(index);
         return std::nullopt;
+    }
+
+    /// The last generated vertex on the tree path from the stored vertex `index`, or `index`: a path that is not a
+    /// shortest one may meet its own generated vertices on the tree path, and ending at the last one keeps it simple,
+    /// so that linking it into the tree makes no cycle.
+    uint_t last_generated(uint_t index)
+    {
+        auto result = index;
+        for (auto id = m_tree->next(*stored(index)); id != none; id = m_tree->next(id))
+            if (const auto found = m_storage->m_vertices.find(m_tree->vertex(id)))
+                result = *found;
+        return result;
     }
 
     void expand(uint_t index)
