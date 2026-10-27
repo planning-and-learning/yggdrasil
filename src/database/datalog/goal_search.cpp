@@ -479,18 +479,19 @@ struct UnitSearch::Oracle
     CompiledProgram* program;
     Executor* executor;
     UnitSearch* search;
-    std::vector<std::vector<uint_t>> buffers;
+    /// Per call depth, the neighbors found and the vertex's row.
+    std::vector<std::pair<std::vector<uint_t>, std::vector<uint_t>>> buffers;
     size_t depth = 0;
     std::vector<Version> reads;
+    std::vector<uint_t> edge;
 
     template<typename F>
     void neighbors(std::span<const std::byte> vertex, bool forward, const F& on_vertex)
     {
         if (buffers.size() <= depth)
             buffers.resize(depth + 1);
-        auto& found = buffers[depth++];
+        auto& [found, row] = buffers[depth++];
         found.clear();
-        auto row = std::vector<uint_t>();
         from_vertex(vertex, row);
         const auto arity = row.size();
         if (forward)
@@ -518,18 +519,19 @@ struct UnitSearch::Oracle
     { neighbors(vertex, false, on_vertex); }
     bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
     {
-        auto row = std::vector<uint_t>(), head = std::vector<uint_t>();
-        from_vertex(from, row);
-        from_vertex(to, head);
-        row.push_back(0);
-        row.insert(row.end(), head.begin(), head.end());
+        // The read row's key at weight 0, then the head's key.
+        from_vertex(from, edge);
+        edge.push_back(0);
+        const auto offset = edge.size();
+        edge.resize(offset + to.size() / sizeof(uint_t));
+        std::memcpy(std::span(edge).subspan(offset).data(), to.data(), to.size());
         auto exists = false;
         for (const auto& bound : search->m_edges)
         {
             if (exists)
                 break;
             reads.assign(bound.rule.literals.size(), Version::CURRENT);
-            executor->run_bound(bound.rule, bound.plan, reads, bound.inputs, row, [&](std::span<const uint_t>) { exists = true; });
+            executor->run_bound(bound.rule, bound.plan, reads, bound.inputs, edge, [&](std::span<const uint_t>) { exists = true; });
         }
         return exists;
     }
