@@ -24,6 +24,7 @@ struct CompiledRule;
 class Executor;
 class GoalHeuristic;
 class GoalFrontier;
+class UnitSearch;
 
 /// The relations of a stratum, the rules that derive them, and the tables they read.
 struct StratumInfo
@@ -165,7 +166,8 @@ public:
                     const CompiledProgram& program,
                     std::vector<size_t> goals,
                     std::unique_ptr<GoalHeuristic> heuristic,
-                    std::unique_ptr<GoalFrontier> frontier);
+                    std::unique_ptr<GoalFrontier> frontier,
+                    std::unique_ptr<UnitSearch> unit);
     WeightedStratum(const WeightedStratum&) = delete;
     WeightedStratum& operator=(const WeightedStratum&) = delete;
     WeightedStratum(WeightedStratum&&) = delete;
@@ -207,6 +209,8 @@ private:
     std::vector<uint_t> m_key;
     std::unique_ptr<GoalHeuristic> m_heuristic;
     std::unique_ptr<GoalFrontier> m_frontier;
+    /// With unit costs, the searches of n_distance replace the queue (goal_search.hpp).
+    std::unique_ptr<UnitSearch> m_unit;
     /// The rows a run derived, offered after it.
     std::vector<std::pair<size_t, std::vector<uint_t>>> m_derived;
 

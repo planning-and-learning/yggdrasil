@@ -8,6 +8,7 @@
 #include "yggdrasil/database/datalog/detail/program.hpp"
 
 #include <algorithm>
+#include <ranges>
 #include <span>
 #include <vector>
 
@@ -31,6 +32,29 @@ public:
     {
         m_reads = reads;
         m_slots.assign(rule.slots, 0);
+        m_stop = false;
+        step(rule, plan, 0, emit);
+    }
+    /// Runs a plan_bound() plan with the variables among `terms` bound to `values`; a constant must equal its value.
+    template<typename Emit>
+    void run_bound(const CompiledRule& rule,
+                   const Plan& plan,
+                   std::span<const Version> reads,
+                   std::span<const Term> terms,
+                   std::span<const uint_t> values,
+                   const Emit& emit)
+    {
+        m_reads = reads;
+        m_slots.assign(rule.slots, 0);
+        for (size_t c = 0; c < terms.size(); ++c)
+        {
+            if (!terms[c].is_variable() ?
+                    terms[c].value != values[c] :
+                    std::ranges::any_of(std::views::iota(size_t { 0 }, c), [&](size_t d) { return terms[d] == terms[c] && values[d] != values[c]; }))
+                return;
+            if (terms[c].is_variable())
+                m_slots[terms[c].value] = values[c];
+        }
         m_stop = false;
         step(rule, plan, 0, emit);
     }

@@ -6,8 +6,13 @@
 #include "yggdrasil/database/datalog/detail/goal_search.hpp"
 
 #include "yggdrasil/database/datalog/detail/executor.hpp"
+#include "yggdrasil/database/search/a_star.hpp"
+#include "yggdrasil/database/search/backward_frontier.hpp"
+#include "yggdrasil/database/search/incremental/tree_repair.hpp"
+#include "yggdrasil/database/search/search_tree.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <ranges>
 #include <set>
@@ -31,6 +36,35 @@ bool all_bound(const Terms& terms, const std::set<uint_t>& bound)
     return std::ranges::all_of(terms, [&](Term t) { return !t.is_variable() || bound.contains(t.value); });
 }
 
+std::span<const std::byte> as_vertex(std::span<const uint_t> key) { return std::as_bytes(key); }
+
+void from_vertex(std::span<const std::byte> vertex, std::vector<uint_t>& key)
+{
+    key.resize(vertex.size() / sizeof(uint_t));
+    std::memcpy(key.data(), vertex.data(), vertex.size());
+}
+
+/// The head weight is the read row's weight plus 1, by one addition that nothing else reads.
+bool adds_one(const CompiledRule& rule, const Literal& source)
+{
+    const auto weight = source.terms.back();
+    const auto head = rule.head_terms.back();
+    if (!weight.is_variable() || !head.is_variable())
+        return false;
+    auto uses = size_t { 0 };
+    auto adds = false;
+    for (const auto& literal : rule.literals)
+    {
+        uses += static_cast<size_t>(std::ranges::count(literal.terms, weight) + std::ranges::count(literal.terms, head));
+        adds = adds
+               || (literal.kind == Literal::Kind::ARITHMETIC && literal.operation == Arithmetic::Operation::ADD && literal.terms[2] == head
+                   && ((literal.terms[0] == weight && literal.terms[1] == Term::constant(1))
+                       || (literal.terms[1] == weight && literal.terms[0] == Term::constant(1))));
+    }
+    // The read row, and the addition's operand and result.
+    return adds && uses == 3;
+}
+
 std::vector<Term> project(std::span<const Term> terms, std::span<const size_t> columns)
 {
     auto projected = std::vector<Term>();
@@ -39,36 +73,24 @@ std::vector<Term> project(std::span<const Term> terms, std::span<const size_t> c
     return projected;
 }
 
-/// A table for reversed rules to read head rows from, and their plans.
-void plan_reversed(CompiledProgram& program, size_t arity, std::vector<CompiledRule>& edges)
+/// Runs the rules from the values `row` of their inputs, into `derived`.
+void run_bound(Executor& executor,
+               std::span<const BoundRule> rules,
+               std::span<const uint_t> row,
+               std::vector<Version>& reads,
+               std::vector<std::vector<uint_t>>& derived)
 {
-    program.tables.push_back(std::make_unique<Table>(arity));
-    program.recursive_tables.push_back(false);
-    for (auto& edge : edges)
-        plan_rule(program, edge);
-}
-
-/// Runs the reversed rules from the head row `row` (followed by weight 0), into `derived`: read rows, then the weight.
-void run_reversed(CompiledProgram& program,
-                  Executor& executor,
-                  size_t scratch,
-                  std::span<const CompiledRule> edges,
-                  std::vector<uint_t>& row,
-                  std::vector<Version>& reads,
-                  std::vector<std::vector<uint_t>>& derived)
-{
-    auto& table = *program.tables[scratch];
-    row.push_back(0);
-    table.frontier.clear();
-    table.frontier.insert(row);
     derived.clear();
-    for (const auto& edge : edges)
+    for (const auto& bound : rules)
     {
-        reads.assign(edge.literals.size(), Version::CURRENT);
-        reads[0] = Version::FRONTIER;
-        executor.run(edge, edge.by_source[0], reads, [&](std::span<const uint_t> found) { derived.emplace_back(found.begin(), found.end()); });
+        reads.assign(bound.rule.literals.size(), Version::CURRENT);
+        executor.run_bound(bound.rule,
+                           bound.plan,
+                           reads,
+                           bound.inputs,
+                           row,
+                           [&](std::span<const uint_t> found) { derived.emplace_back(found.begin(), found.end()); });
     }
-    table.frontier.clear();
 }
 }  // namespace
 
@@ -137,19 +159,19 @@ std::optional<GoalSearch> GoalSearch::make(CompiledProgram& program, const Strat
     return result;
 }
 
-std::optional<std::vector<CompiledRule>> GoalSearch::reverse(CompiledProgram& program, std::span<const size_t> columns, size_t scratch, bool abstract) const
+std::optional<std::vector<BoundRule>> GoalSearch::reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract) const
 {
-    auto edges = std::vector<CompiledRule>();
+    auto edges = std::vector<BoundRule>();
     for (const auto& [r, j] : rules)
     {
         const auto& rule = program.rules[r];
         const auto& source = rule.literals[j];
+        if (abstract && std::ranges::all_of(columns, [&](size_t c) { return source.terms[c] == rule.head_terms[c]; }))
+            continue;
         const auto zero = [&](Term t) { return t == source.terms.back() ? Term::constant(0) : t; };
         auto edge = rule;
         edge.literals.clear();
-        auto head = Literal { Literal::Kind::POSITIVE, scratch, project(rule.head_terms, columns) };
-        head.terms.push_back(Term::variable(static_cast<uint_t>(edge.slots++)));
-        edge.literals.push_back(head);
+        const auto inputs = project(rule.head_terms, columns);
         for (size_t i = 0; i < rule.literals.size(); ++i)
         {
             auto literal = rule.literals[i];
@@ -171,7 +193,7 @@ std::optional<std::vector<CompiledRule>> GoalSearch::reverse(CompiledProgram& pr
                 if (t.is_variable())
                     bound.insert(t.value);
         };
-        bind(head.terms);
+        bind(inputs);
         for (bool grew = true; grew;)
         {
             const auto before = bound.size();
@@ -190,7 +212,8 @@ std::optional<std::vector<CompiledRule>> GoalSearch::reverse(CompiledProgram& pr
                       });
         if (!all_bound(edge.head_terms, bound))
             return std::nullopt;
-        edges.push_back(std::move(edge));
+        auto plan = plan_bound(program, edge, inputs);
+        edges.push_back(BoundRule { std::move(edge), inputs, std::move(plan) });
     }
     return edges;
 }
@@ -207,46 +230,26 @@ void GoalSearch::read_targets(Executor& executor, std::vector<Version>& reads, R
 std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, const GoalSearch& search)
 {
     auto result = std::unique_ptr<GoalHeuristic>(new GoalHeuristic(search));
-    // The projections: every nonempty set of target columns, or for wide keys the single columns and all of them.
-    const auto& targets = search.target_columns;
-    auto subsets = std::vector<std::vector<size_t>>();
-    if (targets.size() <= 4)
-        for (size_t mask = 1; mask < (size_t { 1 } << targets.size()); ++mask)
-        {
-            auto& columns = subsets.emplace_back();
-            for (size_t i = 0; i < targets.size(); ++i)
-                if (mask & (size_t { 1 } << i))
-                    columns.push_back(targets[i]);
-        }
-    else
+    for (const auto column : search.target_columns)
     {
-        for (const auto c : targets)
-            subsets.push_back({ c });
-        subsets.push_back(targets);
-    }
-    for (auto& columns : subsets)
-    {
-        const auto scratch = program.tables.size();
-        auto edges = search.reverse(program, columns, scratch, true);
-        if (!edges)
+        const auto columns = std::vector<size_t> { column };
+        auto edges = search.reverse(program, columns, true);
+        if (!edges || edges->empty())
             continue;
-        plan_reversed(program, columns.size() + 1, *edges);
-        result->m_projections.push_back(Projection { columns, scratch, std::move(*edges), RawArraySet<uint_t>(columns.size()), {}, nullptr, true });
+        result->m_projections.push_back(Projection { columns, std::move(*edges), RawArraySet<uint_t>(columns.size()), {}, nullptr });
     }
     if (result->m_projections.empty())
         return nullptr;
     return result;
 }
 
-void GoalHeuristic::read_targets(CompiledProgram& program, Executor& executor)
+void GoalHeuristic::read_targets(Executor& executor)
 {
     m_target_keys.clear();
     m_search.read_targets(executor, m_reads, m_target_keys);
     const auto& target_columns = m_search.target_columns;
     for (auto& projection : m_projections)
     {
-        if (!projection.usable)
-            continue;
         auto targets = RawArraySet<uint_t>(projection.columns.size());
         for (uint_t i = 0; i < m_target_keys.size(); ++i)
         {
@@ -264,15 +267,9 @@ void GoalHeuristic::read_targets(CompiledProgram& program, Executor& executor)
             flat.insert(flat.end(), row.begin(), row.end());
         auto it = projection.weights.find(flat);
         if (it == projection.weights.end())
-        {
-            auto weights = backward(program, executor, projection, targets);
-            if (!weights)
-            {
-                projection = Projection { {}, projection.scratch, {}, RawArraySet<uint_t>(1), {}, nullptr, false };
-                continue;
-            }
-            it = projection.weights.emplace(std::move(flat), std::move(*weights)).first;
-        }
+            it = projection.weights.emplace(std::move(flat), backward(executor, projection, targets)).first;
+        if (projection.current != &it->second)
+            ++m_generation;
         projection.current = &it->second;
     }
 }
@@ -282,8 +279,6 @@ uint_t GoalHeuristic::operator()(std::span<const uint_t> key)
     auto result = uint_t { 0 };
     for (const auto& projection : m_projections)
     {
-        if (!projection.usable)
-            continue;
         m_key.clear();
         for (const auto c : projection.columns)
             m_key.push_back(key[c]);
@@ -295,11 +290,8 @@ uint_t GoalHeuristic::operator()(std::span<const uint_t> key)
     return result;
 }
 
-std::optional<std::vector<uint_t>>
-GoalHeuristic::backward(CompiledProgram& program, Executor& executor, Projection& projection, const RawArraySet<uint_t>& targets)
+std::vector<uint_t> GoalHeuristic::backward(Executor& executor, Projection& projection, const RawArraySet<uint_t>& targets)
 {
-    // Enough for the projections a search can use; a larger abstract space than this is dropped.
-    constexpr size_t budget = size_t { 1 } << 18;
     auto best = std::vector<uint_t>();
     auto queue = std::vector<std::pair<uint_t, uint_t>>();
     const auto relax = [&](std::span<const uint_t> key, uint_t weight)
@@ -317,10 +309,8 @@ GoalHeuristic::backward(CompiledProgram& program, Executor& executor, Projection
     for (uint_t i = 0; i < targets.size(); ++i)
         relax(targets[i], 0);
     auto row = std::vector<uint_t>();
-    for (size_t expansions = 0; !queue.empty(); ++expansions)
+    while (!queue.empty())
     {
-        if (expansions == budget)
-            return std::nullopt;
         std::ranges::pop_heap(queue, std::greater {});
         const auto [weight, current] = queue.back();
         queue.pop_back();
@@ -328,7 +318,7 @@ GoalHeuristic::backward(CompiledProgram& program, Executor& executor, Projection
             continue;
         // The abstract predecessors of the key, with the weights of their edges to it.
         row.assign(projection.keys[current].begin(), projection.keys[current].end());
-        run_reversed(program, executor, projection.scratch, projection.edges, row, m_reads, m_derived);
+        run_bound(executor, projection.edges, row, m_reads, m_derived);
         for (const auto& derived : m_derived)
             relax(std::span<const uint_t>(derived).first(derived.size() - 1),
                   Arithmetic { Arithmetic::Operation::ADD, {}, {}, 0 }.apply(weight, derived.back()));
@@ -348,10 +338,9 @@ size_t GoalHeuristic::memory_usage() const noexcept
     return result;
 }
 
-GoalFrontier::GoalFrontier(const GoalSearch& search, std::vector<size_t> goal_columns, size_t scratch, std::vector<CompiledRule> edges) :
+GoalFrontier::GoalFrontier(const GoalSearch& search, std::vector<size_t> goal_columns, std::vector<BoundRule> edges) :
     m_search(search),
     m_goal_columns(std::move(goal_columns)),
-    m_scratch(scratch),
     m_edges(std::move(edges)),
     m_goal_keys(std::max<size_t>(m_goal_columns.size(), 1)),
     m_rows(search.target_columns.size()),
@@ -364,12 +353,10 @@ std::unique_ptr<GoalFrontier> GoalFrontier::make(CompiledProgram& program, const
     const auto key_arity = program.tables[search.table]->arity - 1;
     if (search.targets.size() != 1 || search.target_columns.size() != key_arity)
         return nullptr;
-    const auto scratch = program.tables.size();
-    auto edges = search.reverse(program, search.target_columns, scratch, false);
+    auto edges = search.reverse(program, search.target_columns, false);
     if (!edges)
         return nullptr;
-    plan_reversed(program, key_arity + 1, *edges);
-    return std::unique_ptr<GoalFrontier>(new GoalFrontier(search, search.goal_columns.front(), scratch, std::move(*edges)));
+    return std::unique_ptr<GoalFrontier>(new GoalFrontier(search, search.goal_columns.front(), std::move(*edges)));
 }
 
 std::span<const uint_t> GoalFrontier::goal_key(std::span<const uint_t> key)
@@ -382,7 +369,7 @@ std::span<const uint_t> GoalFrontier::goal_key(std::span<const uint_t> key)
     return m_key;
 }
 
-void GoalFrontier::read_targets(CompiledProgram&, Executor& executor)
+void GoalFrontier::read_targets(Executor& executor)
 {
     m_goal_keys.clear();
     m_sides.clear();
@@ -406,7 +393,7 @@ void GoalFrontier::add_source(std::span<const uint_t> key)
         m_sides[*side].status = Status::REACHABLE;
 }
 
-void GoalFrontier::advance(CompiledProgram& program, Executor& executor, std::span<const uint_t> key)
+void GoalFrontier::advance(Executor& executor, std::span<const uint_t> key)
 {
     const auto found = m_goal_keys.find(goal_key(key));
     if (!found)
@@ -422,7 +409,7 @@ void GoalFrontier::advance(CompiledProgram& program, Executor& executor, std::sp
     // The rows of R from which the next row is derivable in one step, in the current state.
     auto row = std::vector<uint_t>(m_rows[side.rows[side.next]].begin(), m_rows[side.rows[side.next]].end());
     ++side.next;
-    run_reversed(program, executor, m_scratch, m_edges, row, m_reads, m_derived);
+    run_bound(executor, m_edges, row, m_reads, m_derived);
     for (const auto& derived : m_derived)
     {
         const auto predecessor = std::span<const uint_t>(derived).first(derived.size() - 1);
@@ -447,6 +434,447 @@ size_t GoalFrontier::memory_usage() const noexcept
     size_t result = m_goal_keys.memory_usage() + m_rows.memory_usage() + m_sources.memory_usage();
     for (const auto& side : m_sides)
         result += side.rows.capacity() * sizeof(uint_t);
+    return result;
+}
+struct UnitSearch::Key
+{
+    explicit Key(size_t vertex_size) : tree(vertex_size), targets(vertex_size), added(vertex_size), storage(vertex_size) {}
+
+    database::SearchTree tree;
+    database::BackwardFrontier backward;
+    database::VertexSet targets;
+    database::incremental::EdgeList added;
+    database::incremental::TreeRepair repair;
+    database::AStarStorage storage;
+    std::vector<uint_t> ids;
+    /// Per delta rule with partial edges, the stored keys by the rule's columns, up to `indexed` of them.
+    struct Index
+    {
+        explicit Index(size_t width) : parts(width) {}
+        RawArraySet<uint_t> parts;
+        std::vector<std::vector<uint_t>> ids;
+        uint_t indexed = 0;
+    };
+    std::vector<std::optional<Index>> indexes;
+    uint64_t generation = 0;
+    bool reset = true;
+    bool restart = false;
+
+    /// The targets' indices in the tree, stored with their estimates.
+    template<typename H>
+    std::span<const uint_t> ensure_targets(const H& heuristic)
+    {
+        ids.clear();
+        for (uint_t i = 0; i < targets.size(); ++i)
+            ids.push_back(tree.ensure(targets[i], heuristic));
+        return ids;
+    }
+};
+
+/// The edges between keys of R, by the stratum's rules in the current state: from a key, the rules read it (at weight 0)
+/// and derive its successors at weight 1; the reversed rules derive its predecessors. Each call collects into a buffer
+/// of its own depth, as a search may check an edge while it generates successors.
+struct UnitSearch::Oracle
+{
+    CompiledProgram* program;
+    Executor* executor;
+    UnitSearch* search;
+    std::vector<std::vector<uint_t>> buffers;
+    size_t depth = 0;
+    std::vector<Version> reads;
+
+    template<typename F>
+    void neighbors(std::span<const std::byte> vertex, bool forward, const F& on_vertex)
+    {
+        if (buffers.size() <= depth)
+            buffers.resize(depth + 1);
+        auto& found = buffers[depth++];
+        found.clear();
+        auto row = std::vector<uint_t>();
+        from_vertex(vertex, row);
+        const auto arity = row.size();
+        if (forward)
+            row.push_back(0);
+        for (const auto& bound : forward ? search->m_forward : search->m_reversed)
+        {
+            reads.assign(bound.rule.literals.size(), Version::CURRENT);
+            executor->run_bound(bound.rule,
+                                bound.plan,
+                                reads,
+                                bound.inputs,
+                                row,
+                                [&](std::span<const uint_t> derived) { found.insert(found.end(), derived.begin(), derived.end() - 1); });
+        }
+        for (size_t offset = 0; offset < found.size(); offset += arity)
+            if (!on_vertex(as_vertex(std::span<const uint_t>(found).subspan(offset, arity))))
+                break;
+        --depth;
+    }
+    template<typename F>
+    void successors(std::span<const std::byte> vertex, const F& on_vertex)
+    { neighbors(vertex, true, on_vertex); }
+    template<typename F>
+    void predecessors(std::span<const std::byte> vertex, const F& on_vertex)
+    { neighbors(vertex, false, on_vertex); }
+    bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to)
+    {
+        auto row = std::vector<uint_t>(), head = std::vector<uint_t>();
+        from_vertex(from, row);
+        from_vertex(to, head);
+        row.push_back(0);
+        row.insert(row.end(), head.begin(), head.end());
+        auto exists = false;
+        for (const auto& bound : search->m_edges)
+        {
+            if (exists)
+                break;
+            reads.assign(bound.rule.literals.size(), Version::CURRENT);
+            executor->run_bound(bound.rule, bound.plan, reads, bound.inputs, row, [&](std::span<const uint_t>) { exists = true; });
+        }
+        return exists;
+    }
+};
+
+namespace
+{
+/// The GoalHeuristic as a DistanceHeuristic over the bytes of keys of R.
+struct Estimate
+{
+    GoalHeuristic* heuristic;
+    std::vector<uint_t>* key;
+
+    [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const
+    {
+        if (!heuristic)
+            return 0;
+        from_vertex(vertex, *key);
+        return (*heuristic)(*key);
+    }
+};
+
+/// Rows of bytes as a VertexRange.
+struct Vertices
+{
+    const std::vector<std::vector<std::byte>>* rows;
+
+    [[nodiscard]] size_t size() const noexcept { return rows->size(); }
+    [[nodiscard]] std::span<const std::byte> row(size_t i) const { return (*rows)[i]; }
+};
+}  // namespace
+
+UnitSearch::UnitSearch(const GoalSearch& search, std::vector<BoundRule> forward, std::vector<BoundRule> edges, std::vector<BoundRule> reversed) :
+    m_search(search),
+    m_goal_columns(search.goal_columns.front()),
+    m_forward(std::move(forward)),
+    m_edges(std::move(edges)),
+    m_reversed(std::move(reversed)),
+    m_goal_keys(std::max<size_t>(m_goal_columns.size(), 1))
+{
+}
+
+UnitSearch::~UnitSearch() = default;
+
+std::unique_ptr<UnitSearch> UnitSearch::make(CompiledProgram& program, const StratumInfo& stratum, const GoalSearch& search)
+{
+    const auto key_arity = program.tables[search.table]->arity - 1;
+    if (search.targets.size() != 1 || search.target_columns.size() != key_arity)
+        return nullptr;
+    for (const auto r : stratum.rules)
+    {
+        const auto& rule = program.rules[r];
+        const auto recursive = std::ranges::find(search.rules, r, &std::pair<size_t, size_t>::first);
+        if (recursive == search.rules.end() ? rule.head_terms.back() != Term::constant(0) : !adds_one(rule, rule.literals[recursive->second]))
+            return nullptr;
+    }
+    auto reversed = search.reverse(program, search.target_columns, false);
+    if (!reversed)
+        return nullptr;
+    auto forward = std::vector<BoundRule>(), edges = std::vector<BoundRule>();
+    for (const auto& [r, j] : search.rules)
+    {
+        auto edge = program.rules[r];
+        auto inputs = edge.literals[j].terms;
+        edge.literals.erase(edge.literals.begin() + static_cast<std::ptrdiff_t>(j));
+        auto plan = plan_bound(program, edge, inputs);
+        forward.push_back(BoundRule { edge, inputs, std::move(plan) });
+        inputs.insert(inputs.end(), edge.head_terms.begin(), edge.head_terms.end() - 1);
+        plan = plan_bound(program, edge, inputs);
+        edges.push_back(BoundRule { std::move(edge), std::move(inputs), std::move(plan) });
+    }
+    auto result = std::unique_ptr<UnitSearch>(new UnitSearch(search, std::move(forward), std::move(edges), std::move(*reversed)));
+    // Per recursive rule and literal over another table, the rule without its read of R, that literal reading its
+    // change: the edges (the read row's key, the head's key) that the change adds.
+    for (const auto& [r, j] : search.rules)
+    {
+        const auto& rule = program.rules[r];
+        const auto& source = rule.literals[j];
+        for (size_t i = 0; i < rule.literals.size(); ++i)
+        {
+            const auto& changed = rule.literals[i];
+            if (i == j || changed.table == npos || reads_static_input(program, changed))
+                continue;
+            auto delta = Delta { rule, i - (i > j ? 1 : 0), changed.kind == Literal::Kind::NEGATED ? Version::REMOVED : Version::ADDED, {} };
+            delta.rule.literals.erase(delta.rule.literals.begin() + static_cast<std::ptrdiff_t>(j));
+            delta.rule.literals[delta.literal].kind = changed.kind == Literal::Kind::AGGREGATE ? Literal::Kind::AGGREGATE : Literal::Kind::POSITIVE;
+            auto bound = std::set<uint_t>();
+            for (bool grew = true; grew;)
+            {
+                const auto before = bound.size();
+                for (const auto& literal : delta.rule.literals)
+                    if (literal.kind == Literal::Kind::POSITIVE || literal.kind == Literal::Kind::AGGREGATE)
+                    {
+                        for (const auto t : literal.terms)
+                            if (t.is_variable())
+                                bound.insert(t.value);
+                    }
+                    else if (literal.kind == Literal::Kind::ARITHMETIC && all_bound(literal.terms | std::views::take(2), bound))
+                        bound.insert(literal.terms[2].value);
+                grew = bound.size() != before;
+            }
+            // Filters over what the rule leaves unbound (the read row's weight) are dropped: more edges, which repair
+            // only lowers bounds for.
+            std::erase_if(delta.rule.literals,
+                          [&](const Literal& l)
+                          {
+                              return (l.kind == Literal::Kind::ARITHMETIC || l.kind == Literal::Kind::COMPARISON || l.kind == Literal::Kind::NEGATED)
+                                     && !all_bound(l.terms, bound);
+                          });
+            delta.literal = static_cast<size_t>(
+                std::ranges::find_if(delta.rule.literals, [&](const Literal& l) { return l.table == changed.table && l.terms == changed.terms; })
+                - delta.rule.literals.begin());
+            // A key column that the rule keeps (the same variable in the read row and the head) and leaves unbound
+            // holds any value: the edge exists from every stored key that matches the others.
+            const auto is_bound = [&](Term t) { return !t.is_variable() || bound.contains(t.value); };
+            for (size_t c = 0; c + 1 < source.terms.size(); ++c)
+                if (is_bound(source.terms[c]) || source.terms[c] != rule.head_terms[c])
+                    delta.columns.push_back(c);
+            delta.rule.head_terms = project(source.terms, delta.columns);
+            const auto head = project(rule.head_terms, delta.columns);
+            delta.rule.head_terms.insert(delta.rule.head_terms.end(), head.begin(), head.end());
+            if (!all_bound(delta.rule.head_terms, bound))
+            {
+                result->m_opaque.push_back(changed.table);
+                continue;
+            }
+            plan_rule(program, delta.rule);
+            result->m_deltas.push_back(std::move(delta));
+        }
+    }
+    return result;
+}
+
+std::span<const uint_t> UnitSearch::goal_key(std::span<const uint_t> key)
+{
+    m_key.clear();
+    for (const auto c : m_goal_columns)
+        m_key.push_back(key[c]);
+    if (m_key.empty())
+        m_key.push_back(0);
+    return m_key;
+}
+
+uint_t UnitSearch::key_search(std::span<const uint_t> goal_key, size_t vertex_size)
+{
+    const auto index = m_goal_keys.insert(goal_key);
+    if (index == m_keys.size())
+        m_keys.push_back(std::make_unique<Key>(vertex_size));
+    return index;
+}
+
+void UnitSearch::reset() noexcept
+{
+    for (auto& key : m_keys)
+        key->reset = true;
+}
+
+void UnitSearch::changed(CompiledProgram& program, Executor& executor)
+{
+    ++m_version;
+    if (std::ranges::any_of(m_opaque, [&](size_t table) { return program.tables[table]->changed(); }))
+    {
+        reset();
+        return;
+    }
+    const auto arity = m_search.target_columns.size();
+    for (const auto& delta : m_deltas)
+    {
+        const auto& table = *program.tables[delta.rule.literals[delta.literal].table];
+        if (table.rows(delta.change).empty())
+            continue;
+        m_reads.assign(delta.rule.literals.size(), Version::CURRENT);
+        m_reads[delta.literal] = delta.change;
+        m_derived.clear();
+        executor.run(delta.rule,
+                     delta.rule.by_source[delta.literal],
+                     m_reads,
+                     [&](std::span<const uint_t> edge) { m_derived.emplace_back(edge.begin(), edge.end()); });
+        const auto record = [&](Key& key, std::span<const uint_t> from, std::span<const uint_t> to)
+        {
+            if (key.reset)
+                return;
+            const auto stored = key.tree.find(as_vertex(from));
+            if (!key.restart)
+            {
+                const auto to_bound = key.backward.bound(key.tree.find(as_vertex(to)));
+                key.restart = to_bound != database::infinity && key.backward.bound(stored) > to_bound + 1;
+            }
+            if (stored)
+                key.added.add(as_vertex(from), as_vertex(to));
+        };
+        const auto width = delta.columns.size();
+        auto from = std::vector<uint_t>(arity), to = std::vector<uint_t>(arity);
+        if (width == arity)
+        {
+            for (const auto& edge : m_derived)
+            {
+                for (size_t i = 0; i < arity; ++i)
+                {
+                    from[delta.columns[i]] = edge[i];
+                    to[delta.columns[i]] = edge[arity + i];
+                }
+                if (const auto index = m_goal_keys.find(goal_key(from)))
+                    record(*m_keys[*index], from, to);
+            }
+            continue;
+        }
+        // Partial edges: the stored keys that match a partial edge's read row in `columns` (by an index grown with
+        // the tree) take its head there, the other columns stay. An edge from a key that is not stored breaks the
+        // backward frontier's bounds if it ends at a found key more than one level inside the unfound ones.
+        if (m_derived.empty())
+            continue;
+        const auto position = static_cast<size_t>(&delta - m_deltas.data());
+        auto part = std::vector<uint_t>(width);
+        for (auto& key : m_keys)
+        {
+            if (key->reset)
+                continue;
+            if (key->indexes.size() <= position)
+                key->indexes.resize(m_deltas.size());
+            auto& index = key->indexes[position];
+            if (!index)
+                index.emplace(width);
+            for (; index->indexed < key->tree.size(); ++index->indexed)
+            {
+                from_vertex(key->tree.vertex(index->indexed), from);
+                for (size_t i = 0; i < width; ++i)
+                    part[i] = from[delta.columns[i]];
+                const auto slot = index->parts.insert(part);
+                if (slot == index->ids.size())
+                    index->ids.emplace_back();
+                index->ids[slot].push_back(index->indexed);
+            }
+            const auto unfound = key->backward.bound(std::nullopt);
+            for (const auto& edge : m_derived)
+            {
+                if (!key->restart)
+                    if (const auto heads = index->parts.find(std::span<const uint_t>(edge).subspan(width)))
+                        key->restart = std::ranges::any_of(index->ids[*heads],
+                                                           [&](uint_t id)
+                                                           {
+                                                               const auto level = key->backward.bound(id);
+                                                               return level != database::infinity && (unfound == database::infinity || level + 1 < unfound);
+                                                           });
+                const auto slot = index->parts.find(std::span<const uint_t>(edge).first(width));
+                if (!slot)
+                    continue;
+                for (const auto id : index->ids[*slot])
+                {
+                    from_vertex(key->tree.vertex(id), from);
+                    to = from;
+                    for (size_t i = 0; i < width; ++i)
+                        to[delta.columns[i]] = edge[width + i];
+                    record(*key, from, to);
+                }
+            }
+        }
+    }
+}
+
+void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<const std::vector<uint_t>> sources, GoalHeuristic* heuristic)
+{
+    const auto arity = m_search.target_columns.size();
+    const auto vertex_size = arity * sizeof(uint_t);
+    auto targets = RawArraySet<uint_t>(arity);
+    m_search.read_targets(executor, m_reads, targets);
+    // Per goal key, its targets and sources as bytes.
+    auto key_targets = std::vector<std::vector<std::vector<std::byte>>>();
+    auto key_sources = std::vector<std::vector<std::vector<std::byte>>>();
+    const auto bytes = [](std::span<const uint_t> key)
+    {
+        const auto vertex = as_vertex(key);
+        return std::vector<std::byte>(vertex.begin(), vertex.end());
+    };
+    for (uint_t i = 0; i < targets.size(); ++i)
+    {
+        const auto index = key_search(goal_key(targets[i]), vertex_size);
+        key_targets.resize(m_keys.size());
+        key_targets[index].push_back(bytes(targets[i]));
+    }
+    key_targets.resize(m_keys.size());
+    key_sources.resize(m_keys.size());
+    for (const auto& source : sources)
+        if (const auto index = m_goal_keys.find(goal_key(std::span<const uint_t>(source).first(arity))); index && !key_targets[*index].empty())
+            key_sources[*index].push_back(bytes(std::span<const uint_t>(source).first(arity)));
+    auto oracle = Oracle { &program, &executor, this, {}, 0 };
+    auto estimate_key = std::vector<uint_t>();
+    const auto estimate = Estimate { heuristic, &estimate_key };
+    const auto generation = heuristic ? heuristic->generation() : 0;
+    auto& table = *program.tables[m_search.table];
+    for (size_t index = 0; index < m_keys.size(); ++index)
+    {
+        if (key_sources[index].empty())
+            continue;
+        auto& key = *m_keys[index];
+        const auto& wanted = key_targets[index];
+        if (key.targets.size() != wanted.size() || !std::ranges::all_of(wanted, [&](const auto& target) { return key.targets.contains(target); }))
+        {
+            key.targets.clear();
+            for (const auto& target : wanted)
+                key.targets.insert(target);
+            key.reset = true;
+        }
+        if (key.generation != generation)
+        {
+            key.generation = generation;
+            key.reset = true;
+        }
+        if (key.reset)
+        {
+            key.tree.clear();
+            key.indexes.clear();
+            key.reset = false;
+            key.backward.start(key.ensure_targets(estimate));
+        }
+        else
+        {
+            if (!key.added.empty())
+                key.repair.run(key.tree, key.added, oracle, estimate);
+            if (key.restart)
+                key.backward.start(key.ensure_targets(estimate));
+        }
+        key.added.clear();
+        key.restart = false;
+        auto search = database::AStar<Oracle, Estimate>(oracle, key.tree, key.backward, estimate, key.targets, key.storage, m_version);
+        const auto distance = search.run(Vertices { &key_sources[index] });
+        if (distance == database::infinity)
+            continue;
+        auto reached = std::vector<uint_t>();
+        search.path(
+            [&](std::span<const std::byte> vertex)
+            {
+                if (key.targets.contains(vertex))
+                    from_vertex(vertex, reached);
+            });
+        reached.push_back(distance);
+        table.current.insert(reached);
+    }
+}
+
+size_t UnitSearch::memory_usage() const noexcept
+{
+    size_t result = m_goal_keys.memory_usage();
+    for (const auto& key : m_keys)
+        result += key->targets.memory_usage() + key->tree.size() * (key->targets.array_size() + 4 * sizeof(uint64_t));
     return result;
 }
 }  // namespace ygg::database::datalog::detail

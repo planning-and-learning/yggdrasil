@@ -823,16 +823,21 @@ indexed relations, without intermediate relations:
   if only goals read it (a minimizing head over its relation and targets from earlier strata, and none of its relations
   an output), it stops once the goals hold; a goal with key columns, which the stratum's rules keep, holds per key, and
   the rows of a key whose goal holds are no longer settled (implementation decision, not from [FM07]). It searches by
-  A\* [FM07 §4] with a heuristic derived
-  from its rules [FM07 §5.1]: their static literals give an abstract weighted graph, and each projection of the key
-  onto some of its columns (pattern databases [CS98]) one whose distances to the projected current targets, computed
-  for every projected key by Dijkstra's algorithm backward from them once per set of targets and kept while the static
-  inputs stay the same, bound the weight to the nearest target from below; h is their maximum, and a projection whose
-  backward search exceeds a budget is dropped (implementation decision); with one goal whose targets bind every key
-  column, a breadth-first search per goal key backward from its targets over the rules reversed (all their literals,
-  in the current state) advances with the forward one, and its exhaustion without reaching a source proves that the
-  key's goal has no row (bidirectional search [Pohl71]; implementation decision);
-  an update evaluates the stratum anew;
+  A\* [FM07 §4] with a heuristic derived from its rules [FM07 §5.1]: their static literals give an abstract weighted
+  graph per key column (single-column pattern databases [CS98], as `n_distance`'s heuristic; rules that keep the column
+  are self-loops there and left out), whose distances to the current targets, computed by Dijkstra's algorithm
+  backward from them once per set of targets and kept while the static inputs stay the same, bound the weight to the
+  nearest target from below; h is their maximum. With one goal whose targets bind every key column, a breadth-first
+  search per goal key backward from its targets over the rules reversed (all their literals, in the current state)
+  advances with the forward one, and its exhaustion without reaching a source proves that the key's goal has no row
+  (bidirectional search [Pohl71]; implementation decision). With unit costs as well (base rules of weight 0, recursive
+  rules adding 1), each goal key is searched as `n_distance` searches (`search/incremental/min_distance.hpp`): A\*
+  over the rules as edges with learned distances [GAA*], stored paths [MPGAA*] and a backward frontier, kept across
+  updates while the key's targets and the heuristic stay the same; the edges an update adds are derived by the rules
+  with a changed literal reading its change (columns the rule keeps and leaves unbound stand for every stored key)
+  and repaired, or restart the frontier where they break its bounds; otherwise an update evaluates the stratum anew;
+- `initialize()` of an initialized evaluator compares its inputs with the rows read last and updates by the difference,
+  so that what strata maintain carries over;
 - static input slots are read once.
 
 Python exposes the records as `DatalogRelationData`, `DatalogAtomData`, `DatalogAggregateData`, `DatalogRuleData`,
@@ -842,6 +847,9 @@ Python exposes the records as `DatalogRelationData`, `DatalogAtomData`, `Datalog
 evaluation per state, and maintenance between two successor states.
 
 [CS98] J. C. Culberson, J. Schaeffer, *Pattern Databases*, Computational Intelligence 14(3), 1998.
+[GAA*] X. Sun, S. Koenig, W. Yeoh, *Generalized Adaptive A\**, AAMAS 2008.
+[MPGAA*] C. Hernández, R. Asín, J. A. Baier, *Reusing Previously Found A\* Paths for Fast Goal-Directed Navigation in
+Dynamic Terrain*, AAAI 2015.
 [Pohl71] I. Pohl, *Bi-directional Search*, Machine Intelligence 6, 1971.
 [Gupta93] A. Gupta, I. S. Mumick, V. S. Subrahmanian, *Maintaining Views Incrementally*, SIGMOD 1993.
 [FM07] P. F. Felzenszwalb, D. McAllester, *The Generalized A\* Architecture*, JAIR 29, 2007.

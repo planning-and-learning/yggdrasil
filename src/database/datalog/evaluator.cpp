@@ -23,6 +23,8 @@ struct Evaluator::Impl
     std::vector<Delta> deltas;
     bool ready = false;
     bool initialized = false;
+    /// initialize() of an initialized evaluator: input rows are compared with the current ones (in `frontier`).
+    bool rebinding = false;
     std::vector<std::byte> bytes;
 
     Impl(ProgramView view, std::span<const RelationView> outputs, std::span<const size_t> static_slots) :
@@ -53,6 +55,30 @@ struct Evaluator::Impl
                 stratum->evaluate(program, executor);
         }
         publish(false);
+    }
+
+    /// After an initialized evaluator read its inputs anew: the rows read last but not now are removed, the new ones
+    /// added, as an update's changes.
+    void apply_rebinding()
+    {
+        for (const auto table_index : program.slot_tables)
+        {
+            if (table_index == npos)
+                continue;
+            auto& table = *program.tables[table_index];
+            if (table.is_static && table.loaded)
+                continue;
+            table.current.for_each(
+                [&](std::span<const uint_t> row)
+                {
+                    if (!table.frontier.contains(row))
+                        table.removed.insert(row);
+                });
+            table.removed.for_each([&](std::span<const uint_t> row) { table.current.erase(row); });
+            table.added.for_each([&](std::span<const uint_t> row) { table.current.insert(row); });
+            table.frontier.clear();
+        }
+        rebinding = false;
     }
 
     void update()
@@ -128,15 +154,29 @@ void Evaluator::begin(bool updating)
     if (updating && !impl.initialized)
         throw std::logic_error("Datalog evaluator: initialize before update.");
     impl.ready = false;
+    impl.rebinding = false;
     for (auto& table : impl.program.tables)
     {
         table->clear_changes();
         if (!updating && table->slot && !(table->is_static && table->loaded))
-            table->current.clear();
+        {
+            if (impl.initialized)
+                table->frontier.clear();
+            else
+                table->current.clear();
+        }
     }
+    impl.rebinding = !updating && impl.initialized;
 }
 
-void Evaluator::input_row(size_t slot, std::span<const uint_t> row) { m_impl->program.tables[m_impl->program.slot_tables[slot]]->current.insert(row); }
+void Evaluator::input_row(size_t slot, std::span<const uint_t> row)
+{
+    auto& table = *m_impl->program.tables[m_impl->program.slot_tables[slot]];
+    if (!m_impl->rebinding)
+        table.current.insert(row);
+    else if (table.frontier.insert(row) && !table.current.contains(row))
+        table.added.insert(row);
+}
 
 void Evaluator::change_row(size_t slot, bool added, std::span<const uint_t> row)
 {
@@ -157,6 +197,8 @@ void Evaluator::change_row(size_t slot, bool added, std::span<const uint_t> row)
 
 void Evaluator::finish_evaluate()
 {
+    if (m_impl->rebinding)
+        m_impl->apply_rebinding();
     m_impl->initialized = false;
     m_impl->evaluate(false);
     m_impl->ready = true;
@@ -164,9 +206,16 @@ void Evaluator::finish_evaluate()
 
 void Evaluator::finish_initialize()
 {
-    m_impl->evaluate(true);
-    m_impl->initialized = true;
-    m_impl->ready = true;
+    auto& impl = *m_impl;
+    if (impl.rebinding)
+    {
+        impl.apply_rebinding();
+        impl.update();
+    }
+    else
+        impl.evaluate(true);
+    impl.initialized = true;
+    impl.ready = true;
 }
 
 void Evaluator::finish_update()

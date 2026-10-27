@@ -20,6 +20,14 @@ namespace ygg::database::datalog::detail
 {
 class Executor;
 
+/// A rule run from values of some of its terms (Executor::run_bound).
+struct BoundRule
+{
+    CompiledRule rule;
+    std::vector<Term> inputs;
+    Plan plan;
+};
+
 /// The search of a weighted relation R that only goals read (WeightedStratum): the stratum's one table, rules that read
 /// it once and add weights only (+), and goals whose other literals give the targets, the keys of R they accept.
 struct GoalSearch
@@ -36,63 +44,61 @@ struct GoalSearch
 
     /// None unless the stratum has this shape.
     static std::optional<GoalSearch> make(CompiledProgram& program, const StratumInfo& stratum, std::span<const size_t> goals);
-    /// The recursive rules reversed, over the key columns `columns`: the first literal reads a head row (its `columns`,
-    /// then a weight) from `scratch`, the head is the read row's `columns` with the edge's weight (the read row's weight
-    /// taken as 0). With `abstract`, only literals over static inputs (and what they compute) are kept, so that the
-    /// derivations include the concrete ones in every state; otherwise every literal. Literals left unbound are dropped,
-    /// which only adds derivations. None if a rule cannot bind the read row's `columns` and the weight.
-    [[nodiscard]] std::optional<std::vector<CompiledRule>>
-    reverse(CompiledProgram& program, std::span<const size_t> columns, size_t scratch, bool abstract) const;
+    /// The recursive rules reversed, over the key columns `columns`: run from a head row's `columns`, they derive the
+    /// read row's `columns` with the edge's weight (the read row's weight taken as 0). With `abstract`, only literals over
+    /// static inputs (and what they compute) are kept, so that the derivations include the concrete ones in every state,
+    /// and rules that keep every column of `columns` (self-loops there) are left out; otherwise every literal. Literals
+    /// left unbound are dropped, which only adds derivations. None if a rule cannot bind the read row's `columns` and the
+    /// weight.
+    [[nodiscard]] std::optional<std::vector<BoundRule>> reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract) const;
     /// Adds the targets of the current state, rows of `target_columns`.
     void read_targets(Executor& executor, std::vector<Version>& reads, RawArraySet<uint_t>& keys) const;
 };
 
 /// A* for a GoalSearch, with a heuristic derived from its rules (Felzenszwalb & McAllester 2007, §5.1): an abstraction
 /// keeps of each recursive rule only its literals over static inputs (and what they compute), so that its derivations
-/// include the concrete ones at the same weights, and of the key only some columns (a projection, as a pattern database
-/// keeps some variables: Culberson & Schaeffer 1998). h(key) is the maximum over the projections of the least abstract
-/// weight from the projected key to a projected target; a maximum of consistent heuristics is consistent. Each
-/// projection's weights are computed for every projected key at once, by Dijkstra's algorithm backward from the
-/// targets over its reversed rules, once per set of targets, and kept for as long as the static inputs stay the same.
-/// A projection whose backward search exceeds a budget of expansions is dropped (implementation decisions: the targets
-/// of a policy's states repeat; keeping every column can leave an abstract space far larger than the concrete one that
-/// the search visits).
+/// include the concrete ones at the same weights, and of the key only one column (a single-column pattern database, as
+/// n_distance's heuristic: Culberson & Schaeffer 1998). h(key) is the maximum over the target columns of the least
+/// abstract weight from the key's column to a target's; a maximum of consistent heuristics is consistent (Holte et al.,
+/// AIJ 2006). Each column's weights are computed for every value at once, by Dijkstra's algorithm backward from the
+/// targets over its reversed rules, once per set of targets, and kept for as long as the static inputs stay the same
+/// (implementation decision: the targets of a policy's states repeat).
 class GoalHeuristic
 {
 public:
-    /// None unless some projection onto target columns has reversed abstract rules.
+    /// None unless some target column has reversed abstract rules.
     static std::unique_ptr<GoalHeuristic> make(CompiledProgram& program, const GoalSearch& search);
 
     /// Reads the targets of the current state, and computes their abstract weights unless known.
-    void read_targets(CompiledProgram& program, Executor& executor);
+    void read_targets(Executor& executor);
     /// The heuristic of the key; Arithmetic::infinity if no target is reachable from it in a projection.
     [[nodiscard]] uint_t operator()(std::span<const uint_t> key);
+    /// Changes whenever read_targets() changes the function, so that bounds learned with it can be discarded.
+    [[nodiscard]] uint64_t generation() const noexcept { return m_generation; }
     [[nodiscard]] size_t memory_usage() const noexcept;
 
 private:
     struct Projection
     {
         std::vector<size_t> columns;
-        size_t scratch;
-        std::vector<CompiledRule> edges;
+        std::vector<BoundRule> edges;
         RawArraySet<uint_t> keys;
         /// Per set of projected targets (its sorted rows, flattened), the abstract weight to them of each key in
         /// `keys`, infinity for keys beyond its size; `current` is that of the current targets.
         std::map<std::vector<uint_t>, std::vector<uint_t>> weights;
         const std::vector<uint_t>* current = nullptr;
-        bool usable = true;
     };
     GoalSearch m_search;
     std::vector<Projection> m_projections;
+    uint64_t m_generation = 0;
     RawArraySet<uint_t> m_target_keys;
     std::vector<Version> m_reads;
     std::vector<std::vector<uint_t>> m_derived;
     std::vector<uint_t> m_key;
 
     explicit GoalHeuristic(const GoalSearch& search) : m_search(search), m_target_keys(search.target_columns.size()) {}
-    /// The abstract weights to the projected targets, by Dijkstra's algorithm backward from them; none if the search
-    /// exceeds the budget.
-    std::optional<std::vector<uint_t>> backward(CompiledProgram& program, Executor& executor, Projection& projection, const RawArraySet<uint_t>& targets);
+    /// The abstract weights to the projected targets, by Dijkstra's algorithm backward from them.
+    std::vector<uint_t> backward(Executor& executor, Projection& projection, const RawArraySet<uint_t>& targets);
 };
 
 /// The other side of a bidirectional search for a GoalSearch with one goal whose targets bind every key column: per key
@@ -108,11 +114,11 @@ public:
     static std::unique_ptr<GoalFrontier> make(CompiledProgram& program, const GoalSearch& search);
 
     /// Starts anew with the targets of the current state.
-    void read_targets(CompiledProgram& program, Executor& executor);
+    void read_targets(Executor& executor);
     /// A source: a key of R that the stratum's base rules derive.
     void add_source(std::span<const uint_t> key);
     /// Advances the search of the key's goal key by one row.
-    void advance(CompiledProgram& program, Executor& executor, std::span<const uint_t> key);
+    void advance(Executor& executor, std::span<const uint_t> key);
     /// Whether the key's goal key is known to have no target that the stratum reaches.
     [[nodiscard]] bool excluded(std::span<const uint_t> key);
     [[nodiscard]] size_t memory_usage() const noexcept;
@@ -133,8 +139,7 @@ private:
     };
     GoalSearch m_search;
     std::vector<size_t> m_goal_columns;
-    size_t m_scratch;
-    std::vector<CompiledRule> m_edges;
+    std::vector<BoundRule> m_edges;
     /// The goal keys with targets, each with its side; the rows found backward; the sources.
     RawArraySet<uint_t> m_goal_keys;
     std::vector<Side> m_sides;
@@ -144,9 +149,74 @@ private:
     std::vector<std::vector<uint_t>> m_derived;
     std::vector<uint_t> m_key;
 
-    GoalFrontier(const GoalSearch& search, std::vector<size_t> goal_columns, size_t scratch, std::vector<CompiledRule> edges);
+    GoalFrontier(const GoalSearch& search, std::vector<size_t> goal_columns, std::vector<BoundRule> edges);
     /// The goal key of a key of R; a goal without key columns has one goal key, (0).
     std::span<const uint_t> goal_key(std::span<const uint_t> key);
+};
+/// The search of a unit-cost GoalSearch (base rules of weight 0, recursive rules adding 1) whose targets bind every key
+/// column, as n_distance searches (search/incremental/min_distance.hpp), with the stratum's rules as edges: per goal
+/// key, A* (search/a_star.hpp) from the key's sources, estimating with the maximum of the GoalHeuristic, the distances
+/// learned by earlier searches (Generalized Adaptive A*, Sun, Koenig & Yeoh 2008) and the bound of a backward frontier
+/// (Pohl's cardinality comparison), ending on a stored path that still holds (Multipath GAA*, Hernández, Asín & Baier
+/// 2015). Per goal key the search tree and the backward frontier are kept while the key's targets stay the same:
+/// removed edges keep the learned distances admissible, and the edges that an update adds (the rules run with a changed
+/// literal reading its change) are repaired (TreeRepair) or restart the frontier; a change these rules cannot express
+/// discards the trees. A search derives only the row of the target it reaches, at the distance: the goals read nothing
+/// else.
+class UnitSearch
+{
+public:
+    /// None unless the stratum has that shape and every rule can be reversed with all its literals.
+    static std::unique_ptr<UnitSearch> make(CompiledProgram& program, const StratumInfo& stratum, const GoalSearch& search);
+    UnitSearch(const UnitSearch&) = delete;
+    UnitSearch& operator=(const UnitSearch&) = delete;
+    UnitSearch(UnitSearch&&) = delete;
+    UnitSearch& operator=(UnitSearch&&) = delete;
+    ~UnitSearch();
+
+    /// Discards the stored searches (the inputs were not changed incrementally).
+    void reset() noexcept;
+    /// Records the edges that the changes of the inputs (their added and removed rows) add.
+    void changed(CompiledProgram& program, Executor& executor);
+    /// Searches each goal key from its sources (rows of R derived by the base rules) and derives the reached target's
+    /// row into R's current rows. `heuristic` estimates for the current targets, or is null.
+    void run(CompiledProgram& program, Executor& executor, std::span<const std::vector<uint_t>> sources, GoalHeuristic* heuristic);
+    [[nodiscard]] size_t memory_usage() const noexcept;
+
+private:
+    struct Key;
+    struct Oracle;
+    /// A rule run with one literal reading its change, deriving the added edges: the read row's key, then the head's,
+    /// each in the key columns `columns`. Goal key columns that the rule leaves unbound are missing: the rules keep the
+    /// goal key, so the edge exists for every goal key.
+    struct Delta
+    {
+        CompiledRule rule;
+        size_t literal;
+        Version change;
+        std::vector<size_t> columns;
+    };
+    GoalSearch m_search;
+    std::vector<size_t> m_goal_columns;
+    /// The recursive rules without their read of R, run from a key at weight 0, and reversed; `m_edges` are the
+    /// forward rules run with the head's key bound too, which check one edge.
+    std::vector<BoundRule> m_forward;
+    std::vector<BoundRule> m_edges;
+    std::vector<BoundRule> m_reversed;
+    std::vector<Delta> m_deltas;
+    /// The tables whose changes the delta rules cannot express.
+    std::vector<size_t> m_opaque;
+    RawArraySet<uint_t> m_goal_keys;
+    std::vector<std::unique_ptr<Key>> m_keys;
+    uint64_t m_version = 0;
+    std::vector<Version> m_reads;
+    std::vector<std::vector<uint_t>> m_derived;
+    std::vector<uint_t> m_key;
+
+    UnitSearch(const GoalSearch& search, std::vector<BoundRule> forward, std::vector<BoundRule> edges, std::vector<BoundRule> reversed);
+    std::span<const uint_t> goal_key(std::span<const uint_t> key);
+    /// The index of the goal key, with its search made on first use.
+    uint_t key_search(std::span<const uint_t> goal_key, size_t vertex_size);
 };
 }  // namespace ygg::database::datalog::detail
 

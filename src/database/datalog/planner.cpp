@@ -167,6 +167,15 @@ void plan_rule(CompiledProgram& program, CompiledRule& rule)
     }
 }
 
+Plan plan_bound(CompiledProgram& program, const CompiledRule& rule, std::span<const Term> bound)
+{
+    auto known = std::vector<bool>(rule.slots);
+    for (const auto t : bound)
+        if (t.is_variable())
+            known[t.value] = true;
+    return plan(program, rule, std::nullopt, std::move(known));
+}
+
 void plan_rules(CompiledProgram& program)
 {
     for (auto& rule : program.rules)

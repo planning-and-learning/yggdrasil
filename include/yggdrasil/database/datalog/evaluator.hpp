@@ -102,7 +102,9 @@ public:
         read_inputs(inputs);
         finish_evaluate();
     }
-    /// Full evaluation that keeps what update() maintains.
+    /// Full evaluation that keeps what update() maintains. Once initialized, the inputs are compared with the rows read
+    /// last and the difference is applied as by update(), so that what the strata maintain (search trees included)
+    /// carries over.
     template<RelationViewRange R>
     void initialize(const R& inputs)
     {

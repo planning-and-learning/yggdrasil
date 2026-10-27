@@ -97,6 +97,8 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
 void plan_rules(CompiledProgram& program);
 /// Plans one rule, also one that is not among the program's rules.
 void plan_rule(CompiledProgram& program, CompiledRule& rule);
+/// A plan of the rule with the variables among `bound` bound before it starts (Executor::run_bound).
+Plan plan_bound(CompiledProgram& program, const CompiledRule& rule, std::span<const Term> bound);
 }  // namespace ygg::database::datalog::detail
 
 #endif

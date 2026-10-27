@@ -16,12 +16,14 @@ WeightedStratum::WeightedStratum(StratumInfo stratum,
                                  const CompiledProgram& program,
                                  std::vector<size_t> goals,
                                  std::unique_ptr<GoalHeuristic> heuristic,
-                                 std::unique_ptr<GoalFrontier> frontier) :
+                                 std::unique_ptr<GoalFrontier> frontier,
+                                 std::unique_ptr<UnitSearch> unit) :
     Stratum(std::move(stratum)),
     m_goals(std::move(goals)),
     m_holds(m_goals.size()),
     m_heuristic(std::move(heuristic)),
-    m_frontier(std::move(frontier))
+    m_frontier(std::move(frontier)),
+    m_unit(std::move(unit))
 {
     for (const auto table : info().tables)
     {
@@ -140,9 +142,23 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
     }
     m_queue.clear();
     if (m_heuristic)
-        m_heuristic->read_targets(program, executor);
+        m_heuristic->read_targets(executor);
+    if (m_unit)
+    {
+        // The base rules' rows are the searches' sources.
+        auto sources = std::vector<std::vector<uint_t>>();
+        for (const auto r : info().rules)
+        {
+            const auto& rule = program.rules[r];
+            if (std::ranges::any_of(rule.literals, [&](const Literal& l) { return l.kind == Literal::Kind::POSITIVE && info().contains(l.table); }))
+                continue;
+            executor.run(rule, rule.plain, reads(rule, Version::CURRENT), [&](std::span<const uint_t> row) { sources.emplace_back(row.begin(), row.end()); });
+        }
+        m_unit->run(program, executor, sources, m_heuristic.get());
+        return;
+    }
     if (m_frontier)
-        m_frontier->read_targets(program, executor);
+        m_frontier->read_targets(executor);
     // Rules that read no relation of the stratum start the queue.
     for (const auto r : info().rules)
     {
@@ -202,15 +218,22 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
             break;
         // The other side advances as this one does, so that the smaller is exhausted first.
         if (m_frontier)
-            m_frontier->advance(program, executor, key);
+            m_frontier->advance(executor, key);
     }
     m_queue.clear();
 }
 
-void WeightedStratum::evaluate(CompiledProgram& program, Executor& executor) { derive(program, executor); }
+void WeightedStratum::evaluate(CompiledProgram& program, Executor& executor)
+{
+    if (m_unit)
+        m_unit->reset();
+    derive(program, executor);
+}
 
 void WeightedStratum::update(CompiledProgram& program, Executor& executor)
 {
+    if (m_unit)
+        m_unit->changed(program, executor);
     for (size_t i = 0; i < info().tables.size(); ++i)
     {
         auto& snapshot = m_snapshot[i];
@@ -237,7 +260,8 @@ void WeightedStratum::update(CompiledProgram& program, Executor& executor)
 
 size_t WeightedStratum::state_memory_usage() const noexcept
 {
-    size_t result = m_queue.capacity() * sizeof(Candidate) + (m_heuristic ? m_heuristic->memory_usage() : 0) + (m_frontier ? m_frontier->memory_usage() : 0);
+    size_t result = m_queue.capacity() * sizeof(Candidate) + (m_heuristic ? m_heuristic->memory_usage() : 0) + (m_frontier ? m_frontier->memory_usage() : 0)
+                    + (m_unit ? m_unit->memory_usage() : 0);
     for (const auto& candidate : m_queue)
         result += candidate.row.capacity() * sizeof(uint_t);
     for (size_t i = 0; i < m_settled.size(); ++i)
