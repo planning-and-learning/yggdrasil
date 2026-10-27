@@ -138,7 +138,8 @@ private:
 /// a target, at a stored vertex on a valid tree path whose length meets the vertex's lower bound (MPGAA*'s goal
 /// condition, with the path's length as an upper bound apart from the learned lower bound), once the least f reaches
 /// the shortest path through a stored vertex on a valid tree path seen (an incumbent), or when the exhausted backward
-/// frontier excludes every source. With `any_path`, a caller that needs only whether a target is reachable gets the
+/// frontier excludes every source, or the heuristic proves every source unreachable (ProvesUnreachable, which also
+/// prunes the search once it is as large as the proof). With `any_path`, a caller that needs only whether a target is reachable gets the
 /// length of some path: the search also ends at the first stored vertex on a valid tree path, a source included.
 ///
 /// Learning (GAA*: h(s) := m - g(s) for closed s) uses m = min(d, the smallest f of an open vertex) instead of the
@@ -194,6 +195,8 @@ public:
                 return finish_incumbent();
             if (const auto distance = visit(entry.index, entry.f))
                 return *distance;
+            if (proven_unreachable(sources))
+                return finish(infinity, std::nullopt);
         }
         return finish_incumbent();
     }
@@ -234,6 +237,9 @@ private:
     uint_t m_reused = none;           ///< The stored source whose tree path ended the search without expanding, if any.
     uint_t m_incumbent = infinity;    ///< The shortest g + tree path length of a generated vertex seen.
     uint_t m_incumbent_index = none;  ///< That vertex.
+    size_t m_expanded = 0;
+    bool m_pruning = false;
+    uint_t m_dropped = infinity;  ///< The smallest g + h of a vertex pruned as unreachable in the current inputs only.
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
@@ -361,7 +367,7 @@ private:
             if (estimate == infinity)
                 return;
             const auto bound = m_backward->bound(stored);
-            if (bound == infinity)
+            if (bound == infinity || pruned(vertex, cost + std::max(estimate, bound)))
                 return;
             m_storage->m_vertices.insert(vertex);
             m_storage->m_nodes.push_back(AStarStorage::Node { .h = std::max(estimate, bound), .stored = stored.value_or(none) });
@@ -381,6 +387,12 @@ private:
             return std::nullopt;
         if (m_targets->contains(m_storage->m_vertices[index]))
             return finish(f, index);
+        if (pruned(m_storage->m_vertices[index], current.g + current.h))
+        {
+            current.closed = true;
+            --m_open;
+            return std::nullopt;
+        }
         const auto id = stored(index);
         // The backward frontier may have raised its bound since the vertex was queued.
         const auto bound = m_backward->bound(id);
@@ -434,8 +446,41 @@ private:
         return result;
     }
 
+    /// ProvesUnreachable: once the search has expanded proof_cost() vertices, it prunes the vertices that the heuristic
+    /// proves unreachable in the current inputs, and returns whether it proves every source so. Learning counts the
+    /// pruned vertices with their estimates (m_dropped): in other inputs they may reach a target.
+    template<VertexRange Sources>
+    bool proven_unreachable(const Sources& sources)
+    {
+        if constexpr (ProvesUnreachable<const H>)
+        {
+            if (m_pruning || m_expanded < m_heuristic->proof_cost())
+                return false;
+            m_pruning = true;
+            return std::ranges::all_of(std::views::iota(static_cast<size_t>(0), sources.size()),
+                                       [&](size_t i) { return m_heuristic->unreachable(sources.row(i)); });
+        }
+        else
+            return false;
+    }
+
+    /// Whether pruning is on and the vertex, reached at f = `f`, is proven unreachable; then it counts for learning.
+    bool pruned(std::span<const std::byte> vertex, uint_t f)
+    {
+        if constexpr (ProvesUnreachable<const H>)
+        {
+            if (!m_pruning || !m_heuristic->unreachable(vertex))
+                return false;
+            m_dropped = std::min(m_dropped, f);
+            return true;
+        }
+        else
+            return false;
+    }
+
     void expand(uint_t index)
     {
+        ++m_expanded;
         node(index).closed = true;
         --m_open;
         const auto vertex = m_storage->m_vertices[index];
@@ -457,7 +502,7 @@ private:
     uint_t finish(uint_t distance, std::optional<uint_t> last)
     {
         const auto& nodes = m_storage->m_nodes;
-        auto m = distance;
+        auto m = std::min(distance, m_dropped);
         for (const auto& open : nodes)
             if (!open.closed)
                 m = std::min(m, open.g + open.h);

@@ -836,7 +836,12 @@ indexed relations, without intermediate relations:
   are self-loops there and left out), whose distances to the current targets, computed by Dijkstra's algorithm
   backward from them once per set of targets and kept while the static inputs stay the same, bound the weight to the
   nearest target from below; h is their maximum. With one goal whose key columns are target columns, each goal key has
-  its own tables, to its own targets (as `n_distance`'s keyed heuristic), computed on its first estimate. With one goal whose targets bind every key column, a breadth-first
+  its own tables, to its own targets (as `n_distance`'s keyed heuristic), computed on its first estimate. A search that
+  has expanded as many vertices as these tables have values also prunes the vertices from which no target is reachable
+  in the abstraction that keeps the literals over the current state it binds completely (tables for the current state
+  only, on use; learning counts the pruned vertices with their estimates), and ends if every source is pruned; so the
+  proof at most doubles the search's cost (implementation decision, as `n_distance`'s must-pass search proves with its
+  heuristic's `exclude()`). With one goal whose targets bind every key column, a breadth-first
   search per goal key backward from its targets over the rules reversed (all their literals, in the current state)
   advances with the forward one, and its exhaustion without reaching a source proves that the key's goal has no row
   (bidirectional search [Pohl71]; implementation decision). With unit costs as well (base rules of weight 0, recursive

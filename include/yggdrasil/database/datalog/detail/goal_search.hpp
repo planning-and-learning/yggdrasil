@@ -53,9 +53,11 @@ struct GoalSearch
     /// read row's `columns` with the edge's weight (the read row's weight taken as 0). With `abstract`, only literals over
     /// static inputs (and what they compute) are kept, so that the derivations include the concrete ones in every state,
     /// and rules that keep every column of `columns` (self-loops there) are left out; otherwise every literal. Literals
-    /// left unbound are dropped, which only adds derivations. None if a rule cannot bind the read row's `columns` and the
-    /// weight.
-    [[nodiscard]] std::optional<std::vector<BoundRule>> reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract) const;
+    /// left unbound are dropped, which only adds derivations. With `abstract` and `state_tables`, the other literals that
+    /// those bind completely are kept as filters too, read in the current state, and their tables added to
+    /// `state_tables`. None if a rule cannot bind the read row's `columns` and the weight.
+    [[nodiscard]] std::optional<std::vector<BoundRule>>
+    reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract, std::vector<size_t>* state_tables = nullptr) const;
     /// Adds the targets of the current state, rows of `target_columns`.
     void read_targets(Executor& executor, std::vector<Version>& reads, RawArraySet<uint_t>& keys) const;
 };
@@ -78,9 +80,16 @@ public:
 
     /// Reads the targets of the current state unless `changed` is false and they were read, and computes their
     /// abstract weights unless known.
-    void read_targets(Executor& executor, bool changed);
+    void read_targets(CompiledProgram& program, Executor& executor, bool changed);
     /// The heuristic of the key; Arithmetic::infinity if no target is reachable from it in a projection.
     [[nodiscard]] uint_t operator()(std::span<const uint_t> key);
+    /// Whether no target of the key's goal key is reachable from it in the abstraction that also keeps the literals over
+    /// the current state that it binds completely (a proof for the current state only: its tables are computed per
+    /// state, on use). This is what n_distance's must-pass search gets from its heuristic's exclude(): an abstraction
+    /// in which the targets are unreachable proves it without a search.
+    [[nodiscard]] bool unreachable(std::span<const uint_t> key);
+    /// About what unreachable() costs: the size of the abstraction (unbounded without literals over the state).
+    [[nodiscard]] size_t proof_cost() const noexcept;
     /// Changes whenever read_targets() changes the function for the goal key (the goal's key columns of a key of R), so
     /// that bounds learned with it can be discarded.
     [[nodiscard]] uint64_t generation(std::span<const uint_t> goal_key) const;
@@ -101,8 +110,12 @@ private:
         std::vector<std::vector<uint_t>> wanted;
         std::vector<const std::vector<uint_t>*> current;
     };
+    static constexpr size_t max_weights = 64;
     GoalSearch m_search;
     std::vector<Projection> m_projections;
+    /// The projections with the literals over the current state, and the tables they read.
+    std::vector<Projection> m_state_projections;
+    std::vector<size_t> m_state_tables;
     /// With one goal whose key columns are target columns, their positions in target_columns: each goal key has
     /// weights to its own targets. Otherwise empty, and one goal key, (0), has every target.
     std::vector<size_t> m_goal_positions;

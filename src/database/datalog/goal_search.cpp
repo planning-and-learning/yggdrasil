@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <ranges>
 #include <set>
 
@@ -162,7 +163,8 @@ std::optional<GoalSearch> GoalSearch::make(CompiledProgram& program, const Strat
     return result;
 }
 
-std::optional<std::vector<BoundRule>> GoalSearch::reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract) const
+std::optional<std::vector<BoundRule>>
+GoalSearch::reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract, std::vector<size_t>* state_tables) const
 {
     auto edges = std::vector<BoundRule>();
     for (const auto& [r, j] : rules)
@@ -213,6 +215,18 @@ std::optional<std::vector<BoundRule>> GoalSearch::reverse(CompiledProgram& progr
                           return (l.kind == Literal::Kind::ARITHMETIC || l.kind == Literal::Kind::COMPARISON || l.kind == Literal::Kind::NEGATED)
                                  && !all_bound(l.terms, bound);
                       });
+        // With `state_tables`, the other literals that the abstraction binds completely: they only filter.
+        if (abstract && state_tables)
+            for (size_t i = 0; i < rule.literals.size(); ++i)
+            {
+                const auto& literal = rule.literals[i];
+                if (i == j || literal.table == npos || reads_static_input(program, literal) || literal.kind == Literal::Kind::AGGREGATE
+                    || !all_bound(literal.terms, bound))
+                    continue;
+                edge.literals.push_back(literal);
+                if (std::ranges::find(*state_tables, literal.table) == state_tables->end())
+                    state_tables->push_back(literal.table);
+            }
         if (!all_bound(edge.head_terms, bound))
             return std::nullopt;
         auto plan = plan_bound(program, edge, inputs);
@@ -240,6 +254,14 @@ std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, con
         if (!edges || edges->empty())
             continue;
         result->m_projections.push_back(Projection { columns, std::move(*edges), RawArraySet<uint_t>(columns.size()) });
+        auto tables = std::vector<size_t>();
+        if (auto state = search.reverse(program, columns, true, &tables); state && !state->empty() && !tables.empty())
+        {
+            result->m_state_projections.push_back(Projection { columns, std::move(*state), RawArraySet<uint_t>(columns.size()) });
+            for (const auto t : tables)
+                if (std::ranges::find(result->m_state_tables, t) == result->m_state_tables.end())
+                    result->m_state_tables.push_back(t);
+        }
     }
     if (result->m_projections.empty())
         return nullptr;
@@ -255,9 +277,10 @@ std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, con
     return result;
 }
 
-void GoalHeuristic::read_targets(Executor& executor, bool changed)
+void GoalHeuristic::read_targets(CompiledProgram& program, Executor& executor, bool changed)
 {
-    if (m_read && !changed)
+    const auto state_changed = std::ranges::any_of(m_state_tables, [&](size_t t) { return program.tables[t]->changed(); });
+    if (m_read && !changed && !state_changed)
         return;
     m_read = true;
     m_executor = &executor;
@@ -273,38 +296,58 @@ void GoalHeuristic::read_targets(Executor& executor, bool changed)
     }
     members.resize(m_goal_keys.size());
     m_generations.resize(m_goal_keys.size(), 0);
-    for (auto& projection : m_projections)
+    // The current state that the state projections read (sizes first, so that keys are unambiguous).
+    auto state = std::vector<uint_t>();
+    for (const auto t : m_state_tables)
     {
-        while (projection.targets.size() < m_goal_keys.size())
-            projection.targets.emplace_back(projection.columns.size());
-        projection.wanted.resize(m_goal_keys.size());
-        projection.current.resize(m_goal_keys.size(), nullptr);
-        for (uint_t index = 0; index < m_goal_keys.size(); ++index)
+        state.push_back(static_cast<uint_t>(program.tables[t]->current.size()));
+        program.tables[t]->current.for_each([&](std::span<const uint_t> row) { state.insert(state.end(), row.begin(), row.end()); });
+    }
+    for (auto* projections : { &m_projections, &m_state_projections })
+        for (auto& projection : *projections)
         {
-            auto targets = RawArraySet<uint_t>(projection.columns.size());
-            for (const auto i : members[index])
+            // Weights for many states are not kept (implementation decision: the bound keeps the map small).
+            if (projections == &m_state_projections && projection.weights.size() >= max_weights + m_goal_keys.size())
             {
-                m_key.clear();
-                for (const auto c : projection.columns)
-                    m_key.push_back(m_target_keys[i][static_cast<size_t>(std::ranges::find(target_columns, c) - target_columns.begin())]);
-                targets.insert(m_key);
+                projection.weights.clear();
+                projection.current.assign(projection.current.size(), nullptr);
             }
-            auto rows = std::vector<std::span<const uint_t>>();
-            for (uint_t i = 0; i < targets.size(); ++i)
-                rows.push_back(targets[i]);
-            std::ranges::sort(rows, [](auto lhs, auto rhs) { return std::ranges::lexicographical_compare(lhs, rhs); });
-            auto flat = std::vector<uint_t>();
-            for (const auto row : rows)
-                flat.insert(flat.end(), row.begin(), row.end());
-            if (projection.wanted[index] != flat)
+            while (projection.targets.size() < m_goal_keys.size())
+                projection.targets.emplace_back(projection.columns.size());
+            projection.wanted.resize(m_goal_keys.size());
+            projection.current.resize(m_goal_keys.size(), nullptr);
+            for (uint_t index = 0; index < m_goal_keys.size(); ++index)
             {
-                ++m_generations[index];
-                projection.wanted[index] = std::move(flat);
-                projection.targets[index] = std::move(targets);
-                projection.current[index] = nullptr;
+                auto targets = RawArraySet<uint_t>(projection.columns.size());
+                for (const auto i : members[index])
+                {
+                    m_key.clear();
+                    for (const auto c : projection.columns)
+                        m_key.push_back(m_target_keys[i][static_cast<size_t>(std::ranges::find(target_columns, c) - target_columns.begin())]);
+                    targets.insert(m_key);
+                }
+                auto rows = std::vector<std::span<const uint_t>>();
+                for (uint_t i = 0; i < targets.size(); ++i)
+                    rows.push_back(targets[i]);
+                std::ranges::sort(rows, [](auto lhs, auto rhs) { return std::ranges::lexicographical_compare(lhs, rhs); });
+                auto flat = std::vector<uint_t>();
+                for (const auto row : rows)
+                    flat.insert(flat.end(), row.begin(), row.end());
+                if (projections == &m_state_projections && !flat.empty())
+                {
+                    flat.push_back(static_cast<uint_t>(rows.size()));
+                    flat.insert(flat.end(), state.begin(), state.end());
+                }
+                if (projection.wanted[index] != flat)
+                {
+                    if (projections == &m_projections)
+                        ++m_generations[index];
+                    projection.wanted[index] = std::move(flat);
+                    projection.targets[index] = std::move(targets);
+                    projection.current[index] = nullptr;
+                }
             }
         }
-    }
 }
 
 std::optional<uint_t> GoalHeuristic::group(std::span<const uint_t> key, bool target)
@@ -350,6 +393,34 @@ uint_t GoalHeuristic::operator()(std::span<const uint_t> key)
         result = std::max(result, (*weights)[*at]);
     }
     return result;
+}
+
+bool GoalHeuristic::unreachable(std::span<const uint_t> key)
+{
+    const auto index = group(key, false);
+    if (!index || *index >= m_generations.size())
+        return true;
+    for (auto& projection : m_state_projections)
+    {
+        const auto* weights = this->weights(projection, *index);
+        m_key.clear();
+        for (const auto c : projection.columns)
+            m_key.push_back(key[c]);
+        const auto at = projection.keys.find(m_key);
+        if (!weights || !at || *at >= weights->size() || (*weights)[*at] == Arithmetic::infinity)
+            return true;
+    }
+    return false;
+}
+
+size_t GoalHeuristic::proof_cost() const noexcept
+{
+    if (m_state_projections.empty())
+        return std::numeric_limits<size_t>::max();
+    auto result = size_t { 0 };
+    for (const auto& projection : m_projections)
+        result += projection.keys.size();
+    return std::max<size_t>(result, 1);
 }
 
 uint64_t GoalHeuristic::generation(std::span<const uint_t> goal_key) const
@@ -620,6 +691,14 @@ struct Estimate
         from_vertex(vertex, *key);
         return (*heuristic)(*key);
     }
+    [[nodiscard]] bool unreachable(std::span<const std::byte> vertex) const
+    {
+        if (!heuristic)
+            return false;
+        from_vertex(vertex, *key);
+        return heuristic->unreachable(*key);
+    }
+    [[nodiscard]] size_t proof_cost() const noexcept { return heuristic ? heuristic->proof_cost() : std::numeric_limits<size_t>::max(); }
 };
 
 /// Rows of bytes as a VertexRange.

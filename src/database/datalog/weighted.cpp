@@ -145,7 +145,7 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor, bool 
     }
     m_queue.clear();
     if (m_heuristic)
-        m_heuristic->read_targets(executor, targets_changed);
+        m_heuristic->read_targets(program, executor, targets_changed);
     if (m_unit)
     {
         // The base rules' rows are the searches' sources.

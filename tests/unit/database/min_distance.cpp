@@ -463,15 +463,39 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
     EXPECT_GT(chains, 0);
 }
 
-/// With any_path, the searches of AStarPathsHoldAcrossSearchesOfOneTree find a path exactly when a target is reachable,
-/// a simple one: a path that is not a shortest one can meet its generated vertices on the tree path where it ends, and
-/// linking those would make a cycle, on which AStar::path() does not return (larger, denser graphs, where this occurs).
-void search_across_updates(unsigned seed, bool any_path)
+/// The zero estimate, and with `proves` a proof of unreachability from the current graph's distances (`distances`),
+/// tried early (ProvesUnreachable).
+struct ProvingHeuristic
+{
+    const std::vector<uint_t>* distances = nullptr;
+    bool proves = false;
+
+    [[nodiscard]] uint_t estimate(std::span<const std::byte>) const noexcept { return 0; }
+    [[nodiscard]] bool unreachable(std::span<const std::byte> vertex) const
+    { return (*distances)[ListGraph::id(vertex)] == std::numeric_limits<uint_t>::max(); }
+    [[nodiscard]] size_t proof_cost() const noexcept { return proves ? 4 : std::numeric_limits<size_t>::max(); }
+};
+
+/// With `proves`, the searches prune the vertices that the current graph's distances prove unreachable: the learned
+/// values must stay valid in later graphs, also where an added edge leads through a pruned vertex. With any_path, the searches of
+/// AStarPathsHoldAcrossSearchesOfOneTree find a path exactly when a target is reachable, a simple one: a path that is not a shortest one can meet its generated
+/// vertices on the tree path where it ends, and linking those would make a cycle, on which AStar::path() does not return (larger, denser graphs, where this
+/// occurs). A graph of `n` vertices and `edges` random edges, which gets `added` random edges every `period` searches.
+struct UpdateShape
+{
+    uint_t n;
+    size_t edges;
+    size_t period;
+    size_t added;
+};
+
+void search_across_updates(unsigned seed, UpdateShape shape, bool any_path, bool proves)
 {
     auto rng = std::mt19937(seed);
-    const auto n = static_cast<uint_t>(any_path ? 100 : 60);
+    const auto n = shape.n;
     auto chains = static_cast<size_t>(0);
-    auto heuristic = ygg::database::BlindDistanceHeuristic {};
+    auto expected = std::vector<uint_t>();
+    auto heuristic = ProvingHeuristic { &expected, proves };
     auto tree = ygg::database::SearchTree(sizeof(uint_t));
     auto backward = ygg::database::BackwardFrontier {};
     auto storage = ygg::database::AStarStorage(sizeof(uint_t));
@@ -479,7 +503,7 @@ void search_across_updates(unsigned seed, bool any_path)
     for (size_t trial = 0; trial < 30; ++trial)
     {
         auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
-        for (size_t e = 0; e < (any_path ? 400U : 150U); ++e)
+        for (size_t e = 0; e < shape.edges; ++e)
         {
             const auto u = static_cast<uint_t>(rng() % n);
             const auto v = static_cast<uint_t>(rng() % n);
@@ -508,11 +532,11 @@ void search_across_updates(unsigned seed, bool any_path)
                     std::erase(out, v);
                     std::erase(graph.in[v], u);
                 }
-            // Every few searches, added edges: TreeRepair lowers the stored values, and the frontier starts anew.
-            if (s % 5 == 0)
+            // Every few searches, added edges: TreeRepair lowers the stored values.
+            if (s % shape.period == 0)
             {
                 auto added = ygg::database::incremental::EdgeList(sizeof(uint_t));
-                for (size_t r = 0; r < 3; ++r)
+                for (size_t r = 0; r < shape.added; ++r)
                 {
                     const auto u = static_cast<uint_t>(rng() % n);
                     const auto v = static_cast<uint_t>(rng() % n);
@@ -524,14 +548,21 @@ void search_across_updates(unsigned seed, bool any_path)
                     }
                 }
                 repair.run(tree, added, graph, heuristic);
-                backward.start(tree, ids);
+                // As incremental::MinDistance: the frontier starts anew only where an added edge breaks its bounds.
+                auto broken = false;
+                for (size_t i = 0; i < added.size(); ++i)
+                {
+                    const auto to = backward.bound(tree.find(added.to(i)));
+                    broken = broken || (to != std::numeric_limits<uint_t>::max() && backward.bound(tree.find(added.from(i))) > to + 1);
+                }
+                if (broken)
+                    backward.start(tree, ids);
             }
-            const auto expected = distances_to_list(graph, targets);
+            expected = distances_to_list(graph, targets);
             auto sources = ListVertices {};
             const auto from = static_cast<uint_t>(rng() % n);
             sources.rows.push_back(ListGraph::bytes(from));
-            auto search =
-                ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, s + 1, any_path);
+            auto search = ygg::database::AStar<ListGraph, ProvingHeuristic>(graph, tree, backward, heuristic, targets, storage, s + 1, any_path);
             const auto distance = search.run(sources);
             if (any_path)
                 ASSERT_EQ(distance == std::numeric_limits<uint_t>::max(), expected[from] == std::numeric_limits<uint_t>::max())
@@ -551,8 +582,13 @@ void search_across_updates(unsigned seed, bool any_path)
 /// may stop holding, and learned values must stay consistent for TreeRepair to lower every one that added edges lower.
 TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
 {
-    for (const auto any_path : { false, true })
-        search_across_updates(GetParam(), any_path);
+    for (const auto proves : { false, true })
+    {
+        search_across_updates(GetParam(), UpdateShape { 60, 150, 5, 3 }, false, proves);
+        search_across_updates(GetParam(), UpdateShape { 100, 400, 5, 3 }, true, proves);
+    }
+    // Sparser graphs with more added edges: added edges through vertices that a search pruned.
+    search_across_updates(GetParam(), UpdateShape { 60, 80, 3, 10 }, false, true);
 }
 
 /// A second search from the same source over the same graph ends on the stored path at the same distance, without
