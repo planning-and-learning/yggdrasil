@@ -312,9 +312,11 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             if (literal.table != npos && std::ranges::find(info.reads, literal.table) == info.reads.end())
                 info.reads.push_back(literal.table);
     }
-    // The rules that read a weighted stratum s, if all of them are goals: a min head without key columns that copies the
-    // weight of its one atom of s, with its other literals in earlier strata (the targets); then s may stop once each
-    // goal holds, since rows settle in order of weight. None if s has an output or another reader.
+    // The rules that read a weighted stratum s, if all of them are goals: a min head that copies the weight of its one
+    // atom of s, with its other literals in earlier strata (the targets); then s may stop once each goal holds, since
+    // rows settle in order of weight. A goal's key columns are key columns of the atom, which the rules of s keep (a row
+    // of one key derives only rows of that key), so that s stops each key on its own. None if s has an output or
+    // another reader.
     const auto goal_rules = [&](size_t s) -> std::vector<size_t>
     {
         const auto& info = infos[s];
@@ -333,9 +335,21 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             if (reading.empty())
                 continue;
             const auto& head = *program.tables[rule.head];
-            if (reading.size() != 1 || rule.literals[reading.front()].kind != Literal::Kind::POSITIVE || !head.weighted || head.arity != 1
-                || rule.head_terms.back() != rule.literals[reading.front()].terms.back())
+            const auto& read = rule.literals[reading.front()];
+            if (reading.size() != 1 || read.kind != Literal::Kind::POSITIVE || !head.weighted || rule.head_terms.back() != read.terms.back())
                 return {};
+            for (size_t i = 0; i + 1 < rule.head_terms.size(); ++i)
+            {
+                const auto key = std::find(read.terms.begin(), read.terms.end() - 1, rule.head_terms[i]);
+                if (!rule.head_terms[i].is_variable() || key == read.terms.end() - 1 || info.tables.size() != 1)
+                    return {};
+                const auto column = static_cast<size_t>(key - read.terms.begin());
+                for (const auto other : info.rules)
+                    for (const auto& literal : program.rules[other].literals)
+                        if (literal.kind == Literal::Kind::POSITIVE && info.contains(literal.table)
+                            && (!literal.terms[column].is_variable() || program.rules[other].head_terms[column] != literal.terms[column]))
+                            return {};
+            }
             for (const auto& literal : rule.literals)
                 if (literal.table != npos && !info.contains(literal.table) && !program.tables[literal.table]->slot && stratum_of[literal.table] >= s)
                     return {};

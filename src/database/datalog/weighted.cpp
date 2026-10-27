@@ -26,6 +26,17 @@ WeightedStratum::WeightedStratum(StratumInfo stratum, const CompiledProgram& pro
         m_best.emplace_back();
         m_snapshot.emplace_back(arity);
     }
+    for (const auto g : m_goals)
+    {
+        const auto& rule = program.rules[g];
+        const auto& read =
+            *std::ranges::find_if(rule.literals, [&](const Literal& l) { return l.kind == Literal::Kind::POSITIVE && info().contains(l.table); });
+        auto columns = std::vector<size_t>();
+        for (size_t i = 0; i + 1 < rule.head_terms.size(); ++i)
+            columns.push_back(static_cast<size_t>(std::ranges::find(read.terms, rule.head_terms[i]) - read.terms.begin()));
+        const auto key_arity = std::max<size_t>(columns.size(), 1);
+        m_goal_keys.push_back(GoalKeys { info().position(read.table), std::move(columns), RawArraySet<uint_t>(key_arity) });
+    }
 }
 
 WeightedStratum::~WeightedStratum() = default;
@@ -34,7 +45,7 @@ void WeightedStratum::offer(CompiledProgram& program, Executor& executor, size_t
 {
     const auto key = row.first(row.size() - 1);
     const auto weight = row.back();
-    if (m_settled[position].contains(key))
+    if (m_settled[position].contains(key) || finished(position, row))
         return;
     const auto estimate = m_heuristic ? (*m_heuristic)(program, executor, key) : 0;
     if (estimate == Arithmetic::infinity)
@@ -67,6 +78,7 @@ bool WeightedStratum::goals_hold(CompiledProgram& program, Executor& executor, s
     {
         if (m_holds[g])
             continue;
+        auto& keys = m_goal_keys[g];
         const auto& rule = program.rules[m_goals[g]];
         for (size_t j = 0; j < rule.literals.size() && !m_holds[g]; ++j)
         {
@@ -74,15 +86,46 @@ bool WeightedStratum::goals_hold(CompiledProgram& program, Executor& executor, s
                 continue;
             auto& read = reads(rule, Version::CURRENT);
             read[j] = Version::FRONTIER;
-            executor.run(rule, rule.by_source[j], read, [&](std::span<const uint_t>) { m_holds[g] = true; });
+            executor.run(rule,
+                         rule.by_source[j],
+                         read,
+                         [&](std::span<const uint_t> row)
+                         {
+                             if (keys.columns.empty())
+                                 m_holds[g] = true;
+                             else
+                                 keys.done.insert(row.first(row.size() - 1));
+                         });
         }
     }
-    return std::ranges::all_of(m_holds, [](bool holds) { return holds; });
+    return std::ranges::all_of(m_goal_keys, [](const GoalKeys& keys) { return keys.columns.empty(); })
+           && std::ranges::all_of(m_holds, [](bool holds) { return holds; });
+}
+
+bool WeightedStratum::finished(size_t position, std::span<const uint_t> row)
+{
+    auto read = false;
+    for (const auto& keys : m_goal_keys)
+    {
+        if (keys.position != position)
+            continue;
+        if (keys.columns.empty())
+            return false;
+        m_key.clear();
+        for (const auto column : keys.columns)
+            m_key.push_back(row[column]);
+        if (!keys.done.contains(m_key))
+            return false;
+        read = true;
+    }
+    return read;
 }
 
 void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
 {
     m_holds.assign(m_goals.size(), false);
+    for (auto& keys : m_goal_keys)
+        keys.done.clear();
     for (size_t i = 0; i < info().tables.size(); ++i)
     {
         program.tables[info().tables[i]]->clear();
@@ -117,7 +160,7 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
         auto& settled = m_settled[candidate.position];
         // A lighter derivation of the row was queued after this one, or settled. A queued row has a best weight.
         const auto queued = m_queued[candidate.position].find(key);
-        if (settled.contains(key) || !queued || row.back() != m_best[candidate.position][*queued])
+        if (settled.contains(key) || !queued || row.back() != m_best[candidate.position][*queued] || finished(candidate.position, row))
             continue;
         settled.insert(key);
         const auto table_index = info().tables[candidate.position];
@@ -185,6 +228,8 @@ size_t WeightedStratum::state_memory_usage() const noexcept
         result += candidate.row.capacity() * sizeof(uint_t);
     for (size_t i = 0; i < m_settled.size(); ++i)
         result += m_settled[i].memory_usage() + m_queued[i].memory_usage() + m_best[i].capacity() * sizeof(uint_t) + m_snapshot[i].memory_usage();
+    for (const auto& keys : m_goal_keys)
+        result += keys.done.memory_usage();
     return result;
 }
 }  // namespace ygg::database::datalog::detail

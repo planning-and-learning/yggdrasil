@@ -149,8 +149,9 @@ private:
 /// head weight is the sum or maximum of their weighted atoms' weights and other terms. Evaluated by Knuth's lightest
 /// derivation algorithm (Felzenszwalb & McAllester 2007, §3): rows are settled in order of weight from a priority queue,
 /// each settled row expanded by the rules that read it with the settled rows (weighted.cpp). If only goal rules read the
-/// stratum (a min head without key columns over one of its relations and the targets), it stops once every goal holds:
-/// the first settled row a goal reads has the least weight; with a heuristic derived from its rules (heuristic.hpp), rows
+/// stratum (a min head over one of its relations and the targets), it stops once every goal holds: the first settled
+/// row a goal reads has the least weight. A goal with key columns holds per key, and the rows of a key whose goal holds
+/// are no longer queued or settled (the rules keep the key). With a heuristic derived from its rules (heuristic.hpp), rows
 /// settle in order of weight plus the heuristic (A*, Felzenszwalb & McAllester 2007, §4), which keeps that order
 /// correct since the heuristic is monotone. An update evaluates the stratum anew and records the difference to its
 /// old rows.
@@ -187,13 +188,26 @@ private:
     std::vector<Candidate> m_queue;
     std::vector<RawArraySet<uint_t>> m_snapshot;
     std::vector<size_t> m_goals;
+    /// Per goal without key columns, whether it holds.
     std::vector<bool> m_holds;
+    /// Per goal, the table of the stratum it reads, the columns of the read row that are its key, and the keys whose
+    /// goal holds.
+    struct GoalKeys
+    {
+        size_t position;
+        std::vector<size_t> columns;
+        RawArraySet<uint_t> done;
+    };
+    std::vector<GoalKeys> m_goal_keys;
+    std::vector<uint_t> m_key;
     std::unique_ptr<GoalHeuristic> m_heuristic;
     /// The rows a run derived, offered after it: the heuristic runs rules itself.
     std::vector<std::pair<size_t, std::vector<uint_t>>> m_derived;
 
-    /// Whether the settled row (the frontier of its table) makes every goal hold.
+    /// Records the goals that the settled row (the frontier of its table) makes hold; whether every goal holds.
     bool goals_hold(CompiledProgram& program, Executor& executor, size_t table);
+    /// Whether the goals that read the table at `position` hold for the row's keys; false for goals without keys.
+    [[nodiscard]] bool finished(size_t position, std::span<const uint_t> row);
     /// Queues a derived row of the stratum's table at `position` unless a lighter one is settled or queued, or the
     /// heuristic shows that it reaches no target.
     void offer(CompiledProgram& program, Executor& executor, size_t position, std::span<const uint_t> row);

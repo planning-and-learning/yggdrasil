@@ -760,6 +760,87 @@ TEST(DatabaseDatalog, WeightedGoalSearchesWithAHeuristicFromStaticRules)
     }
 }
 
+TEST(DatabaseDatalog, WeightedGoalStopsEachKeyAtItsLeastTarget)
+{
+    // dist per key k: from k's sources over the shared static edges and the fluent `open`; best: per key the least dist
+    // over k's targets, so the stratum stops each key once one of its targets settles, searching with A*. Equal to the
+    // naive interpreter, in full evaluation and in updates, also of the targets alone.
+    Programs p;
+    const auto e = p.relation(100, 2, 0), source = p.relation(101, 2, 1), target = p.relation(102, 2, 2), open = p.relation(103, 1, 3);
+    const auto dist = p.weighted(0, 3), best = p.weighted(1, 2);
+    constexpr uint_t k = 0, x = 1, y = 2, w = 3, c = 4, v = 5;
+    using Operation = dl::Arithmetic::Operation;
+    const auto program = p.program({
+        p.rule(p.atom(dist, { var(k), var(x), obj(0) }), { p.atom(source, { var(k), var(x) }) }),
+        p.rule(p.atom(dist, { var(k), var(y), var(v) }),
+               { p.atom(dist, { var(k), var(x), var(w) }), p.atom(e, { var(x), var(y) }), p.atom(open, { var(y) }) },
+               {},
+               {},
+               {},
+               { dl::Arithmetic { Operation::ADD, var(y), obj(1), c }, dl::Arithmetic { Operation::ADD, var(w), var(c), v } }),
+        p.rule(p.atom(best, { var(k), var(w) }), { p.atom(dist, { var(k), var(x), var(w) }), p.atom(target, { var(k), var(x) }) }),
+    });
+    std::mt19937 random(29);
+    const auto draw = [&](size_t count, size_t arity, uint_t range)
+    {
+        auto tuples = Tuples();
+        for (size_t i = 0; i < count; ++i)
+        {
+            auto tuple = Tuple();
+            for (size_t a = 0; a < arity; ++a)
+                tuple.push_back(static_cast<uint_t>(random() % (a == 0 && arity == 2 && range == 4 ? 4 : 12)));
+            tuples.insert(tuple);
+        }
+        return tuples;
+    };
+    for (size_t graph = 0; graph < 10; ++graph)
+    {
+        const auto edges = draw(30, 2, 12);
+        constexpr auto static_slots = std::array<size_t, 1> { 0 };
+        dl::Evaluator evaluator(program, std::array { best }, static_slots);
+        auto current = std::vector<Tuples> { edges, {}, {}, {} };
+        evaluator.initialize(std::array { borrow(relation_of(current[0], 2)),
+                                          borrow(relation_of(current[1], 2)),
+                                          borrow(relation_of(current[2], 2)),
+                                          borrow(relation_of(current[3], 1)) });
+        for (size_t trial = 0; trial < 40; ++trial)
+        {
+            auto inputs = std::vector<Tuples> { edges, draw(2 + random() % 4, 2, 4), draw(1 + random() % 6, 2, 4), draw(10, 1, 12) };
+            if (trial % 4 == 3)  // Only the targets change.
+            {
+                inputs[1] = current[1];
+                inputs[3] = current[3];
+            }
+            const Interpreter expected(program, inputs);
+            if (trial % 2 == 0)
+            {
+                auto relations = std::vector<Relation>();
+                for (size_t slot = 0; slot < 4; ++slot)
+                    relations.push_back(relation_of(inputs[slot], slot == 3 ? 1 : 2));
+                evaluator.initialize(std::array { borrow(relations[0]), borrow(relations[1]), borrow(relations[2]), borrow(relations[3]) });
+            }
+            else
+            {
+                auto added = std::vector<Relation>(), removed = std::vector<Relation>();
+                for (size_t slot = 0; slot < 4; ++slot)
+                {
+                    Tuples a, r;
+                    std::ranges::set_difference(inputs[slot], current[slot], std::inserter(a, a.end()));
+                    std::ranges::set_difference(current[slot], inputs[slot], std::inserter(r, r.end()));
+                    added.push_back(relation_of(a, slot == 3 ? 1 : 2));
+                    removed.push_back(relation_of(r, slot == 3 ? 1 : 2));
+                }
+                evaluator.update(std::array { Change { borrow(added[0]), borrow(removed[0]) },
+                                              Change { borrow(added[1]), borrow(removed[1]) },
+                                              Change { borrow(added[2]), borrow(removed[2]) },
+                                              Change { borrow(added[3]), borrow(removed[3]) } });
+            }
+            EXPECT_EQ(tuples_of(evaluator.get_result()), expected.get(1)) << "graph " << graph << ", trial " << trial;
+            current = inputs;
+        }
+    }
+}
+
 TEST(DatabaseDatalog, DeleteAndRederiveKeepsRowsWithAnotherDerivation)
 {
     // reach over the path 0 -> 1 -> ... -> 199 with a shortcut 190 -> 195. Cutting 192 -> 193 over-deletes 193, ..., 199,

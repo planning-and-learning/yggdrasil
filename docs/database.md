@@ -820,8 +820,10 @@ indexed relations, without intermediate relations:
 - an aggregate keeps the satisfying assignments of its body by counting and its groups incrementally;
 - a stratum of weighted relations is evaluated by Knuth's lightest derivation algorithm [Knuth77, as stated in FM07 §3]:
   rows settle in order of weight from a priority queue, each expanded by the rules that read it with the settled rows;
-  if only goals read it (a minimizing head without key columns over its relation and targets from earlier strata, and
-  none of its relations an output), it stops once the goals hold, and searches by A\* [FM07 §4] with a heuristic derived
+  if only goals read it (a minimizing head over its relation and targets from earlier strata, and none of its relations
+  an output), it stops once the goals hold; a goal with key columns, which the stratum's rules keep, holds per key, and
+  the rows of a key whose goal holds are no longer settled (implementation decision, not from [FM07]). It searches by
+  A\* [FM07 §4] with a heuristic derived
   from its rules [FM07 §5.1]: their static literals give an abstract weighted graph whose distances, computed once per
   key and kept while the static inputs stay the same, bound the weight to the nearest current target from below;
   an update evaluates the stratum anew;
