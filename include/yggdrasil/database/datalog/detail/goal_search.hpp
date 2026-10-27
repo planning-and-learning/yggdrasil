@@ -41,6 +41,8 @@ struct GoalSearch
     std::vector<CompiledRule> targets;
     /// Per goal, the key columns of its read of R that are its key.
     std::vector<std::vector<size_t>> goal_columns;
+    /// The tables that the targets' literals read: the targets change only with them.
+    std::vector<size_t> target_tables;
 
     /// None unless the stratum has this shape.
     static std::optional<GoalSearch> make(CompiledProgram& program, const StratumInfo& stratum, std::span<const size_t> goals);
@@ -69,8 +71,9 @@ public:
     /// None unless some target column has reversed abstract rules.
     static std::unique_ptr<GoalHeuristic> make(CompiledProgram& program, const GoalSearch& search);
 
-    /// Reads the targets of the current state, and computes their abstract weights unless known.
-    void read_targets(Executor& executor);
+    /// Reads the targets of the current state unless `changed` is false and they were read, and computes their
+    /// abstract weights unless known.
+    void read_targets(Executor& executor, bool changed);
     /// The heuristic of the key; Arithmetic::infinity if no target is reachable from it in a projection.
     [[nodiscard]] uint_t operator()(std::span<const uint_t> key);
     /// Changes whenever read_targets() changes the function, so that bounds learned with it can be discarded.
@@ -91,6 +94,7 @@ private:
     GoalSearch m_search;
     std::vector<Projection> m_projections;
     uint64_t m_generation = 0;
+    bool m_read = false;
     RawArraySet<uint_t> m_target_keys;
     std::vector<Version> m_reads;
     std::vector<std::vector<uint_t>> m_derived;
@@ -180,7 +184,8 @@ public:
     void changed(CompiledProgram& program, Executor& executor);
     /// Searches each goal key from its sources (rows of R derived by the base rules) and derives the reached target's
     /// row into R's current rows. `heuristic` estimates for the current targets, or is null.
-    void run(CompiledProgram& program, Executor& executor, std::span<const std::vector<uint_t>> sources, GoalHeuristic* heuristic);
+    /// `targets_changed` false: the targets are those of the last run.
+    void run(CompiledProgram& program, Executor& executor, std::span<const std::vector<uint_t>> sources, GoalHeuristic* heuristic, bool targets_changed);
     [[nodiscard]] size_t memory_usage() const noexcept;
 
 private:
@@ -208,6 +213,9 @@ private:
     std::vector<size_t> m_opaque;
     RawArraySet<uint_t> m_goal_keys;
     std::vector<std::unique_ptr<Key>> m_keys;
+    /// Per goal key, its targets as bytes, from the last run that read them.
+    std::vector<std::vector<std::vector<std::byte>>> m_key_targets;
+    bool m_read = false;
     uint64_t m_version = 0;
     std::vector<Version> m_reads;
     std::vector<std::vector<uint_t>> m_derived;

@@ -167,7 +167,8 @@ public:
                     std::vector<size_t> goals,
                     std::unique_ptr<GoalHeuristic> heuristic,
                     std::unique_ptr<GoalFrontier> frontier,
-                    std::unique_ptr<UnitSearch> unit);
+                    std::unique_ptr<UnitSearch> unit,
+                    std::vector<size_t> target_tables);
     WeightedStratum(const WeightedStratum&) = delete;
     WeightedStratum& operator=(const WeightedStratum&) = delete;
     WeightedStratum(WeightedStratum&&) = delete;
@@ -211,6 +212,8 @@ private:
     std::unique_ptr<GoalFrontier> m_frontier;
     /// With unit costs, the searches of n_distance replace the queue (goal_search.hpp).
     std::unique_ptr<UnitSearch> m_unit;
+    /// The tables the goals' targets read (GoalSearch::target_tables).
+    std::vector<size_t> m_target_tables;
     /// The rows a run derived, offered after it.
     std::vector<std::pair<size_t, std::vector<uint_t>>> m_derived;
 
@@ -222,7 +225,8 @@ private:
     /// heuristic shows that it reaches no target.
     void offer(size_t position, std::span<const uint_t> row);
     void offer_derived();
-    void derive(CompiledProgram& program, Executor& executor);
+    /// `fresh`: the inputs were read anew, without changes.
+    void derive(CompiledProgram& program, Executor& executor, bool fresh);
 };
 
 /// The groups of an aggregate, kept from its body's table (its satisfying assignments) (aggregate.cpp).

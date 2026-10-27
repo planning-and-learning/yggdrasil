@@ -377,8 +377,13 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             auto heuristic = search ? GoalHeuristic::make(program, *search) : nullptr;
             auto frontier = search ? GoalFrontier::make(program, *search) : nullptr;
             auto unit = search ? UnitSearch::make(program, info, *search) : nullptr;
-            program.strata.push_back(
-                std::make_unique<WeightedStratum>(std::move(info), program, std::move(goals), std::move(heuristic), std::move(frontier), std::move(unit)));
+            program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info),
+                                                                       program,
+                                                                       std::move(goals),
+                                                                       std::move(heuristic),
+                                                                       std::move(frontier),
+                                                                       std::move(unit),
+                                                                       search ? search->target_tables : std::vector<size_t> {}));
         }
         else if (info.tables.size() == 1 && aggregate_of.contains(info.tables.front()))
         {

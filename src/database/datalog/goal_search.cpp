@@ -153,6 +153,9 @@ std::optional<GoalSearch> GoalSearch::make(CompiledProgram& program, const Strat
             if (!(literal.kind == Literal::Kind::POSITIVE && literal.table == table))
                 target.literals.push_back(literal);
         target.head_terms = project(keys[i], result.target_columns);
+        for (const auto& literal : target.literals)
+            if (literal.table != npos && std::ranges::find(result.target_tables, literal.table) == result.target_tables.end())
+                result.target_tables.push_back(literal.table);
         plan_rule(program, target);
         result.targets.push_back(std::move(target));
     }
@@ -243,8 +246,11 @@ std::unique_ptr<GoalHeuristic> GoalHeuristic::make(CompiledProgram& program, con
     return result;
 }
 
-void GoalHeuristic::read_targets(Executor& executor)
+void GoalHeuristic::read_targets(Executor& executor, bool changed)
 {
+    if (m_read && !changed)
+        return;
+    m_read = true;
     m_target_keys.clear();
     m_search.read_targets(executor, m_reads, m_target_keys);
     const auto& target_columns = m_search.target_columns;
@@ -685,6 +691,7 @@ uint_t UnitSearch::key_search(std::span<const uint_t> goal_key, size_t vertex_si
 
 void UnitSearch::reset() noexcept
 {
+    m_read = false;
     for (auto& key : m_keys)
         key->reset = true;
 }
@@ -792,27 +799,45 @@ void UnitSearch::changed(CompiledProgram& program, Executor& executor)
     }
 }
 
-void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<const std::vector<uint_t>> sources, GoalHeuristic* heuristic)
+void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<const std::vector<uint_t>> sources, GoalHeuristic* heuristic, bool targets_changed)
 {
     const auto arity = m_search.target_columns.size();
     const auto vertex_size = arity * sizeof(uint_t);
-    auto targets = RawArraySet<uint_t>(arity);
-    m_search.read_targets(executor, m_reads, targets);
-    // Per goal key, its targets and sources as bytes.
-    auto key_targets = std::vector<std::vector<std::vector<std::byte>>>();
-    auto key_sources = std::vector<std::vector<std::vector<std::byte>>>();
     const auto bytes = [](std::span<const uint_t> key)
     {
         const auto vertex = as_vertex(key);
         return std::vector<std::byte>(vertex.begin(), vertex.end());
     };
-    for (uint_t i = 0; i < targets.size(); ++i)
+    // Per goal key, its targets (read anew only if they can have changed) and sources as bytes.
+    const auto reread = targets_changed || !m_read;
+    if (reread)
     {
-        const auto index = key_search(goal_key(targets[i]), vertex_size);
-        key_targets.resize(m_keys.size());
-        key_targets[index].push_back(bytes(targets[i]));
+        auto targets = RawArraySet<uint_t>(arity);
+        m_search.read_targets(executor, m_reads, targets);
+        m_key_targets.assign(m_keys.size(), {});
+        for (uint_t i = 0; i < targets.size(); ++i)
+        {
+            const auto index = key_search(goal_key(targets[i]), vertex_size);
+            m_key_targets.resize(m_keys.size());
+            m_key_targets[index].push_back(bytes(targets[i]));
+        }
+        m_key_targets.resize(m_keys.size());
+        for (size_t index = 0; index < m_keys.size(); ++index)
+        {
+            auto& key = *m_keys[index];
+            const auto& wanted = m_key_targets[index];
+            if (key.targets.size() != wanted.size() || !std::ranges::all_of(wanted, [&](const auto& target) { return key.targets.contains(target); }))
+            {
+                key.targets.clear();
+                for (const auto& target : wanted)
+                    key.targets.insert(target);
+                key.reset = true;
+            }
+        }
+        m_read = true;
     }
-    key_targets.resize(m_keys.size());
+    const auto& key_targets = m_key_targets;
+    auto key_sources = std::vector<std::vector<std::vector<std::byte>>>();
     key_sources.resize(m_keys.size());
     for (const auto& source : sources)
         if (const auto index = m_goal_keys.find(goal_key(std::span<const uint_t>(source).first(arity))); index && !key_targets[*index].empty())
@@ -827,14 +852,6 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
         if (key_sources[index].empty())
             continue;
         auto& key = *m_keys[index];
-        const auto& wanted = key_targets[index];
-        if (key.targets.size() != wanted.size() || !std::ranges::all_of(wanted, [&](const auto& target) { return key.targets.contains(target); }))
-        {
-            key.targets.clear();
-            for (const auto& target : wanted)
-                key.targets.insert(target);
-            key.reset = true;
-        }
         if (key.generation != generation)
         {
             key.generation = generation;

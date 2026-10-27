@@ -17,13 +17,15 @@ WeightedStratum::WeightedStratum(StratumInfo stratum,
                                  std::vector<size_t> goals,
                                  std::unique_ptr<GoalHeuristic> heuristic,
                                  std::unique_ptr<GoalFrontier> frontier,
-                                 std::unique_ptr<UnitSearch> unit) :
+                                 std::unique_ptr<UnitSearch> unit,
+                                 std::vector<size_t> target_tables) :
     Stratum(std::move(stratum)),
     m_goals(std::move(goals)),
     m_holds(m_goals.size()),
     m_heuristic(std::move(heuristic)),
     m_frontier(std::move(frontier)),
-    m_unit(std::move(unit))
+    m_unit(std::move(unit)),
+    m_target_tables(std::move(target_tables))
 {
     for (const auto table : info().tables)
     {
@@ -128,8 +130,9 @@ bool WeightedStratum::finished(size_t position, std::span<const uint_t> row)
     return read;
 }
 
-void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
+void WeightedStratum::derive(CompiledProgram& program, Executor& executor, bool fresh)
 {
+    const auto targets_changed = fresh || std::ranges::any_of(m_target_tables, [&](size_t t) { return program.tables[t]->changed(); });
     m_holds.assign(m_goals.size(), false);
     for (auto& keys : m_goal_keys)
         keys.done.clear();
@@ -142,7 +145,7 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
     }
     m_queue.clear();
     if (m_heuristic)
-        m_heuristic->read_targets(executor);
+        m_heuristic->read_targets(executor, targets_changed);
     if (m_unit)
     {
         // The base rules' rows are the searches' sources.
@@ -154,7 +157,7 @@ void WeightedStratum::derive(CompiledProgram& program, Executor& executor)
                 continue;
             executor.run(rule, rule.plain, reads(rule, Version::CURRENT), [&](std::span<const uint_t> row) { sources.emplace_back(row.begin(), row.end()); });
         }
-        m_unit->run(program, executor, sources, m_heuristic.get());
+        m_unit->run(program, executor, sources, m_heuristic.get(), targets_changed);
         return;
     }
     if (m_frontier)
@@ -227,7 +230,7 @@ void WeightedStratum::evaluate(CompiledProgram& program, Executor& executor)
 {
     if (m_unit)
         m_unit->reset();
-    derive(program, executor);
+    derive(program, executor, true);
 }
 
 void WeightedStratum::update(CompiledProgram& program, Executor& executor)
@@ -240,7 +243,7 @@ void WeightedStratum::update(CompiledProgram& program, Executor& executor)
         snapshot.clear();
         program.tables[info().tables[i]]->current.for_each([&](std::span<const uint_t> row) { snapshot.insert(row); });
     }
-    derive(program, executor);
+    derive(program, executor, false);
     for (size_t i = 0; i < info().tables.size(); ++i)
     {
         auto& table = *program.tables[info().tables[i]];
