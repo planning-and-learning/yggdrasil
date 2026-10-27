@@ -8,6 +8,7 @@
 #include "query_helpers.hpp"
 #include "yggdrasil/database/evaluation/full.hpp"
 #include "yggdrasil/database/relation/relation_repository.hpp"
+#include "yggdrasil/database/search/incremental/tree_repair.hpp"
 
 #include <array>
 #include <cstddef>
@@ -367,6 +368,50 @@ struct ListVertices
     [[nodiscard]] std::span<const std::byte> row(size_t i) const { return rows[i]; }
 };
 
+/// The distance of every vertex to the nearest target, by breadth-first search backward; the maximum if none is reachable.
+std::vector<uint_t> distances_to_list(const ListGraph& graph, const ygg::database::VertexSet& targets)
+{
+    auto result = std::vector<uint_t>(graph.out.size(), std::numeric_limits<uint_t>::max());
+    auto queue = std::vector<uint_t>();
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
+        const auto t = ListGraph::id(targets[static_cast<uint_t>(i)]);
+        result[t] = 0;
+        queue.push_back(t);
+    }
+    for (size_t i = 0; i < queue.size(); ++i)
+        for (const auto u : graph.in[queue[i]])
+            if (result[u] == std::numeric_limits<uint_t>::max())
+            {
+                result[u] = result[queue[i]] + 1;
+                queue.push_back(u);
+            }
+    return result;
+}
+
+/// Checks that AStar::path() visits a path of length `distance` from a source to a target: where the search ended back
+/// to its source (the only source on the path, as sources have g = 0), then the stored chain from there to a target.
+/// Returns whether it ends on a stored chain.
+template<typename Search>
+bool expect_path(const ListGraph& graph, const ListVertices& sources, const ygg::database::VertexSet& targets, const Search& search, uint_t distance)
+{
+    auto path = std::vector<uint_t>();
+    search.path([&](std::span<const std::byte> vertex) { path.push_back(ListGraph::id(vertex)); });
+    const auto is_source = [&](uint_t v) { return std::ranges::any_of(sources.rows, [&](const auto& row) { return ListGraph::id(row) == v; }); };
+    const auto edge = [&](uint_t u, uint_t v) { return std::ranges::find(graph.out[u], v) != graph.out[u].end(); };
+    const auto source = static_cast<size_t>(std::ranges::find_if(path, is_source) - path.begin());
+    EXPECT_LT(source, path.size());
+    EXPECT_EQ(path.size(), distance + 1);
+    if (source >= path.size() || path.size() != distance + 1)
+        return false;
+    for (size_t i = 0; i < source; ++i)
+        EXPECT_TRUE(edge(path[i + 1], path[i]));
+    for (size_t i = source + 1; i < path.size(); ++i)
+        EXPECT_TRUE(edge(i == source + 1 ? path.front() : path[i - 1], path[i]));
+    EXPECT_TRUE(targets.contains(std::span<const std::byte>(ListGraph::bytes(source + 1 < path.size() ? path.back() : path.front()))));
+    return source + 1 < path.size();
+}
+
 /// AStar::path() visits a shortest path from a source to a target, whether the search ends at a target or on a stored
 /// chain of the backward frontier.
 TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
@@ -408,24 +453,88 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         const auto distance = search.run(sources);
         if (distance == std::numeric_limits<uint_t>::max())
             continue;
-        auto path = std::vector<uint_t>();
-        search.path([&](std::span<const std::byte> vertex) { path.push_back(ListGraph::id(vertex)); });
-        // Visited: where the search ended back to its source (the only source on the path, as sources have g = 0),
-        // then the stored chain from where it ended to a target.
-        const auto is_source = [&](uint_t v) { return std::ranges::any_of(sources.rows, [&](const auto& row) { return ListGraph::id(row) == v; }); };
-        const auto edge = [&](uint_t u, uint_t v) { return graph.edge_exists(ListGraph::bytes(u), ListGraph::bytes(v)); };
-        const auto source = static_cast<size_t>(std::ranges::find_if(path, is_source) - path.begin());
-        ASSERT_LT(source, path.size()) << "trial " << trial;
-        ASSERT_EQ(path.size(), distance + 1) << "trial " << trial;
-        for (size_t i = 0; i < source; ++i)
-            EXPECT_TRUE(edge(path[i + 1], path[i])) << "trial " << trial;
-        for (size_t i = source + 1; i < path.size(); ++i)
-            EXPECT_TRUE(edge(i == source + 1 ? path.front() : path[i - 1], path[i])) << "trial " << trial;
-        EXPECT_TRUE(targets.contains(std::span<const std::byte>(ListGraph::bytes(source + 1 < path.size() ? path.back() : path.front()))));
+        chains += expect_path(graph, sources, targets, search, distance);
         ++paths;
-        chains += source + 1 < path.size();
     }
     EXPECT_GT(paths, 10);
+    EXPECT_GT(chains, 0);
+}
+
+/// Searches from many sources over one stored tree and backward frontier, under removed and added edges (repaired by
+/// TreeRepair, with the frontier started anew), find the distances and visit shortest paths: the frontier advances
+/// during later searches and relinks vertices of chains that an earlier search stored, so a chain kept as the incumbent
+/// may stop holding, and learned values must stay consistent for TreeRepair to lower every one that added edges lower.
+TEST_P(DatabaseMinDistance, AStarPathsHoldAcrossSearchesOfOneTree)
+{
+    auto rng = std::mt19937(GetParam());
+    const auto n = static_cast<uint_t>(60);
+    auto chains = static_cast<size_t>(0);
+    auto heuristic = ygg::database::BlindDistanceHeuristic {};
+    auto tree = ygg::database::SearchTree(sizeof(uint_t));
+    auto backward = ygg::database::BackwardFrontier {};
+    auto storage = ygg::database::AStarStorage(sizeof(uint_t));
+    auto repair = ygg::database::incremental::TreeRepair {};
+    for (size_t trial = 0; trial < 30; ++trial)
+    {
+        auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
+        for (size_t e = 0; e < 150; ++e)
+        {
+            const auto u = static_cast<uint_t>(rng() % n);
+            const auto v = static_cast<uint_t>(rng() % n);
+            if (u != v && std::ranges::find(graph.out[u], v) == graph.out[u].end())
+            {
+                graph.out[u].push_back(v);
+                graph.in[v].push_back(u);
+            }
+        }
+        auto targets = ygg::database::VertexSet(sizeof(uint_t));
+        for (size_t i = 0; i < 3; ++i)
+            targets.insert(std::span<const std::byte>(ListGraph::bytes(static_cast<uint_t>(rng() % n))));
+        tree.clear();
+        auto ids = std::vector<uint_t>();
+        for (size_t i = 0; i < targets.size(); ++i)
+            ids.push_back(tree.ensure(targets[static_cast<uint_t>(i)], heuristic));
+        backward.start(tree, ids);
+        for (size_t s = 0; s < 40; ++s)
+        {
+            // Removed edges keep the frontier's levels lower bounds; the version expires the chains' edge checks.
+            for (size_t r = 0; r < 2; ++r)
+                if (auto& out = graph.out[rng() % n]; !out.empty())
+                {
+                    const auto v = out[rng() % out.size()];
+                    const auto u = static_cast<uint_t>(&out - graph.out.data());
+                    std::erase(out, v);
+                    std::erase(graph.in[v], u);
+                }
+            // Every few searches, added edges: TreeRepair lowers the stored values, and the frontier starts anew.
+            if (s % 5 == 0)
+            {
+                auto added = ygg::database::incremental::EdgeList(sizeof(uint_t));
+                for (size_t r = 0; r < 3; ++r)
+                {
+                    const auto u = static_cast<uint_t>(rng() % n);
+                    const auto v = static_cast<uint_t>(rng() % n);
+                    if (u != v && std::ranges::find(graph.out[u], v) == graph.out[u].end())
+                    {
+                        graph.out[u].push_back(v);
+                        graph.in[v].push_back(u);
+                        added.add(ListGraph::bytes(u), ListGraph::bytes(v));
+                    }
+                }
+                repair.run(tree, added, graph, heuristic);
+                backward.start(tree, ids);
+            }
+            const auto expected = distances_to_list(graph, targets);
+            auto sources = ListVertices {};
+            const auto from = static_cast<uint_t>(rng() % n);
+            sources.rows.push_back(ListGraph::bytes(from));
+            auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, s + 1);
+            const auto distance = search.run(sources);
+            ASSERT_EQ(distance, expected[from]) << "trial " << trial << ", search " << s;
+            if (distance != std::numeric_limits<uint_t>::max())
+                chains += expect_path(graph, sources, targets, search, distance);
+        }
+    }
     EXPECT_GT(chains, 0);
 }
 

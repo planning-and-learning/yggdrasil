@@ -720,10 +720,10 @@ ordered by f, then g) runs against a backward breadth-first frontier.
 The stored search tree (`search/search_tree.hpp`) keeps per vertex a learned lower bound and
 a next pointer with its path's length, an upper bound while the path's edges exist. A search
 ends on a stored path whose length meets the vertex's lower bound, or once nothing shorter than
-the best stored path seen can remain. The vertices of a found path learn their exact
-distances; exact values beside the heuristic's estimates are admissible but not necessarily
-consistent, so A* reopens a vertex reached more cheaply, which never happens under a
-consistent estimate.
+the best stored path seen can remain. Learned values stay consistent with the heuristic's
+estimates of unstored vertices, which repair after added edges relies on, so the vertices of a
+found path do not learn their exact distances. A* still reopens a vertex reached more cheaply,
+which never happens under a consistent estimate.
 
 The heuristic `H` (`search/concepts.hpp`, `DistanceHeuristic`) must be consistent in every
 graph the inputs can form while the targets stay unchanged: it may depend on the targets and

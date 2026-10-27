@@ -143,9 +143,9 @@ private:
 ///
 /// Learning (GAA*: h(s) := m - g(s) for closed s) uses m = min(d, the smallest g + h_learn of an open or dropped
 /// vertex) instead of the distance d, where h_learn = max(h, learned) omits the backward bound, which is discarded when
-/// added edges break it. The vertices of the found path learn their exact distances (d - g, and the stored chain's
-/// lengths), so that a later search from them ends on the path while it holds; exact values next to estimates are
-/// admissible but need not be consistent, hence reopening. [Our addition.]
+/// added edges break it. [Our addition.] The path's vertices do not learn their exact distances: next to estimates of
+/// unstored vertices those need not be consistent, and TreeRepair, which lowers learned values only over stored
+/// predecessors, would then miss vertices that added edges shorten.
 template<typename Oracle, DistanceHeuristic H>
     requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
 class AStar
@@ -284,11 +284,31 @@ private:
     {
         while (!m_backward->exhausted() && m_backward->frontier_size() <= m_open)
         {
-            m_counters.backward_vertices += m_backward->step(*m_tree, *m_oracle, *m_heuristic);
+            const auto found = m_backward->step(*m_tree, *m_oracle, *m_heuristic);
+            m_counters.backward_vertices += found;
+            if (found != 0)
+                relinked();
             if (closed_off(sources))
                 return true;
         }
         return false;
+    }
+
+    /// The backward frontier links the vertices it finds, which may change stored chains: the chain checks made so far
+    /// are discarded, and the incumbent is kept only while its chain still holds.
+    void relinked()
+    {
+        m_tree->begin_search();
+        if (m_incumbent_index == none)
+            return;
+        const auto id = *stored(m_incumbent_index);
+        if (on_valid_path(id))
+            m_incumbent = node(m_incumbent_index).g + m_tree->path(id);
+        else
+        {
+            m_incumbent = infinity;
+            m_incumbent_index = none;
+        }
     }
 
     AStarStorage::Node& node(uint_t index) noexcept { return m_storage->m_nodes[index]; }
@@ -423,11 +443,6 @@ private:
                 m_tree->mark_target(ensure(*last));
             for (auto child = *last; nodes[child].parent != none; child = nodes[child].parent)
                 m_tree->link(ensure(nodes[child].parent), ensure(child));
-            // The path is a shortest one: its vertices' distances are exact.
-            for (auto index = *last; index != none; index = nodes[index].parent)
-                m_tree->learn(ensure(index), distance - nodes[index].g);
-            for (auto id = m_tree->next(ensure(*last)); id != none; id = m_tree->next(id))
-                m_tree->learn(id, m_tree->path(id));
         }
         return distance;
     }
