@@ -248,7 +248,7 @@ private:
         restart_backward(heuristic);
     }
 
-    void restart_backward(const H& heuristic) { m_backward.start(m_targets.ensure_in(m_tree, heuristic)); }
+    void restart_backward(const H& heuristic) { m_backward.start(m_tree, m_targets.ensure_in(m_tree, heuristic)); }
 };
 
 }  // namespace ygg::database::incremental

@@ -33,7 +33,8 @@ namespace ygg::database
 class BackwardFrontier
 {
 public:
-    void start(std::span<const uint_t> targets);
+    /// Starts from the targets (stored vertices), which become their own paths of length 0 (SearchTree::mark_target).
+    void start(SearchTree& tree, std::span<const uint_t> targets);
 
     /// Advances one level; returns the number of vertices found.
     template<PredecessorOracle Predecessors, DistanceHeuristic H>

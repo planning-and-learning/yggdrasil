@@ -7,12 +7,13 @@
 
 namespace ygg::database
 {
-void BackwardFrontier::start(std::span<const uint_t> targets)
+void BackwardFrontier::start(SearchTree& tree, std::span<const uint_t> targets)
 {
     m_level.clear();
     m_frontier.clear();
     for (const auto target : targets)
     {
+        tree.mark_target(target);
         level_slot(target) = 0;
         m_frontier.push_back(target);
     }

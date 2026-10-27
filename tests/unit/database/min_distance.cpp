@@ -403,7 +403,7 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         auto ids = std::vector<uint_t>();
         for (size_t i = 0; i < targets.size(); ++i)
             ids.push_back(tree.ensure(targets[static_cast<uint_t>(i)], heuristic));
-        backward.start(ids);
+        backward.start(tree, ids);
         auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0);
         const auto distance = search.run(sources);
         if (distance == std::numeric_limits<uint_t>::max())
@@ -427,6 +427,83 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
     }
     EXPECT_GT(paths, 10);
     EXPECT_GT(chains, 0);
+}
+
+/// A second search from the same source over the same graph ends on the stored path at the same distance, without
+/// expanding: the path's length meets the source's lower bound, also when the backward frontier ended the first search
+/// (whose learned bounds can then stay below the path's length).
+TEST_P(DatabaseMinDistance, AStarReusesTheStoredPath)
+{
+    auto rng = std::mt19937(GetParam());
+    const auto n = static_cast<uint_t>(40);
+    auto heuristic = ygg::database::BlindDistanceHeuristic {};
+    auto tree = ygg::database::SearchTree(sizeof(uint_t));
+    auto backward = ygg::database::BackwardFrontier {};
+    auto storage = ygg::database::AStarStorage(sizeof(uint_t));
+    auto searched = static_cast<size_t>(0);
+    for (size_t trial = 0; trial < 50; ++trial)
+    {
+        auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
+        for (size_t e = 0; e < 70; ++e)
+        {
+            const auto u = static_cast<uint_t>(rng() % n);
+            const auto v = static_cast<uint_t>(rng() % n);
+            if (u != v && std::ranges::find(graph.out[u], v) == graph.out[u].end())
+            {
+                graph.out[u].push_back(v);
+                graph.in[v].push_back(u);
+            }
+        }
+        auto sources = ListVertices {};
+        sources.rows.push_back(ListGraph::bytes(static_cast<uint_t>(rng() % n)));
+        auto targets = ygg::database::VertexSet(sizeof(uint_t));
+        targets.insert(std::span<const std::byte>(ListGraph::bytes(static_cast<uint_t>(rng() % n))));
+        tree.clear();
+        auto ids = std::vector<uint_t>();
+        for (size_t i = 0; i < targets.size(); ++i)
+            ids.push_back(tree.ensure(targets[static_cast<uint_t>(i)], heuristic));
+        backward.start(tree, ids);
+        const auto first =
+            ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0).run(sources);
+        if (first == std::numeric_limits<uint_t>::max() || first == 0)
+            continue;
+        auto again = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0);
+        EXPECT_EQ(again.run(sources), first) << "trial " << trial;
+        EXPECT_EQ(again.counters().tree_hits, 1) << "trial " << trial;
+        ++searched;
+    }
+    EXPECT_GT(searched, 10);
+}
+
+/// An exact learned distance next to blind estimates is admissible but not consistent: the search first closes c
+/// through the longer path s -> b1 -> b2 -> c, then reaches it through s -> a1 -> c; reopening c gives the distance 5.
+/// The target's 20 dead-end predecessors keep the backward frontier at its first level.
+TEST(DatabaseMinDistance, AStarReopensUnderAnInconsistentEstimate)
+{
+    constexpr uint_t s = 0, a1 = 1, b1 = 2, b2 = 3, c = 4, d1 = 5, d2 = 6, t = 7;
+    auto graph = ListGraph { std::vector<std::vector<uint_t>>(28), std::vector<std::vector<uint_t>>(28) };
+    const auto edge = [&](uint_t u, uint_t v)
+    {
+        graph.out[u].push_back(v);
+        graph.in[v].push_back(u);
+    };
+    for (const auto& [u, v] :
+         std::vector<std::pair<uint_t, uint_t>> { { s, a1 }, { a1, c }, { s, b1 }, { b1, b2 }, { b2, c }, { c, d1 }, { d1, d2 }, { d2, t } })
+        edge(u, v);
+    for (uint_t dead = 8; dead < 28; ++dead)
+        edge(dead, t);
+    auto heuristic = ygg::database::BlindDistanceHeuristic {};
+    auto tree = ygg::database::SearchTree(sizeof(uint_t));
+    auto backward = ygg::database::BackwardFrontier {};
+    auto storage = ygg::database::AStarStorage(sizeof(uint_t));
+    auto targets = ygg::database::VertexSet(sizeof(uint_t));
+    targets.insert(std::span<const std::byte>(ListGraph::bytes(t)));
+    tree.learn(tree.ensure(std::span<const std::byte>(ListGraph::bytes(a1)), heuristic), 4);  // Its distance.
+    auto ids = std::vector<uint_t> { tree.ensure(targets[0], heuristic) };
+    backward.start(tree, ids);
+    auto sources = ListVertices {};
+    sources.rows.push_back(ListGraph::bytes(s));
+    EXPECT_EQ((ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0).run(sources)), 5);
 }
 
 INSTANTIATE_TEST_SUITE_P(Seeds, DatabaseMinDistance, testing::Range(1u, 9u));

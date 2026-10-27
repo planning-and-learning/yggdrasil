@@ -130,18 +130,22 @@ private:
 
 /// One best-first search from sources to the targets with unit edge costs (Hart, Nilsson & Raphael, "A Formal Basis
 /// for the Heuristic Determination of Minimum Cost Paths", IEEE Trans. SSC 1968). The estimate is the maximum of the
-/// caller's heuristic h, the tree's learned distance and the backward frontier's bound; all three are consistent, so a
-/// vertex is closed once. Within an f, larger g is expanded first (OpenList).
+/// caller's heuristic h, the tree's learned distance and the backward frontier's bound, all admissible; a closed
+/// vertex reached again more cheaply is reopened, as A* with an admissible estimate needs, which never happens while
+/// the estimate is consistent. Within an f, larger g is expanded first (OpenList).
 ///
 /// The search is bidirectional: before each expansion the backward frontier advances while it is not larger than the
 /// forward open list (Pohl's cardinality comparison, "Bi-directional Search", Machine Intelligence 6, 1971). It ends at
-/// a target, at a stored vertex on a valid tree path (MPGAA*'s goal condition), or when the exhausted backward frontier
-/// excludes every source.
+/// a target, at a stored vertex on a valid tree path whose length meets the vertex's lower bound (MPGAA*'s goal
+/// condition, with the path's length as an upper bound apart from the learned lower bound), once the least f reaches
+/// the shortest path through a stored vertex on a valid tree path seen (an incumbent), or when the exhausted backward
+/// frontier excludes every source.
 ///
 /// Learning (GAA*: h(s) := m - g(s) for closed s) uses m = min(d, the smallest g + h_learn of an open or dropped
-/// vertex) instead of the distance d, where h_learn = max(h, learned) omits the backward bound: a search that ends
-/// early on a backward level, or on an exhausted frontier, then still learns bounds that are consistent without the
-/// backward frontier, which is discarded when added edges break its bounds. [Our addition.]
+/// vertex) instead of the distance d, where h_learn = max(h, learned) omits the backward bound, which is discarded when
+/// added edges break it. The vertices of the found path learn their exact distances (d - g, and the stored chain's
+/// lengths), so that a later search from them ends on the path while it holds; exact values next to estimates are
+/// admissible but need not be consistent, hence reopening. [Our addition.]
 template<typename Oracle, DistanceHeuristic H>
     requires SuccessorOracle<Oracle> && PredecessorOracle<Oracle> && EdgeCheck<Oracle>
 class AStar
@@ -176,12 +180,14 @@ public:
         while (!m_storage->m_open_list.empty())
         {
             if (advance_backward(sources))
-                return finish(infinity, std::nullopt);
+                return finish_incumbent();
             const auto entry = m_storage->m_open_list.pop();
+            if (entry.f >= m_incumbent)
+                return finish_incumbent();
             if (const auto distance = visit(entry.index, entry.f))
                 return *distance;
         }
-        return finish(infinity, std::nullopt);
+        return finish_incumbent();
     }
 
     [[nodiscard]] const AStarCounters& counters() const noexcept { return m_counters; }
@@ -215,9 +221,11 @@ private:
     AStarStorage* m_storage;
     uint64_t m_version;
     size_t m_open = 0;
-    uint_t m_dropped = infinity;  ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
-    uint_t m_last = none;         ///< The generated vertex the search ended at, if it ended at one.
-    uint_t m_reused = none;       ///< The stored source whose tree path ended the search without expanding, if any.
+    uint_t m_dropped = infinity;      ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
+    uint_t m_last = none;             ///< The generated vertex the search ended at, if it ended at one.
+    uint_t m_reused = none;           ///< The stored source whose tree path ended the search without expanding, if any.
+    uint_t m_incumbent = infinity;    ///< The shortest g + tree path length of a generated vertex seen.
+    uint_t m_incumbent_index = none;  ///< That vertex.
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
@@ -229,8 +237,16 @@ private:
 
     bool on_valid_path(uint_t id)
     {
-        return m_tree
-            ->on_valid_path(id, [&](uint_t u) { return value(u); }, [&](uint_t u) { return m_targets->contains(m_tree->vertex(u)); }, *m_oracle, m_version);
+        return m_tree->on_valid_path(id, [&](uint_t u) { return m_targets->contains(m_tree->vertex(u)); }, *m_oracle, m_version);
+    }
+
+    /// Ends with the incumbent, or without a path.
+    uint_t finish_incumbent()
+    {
+        if (m_incumbent == infinity)
+            return finish(infinity, std::nullopt);
+        ++m_counters.tree_hits;
+        return finish(m_incumbent, m_incumbent_index);
     }
 
     /// Whether the exhausted backward frontier found no source.
@@ -242,7 +258,8 @@ private:
                                        [&](size_t i) { return m_backward->level(m_tree->find(sources.row(i)).value_or(none)) != none; });
     }
 
-    /// A single stored source on a valid tree path has an exact value; a learned infinity proves it dead.
+    /// A single stored source on a valid tree path whose length meets its lower bound has that distance; a learned
+    /// infinity proves it dead.
     template<VertexRange Sources>
     std::optional<uint_t> reuse(const Sources& sources)
     {
@@ -253,11 +270,12 @@ private:
             return std::nullopt;
         if (m_tree->learned(*stored) == infinity)
             return infinity;
-        if (!on_valid_path(*stored))
+        const auto lower = std::max({ value(*stored), m_heuristic->estimate(sources.row(0)), m_backward->bound(stored) });
+        if (!on_valid_path(*stored) || m_tree->path(*stored) != lower)
             return std::nullopt;
         ++m_counters.tree_hits;
         m_reused = *stored;
-        return value(*stored);
+        return lower;
     }
 
     /// Cardinality comparison; returns whether the exhausted backward frontier excludes every source.
@@ -290,8 +308,13 @@ private:
     void push(std::span<const std::byte> vertex, uint_t cost, uint_t from)
     {
         const auto found = m_storage->m_vertices.find(vertex);
-        if (found && (node(*found).closed || node(*found).g <= cost))
+        if (found && node(*found).g <= cost)
             return;
+        if (found && node(*found).closed)
+        {
+            node(*found).closed = false;
+            ++m_open;
+        }
         if (!found)
         {
             auto estimate = m_heuristic->estimate(vertex);
@@ -345,8 +368,17 @@ private:
         // It stays open for learning: its successors were not generated.
         if (id && on_valid_path(*id))
         {
-            ++m_counters.tree_hits;
-            return finish(current.g + value(*id), index);
+            const auto length = m_tree->path(*id);
+            if (length == current.h)
+            {
+                ++m_counters.tree_hits;
+                return finish(current.g + length, index);
+            }
+            if (current.g + length < m_incumbent)
+            {
+                m_incumbent = current.g + length;
+                m_incumbent_index = index;
+            }
         }
         expand(index);
         return std::nullopt;
@@ -385,9 +417,17 @@ private:
                     m_tree->learn(ensure(i), learned);
         if (last)
         {
+            // The path's lengths from where it ends: 0 at a target, or the stored chain's.
             m_last = *last;
+            if (m_targets->contains(m_storage->m_vertices[*last]))
+                m_tree->mark_target(ensure(*last));
             for (auto child = *last; nodes[child].parent != none; child = nodes[child].parent)
                 m_tree->link(ensure(nodes[child].parent), ensure(child));
+            // The path is a shortest one: its vertices' distances are exact.
+            for (auto index = *last; index != none; index = nodes[index].parent)
+                m_tree->learn(ensure(index), distance - nodes[index].g);
+            for (auto id = m_tree->next(ensure(*last)); id != none; id = m_tree->next(id))
+                m_tree->learn(id, m_tree->path(id));
         }
         return distance;
     }

@@ -25,14 +25,15 @@ namespace ygg::database
 inline constexpr size_t vertex_segment_size = 64;
 using VertexSet = RawArraySet<std::byte, vertex_segment_size>;
 
-/// The stored vertices of searches towards fixed targets: per vertex a lower bound on its distance (learned) and one
-/// next pointer along a found path. A vertex whose next chain reaches a target, with values that drop by one per
-/// existing edge, has an exact value: the goal condition of Multipath Generalized Adaptive A* (Hernández, Asín &
-/// Baier, "Reusing Previously Found A* Paths for Fast Goal-Directed Navigation in Dynamic Terrain", AAAI 2015).
-/// Edges of a chain are checked lazily, and a check is kept until the graph's version changes.
+/// The stored vertices of searches towards fixed targets: per vertex a lower bound on its distance (learned), one next
+/// pointer along a found path, and that path's length (an upper bound while its edges exist). A vertex whose next chain
+/// reaches a target with lengths that drop by one per existing edge has a path of that length; where the length meets
+/// a lower bound the distance is exact: the goal condition of Multipath Generalized Adaptive A* (Hernández, Asín &
+/// Baier, "Reusing Previously Found A* Paths for Fast Goal-Directed Navigation in Dynamic Terrain", AAAI 2015), with
+/// the path's length kept apart from the learned bound, which A* may learn below it. Edges of a chain are checked
+/// lazily, and a check is kept until the graph's version changes.
 ///
-/// The tree knows edges only through EdgeCheck; the caller supplies the value used along a chain (e.g. the larger of
-/// the learned distance and an exact backward level). incremental::MinDistance keeps it across searches and repairs it
+/// The tree knows edges only through EdgeCheck. incremental::MinDistance keeps it across searches and repairs it
 /// (incremental/search/tree_repair.hpp).
 class SearchTree
 {
@@ -79,16 +80,29 @@ public:
         set_next(id, none);
     }
     [[nodiscard]] uint_t next(uint_t id) const noexcept { return m_nodes[id].next; }
-    void link(uint_t from, uint_t to) noexcept { set_next(from, to); }
+    /// The length of the vertex's chain when it was linked; infinity without one.
+    [[nodiscard]] uint_t path(uint_t id) const noexcept { return m_nodes[id].path; }
+    /// A target: its chain is itself.
+    void mark_target(uint_t id) noexcept
+    {
+        set_next(id, none);
+        m_nodes[id].path = 0;
+    }
+    /// Links the vertex to the next one of its path, which is one longer than the next one's.
+    void link(uint_t from, uint_t to) noexcept
+    {
+        set_next(from, to);
+        m_nodes[from].path = m_nodes[to].path == infinity ? infinity : m_nodes[to].path + 1;
+    }
 
     /// Starts a new search: chain checks of earlier searches are forgotten.
     void begin_search() noexcept { ++m_epoch; }
 
-    /// Whether the next chain from `start` reaches a target with values that drop by one per existing edge. Edge
-    /// checks hold until `version` changes.
-    template<typename Value, typename IsTarget, EdgeCheck Edges>
-        requires std::invocable<const Value&, uint_t> && std::predicate<const IsTarget&, uint_t>
-    bool on_valid_path(uint_t start, const Value& value, const IsTarget& is_target, Edges& edges, uint64_t version)
+    /// Whether the next chain from `start` reaches a target with lengths that drop by one per existing edge: a path of
+    /// length path(start). Edge checks hold until `version` changes.
+    template<typename IsTarget, EdgeCheck Edges>
+        requires std::predicate<const IsTarget&, uint_t>
+    bool on_valid_path(uint_t start, const IsTarget& is_target, Edges& edges, uint64_t version)
     {
         auto& chain = m_chain;
         chain.clear();
@@ -101,13 +115,13 @@ public:
                 break;
             }
             chain.push_back(u);
-            if (value(u) == 0 && is_target(u))
+            if (m_nodes[u].path == 0 && is_target(u))
             {
                 result = true;
                 break;
             }
             const auto v = m_nodes[u].next;
-            if (v == none || value(v) == infinity || value(u) != value(v) + 1)
+            if (v == none || m_nodes[v].path == infinity || m_nodes[u].path != m_nodes[v].path + 1)
                 break;
             if (m_nodes[u].edge_version != version)
             {
@@ -135,16 +149,19 @@ private:
     {
         uint_t learned = 0;
         uint_t next = none;
+        uint_t path = infinity;             ///< The chain's length when it was linked.
         uint64_t checked = 0;               ///< Epoch of the last chain check.
         bool valid = false;                 ///< Its result.
         uint64_t edge_version = unchecked;  ///< Graph version at which the edge to next was checked.
     };
 
-    /// A new next pointer has an unchecked edge.
+    /// A new next pointer has an unchecked edge; without one, there is no path.
     void set_next(uint_t id, uint_t next) noexcept
     {
         m_nodes[id].next = next;
         m_nodes[id].edge_version = unchecked;
+        if (next == none)
+            m_nodes[id].path = infinity;
     }
 
     VertexSet m_vertices;

@@ -843,14 +843,14 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
             key.tree.clear();
             key.indexes.clear();
             key.reset = false;
-            key.backward.start(key.ensure_targets(estimate));
+            key.backward.start(key.tree, key.ensure_targets(estimate));
         }
         else
         {
             if (!key.added.empty())
                 key.repair.run(key.tree, key.added, oracle, estimate);
             if (key.restart)
-                key.backward.start(key.ensure_targets(estimate));
+                key.backward.start(key.tree, key.ensure_targets(estimate));
         }
         key.added.clear();
         key.restart = false;

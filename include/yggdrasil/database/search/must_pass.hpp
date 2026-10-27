@@ -286,7 +286,7 @@ private:
         const auto heuristic = KeyedHeuristic(*this);
         m_tree.clear();
         m_targets.assign(Vertices { &m_ends, m_allowed_ends });
-        m_frontier.start(m_targets.ensure_in(m_tree, heuristic));
+        m_frontier.start(m_tree, m_targets.ensure_in(m_tree, heuristic));
         auto search = AStar<Graph, KeyedHeuristic>(graph, m_tree, m_frontier, heuristic, m_targets.vertices(), m_search, m_edges.evaluator().version());
         const auto reachable = search.run(Vertices { &m_starts, m_allowed_starts }) != infinity;
         m_statistics += search.counters();
