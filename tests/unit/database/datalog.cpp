@@ -841,6 +841,63 @@ TEST(DatabaseDatalog, WeightedGoalStopsEachKeyAtItsLeastTarget)
     }
 }
 
+TEST(DatabaseDatalog, WeightedGoalSearchesWithProjectionsOfTheTargets)
+{
+    // dist over pairs (x, y): x moves over the static `e`, y over the static `f` where the fluent `open` holds; best:
+    // the least dist with y a target and x anything, so the heuristic projects the key onto y. Equal to the naive
+    // interpreter.
+    Programs p;
+    const auto e = p.relation(100, 2, 0), f = p.relation(101, 2, 1), source = p.relation(102, 2, 2), target = p.relation(103, 1, 3),
+               open = p.relation(104, 1, 4);
+    const auto dist = p.weighted(0, 3), best = p.weighted(1, 1);
+    constexpr uint_t x = 0, y = 1, z = 2, w = 3, v = 4;
+    using Operation = dl::Arithmetic::Operation;
+    const auto program = p.program({
+        p.rule(p.atom(dist, { var(x), var(y), obj(0) }), { p.atom(source, { var(x), var(y) }) }),
+        p.rule(p.atom(dist, { var(z), var(y), var(v) }),
+               { p.atom(dist, { var(x), var(y), var(w) }), p.atom(e, { var(x), var(z) }) },
+               {},
+               {},
+               {},
+               { dl::Arithmetic { Operation::ADD, var(w), obj(1), v } }),
+        p.rule(p.atom(dist, { var(x), var(z), var(v) }),
+               { p.atom(dist, { var(x), var(y), var(w) }), p.atom(f, { var(y), var(z) }), p.atom(open, { var(z) }) },
+               {},
+               {},
+               {},
+               { dl::Arithmetic { Operation::ADD, var(w), obj(2), v } }),
+        p.rule(p.atom(best, { var(w) }), { p.atom(dist, { var(x), var(y), var(w) }), p.atom(target, { var(y) }) }),
+    });
+    std::mt19937 random(31);
+    const auto draw = [&](size_t count, size_t arity)
+    {
+        auto tuples = Tuples();
+        for (size_t i = 0; i < count; ++i)
+        {
+            auto tuple = Tuple();
+            for (size_t a = 0; a < arity; ++a)
+                tuple.push_back(static_cast<uint_t>(random() % 8));
+            tuples.insert(tuple);
+        }
+        return tuples;
+    };
+    for (size_t graph = 0; graph < 10; ++graph)
+    {
+        const auto edges = draw(14, 2), fills = draw(14, 2);
+        const auto e_relation = relation_of(edges, 2), f_relation = relation_of(fills, 2);
+        constexpr auto static_slots = std::array<size_t, 2> { 0, 1 };
+        dl::Evaluator evaluator(program, std::array { best }, static_slots);
+        for (size_t trial = 0; trial < 20; ++trial)
+        {
+            const auto inputs = std::vector<Tuples> { edges, fills, draw(1 + random() % 2, 2), draw(1 + random() % 2, 1), draw(6, 1) };
+            const auto s = relation_of(inputs[2], 2), t = relation_of(inputs[3], 1), o = relation_of(inputs[4], 1);
+            evaluator.evaluate(std::array { borrow(e_relation), borrow(f_relation), borrow(s), borrow(t), borrow(o) });
+            const Interpreter expected(program, inputs);
+            EXPECT_EQ(tuples_of(evaluator.get_result()), expected.get(1)) << "graph " << graph << ", trial " << trial;
+        }
+    }
+}
+
 TEST(DatabaseDatalog, DeleteAndRederiveKeepsRowsWithAnotherDerivation)
 {
     // reach over the path 0 -> 1 -> ... -> 199 with a shortcut 190 -> 195. Cutting 192 -> 193 over-deletes 193, ..., 199,
