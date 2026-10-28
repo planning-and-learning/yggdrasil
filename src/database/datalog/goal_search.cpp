@@ -173,6 +173,8 @@ GoalSearch::reverse(CompiledProgram& program, std::span<const size_t> columns, b
         const auto& source = rule.literals[j];
         if (abstract && std::ranges::all_of(columns, [&](size_t c) { return source.terms[c] == rule.head_terms[c]; }))
             continue;
+        // The read row's weight flows only into the head's weight (require_superior in translation.cpp), so taking it as 0
+        // changes no other literal.
         const auto zero = [&](Term t) { return t == source.terms.back() ? Term::constant(0) : t; };
         auto edge = rule;
         edge.literals.clear();
@@ -845,6 +847,10 @@ void UnitSearch::changed(CompiledProgram& program, Executor& executor)
         reset();
         return;
     }
+    // Searches for any path start a new frontier and keep no learned values that added edges would need repaired; the
+    // version expires their stored paths' edge checks.
+    if (m_search.any_path)
+        return;
     const auto arity = m_search.target_columns.size();
     for (const auto& delta : m_deltas)
     {
@@ -1006,13 +1012,19 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
         }
         else
         {
-            if (!key.added.empty())
-                key.repair.run(key.tree, key.added, oracle, estimate);
             // Removed edges keep the frontier's levels lower bounds, but leave the vertices it found through them: it can
             // then no longer be exhausted early, which proves a target unreachable. A search for any path needs no
-            // bounds beyond meeting the frontier, so it starts one anew (implementation decision, as MustPass does).
-            if (key.restart || m_search.any_path)
+            // bounds beyond meeting the frontier, so it starts one anew, which also forgets the learned values
+            // (implementation decision, as MustPass does).
+            if (m_search.any_path)
                 key.backward.start(key.tree, key.ensure_targets(estimate));
+            else
+            {
+                if (!key.added.empty())
+                    key.repair.run(key.tree, key.added, oracle, estimate);
+                if (key.restart)
+                    key.backward.start(key.tree, key.ensure_targets(estimate));
+            }
         }
         key.added.clear();
         key.restart = false;
@@ -1027,7 +1039,8 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
                 if (key.targets.contains(vertex))
                     from_vertex(vertex, reached);
             });
-        reached.push_back(distance);
+        // No weight of an any-path search is observed: 0 keeps the row the same while the goal holds.
+        reached.push_back(m_search.any_path ? 0 : distance);
         table.current.insert(reached);
     }
 }

@@ -852,7 +852,8 @@ indexed relations, without intermediate relations:
   and repaired, or restart the frontier where they break its bounds; otherwise an update evaluates the stratum anew.
   If no weight of the goals' heads can be observed (no output or aggregate reads them, and no rule uses them but by
   copying them into such a head), a goal holds with any weight, and each search ends at the first path it finds,
-  a valid stored one included, with a new backward frontier: one kept across removed edges keeps the vertices it found
+  a valid stored one included, derives the row at weight 0 (so that it stays the same while the goal holds), skips the
+  delta rules and repair of learned values, and starts with a new backward frontier: one kept across removed edges keeps the vertices it found
   through them, so that its exhaustion, which proves a target unreachable, would come late (implementation decisions);
 - `initialize()` of an initialized evaluator compares its inputs with the rows read last and updates by the difference,
   so that what strata maintain carries over;
