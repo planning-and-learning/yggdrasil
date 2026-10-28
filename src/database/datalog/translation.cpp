@@ -416,9 +416,10 @@ CompiledProgram translate(ProgramView view, std::span<const RelationView> output
             auto search = GoalSearch::make(program, info, goals);
             if (search)
                 search->any_path = std::ranges::none_of(goals, [&](size_t g) { return weights_observed(program.rules[g].head); });
-            auto heuristic = search ? GoalHeuristic::make(program, *search) : nullptr;
-            auto frontier = search ? GoalFrontier::make(program, *search) : nullptr;
             auto unit = search ? UnitSearch::make(program, info, *search) : nullptr;
+            // Only a unit search tries the heuristic's proofs of unreachability.
+            auto heuristic = search ? GoalHeuristic::make(program, *search, unit != nullptr) : nullptr;
+            auto frontier = search ? GoalFrontier::make(program, *search) : nullptr;
             program.strata.push_back(std::make_unique<WeightedStratum>(std::move(info),
                                                                        program,
                                                                        std::move(goals),

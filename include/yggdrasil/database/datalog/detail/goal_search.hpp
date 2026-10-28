@@ -47,17 +47,25 @@ struct GoalSearch
     /// weight a derivation gives, a search may stop at the first target it reaches, and its row is derived at weight 0.
     bool any_path = false;
 
+    /// The abstract edges with the literals over the current state that reverse() keeps as filters too, and those
+    /// literals' tables.
+    struct StateEdges
+    {
+        std::vector<BoundRule> edges;
+        std::vector<size_t> tables;
+    };
+
     /// None unless the stratum has this shape.
     static std::optional<GoalSearch> make(CompiledProgram& program, const StratumInfo& stratum, std::span<const size_t> goals);
     /// The recursive rules reversed, over the key columns `columns`: run from a head row's `columns`, they derive the
     /// read row's `columns` with the edge's weight (the read row's weight taken as 0). With `abstract`, only literals over
     /// static inputs (and what they compute) are kept, so that the derivations include the concrete ones in every state,
     /// and rules that keep every column of `columns` (self-loops there) are left out; otherwise every literal. Literals
-    /// left unbound are dropped, which only adds derivations. With `abstract` and `state_tables`, the other literals that
-    /// those bind completely are kept as filters too, read in the current state, and their tables added to
-    /// `state_tables`. None if a rule cannot bind the read row's `columns` and the weight.
+    /// left unbound are dropped, which only adds derivations. With `abstract` and `state`, also the same edges with the
+    /// other literals that those bind completely as filters (read in the current state) into `state`. None if a rule
+    /// cannot bind the read row's `columns` and the weight.
     [[nodiscard]] std::optional<std::vector<BoundRule>>
-    reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract, std::vector<size_t>* state_tables = nullptr) const;
+    reverse(CompiledProgram& program, std::span<const size_t> columns, bool abstract, StateEdges* state = nullptr) const;
     /// Adds the targets of the current state, rows of `target_columns`.
     void read_targets(Executor& executor, std::vector<Version>& reads, RawArraySet<uint_t>& keys) const;
 };
@@ -75,11 +83,12 @@ struct GoalSearch
 class GoalHeuristic
 {
 public:
-    /// None unless some target column has reversed abstract rules.
-    static std::unique_ptr<GoalHeuristic> make(CompiledProgram& program, const GoalSearch& search);
+    /// None unless some target column has reversed abstract rules. With `proofs`, also the abstraction of the current
+    /// state that unreachable() searches (for a search that calls it).
+    static std::unique_ptr<GoalHeuristic> make(CompiledProgram& program, const GoalSearch& search, bool proofs);
 
-    /// Reads the targets of the current state unless `changed` is false and they were read, and computes their
-    /// abstract weights unless known.
+    /// Reads the targets of the current state unless `changed` is false and they were read, and notes the state that
+    /// unreachable() reads if a state table changed; the abstract weights are computed on first use.
     void read_targets(CompiledProgram& program, Executor& executor, bool changed);
     /// The heuristic of the key; Arithmetic::infinity if no target is reachable from it in a projection.
     [[nodiscard]] uint_t operator()(std::span<const uint_t> key);
@@ -88,7 +97,8 @@ public:
     /// state, on use). This is what n_distance's must-pass search gets from its heuristic's exclude(): an abstraction
     /// in which the targets are unreachable proves it without a search.
     [[nodiscard]] bool unreachable(std::span<const uint_t> key);
-    /// About what unreachable() costs: the size of the abstraction (unbounded without literals over the state).
+    /// About what unreachable() costs: the number of abstract values its backward searches can visit, by the static
+    /// projections of their columns (unbounded without literals over the state).
     [[nodiscard]] size_t proof_cost() const noexcept;
     /// Changes whenever read_targets() changes the function for the goal key (the goal's key columns of a key of R), so
     /// that bounds learned with it can be discarded.
@@ -109,17 +119,28 @@ private:
         std::vector<RawArraySet<uint_t>> targets;
         std::vector<std::vector<uint_t>> wanted;
         std::vector<const std::vector<uint_t>*> current;
+        /// For a state projection, the static projection of its column, whose targets it uses (and its key there,
+        /// followed by the state's id); npos otherwise.
+        size_t domain = npos;
     };
     static constexpr size_t max_weights = 64;
     GoalSearch m_search;
     std::vector<Projection> m_projections;
-    /// The projections with the literals over the current state, and the tables they read.
+    /// The projections with the literals over the current state, the tables they read, and an id per distinct state of
+    /// those (the latest few), the current one's in m_state.
     std::vector<Projection> m_state_projections;
     std::vector<size_t> m_state_tables;
+    std::map<std::vector<uint_t>, uint_t> m_states;
+    uint_t m_state = 0;
+    uint_t m_next_state = 0;
     /// With one goal whose key columns are target columns, their positions in target_columns: each goal key has
     /// weights to its own targets. Otherwise empty, and one goal key, (0), has every target.
     std::vector<size_t> m_goal_positions;
+    std::vector<size_t> m_goal_columns;
+    std::vector<uint_t> m_no_goal_key { 0 };
     RawArraySet<uint_t> m_goal_keys;
+    /// Per goal key, its targets (indices into m_target_keys) and its generation.
+    std::vector<std::vector<uint_t>> m_members;
     std::vector<uint64_t> m_generations;
     Executor* m_executor = nullptr;
     bool m_read = false;
@@ -129,10 +150,10 @@ private:
     std::vector<uint_t> m_key;
 
     explicit GoalHeuristic(const GoalSearch& search) : m_search(search), m_goal_keys(1), m_target_keys(search.target_columns.size()) {}
-    /// The index of the goal key of a key of R, or of a target's (`target`), if it has targets.
-    std::optional<uint_t> group(std::span<const uint_t> key, bool target);
     /// The weights of the goal key's current targets, computed on first use; null without targets.
     const std::vector<uint_t>* weights(Projection& projection, uint_t group);
+    /// The projection's weight of a key of R, of goal key `group`; infinity without one.
+    uint_t weight(Projection& projection, uint_t group, std::span<const uint_t> key);
     /// The abstract weights to the projected targets, by Dijkstra's algorithm backward from them.
     std::vector<uint_t> backward(Executor& executor, Projection& projection, const RawArraySet<uint_t>& targets);
 };
