@@ -832,6 +832,11 @@ std::unique_ptr<UnitSearch> UnitSearch::make(CompiledProgram& program, const Str
             result->m_deltas.push_back(std::move(delta));
         }
     }
+    for (const auto& [r, j] : search.rules)
+        for (const auto& literal : program.rules[r].literals)
+            if (literal.table != npos && literal.table != search.table
+                && std::ranges::find(result->m_edge_tables, literal.table) == result->m_edge_tables.end())
+                result->m_edge_tables.push_back(literal.table);
     return result;
 }
 
@@ -860,10 +865,15 @@ void UnitSearch::changed(CompiledProgram& program, Executor& executor)
         reset();
         return;
     }
-    // Searches for any path start a new frontier and keep no learned values that added edges would need repaired; the
-    // version expires their stored paths' edge checks.
+    // A search for any path starts a new frontier, which forgets the learned values, once the edges changed; otherwise
+    // both still hold, an exhausted search's dead ends included. The version expires the stored paths' edge checks.
     if (m_search.any_path)
+    {
+        if (std::ranges::any_of(m_edge_tables, [&](size_t table) { return program.tables[table]->changed(); }))
+            for (auto& key : m_keys)
+                key->restart = true;
         return;
+    }
     const auto arity = m_search.target_columns.size();
     for (const auto& delta : m_deltas)
     {
@@ -1027,10 +1037,13 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
         {
             // Removed edges keep the frontier's levels lower bounds, but leave the vertices it found through them: it can
             // then no longer be exhausted early, which proves a target unreachable. A search for any path needs no
-            // bounds beyond meeting the frontier, so it starts one anew, which also forgets the learned values
-            // (implementation decision, as MustPass does).
+            // bounds beyond meeting the frontier, so it starts one anew after changed edges, which also forgets the
+            // learned values (implementation decision, as MustPass does).
             if (m_search.any_path)
-                key.backward.start(key.tree, key.ensure_targets(estimate));
+            {
+                if (key.restart)
+                    key.backward.start(key.tree, key.ensure_targets(estimate));
+            }
             else
             {
                 if (!key.added.empty())

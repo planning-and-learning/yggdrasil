@@ -262,8 +262,9 @@ private:
     std::vector<BoundRule> m_edges;
     std::vector<BoundRule> m_reversed;
     std::vector<Delta> m_deltas;
-    /// The tables whose changes the delta rules cannot express.
+    /// The tables whose changes the delta rules cannot express, and those that the recursive rules read.
     std::vector<size_t> m_opaque;
+    std::vector<size_t> m_edge_tables;
     RawArraySet<uint_t> m_goal_keys;
     std::vector<std::unique_ptr<Key>> m_keys;
     /// Per goal key, its targets as bytes, from the last run that read them.

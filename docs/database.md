@@ -853,7 +853,8 @@ indexed relations, without intermediate relations:
   If no weight of the goals' heads can be observed (no output or aggregate reads them, and no rule uses them but by
   copying them into such a head), a goal holds with any weight, and each search ends at the first path it finds,
   a valid stored one included, derives the row at weight 0 (so that it stays the same while the goal holds), skips the
-  delta rules and repair of learned values, and starts with a new backward frontier: one kept across removed edges keeps the vertices it found
+  delta rules and repair of learned values, and starts with a new backward frontier once a table its recursive rules
+  read changed (otherwise frontier and learned values still hold, dead ends included): one kept across removed edges keeps the vertices it found
   through them, so that its exhaustion, which proves a target unreachable, would come late (implementation decisions);
 - `initialize()` of an initialized evaluator compares its inputs with the rows read last and updates by the difference,
   so that what strata maintain carries over;
