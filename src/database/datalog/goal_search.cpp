@@ -1008,7 +1008,10 @@ void UnitSearch::run(CompiledProgram& program, Executor& executor, std::span<con
         {
             if (!key.added.empty())
                 key.repair.run(key.tree, key.added, oracle, estimate);
-            if (key.restart)
+            // Removed edges keep the frontier's levels lower bounds, but leave the vertices it found through them: it can
+            // then no longer be exhausted early, which proves a target unreachable. A search for any path needs no
+            // bounds beyond meeting the frontier, so it starts one anew (implementation decision, as MustPass does).
+            if (key.restart || m_search.any_path)
                 key.backward.start(key.tree, key.ensure_targets(estimate));
         }
         key.added.clear();

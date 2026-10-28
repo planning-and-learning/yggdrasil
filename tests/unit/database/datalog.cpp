@@ -975,6 +975,87 @@ TEST(DatabaseDatalog, UnitWeightedGoalReusesItsSearchesAcrossUpdates)
     }
 }
 
+// As UnitWeightedGoalReusesItsSearchesAcrossUpdates, but only whether each key reaches a target is read: the searches
+// end at the first path (any_path) and restart their backward frontiers, whose found vertices removed edges would
+// leave stale. Toggling `open` adds and removes edges, so keys switch between reaching a target and not.
+TEST(DatabaseDatalog, UnitWeightedGoalWhoseWeightIsNotReadUnderUpdates)
+{
+    // dist per key k with unit costs from k's sources over the static edges where the fluent `open` holds: the searches
+    // of n_distance, kept across updates while k's targets stay the same. Most updates change `open` alone, which adds
+    // and removes edges; some change sources or targets. Equal to the naive interpreter after every update.
+    Programs p;
+    const auto e = p.relation(100, 2, 0), source = p.relation(101, 2, 1), target = p.relation(102, 2, 2), open = p.relation(103, 1, 3);
+    const auto dist = p.weighted(0, 3), best = p.weighted(1, 2), reached = p.relation(2, 1);
+    constexpr uint_t k = 0, x = 1, y = 2, w = 3, v = 4;
+    using Operation = dl::Arithmetic::Operation;
+    const auto program = p.program({
+        p.rule(p.atom(dist, { var(k), var(x), obj(0) }), { p.atom(source, { var(k), var(x) }) }),
+        p.rule(p.atom(dist, { var(k), var(y), var(v) }),
+               { p.atom(dist, { var(k), var(x), var(w) }), p.atom(e, { var(x), var(y) }), p.atom(open, { var(y) }) },
+               {},
+               {},
+               {},
+               { dl::Arithmetic { Operation::ADD, var(w), obj(1), v } }),
+        p.rule(p.atom(best, { var(k), var(w) }), { p.atom(dist, { var(k), var(x), var(w) }), p.atom(target, { var(k), var(x) }) }),
+        p.rule(p.atom(reached, { var(k) }), { p.atom(best, { var(k), var(w) }) }),
+    });
+    std::mt19937 random(37);
+    const auto draw = [&](size_t count, size_t arity, uint_t key_range)
+    {
+        auto tuples = Tuples();
+        for (size_t i = 0; i < count; ++i)
+        {
+            auto tuple = Tuple();
+            for (size_t a = 0; a < arity; ++a)
+                tuple.push_back(static_cast<uint_t>(random() % (a == 0 && arity == 2 ? key_range : 30)));
+            tuples.insert(tuple);
+        }
+        return tuples;
+    };
+    for (size_t graph = 0; graph < 20; ++graph)
+    {
+        const auto edges = draw(70, 2, 30);
+        constexpr auto static_slots = std::array<size_t, 1> { 0 };
+        dl::Evaluator evaluator(program, std::array { reached }, static_slots);
+        auto current = std::vector<Tuples> { edges, draw(4, 2, 3), draw(4, 2, 3), draw(24, 1, 30) };
+        evaluator.initialize(std::array { borrow(relation_of(current[0], 2)),
+                                          borrow(relation_of(current[1], 2)),
+                                          borrow(relation_of(current[2], 2)),
+                                          borrow(relation_of(current[3], 1)) });
+        EXPECT_EQ(tuples_of(evaluator.get_result()), Interpreter(program, current).get(2)) << "graph " << graph;
+        for (size_t trial = 0; trial < 60; ++trial)
+        {
+            auto inputs = current;
+            // Toggle a few cells of `open`; every fifth update also redraws the sources, every seventh the targets.
+            for (size_t i = 0; i < 3; ++i)
+            {
+                const auto cell = Tuple { static_cast<uint_t>(random() % 30) };
+                if (!inputs[3].erase(cell))
+                    inputs[3].insert(cell);
+            }
+            if (trial % 5 == 4)
+                inputs[1] = draw(4, 2, 3);
+            if (trial % 7 == 6)
+                inputs[2] = draw(4, 2, 3);
+            auto added = std::vector<Relation>(), removed = std::vector<Relation>();
+            for (size_t slot = 0; slot < 4; ++slot)
+            {
+                Tuples a, r;
+                std::ranges::set_difference(inputs[slot], current[slot], std::inserter(a, a.end()));
+                std::ranges::set_difference(current[slot], inputs[slot], std::inserter(r, r.end()));
+                added.push_back(relation_of(a, slot == 3 ? 1 : 2));
+                removed.push_back(relation_of(r, slot == 3 ? 1 : 2));
+            }
+            evaluator.update(std::array { Change { borrow(added[0]), borrow(removed[0]) },
+                                          Change { borrow(added[1]), borrow(removed[1]) },
+                                          Change { borrow(added[2]), borrow(removed[2]) },
+                                          Change { borrow(added[3]), borrow(removed[3]) } });
+            EXPECT_EQ(tuples_of(evaluator.get_result()), Interpreter(program, inputs).get(2)) << "graph " << graph << ", trial " << trial;
+            current = inputs;
+        }
+    }
+}
+
 TEST(DatabaseDatalog, DeleteAndRederiveKeepsRowsWithAnotherDerivation)
 {
     // reach over the path 0 -> 1 -> ... -> 199 with a shortcut 190 -> 195. Cutting 192 -> 193 over-deletes 193, ..., 199,
