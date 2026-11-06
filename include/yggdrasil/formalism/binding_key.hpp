@@ -18,8 +18,11 @@
 #ifndef YGG_FORMALISM_BINDING_KEY_HPP_
 #define YGG_FORMALISM_BINDING_KEY_HPP_
 
-#include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/semantics/hash.hpp"
+
+#include "yggdrasil/core/config.hpp"
+
+#include <urd/elements/equal_to.hpp>
+#include <urd/elements/hash.hpp>
 
 namespace ygg::formalism
 {
@@ -35,7 +38,7 @@ struct BindingKeyHash
     hash_t operator()(const Key& key) const
     {
         const auto [relation, objects] = key.get_key();
-        return hash_combine(relation, hash_range(objects));
+        return urd::hash_combine(relation, urd::hash_range(objects));
     }
 };
 
@@ -49,7 +52,7 @@ struct BindingKeyEqualTo
     {
         const auto [lhs_relation, lhs_objects] = lhs.get_key();
         const auto [rhs_relation, rhs_objects] = rhs.get_key();
-        return EqualTo<> {}(lhs_relation, rhs_relation) && equal_range(lhs_objects, rhs_objects);
+        return urd::EqualTo<> {}(lhs_relation, rhs_relation) && urd::equal_range(lhs_objects, rhs_objects);
     }
 };
 

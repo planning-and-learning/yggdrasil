@@ -11,10 +11,10 @@
 #define YGG_DATABASE_SEMANTICS_OPERATIONS_HPP_
 
 #include "yggdrasil/database/semantics/join_index.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/plans.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/semantics/hash.hpp"
 
 #include <algorithm>
 #include <array>
@@ -27,6 +27,8 @@
 #include <span>
 #include <stdexcept>
 #include <type_traits>
+#include <urd/elements/equal_to.hpp>
+#include <urd/elements/hash.hpp>
 #include <utility>
 #include <vector>
 
@@ -34,23 +36,30 @@ namespace ygg::database
 {
 
 /// Scratch storage for sequential relational operations. Keep one workspace
-/// per evaluator (or borrow one from UniqueObjectPool); never share it between
+/// per evaluator (or borrow one from a urd slots Store); never share it between
 /// concurrent or reentrant calls. All buffers retain their capacity. Inputs
 /// and their borrowed schemas must not refer to these scratch buffers.
 struct Workspace
 {
-    std::vector<ColumnLayout> columns;
-    std::vector<ColumnSlice> lhs_keys;
-    std::vector<ColumnSlice> rhs_keys;
-    std::vector<ColumnSlice> rhs_payload;
-    std::vector<std::byte> row;
-    UnorderedMultiMap<hash_t, size_t> join_index;
+    urd::Store<urd::sequence<ColumnLayout>> columns;
+    urd::Store<urd::sequence<ColumnSlice>> lhs_keys;
+    urd::Store<urd::sequence<ColumnSlice>> rhs_keys;
+    urd::Store<urd::sequence<ColumnSlice>> rhs_payload;
+    urd::Store<urd::sequence<std::byte>> row;
+    urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains> join_index;
+
+    Workspace() = default;
+    ~Workspace() = default;
+    Workspace(const Workspace&) = delete;  ///< Scratch storage is moved, never copied.
+    Workspace& operator=(const Workspace&) = delete;
+    Workspace(Workspace&&) = default;
+    Workspace& operator=(Workspace&&) = default;
 
     /// Retained scratch storage.
     [[nodiscard]] size_t memory_usage() const noexcept
     {
         return columns.capacity() * sizeof(ColumnLayout) + (lhs_keys.capacity() + rhs_keys.capacity() + rhs_payload.capacity()) * sizeof(ColumnSlice)
-               + row.capacity() + join_index.memory_usage();
+               + row.capacity() + urd::memory_usage(join_index);
     }
 };
 
@@ -67,28 +76,28 @@ struct JoinReuse
 /// Output overloads replace rows, retain capacity, and require a matching
 /// schema and storage distinct from every input (including renamed views).
 template<RelationViewConcept V>
-void project(const V& input, const ProjectionPlan& plan, Builder<Relation>& out, Workspace& workspace);
+void project(const V& input, const ProjectionPlan& plan, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out, Workspace& workspace);
+void project(const V& input, std::span<const urd::index<Column>> columns, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out, Workspace& workspace);
+void project(const V& input, std::initializer_list<urd::index<Column>> columns, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out);
+void project(const V& input, std::span<const urd::index<Column>> columns, urd::builder<Relation>& out);
 
 template<RelationViewConcept V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out);
+void project(const V& input, std::initializer_list<urd::index<Column>> columns, urd::builder<Relation>& out);
 
 template<RelationViewConcept V>
-Builder<Relation> project(const V& input, Builder<Columns> columns);
+urd::builder<Relation> project(const V& input, urd::builder<Columns> columns);
 
 template<RelationViewConcept V>
-Builder<Relation> project(const V& input, std::span<const Index<Column>> columns);
+urd::builder<Relation> project(const V& input, std::span<const urd::index<Column>> columns);
 
 template<RelationViewConcept V>
-Builder<Relation> project(const V& input, std::initializer_list<Index<Column>> columns);
+urd::builder<Relation> project(const V& input, std::initializer_list<urd::index<Column>> columns);
 
 /// Replace ordered columns and rows, invalidating the destination's canonical
 /// index. Self-assignment is supported. Storage identity is preserved, and
@@ -98,88 +107,88 @@ Builder<Relation> project(const V& input, std::initializer_list<Index<Column>> c
 /// Borrowed destination rows and schema spans are invalidated. An insertion
 /// failure may leave partial output. Schema namespaces belong to publication.
 template<RelationViewConcept V>
-Builder<Relation>& assign(Builder<Relation>& destination, const V& source);
+urd::builder<Relation>& assign(urd::builder<Relation>& destination, const V& source);
 
 /// The predicate receives a typed row borrowing the input and its schema. It must not mutate
 /// inputs or output. A throwing predicate can leave a partial output result.
 template<RelationViewConcept V, typename Predicate>
     requires std::predicate<Predicate&, Row>
-void select(const V& input, Predicate predicate, Builder<Relation>& out);
+void select(const V& input, Predicate predicate, urd::builder<Relation>& out);
 
 template<RelationViewConcept V, typename Predicate>
     requires std::predicate<Predicate&, Row>
-Builder<Relation> select(const V& input, Predicate predicate);
+urd::builder<Relation> select(const V& input, Predicate predicate);
 
 template<RelationViewConcept V>
-void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation>& out);
+void select_equal_columns(const V& input, urd::index<Column> lhs, urd::index<Column> rhs, urd::builder<Relation>& out);
 
 template<RelationViewConcept V>
-Builder<Relation> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs);
+urd::builder<Relation> select_equal_columns(const V& input, urd::index<Column> lhs, urd::index<Column> rhs);
 
 template<RelationViewConcept V, ByteCodable T>
-void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation>& out);
+void select_equal_value(const V& input, urd::index<Column> column, const T& value, urd::builder<Relation>& out);
 
 template<RelationViewConcept V, ByteCodable T>
-Builder<Relation> select_equal_value(const V& input, Index<Column> column, const T& value);
+urd::builder<Relation> select_equal_value(const V& input, urd::index<Column> column, const T& value);
 
 /// Natural join: match common labels and return lhs columns followed by
 /// rhs-only columns. Disjoint schemas produce the Cartesian product.
 /// Hashes the smaller input, retaining only hashes and row indices in the
 /// transient index. Collisions are resolved by comparing the actual values.
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace);
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, urd::builder<Relation>& out, Workspace& workspace);
 
 /// Reuses an index on either input instead of rebuilding the smaller side.
 /// The index must match that input's storage and the plan's ordered field slices.
 /// Result row order is unspecified, as for the other relational operations.
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& index, Builder<Relation>& out, Workspace& workspace);
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& index, urd::builder<Relation>& out, Workspace& workspace);
 
 /// Reuses the one marked input, or the smaller input when both are marked.
 /// With neither marked, uses an ordinary transient index. Empty inputs and
 /// Cartesian products do not create cached indexes.
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cache, JoinReuse reuse, Builder<Relation>& out, Workspace& workspace);
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cache, JoinReuse reuse, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, Builder<Relation>& out, Workspace& workspace);
+void join(const L& lhs, const R& rhs, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, Builder<Relation>& out);
+void join(const L& lhs, const R& rhs, urd::builder<Relation>& out);
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> join(const L& lhs, const R& rhs);
+urd::builder<Relation> join(const L& lhs, const R& rhs);
 
 /// Union and difference require identical ordered schemas. Project one input
 /// first to align a differently ordered schema. The trailing underscore avoids
 /// the C++ keyword union.
 template<RelationViewConcept L, RelationViewConcept R>
-void union_(const L& lhs, const R& rhs, Builder<Relation>& out);
+void union_(const L& lhs, const R& rhs, urd::builder<Relation>& out);
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> union_(const L& lhs, const R& rhs);
+urd::builder<Relation> union_(const L& lhs, const R& rhs);
 
 template<RelationViewConcept L, RelationViewConcept R>
-void difference(const L& lhs, const R& rhs, Builder<Relation>& out);
+void difference(const L& lhs, const R& rhs, urd::builder<Relation>& out);
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> difference(const L& lhs, const R& rhs);
+urd::builder<Relation> difference(const L& lhs, const R& rhs);
 
 /// Semijoin lhs ⋉ rhs: the lhs rows with a match in rhs on the plan's keys. Without shared columns, lhs if rhs is
 /// nonempty. Hashes rhs.
 template<RelationViewConcept L, RelationViewConcept R>
-void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace);
+void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> semijoin(const L& lhs, const R& rhs);
+urd::builder<Relation> semijoin(const L& lhs, const R& rhs);
 
 /// Antijoin lhs ▷ rhs: the lhs rows without a match in rhs on the plan's keys. Without shared columns, lhs if rhs is
 /// empty. Hashes rhs.
 template<RelationViewConcept L, RelationViewConcept R>
-void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace);
+void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, urd::builder<Relation>& out, Workspace& workspace);
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> antijoin(const L& lhs, const R& rhs);
+urd::builder<Relation> antijoin(const L& lhs, const R& rhs);
 
 }  // namespace ygg::database
 
@@ -189,9 +198,9 @@ namespace ygg::database
 namespace detail
 {
 /// Copy canonical fields verbatim; plans resolve their byte slices before evaluation.
-void append_fields(std::vector<std::byte>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields);
+void append_fields(urd::Store<urd::sequence<std::byte>>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields);
 
-void prepare_output(Builder<Relation>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs);
+void prepare_output(urd::builder<Relation>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs);
 
 template<RelationViewConcept L, RelationViewConcept R>
 void require_same_columns(const L& lhs, const R& rhs)
@@ -206,7 +215,7 @@ void require_plan_columns(std::span<const ColumnLayout> actual, std::span<const 
 namespace detail
 {
 template<RelationViewConcept V>
-void project_rows(const V& input, std::span<const ColumnLayout> columns, std::span<const ColumnSlice> positions, Builder<Relation>& out, Workspace& workspace)
+void project_rows(const V& input, std::span<const ColumnLayout> columns, std::span<const ColumnSlice> positions, urd::builder<Relation>& out, Workspace& workspace)
 {
     detail::prepare_output(out, columns, { input.get_storage_address() });
 
@@ -231,38 +240,38 @@ void project_rows(const V& input, std::span<const ColumnLayout> columns, std::sp
 }  // namespace detail
 
 template<RelationViewConcept V>
-void project(const V& input, const ProjectionPlan& plan, Builder<Relation>& out, Workspace& workspace)
+void project(const V& input, const ProjectionPlan& plan, urd::builder<Relation>& out, Workspace& workspace)
 {
     detail::require_plan_columns(input.columns().span(), plan.input_columns().span());
     detail::project_rows(input, plan.output_columns().span(), plan.positions(), out, workspace);
 }
 
 template<RelationViewConcept V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out, Workspace& workspace)
+void project(const V& input, std::span<const urd::index<Column>> columns, urd::builder<Relation>& out, Workspace& workspace)
 {
     detail::projection_positions(input.columns().span(), columns, workspace.columns, workspace.lhs_keys);
     detail::project_rows(input, workspace.columns, workspace.lhs_keys, out, workspace);
 }
 
 template<RelationViewConcept V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out, Workspace& workspace)
-{ project(input, std::span<const Index<Column>>(columns), out, workspace); }
+void project(const V& input, std::initializer_list<urd::index<Column>> columns, urd::builder<Relation>& out, Workspace& workspace)
+{ project(input, std::span<const urd::index<Column>>(columns), out, workspace); }
 
 template<RelationViewConcept V>
-void project(const V& input, std::span<const Index<Column>> columns, Builder<Relation>& out)
+void project(const V& input, std::span<const urd::index<Column>> columns, urd::builder<Relation>& out)
 {
     auto workspace = Workspace();
     project(input, columns, out, workspace);
 }
 
 template<RelationViewConcept V>
-void project(const V& input, std::initializer_list<Index<Column>> columns, Builder<Relation>& out)
-{ project(input, std::span<const Index<Column>>(columns), out); }
+void project(const V& input, std::initializer_list<urd::index<Column>> columns, urd::builder<Relation>& out)
+{ project(input, std::span<const urd::index<Column>>(columns), out); }
 
 template<RelationViewConcept V>
-Builder<Relation> project(const V& input, Builder<Columns> columns)
+urd::builder<Relation> project(const V& input, urd::builder<Columns> columns)
 {
-    auto out = Builder<Relation>(std::move(columns));
+    auto out = urd::builder<Relation>(std::move(columns));
     auto workspace = Workspace();
     const auto input_columns = input.columns().span();
     for (const auto& column : out.columns())
@@ -277,22 +286,22 @@ Builder<Relation> project(const V& input, Builder<Columns> columns)
 }
 
 template<RelationViewConcept V>
-Builder<Relation> project(const V& input, std::span<const Index<Column>> columns)
+urd::builder<Relation> project(const V& input, std::span<const urd::index<Column>> columns)
 {
     auto workspace = Workspace();
     detail::projection_positions(input.columns().span(), columns, workspace.columns, workspace.lhs_keys);
-    auto out = Builder<Relation>(workspace.columns);
+    auto out = urd::builder<Relation>(workspace.columns);
     detail::project_rows(input, workspace.columns, workspace.lhs_keys, out, workspace);
     return out;
 }
 
 template<RelationViewConcept V>
-Builder<Relation> project(const V& input, std::initializer_list<Index<Column>> columns)
-{ return project(input, std::span<const Index<Column>>(columns)); }
+urd::builder<Relation> project(const V& input, std::initializer_list<urd::index<Column>> columns)
+{ return project(input, std::span<const urd::index<Column>>(columns)); }
 
 template<RelationViewConcept V, typename Predicate>
     requires std::predicate<Predicate&, Row>
-void select(const V& input, Predicate predicate, Builder<Relation>& out)
+void select(const V& input, Predicate predicate, urd::builder<Relation>& out)
 {
     detail::prepare_output(out, input.columns().span(), { input.get_storage_address() });
     for (size_t i = 0; i < input.size(); ++i)
@@ -301,7 +310,7 @@ void select(const V& input, Predicate predicate, Builder<Relation>& out)
 }
 
 template<RelationViewConcept V>
-Builder<Relation>& assign(Builder<Relation>& destination, const V& source)
+urd::builder<Relation>& assign(urd::builder<Relation>& destination, const V& source)
 {
     if (destination.get_storage_address() == source.get_storage_address())
     {
@@ -316,15 +325,15 @@ Builder<Relation>& assign(Builder<Relation>& destination, const V& source)
 
 template<RelationViewConcept V, typename Predicate>
     requires std::predicate<Predicate&, Row>
-Builder<Relation> select(const V& input, Predicate predicate)
+urd::builder<Relation> select(const V& input, Predicate predicate)
 {
-    auto out = Builder<Relation>(input.columns().span());
+    auto out = urd::builder<Relation>(input.columns().span());
     select(input, std::move(predicate), out);
     return out;
 }
 
 template<RelationViewConcept V>
-void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, Builder<Relation>& out)
+void select_equal_columns(const V& input, urd::index<Column> lhs, urd::index<Column> rhs, urd::builder<Relation>& out)
 {
     const auto& left = input.columns().span()[input.column_index(lhs)];
     const auto& right = input.columns().span()[input.column_index(rhs)];
@@ -334,15 +343,15 @@ void select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs, 
 }
 
 template<RelationViewConcept V>
-Builder<Relation> select_equal_columns(const V& input, Index<Column> lhs, Index<Column> rhs)
+urd::builder<Relation> select_equal_columns(const V& input, urd::index<Column> lhs, urd::index<Column> rhs)
 {
-    auto out = Builder<Relation>(input.columns().span());
+    auto out = urd::builder<Relation>(input.columns().span());
     select_equal_columns(input, lhs, rhs, out);
     return out;
 }
 
 template<RelationViewConcept V, ByteCodable T>
-void select_equal_value(const V& input, Index<Column> column, const T& value, Builder<Relation>& out)
+void select_equal_value(const V& input, urd::index<Column> column, const T& value, urd::builder<Relation>& out)
 {
     const auto& field = input.columns().span()[input.column_index(column)];
     if (field.type != type_id<T>)
@@ -353,9 +362,9 @@ void select_equal_value(const V& input, Index<Column> column, const T& value, Bu
 }
 
 template<RelationViewConcept V, ByteCodable T>
-Builder<Relation> select_equal_value(const V& input, Index<Column> column, const T& value)
+urd::builder<Relation> select_equal_value(const V& input, urd::index<Column> column, const T& value)
 {
-    auto out = Builder<Relation>(input.columns().span());
+    auto out = urd::builder<Relation>(input.columns().span());
     select_equal_value(input, column, value, out);
     return out;
 }
@@ -364,7 +373,7 @@ namespace detail
 {
 /// Appends joined rows. Lookup values are row positions in the selected build
 /// input for a key hash; actual key equality resolves hash collisions.
-template<RelationViewConcept L, RelationViewConcept R, std::unsigned_integral Position>
+template<RelationViewConcept L, RelationViewConcept R, typename Index>
 void join_rows(const L& lhs,
                const R& rhs,
                std::span<const ColumnLayout> columns,
@@ -372,8 +381,8 @@ void join_rows(const L& lhs,
                std::span<const ColumnSlice> rhs_keys,
                std::span<const ColumnSlice> rhs_payload,
                bool build_left,
-               const UnorderedMultiMap<hash_t, Position>& index,
-               Builder<Relation>& out,
+               const Index& index,  ///< urd::Store<urd::map<hash_t, position>, urd::multi, urd::retains>
+               urd::builder<Relation>& out,
                Workspace& workspace)
 {
     if (lhs.empty() || rhs.empty())
@@ -428,7 +437,7 @@ void join_rows(const L& lhs,
                std::span<const ColumnSlice> lhs_keys,
                std::span<const ColumnSlice> rhs_keys,
                std::span<const ColumnSlice> rhs_payload,
-               Builder<Relation>& out,
+               urd::builder<Relation>& out,
                Workspace& workspace)
 {
     prepare_output(out, columns, { lhs.get_storage_address(), rhs.get_storage_address() });
@@ -446,7 +455,7 @@ void join_rows(const L& lhs,
 }  // namespace detail
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& index, Builder<Relation>& out, Workspace& workspace)
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& index, urd::builder<Relation>& out, Workspace& workspace)
 {
     detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
@@ -458,7 +467,7 @@ void join(const L& lhs, const R& rhs, const JoinPlan& plan, const JoinIndex& ind
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, urd::builder<Relation>& out, Workspace& workspace)
 {
     detail::require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     detail::require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
@@ -466,7 +475,7 @@ void join(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& o
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cache, JoinReuse reuse, Builder<Relation>& out, Workspace& workspace)
+void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cache, JoinReuse reuse, urd::builder<Relation>& out, Workspace& workspace)
 {
     if (!reuse.lhs && !reuse.rhs)
         return join(lhs, rhs, plan, out, workspace);
@@ -487,31 +496,31 @@ void join(const L& lhs, const R& rhs, const JoinPlan& plan, JoinIndexCache& cach
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, Builder<Relation>& out, Workspace& workspace)
+void join(const L& lhs, const R& rhs, urd::builder<Relation>& out, Workspace& workspace)
 {
     detail::join_positions(lhs.columns().span(), rhs.columns().span(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
     detail::join_rows(lhs, rhs, workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload, out, workspace);
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void join(const L& lhs, const R& rhs, Builder<Relation>& out)
+void join(const L& lhs, const R& rhs, urd::builder<Relation>& out)
 {
     auto workspace = Workspace();
     join(lhs, rhs, out, workspace);
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> join(const L& lhs, const R& rhs)
+urd::builder<Relation> join(const L& lhs, const R& rhs)
 {
     auto workspace = Workspace();
     detail::join_positions(lhs.columns().span(), rhs.columns().span(), workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload);
-    auto out = Builder<Relation>(workspace.columns);
+    auto out = urd::builder<Relation>(workspace.columns);
     detail::join_rows(lhs, rhs, workspace.columns, workspace.lhs_keys, workspace.rhs_keys, workspace.rhs_payload, out, workspace);
     return out;
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void union_(const L& lhs, const R& rhs, Builder<Relation>& out)
+void union_(const L& lhs, const R& rhs, urd::builder<Relation>& out)
 {
     detail::require_same_columns(lhs, rhs);
     detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
@@ -522,15 +531,15 @@ void union_(const L& lhs, const R& rhs, Builder<Relation>& out)
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> union_(const L& lhs, const R& rhs)
+urd::builder<Relation> union_(const L& lhs, const R& rhs)
 {
-    auto out = Builder<Relation>(lhs.columns().span());
+    auto out = urd::builder<Relation>(lhs.columns().span());
     union_(lhs, rhs, out);
     return out;
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void difference(const L& lhs, const R& rhs, Builder<Relation>& out)
+void difference(const L& lhs, const R& rhs, urd::builder<Relation>& out)
 {
     detail::require_same_columns(lhs, rhs);
     detail::prepare_output(out, lhs.columns().span(), { lhs.get_storage_address(), rhs.get_storage_address() });
@@ -540,9 +549,9 @@ void difference(const L& lhs, const R& rhs, Builder<Relation>& out)
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> difference(const L& lhs, const R& rhs)
+urd::builder<Relation> difference(const L& lhs, const R& rhs)
 {
-    auto out = Builder<Relation>(lhs.columns().span());
+    auto out = urd::builder<Relation>(lhs.columns().span());
     difference(lhs, rhs, out);
     return out;
 }
@@ -551,7 +560,7 @@ namespace detail
 {
 /// Keeps the lhs rows whose match in rhs on the plan's keys exists (`matching`) or does not.
 template<RelationViewConcept L, RelationViewConcept R>
-void filter_matches(const L& lhs, const R& rhs, const JoinPlan& plan, bool matching, Builder<Relation>& out, Workspace& workspace)
+void filter_matches(const L& lhs, const R& rhs, const JoinPlan& plan, bool matching, urd::builder<Relation>& out, Workspace& workspace)
 {
     require_plan_columns(lhs.columns().span(), plan.lhs_columns().span());
     require_plan_columns(rhs.columns().span(), plan.rhs_columns().span());
@@ -576,27 +585,27 @@ void filter_matches(const L& lhs, const R& rhs, const JoinPlan& plan, bool match
 }  // namespace detail
 
 template<RelationViewConcept L, RelationViewConcept R>
-void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
+void semijoin(const L& lhs, const R& rhs, const JoinPlan& plan, urd::builder<Relation>& out, Workspace& workspace)
 { detail::filter_matches(lhs, rhs, plan, true, out, workspace); }
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> semijoin(const L& lhs, const R& rhs)
+urd::builder<Relation> semijoin(const L& lhs, const R& rhs)
 {
     auto workspace = Workspace();
-    auto out = Builder<Relation>(lhs.columns().span());
+    auto out = urd::builder<Relation>(lhs.columns().span());
     semijoin(lhs, rhs, JoinPlan(lhs.columns().span(), rhs.columns().span()), out, workspace);
     return out;
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
-void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, Builder<Relation>& out, Workspace& workspace)
+void antijoin(const L& lhs, const R& rhs, const JoinPlan& plan, urd::builder<Relation>& out, Workspace& workspace)
 { detail::filter_matches(lhs, rhs, plan, false, out, workspace); }
 
 template<RelationViewConcept L, RelationViewConcept R>
-Builder<Relation> antijoin(const L& lhs, const R& rhs)
+urd::builder<Relation> antijoin(const L& lhs, const R& rhs)
 {
     auto workspace = Workspace();
-    auto out = Builder<Relation>(lhs.columns().span());
+    auto out = urd::builder<Relation>(lhs.columns().span());
     antijoin(lhs, rhs, JoinPlan(lhs.columns().span(), rhs.columns().span()), out, workspace);
     return out;
 }

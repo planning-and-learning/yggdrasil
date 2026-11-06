@@ -1,7 +1,9 @@
 #ifndef YGG_PYTHON_SERIALIZATION_HPP_
 #define YGG_PYTHON_SERIALIZATION_HPP_
 
-#include "yggdrasil/core/type_list.hpp"
+#include <boost/mp11.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/serialization/dictionaries.hpp"
 
 #include <boost/json.hpp>
@@ -41,13 +43,13 @@ void bind_fields()
                                                         nanobind::arg("qualname") = nanobind::cast<std::string>(native_type.attr("__qualname__")) + ".Fields");
 }
 
-inline std::optional<std::vector<std::string>> selected_fields(nanobind::handle native_type, nanobind::handle fields)
+inline std::optional<urd::Store<urd::sequence<std::string>>> selected_fields(nanobind::handle native_type, nanobind::handle fields)
 {
     if (fields.is_none())
         return std::nullopt;
     if (nanobind::isinstance<nanobind::str>(fields))
         throw nanobind::type_error("fields must be a sequence, not a string");
-    auto selected = std::vector<std::string> {};
+    auto selected = urd::Store<urd::sequence<std::string>> {};
     for (const auto field : nanobind::iter(fields))
     {
         if (nanobind::isinstance<nanobind::str>(field))
@@ -176,7 +178,7 @@ void register_table(serialization::Dictionaries& dictionaries,
                     const nanobind::type_object& native_type,
                     const std::string& name,
                     const std::string& prefix,
-                    TypeList<Registered...>,
+                    boost::mp11::mp_list<Registered...>,
                     nanobind::object fields = nanobind::none(),
                     nanobind::object project = nanobind::none())
 {
@@ -213,7 +215,7 @@ void register_table(serialization::Dictionaries& dictionaries,
 }
 
 template<typename... Ts>
-nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::handle value, TypeList<Ts...>)
+nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::handle value, boost::mp11::mp_list<Ts...>)
 {
     nanobind::object result;
     const auto serialize_as = [&]<typename T>()
@@ -229,7 +231,7 @@ nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::
 }
 
 template<typename... Ts>
-nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, TypeList<Ts...>)
+nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, boost::mp11::mp_list<Ts...>)
 {
     nanobind::object result;
     const auto table_of = [&]<typename T>()
@@ -284,12 +286,12 @@ void bind_registration(nanobind::module_& module)
            const std::string& name,
            const std::string& prefix,
            nb::object fields,
-           nb::object project) { register_table(dictionaries, native_type, name, prefix, TypeList<T> {}, fields, project); },
+           nb::object project) { register_table(dictionaries, native_type, name, prefix, boost::mp11::mp_list<T> {}, fields, project); },
         registration_signature(nb::type<T>()));
 }
 
 template<typename... Registered>
-void bind_registration_overloads(nanobind::module_& module, TypeList<Registered...>)
+void bind_registration_overloads(nanobind::module_& module, boost::mp11::mp_list<Registered...>)
 { (bind_registration<Registered>(module), ...); }
 
 template<typename T>
@@ -308,7 +310,7 @@ void bind_serialize(nanobind::module_& module)
 }
 
 template<typename... Serialized>
-void bind_serialize(nanobind::module_& module, TypeList<Serialized...>)
+void bind_serialize(nanobind::module_& module, boost::mp11::mp_list<Serialized...>)
 { (bind_serialize<Serialized>(module), ...); }
 
 template<typename T>
@@ -320,23 +322,23 @@ void bind_table(nanobind::module_& module)
 
     module.def(
         "table",
-        [](Dictionaries& dictionaries, nb::type_object_t<T> native_type) { return table(dictionaries, native_type, TypeList<T> {}); },
+        [](Dictionaries& dictionaries, nb::type_object_t<T> native_type) { return table(dictionaries, native_type, boost::mp11::mp_list<T> {}); },
         "dictionaries"_a,
         "native_type"_a);
 }
 
 template<typename... Registered>
-void bind_table(nanobind::module_& module, TypeList<Registered...>)
+void bind_table(nanobind::module_& module, boost::mp11::mp_list<Registered...>)
 { (bind_table<Registered>(module), ...); }
 
 template<typename... Registered, typename... Serialized, typename... Projected>
-void bind_serialization(nanobind::module_& module, TypeList<Registered...>, TypeList<Serialized...>, TypeList<Projected...>)
+void bind_serialization(nanobind::module_& module, boost::mp11::mp_list<Registered...>, boost::mp11::mp_list<Serialized...>, boost::mp11::mp_list<Projected...>)
 {
     (bind_fields<Serialized>(), ...);
     (bind_native_serializer<Projected>(), ...);
-    bind_registration_overloads(module, TypeList<Registered...> {});
-    bind_serialize(module, TypeList<Serialized...> {});
-    bind_table(module, TypeList<Registered...> {});
+    bind_registration_overloads(module, boost::mp11::mp_list<Registered...> {});
+    bind_serialize(module, boost::mp11::mp_list<Serialized...> {});
+    bind_table(module, boost::mp11::mp_list<Registered...> {});
 }
 
 }  // namespace ygg::python

@@ -6,8 +6,11 @@
 #ifndef YGG_DATABASE_SEMANTICS_MUST_PASS_HPP_
 #define YGG_DATABASE_SEMANTICS_MUST_PASS_HPP_
 
-#include "yggdrasil/containers/raw_array_set.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
 #include "yggdrasil/database/semantics/must_pass_plan.hpp"
@@ -83,13 +86,13 @@ public:
         m_plan(plan),
         m_probe_positions(plan.probe_positions()),
         m_edges(bound::QueryEvaluator(checked(edges, plan), static_slots), plan.edge_columns().span(), plan.keys(), plan.arity()),
-        m_keys(std::max<size_t>(plan.key_size(), 1)),
-        m_probes(plan.probe_size()),
-        m_starts(plan.vertex_size()),
-        m_ends(plan.vertex_size()),
-        m_tree(plan.vertex_size()),
-        m_targets(plan.vertex_size()),
-        m_search(plan.vertex_size()),
+        m_keys(),
+        m_probes(),
+        m_starts(),
+        m_ends(),
+        m_tree(),
+        m_targets(),
+        m_search(),
         m_estimated(plan.key_size() + plan.vertex_size())
     {
     }
@@ -100,7 +103,7 @@ public:
     /// Appends to `out`, which has the plan's output columns, the must-pass probe objects of every key of the sources and
     /// targets over the edges of the inputs: input(slot) returns slot's relation view.
     template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T, RelationViewConcept P>
-    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, Builder<Relation>& out, H& heuristic)
+    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, urd::builder<Relation>& out, H& heuristic)
     {
         m_heuristic = &heuristic;
         detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
@@ -121,7 +124,7 @@ public:
 
     template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T, RelationViewConcept P>
         requires std::default_initializable<H>
-    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, Builder<Relation>& out)
+    void must_pass(const Input& input, const S& sources, const T& targets, const P& probes, urd::builder<Relation>& out)
     {
         auto heuristic = H {};
         must_pass(input, sources, targets, probes, out, heuristic);
@@ -137,7 +140,7 @@ private:
         std::span<const uint_t> ids;
 
         [[nodiscard]] size_t size() const noexcept { return ids.size(); }
-        [[nodiscard]] std::span<const std::byte> row(size_t i) const { return (*set)[ids[i]]; }
+        [[nodiscard]] std::span<const std::byte> row(size_t i) const { return vertex_at(*set, ids[i]); }
     };
 
     using Edges = detail::EdgeQuery<bound::QueryEvaluator>;
@@ -226,15 +229,15 @@ private:
                 m_key_sources[0].push_back(r);
                 continue;
             }
-            const auto key = m_keys.find(key_of(sources.row(r)));
-            YGG_ASSUME(key.has_value());  // every source's key was inserted above
+            const auto key = vertex_id(m_keys, key_of(sources.row(r)));
+            URD_ASSUME(key.has_value());  // every source's key was inserted above
             m_key_sources[*key].push_back(r);
         }
         for (size_t r = 0; r < targets.size(); ++r)
         {
             if (!keyed)
                 m_key_targets[0].push_back(r);
-            else if (const auto key = m_keys.find(key_of(targets.row(r))))  // A key without sources has no paths.
+            else if (const auto key = vertex_id(m_keys, key_of(targets.row(r))))  // A key without sources has no paths.
                 m_key_targets[*key].push_back(r);
         }
     }
@@ -244,12 +247,12 @@ private:
     void probes_of(std::span<const std::byte> vertex, const OnProbe& on_probe) const
     {
         for (const auto position : m_probe_positions)
-            if (const auto probe = m_probes.find(vertex.subspan(position, m_plan.probe_size())))
+            if (const auto probe = vertex_id(m_probes, vertex.subspan(position, m_plan.probe_size())))
                 on_probe(static_cast<uint_t>(*probe));
     }
     [[nodiscard]] bool contains(std::span<const std::byte> vertex, uint_t probe) const
     {
-        const auto object = m_probes[probe];
+        const auto object = vertex_at(m_probes, probe);
         return std::ranges::any_of(m_probe_positions,
                                    [&](size_t position) { return std::ranges::equal(vertex.subspan(position, m_plan.probe_size()), object); });
     }
@@ -271,13 +274,13 @@ private:
         m_excluded = excluded;
         if constexpr (requires(H& h, std::span<const std::byte> bytes) { h.exclude(bytes, bytes); })
         {
-            m_heuristic->exclude(m_key, excluded == none ? std::span<const std::byte>() : std::span<const std::byte>(m_probes[excluded]));
+            m_heuristic->exclude(m_key, excluded == none ? std::span<const std::byte>() : std::span<const std::byte>(vertex_at(m_probes, excluded)));
         }
-        const auto keep_allowed = [&](const VertexSet& vertices, std::vector<uint_t>& out)
+        const auto keep_allowed = [&](const VertexSet& vertices, urd::Store<urd::sequence<uint_t>>& out)
         {
             out.clear();
             for (uint_t id = 0; id < vertices.size(); ++id)
-                if (allowed(vertices[id]))
+                if (allowed(vertex_at(vertices, id)))
                     out.push_back(id);
         };
         keep_allowed(m_starts, m_allowed_starts);
@@ -296,7 +299,7 @@ private:
     }
 
     template<RelationViewConcept S, RelationViewConcept T>
-    void verify(const S& sources, const T& targets, uint_t key, Builder<Relation>& out)
+    void verify(const S& sources, const T& targets, uint_t key, urd::builder<Relation>& out)
     {
         const auto key_bytes = key_of(sources.row(m_key_sources[key].front()));
         m_key = key_bytes;
@@ -325,24 +328,24 @@ private:
         const auto in_all = [&](const VertexSet& vertices, uint_t probe)
         {
             return std::ranges::all_of(std::views::iota(static_cast<uint_t>(0), static_cast<uint_t>(vertices.size())),
-                                       [&](uint_t id) { return contains(vertices[id], probe); });
+                                       [&](uint_t id) { return contains(vertex_at(vertices, id), probe); });
         };
         for (const auto probe : m_candidates)
             // An object in every source or every target is passed trivially, as initial facts and goals are landmarks.
             if (in_all(m_starts, probe) || in_all(m_ends, probe) || (++m_statistics.removals, !search(probe, [](std::span<const std::byte>) {})))
             {
-                std::ranges::copy(m_probes[probe], m_row.begin() + static_cast<std::ptrdiff_t>(m_plan.key_size()));
+                std::ranges::copy(vertex_at(m_probes, probe), m_row.begin() + static_cast<std::ptrdiff_t>(m_plan.key_size()));
                 out.insert(std::span<const std::byte>(m_row));
             }
     }
 
     MustPassPlan m_plan;
-    std::vector<size_t> m_probe_positions;
+    urd::Store<urd::sequence<size_t>> m_probe_positions;
     Edges m_edges;
-    RawArraySet<std::byte> m_keys;    ///< Interned key bytes; unused without key columns.
-    RawArraySet<std::byte> m_probes;  ///< Interned probe objects.
-    std::vector<std::vector<size_t>> m_key_sources;
-    std::vector<std::vector<size_t>> m_key_targets;
+    VertexSet m_keys;    ///< Interned key bytes; unused without key columns.
+    VertexSet m_probes;  ///< Interned probe objects.
+    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>>> m_key_sources;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>>> m_key_targets;
     // The current key.
     std::span<const std::byte> m_key;  ///< Borrowed from the sources during must_pass().
     VertexSet m_starts;
@@ -350,15 +353,15 @@ private:
     // Searches.
     H* m_heuristic = nullptr;
     uint_t m_excluded = none;  ///< The probe object whose vertices the current search avoids, or none.
-    std::vector<uint_t> m_allowed_starts;
-    std::vector<uint_t> m_allowed_ends;
+    urd::Store<urd::sequence<uint_t>> m_allowed_starts;
+    urd::Store<urd::sequence<uint_t>> m_allowed_ends;
     SearchTree m_tree;
     BackwardFrontier m_frontier;
     detail::TargetSet m_targets;
     AStarStorage m_search;
-    std::vector<uint_t> m_candidates;    ///< Probe objects on the witness.
-    std::vector<std::byte> m_estimated;  ///< The key and a vertex, as given to the heuristic.
-    std::vector<std::byte> m_row;
+    urd::Store<urd::sequence<uint_t>> m_candidates;    ///< Probe objects on the witness.
+    urd::Store<urd::sequence<std::byte>> m_estimated;  ///< The key and a vertex, as given to the heuristic.
+    urd::Store<urd::sequence<std::byte>> m_row;
     MustPassStatistics m_statistics;
 };
 

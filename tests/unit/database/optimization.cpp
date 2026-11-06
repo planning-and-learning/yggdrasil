@@ -1,4 +1,6 @@
 #include "query_helpers.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <array>
 #include <cmath>
@@ -19,14 +21,14 @@
 
 namespace
 {
-using Column = ygg::Index<ygg::database::Column>;
-using PlanId = ygg::Index<ygg::database::Query<>>;
-using Relation = ygg::Builder<ygg::database::Relation>;
+using Column = urd::index<ygg::database::Column>;
+using PlanId = urd::index<ygg::database::Query<>>;
+using Relation = urd::builder<ygg::database::Relation>;
 using Delta = ygg::database::incremental::Delta;
 using Change = std::pair<ygg::database::BorrowedRelationView, ygg::database::BorrowedRelationView>;
 
 // Borrowed views use a relation repository only as their context.
-inline ygg::database::BorrowedRelationView borrow(const ygg::Builder<ygg::database::Relation>& relation)
+inline ygg::database::BorrowedRelationView borrow(const urd::builder<ygg::database::Relation>& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
     return { relation, context };
@@ -35,7 +37,7 @@ const Column w(3), x(0), y(1), z(2);
 
 auto rows(const auto& relation)
 {
-    std::vector<std::vector<std::byte>> result;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<std::byte>>>> result;
     result.reserve(relation.size());
     for (size_t i = 0; i < relation.size(); ++i)
         result.emplace_back(relation.row(i).begin(), relation.row(i).end());
@@ -56,16 +58,16 @@ size_t count(const ygg::database::QueryPlan& plan)
         result += ygg::database::is<Tag>(plan[PlanId(ygg::to_uint_t(position))]);
     return result;
 }
-std::vector<Column> labels(std::initializer_list<Column> values)
+urd::Store<urd::sequence<Column>> labels(std::initializer_list<Column> values)
 {
-    std::vector<Column> result(values);
+    urd::Store<urd::sequence<Column>> result(values);
     std::ranges::sort(result);
     return result;
 }
 
 TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
 {
-    ygg::Builder<ygg::database::Columns> columns;
+    urd::builder<ygg::database::Columns> columns;
     columns.push_back<double>(x);
     columns.push_back<bool>(y);
     Relation relation(columns.span());
@@ -80,7 +82,7 @@ TEST(DatabaseOptimization, CollectsCanonicalTypedDistinctCounts)
 
 TEST(DatabaseOptimization, AveragesStatisticsOverSamplesAndWarnsAboutAlwaysEmptyKeys)
 {
-    ygg::Builder<ygg::database::Columns> columns;
+    urd::builder<ygg::database::Columns> columns;
     columns.push_back<double>(x);
     columns.push_back<double>(y);
     Relation two(columns.span()), four(columns.span()), empty(columns.span());
@@ -160,7 +162,7 @@ TEST(DatabaseOptimization, YannakakisBoundsIntermediatesByInputTimesOutput)
     const auto plan = ygg::database::optimize(root);
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(plan), 0);
     // Evaluate every operator of the plan as its own root.
-    std::vector<ygg::database::QueryView<>> nodes;
+    urd::Store<urd::sequence<ygg::database::QueryView<>>> nodes;
     nodes.reserve(plan.node_count());
     for (size_t position = 0; position < plan.node_count(); ++position)
         nodes.push_back(plan[PlanId(ygg::to_uint_t(position))]);
@@ -212,8 +214,8 @@ TEST(DatabaseOptimization, BoundRootsKeepTheirJoinStructure)
         for (size_t slot = 0; slot < inputs.size(); ++slot)
             evaluator.bind_slot(slot, inputs[slot]);
         const auto binding = evaluator.prepare({ 0 });
-        auto bytes = std::vector<std::byte>();
-        auto result = std::vector<std::vector<std::byte>>();
+        auto bytes = urd::Store<urd::sequence<std::byte>>();
+        auto result = urd::Store<urd::sequence<urd::Store<urd::sequence<std::byte>>>>();
         evaluator.evaluate(binding,
                            ygg::database::encode_row<ygg::uint_t>(std::array { static_cast<ygg::uint_t>(1) }, bytes),
                            [&](std::span<const std::byte> row)
@@ -261,7 +263,7 @@ TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(plan), 0);
     bool found = false;
     for (size_t position = 0; position < plan.node_count(); ++position)
-        ygg::visit(
+        std::visit(
             [&]<typename Concrete>(Concrete query)
             {
                 if constexpr (std::same_as<Concrete, ygg::database::QueryView<ygg::database::QueryJoinTag>>)
@@ -269,7 +271,7 @@ TEST(DatabaseOptimization, CostBasedPlanChoosesTheSelectiveSubjoin)
                     std::set<size_t> slots;
                     for (const auto child : { query.get_lhs(), query.get_rhs() })
                         for (const auto node : ygg::database::reachable(std::span<const ygg::database::QueryView<>>(&child, 1)))
-                            ygg::visit(
+                            std::visit(
                                 [&]<typename Leaf>(Leaf leaf)
                                 {
                                     if constexpr (std::same_as<Leaf, ygg::database::QueryView<ygg::database::QueryInputTag>>)
@@ -297,9 +299,9 @@ TEST(DatabaseOptimization, CostBasedPlanUsesGenericJoinWhereJoinsGrow)
     statistics.inputs[2] = { 10000, { { z, 100 }, { x, 100 } } };
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(ygg::database::optimize(root, statistics)), 1);
     // With key-like columns no join grows, and binary joins remain.
-    for (auto& [slot, input] : statistics.inputs)
-        for (auto& [column, count] : input.distinct)
-            count = 10000;
+    for (const auto& [slot, input] : statistics.inputs)
+        for (const auto& [column, count] : input.distinct)
+            statistics.inputs.at(slot).distinct.at(column) = 10000;
     EXPECT_EQ(count<ygg::database::QueryGenericJoinTag>(ygg::database::optimize(root, statistics)), 0);
 }
 
@@ -367,11 +369,11 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
     std::mt19937 random(1597);
     for (size_t iteration = 0; iteration < 35; ++iteration)
     {
-        std::vector<decltype(rows(inputs[0]))> before;
+        urd::Store<urd::sequence<decltype(rows(inputs[0]))>> before;
         before.reserve(roots.size());
         for (size_t root = 0; root < roots.size(); ++root)
             before.push_back(rows(incremental.get_result(root)));
-        std::vector<Delta> deltas;
+        urd::Store<urd::sequence<Delta>> deltas;
         for (auto& input : inputs)
         {
             deltas.emplace_back(input.columns().span());
@@ -393,7 +395,7 @@ TEST(DatabaseOptimization, BothModesPreserveDifferencesRenamesAndExistentialVari
                     }
                 }
         }
-        std::vector<Change> changes;
+        urd::Store<urd::sequence<Change>> changes;
         changes.reserve(deltas.size());
         for (const auto& change : deltas)
             changes.emplace_back(borrow(change.added), borrow(change.removed));
@@ -424,7 +426,7 @@ TEST(DatabaseOptimization, BothModesMatchRandomRelationalExpressions)
     std::mt19937 random(12553);
     const auto labels = [](ygg::database::QueryView<> query)
     {
-        std::vector<Column> result;
+        urd::Store<urd::sequence<Column>> result;
         for (const auto& column : query.columns())
             result.push_back(column.label);
         return result;

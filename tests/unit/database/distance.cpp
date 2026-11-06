@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "yggdrasil/database/semantics/relation_repository.hpp"
 
@@ -24,9 +26,9 @@ namespace ygg::tests
 {
 namespace
 {
-using Values = TypeList<uint_t>;
-using RelationBuilder = Builder<database::Relation>;
-using ColumnIndex = Index<database::Column>;
+using Values = boost::mp11::mp_list<uint_t>;
+using RelationBuilder = urd::builder<database::Relation>;
+using ColumnIndex = urd::index<database::Column>;
 using Vertices = std::set<uint_t>;
 using Edges = std::set<std::pair<uint_t, uint_t>>;
 using Results = std::set<std::array<uint_t, 3>>;
@@ -64,8 +66,8 @@ Results reference(const Vertices& sources, const Edges& edges, const Vertices& t
     for (const auto source : sources)
         for (const auto target : targets)
         {
-            std::vector<int> distances(universe, -1);
-            std::vector<uint_t> queue { source };
+            urd::Store<urd::sequence<int>> distances(universe, -1);
+            urd::Store<urd::sequence<uint_t>> queue { source };
             distances[source] = 0;
             for (size_t head = 0; head < queue.size() && distances[target] < 0; ++head)
                 for (const auto& [from, to] : edges)
@@ -174,7 +176,7 @@ TEST(YggdrasilTests, DatabaseDistanceValidatesSchemasBeforeClearingOutput)
     EXPECT_THROW((database::DistancePlan(sources.columns().span(), sources.columns().span(), targets.columns().span(), ColumnIndex(3))), std::invalid_argument);
     EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), edges.columns().span(), ColumnIndex(3))), std::invalid_argument);
     EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), ColumnIndex(2))), std::invalid_argument);
-    Builder<database::Columns> wrong_type;
+    urd::builder<database::Columns> wrong_type;
     wrong_type.push_back<double>(ColumnIndex(20));
     EXPECT_THROW((database::DistancePlan(sources.columns().span(), edges.columns().span(), wrong_type.span(), ColumnIndex(3))), std::invalid_argument);
 
@@ -374,7 +376,7 @@ TEST(YggdrasilTests, DatabaseDistanceMixedTupleTypesShareCanonicalVertices)
 {
     const auto schema = [](uint_t label, size_t tuples)
     {
-        Builder<database::Columns> result;
+        urd::builder<database::Columns> result;
         for (size_t i = 0; i < tuples; ++i)
         {
             result.push_back<uint_t>(ColumnIndex(label++));
@@ -383,7 +385,7 @@ TEST(YggdrasilTests, DatabaseDistanceMixedTupleTypesShareCanonicalVertices)
         }
         return result;
     };
-    Builder<database::Relation> sources(schema(11, 1)), edges(schema(1, 2)), targets(schema(21, 1));
+    urd::builder<database::Relation> sources(schema(11, 1)), edges(schema(1, 2)), targets(schema(21, 1));
     sources.insert(std::tuple { static_cast<uint_t>(7), -0.0, true });
     edges.insert(std::tuple { static_cast<uint_t>(7), +0.0, true, static_cast<uint_t>(8), 1.5, false });
     targets.insert(std::tuple { static_cast<uint_t>(7), +0.0, true });
@@ -607,7 +609,7 @@ TEST(YggdrasilTests, DatabaseMinDistanceAggregatesTheDistanceColumnFullAndIncrem
     database::incremental::Delta ds(sources.columns().span()), de(edges.columns().span()), dt(targets.columns().span());
 
     // Each state changes sources, edges, or targets; the minimum moves up, down, to zero and to infinity.
-    const std::vector<std::tuple<Vertices, Edges, Vertices>> states {
+    const urd::Store<urd::sequence<std::tuple<Vertices, Edges, Vertices>>> states {
         { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },            // 3
         { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 0, 3 } }, { 3 } },  // shortcut: 1
         { { 0 }, { { 0, 1 }, { 1, 2 }, { 2, 3 } }, { 3 } },            // deleting the minimum reveals 3

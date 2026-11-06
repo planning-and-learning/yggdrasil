@@ -6,8 +6,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_BOUND_QUERY_EVALUATION_HPP_
 #define YGG_DATABASE_SEMANTICS_BOUND_QUERY_EVALUATION_HPP_
 
-#include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
+#include <urd/repr/sequences/segmented.hpp>
 #include "yggdrasil/database/semantics/bound/conjunctive_plan.hpp"
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 #include "yggdrasil/database/semantics/join_index.hpp"
@@ -20,10 +21,13 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <urd/memory.hpp>
+#include <urd/repr/maps/postings.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -58,7 +62,7 @@ public:
 
     [[nodiscard]] size_t input_count() const noexcept { return m_query.input_columns.size(); }
     [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
-    [[nodiscard]] const Builder<Relation>& input(size_t slot) const { return *m_inputs.at(slot); }
+    [[nodiscard]] const urd::builder<Relation>& input(size_t slot) const { return *m_inputs.at(slot); }
     [[nodiscard]] bool bound() const noexcept { return std::ranges::find(m_bound, false) == m_bound.end(); }
     /// Increases whenever an input changes.
     [[nodiscard]] uint64_t version() const noexcept { return m_version; }
@@ -108,27 +112,39 @@ public:
         for (size_t r = 0; r < removed.size(); ++r)
         {
             const auto found = snapshot.find(Row(removed.row(r), columns));
-            YGG_ASSUME(found.has_value());  // every removed row was checked present above
+            URD_ASSUME(found.has_value());  // every removed row was checked present above
             const auto position = *found;
             const auto last = to_uint_t(snapshot.size() - 1);
-            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.erase(database::detail::join_key_hash(snapshot.row(position), entry.keys), position); });
+            const auto erase = [](auto& rows, hash_t key, uint_t value)
+            {
+                const auto matches = rows.equal_range(key);
+                const auto found = std::find_if(matches.first, matches.second, [&](const auto& pair) { return pair.second == value; });
+                URD_ASSUME(found != matches.second);  // every indexed row is in its key's entries
+                rows.erase(found);
+            };
+            for_each_index(slot, [&](KeyIndex& entry) { erase(entry.rows, database::detail::join_key_hash(snapshot.row(position), entry.keys), position); });
             snapshot.erase(position);
             if (position != last)
                 for_each_index(slot,
                                [&](KeyIndex& entry)
-                               { entry.rows.replace(database::detail::join_key_hash(snapshot.row(position), entry.keys), last, position); });
+                               {
+                                   // The last row moved into the erased one's position.
+                                   const auto key = database::detail::join_key_hash(snapshot.row(position), entry.keys);
+                                   erase(entry.rows, key, last);
+                                   entry.rows.insert({ key, position });
+                               });
         }
         for (size_t r = 0; r < added.size(); ++r)
         {
             const auto position = snapshot.insert(Row(added.row(r), columns));
-            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert(database::detail::join_key_hash(added.row(r), entry.keys), position); });
+            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert({ database::detail::join_key_hash(added.row(r), entry.keys), position }); });
         }
         ++m_version;
     }
 
     /// Evaluation with the output columns at `positions` bound, in that order; returns its handle. The plans are
     /// compiled at the first evaluation, when the inputs' sizes are known.
-    size_t prepare(std::vector<size_t> positions)
+    size_t prepare(urd::Store<urd::sequence<size_t>> positions)
     {
         for (size_t binding = 0; binding < m_bindings.size(); ++binding)
             if (m_bindings[binding].positions == positions)
@@ -162,7 +178,7 @@ public:
     [[nodiscard]] const UnionNormalForm& query() const noexcept { return m_query; }
 
     /// One plan per branch, with the variables marked in `bound` bound on arrival, for the current inputs' sizes.
-    std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound);
+    std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound);  // std::vector: of an incomplete type (a Store resolves its element type at once)
 
     /// Binds the atom's variables to an input row; false if the row repeats a variable with different values.
     bool bind_atom(const ConjunctiveAtom& atom, std::span<const std::byte> row);
@@ -178,36 +194,36 @@ public:
 private:
     struct Binding
     {
-        std::vector<size_t> positions;
-        std::vector<ConjunctivePlan> plans;
+        urd::Store<urd::sequence<size_t>> positions;
+        std::vector<ConjunctivePlan> plans;  // std::vector: of an incomplete type (a Store resolves its element type at once)
     };
     /// The rows of an input slot keyed by some of its columns; with no key columns, a scan.
     struct KeyIndex
     {
         size_t slot = 0;
-        std::vector<size_t> positions;
-        std::vector<ColumnSlice> keys;           ///< The key columns in the slot's rows.
-        UnorderedMultiMap<hash_t, uint_t> rows;  ///< Row positions by key hash, once built.
+        urd::Store<urd::sequence<size_t>> positions;
+        urd::Store<urd::sequence<ColumnSlice>> keys;           ///< The key columns in the slot's rows.
+        urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> rows;  ///< Row positions by key hash, once built.
         bool built = false;
     };
     /// A step's lookup: its index and where the key's variables are in the frame.
     struct Lookup
     {
         size_t index = 0;
-        std::vector<ColumnSlice> probe;
+        urd::Store<urd::sequence<ColumnSlice>> probe;
     };
 
     UnionNormalForm m_query;
-    std::vector<ColumnLayout> m_columns;
+    urd::Store<urd::sequence<ColumnLayout>> m_columns;
     RelationPool m_pool;             ///< Owns the input snapshots; declared before them, so it outlives them.
-    std::vector<std::byte> m_frame;  ///< The variables' values while a branch runs.
+    urd::Store<urd::sequence<std::byte>> m_frame;  ///< The variables' values while a branch runs.
     std::vector<bool> m_static;
-    std::vector<UniqueObjectPoolPtr<Builder<Relation>>> m_inputs;
+    urd::Store<urd::sequence<urd::unique_slot_ptr<urd::builder<Relation>>>> m_inputs;
     std::vector<bool> m_bound;
-    std::deque<KeyIndex> m_indexes;
-    std::deque<Lookup> m_lookups;  ///< By ConjunctiveStep::index.
-    std::vector<Binding> m_bindings;
-    std::vector<std::byte> m_row;
+    urd::Store<urd::sequence<KeyIndex>, urd::stable_refs> m_indexes;
+    urd::Store<urd::sequence<Lookup>, urd::stable_refs> m_lookups;  ///< By ConjunctiveStep::index.
+    urd::Store<urd::sequence<Binding>> m_bindings;
+    urd::Store<urd::sequence<std::byte>> m_row;
     uint64_t m_version = 0;
 
     std::span<std::byte> variable(uint32_t var) noexcept { return std::span(m_frame).subspan(m_query.variables[var].offset, m_query.variables[var].size); }
@@ -301,7 +317,7 @@ private:
             entry.rows.clear();
             entry.rows.reserve(rows.size());
             for (size_t r = 0; r < rows.size(); ++r)
-                entry.rows.insert(database::detail::join_key_hash(rows.row(r), entry.keys), to_uint_t(r));
+                entry.rows.insert({ database::detail::join_key_hash(rows.row(r), entry.keys), to_uint_t(r) });
             entry.built = true;
         }
         // The key's variables stay bound while this step iterates, so the frame is the probe.

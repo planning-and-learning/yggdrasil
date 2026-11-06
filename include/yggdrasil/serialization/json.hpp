@@ -19,7 +19,7 @@
 #define YGG_SERIALIZATION_JSON_HPP_
 
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/core/path.hpp"
+#include "yggdrasil/io/project_path.hpp"
 
 #include <boost/json.hpp>
 #include <cmath>

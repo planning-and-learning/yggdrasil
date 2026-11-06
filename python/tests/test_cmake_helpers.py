@@ -1,11 +1,8 @@
 # Copyright (C) 2026 Dominik Drexler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Contract tests for the CMake helpers shipped in the pyyggdrasil wheel.
+"""Contract test for the CMake package shipped in the pyyggdrasil wheel: find_package(yggdrasil) gives the target.
 
-The yggdrasil_* helper functions in lib/cmake/yggdrasil/yggdrasilPythonHelpers.cmake
-are consumed by the downstream repos (loki, tyr, runir) both from their
-CMakeLists.txt and from their exported Config files. These tests pin the
-behavioral contract against the installed wheel.
+The build helpers the downstream repos use are brokkr's (pybrokkr), tested there.
 """
 
 import shutil
@@ -15,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+import pyurd
 import pyyggdrasil
 
 
@@ -25,69 +23,7 @@ def _require_cmake() -> str:
     return cmake
 
 
-def _helpers_path() -> Path:
-    helpers = Path(pyyggdrasil.cmake_dir()) / "yggdrasilPythonHelpers.cmake"
-    assert helpers.is_file(), f"helpers module missing from wheel: {helpers}"
-    return helpers
-
-
-def test_helper_functions_contract(tmp_path: Path) -> None:
-    cmake = _require_cmake()
-    helpers = _helpers_path()
-
-    dependency_prefix = tmp_path / "dependency"
-    (dependency_prefix / "lib").mkdir(parents=True)
-
-    script = tmp_path / "contract.cmake"
-    script.write_text(
-        textwrap.dedent(
-            f"""
-            cmake_minimum_required(VERSION 3.21)
-            set(CMAKE_INSTALL_LIBDIR lib64)
-            include("{helpers.as_posix()}")
-
-            # libdir detection: prefix only has lib/, CMAKE_INSTALL_LIBDIR is lib64
-            yggdrasil_register_python_native_runtime_prefix("pyyggdrasil" "{dependency_prefix.as_posix()}")
-            # no second argument: falls back to CMAKE_INSTALL_LIBDIR
-            yggdrasil_register_python_native_runtime_prefix("pypddl/native")
-
-            yggdrasil_make_python_native_runtime_rpaths(runtime_rpaths "$ORIGIN" "../")
-            if(NOT runtime_rpaths STREQUAL "$ORIGIN;$ORIGIN/../pyyggdrasil/lib;$ORIGIN/../pypddl/native/lib64")
-                message(FATAL_ERROR "unexpected rpath list: ${{runtime_rpaths}}")
-            endif()
-
-            yggdrasil_make_python_native_runtime_rpath_string(runtime_rpath "@loader_path" "../../../")
-            set(expected_rpath "@loader_path:@loader_path/../../../pyyggdrasil/lib")
-            string(APPEND expected_rpath ":@loader_path/../../../pypddl/native/lib64")
-            if(NOT runtime_rpath STREQUAL expected_rpath)
-                message(FATAL_ERROR "unexpected rpath string: ${{runtime_rpath}}")
-            endif()
-
-            # include-dir registration only records existing directories
-            yggdrasil_register_native_dependency_prefix("{dependency_prefix.as_posix()}")
-            if(YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES)
-                message(FATAL_ERROR "prefix without include/ must not register: "
-                                    "${{YGGDRASIL_NATIVE_DEPENDENCY_INCLUDE_DIRECTORIES}}")
-            endif()
-
-            # manual override: preset out-var is respected and prepended to CMAKE_PREFIX_PATH
-            set(OVERRIDE_PREFIX "{dependency_prefix.as_posix()}")
-            yggdrasil_find_python_native_prefix(nonexistent_package OVERRIDE_PREFIX)
-            if(NOT OVERRIDE_PREFIX STREQUAL "{dependency_prefix.as_posix()}")
-                message(FATAL_ERROR "manual override was clobbered: ${{OVERRIDE_PREFIX}}")
-            endif()
-            if(NOT "{dependency_prefix.as_posix()}" IN_LIST CMAKE_PREFIX_PATH)
-                message(FATAL_ERROR "override prefix missing from CMAKE_PREFIX_PATH")
-            endif()
-            """
-        ),
-        encoding="utf-8",
-    )
-
-    subprocess.run([cmake, "-P", str(script)], check=True)
-
-
-def test_find_package_provides_helpers_and_target(tmp_path: Path) -> None:
+def test_find_package_provides_target(tmp_path: Path) -> None:
     cmake = _require_cmake()
     prefix = pyyggdrasil.native_prefix()
 
@@ -100,20 +36,18 @@ def test_find_package_provides_helpers_and_target(tmp_path: Path) -> None:
             if(NOT TARGET yggdrasil::yggdrasil)
                 message(FATAL_ERROR "yggdrasil::yggdrasil target missing")
             endif()
-            if(NOT COMMAND yggdrasil_make_python_native_runtime_rpaths)
-                message(FATAL_ERROR "helper functions not provided by yggdrasilConfig")
-            endif()
-            message(STATUS "helpers contract OK")
+            message(STATUS "yggdrasil contract OK")
             """
         ),
         encoding="utf-8",
     )
 
     result = subprocess.run(
-        [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")],
+        # pyurd's prefix, as a consumer's build backend or brokkr puts it there: yggdrasil's config finds urd in it.
+        [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build"), f"-DCMAKE_PREFIX_PATH={pyurd.cmake_prefix()}"],
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
-    assert "helpers contract OK" in result.stdout
+    assert "yggdrasil contract OK" in result.stdout

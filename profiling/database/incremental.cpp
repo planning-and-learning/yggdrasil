@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/relation_builder.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #ifndef YGG_DATABASE_APPEND_ONLY_PROFILE
 #include "yggdrasil/database/semantics/incremental/join.hpp"
@@ -28,7 +30,7 @@ namespace ygg::profiling
 {
 namespace
 {
-using ColumnIndex = Index<database::Column>;
+using ColumnIndex = urd::index<database::Column>;
 
 // Define YGG_DATABASE_APPEND_ONLY_PROFILE to isolate the append/clear workload
 // without pulling in the incremental evaluators.
@@ -93,7 +95,7 @@ struct Trace
         // Check before multiplication and the conversion to uint_t below.
         if (generation > std::numeric_limits<uint_t>::max() / rows - 4)
             throw std::overflow_error("Benchmark trace generation exceeds the tuple value range.");
-        std::vector<std::array<uint_t, 2>> current;
+        urd::Store<urd::sequence<std::array<uint_t, 2>>> current;
         current.reserve(rows);
         for (size_t i = 0; i < rows; ++i)
             current.push_back({ static_cast<uint_t>(i / witnesses), static_cast<uint_t>(i) });
@@ -379,7 +381,7 @@ void fixed_input_join(benchmark::State& state)
                      {
                          auto bytes = evaluation.memory_usage() + workspace.row.capacity();
                          if constexpr (!Incremental)
-                             bytes += index.index().memory_usage();
+                             bytes += urd::memory_usage(index.index());
                          return bytes;
                      });
 }
@@ -441,7 +443,7 @@ void changing_join(benchmark::State& state)
         std::swap(previous, reference);
     }
     state.counters["mean_output_delta_rows"] = static_cast<double>(output_delta_rows) / trace.transitions.size();
-    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity() + workspace.join_index.memory_usage(); });
+    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity() + urd::memory_usage(workspace.join_index); });
     // Each side removes and adds range(1) rows in the same overlapping key groups.
     state.counters["input_delta_rows"] = static_cast<double>(4 * state.range(1));
 }

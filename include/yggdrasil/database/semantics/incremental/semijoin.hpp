@@ -6,12 +6,14 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_SEMIJOIN_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_SEMIJOIN_HPP_
 
-#include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 
 #include <span>
+#include <urd/memory.hpp>
+#include <urd/repr/maps/postings.hpp>
+#include <urd/store.hpp>
 #include <utility>
 
 namespace ygg::database::incremental
@@ -27,11 +29,11 @@ class SemijoinEvaluator
 {
     JoinPlan m_plan;
     bool m_anti;
-    Builder<Relation> m_lhs;
-    Builder<Relation> m_rhs;
-    UnorderedMultiMap<hash_t, uint_t> m_lhs_index;
-    UnorderedMultiMap<hash_t, uint_t> m_rhs_index;
-    Builder<Relation> m_result;
+    urd::builder<Relation> m_lhs;
+    urd::builder<Relation> m_rhs;
+    urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_lhs_index;
+    urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_rhs_index;
+    urd::builder<Relation> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
@@ -146,12 +148,12 @@ public:
         apply(lhs, rhs);
     }
 
-    [[nodiscard]] const Builder<Relation>& get_result() const&
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&
     {
         detail::require_initialized(m_initialized);
         return m_result;
     }
-    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);
@@ -161,8 +163,8 @@ public:
 
     [[nodiscard]] size_t memory_usage() const noexcept
     {
-        return m_lhs.memory_usage() + m_rhs.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + m_lhs_index.memory_usage()
-               + m_rhs_index.memory_usage();
+        return m_lhs.memory_usage() + m_rhs.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + urd::memory_usage(m_lhs_index)
+               + urd::memory_usage(m_rhs_index);
     }
 };
 

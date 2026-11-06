@@ -7,13 +7,13 @@
 
 namespace ygg::database
 {
-QueryView<> OperatorBuilder::generic_join(std::span<const QueryView<>> atoms, std::span<const Index<Column>> order)
+QueryView<> OperatorBuilder::generic_join(std::span<const QueryView<>> atoms, std::span<const urd::index<Column>> order)
 {
     return make<QueryGenericJoinTag>(
         [&](auto& data)
         {
             for (const auto atom : atoms)
-                data.inputs.push_back(atom.get_index());
+                data.inputs.push_back(atom.index());
             data.variable_order.set(order.begin(), order.end());
             data.output_order.set(order.begin(), order.end());
         });

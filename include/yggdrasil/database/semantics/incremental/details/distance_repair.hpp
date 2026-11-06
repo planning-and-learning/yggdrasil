@@ -6,17 +6,20 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_DETAILS_DISTANCE_REPAIR_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_DETAILS_DISTANCE_REPAIR_HPP_
 
-#include "yggdrasil/containers/associative_containers.hpp"
-#include "yggdrasil/containers/fibonacci_heap.hpp"
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/core/counting_memory_resource.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/semantics/hash.hpp"
+
+#include <urd/elements/equal_to.hpp>
+#include <urd/elements/hash.hpp>
+#include <urd/memory.hpp>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/maps/unordered_flat_map.hpp>
+#include <urd/repr/queues/addressable_heap.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <cassert>
-#include <functional>
 #include <limits>
-#include <memory_resource>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -47,19 +50,17 @@ void count_distance_work([[maybe_unused]] size_t DistanceWork::* member) noexcep
 class DistanceRepairWorkspace
 {
     using Entry = std::pair<uint_t, uint_t>;  // Distance, then vertex (or predecessor in a local heap).
-    using Heap = FibonacciHeap<Entry, std::greater<Entry>>;
+    // The least entry leaves first; push gives a handle that update and erase take.
+    using Heap = urd::Store<urd::queue<Entry>, urd::by_priority, urd::handles>;
 
-    // Resources outlive their heaps; the evaluator owns this workspace at a stable address.
-    CountingMemoryResource m_memory;
-    std::pmr::unsynchronized_pool_resource m_pool { &m_memory };
-    Heap m_global { Heap::allocator_type { &m_pool } };
-    std::vector<Heap> m_local;
-    std::vector<std::optional<Heap::handle_type>> m_vertices;
-    UnorderedMap<std::pair<uint_t, uint_t>, Heap::handle_type> m_edges;
+    Heap m_global;
+    urd::Store<urd::sequence<Heap>> m_local;
+    urd::Store<urd::sequence<std::optional<Heap::handle_type>>> m_vertices;
+    urd::Store<urd::map<std::pair<uint_t, uint_t>, Heap::handle_type>> m_edges;
 
     static void update(Heap& heap, Heap::handle_type handle, Entry entry)
     {
-        if (*handle != entry)
+        if (heap[handle] != entry)
         {
             heap.update(handle, entry);
             count_distance_work(&DistanceWork::heap_updates);
@@ -77,9 +78,8 @@ public:
     void resize(size_t count)
     {
         assert(m_global.empty() && m_edges.empty());
-        // Growing a vector may copy Boost heaps; all of them must be empty here.
-        while (m_local.size() < count)
-            m_local.emplace_back(Heap::allocator_type { &m_pool });
+        if (m_local.size() < count)
+            m_local.resize(count);
         m_vertices.resize(count);
     }
 
@@ -110,8 +110,11 @@ public:
 
     size_t memory_usage() const noexcept
     {
-        return sizeof(*this) + m_memory.memory_usage() + m_local.capacity() * sizeof(Heap) + m_vertices.capacity() * sizeof(std::optional<Heap::handle_type>)
-               + m_edges.capacity() * (sizeof(std::pair<const std::pair<uint_t, uint_t>, Heap::handle_type>) + sizeof(gtl::priv::ctrl_t));
+        auto heaps = urd::memory_usage(m_global);
+        for (const auto& heap : m_local)
+            heaps += urd::memory_usage(heap);
+        return sizeof(*this) + heaps + m_local.capacity() * sizeof(Heap) + m_vertices.capacity() * sizeof(std::optional<Heap::handle_type>)
+               + urd::memory_usage(m_edges);
     }
 };
 }  // namespace ygg::database::incremental::detail

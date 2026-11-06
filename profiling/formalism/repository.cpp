@@ -9,7 +9,8 @@
 
 #include "yggdrasil/formalism/repository.hpp"
 
-#include "yggdrasil/containers/vector.hpp"
+#include <urd/elements/flat.hpp>
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 
@@ -30,33 +31,34 @@ struct BlockObjectTag;
 struct PackedObjectTag;
 }
 
-namespace ygg
+namespace urd
 {
 
 template<>
-struct Data<profiling::TrivialSymbol>
+struct data<ygg::profiling::TrivialSymbol>
 {
-    Index<profiling::TrivialSymbol> index;
+    urd::index<ygg::profiling::TrivialSymbol> index;
     std::uint64_t value = 0;
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::value> {}; }
 };
 
 template<>
-struct Data<profiling::SerializedSymbol>
+struct data<ygg::profiling::SerializedSymbol>
 {
-    Index<profiling::SerializedSymbol> index;
-    IndexList<profiling::TrivialSymbol> values;
+    urd::index<ygg::profiling::SerializedSymbol> index;
+    urd::flat_vector<urd::index<ygg::profiling::TrivialSymbol>> values;
 
-    Data() = default;
-    Data(const Data&) = delete;
-    Data& operator=(const Data&) = delete;
-    Data(Data&&) = default;
-    Data& operator=(Data&&) = default;
-    ~Data() = default;
+    data() = default;
+    data(const data&) = delete;
+    data& operator=(const data&) = delete;
+    data(data&&) = default;
+    data& operator=(data&&) = default;
+    ~data() = default;
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::values> {}; }
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::values> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::values> {}; }
 };
 
 }
@@ -66,7 +68,7 @@ namespace ygg::formalism
 template<>
 struct RelationRepositoryTraits<profiling::PackedObjectTag>
 {
-    using storage_type = BitPackedArraySetStorage;
+    using storage_type = BitRowPoolStorage;
 };
 }
 
@@ -99,30 +101,30 @@ std::unique_ptr<Repository>& repository()
     return value;
 }
 
-void set_key(Data<TrivialSymbol>& data, std::uint64_t key) noexcept { data.value = key; }
+void set_key(urd::data<TrivialSymbol>& data, std::uint64_t key) noexcept { data.value = key; }
 
-void set_key(Data<SerializedSymbol>& data, std::uint64_t key)
+void set_key(urd::data<SerializedSymbol>& data, std::uint64_t key)
 {
     if (data.values.empty())
         data.values.resize(4);
     for (std::size_t i = 0; i < data.values.size(); ++i)
-        data.values[i] = Index<TrivialSymbol>(static_cast<uint_t>((key >> (i * 16U)) & 0xFFFFU));
+        data.values[i] = urd::index<TrivialSymbol>(static_cast<uint_t>((key >> (i * 16U)) & 0xFFFFU));
 }
 
 template<typename Binding>
-Data<Binding> make_binding(Index<Relation> relation = Index<Relation>(0))
+urd::data<Binding> make_binding(urd::index<Relation> relation = urd::index<Relation>(0))
 {
     using Object = formalism::Object<typename Binding::object_tag>;
-    auto objects = IndexList<Object> {};
+    auto objects = urd::flat_vector<urd::index<Object>> {};
     objects.resize(4);
-    return Data<Binding>(relation, std::move(objects));
+    return urd::data<Binding>(relation, std::move(objects));
 }
 
 template<typename Binding>
-void set_key(Data<Binding>& data, std::uint64_t key) noexcept
+void set_key(urd::data<Binding>& data, std::uint64_t key) noexcept
 {
     for (std::size_t i = 0; i < data.objects.size(); ++i)
-        data.objects[i] = Index<formalism::Object<typename Binding::object_tag>>(static_cast<uint_t>((key >> (i * 12U)) & 0xFFFU));
+        data.objects[i] = urd::index<formalism::Object<typename Binding::object_tag>>(static_cast<uint_t>((key >> (i * 12U)) & 0xFFFU));
 }
 
 template<typename Repository>
@@ -133,7 +135,7 @@ template<typename Repository, typename Symbol>
 void set_up_symbol(const benchmark::State& state)
 {
     set_up_empty<Repository>(state);
-    auto data = Data<Symbol> {};
+    auto data = urd::data<Symbol> {};
     for (std::uint64_t key = 0; key < kPrefill; ++key)
     {
         set_key(data, key);
@@ -148,7 +150,7 @@ void set_up_relation(const benchmark::State& state)
     const auto lanes = PerThreadLane ? state.threads() : 1;
     for (int lane = 0; lane < lanes; ++lane)
     {
-        auto data = make_binding<Binding>(Index<Relation>(static_cast<uint_t>(lane)));
+        auto data = make_binding<Binding>(urd::index<Relation>(static_cast<uint_t>(lane)));
         for (std::uint64_t key = 0; key < kPrefill; ++key)
         {
             set_key(data, key);
@@ -179,7 +181,7 @@ void report_relation(benchmark::State& state, std::uint64_t created, bool per_th
     std::size_t entries = 0;
     const auto lanes = per_thread_lane ? state.threads() : 1;
     for (int lane = 0; lane < lanes; ++lane)
-        entries += repository<Repository>()->size(Index<Relation>(static_cast<uint_t>(lane)));
+        entries += repository<Repository>()->size(urd::index<Relation>(static_cast<uint_t>(lane)));
     const auto bytes = repository<Repository>()->template memory_usage<Binding>();
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
@@ -191,7 +193,7 @@ void report_relation(benchmark::State& state, std::uint64_t created, bool per_th
 template<typename Repository, typename Symbol>
 void benchmark_symbol_find(benchmark::State& state)
 {
-    auto data = Data<Symbol> {};
+    auto data = urd::data<Symbol> {};
     std::uint64_t checksum = 0;
     std::uint64_t operation = 0;
     for (auto _ : state)
@@ -203,7 +205,7 @@ void benchmark_symbol_find(benchmark::State& state)
             state.SkipWithError("prefilled symbol not found");
             break;
         }
-        checksum += found->get_index().get_value();
+        checksum += found->index().value;
     }
     benchmark::DoNotOptimize(checksum);
     report_symbol<Repository, Symbol>(state, 0);
@@ -212,7 +214,7 @@ void benchmark_symbol_find(benchmark::State& state)
 template<typename Repository, typename Symbol>
 void benchmark_symbol_mixed(benchmark::State& state)
 {
-    auto data = Data<Symbol> {};
+    auto data = urd::data<Symbol> {};
     std::uint64_t checksum = 0;
     std::uint64_t created = 0;
     std::uint64_t operation = 0;
@@ -225,7 +227,7 @@ void benchmark_symbol_mixed(benchmark::State& state)
         set_key(data, key);
         const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.get_index().get_value();
+        checksum += view.index().value;
     }
     if (created != (static_cast<std::uint64_t>(state.iterations()) + 19U) / 20U)
         state.SkipWithError("mixed symbol miss was not created");
@@ -236,7 +238,7 @@ void benchmark_symbol_mixed(benchmark::State& state)
 template<typename Repository, typename Symbol>
 void benchmark_symbol_insert(benchmark::State& state)
 {
-    auto data = Data<Symbol> {};
+    auto data = urd::data<Symbol> {};
     std::uint64_t checksum = 0;
     std::uint64_t created = 0;
     std::uint64_t operation = 0;
@@ -246,7 +248,7 @@ void benchmark_symbol_insert(benchmark::State& state)
         set_key(data, key);
         const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.get_index().get_value();
+        checksum += view.index().value;
     }
     if (created != static_cast<std::uint64_t>(state.iterations()))
         state.SkipWithError("unique symbol insertion was not created");
@@ -258,7 +260,7 @@ template<typename Repository, typename Binding, bool PerThreadLane>
 void benchmark_relation_find(benchmark::State& state)
 {
     const auto lane = PerThreadLane ? state.thread_index() : 0;
-    auto data = make_binding<Binding>(Index<Relation>(static_cast<uint_t>(lane)));
+    auto data = make_binding<Binding>(urd::index<Relation>(static_cast<uint_t>(lane)));
     std::uint64_t checksum = 0;
     std::uint64_t operation = 0;
     for (auto _ : state)
@@ -270,7 +272,7 @@ void benchmark_relation_find(benchmark::State& state)
             state.SkipWithError("prefilled relation binding not found");
             break;
         }
-        checksum += found->get_index().row.get_value();
+        checksum += found->index().row.value;
     }
     benchmark::DoNotOptimize(checksum);
     report_relation<Repository, Binding>(state, 0, PerThreadLane);
@@ -292,7 +294,7 @@ void benchmark_relation_mixed(benchmark::State& state)
         set_key(data, key);
         const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.get_index().row.get_value();
+        checksum += view.index().row.value;
     }
     if (created != (static_cast<std::uint64_t>(state.iterations()) + 19U) / 20U)
         state.SkipWithError("mixed relation miss was not created");
@@ -304,7 +306,7 @@ template<typename Repository, typename Binding, bool PerThreadLane>
 void benchmark_relation_insert(benchmark::State& state)
 {
     const auto lane = PerThreadLane ? state.thread_index() : 0;
-    auto data = make_binding<Binding>(Index<Relation>(static_cast<uint_t>(lane)));
+    auto data = make_binding<Binding>(urd::index<Relation>(static_cast<uint_t>(lane)));
     std::uint64_t checksum = 0;
     std::uint64_t created = 0;
     std::uint64_t operation = 0;
@@ -315,7 +317,7 @@ void benchmark_relation_insert(benchmark::State& state)
         set_key(data, key);
         const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.get_index().row.get_value();
+        checksum += view.index().row.value;
     }
     if (created != static_cast<std::uint64_t>(state.iterations()))
         state.SkipWithError("unique relation insertion was not created");

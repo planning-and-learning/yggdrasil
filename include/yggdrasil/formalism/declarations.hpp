@@ -10,29 +10,30 @@
 #ifndef YGG_FORMALISM_DECLARATIONS_HPP_
 #define YGG_FORMALISM_DECLARATIONS_HPP_
 
-#include "yggdrasil/core/concepts.hpp"
-#include "yggdrasil/core/types.hpp"
+#include <urd/elements/flat.hpp>
 
+#include <boost/mp11.hpp>
 #include <concepts>
 #include <ranges>
 #include <tuple>
 #include <type_traits>
+#include <urd/elements/concepts.hpp>
 
 namespace ygg::formalism
 {
 
 /// Whether a repository's symbol inventory contains T.
 template<typename Repository, typename T>
-concept SupportsSymbol = std::remove_cvref_t<Repository>::SymbolTypes::template contains<T>;
+concept SupportsSymbol = boost::mp11::mp_contains<typename std::remove_cvref_t<Repository>::SymbolTypes, T>::value;
 
 /// Whether a repository's relation inventory contains a relation tag.
 template<typename Repository, typename T>
-concept SupportsRelation = std::remove_cvref_t<Repository>::RelationTypes::template contains<T>;
+concept SupportsRelation = boost::mp11::mp_contains<typename std::remove_cvref_t<Repository>::RelationTypes, T>::value;
 
 /// Read access to one supported symbol representation.
 template<typename Repository, typename T>
-concept SymbolRepositoryFor = SupportsSymbol<Repository, T> && requires(const std::remove_reference_t<Repository>& repository, Index<T> index) {
-    { repository[index] } -> std::same_as<const Data<T>&>;
+concept SymbolRepositoryFor = SupportsSymbol<Repository, T> && requires(const std::remove_reference_t<Repository>& repository, urd::index<T> index) {
+    { repository[index] } -> std::same_as<const urd::data<T>&>;
 };
 
 template<typename C, typename T>
@@ -76,11 +77,29 @@ concept RelationBindingConcept = is_relation_binding_v<T>;
 template<typename T>
 concept NonRelationBindingConcept = !RelationBindingConcept<T>;
 
+/// The handle of a relation binding: its relation and its row in that relation's table.
+template<typename RelationTag, typename ObjectTag>
+struct RelationBindingIndex
+{
+    /// What it locates: a binding handle is an urd::handle, resolved through its context.
+    using located = RelationBinding<RelationTag, ObjectTag>;
+
+    urd::index<RelationTag> relation;
+    urd::index<Row> row;
+
+    friend constexpr auto operator<=>(const RelationBindingIndex&, const RelationBindingIndex&) = default;
+    static constexpr auto identifying_members() noexcept { return urd::Members<&RelationBindingIndex::relation, &RelationBindingIndex::row> {}; }
+    /// The binding it locates, as its context gives it (what its view reads).
+    [[nodiscard]] decltype(auto) read(const auto& context) const { return context[*this]; }
+};
+
 /// Read access to a supported binding's row representation.
 template<typename Repository, typename RelationTag, typename ObjectTag>
 concept RelationRepositoryFor = SupportsRelation<Repository, RelationTag>
-                                && requires(const std::remove_reference_t<Repository>& repository, Index<RelationBinding<RelationTag, ObjectTag>> index) {
-                                       { repository[index] } -> InputRangeOf<Index<Object<ObjectTag>>>;
+                                && requires(const std::remove_reference_t<Repository>& repository, ygg::formalism::RelationBindingIndex<RelationTag, ObjectTag> index) {
+                                       { repository[index].relation } -> std::convertible_to<urd::index<RelationTag>>;
+                                       requires std::ranges::input_range<decltype(repository[index].objects)>
+                                                && std::same_as<std::ranges::range_value_t<decltype(repository[index].objects)>, urd::index<Object<ObjectTag>>>;
                                    };
 
 template<typename C, typename RelationTag, typename ObjectTag>
@@ -88,42 +107,41 @@ concept RelationContextFor = requires(const std::remove_reference_t<C>& context)
     { get_repository(context) } -> RelationRepositoryFor<RelationTag, ObjectTag>;
 };
 
-}  // namespace ygg::formalism
 
-namespace ygg
+/// A published binding as its context gives it (context[RelationBindingIndex]): its relation and its row of objects,
+/// the shape of a binding's record, so that one mixin reads both (binding_view.hpp).
+template<typename RelationTag, typename Objects>
+struct RelationBindingRow
 {
-
-template<typename RelationTag, typename ObjectTag>
-struct Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
-{
-    Index<RelationTag> relation;
-    Index<ygg::formalism::Row> row;
-
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Index::relation, &Index::row> {}; }
-};
-}  // namespace ygg
-
-namespace ygg::formalism
-{
-
-template<typename RelationTag, typename ObjectTag, typename BindingRange>
-    requires std::ranges::forward_range<const std::remove_reference_t<BindingRange>> && std::ranges::common_range<const std::remove_reference_t<BindingRange>>
-             && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
-struct RelationBindingsForwardRange
-{
-    const Index<RelationTag>* relation;
-    const std::remove_reference_t<BindingRange>* rows;
+    urd::index<RelationTag> relation;
+    Objects objects;
 };
 
-template<typename RelationTag, typename ObjectTag, typename BindingRange>
-    requires std::ranges::random_access_range<const std::remove_reference_t<BindingRange>>
-             && std::ranges::common_range<const std::remove_reference_t<BindingRange>>
-             && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
-struct RelationBindingsRandomAccessRange
+/// The view of a binding (H = RelationBindingIndex) through its context C: the urd::view of the binding it locates.
+template<typename H, typename C>
+using RelationBindingView = urd::view<typename H::located, C, H>;
+
+/// What the rows of one relation's bindings give through their context C: each row as the view of its binding.
+template<typename RelationTag, typename ObjectTag, typename C>
+struct RelationBindingOfRow
 {
-    const Index<RelationTag>* relation;
-    const std::remove_reference_t<BindingRange>* rows;
+    urd::index<RelationTag> relation;
+    const C* context;
+
+    auto operator()(urd::index<Row> row) const { return context->view(RelationBindingIndex<RelationTag, ObjectTag> { relation, row }); }
 };
+
+/// The bindings of one relation, stored as its rows, read through their context C: each row transformed into its
+/// binding's view (std::views::transform: it traverses as the rows do). It holds rows that are a view, else borrows
+/// them; borrowed rows and the context must outlive it, and its iterators must not outlive it.
+template<typename RelationTag, typename ObjectTag, typename Rows, typename C>
+using RelationBindingsView = std::ranges::transform_view<std::views::all_t<const Rows&>, RelationBindingOfRow<RelationTag, ObjectTag, C>>;
+
+/// The bindings of `relation` stored as `rows`, read through `context`.
+template<typename ObjectTag, typename RelationTag, std::ranges::forward_range Rows, typename C>
+    requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<const Rows>>, urd::index<Row>>
+RelationBindingsView<RelationTag, ObjectTag, Rows, C> bindings_view(urd::index<RelationTag> relation, const Rows& rows, const C& context)
+{ return { std::views::all(rows), { relation, &context } }; }
 }  // namespace ygg::formalism
 
 #endif

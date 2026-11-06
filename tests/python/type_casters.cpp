@@ -17,7 +17,7 @@
 
 #include "type_casters.hpp"
 
-#include "yggdrasil/containers/bit_packed_array_pool.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/python/type_casters.hpp"
 
 #include <cista/containers/array.h>
@@ -26,6 +26,8 @@
 #include <cista/containers/variant.h>
 #include <cista/containers/vector.h>
 #include <nanobind/nanobind.h>
+#include <ranges>
+#include <span>
 
 void bind_type_casters_test(nanobind::module_& m)
 {
@@ -36,8 +38,7 @@ void bind_type_casters_test(nanobind::module_& m)
           {
               using Array = ::cista::array<int, 3>;
               static constexpr auto data = Array { 1, 2, 3 };
-              static constexpr auto context = 0;
-              return ygg::View<Array, int>(data, context);
+              return std::views::all(data);
           });
 
     m.def("pair_view",
@@ -45,8 +46,7 @@ void bind_type_casters_test(nanobind::module_& m)
           {
               using Pair = ::cista::pair<int, int>;
               static constexpr auto data = Pair { 4, 5 };
-              static constexpr auto context = 0;
-              return ygg::View<Pair, int>(data, context);
+              return data;
           });
 
     m.def("nested_view",
@@ -55,20 +55,7 @@ void bind_type_casters_test(nanobind::module_& m)
               using Pair = ::cista::pair<int, int>;
               using Array = ::cista::array<Pair, 2>;
               static constexpr auto data = Array { Pair { 6, 7 }, Pair { 8, 9 } };
-              static constexpr auto context = 0;
-              return ygg::View<Array, int>(data, context);
-          });
-
-    m.def("concurrent_bit_packed_view",
-          []
-          {
-              using Block = unsigned;
-              using Coder = ygg::bit::ForwardingBlockCoder<Block>;
-              using Array = ygg::BasicBitPackedArrayView<const Block, Coder, true>;
-              static auto data = Block { 0b00111001 };
-              static const auto view = Array(&data, 3, 2, 0);
-              static constexpr auto context = 0;
-              return ygg::View<Array, int>(view, context);
+              return std::views::all(data);
           });
 
     m.def("roundtrip_pair", [](::cista::pair<int, int> value) { return value; });

@@ -6,9 +6,9 @@
 #ifndef YGG_DATABASE_DECLARATIONS_HPP_
 #define YGG_DATABASE_DECLARATIONS_HPP_
 
-#include "yggdrasil/core/byte_codec.hpp"
-#include "yggdrasil/core/type_list.hpp"
-#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/database/byte_codec.hpp"
+#include <boost/mp11.hpp>
+#include <urd/elements/flat.hpp>
 
 namespace ygg::database
 {
@@ -65,7 +65,7 @@ struct QueryAntijoinTag
 {
 };
 
-using QueryConstructorTags = TypeList<QueryInputTag,
+using QueryConstructorTags = boost::mp11::mp_list<QueryInputTag,
                                       QueryEmptyTag,
                                       QueryJoinTag,
                                       QueryProjectTag,
@@ -81,7 +81,7 @@ using QueryConstructorTags = TypeList<QueryInputTag,
 
 /// Tag void is the type-erased query holding one of the concrete query records.
 template<typename Tag = void>
-    requires(std::is_void_v<Tag> || InTypeList<Tag, QueryConstructorTags>)
+    requires(std::is_void_v<Tag> || boost::mp11::mp_contains<QueryConstructorTags, Tag>::value)
 struct Query
 {
 };
@@ -89,7 +89,7 @@ class QueryPlan;
 class QueryRepository;
 class QueryRepositoryFactory;
 template<typename Tag = void>
-using QueryView = ygg::View<ygg::Index<Query<Tag>>, QueryRepository>;
+using QueryView = urd::view<Query<Tag>, QueryRepository>;
 
 struct RelationRow
 {
@@ -102,8 +102,8 @@ class RelationPool;
 class RelationPoolFactory;
 class RelationRepository;
 class RelationRepositoryFactory;
-using RelationView = ygg::View<ygg::Index<Relation>, RelationRepository>;
-using BorrowedRelationView = ygg::View<ygg::Builder<Relation>, RelationRepository>;
+using RelationView = urd::view<Relation, RelationRepository>;
+using BorrowedRelationView = urd::borrowed_view<Relation, RelationRepository, urd::builder<Relation>>;
 }  // namespace ygg::database
 
 #endif

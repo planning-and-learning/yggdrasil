@@ -6,11 +6,8 @@
 #ifndef YGG_DATABASE_SEMANTICS_JOIN_INDEX_HPP_
 #define YGG_DATABASE_SEMANTICS_JOIN_INDEX_HPP_
 
-#include "yggdrasil/containers/unordered_multi_map.hpp"
-#include "yggdrasil/containers/unordered_set.hpp"
 #include "yggdrasil/database/semantics/plans.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
-#include "yggdrasil/semantics/hash.hpp"
 
 #include <algorithm>
 #include <boost/hash2/xxhash.hpp>
@@ -20,6 +17,15 @@
 #include <span>
 #include <stdexcept>
 #include <tuple>
+#include <urd/elements/hash.hpp>
+#include <urd/memory.hpp>
+#include <urd/repr/maps/postings.hpp>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/maps/unordered_flat_map.hpp>
+#include <urd/repr/values/std_set.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <vector>
 
 namespace ygg::database
@@ -33,8 +39,8 @@ class JoinIndex
 {
 private:
     size_t m_relation_index;
-    std::vector<ColumnSlice> m_keys;
-    UnorderedMultiMap<hash_t, size_t> m_index;
+    urd::Store<urd::sequence<ColumnSlice>> m_keys;
+    urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains> m_index;
 
 public:
     template<RelationViewConcept V>
@@ -42,9 +48,12 @@ public:
 
     template<RelationViewConcept V>
     bool matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept;
-    [[nodiscard]] const UnorderedMultiMap<hash_t, size_t>& index() const noexcept { return m_index; }
+    [[nodiscard]] const urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains>& index() const noexcept { return m_index; }
 
-    [[nodiscard]] auto identifying_members() const noexcept { return std::make_tuple(m_relation_index, std::span<const ColumnSlice>(m_keys)); }
+    [[nodiscard]] size_t relation_index() const noexcept { return m_relation_index; }
+    /// The key slices as a span: lookups probe with a std::tuple of the relation index and one.
+    [[nodiscard]] std::span<const ColumnSlice> key_span() const noexcept { return m_keys; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&JoinIndex::relation_index, &JoinIndex::key_span> {}; }
 };
 
 /// Shares indexes across renamed views and plans using the same ordered key slices.
@@ -54,7 +63,7 @@ public:
 class JoinIndexCache
 {
 private:
-    UnorderedSet<JoinIndex> m_indexes;
+    urd::Store<urd::set<JoinIndex>> m_indexes;
 
 public:
     /// Hits borrow the lookup key and allocate nothing. Returned references
@@ -84,12 +93,12 @@ bool join_keys_equal(std::span<const std::byte> lhs,
 void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys);
 
 template<RelationViewConcept V>
-void build_join_index(const V& build, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, size_t>& index)
+void build_join_index(const V& build, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains>& index)
 {
     index.clear();
     index.reserve(build.size());
     for (size_t i = 0; i < build.size(); ++i)
-        index.insert(join_key_hash(build.row(i), keys), i);
+        index.insert({ join_key_hash(build.row(i), keys), i });
 }
 }  // namespace detail
 
@@ -105,7 +114,7 @@ JoinIndex::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_rela
 
 template<RelationViewConcept V>
 bool JoinIndex::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
-{ return ygg::EqualTo<JoinIndex> {}(*this, std::make_tuple(relation.get_storage_index(), keys)); }
+{ return urd::EqualTo<JoinIndex> {}(*this, std::make_tuple(relation.get_storage_index(), keys)); }
 
 template<RelationViewConcept V>
 const JoinIndex& JoinIndexCache::get_or_create(const V& relation, std::span<const ColumnSlice> keys)

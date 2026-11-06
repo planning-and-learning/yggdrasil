@@ -4,19 +4,21 @@
  */
 
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::bound
 {
-std::vector<ConjunctivePlan> QueryEvaluator::plans(const std::vector<bool>& bound)
+std::vector<ConjunctivePlan> QueryEvaluator::plans(const std::vector<bool>& bound)  // std::vector: of an incomplete type (a Store resolves its element type at once)
 {
-    auto measured = std::vector<std::optional<RelationStatistics>>(input_count());
+    auto measured = urd::Store<urd::sequence<std::optional<RelationStatistics>>>(input_count());
     const auto statistics = [&](size_t slot) -> const RelationStatistics&
     {
         if (!measured[slot])
             measured[slot] = measure_relation(*m_inputs[slot]);
         return *measured[slot];
     };
-    auto compiled = std::vector<ConjunctivePlan>();
+    auto compiled = std::vector<ConjunctivePlan>();  // std::vector: of an incomplete type (a Store resolves its element type at once)
     for (const auto& branch : m_query.branches)
     {
         auto& plan = compiled.emplace_back(plan_branch(m_query, branch, bound, statistics));
@@ -47,7 +49,7 @@ namespace ygg::database::bound
 {
 size_t QueryEvaluator::index_id(size_t slot, std::span<const std::pair<size_t, uint32_t>> key)
 {
-    auto positions = std::vector<size_t>();
+    auto positions = urd::Store<urd::sequence<size_t>>();
     for (const auto& [c, var] : key)
         positions.push_back(c);
     for (size_t id = 0; id < m_indexes.size(); ++id)

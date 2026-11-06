@@ -20,7 +20,7 @@ follows.
    header that implements them, with no implementation includes. Forward
    declarations that own default template arguments (`Node<Kind, State = ...>`)
    live there too; the definition then omits the defaults.
-3. **Data headers hold data.** `*_data.hpp` defines `ygg::Data<T>` with indices
+3. **Data headers hold data.** `*_data.hpp` defines `urd::data<T>` with indices
    and values only. Helpers that take views are templates over the view
    context, or live in the view header.
 4. **Hold heavy types by pointer or reference with declaration-only includes.**

@@ -4,12 +4,14 @@
  */
 
 #include "yggdrasil/database/semantics/details/min_distance.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
-std::vector<size_t> column_range(size_t first, size_t last)
+urd::Store<urd::sequence<size_t>> column_range(size_t first, size_t last)
 {
-    auto positions = std::vector<size_t>();
+    auto positions = urd::Store<urd::sequence<size_t>>();
     for (auto c = first; c < last; ++c)
         positions.push_back(c);
     return positions;

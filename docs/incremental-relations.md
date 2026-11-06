@@ -3,7 +3,7 @@
 The C++ interfaces in `yggdrasil/database/incremental/` maintain projection and
 natural join, including joins where both inputs change. Full `project` and `join`
 use the same typed schemas and packed rows. All results use the
-existing `Builder<Relation<Values>>` and contextual `View` interfaces (`Values` is the registered type list); publishing them
+existing `urd::builder<Relation<Values>>` and contextual `View` interfaces (`Values` is the registered type list); publishing them
 in a repository is optional.
 
 ## Projection
@@ -12,7 +12,7 @@ in a repository is optional.
 using namespace ygg;
 using namespace ygg::database;
 
-Builder<Relation<>> input({ Index<Column>(0), Index<Column>(1) });
+urd::builder<Relation<>> input({ Index<Column>(0), Index<Column>(1) });
 input.insert(std::tuple { uint_t(7), uint_t(10) });
 input.insert(std::tuple { uint_t(7), uint_t(11) });
 
@@ -70,7 +70,7 @@ input views need to stay alive between calls, and no repository is needed.
 For example, when only the left input changes:
 
 ```cpp
-Builder<Relation<>> unchanged(rhs.columns().span());
+urd::builder<Relation<>> unchanged(rhs.columns().span());
 joined.update(lhs_change.added, lhs_change.removed, unchanged, unchanged, workspace);
 ```
 

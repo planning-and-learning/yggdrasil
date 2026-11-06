@@ -6,7 +6,10 @@
 #ifndef YGG_DATABASE_SEMANTICS_SEARCH_A_STAR_HPP_
 #define YGG_DATABASE_SEMANTICS_SEARCH_A_STAR_HPP_
 
-#include "yggdrasil/containers/raw_array_set.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/repr/queues/queue.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
@@ -37,53 +40,28 @@ struct AStarCounters
     }
 };
 
-/// The open list of A*: a binary heap of vertex indices by smallest f, then largest g, then latest push, the order of
-/// a two-level bucket queue whose buckets are stacks. Preferring large g (and the latest of equals) among equal f is the
+/// An entry of the open list of A*: popped by smallest f, then largest g, then latest push, the order of a two-level
+/// bucket queue whose buckets are stacks. Preferring large g (and the latest of equals) among equal f is the
 /// tie-breaking that leaves plateaus towards the targets (Asai & Fukunaga, "Tiebreaking Strategies for A* Search: How
-/// to Explore the Final Frontier", JAIR 2017). One vector, so clear() keeps its capacity and a reused open list does
-/// not allocate.
-class OpenList
+/// to Explore the Final Frontier", JAIR 2017).
+struct OpenEntry
 {
-public:
-    struct Entry
-    {
-        uint_t f = 0;
-        uint_t g = 0;
-        uint_t push = 0;   ///< Push order.
-        uint_t index = 0;  ///< The generated vertex.
-    };
+    uint_t f = 0;
+    uint_t g = 0;
+    uint_t push = 0;   ///< Push order.
+    uint_t index = 0;  ///< The generated vertex.
+};
 
-    void clear() noexcept
-    {
-        m_heap.clear();
-        m_pushes = 0;
-    }
-    [[nodiscard]] bool empty() const noexcept { return m_heap.empty(); }
-    void push(uint_t f, uint_t g, uint_t index)
-    {
-        m_heap.push_back(Entry { f, g, m_pushes++, index });
-        std::ranges::push_heap(m_heap, later);
-    }
-    Entry pop()
-    {
-        std::ranges::pop_heap(m_heap, later);
-        const auto entry = m_heap.back();
-        m_heap.pop_back();
-        return entry;
-    }
-
-private:
-    std::vector<Entry> m_heap;
-    uint_t m_pushes = 0;
-
-    /// Whether lhs is popped after rhs.
-    static bool later(const Entry& lhs, const Entry& rhs) noexcept
+/// Whether lhs is popped before rhs: a total order, since pushes are unique.
+struct PoppedFirst
+{
+    bool operator()(const OpenEntry& lhs, const OpenEntry& rhs) const noexcept
     {
         if (lhs.f != rhs.f)
-            return lhs.f > rhs.f;
+            return lhs.f < rhs.f;
         if (lhs.g != rhs.g)
-            return lhs.g < rhs.g;
-        return lhs.push < rhs.push;
+            return lhs.g > rhs.g;
+        return lhs.push > rhs.push;
     }
 };
 
@@ -97,7 +75,7 @@ class AStar;
 class AStarStorage
 {
 public:
-    explicit AStarStorage(size_t vertex_size) : m_vertices(vertex_size) {}
+    AStarStorage() : m_vertices() {}
 
 private:
     template<typename Oracle, DistanceHeuristic H>
@@ -120,18 +98,21 @@ private:
         m_vertices.clear();
         m_nodes.clear();
         m_open_list.clear();
+        m_pushes = 0;
     }
 
     VertexSet m_vertices;
-    std::vector<Node> m_nodes;
-    OpenList m_open_list;
-    std::vector<std::byte> m_vertex;  ///< A copy of the expanded vertex: generating successors may move m_vertices.
+    urd::Store<urd::sequence<Node>> m_nodes;
+    /// A binary heap in one vector, so clear() keeps its capacity and a reused open list does not allocate.
+    urd::Store<urd::queue<OpenEntry>, urd::by_priority, urd::order_by<PoppedFirst>> m_open_list;
+    uint_t m_pushes = 0;
+    urd::Store<urd::sequence<std::byte>> m_vertex;  ///< A copy of the expanded vertex: generating successors may move m_vertices.
 };
 
 /// One best-first search from sources to the targets with unit edge costs (Hart, Nilsson & Raphael, "A Formal Basis
 /// for the Heuristic Determination of Minimum Cost Paths", IEEE Trans. SSC 1968). The estimate is the maximum of the
 /// caller's heuristic h, the tree's learned distance and the backward frontier's bound; all three are consistent, so a
-/// vertex is closed once. Within an f, larger g is expanded first (OpenList).
+/// vertex is closed once. Within an f, larger g is expanded first (OpenEntry).
 ///
 /// The search is bidirectional: before each expansion the backward frontier advances while it is not larger than the
 /// forward open list (Pohl's cardinality comparison, "Bi-directional Search", Machine Intelligence 6, 1971). It ends at
@@ -177,7 +158,8 @@ public:
         {
             if (advance_backward(sources))
                 return finish(infinity, std::nullopt);
-            const auto entry = m_storage->m_open_list.pop();
+            const auto entry = m_storage->m_open_list.top();
+            m_storage->m_open_list.pop();
             if (const auto distance = visit(entry.index, entry.f))
                 return *distance;
         }
@@ -195,7 +177,7 @@ public:
         if (m_last != none)
         {
             for (auto index = m_last; index != none; index = m_storage->m_nodes[index].parent)
-                on_vertex(m_storage->m_vertices[index]);
+                on_vertex(vertex_at(m_storage->m_vertices, index));
             end = m_storage->m_nodes[m_last].stored;
         }
         if (end == none)
@@ -275,7 +257,8 @@ private:
 
     AStarStorage::Node& node(uint_t index) noexcept { return m_storage->m_nodes[index]; }
 
-    void enqueue(uint_t index) { m_storage->m_open_list.push(node(index).g + node(index).h, node(index).g, index); }
+    void enqueue(uint_t index)
+    { m_storage->m_open_list.push(OpenEntry { node(index).g + node(index).h, node(index).g, m_storage->m_pushes++, index }); }
 
     /// The tree index of a generated vertex. A vertex not stored when generated is looked up again: the backward
     /// frontier may have stored it since.
@@ -283,19 +266,19 @@ private:
     {
         auto& id = node(index).stored;
         if (id == none)
-            id = m_tree->find(m_storage->m_vertices[index]).value_or(none);
+            id = m_tree->find(vertex_at(m_storage->m_vertices, index)).value_or(none);
         return id == none ? std::nullopt : std::optional<uint_t>(id);
     }
 
     void push(std::span<const std::byte> vertex, uint_t cost, uint_t from)
     {
-        const auto found = m_storage->m_vertices.find(vertex);
+        const auto found = vertex_id(m_storage->m_vertices, vertex);
         if (found && (node(*found).closed || node(*found).g <= cost))
             return;
         if (!found)
         {
             auto estimate = m_heuristic->estimate(vertex);
-            assert(from == none || estimate == infinity || m_heuristic->estimate(m_storage->m_vertices[from]) <= estimate + 1);  // Consistency.
+            assert(from == none || estimate == infinity || m_heuristic->estimate(vertex_at(m_storage->m_vertices, from)) <= estimate + 1);  // Consistency.
             const auto stored = m_tree->find(vertex);
             if (stored)
                 estimate = std::max(estimate, m_tree->learned(*stored));
@@ -323,7 +306,7 @@ private:
         auto& current = node(index);
         if (current.closed || current.g + current.h != f)
             return std::nullopt;
-        if (m_targets->contains(m_storage->m_vertices[index]))
+        if (m_targets->contains(vertex_at(m_storage->m_vertices, index)))
             return finish(f, index);
         const auto id = stored(index);
         // The backward frontier may have raised its bound since the vertex was queued.
@@ -356,7 +339,7 @@ private:
     {
         node(index).closed = true;
         --m_open;
-        const auto vertex = m_storage->m_vertices[index];
+        const auto vertex = vertex_at(m_storage->m_vertices, index);
         m_storage->m_vertex.assign(vertex.begin(), vertex.end());
         const auto cost = node(index).g + 1;
         m_oracle->successors(m_storage->m_vertex,
@@ -396,7 +379,7 @@ private:
     {
         if (const auto id = stored(index))
             return *id;
-        return node(index).stored = m_tree->ensure(m_storage->m_vertices[index], *m_heuristic);
+        return node(index).stored = m_tree->ensure(vertex_at(m_storage->m_vertices, index), *m_heuristic);
     }
 };
 

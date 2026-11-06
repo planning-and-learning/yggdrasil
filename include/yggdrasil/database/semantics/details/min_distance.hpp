@@ -6,7 +6,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_DETAILS_MIN_DISTANCE_HPP_
 #define YGG_DATABASE_SEMANTICS_DETAILS_MIN_DISTANCE_HPP_
 
-#include "yggdrasil/containers/raw_array_set.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
@@ -22,7 +24,7 @@
 namespace ygg::database::detail
 {
 
-std::vector<size_t> column_range(size_t first, size_t last);
+urd::Store<urd::sequence<size_t>> column_range(size_t first, size_t last);
 
 QueryView<> checked_edges(QueryView<> edges, const DistancePlan& plan);
 
@@ -118,7 +120,7 @@ public:
 
 private:
     /// The key columns and the target vertex of an edge, the bound columns of a predecessor query.
-    static std::vector<size_t> key_and_target_positions(size_t keys, size_t arity)
+    static urd::Store<urd::sequence<size_t>> key_and_target_positions(size_t keys, size_t arity)
     {
         auto positions = column_range(0, keys);
         for (const auto position : column_range(keys + arity, keys + 2 * arity))
@@ -143,15 +145,15 @@ private:
     size_t m_forward;
     size_t m_backward;
     size_t m_check;
-    std::vector<std::byte> m_bound;  ///< The key and a vertex, kept to avoid allocations.
-    std::vector<std::byte> m_edge;   ///< The key and the vertices of the checked edge, kept to avoid allocations.
+    urd::Store<urd::sequence<std::byte>> m_bound;  ///< The key and a vertex, kept to avoid allocations.
+    urd::Store<urd::sequence<std::byte>> m_edge;   ///< The key and the vertices of the checked edge, kept to avoid allocations.
 };
 
 /// The targets of a search, as a vertex set.
 class TargetSet
 {
 public:
-    explicit TargetSet(size_t vertex_size) : m_vertices(vertex_size) {}
+    TargetSet() : m_vertices() {}
 
     template<VertexRange Targets>
     [[nodiscard]] bool same(const Targets& targets) const
@@ -174,13 +176,13 @@ public:
     {
         m_ids.clear();
         for (size_t i = 0; i < m_vertices.size(); ++i)
-            m_ids.push_back(tree.ensure(m_vertices[static_cast<uint_t>(i)], heuristic));
+            m_ids.push_back(tree.ensure(vertex_at(m_vertices, static_cast<uint_t>(i)), heuristic));
         return m_ids;
     }
 
 private:
     VertexSet m_vertices;
-    std::vector<uint_t> m_ids;
+    urd::Store<urd::sequence<uint_t>> m_ids;
 };
 
 }  // namespace ygg::database::detail

@@ -13,13 +13,13 @@ namespace yggdrasil::database_python
 {
 namespace nb = nanobind;
 
-using Column = ygg::Index<ygg::database::Column>;
+using Column = urd::index<ygg::database::Column>;
 using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
 using QueryView = ygg::database::QueryView<>;
 using QueryRepositoryBinding = nb::class_<ygg::database::QueryRepository>;
 
 template<typename Tag>
-using QueryData = ygg::Data<ygg::database::Query<Tag>>;
+using QueryData = urd::data<ygg::database::Query<Tag>>;
 template<typename Tag>
 using ConcreteQueryView = ygg::database::QueryView<Tag>;
 

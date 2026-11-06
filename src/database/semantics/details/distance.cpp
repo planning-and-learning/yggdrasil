@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/distance.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <span>
 
@@ -14,11 +16,11 @@ uint_t DistanceGraph::insert_vertex(std::span<const std::byte> tuple)
     // Reserve the maximum distance as infinity; a simple path has fewer edges than vertices.
     if (vertices.size() >= distance_infinity)
     {
-        if (const auto existing = vertices.find(tuple))
-            return *existing;
+        if (const auto existing = vertices.find(tuple); !existing.is_none())
+            return existing.value;
         throw std::length_error("Distance: vertex count exceeds the finite distance range.");
     }
-    return vertices.insert(tuple);
+    return vertices.insert(tuple).first.value;
 }
 }
 
@@ -26,8 +28,8 @@ namespace ygg::database::detail
 {
 std::pair<uint_t, uint_t> DistanceGraph::insert_endpoints(std::span<const std::byte> edge)
 {
-    const auto from = insert_vertex(edge.first(vertices.array_size()));
-    return { from, insert_vertex(edge.subspan(vertices.array_size())) };
+    const auto from = insert_vertex(edge.first(tuple_bytes));
+    return { from, insert_vertex(edge.subspan(tuple_bytes)) };
 }
 }
 
@@ -53,7 +55,7 @@ void DistanceGraph::clear()
 
 namespace ygg::database::detail
 {
-void breadth_first_search(const DistanceGraph& graph, uint_t root, std::vector<uint_t>& distances, std::vector<uint_t>& queue)
+void breadth_first_search(const DistanceGraph& graph, uint_t root, urd::Store<urd::sequence<uint_t>>& distances, urd::Store<urd::sequence<uint_t>>& queue)
 {
     assert(root < graph.vertices.size());
     distances.assign(graph.vertices.size(), distance_infinity);
@@ -75,13 +77,13 @@ void breadth_first_search(const DistanceGraph& graph, uint_t root, std::vector<u
 
 namespace ygg::database::detail
 {
-Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t length, const DistancePlan& plan, std::vector<std::byte>& row)
+Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t length, const DistancePlan& plan, urd::Store<urd::sequence<std::byte>>& row)
 {
     assert(length != distance_infinity);
     row.resize(plan.output_columns().row_size());
     const auto tuple_size = plan.tuple_size();
-    std::ranges::copy(graph.vertices[from], row.begin());
-    std::ranges::copy(graph.vertices[to], std::span(row).subspan(tuple_size).begin());
+    std::ranges::copy(graph.vertices.view(urd::index<urd::Store<urd::sequence<std::byte>, urd::frozen>>(from)), row.begin());
+    std::ranges::copy(graph.vertices.view(urd::index<urd::Store<urd::sequence<std::byte>, urd::frozen>>(to)), std::span(row).subspan(tuple_size).begin());
     ByteCodec<uint_t>::encode(length, std::span(row).subspan(2 * tuple_size));
     return Row(row, plan.output_columns().span());
 }
@@ -92,7 +94,7 @@ namespace ygg::database
 DistancePlan::DistancePlan(std::span<const ColumnLayout> sources,
                            std::span<const ColumnLayout> edges,
                            std::span<const ColumnLayout> targets,
-                           Index<Column> distance_column) :
+                           urd::index<Column> distance_column) :
     m_sources(sources),
     m_edges(edges),
     m_targets(targets),
@@ -115,7 +117,7 @@ DistanceWorkspace::DistanceWorkspace(const DistancePlan& plan) : m_graph(plan.tu
 
 namespace ygg::database
 {
-bool DistanceWorkspace::matches(const DistancePlan& plan) const noexcept { return m_graph.vertices.array_size() == plan.tuple_size(); }
+bool DistanceWorkspace::matches(const DistancePlan& plan) const noexcept { return m_graph.tuple_bytes == plan.tuple_size(); }
 }
 
 namespace ygg::database

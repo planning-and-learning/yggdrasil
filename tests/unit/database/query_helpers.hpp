@@ -12,9 +12,9 @@ namespace ygg::tests::qb
 {
 /// A schema whose columns all have type T.
 template<ygg::ByteCodable T>
-Builder<database::Columns> columns_of(std::initializer_list<Index<database::Column>> labels)
+urd::builder<database::Columns> columns_of(std::initializer_list<urd::index<database::Column>> labels)
 {
-    Builder<database::Columns> columns;
+    urd::builder<database::Columns> columns;
     columns.template assign<T>(labels);
     return columns;
 }
@@ -31,11 +31,11 @@ inline database::QueryBuilder& builder()
     return storage;
 }
 
-inline Index<database::Query<>> require(const database::QueryRepository& repository, database::QueryView<> query)
+inline urd::index<database::Query<>> require(const database::QueryRepository& repository, database::QueryView<> query)
 {
-    if (&query.get_repository() != &repository)
+    if (&get_repository(query.context()) != &repository)
         throw std::invalid_argument("Query: operand belongs to another repository.");
-    return query.get_index();
+    return query.index();
 }
 
 inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const database::ColumnLayout> columns)
@@ -45,13 +45,13 @@ inline database::QueryView<> input(database::QueryRepository& repository, size_t
     data->columns.set(columns.begin(), columns.end());
     return database::insert_query(repository, builder(), *data);
 }
-inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const Index<database::Column>> columns)
+inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const urd::index<database::Column>> columns)
 {
-    const Builder<database::Columns> schema(columns);
+    const urd::builder<database::Columns> schema(columns);
     return input(repository, slot, schema.span());
 }
-inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::initializer_list<Index<database::Column>> columns)
-{ return input(repository, slot, std::span<const Index<database::Column>>(columns)); }
+inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::initializer_list<urd::index<database::Column>> columns)
+{ return input(repository, slot, std::span<const urd::index<database::Column>>(columns)); }
 
 inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const database::ColumnLayout> columns)
 {
@@ -59,13 +59,13 @@ inline database::QueryView<> empty(database::QueryRepository& repository, std::s
     data->columns.set(columns.begin(), columns.end());
     return database::insert_query(repository, builder(), *data);
 }
-inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const Index<database::Column>> columns)
+inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const urd::index<database::Column>> columns)
 {
-    const Builder<database::Columns> schema(columns);
+    const urd::builder<database::Columns> schema(columns);
     return empty(repository, schema.span());
 }
-inline database::QueryView<> empty(database::QueryRepository& repository, std::initializer_list<Index<database::Column>> columns)
-{ return empty(repository, std::span<const Index<database::Column>>(columns)); }
+inline database::QueryView<> empty(database::QueryRepository& repository, std::initializer_list<urd::index<database::Column>> columns)
+{ return empty(repository, std::span<const urd::index<database::Column>>(columns)); }
 
 template<typename Tag>
 database::QueryView<> binary(database::QueryRepository& repository, database::QueryView<> lhs, database::QueryView<> rhs)
@@ -88,24 +88,24 @@ inline database::QueryView<> antijoin(database::QueryRepository& repository, dat
 { return binary<database::QueryAntijoinTag>(repository, lhs, rhs); }
 
 template<typename Tag>
-database::QueryView<> relabel(database::QueryRepository& repository, database::QueryView<> arg, std::span<const Index<database::Column>> labels)
+database::QueryView<> relabel(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<database::Column>> labels)
 {
     auto data = database::checkout<database::Query<Tag>>(builder());
     data->arg = require(repository, arg);
     data->labels.set(labels.begin(), labels.end());
     return database::insert_query(repository, builder(), *data);
 }
-inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::span<const Index<database::Column>> labels)
+inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<database::Column>> labels)
 { return relabel<database::QueryProjectTag>(repository, arg, labels); }
-inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<Index<database::Column>> labels)
-{ return project(repository, arg, std::span<const Index<database::Column>>(labels)); }
-inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::span<const Index<database::Column>> labels)
+inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<urd::index<database::Column>> labels)
+{ return project(repository, arg, std::span<const urd::index<database::Column>>(labels)); }
+inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<database::Column>> labels)
 { return relabel<database::QueryRenameTag>(repository, arg, labels); }
-inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<Index<database::Column>> labels)
-{ return rename(repository, arg, std::span<const Index<database::Column>>(labels)); }
+inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<urd::index<database::Column>> labels)
+{ return rename(repository, arg, std::span<const urd::index<database::Column>>(labels)); }
 
 inline database::QueryView<>
-select_equal(database::QueryRepository& repository, database::QueryView<> arg, Index<database::Column> lhs, Index<database::Column> rhs)
+select_equal(database::QueryRepository& repository, database::QueryView<> arg, urd::index<database::Column> lhs, urd::index<database::Column> rhs)
 {
     auto data = database::checkout<database::Query<database::QuerySelectEqualTag>>(builder());
     data->arg = require(repository, arg);
@@ -114,7 +114,7 @@ select_equal(database::QueryRepository& repository, database::QueryView<> arg, I
     return database::insert_query(repository, builder(), *data);
 }
 inline database::QueryView<>
-select_encoded(database::QueryRepository& repository, database::QueryView<> arg, Index<database::Column> column, std::span<const std::byte> value)
+select_encoded(database::QueryRepository& repository, database::QueryView<> arg, urd::index<database::Column> column, std::span<const std::byte> value)
 {
     auto data = database::checkout<database::Query<database::QuerySelectValueTag>>(builder());
     data->arg = require(repository, arg);
@@ -124,7 +124,7 @@ select_encoded(database::QueryRepository& repository, database::QueryView<> arg,
     return database::insert_query(repository, builder(), *data);
 }
 template<ygg::ByteCodable T>
-database::QueryView<> select_value(database::QueryRepository& repository, database::QueryView<> arg, Index<database::Column> column, T value)
+database::QueryView<> select_value(database::QueryRepository& repository, database::QueryView<> arg, urd::index<database::Column> column, T value)
 {
     if (arg.columns()[database::column_index(arg.columns(), column)].type != ygg::type_id<T>)
         throw std::invalid_argument("Query: constant type does not match selected column.");
@@ -137,7 +137,7 @@ inline database::QueryView<> distance(database::QueryRepository& repository,
                                       database::QueryView<> sources,
                                       database::QueryView<> edges,
                                       database::QueryView<> targets,
-                                      Index<database::Column> distance_column)
+                                      urd::index<database::Column> distance_column)
 {
     auto data = database::checkout<database::Query<database::QueryDistanceTag>>(builder());
     data->sources = require(repository, sources);
@@ -149,8 +149,8 @@ inline database::QueryView<> distance(database::QueryRepository& repository,
 
 inline database::QueryView<> generic_join(database::QueryRepository& repository,
                                           std::span<const database::QueryView<>> inputs,
-                                          std::span<const Index<database::Column>> variable_order,
-                                          std::span<const Index<database::Column>> output_order = {})
+                                          std::span<const urd::index<database::Column>> variable_order,
+                                          std::span<const urd::index<database::Column>> output_order = {})
 {
     auto data = database::checkout<database::Query<database::QueryGenericJoinTag>>(builder());
     for (const auto input : inputs)
@@ -161,13 +161,13 @@ inline database::QueryView<> generic_join(database::QueryRepository& repository,
 }
 inline database::QueryView<> generic_join(database::QueryRepository& repository,
                                           std::initializer_list<database::QueryView<>> inputs,
-                                          std::initializer_list<Index<database::Column>> variable_order,
-                                          std::initializer_list<Index<database::Column>> output_order = {})
+                                          std::initializer_list<urd::index<database::Column>> variable_order,
+                                          std::initializer_list<urd::index<database::Column>> output_order = {})
 {
     return generic_join(repository,
                         std::span<const database::QueryView<>>(inputs),
-                        std::span<const Index<database::Column>>(variable_order),
-                        std::span<const Index<database::Column>>(output_order));
+                        std::span<const urd::index<database::Column>>(variable_order),
+                        std::span<const urd::index<database::Column>>(output_order));
 }
 }  // namespace ygg::tests::qb
 

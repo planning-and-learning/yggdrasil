@@ -6,7 +6,10 @@
 #ifndef YGG_DATABASE_SYNTAX_COLUMNS_HPP_
 #define YGG_DATABASE_SYNTAX_COLUMNS_HPP_
 
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/database/declarations.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/syntax/columns_data.hpp"
 
 #include <algorithm>
@@ -25,10 +28,10 @@ namespace ygg::database
 {
 /// Validate unique labels and nonempty, contiguously packed columns.
 void validate_columns(std::span<const ColumnLayout> columns);
-size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column);
-bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept;
+size_t column_index(std::span<const ColumnLayout> columns, urd::index<Column> column);
+bool contains_column(std::span<const ColumnLayout> columns, urd::index<Column> column) noexcept;
 /// The labels in schema order.
-std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns);
+urd::Store<urd::sequence<urd::index<Column>>> column_labels(std::span<const ColumnLayout> columns);
 size_t row_size(std::span<const ColumnLayout> columns) noexcept;
 /// The schema is already validated; validate the width and canonical field encodings.
 void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns);
@@ -42,79 +45,78 @@ void write_column(std::span<std::byte> bytes, std::span<const ColumnLayout> colu
 }  // namespace detail
 }  // namespace ygg::database
 
-namespace ygg
+namespace urd
 {
 /// Owns a validated typed schema. Changing it clears its canonical index and
 /// retains column storage. Row byte width is independent of logical arity.
 template<>
-struct Builder<database::Columns>
+struct builder<ygg::database::Columns>
 {
 private:
-    Data<database::Columns> m_data;
+    urd::data<ygg::database::Columns> m_data;
 
 public:
-    Builder() = default;
-    explicit Builder(std::span<const database::ColumnLayout> columns);
-    Builder(std::initializer_list<database::ColumnLayout> columns);
-    /// Labels alone give every column type uint_t; use assign<T> for another type.
-    explicit Builder(std::span<const Index<database::Column>> columns);
-    Builder(std::initializer_list<Index<database::Column>> columns);
+    builder() = default;
+    explicit builder(std::span<const ygg::database::ColumnLayout> columns);
+    builder(std::initializer_list<ygg::database::ColumnLayout> columns);
+    /// Labels alone give every column type ygg::uint_t; use assign<T> for another type.
+    explicit builder(std::span<const urd::index<ygg::database::Column>> columns);
+    builder(std::initializer_list<urd::index<ygg::database::Column>> columns);
 
     auto& get_data() noexcept { return m_data; }
     [[nodiscard]] const auto& get_data() const noexcept { return m_data; }
-    [[nodiscard]] auto get_index() const noexcept { return m_data.index; }
-    void set_index(Index<database::Columns> index) noexcept { m_data.index = index; }
+    [[nodiscard]] auto index() const noexcept { return m_data.index; }
+    void set_index(urd::index<ygg::database::Columns> index) noexcept { m_data.index = index; }
 
-    [[nodiscard]] std::span<const database::ColumnLayout> span() const& noexcept { return { m_data.values.data(), m_data.values.size() }; }
-    [[nodiscard]] std::span<const database::ColumnLayout> span() const&& = delete;
+    [[nodiscard]] std::span<const ygg::database::ColumnLayout> span() const& noexcept { return { m_data.values.data(), m_data.values.size() }; }
+    [[nodiscard]] std::span<const ygg::database::ColumnLayout> span() const&& = delete;
     [[nodiscard]] auto begin() const noexcept { return m_data.values.begin(); }
     [[nodiscard]] auto end() const noexcept { return m_data.values.end(); }
-    [[nodiscard]] const database::ColumnLayout* data() const noexcept { return m_data.values.data(); }
+    [[nodiscard]] const ygg::database::ColumnLayout* data() const noexcept { return m_data.values.data(); }
     [[nodiscard]] size_t size() const noexcept { return m_data.values.size(); }
     [[nodiscard]] bool empty() const noexcept { return m_data.values.empty(); }
-    const database::ColumnLayout& operator[](size_t index) const noexcept { return m_data.values[index]; }
-    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
-    [[nodiscard]] size_t row_size() const noexcept { return database::row_size(span()); }
-    [[nodiscard]] size_t memory_usage() const noexcept { return m_data.values.allocated_size_ * sizeof(database::ColumnLayout); }
+    const ygg::database::ColumnLayout& operator[](size_t index) const noexcept { return m_data.values[index]; }
+    [[nodiscard]] size_t column_index(urd::index<ygg::database::Column> column) const { return ygg::database::column_index(span(), column); }
+    [[nodiscard]] size_t row_size() const noexcept { return ygg::database::row_size(span()); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return m_data.values.allocated_size_ * sizeof(ygg::database::ColumnLayout); }
 
     template<ygg::ByteCodable T>
-    void push_back(Index<database::Column> column);
-    void push_back(Index<database::Column> column, ygg::TypeId type);
-    void assign(std::span<const database::ColumnLayout> columns);
-    void assign(std::initializer_list<database::ColumnLayout> columns);
-    template<ygg::ByteCodable T = uint_t>
-    void assign(std::span<const Index<database::Column>> columns);
-    template<ygg::ByteCodable T = uint_t>
-    void assign(std::initializer_list<Index<database::Column>> columns);
-    void initialize(std::span<const database::ColumnLayout> columns) { assign(columns); }
-    void initialize(std::initializer_list<database::ColumnLayout> columns) { assign(columns); }
-    void initialize(std::span<const Index<database::Column>> columns) { assign(columns); }
-    void initialize(std::initializer_list<Index<database::Column>> columns) { assign(columns); }
+    void push_back(urd::index<ygg::database::Column> column);
+    void push_back(urd::index<ygg::database::Column> column, ygg::TypeId type);
+    void assign(std::span<const ygg::database::ColumnLayout> columns);
+    void assign(std::initializer_list<ygg::database::ColumnLayout> columns);
+    template<ygg::ByteCodable T = ygg::uint_t>
+    void assign(std::span<const urd::index<ygg::database::Column>> columns);
+    template<ygg::ByteCodable T = ygg::uint_t>
+    void assign(std::initializer_list<urd::index<ygg::database::Column>> columns);
+    void initialize(std::span<const ygg::database::ColumnLayout> columns) { assign(columns); }
+    void initialize(std::initializer_list<ygg::database::ColumnLayout> columns) { assign(columns); }
+    void initialize(std::span<const urd::index<ygg::database::Column>> columns) { assign(columns); }
+    void initialize(std::initializer_list<urd::index<ygg::database::Column>> columns) { assign(columns); }
     /// Relabel without changing types or layout; validates before mutating.
-    void rename(std::span<const Index<database::Column>> columns);
-    void rename(std::initializer_list<Index<database::Column>> columns) { rename(std::span<const Index<database::Column>>(columns)); }
-    void clear() noexcept { m_data.clear(); }
+    void rename(std::span<const urd::index<ygg::database::Column>> columns);
+    void rename(std::initializer_list<urd::index<ygg::database::Column>> columns) { rename(std::span<const urd::index<ygg::database::Column>>(columns)); }
+    void clear() noexcept { urd::clear_members(m_data); }
 
     template<ygg::ByteCodable T>
-    [[nodiscard]] T get(std::span<const std::byte> bytes, Index<database::Column> column) const
-    { return database::detail::read_column<T>(bytes, span(), column_index(column)); }
+    [[nodiscard]] T read(std::span<const std::byte> bytes, urd::index<ygg::database::Column> column) const
+    { return ygg::database::detail::read_column<T>(bytes, span(), column_index(column)); }
     template<ygg::ByteCodable T>
-    void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
-    { database::detail::write_column<T>(bytes, span(), column_index(column), value); }
-    void validate_row(std::span<const std::byte> bytes) const { database::validate_row(bytes, span()); }
+    void write(std::span<std::byte> bytes, urd::index<ygg::database::Column> column, T value) const
+    { ygg::database::detail::write_column<T>(bytes, span(), column_index(column), value); }
+    void validate_row(std::span<const std::byte> bytes) const { ygg::database::validate_row(bytes, span()); }
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Builder::m_data> {}; }
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Builder::m_data> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&builder::m_data> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&builder::m_data> {}; }
 };
-}  // namespace ygg
+}  // namespace urd
 
 namespace ygg::database
 {
 template<typename V>
-concept ColumnsViewConcept = requires(const V& columns, size_t index, Index<Column> column) {
-    { columns.get_index() } -> std::same_as<Index<Columns>>;
+concept ColumnsViewConcept = requires(const V& columns, size_t index, urd::index<Column> column) {
+    { columns.index() } -> std::same_as<urd::index<Columns>>;
     { columns.span() } -> std::same_as<std::span<const ColumnLayout>>;
-    { columns.data() } -> std::same_as<const ColumnLayout*>;
     { columns.size() } -> std::same_as<size_t>;
     { columns.empty() } -> std::same_as<bool>;
     { columns[index] } -> std::same_as<const ColumnLayout&>;
@@ -123,44 +125,49 @@ concept ColumnsViewConcept = requires(const V& columns, size_t index, Index<Colu
 };
 }  // namespace ygg::database
 
-namespace ygg
-{
-/// Schema accessors shared by the index, data, and builder views of columns.
+/// Schema accessors shared by the index, data, and builder views of columns (a builder view reads the builder's record).
 template<typename V>
-class ViewMixin<database::Columns, V>
+struct urd::view_mixin<ygg::database::Columns, V>
 {
-    [[nodiscard]] const Data<database::Columns>& record() const noexcept { return static_cast<const V&>(*this).get_record(); }
+private:
+    [[nodiscard]] const urd::data<ygg::database::Columns>& record() const noexcept
+    {
+        const auto& self = static_cast<const V&>(*this);
+        if constexpr (requires { self.data().get_data(); })
+            return self.data().get_data();
+        else
+            return self.data();
+    }
 
 public:
-    [[nodiscard]] std::span<const database::ColumnLayout> span() const noexcept { return { record().values.data(), record().values.size() }; }
+    /// The record's own index (an index view's index() hides it, the same).
+    [[nodiscard]] urd::index<ygg::database::Columns> index() const noexcept { return record().index; }
+    [[nodiscard]] std::span<const ygg::database::ColumnLayout> span() const noexcept { return { record().values.data(), record().values.size() }; }
     [[nodiscard]] auto begin() const noexcept { return span().begin(); }
     [[nodiscard]] auto end() const noexcept { return span().end(); }
-    [[nodiscard]] const database::ColumnLayout* data() const noexcept { return span().data(); }
     [[nodiscard]] size_t size() const noexcept { return span().size(); }
     [[nodiscard]] bool empty() const noexcept { return span().empty(); }
-    const database::ColumnLayout& operator[](size_t index) const noexcept { return span()[index]; }
-    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return database::column_index(span(), column); }
-    [[nodiscard]] size_t row_size() const noexcept { return database::row_size(span()); }
+    const ygg::database::ColumnLayout& operator[](size_t index) const noexcept { return span()[index]; }
+    [[nodiscard]] size_t column_index(urd::index<ygg::database::Column> column) const { return ygg::database::column_index(span(), column); }
+    [[nodiscard]] size_t row_size() const noexcept { return ygg::database::row_size(span()); }
 
     template<ygg::ByteCodable T>
-    T get(std::span<const std::byte> bytes, Index<database::Column> column) const
-    { return database::detail::read_column<T>(bytes, span(), column_index(column)); }
+    T read(std::span<const std::byte> bytes, urd::index<ygg::database::Column> column) const
+    { return ygg::database::detail::read_column<T>(bytes, span(), column_index(column)); }
     template<ygg::ByteCodable T>
-    void set(std::span<std::byte> bytes, Index<database::Column> column, T value) const
-    { database::detail::write_column<T>(bytes, span(), column_index(column), value); }
-    void validate_row(std::span<const std::byte> bytes) const { database::validate_row(bytes, span()); }
+    void write(std::span<std::byte> bytes, urd::index<ygg::database::Column> column, T value) const
+    { ygg::database::detail::write_column<T>(bytes, span(), column_index(column), value); }
+    void validate_row(std::span<const std::byte> bytes) const { ygg::database::validate_row(bytes, span()); }
 };
-}  // namespace ygg
-
 namespace ygg::database
 {
 namespace detail
 {
-void validate_column_labels(std::span<const Index<Column>> columns);
+void validate_column_labels(std::span<const urd::index<Column>> columns);
 
 /// Validates a schema given by labels alone, whose columns all have type T, and returns its row width.
 template<ByteCodable T = uint_t>
-size_t label_row_size(std::span<const Index<Column>> labels)
+size_t label_row_size(std::span<const urd::index<Column>> labels)
 {
     validate_column_labels(labels);
     constexpr auto width = ByteCodec<T>::size;
@@ -202,47 +209,47 @@ namespace detail
 void validate_relabel(std::span<const ColumnLayout> previous, std::span<const ColumnLayout> next);
 
 /// Replaces the schema, retaining capacity; the columns may be a slice of the replaced schema.
-void assign_columns(Data<Columns>& data, std::span<const ColumnLayout> columns);
+void assign_columns(urd::data<Columns>& data, std::span<const ColumnLayout> columns);
 }  // namespace detail
 
 inline size_t row_size(std::span<const ColumnLayout> columns) noexcept { return columns.empty() ? 0 : columns.back().offset + columns.back().size; }
 }  // namespace ygg::database
 
-namespace ygg
+namespace urd
 {
 
 template<ygg::ByteCodable T>
-void Builder<database::Columns>::push_back(Index<database::Column> column)
+void urd::builder<ygg::database::Columns>::push_back(urd::index<ygg::database::Column> column)
 { push_back(column, ygg::type_id<T>); }
 
 template<ygg::ByteCodable T>
-void Builder<database::Columns>::assign(std::span<const Index<database::Column>> columns)
+void urd::builder<ygg::database::Columns>::assign(std::span<const urd::index<ygg::database::Column>> columns)
 {
-    database::detail::label_row_size<T>(columns);
+    ygg::database::detail::label_row_size<T>(columns);
     constexpr auto width = ygg::ByteCodec<T>::size;
     m_data.values.resize(columns.size());
     for (size_t i = 0; i < columns.size(); ++i)
-        m_data.values[i] = database::ColumnLayout { columns[i], ygg::type_id<T>, i * width, width };
-    ygg::clear(m_data.index);
+        m_data.values[i] = ygg::database::ColumnLayout { columns[i], ygg::type_id<T>, i * width, width };
+    m_data.index = {};
 }
 
 template<ygg::ByteCodable T>
-void Builder<database::Columns>::assign(std::initializer_list<Index<database::Column>> columns)
-{ assign<T>(std::span<const Index<database::Column>>(columns)); }
+void urd::builder<ygg::database::Columns>::assign(std::initializer_list<urd::index<ygg::database::Column>> columns)
+{ assign<T>(std::span<const urd::index<ygg::database::Column>>(columns)); }
 
-}  // namespace ygg
+}  // namespace urd
 
 namespace ygg::database
 {
 template<ColumnsViewConcept V>
-Data<Columns>& assign(Data<Columns>& data, const V& source)
+urd::data<Columns>& assign(urd::data<Columns>& data, const V& source)
 {
     detail::assign_columns(data, source.span());
     return data;
 }
 
 template<ColumnsViewConcept V>
-Builder<Columns>& assign(Builder<Columns>& builder, const V& source)
+urd::builder<Columns>& assign(urd::builder<Columns>& builder, const V& source)
 {
     builder.assign(source.span());
     return builder;

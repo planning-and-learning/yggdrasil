@@ -18,14 +18,30 @@
 #ifndef YGG_IO_PROJECT_PATH_HPP_
 #define YGG_IO_PROJECT_PATH_HPP_
 
-#include "yggdrasil/core/path.hpp"
-
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
 namespace ygg::common
 {
+
+inline std::filesystem::path resolve_path(const std::filesystem::path& prefix, std::string_view path)
+{
+    const auto result = std::filesystem::path(std::string(path));
+    return result.is_absolute() ? result : prefix / result;
+}
+
+inline std::string read_file(const std::filesystem::path& path)
+{
+    auto stream = std::ifstream(path, std::ios::binary);
+    if (!stream)
+        throw std::runtime_error("Could not open file: " + path.string());
+
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
 
 #ifdef ROOT_DIR
 inline std::filesystem::path root_path() { return std::filesystem::path(std::string(ROOT_DIR)); }

@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/incremental/generic_join.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
 #include "yggdrasil/database/semantics/relation_repository.hpp"
@@ -18,13 +20,13 @@ namespace ygg::tests
 {
 namespace
 {
-using Values = TypeList<uint_t>;
-using RelationBuilder = Builder<database::Relation>;
+using Values = boost::mp11::mp_list<uint_t>;
+using RelationBuilder = urd::builder<database::Relation>;
 using Change = database::incremental::Delta;
-using ColumnIndex = Index<database::Column>;
+using ColumnIndex = urd::index<database::Column>;
 
 // Borrowed views use a relation repository only as their context.
-inline database::BorrowedRelationView borrow(const Builder<database::Relation>& relation)
+inline database::BorrowedRelationView borrow(const urd::builder<database::Relation>& relation)
 {
     static const auto context = database::RelationRepositoryFactory {}.create();
     return { relation, context };
@@ -50,7 +52,7 @@ struct ThrowingRelation : database::BorrowedRelationView
 template<database::RelationViewRange R>
 database::GenericJoinPlan plan_for(const R& inputs, std::initializer_list<ColumnIndex> variables, std::initializer_list<ColumnIndex> output)
 {
-    std::vector<std::vector<database::ColumnLayout>> schemas;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
     schemas.reserve(inputs.size());
     for (const auto& input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
@@ -67,13 +69,13 @@ void expect_same(const A& actual, const E& expected)
 }
 
 template<database::RelationViewRange R>
-Builder<database::Relation> binary_reference(const R& inputs, const database::GenericJoinPlan& plan)
+urd::builder<database::Relation> binary_reference(const R& inputs, const database::GenericJoinPlan& plan)
 {
-    Builder<database::Relation> result;
+    urd::builder<database::Relation> result;
     result.insert(std::tuple {});
     for (const auto input : inputs)
         result = database::join(result, input);
-    std::vector<ColumnIndex> output;
+    urd::Store<urd::sequence<ColumnIndex>> output;
     for (const auto column : plan.output_columns().span())
         output.push_back(column.label);
     return database::project(result, output);
@@ -120,7 +122,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrd
     const std::array inputs { borrow(r), borrow(s), borrow(t) };
     std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
     const std::array output { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) };
-    std::vector<std::vector<database::ColumnLayout>> schemas;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
     schemas.reserve(inputs.size());
     for (const auto input : inputs)
         schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
@@ -160,7 +162,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
         ASSERT_EQ(expected.size(), count);
 
         const std::array inputs { borrow(r), borrow(s), borrow(t) };
-        std::vector<std::vector<database::ColumnLayout>> schemas;
+        urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
         schemas.reserve(inputs.size());
         for (const auto input : inputs)
             schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
@@ -230,14 +232,14 @@ TEST(YggdrasilTests, DatabaseGenericJoinHandlesDisconnectedAndNullaryInputs)
 
 TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueComparators)
 {
-    Builder<database::Columns> left_schema;
+    urd::builder<database::Columns> left_schema;
     left_schema.push_back<std::uint64_t>(ColumnIndex(1));
     left_schema.push_back<double>(ColumnIndex(2));
-    Builder<database::Columns> right_schema;
+    urd::builder<database::Columns> right_schema;
     right_schema.push_back<double>(ColumnIndex(2));
     right_schema.push_back<bool>(ColumnIndex(3));
-    Builder<database::Relation> left(left_schema.span());
-    Builder<database::Relation> right(right_schema.span());
+    urd::builder<database::Relation> left(left_schema.span());
+    urd::builder<database::Relation> right(right_schema.span());
     const auto nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000001 });
     const auto other_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000002 });
     left.insert(std::tuple { std::uint64_t { 4 }, -0.0 });
@@ -247,7 +249,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueCompa
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for(inputs, { ColumnIndex(2), ColumnIndex(3), ColumnIndex(1) }, { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) });
     database::GenericJoinWorkspace workspace(plan);
-    Builder<database::Relation> result(plan.output_columns().span());
+    urd::builder<database::Relation> result(plan.output_columns().span());
     database::generic_join(inputs, plan, result, workspace);
     const auto expected = binary_reference(inputs, plan);
     expect_same(result, expected);

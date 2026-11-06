@@ -1,4 +1,5 @@
 #include "yggdrasil/database/semantics/distance.hpp"
+#include "yggdrasil/python/type_casters.hpp"
 
 #include "module.hpp"
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
@@ -13,8 +14,8 @@ namespace yggdrasil
 
 namespace
 {
-using Relation = ygg::Builder<ygg::database::Relation>;
-using Column = ygg::Index<ygg::database::Column>;
+using Relation = urd::builder<ygg::database::Relation>;
+using Column = urd::index<ygg::database::Column>;
 using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
 using Plan = ygg::database::DistancePlan;
 using Evaluator = ygg::database::incremental::DistanceEvaluator;

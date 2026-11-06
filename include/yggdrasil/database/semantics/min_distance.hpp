@@ -97,9 +97,9 @@ private:
     MinDistance(bound::QueryEvaluator edges, const DistancePlan& plan) :
         m_plan(plan),
         m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
-        m_tree(plan.tuple_size()),
-        m_targets(plan.tuple_size()),
-        m_search(plan.tuple_size())
+        m_tree(),
+        m_targets(),
+        m_search()
     {
     }
 

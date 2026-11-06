@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_GENERIC_JOIN_PLAN_HPP_
 
 #include "yggdrasil/database/semantics/plans.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <cista/containers/vector.h>
 #include <cstddef>
@@ -20,17 +22,17 @@ namespace ygg::database
 class GenericJoinPlan
 {
     cista::offset::vector<cista::offset::vector<ColumnLayout>> m_inputs;
-    Builder<Columns> m_output;
-    cista::offset::vector<Index<Column>> m_order;
+    urd::builder<Columns> m_output;
+    cista::offset::vector<urd::index<Column>> m_order;
     cista::offset::vector<cista::offset::vector<ColumnSlice>> m_keys;
     cista::offset::vector<cista::offset::vector<size_t>> m_occurrences;
     cista::offset::vector<ColumnSlice> m_output_positions;
 
 public:
     GenericJoinPlan() = default;
-    GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inputs,
-                    std::span<const Index<Column>> variable_order,
-                    std::span<const Index<Column>> output_order);
+    GenericJoinPlan(std::span<const urd::Store<urd::sequence<ColumnLayout>>> inputs,
+                    std::span<const urd::index<Column>> variable_order,
+                    std::span<const urd::index<Column>> output_order);
 
     [[nodiscard]] size_t input_count() const noexcept { return m_inputs.size(); }
     [[nodiscard]] std::span<const ColumnLayout> input_columns(size_t input) const
@@ -40,7 +42,7 @@ public:
     }
     [[nodiscard]] const auto& output_columns() const& noexcept { return m_output; }
     [[nodiscard]] const auto& output_columns() const&& = delete;
-    [[nodiscard]] std::span<const Index<Column>> variable_order() const noexcept { return { m_order.data(), m_order.size() }; }
+    [[nodiscard]] std::span<const urd::index<Column>> variable_order() const noexcept { return { m_order.data(), m_order.size() }; }
     [[nodiscard]] std::span<const ColumnSlice> input_keys(size_t input) const
     {
         const auto& keys = m_keys.at(input);
@@ -55,7 +57,7 @@ public:
 
     static constexpr auto cista_members() noexcept
     {
-        return ygg::Members<&GenericJoinPlan::m_inputs,
+        return urd::Members<&GenericJoinPlan::m_inputs,
                             &GenericJoinPlan::m_output,
                             &GenericJoinPlan::m_order,
                             &GenericJoinPlan::m_keys,

@@ -5,10 +5,11 @@
 #ifndef YGG_DATABASE_SYNTAX_QUERY_DATA_HPP_
 #define YGG_DATABASE_SYNTAX_QUERY_DATA_HPP_
 
-#include "yggdrasil/containers/variant.hpp"
-#include "yggdrasil/core/byte_codec.hpp"
-#include "yggdrasil/core/type_list.hpp"
-#include "yggdrasil/core/types_utils.hpp"
+#include <urd/elements/flat.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
+#include "yggdrasil/database/byte_codec.hpp"
+#include <boost/mp11.hpp>
 #include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/generic_join.hpp"
@@ -25,215 +26,206 @@
 #include <utility>
 #include <vector>
 
-namespace ygg
+namespace urd
 {
 template<>
-struct Data<database::Query<>>
+struct data<ygg::database::Query<>>
 {
-    using Variant = IndexVariant<MapTypeListT<database::Query, database::QueryConstructorTags>>;
+    using Variant = urd::index_variant<boost::mp11::mp_transform<ygg::database::Query, ygg::database::QueryConstructorTags>>;
 
-    Index<database::Query<>> index;
+    urd::index<ygg::database::Query<>> index;
     Variant variant;
 
-    Data() = default;
-    explicit Data(Variant variant_) : index(), variant(std::move(variant_)) {}
+    data() = default;
+    explicit data(Variant variant_) : index(), variant(std::move(variant_)) {}
     /// The erased record of an interned concrete query.
     template<typename Tag, typename C>
-    explicit Data(View<Index<database::Query<Tag>>, C> concrete) : variant(concrete.get_index())
+    explicit data(urd::view<ygg::database::Query<Tag>, C> concrete) : variant(concrete.index())
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::variant> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::variant> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::variant> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::variant> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QueryInputTag>>
+struct data<ygg::database::Query<ygg::database::QueryInputTag>>
 {
-    Index<database::Query<database::QueryInputTag>> index;
+    urd::index<ygg::database::Query<ygg::database::QueryInputTag>> index;
     size_t input_slot = 0;
-    cista::offset::vector<database::ColumnLayout> columns;
+    cista::offset::vector<ygg::database::ColumnLayout> columns;
 
-    Data() = default;
-    Data(size_t input_slot_, std::span<const database::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
+    data() = default;
+    data(size_t input_slot_, std::span<const ygg::database::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::input_slot, &Data::columns> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::input_slot, &Data::columns> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::input_slot, &data::columns> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::input_slot, &data::columns> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QueryEmptyTag>>
+struct data<ygg::database::Query<ygg::database::QueryEmptyTag>>
 {
-    Index<database::Query<database::QueryEmptyTag>> index;
-    cista::offset::vector<database::ColumnLayout> columns;
+    urd::index<ygg::database::Query<ygg::database::QueryEmptyTag>> index;
+    cista::offset::vector<ygg::database::ColumnLayout> columns;
 
-    Data() = default;
-    explicit Data(std::span<const database::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
+    data() = default;
+    explicit data(std::span<const ygg::database::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::columns> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::columns> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::columns> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::columns> {}; }
 };
 
 // Prepared schemas and positions are serialized but do not define operator identity.
 template<typename Tag>
-    requires(std::same_as<Tag, database::QueryJoinTag> || std::same_as<Tag, database::QuerySemijoinTag> || std::same_as<Tag, database::QueryAntijoinTag>)
-struct Data<database::Query<Tag>>
+    requires(std::same_as<Tag, ygg::database::QueryJoinTag> || std::same_as<Tag, ygg::database::QuerySemijoinTag> || std::same_as<Tag, ygg::database::QueryAntijoinTag>)
+struct data<ygg::database::Query<Tag>>
 {
-    Index<database::Query<Tag>> index;
-    Index<database::Query<>> lhs;
-    Index<database::Query<>> rhs;
-    database::JoinPlan plan;
+    urd::index<ygg::database::Query<Tag>> index;
+    urd::index<ygg::database::Query<>> lhs;
+    urd::index<ygg::database::Query<>> rhs;
+    ygg::database::JoinPlan plan;
 
-    Data() = default;
-    Data(Index<database::Query<>> lhs_, Index<database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
+    data() = default;
+    data(urd::index<ygg::database::Query<>> lhs_, urd::index<ygg::database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
     template<typename C>
-    Data(View<Index<database::Query<>>, C> lhs_, View<Index<database::Query<>>, C> rhs_) : Data(lhs_.get_index(), rhs_.get_index())
+    data(urd::view<ygg::database::Query<>, C> lhs_, urd::view<ygg::database::Query<>, C> rhs_) : data(lhs_.index(), rhs_.index())
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::lhs, &Data::rhs> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::lhs, &Data::rhs, &Data::plan> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::lhs, &data::rhs> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lhs, &data::rhs, &data::plan> {}; }
 };
 
 template<typename Tag>
-    requires(std::same_as<Tag, database::QueryUnionTag> || std::same_as<Tag, database::QueryDifferenceTag>)
-struct Data<database::Query<Tag>>
+    requires(std::same_as<Tag, ygg::database::QueryUnionTag> || std::same_as<Tag, ygg::database::QueryDifferenceTag>)
+struct data<ygg::database::Query<Tag>>
 {
-    Index<database::Query<Tag>> index;
-    Index<database::Query<>> lhs;
-    Index<database::Query<>> rhs;
-    cista::offset::vector<database::ColumnLayout> columns;
+    urd::index<ygg::database::Query<Tag>> index;
+    urd::index<ygg::database::Query<>> lhs;
+    urd::index<ygg::database::Query<>> rhs;
+    cista::offset::vector<ygg::database::ColumnLayout> columns;
 
-    Data() = default;
-    Data(Index<database::Query<>> lhs_, Index<database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
+    data() = default;
+    data(urd::index<ygg::database::Query<>> lhs_, urd::index<ygg::database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
     template<typename C>
-    Data(View<Index<database::Query<>>, C> lhs_, View<Index<database::Query<>>, C> rhs_) : Data(lhs_.get_index(), rhs_.get_index())
+    data(urd::view<ygg::database::Query<>, C> lhs_, urd::view<ygg::database::Query<>, C> rhs_) : data(lhs_.index(), rhs_.index())
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::lhs, &Data::rhs> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::lhs, &Data::rhs, &Data::columns> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::lhs, &data::rhs> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lhs, &data::rhs, &data::columns> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QueryProjectTag>>
+struct data<ygg::database::Query<ygg::database::QueryProjectTag>>
 {
-    Index<database::Query<database::QueryProjectTag>> index;
-    Index<database::Query<>> arg;
-    cista::offset::vector<Index<database::Column>> labels;
-    database::ProjectionPlan plan;
+    urd::index<ygg::database::Query<ygg::database::QueryProjectTag>> index;
+    urd::index<ygg::database::Query<>> arg;
+    cista::offset::vector<urd::index<ygg::database::Column>> labels;
+    ygg::database::ProjectionPlan plan;
 
-    Data() = default;
-    Data(Index<database::Query<>> arg_, std::span<const Index<database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
+    data() = default;
+    data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
     template<typename C>
-    Data(View<Index<database::Query<>>, C> arg_, std::span<const Index<database::Column>> labels_) : Data(arg_.get_index(), labels_)
+    data(urd::view<ygg::database::Query<>, C> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : data(arg_.index(), labels_)
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::labels> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::arg, &Data::labels, &Data::plan> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::labels> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::arg, &data::labels, &data::plan> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QueryRenameTag>>
+struct data<ygg::database::Query<ygg::database::QueryRenameTag>>
 {
-    Index<database::Query<database::QueryRenameTag>> index;
-    Index<database::Query<>> arg;
-    cista::offset::vector<Index<database::Column>> labels;
-    cista::offset::vector<database::ColumnLayout> columns;
+    urd::index<ygg::database::Query<ygg::database::QueryRenameTag>> index;
+    urd::index<ygg::database::Query<>> arg;
+    cista::offset::vector<urd::index<ygg::database::Column>> labels;
+    cista::offset::vector<ygg::database::ColumnLayout> columns;
 
-    Data() = default;
-    Data(Index<database::Query<>> arg_, std::span<const Index<database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
+    data() = default;
+    data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
     template<typename C>
-    Data(View<Index<database::Query<>>, C> arg_, std::span<const Index<database::Column>> labels_) : Data(arg_.get_index(), labels_)
+    data(urd::view<ygg::database::Query<>, C> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : data(arg_.index(), labels_)
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::labels> {}; }
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::index, &Data::arg, &Data::labels, &Data::columns> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::labels> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::arg, &data::labels, &data::columns> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QuerySelectEqualTag>>
+struct data<ygg::database::Query<ygg::database::QuerySelectEqualTag>>
 {
-    Index<database::Query<database::QuerySelectEqualTag>> index;
-    Index<database::Query<>> arg;
-    Index<database::Column> lhs_column;
-    Index<database::Column> rhs_column;
-    cista::offset::vector<database::ColumnLayout> columns;
+    urd::index<ygg::database::Query<ygg::database::QuerySelectEqualTag>> index;
+    urd::index<ygg::database::Query<>> arg;
+    urd::index<ygg::database::Column> lhs_column;
+    urd::index<ygg::database::Column> rhs_column;
+    cista::offset::vector<ygg::database::ColumnLayout> columns;
     size_t lhs_position = 0;
     size_t rhs_position = 0;
 
-    Data() = default;
-    Data(Index<database::Query<>> arg_, Index<database::Column> lhs_column_, Index<database::Column> rhs_column_) :
+    data() = default;
+    data(urd::index<ygg::database::Query<>> arg_, urd::index<ygg::database::Column> lhs_column_, urd::index<ygg::database::Column> rhs_column_) :
         arg(arg_),
         lhs_column(lhs_column_),
         rhs_column(rhs_column_)
     {
     }
     template<typename C>
-    Data(View<Index<database::Query<>>, C> arg_, Index<database::Column> lhs_column_, Index<database::Column> rhs_column_) :
-        Data(arg_.get_index(), lhs_column_, rhs_column_)
+    data(urd::view<ygg::database::Query<>, C> arg_, urd::index<ygg::database::Column> lhs_column_, urd::index<ygg::database::Column> rhs_column_) :
+        data(arg_.index(), lhs_column_, rhs_column_)
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::lhs_column, &Data::rhs_column> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::lhs_column, &data::rhs_column> {}; }
     static constexpr auto cista_members() noexcept
-    { return ygg::Members<&Data::index, &Data::arg, &Data::lhs_column, &Data::rhs_column, &Data::columns, &Data::lhs_position, &Data::rhs_position> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    { return urd::Members<&data::index, &data::arg, &data::lhs_column, &data::rhs_column, &data::columns, &data::lhs_position, &data::rhs_position> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QuerySelectValueTag>>
+struct data<ygg::database::Query<ygg::database::QuerySelectValueTag>>
 {
-    Index<database::Query<database::QuerySelectValueTag>> index;
-    Index<database::Query<>> arg;
-    Index<database::Column> column;
+    urd::index<ygg::database::Query<ygg::database::QuerySelectValueTag>> index;
+    urd::index<ygg::database::Query<>> arg;
+    urd::index<ygg::database::Column> column;
     cista::offset::vector<std::byte> constant;
     /// The type of the encoded constant.
     ygg::TypeId constant_type = ygg::TypeId::none;
-    cista::offset::vector<database::ColumnLayout> columns;
+    cista::offset::vector<ygg::database::ColumnLayout> columns;
     size_t column_position = 0;
 
-    Data() = default;
+    data() = default;
     /// The constant is encoded with the column codec of its type.
     template<ygg::ByteCodable T>
-    Data(Index<database::Query<>> arg_, Index<database::Column> column_, T value) : arg(arg_), column(column_), constant_type(ygg::type_id<T>)
+    data(urd::index<ygg::database::Query<>> arg_, urd::index<ygg::database::Column> column_, T value) : arg(arg_), column(column_), constant_type(ygg::type_id<T>)
     {
         std::array<std::byte, ygg::ByteCodec<T>::size> bytes {};
         ygg::ByteCodec<T>::encode(value, bytes);
         constant.set(bytes.begin(), bytes.end());
     }
     template<typename C, ygg::ByteCodable T>
-    Data(View<Index<database::Query<>>, C> arg_, Index<database::Column> column_, T value) : Data(arg_.get_index(), column_, value)
+    data(urd::view<ygg::database::Query<>, C> arg_, urd::index<ygg::database::Column> column_, T value) : data(arg_.index(), column_, value)
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::arg, &Data::column, &Data::constant> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::column, &data::constant> {}; }
     static constexpr auto cista_members() noexcept
-    { return ygg::Members<&Data::index, &Data::arg, &Data::column, &Data::constant, &Data::constant_type, &Data::columns, &Data::column_position> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    { return urd::Members<&data::index, &data::arg, &data::column, &data::constant, &data::constant_type, &data::columns, &data::column_position> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QueryDistanceTag>>
+struct data<ygg::database::Query<ygg::database::QueryDistanceTag>>
 {
-    Index<database::Query<database::QueryDistanceTag>> index;
-    Index<database::Query<>> sources;
-    Index<database::Query<>> edges;
-    Index<database::Query<>> targets;
-    Index<database::Column> distance_column;
-    database::DistancePlan plan;
+    urd::index<ygg::database::Query<ygg::database::QueryDistanceTag>> index;
+    urd::index<ygg::database::Query<>> sources;
+    urd::index<ygg::database::Query<>> edges;
+    urd::index<ygg::database::Query<>> targets;
+    urd::index<ygg::database::Column> distance_column;
+    ygg::database::DistancePlan plan;
 
-    Data() = default;
-    Data(Index<database::Query<>> sources_, Index<database::Query<>> edges_, Index<database::Query<>> targets_, Index<database::Column> distance_column_) :
+    data() = default;
+    data(urd::index<ygg::database::Query<>> sources_, urd::index<ygg::database::Query<>> edges_, urd::index<ygg::database::Query<>> targets_, urd::index<ygg::database::Column> distance_column_) :
         sources(sources_),
         edges(edges_),
         targets(targets_),
@@ -241,56 +233,56 @@ struct Data<database::Query<database::QueryDistanceTag>>
     {
     }
     template<typename C>
-    Data(View<Index<database::Query<>>, C> sources_,
-         View<Index<database::Query<>>, C> edges_,
-         View<Index<database::Query<>>, C> targets_,
-         Index<database::Column> distance_column_) :
-        Data(sources_.get_index(), edges_.get_index(), targets_.get_index(), distance_column_)
+    data(urd::view<ygg::database::Query<>, C> sources_,
+         urd::view<ygg::database::Query<>, C> edges_,
+         urd::view<ygg::database::Query<>, C> targets_,
+         urd::index<ygg::database::Column> distance_column_) :
+        data(sources_.index(), edges_.index(), targets_.index(), distance_column_)
     {
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::sources, &Data::edges, &Data::targets, &Data::distance_column> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::sources, &data::edges, &data::targets, &data::distance_column> {}; }
     static constexpr auto cista_members() noexcept
-    { return ygg::Members<&Data::index, &Data::sources, &Data::edges, &Data::targets, &Data::distance_column, &Data::plan> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    { return urd::Members<&data::index, &data::sources, &data::edges, &data::targets, &data::distance_column, &data::plan> {}; }
 };
 
 template<>
-struct Data<database::Query<database::QueryGenericJoinTag>>
+struct data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>
 {
-    Index<database::Query<database::QueryGenericJoinTag>> index;
-    cista::offset::vector<Index<database::Query<>>> inputs;
-    cista::offset::vector<Index<database::Column>> variable_order;
-    cista::offset::vector<Index<database::Column>> output_order;
-    database::GenericJoinPlan plan;
+    urd::index<ygg::database::Query<ygg::database::QueryGenericJoinTag>> index;
+    cista::offset::vector<urd::index<ygg::database::Query<>>> inputs;
+    cista::offset::vector<urd::index<ygg::database::Column>> variable_order;
+    cista::offset::vector<urd::index<ygg::database::Column>> output_order;
+    ygg::database::GenericJoinPlan plan;
 
-    Data() = default;
+    data() = default;
     /// An empty output order is canonicalized on insertion.
-    Data(std::span<const Index<database::Query<>>> inputs_,
-         std::span<const Index<database::Column>> variable_order_,
-         std::span<const Index<database::Column>> output_order_ = {}) :
+    data(std::span<const urd::index<ygg::database::Query<>>> inputs_,
+         std::span<const urd::index<ygg::database::Column>> variable_order_,
+         std::span<const urd::index<ygg::database::Column>> output_order_ = {}) :
         index()
     {
         inputs.set(inputs_.begin(), inputs_.end());
         variable_order.set(variable_order_.begin(), variable_order_.end());
         output_order.set(output_order_.begin(), output_order_.end());
     }
-    template<typename C>
-    Data(const std::vector<::ygg::View<Index<database::Query<>>, C>>& inputs_,
-         std::span<const Index<database::Column>> variable_order_,
-         std::span<const Index<database::Column>> output_order_ = {}) :
+    /// From any range of query views (a sequence Store, std::vector, an array).
+    template<std::ranges::input_range Views>
+        requires std::same_as<std::ranges::range_value_t<Views>, urd::view<ygg::database::Query<>, ygg::database::QueryRepository>>
+    data(const Views& inputs_,
+         std::span<const urd::index<ygg::database::Column>> variable_order_,
+         std::span<const urd::index<ygg::database::Column>> output_order_ = {}) :
         index()
     {
-        set(inputs_, inputs);
+        inputs = urd::to_stored(inputs_);
         variable_order.set(variable_order_.begin(), variable_order_.end());
         output_order.set(output_order_.begin(), output_order_.end());
     }
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::inputs, &Data::variable_order, &Data::output_order> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::inputs, &data::variable_order, &data::output_order> {}; }
     static constexpr auto cista_members() noexcept
-    { return ygg::Members<&Data::index, &Data::inputs, &Data::variable_order, &Data::output_order, &Data::plan> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    { return urd::Members<&data::index, &data::inputs, &data::variable_order, &data::output_order, &data::plan> {}; }
 };
-}  // namespace ygg
+}  // namespace urd
 
 #endif

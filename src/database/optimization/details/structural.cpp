@@ -4,15 +4,17 @@
  */
 
 #include "yggdrasil/database/optimization/details/structural.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
-#include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
 
 namespace ygg::database::detail
 {
-std::optional<std::vector<std::optional<size_t>>> join_tree(std::vector<std::vector<Index<Column>>> edges)
+std::optional<urd::Store<urd::sequence<std::optional<size_t>>>> join_tree(urd::Store<urd::sequence<urd::Store<urd::sequence<urd::index<Column>>>>> edges)
 {
     const auto count = edges.size();
-    std::vector<std::optional<size_t>> parent(count);
+    urd::Store<urd::sequence<std::optional<size_t>>> parent(count);
     std::vector<bool> alive(count, true);
     size_t remaining = count;
     for (bool changed = true; changed && remaining > 1;)
@@ -22,8 +24,8 @@ std::optional<std::vector<std::optional<size_t>>> join_tree(std::vector<std::vec
         {
             if (!alive[edge])
                 continue;
-            const auto removed = std::erase_if(edges[edge],
-                                               [&](Index<Column> variable)
+            const auto removed = erase_if(edges[edge],
+                                               [&](urd::index<Column> variable)
                                                {
                                                    for (size_t other = 0; other < count; ++other)
                                                        if (other != edge && alive[other] && std::ranges::binary_search(edges[other], variable))
@@ -58,14 +60,14 @@ namespace ygg::database::detail
 QueryView<> yannakakis(const JoinBlock& block, std::span<const std::optional<size_t>> parent, OperatorBuilder& build)
 {
     const auto count = block.atoms.size();
-    std::vector<std::vector<size_t>> children(count);
+    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>>> children(count);
     size_t root = 0;
     for (size_t atom = 0; atom < count; ++atom)
         if (const auto& above = parent[atom])
             children[*above].push_back(atom);
         else
             root = atom;
-    std::vector<size_t> preorder { root };
+    urd::Store<urd::sequence<size_t>> preorder { root };
     for (size_t position = 0; position < preorder.size(); ++position)
         for (const auto child : children[preorder[position]])
             preorder.push_back(child);
@@ -78,14 +80,14 @@ QueryView<> yannakakis(const JoinBlock& block, std::span<const std::optional<siz
         if (const auto& above = parent[atom])
             relations[atom] = semijoin(build, relations[atom], relations[*above]);
 
-    std::vector<std::optional<QueryView<>>> results(count);
+    urd::Store<urd::sequence<std::optional<QueryView<>>>> results(count);
     for (auto atom = preorder.rbegin(); atom != preorder.rend(); ++atom)
     {
         auto joined = relations[*atom];
         for (const auto child : children[*atom])
         {
             const auto& result = results[child];
-            YGG_ASSUME(result.has_value());  // the reverse preorder visits children first
+            URD_ASSUME(result.has_value());  // the reverse preorder visits children first
             joined = build.join(joined, *result);
         }
         auto keep = block.required;
@@ -98,7 +100,7 @@ QueryView<> yannakakis(const JoinBlock& block, std::span<const std::optional<siz
         results[*atom] = build.restrict(joined, keep);
     }
     const auto& result = results[root];
-    YGG_ASSUME(result.has_value());  // the reverse preorder ends at the root
+    URD_ASSUME(result.has_value());  // the reverse preorder ends at the root
     return *result;
 }
 }
@@ -107,7 +109,7 @@ namespace ygg::database::detail
 {
 QueryView<> structural_plan(const JoinBlock& block, OperatorBuilder& build)
 {
-    std::vector<std::vector<Index<Column>>> edges;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<urd::index<Column>>>>> edges;
     edges.reserve(block.atoms.size());
     for (const auto atom : block.atoms)
         edges.push_back(variables(atom));

@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/optimization/details/estimation.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
@@ -27,14 +29,14 @@ Estimate factor(const RelationStatistics& stats, std::span<const ColumnLayout> c
 
 namespace ygg::database::detail
 {
-Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
+Estimate conjunction(Estimate result, std::span<const urd::index<Column>> labels)
 {
     // ponytail: hand-rolled union-find over a few columns; boost::disjoint_sets needs property maps for no gain here.
-    UnorderedMap<Index<Column>, Index<Column>> parent;
+    urd::Store<urd::map<urd::index<Column>, urd::index<Column>>> parent;
     for (const auto& single : result.factors)
         for (const auto& attribute : single.attributes)
             parent[attribute.column] = attribute.column;
-    const auto find = [&](Index<Column> column)
+    const auto find = [&](urd::index<Column> column)
     {
         while (parent.at(column) != column)
             column = parent.at(column);
@@ -45,7 +47,7 @@ Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
         const auto left = find(lhs), right = find(rhs);
         parent[std::max(left, right)] = std::min(left, right);
     }
-    UnorderedMap<Index<Column>, std::vector<std::byte>> bound;
+    urd::Store<urd::map<urd::index<Column>, urd::Store<urd::sequence<std::byte>>>> bound;
     bool zero = false;
     for (const auto& [column, value] : result.constants)
     {
@@ -53,12 +55,12 @@ Estimate conjunction(Estimate result, std::span<const Index<Column>> labels)
         if (!inserted && it->second != value)
             zero = true;
     }
-    UnorderedMap<Index<Column>, std::vector<double>> domains;
-    Set<std::pair<FactorIdentity, std::vector<std::pair<size_t, Index<Column>>>>> unique;
+    urd::Store<urd::map<urd::index<Column>, urd::Store<urd::sequence<double>>>> domains;
+    urd::Store<urd::set<std::pair<FactorIdentity, urd::Store<urd::sequence<std::pair<size_t, urd::index<Column>>>>>>, urd::sorted> unique;
     double logarithm = 0;
     for (const auto& single : result.factors)
     {
-        std::vector<std::pair<size_t, Index<Column>>> bindings;
+        urd::Store<urd::sequence<std::pair<size_t, urd::index<Column>>>> bindings;
         bindings.reserve(single.attributes.size());
         for (const auto& attribute : single.attributes)
             bindings.emplace_back(attribute.position, find(attribute.column));
@@ -131,8 +133,8 @@ namespace ygg::database::detail
 {
 RelationStatistics capped(RelationStatistics stats)
 {
-    for (auto& [column, count] : stats.distinct)
-        count = std::min(count, stats.rows);
+    for (const auto& [column, count] : stats.distinct)
+        stats.distinct.at(column) = std::min(count, stats.rows);
     return stats;
 }
 }

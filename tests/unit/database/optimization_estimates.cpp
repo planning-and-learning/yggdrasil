@@ -7,8 +7,8 @@
 
 namespace
 {
-using Column = ygg::Index<ygg::database::Column>;
-using PlanId = ygg::Index<ygg::database::Query<>>;
+using Column = urd::index<ygg::database::Column>;
+using PlanId = urd::index<ygg::database::Query<>>;
 const Column x(0), y(1), z(2);
 
 // Exercises System R estimation independently of planning: the same conjunction
@@ -17,12 +17,12 @@ auto estimate(ygg::database::QueryView<> root, const ygg::database::Statistics& 
 {
     std::map<PlanId, ygg::database::detail::Estimate> estimates;
     for (const auto query : ygg::database::reachable(std::span<const ygg::database::QueryView<>>(&root, 1)))
-        estimates[query.get_index()] = ygg::database::detail::estimate(
+        estimates[query.index()] = ygg::database::detail::estimate(
             query,
-            query.get_index(),
-            [&](ygg::database::QueryView<> child) { return estimates.at(child.get_index()); },
+            query.index(),
+            [&](ygg::database::QueryView<> child) { return estimates.at(child.index()); },
             statistics);
-    return estimates.at(root.get_index());
+    return estimates.at(root.index());
 }
 
 void same_estimate(const auto& lhs, const auto& rhs)
@@ -131,7 +131,7 @@ TEST(DatabaseOptimizationEstimates, ObservationsOverrideDerivedEstimates)
     statistics.inputs[3] = { 100, {} };
     statistics.inputs[8] = { 200, {} };
     EXPECT_NEAR(estimate(join, statistics).rows, 100, 1e-9);
-    statistics.expressions[join.get_index()] = { 7, { { x, 2 }, { y, 3 } } };
+    statistics.expressions[join.index()] = { 7, { { x, 2 }, { y, 3 } } };
     const auto observed = estimate(join, statistics);
     EXPECT_EQ(observed.rows, 7);
     EXPECT_EQ(observed.distinct.at(x), 2);
@@ -159,7 +159,7 @@ TEST(DatabaseOptimizationEstimates, BoundedDomainsCapDistinctCounts)
 
 TEST(DatabaseOptimizationEstimates, FactorIdentitySeparatesInputsAndQueries)
 {
-    ygg::Builder<ygg::database::Columns> columns;
+    urd::builder<ygg::database::Columns> columns;
     columns.push_back<ygg::uint_t>(x);
     const ygg::database::RelationStatistics statistics { 10, { { x, 2 } } };
     const auto input = ygg::database::detail::factor(statistics, columns.span(), ygg::database::detail::InputFactorIdentity { 7 });

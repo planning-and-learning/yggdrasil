@@ -18,12 +18,9 @@
 #ifndef YGG_FORMALISM_BINDING_VIEW_HPP_
 #define YGG_FORMALISM_BINDING_VIEW_HPP_
 
-#include "yggdrasil/containers/span.hpp"
-#include "yggdrasil/containers/vector.hpp"
-#include "yggdrasil/core/types.hpp"
+#include <urd/elements/flat.hpp>
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/semantics/containers/block_array_ordering.hpp"
 
 #include <iterator>
 #include <ranges>
@@ -33,228 +30,22 @@
 #include <type_traits>
 #include <utility>
 
-namespace ygg::formalism::detail
-{
-/// Borrows the row sequence and context, independently of its binding-range wrapper.
-/// Comparing or subtracting iterators requires that they belong to the same sequence.
-template<typename RelationTag, typename ObjectTag, std::forward_iterator BaseIterator, typename C>
-class RelationBindingIterator
-{
-    const C* m_context = nullptr;
-    BaseIterator m_it {};
-    Index<RelationTag> m_relation {};
-
-public:
-    using difference_type = std::iter_difference_t<BaseIterator>;
-    using value_type = ygg::View<Index<RelationBinding<RelationTag, ObjectTag>>, C>;
-    using reference = value_type;
-    using pointer = void;
-    using iterator_concept =
-        std::conditional_t<std::random_access_iterator<BaseIterator>,
-                           std::random_access_iterator_tag,
-                           std::conditional_t<std::bidirectional_iterator<BaseIterator>, std::bidirectional_iterator_tag, std::forward_iterator_tag>>;
-    using iterator_category = iterator_concept;
-
-    RelationBindingIterator() = default;
-    RelationBindingIterator(Index<RelationTag> relation, BaseIterator it, const C& context) : m_context(&context), m_it(std::move(it)), m_relation(relation) {}
-
-    reference operator*() const { return ygg::make_view(Index<RelationBinding<RelationTag, ObjectTag>> { m_relation, *m_it }, *m_context); }
-    RelationBindingIterator& operator++()
-    {
-        ++m_it;
-        return *this;
-    }
-    RelationBindingIterator operator++(int)
-    {
-        auto old = *this;
-        ++*this;
-        return old;
-    }
-    RelationBindingIterator& operator--()
-        requires std::bidirectional_iterator<BaseIterator>
-    {
-        --m_it;
-        return *this;
-    }
-    RelationBindingIterator operator--(int)
-        requires std::bidirectional_iterator<BaseIterator>
-    {
-        auto old = *this;
-        --*this;
-        return old;
-    }
-    RelationBindingIterator& operator+=(difference_type n)
-        requires std::random_access_iterator<BaseIterator>
-    {
-        m_it += n;
-        return *this;
-    }
-    RelationBindingIterator& operator-=(difference_type n)
-        requires std::random_access_iterator<BaseIterator>
-    {
-        m_it -= n;
-        return *this;
-    }
-    friend RelationBindingIterator operator+(RelationBindingIterator it, difference_type n)
-        requires std::random_access_iterator<BaseIterator>
-    { return it += n; }
-    friend RelationBindingIterator operator+(difference_type n, RelationBindingIterator it)
-        requires std::random_access_iterator<BaseIterator>
-    { return it += n; }
-    friend RelationBindingIterator operator-(RelationBindingIterator it, difference_type n)
-        requires std::random_access_iterator<BaseIterator>
-    { return it -= n; }
-    friend difference_type operator-(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
-        requires std::random_access_iterator<BaseIterator>
-    { return lhs.m_it - rhs.m_it; }
-    reference operator[](difference_type n) const
-        requires std::random_access_iterator<BaseIterator>
-    { return *(*this + n); }
-    friend bool operator==(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs) { return lhs.m_it == rhs.m_it; }
-    friend bool operator<(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
-        requires std::random_access_iterator<BaseIterator>
-    { return lhs.m_it < rhs.m_it; }
-    friend bool operator>(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
-        requires std::random_access_iterator<BaseIterator>
-    { return rhs < lhs; }
-    friend bool operator<=(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
-        requires std::random_access_iterator<BaseIterator>
-    { return !(rhs < lhs); }
-    friend bool operator>=(const RelationBindingIterator& lhs, const RelationBindingIterator& rhs)
-        requires std::random_access_iterator<BaseIterator>
-    { return !(lhs < rhs); }
-};
-}  // namespace ygg::formalism::detail
-
-namespace ygg
-{
-
-template<typename RelationTag, typename ObjectTag, typename C>
-class View<Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public IndexViewBase<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, C>
-{
-public:
-    using IndexViewBase<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, C>::IndexViewBase;
-
-    [[nodiscard]] auto get_relation() const { return ygg::make_view(this->get_handle().relation, this->get_context()); }
-    [[nodiscard]] auto get_objects() const { return ygg::make_view(this->get_data(), this->get_context()); }
-    // Use the relation index rather than its view: view identity includes the repository,
-    // while this key represents the logical binding across repositories.
-    [[nodiscard]] auto get_key() const { return std::make_pair(this->get_handle().relation, this->get_data()); }
-};
-
-/// Borrows a complete binding without publishing a row identity. Data and context
-/// must outlive the view and all object ranges; keep the data unchanged while used.
-template<typename RelationTag, typename ObjectTag, typename C>
-class View<Data<formalism::RelationBinding<RelationTag, ObjectTag>>, C> : public DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>
-{
-    [[nodiscard]] auto objects() const noexcept
-    { return std::span<const Index<formalism::Object<ObjectTag>>>(this->get_data().objects.data(), this->get_data().objects.size()); }
-
-public:
-    using DataViewBase<formalism::RelationBinding<RelationTag, ObjectTag>, C>::DataViewBase;
-
-    [[nodiscard]] auto get_relation() const { return make_view(this->get_data().relation, this->get_context()); }
-    [[nodiscard]] auto get_objects() const noexcept { return make_view(objects(), this->get_context()); }
-    [[nodiscard]] auto get_key() const noexcept { return std::make_pair(this->get_data().relation, objects()); }
-};
-
-template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
-class View<ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>, C>
+/// A binding, published (its handle read through the context: a RelationBindingRow) or borrowed (its record): its
+/// relation and objects, both read through the context. A borrowed binding's record and context must outlive the view
+/// and all object ranges; keep the record unchanged while used.
+template<typename RelationTag, typename ObjectTag, typename V>
+struct urd::view_mixin<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, V>
 {
 private:
-    using Container = ygg::formalism::RelationBindingsForwardRange<RelationTag, ObjectTag, BindingRange>;
-    using T = Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>;
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
-
-    [[nodiscard]] bool empty() const { return std::ranges::begin(*get_data().rows) == std::ranges::end(*get_data().rows); }
-
-    [[nodiscard]] size_t size() const
-        requires std::ranges::sized_range<const std::remove_reference_t<BindingRange>>
-    { return std::ranges::size(*get_data().rows); }
-
-    [[nodiscard]] decltype(auto) front() const
-    {
-        ensure_not_empty();
-        auto it = std::ranges::begin(*get_data().rows);
-        return ygg::make_view(T { *get_data().relation, *it }, get_context());
-    }
-
-    using const_iterator =
-        formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;
-
-    [[nodiscard]] const_iterator begin() const { return const_iterator { *get_data().relation, std::ranges::begin(*get_data().rows), get_context() }; }
-
-    [[nodiscard]] const_iterator end() const { return const_iterator { *get_data().relation, std::ranges::end(*get_data().rows), get_context() }; }
-
-    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
-    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
-    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
-
-private:
-    void ensure_not_empty() const
-    {
-        if (empty())
-            throw std::out_of_range("RelationBindingsForwardRange: range is empty.");
-    }
-
-    const C* m_context;
-    Container m_handle;
+    [[nodiscard]] auto get_relation() const { return self().context().view(self().data().relation); }
+    [[nodiscard]] auto get_objects() const { return urd::resolve(self().data().objects, self().context()); }
+    /// The logical binding across repositories: the relation index (a view's identity includes its repository) and
+    /// the object row.
+    [[nodiscard]] auto get_key() const { return std::make_pair(self().data().relation, std::views::all(self().data().objects)); }
 };
-
-template<typename RelationTag, typename ObjectTag, typename BindingRange, typename C>
-class View<ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>, C>
-{
-private:
-    using Container = ygg::formalism::RelationBindingsRandomAccessRange<RelationTag, ObjectTag, BindingRange>;
-    using T = Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>;
-
-public:
-    View(Container handle, const C& context) noexcept : m_context(&context), m_handle(handle) {}
-
-    [[nodiscard]] bool empty() const { return std::ranges::begin(*get_data().rows) == std::ranges::end(*get_data().rows); }
-
-    [[nodiscard]] size_t size() const { return std::ranges::size(*get_data().rows); }
-
-    [[nodiscard]] decltype(auto) front() const
-    {
-        ensure_not_empty();
-        auto it = std::ranges::begin(*get_data().rows);
-        return ygg::make_view(T { *get_data().relation, *it }, get_context());
-    }
-
-    [[nodiscard]] decltype(auto) back() const
-    {
-        ensure_not_empty();
-        return ygg::make_view(T { *get_data().relation, std::views::all(*get_data().rows).back() }, get_context());
-    }
-
-    decltype(auto) operator[](size_t i) const { return ygg::make_view(T { *get_data().relation, std::views::all(*get_data().rows)[i] }, get_context()); }
-
-    using const_iterator =
-        formalism::detail::RelationBindingIterator<RelationTag, ObjectTag, std::ranges::iterator_t<const std::remove_reference_t<BindingRange>>, C>;
-
-    [[nodiscard]] const_iterator begin() const { return const_iterator { *get_data().relation, std::ranges::begin(*get_data().rows), get_context() }; }
-
-    [[nodiscard]] const_iterator end() const { return const_iterator { *get_data().relation, std::ranges::end(*get_data().rows), get_context() }; }
-
-    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
-    [[nodiscard]] const auto& get_context() const noexcept { return *m_context; }
-    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
-
-private:
-    void ensure_not_empty() const
-    {
-        if (empty())
-            throw std::out_of_range("RelationBindingsRandomAccessRange: range is empty.");
-    }
-
-    const C* m_context;
-    Container m_handle;
-};
-
-}  // namespace ygg
 
 namespace ygg::formalism
 {
@@ -262,14 +53,16 @@ namespace ygg::formalism
 /// is deliberately absent; a logical key consists of the relation and object row.
 template<typename V, typename RelationTag, typename ObjectTag>
 concept RelationBindingViewConcept = requires(const std::remove_reference_t<V>& view) {
-    view.get_data();
-    view.get_handle();
-    view.get_context();
-    { view.get_relation().get_index() } -> std::same_as<Index<RelationTag>>;
-    { view.get_objects()[size_t {}].get_index() } -> std::same_as<Index<Object<ObjectTag>>>;
-    { view.get_objects().get_data() } -> SizedForwardRangeOf<Index<Object<ObjectTag>>>;
-    { view.get_key().first } -> SameAsIgnoringCvref<Index<RelationTag>>;
-    { view.get_key().second } -> SizedForwardRangeOf<Index<Object<ObjectTag>>>;
+    view.data();
+    view.context();
+    { view.get_relation().index() } -> std::same_as<urd::index<RelationTag>>;
+    { view.get_objects()[size_t {}].index() } -> std::same_as<urd::index<Object<ObjectTag>>>;
+    requires std::same_as<std::remove_cvref_t<decltype(view.get_key().first)>, urd::index<RelationTag>>;
+    requires std::ranges::forward_range<const std::remove_reference_t<decltype(view.get_key().second)>>
+                 && std::ranges::sized_range<const std::remove_reference_t<decltype(view.get_key().second)>>
+                 && std::same_as<std::ranges::range_value_t<const std::remove_reference_t<decltype(view.get_key().second)>>, urd::index<Object<ObjectTag>>>
+                 && std::convertible_to<std::ranges::range_reference_t<const std::remove_reference_t<decltype(view.get_key().second)>>,
+                                        const urd::index<Object<ObjectTag>>&>;
 };
 }  // namespace ygg::formalism
 

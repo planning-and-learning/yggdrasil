@@ -6,7 +6,6 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_QUERY_EVALUATION_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_BOUND_QUERY_EVALUATION_HPP_
 
-#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
@@ -17,6 +16,11 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/maps/unordered_flat_map.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -27,8 +31,8 @@ namespace ygg::database::incremental::bound
 struct InputChange
 {
     size_t slot = 0;
-    Builder<Relation> added;
-    Builder<Relation> removed;
+    urd::builder<Relation> added;
+    urd::builder<Relation> removed;
 };
 
 /// A bound::QueryEvaluator kept across input changes. initialize() binds the first inputs; update() takes a caller's
@@ -50,7 +54,7 @@ public:
         for (size_t slot = 0; slot < input_count(); ++slot)
         {
             const auto columns = std::span<const ColumnLayout>(m_base.query().input_columns[slot]);
-            m_changes.push_back(InputChange { slot, Builder<Relation>(columns), Builder<Relation>(columns) });
+            m_changes.push_back(InputChange { slot, urd::builder<Relation>(columns), urd::builder<Relation>(columns) });
         }
         m_changed.reserve(input_count());
         m_positive.assign(input_count(), false);
@@ -69,12 +73,12 @@ public:
 
     [[nodiscard]] size_t input_count() const noexcept { return m_base.input_count(); }
     [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_base.columns(); }
-    [[nodiscard]] const Builder<Relation>& input(size_t slot) const { return m_base.input(slot); }
+    [[nodiscard]] const urd::builder<Relation>& input(size_t slot) const { return m_base.input(slot); }
     [[nodiscard]] bool bound() const noexcept { return m_base.bound(); }
     [[nodiscard]] bool is_static(size_t slot) const noexcept { return m_base.is_static(slot); }
     /// Increases whenever a change can remove output rows (see the class comment).
     [[nodiscard]] uint64_t version() const noexcept { return m_version; }
-    size_t prepare(std::vector<size_t> positions) { return m_base.prepare(std::move(positions)); }
+    size_t prepare(urd::Store<urd::sequence<size_t>> positions) { return m_base.prepare(std::move(positions)); }
     template<RowPredicate OnRow>
     void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
     { m_base.evaluate(binding, values, on_row); }
@@ -152,9 +156,9 @@ public:
 
 private:
     database::bound::QueryEvaluator m_base;
-    UnorderedMap<std::vector<bool>, std::vector<database::bound::ConjunctivePlan>> m_seed_plans;  ///< By the variables bound on arrival.
-    std::vector<InputChange> m_changes;                                                           ///< By slot; reused across bind() calls.
-    std::vector<size_t> m_changed;                                                                ///< The slots the last bind() changed.
+    urd::Store<urd::map<std::vector<bool>, std::vector<database::bound::ConjunctivePlan>>> m_seed_plans;  ///< By the variables bound on arrival. std::vector: filled from the plans, of an incomplete type.
+    urd::Store<urd::sequence<InputChange>> m_changes;                                                           ///< By slot; reused across bind() calls.
+    urd::Store<urd::sequence<size_t>> m_changed;                                                                ///< The slots the last bind() changed.
     std::vector<bool> m_positive;  ///< By slot: whether it occurs under an even number of negations.
     std::vector<bool> m_negative;  ///< By slot: whether it occurs under an odd number of negations.
     uint64_t m_version = 0;

@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SYNTAX_OPERATOR_BUILDER_HPP_
 
 #include "yggdrasil/database/syntax/query.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <algorithm>
 #include <concepts>
@@ -28,7 +30,7 @@ public:
     QueryRepository& repository() noexcept { return *m_repository; }
     QueryBuilder& builder() noexcept { return *m_builder; }
 
-    template<class Tag, std::invocable<Data<Query<Tag>>&> Fill>
+    template<class Tag, std::invocable<urd::data<Query<Tag>>&> Fill>
     QueryView<> make(Fill fill)
     {
         auto data = checkout<Query<Tag>>(*m_builder);
@@ -45,17 +47,17 @@ public:
         return make<Tag>(
             [&](auto& data)
             {
-                data.lhs = lhs.get_index();
-                data.rhs = rhs.get_index();
+                data.lhs = lhs.index();
+                data.rhs = rhs.index();
             });
     }
     template<class Tag>
-    QueryView<> relabel(QueryView<> arg, std::span<const Index<Column>> labels)
+    QueryView<> relabel(QueryView<> arg, std::span<const urd::index<Column>> labels)
     {
         return make<Tag>(
             [&](auto& data)
             {
-                data.arg = arg.get_index();
+                data.arg = arg.index();
                 data.labels.set(labels.begin(), labels.end());
             });
     }
@@ -63,23 +65,23 @@ public:
     /// The source's operation over schema-identical children of this repository.
     QueryView<> clone(QueryView<> source, std::span<const QueryView<>> children) { return detail::clone_query(source, children, *m_repository, *m_builder); }
     /// Keeps the query's columns with the given labels, in that order.
-    QueryView<> project(QueryView<> query, std::span<const Index<Column>> labels)
+    QueryView<> project(QueryView<> query, std::span<const urd::index<Column>> labels)
     {
         if (std::ranges::equal(column_labels(query.columns()), labels))
             return query;
         return relabel<QueryProjectTag>(query, labels);
     }
     /// Keeps the query's columns whose labels occur in the sorted set, in schema order.
-    QueryView<> restrict(QueryView<> query, std::span<const Index<Column>> keep)
+    QueryView<> restrict(QueryView<> query, std::span<const urd::index<Column>> keep)
     {
-        std::vector<Index<Column>> labels;
+        urd::Store<urd::sequence<urd::index<Column>>> labels;
         for (const auto& column : query.columns())
             if (std::ranges::binary_search(keep, column.label))
                 labels.push_back(column.label);
         return project(query, labels);
     }
     /// Generic Join over the atoms; the variable order is also the output order.
-    QueryView<> generic_join(std::span<const QueryView<>> atoms, std::span<const Index<Column>> order);
+    QueryView<> generic_join(std::span<const QueryView<>> atoms, std::span<const urd::index<Column>> order);
 };
 
 }  // namespace ygg::database

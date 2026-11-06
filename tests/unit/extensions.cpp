@@ -20,7 +20,10 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <type_traits>
-#include <yggdrasil.hpp>
+#include "yggdrasil/core/config.hpp"
+#include "yggdrasil/execution/onetbb.hpp"
+
+#include <urd/elements/index.hpp>
 
 namespace ygg::tests
 {
@@ -28,50 +31,21 @@ namespace ygg::tests
 struct AdaptersIndexTag;
 }
 
-namespace ygg
-{
-}  // namespace ygg
-
 namespace ygg::tests
 {
 
-namespace
-{
-struct AdaptersUint : ygg::FixedUintMixin<AdaptersUint>
-{
-    using Base = ygg::FixedUintMixin<AdaptersUint>;
-    using Base::Base;
-};
-}  // namespace
-
 TEST(YggdrasilTests, CommonAdaptersUmbrellaHeaderExposesPublicSurfaces)
 {
-    static_assert(std::is_same_v<ygg::Index<AdaptersIndexTag>::value_type, ygg::uint_t>);
-    static_assert(std::is_same_v<AdaptersUint::value_type, ygg::uint_t>);
+    static_assert(std::is_same_v<urd::index<AdaptersIndexTag>::value_type, ygg::uint_t>);
 
-    const auto default_index = ygg::Index<AdaptersIndexTag>();
-    const auto max_index = ygg::Index<AdaptersIndexTag>::max();
-    const auto index = ygg::Index<AdaptersIndexTag>(3);
+    const auto default_index = urd::index<AdaptersIndexTag>();
+    const auto max_index = urd::index<AdaptersIndexTag>();
+    const auto index = urd::index<AdaptersIndexTag>(3);
 
-    EXPECT_TRUE(default_index.is_max());
-    EXPECT_TRUE(max_index.is_max());
-    EXPECT_FALSE(index.is_max());
-    EXPECT_EQ(index.get_value(), 3);
-
-    const auto default_uint = AdaptersUint();
-    const auto max_uint = AdaptersUint::max();
-    const auto uint_value = AdaptersUint(4);
-
-    EXPECT_TRUE(default_uint.is_max());
-    EXPECT_TRUE(max_uint.is_max());
-    EXPECT_FALSE(uint_value.is_max());
-    EXPECT_EQ(uint_value.get_value(), 4);
-
-    auto arena = ygg::buffer::SegmentedBuffer();
-    const auto value = std::array<uint8_t, 1> { 1 };
-
-    EXPECT_NE(arena.write(value.data(), value.size()), nullptr);
-    EXPECT_EQ(arena.size(), 1);
+    EXPECT_TRUE(default_index.is_none());
+    EXPECT_TRUE(max_index.is_none());
+    EXPECT_FALSE(index.is_none());
+    EXPECT_EQ(index.value, 3);
 }
 
 TEST(YggdrasilTests, CommonExecutionContextExposesThreadLimit)

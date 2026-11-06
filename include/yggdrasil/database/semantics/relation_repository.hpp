@@ -6,8 +6,10 @@
 #ifndef YGG_DATABASE_SEMANTICS_RELATION_REPOSITORY_HPP_
 #define YGG_DATABASE_SEMANTICS_RELATION_REPOSITORY_HPP_
 
-#include "yggdrasil/containers/raw_vector_set.hpp"
-#include "yggdrasil/core/config.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/store.hpp>
+#include <urd/config.hpp>
 #include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 #include "yggdrasil/formalism/interning.hpp"
@@ -54,15 +56,19 @@ class RelationRepository
     friend class RelationRepositoryFactory;
 
 public:
-    using SymbolTypes = TypeList<Columns, Relation>;
+    using SymbolTypes = boost::mp11::mp_list<Columns, Relation>;
+    /// Rows of any width (one per schema), and sorted row-ID sets, interned in urd pools (stored flat): a handle's
+    /// value is a row's ID, or a row set's.
+    using RowPool = urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd::frozen>>>;
+    using RowSetPool = urd::Store<urd::pool<urd::Store<urd::sequence<urd::index<RelationRow>>, urd::frozen>>>;
 
 private:
     formalism::SymbolRepository<Columns, Relation> m_symbols;
-    Data<Columns> m_columns_data;
-    RawVectorSet<uint_t, std::byte> m_rows;
-    RawVectorSet<uint_t, Index<RelationRow>> m_row_sets;
-    std::vector<Index<RelationRow>> m_row_indices;
-    std::vector<size_t> m_storage_indices;
+    urd::data<Columns> m_columns_data;
+    RowPool m_rows;
+    RowSetPool m_row_sets;
+    urd::Store<urd::sequence<urd::index<RelationRow>>> m_row_indices;
+    urd::Store<urd::sequence<size_t>> m_storage_indices;
     RelationRepositoryFactory m_factory;
     size_t m_index;
 
@@ -76,163 +82,166 @@ public:
     RelationRepository& operator=(RelationRepository&&) = delete;
 
     [[nodiscard]] size_t get_index() const noexcept { return m_index; }
+    /// The repository's number, as urd::view asks of a context.
+    [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
     [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
     [[nodiscard]] const auto& get_row_repository() const noexcept { return m_rows; }
     [[nodiscard]] const auto& get_row_set_repository() const noexcept { return m_row_sets; }
 
     /// Interns the view's rows as a sorted row set.
     template<RelationViewConcept V>
-    Index<RelationRowSet> insert_rows(const V& builder)
+    urd::index<RelationRowSet> insert_rows(const V& builder)
     {
         m_row_indices.clear();
         m_row_indices.reserve(builder.size());
         for (size_t i = 0; i < builder.size(); ++i)
-            m_row_indices.emplace_back(m_rows.insert(builder.row(i)));
+            m_row_indices.emplace_back(m_rows.insert(builder.row(i)).first.value);
         std::ranges::sort(m_row_indices);
-        const auto index = Index<RelationRowSet>(m_row_sets.insert(m_row_indices));
+        const auto index = urd::index<RelationRowSet>(m_row_sets.insert(m_row_indices).first.value);
         ensure_storage_index(index);
         return index;
     }
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
-    [[nodiscard]] std::optional<View<Index<Entity>, RelationRepository>> find(const Data<Entity>& data) const noexcept
+    [[nodiscard]] std::optional<urd::view<Entity, RelationRepository>> find(const urd::data<Entity>& data) const noexcept
     {
         if (const auto index = m_symbols.template find_local<Entity>(data))
-            return View<Index<Entity>, RelationRepository>(*index, *this);
+            return urd::view<Entity, RelationRepository>(*index, *this);
         return std::nullopt;
     }
 
-    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(Data<Columns>& data)
+    std::pair<urd::view<Columns, RelationRepository>, bool> insert(urd::data<Columns>& data)
     {
         validate_columns(std::span<const ColumnLayout>(data.values.data(), data.values.size()));
         const auto [index, created] = m_symbols.template insert_local<Columns>(data);
-        return { View<Index<Columns>, RelationRepository>(index, *this), created };
+        return { urd::view<Columns, RelationRepository>(index, *this), created };
     }
 
-    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(std::span<const ColumnLayout> columns)
+    std::pair<urd::view<Columns, RelationRepository>, bool> insert(std::span<const ColumnLayout> columns)
     {
-        m_columns_data.clear();
+        urd::clear_members(m_columns_data);
         m_columns_data.values.set(columns.begin(), columns.end());
         return insert(m_columns_data);
     }
 
-    std::pair<View<Index<Columns>, RelationRepository>, bool> insert(std::span<const Index<Column>> columns)
+    std::pair<urd::view<Columns, RelationRepository>, bool> insert(std::span<const urd::index<Column>> columns)
     {
-        const auto schema = Builder<Columns>(columns);
+        const auto schema = urd::builder<Columns>(columns);
         return insert(schema.span());
     }
 
-    std::pair<RelationView, bool> insert(Data<Relation>& data);
+    std::pair<RelationView, bool> insert(urd::data<Relation>& data);
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
-    const Data<Entity>& operator[](Index<Entity> index) const noexcept
+    const urd::data<Entity>& operator[](urd::index<Entity> index) const noexcept
     { return m_symbols.template local<Entity>(index); }
 
-    template<typename Entity>
-        requires formalism::SupportsSymbol<RelationRepository, Entity>
-    [[nodiscard]] const RelationRepository& get_canonical_context(Index<Entity>) const noexcept
-    { return *this; }
+    /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
+    template<typename T>
+    [[nodiscard]] urd::view<T, RelationRepository> view(urd::index<T> index) const noexcept
+    { return { index, *this }; }
+
     [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
     [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
-    [[nodiscard]] View<Index<Columns>, RelationRepository> get_columns(Index<Columns> index) const noexcept { return { index, *this }; }
+    [[nodiscard]] urd::view<Columns, RelationRepository> get_columns(urd::index<Columns> index) const noexcept { return { index, *this }; }
 
-    [[nodiscard]] size_t get_storage_index(Index<RelationRowSet> row_set_index) const noexcept
+    [[nodiscard]] size_t get_storage_index(urd::index<RelationRowSet> row_set_index) const noexcept
     {
-        assert(row_set_index.get_value() < m_storage_indices.size());
-        return m_storage_indices[row_set_index.get_value()];
+        assert(row_set_index.value < m_storage_indices.size());
+        return m_storage_indices[row_set_index.value];
     }
 
     template<typename C>
-    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
+    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
     {
-        if (&get_repository(source.get_context()) != this)
+        if (&get_repository(source.context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
         detail::validate_relabel(source.columns().span(), columns);
-        auto data = source.get_data();
-        ygg::clear(data.index);
-        data.columns_index = insert(columns).first.get_index();
+        auto data = source.data();
+        data.index = {};
+        data.columns_index = insert(columns).first.index();
         data.schema_namespace = schema_namespace;
-        return make_view(insert(data).first.get_index(), source.get_context());
+        return source.context().view(insert(data).first.index());
     }
 
     template<typename C>
-    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const ColumnLayout> columns)
-    { return rename(source, columns, source.get_data().schema_namespace); }
+    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const ColumnLayout> columns)
+    { return rename(source, columns, source.data().schema_namespace); }
 
     template<typename C>
-    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const Index<Column>> columns, size_t schema_namespace)
+    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const urd::index<Column>> columns, size_t schema_namespace)
     {
-        auto schema = Builder<Columns>(source.columns().span());
+        auto schema = urd::builder<Columns>(source.columns().span());
         schema.rename(columns);
         return rename(source, schema.span(), schema_namespace);
     }
 
     template<typename C>
-    View<Index<Relation>, C> rename(View<Index<Relation>, C> source, std::span<const Index<Column>> columns)
-    { return rename(source, columns, source.get_data().schema_namespace); }
+    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const urd::index<Column>> columns)
+    { return rename(source, columns, source.data().schema_namespace); }
 
     void clear() noexcept
     {
         m_symbols.clear();
-        m_columns_data.clear();
+        urd::clear_members(m_columns_data);
         m_row_sets.clear();
         m_rows.clear();
         m_row_indices.clear();
     }
 
 private:
-    void ensure_storage_index(Index<RelationRowSet> index)
+    void ensure_storage_index(urd::index<RelationRowSet> index)
     {
-        while (m_storage_indices.size() <= index.get_value())
+        while (m_storage_indices.size() <= index.value)
             m_storage_indices.push_back(m_factory.m_rows.next_index());
     }
 };
 
-const RelationRepository& get_repository(const RelationRepository& repository YGG_LIFETIMEBOUND) noexcept;
+const RelationRepository& get_repository(const RelationRepository& repository URD_LIFETIMEBOUND) noexcept;
 
 // Validation stays in the raw repository members for both direct and prepared
 // calls.
-void prepare_for_insert(RelationRepository&, Data<Columns>&) noexcept;
+void prepare_for_insert(RelationRepository&, urd::data<Columns>&) noexcept;
 
-void prepare_for_insert(RelationRepository&, Data<Relation>&) noexcept;
+void prepare_for_insert(RelationRepository&, urd::data<Relation>&) noexcept;
 
 using formalism::insert;
 
 /// Insert mutable schemas and synchronize their canonical identity.
-inline auto insert(RelationRepository& repository, Builder<Columns>& builder) { return formalism::insert(repository, builder.get_data()); }
+inline auto insert(RelationRepository& repository, urd::builder<Columns>& builder) { return formalism::insert(repository, builder.get_data()); }
 
 /// Intern a compatible mutable relation without copying its tuple storage.
-inline auto insert(RelationRepository& repository, Builder<Relation>& builder, size_t schema_namespace = 0)
+inline auto insert(RelationRepository& repository, urd::builder<Relation>& builder, size_t schema_namespace = 0)
 {
-    auto data = Data<Relation>();
-    data.columns_index = repository.insert(builder.columns().span()).first.get_index();
+    auto data = urd::data<Relation>();
+    data.columns_index = repository.insert(builder.columns().span()).first.index();
     data.row_set_index = repository.insert_rows(builder);
     data.schema_namespace = schema_namespace;
     auto result = formalism::insert(repository, data);
-    builder.set_index(result.first.get_index());
+    builder.set_index(result.first.index());
     return result;
 }
 
 /// Remap repository-local schema and row identities into the destination.
 template<typename C>
-auto copy(View<Data<Relation>, C> source, RelationRepository& repository)
+auto copy(urd::borrowed_view<Relation, C> source, RelationRepository& repository)
 {
-    auto data = Data<Relation>();
-    data.columns_index = repository.insert(source.columns().span()).first.get_index();
+    auto data = urd::data<Relation>();
+    data.columns_index = repository.insert(source.columns().span()).first.index();
     data.row_set_index = repository.insert_rows(source);
-    data.schema_namespace = source.get_data().schema_namespace;
+    data.schema_namespace = source.data().schema_namespace;
     return formalism::insert(repository, data);
 }
 
 template<typename C>
-auto copy(View<Index<Relation>, C> source, RelationRepository& repository)
+auto copy(urd::view<Relation, C> source, RelationRepository& repository)
 {
-    if (&get_repository(source.get_context()) == &repository)
-        return std::pair { make_view(source.get_index(), repository), false };
-    return copy(make_view(source.get_data(), source.get_context()), repository);
+    if (&get_repository(source.context()) == &repository)
+        return std::pair { repository.view(source.index()), false };
+    return copy(urd::resolve(source.data(), source.context()), repository);
 }
 
 template<ColumnsViewConcept V>

@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SYNTAX_TRANSLATIONS_RELAXATION_HPP_
 
 #include "yggdrasil/database/syntax/operator_builder.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -26,8 +28,8 @@ namespace ygg::database
 /// Relaxations of queries over inputs of which only some are known.
 struct Relaxation
 {
-    std::vector<std::optional<QueryView<>>> queries;  ///< Per root; nullopt if nothing is constrained.
-    std::vector<size_t> slots;                        ///< The original input slot of each relaxed input, shared by all roots.
+    urd::Store<urd::sequence<std::optional<QueryView<>>>> queries;  ///< Per root; nullopt if nothing is constrained.
+    urd::Store<urd::sequence<size_t>> slots;                        ///< The original input slot of each relaxed input, shared by all roots.
 };
 
 namespace detail
@@ -46,7 +48,7 @@ constexpr Polarity flip(Polarity polarity) noexcept { return polarity == Polarit
 template<std::predicate<size_t> Known>
 class Relaxer
 {
-    using Labels = std::vector<Index<Column>>;
+    using Labels = urd::Store<urd::sequence<urd::index<Column>>>;
 
 public:
     Relaxer(QueryRepository& repository, QueryBuilder& builder, Known known) : m_build(repository, builder), m_known(std::move(known)) {}
@@ -55,22 +57,22 @@ public:
     /// nullopt means nothing is known: ⊤ when over, ∅ when under.
     std::optional<QueryView<>> relax(QueryView<> query, const Labels& needed, Polarity polarity)
     {
-        auto result = ygg::visit([&]<typename Tag>(QueryView<Tag> concrete) { return relax(concrete, needed, polarity); }, query.get_variant());
+        auto result = std::visit([&]<typename Tag>(QueryView<Tag> concrete) { return relax(concrete, needed, polarity); }, query.get_variant());
         // Labels nobody needs are eliminated here, in the order of `needed`; with none needed, only the emptiness remains.
         if (result)
             result = m_build.project(*result, intersection(needed, labels(*result)));
         return result;
     }
 
-    std::vector<size_t> slots() && { return std::move(m_slots); }
+    urd::Store<urd::sequence<size_t>> slots() && { return std::move(m_slots); }
 
 private:
     OperatorBuilder m_build;
     Known m_known;
-    std::vector<size_t> m_slots;  ///< The original slot of each relaxed input.
+    urd::Store<urd::sequence<size_t>> m_slots;  ///< The original slot of each relaxed input.
 
     static Labels labels(QueryView<> query) { return column_labels(query.columns()); }
-    static bool contains(const Labels& labels, Index<Column> label) { return std::ranges::find(labels, label) != labels.end(); }
+    static bool contains(const Labels& labels, urd::index<Column> label) { return std::ranges::find(labels, label) != labels.end(); }
     /// The labels of `lhs` also in `rhs`, in the order of `lhs`.
     static Labels intersection(const Labels& lhs, const Labels& rhs)
     {
@@ -90,7 +92,7 @@ private:
     }
     static bool subset(const Labels& lhs, const Labels& rhs)
     {
-        return std::ranges::all_of(lhs, [&](Index<Column> label) { return contains(rhs, label); });
+        return std::ranges::all_of(lhs, [&](urd::index<Column> label) { return contains(rhs, label); });
     }
 
     /// The relaxed input of a known slot.
@@ -144,12 +146,12 @@ private:
             return m_build.empty(concrete.columns());
         else if constexpr (std::same_as<Tag, QueryJoinTag> || std::same_as<Tag, QueryGenericJoinTag>)
         {
-            auto conjuncts = std::vector<QueryView<>>();
+            auto conjuncts = urd::Store<urd::sequence<QueryView<>>>();
             if constexpr (std::same_as<Tag, QueryJoinTag>)
                 conjuncts = { concrete.get_lhs(), concrete.get_rhs() };
             else
                 for (const auto input : concrete.get_inputs())
-                    conjuncts.emplace_back(input, concrete.get_repository());
+                    conjuncts.emplace_back(input, get_repository(concrete.context()));
             // A conjunct needs its labels that are needed above or shared with another conjunct (early elimination).
             auto result = std::optional<QueryView<>>();
             for (size_t k = 0; k < conjuncts.size(); ++k)
@@ -183,7 +185,7 @@ private:
         }
         else if constexpr (std::same_as<Tag, QuerySelectEqualTag> || std::same_as<Tag, QuerySelectValueTag>)
         {
-            const auto& data = concrete.get_data();
+            const auto& data = concrete.data();
             const auto selected = [&]
             {
                 if constexpr (std::same_as<Tag, QuerySelectEqualTag>)
@@ -201,7 +203,7 @@ private:
                 [&](auto& filtered)
                 {
                     filtered = data;
-                    filtered.arg = arg->get_index();
+                    filtered.arg = arg->index();
                 });
         }
         else if constexpr (std::same_as<Tag, QueryUnionTag>)
@@ -313,7 +315,7 @@ template<std::predicate<size_t> Known>
 Relaxation relax(std::span<const QueryView<>> roots, Known&& known, QueryRepository& repository, QueryBuilder& builder)
 {
     auto relaxer = detail::Relaxer<std::remove_cvref_t<Known>>(repository, builder, std::forward<Known>(known));
-    auto queries = std::vector<std::optional<QueryView<>>>();
+    auto queries = urd::Store<urd::sequence<std::optional<QueryView<>>>>();
     for (const auto root : roots)
         queries.push_back(relaxer.relax(root, column_labels(root.columns()), detail::Polarity::over));
     return Relaxation { std::move(queries), std::move(relaxer).slots() };

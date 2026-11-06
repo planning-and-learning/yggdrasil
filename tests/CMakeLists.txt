@@ -3,21 +3,20 @@ enable_testing()
 # Dependencies and targets
 
 find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
-yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
-find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(nanobind CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 add_subdirectory(unit)
 
 nanobind_add_module(yggdrasil_type_casters_test NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend python/type_casters.cpp python/type_casters_module.cpp)
 target_compile_features(yggdrasil_type_casters_test PRIVATE cxx_std_20)
 target_include_directories(yggdrasil_type_casters_test PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # The dependencies' headers are system headers, so the build's warnings cover only this project.
-target_include_directories(yggdrasil_type_casters_test SYSTEM PRIVATE "${YGGDRASIL_NATIVE_PREFIX}/include")
+target_include_directories(yggdrasil_type_casters_test SYSTEM PRIVATE "${URD_NATIVE_PREFIX}/include")
 
 nanobind_add_module(yggdrasil_diagnostics_test NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend python/diagnostics.cpp python/diagnostics_module.cpp)
 target_compile_features(yggdrasil_diagnostics_test PRIVATE cxx_std_20)
 target_include_directories(yggdrasil_diagnostics_test PRIVATE "${PROJECT_SOURCE_DIR}/include")
 # The dependencies' headers are system headers, so the build's warnings cover only this project.
-target_include_directories(yggdrasil_diagnostics_test SYSTEM PRIVATE "${YGGDRASIL_NATIVE_PREFIX}/include")
+target_include_directories(yggdrasil_diagnostics_test SYSTEM PRIVATE "${URD_NATIVE_PREFIX}/include")
 
 # Test registration
 
@@ -26,22 +25,6 @@ add_test(
     COMMAND ${Python_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/python/type_casters.py
         $<TARGET_FILE:yggdrasil_type_casters_test>
-)
-
-add_test(
-    NAME cmake_read_project_version
-    COMMAND ${CMAKE_COMMAND}
-        -DYGGDRASIL_PROJECT_ROOT=${PROJECT_SOURCE_DIR}
-        -DYGGDRASIL_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-        -P ${PROJECT_SOURCE_DIR}/tests/cmake/read_project_version.cmake
-)
-
-add_test(
-    NAME cmake_patch_python_stubs
-    COMMAND ${CMAKE_COMMAND}
-        -DYGGDRASIL_PROJECT_ROOT=${PROJECT_SOURCE_DIR}
-        -DYGGDRASIL_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-        -P ${PROJECT_SOURCE_DIR}/tests/cmake/patch_python_stubs.cmake
 )
 
 add_test(
@@ -61,8 +44,3 @@ add_test(
         $<TARGET_FILE:yggdrasil_diagnostics_test>
 )
 
-add_test(
-    NAME python_build_backend_smoke
-    COMMAND ${Python_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/python/build_backend_smoke.py
-)

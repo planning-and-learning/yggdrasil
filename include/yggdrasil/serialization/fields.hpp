@@ -2,6 +2,8 @@
 #define YGG_SERIALIZATION_FIELDS_HPP_
 
 #include <functional>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -20,7 +22,7 @@ inline constexpr std::string_view variant_field = "variant";
 // declared by downstream libraries, without requiring a native object.
 struct FieldNames
 {
-    std::vector<std::string> names;
+    urd::Store<urd::sequence<std::string>> names;
 
     template<typename Accessor>
     void field(std::string_view name, Accessor)
@@ -54,7 +56,7 @@ struct FieldWriter
 
 /// Default serialized field names, in declaration order. Accessors are never evaluated.
 template<typename T>
-std::vector<std::string> fields()
+urd::Store<urd::sequence<std::string>> fields()
 {
     FieldNames archive;
     describe_fields(archive, std::type_identity<T> {});

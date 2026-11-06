@@ -22,7 +22,7 @@ class GenericJoinEvaluator
     GenericJoinPlan m_plan;
     GenericJoinWorkspace m_workspace;
     database::detail::GenericJoinTrie m_changed;
-    Builder<Relation> m_result;
+    urd::builder<Relation> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
@@ -112,12 +112,12 @@ public:
         apply(changes);
     }
 
-    [[nodiscard]] const Builder<Relation>& get_result() const&
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&
     {
         detail::require_initialized(m_initialized);
         return m_result;
     }
-    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);

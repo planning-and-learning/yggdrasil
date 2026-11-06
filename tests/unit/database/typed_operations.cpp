@@ -17,8 +17,8 @@ namespace ygg::tests
 {
 namespace
 {
-using ColumnIndex = Index<database::Column>;
-using RelationBuilder = Builder<database::Relation>;
+using ColumnIndex = urd::index<database::Column>;
+using RelationBuilder = urd::builder<database::Relation>;
 
 void expect_same_rows(const RelationBuilder& actual, const RelationBuilder& expected)
 {
@@ -50,7 +50,7 @@ void expect_delta(const database::incremental::Delta& actual, const RelationBuil
 
 TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedChanges)
 {
-    Builder<database::Columns> columns;
+    urd::builder<database::Columns> columns;
     columns.push_back<uint_t>(ColumnIndex(1));
     columns.push_back<double>(ColumnIndex(2));
     columns.push_back<bool>(ColumnIndex(3));
@@ -93,11 +93,11 @@ TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedC
 
 TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexes)
 {
-    Builder<database::Columns> left_columns;
+    urd::builder<database::Columns> left_columns;
     left_columns.push_back<uint_t>(ColumnIndex(1));
     left_columns.push_back<double>(ColumnIndex(2));
     left_columns.push_back<bool>(ColumnIndex(3));
-    Builder<database::Columns> right_columns;
+    urd::builder<database::Columns> right_columns;
     right_columns.push_back<bool>(ColumnIndex(3));
     right_columns.push_back<uint_t>(ColumnIndex(1));
     right_columns.push_back<double>(ColumnIndex(4));
@@ -149,7 +149,7 @@ TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexe
 
 TEST(YggdrasilTests, DatabaseTypedConstantSelectionUsesCanonicalFloatEquality)
 {
-    Builder<database::Columns> columns;
+    urd::builder<database::Columns> columns;
     columns.push_back<double>(ColumnIndex(1));
     columns.push_back<uint_t>(ColumnIndex(2));
     RelationBuilder input(columns.span());
@@ -171,10 +171,10 @@ TEST(YggdrasilTests, DatabaseTypedConstantSelectionUsesCanonicalFloatEquality)
 
 TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResults)
 {
-    Builder<database::Columns> columns;
+    urd::builder<database::Columns> columns;
     columns.push_back<uint_t>(ColumnIndex(1));
     columns.push_back<double>(ColumnIndex(2));
-    Builder<database::Columns> incompatible;
+    urd::builder<database::Columns> incompatible;
     incompatible.push_back<double>(ColumnIndex(1));
     incompatible.push_back<double>(ColumnIndex(2));
     RelationBuilder input(columns.span());
@@ -209,9 +209,9 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     database::RelationRepositoryFactory factory;
     auto repository = factory.create();
     database::JoinIndexCache cache;
-    Builder<database::Columns> unsigned_columns;
+    urd::builder<database::Columns> unsigned_columns;
     unsigned_columns.push_back<std::uint64_t>(ColumnIndex(1));
-    Builder<database::Columns> float_columns;
+    urd::builder<database::Columns> float_columns;
     float_columns.push_back<double>(ColumnIndex(1));
     RelationBuilder unsigned_input(unsigned_columns.span());
     RelationBuilder float_input(float_columns.span());
@@ -230,10 +230,10 @@ TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
     cache.get_or_create(renamed, unsigned_key.positions());
     EXPECT_EQ(cache.size(), 2);
 
-    Builder<database::Columns> before_columns;
+    urd::builder<database::Columns> before_columns;
     before_columns.push_back<bool>(ColumnIndex(2));
     before_columns.push_back<uint_t>(ColumnIndex(1));
-    Builder<database::Columns> after_columns;
+    urd::builder<database::Columns> after_columns;
     after_columns.push_back<uint_t>(ColumnIndex(1));
     after_columns.push_back<bool>(ColumnIndex(2));
     RelationBuilder before(before_columns.span());

@@ -9,22 +9,22 @@ Nullary relations and runtime arities remain supported.
 
 Columns hold one of a fixed set of value types: `uint32_t`, `int32_t`, `uint64_t`,
 `int64_t`, `float`, `double`, and `bool` (`ygg::ByteCodable`, in
-`<yggdrasil/core/byte_codec.hpp>`). Each has a `ygg::TypeId`, which schemas store,
+`<yggdrasil/database/byte_codec.hpp>`). Each has a `ygg::TypeId`, which schemas store,
 so relations, schemas, plans and repositories carry no list of value types.
-Indices are stored as `uint_t` (`index.get_value()`); the code that owns a relation
+Indices are stored as `uint_t` (`index.value`); the code that owns a relation
 knows which tag a column holds and converts back with `Index<Tag>(value)`.
 
 ```cpp
 #include <yggdrasil/database/semantics/operations.hpp>
 
 using namespace ygg::database;
-const ygg::Index<Column> source(0), target(1), distance(2);
+const urd::index<Column> source(0), target(1), distance(2);
 
-ygg::Builder<Columns> columns;
+urd::builder<Columns> columns;
 columns.push_back<std::uint32_t>(source);
 columns.push_back<std::uint32_t>(target);
 columns.push_back<double>(distance);
-ygg::Builder<Relation> paths(std::move(columns));
+urd::builder<Relation> paths(std::move(columns));
 paths.insert(std::tuple { std::uint32_t(3), std::uint32_t(8), 2.5 });
 paths.insert(std::tuple { std::uint32_t(3), std::uint32_t(9), 4.0 });
 
@@ -55,7 +55,7 @@ format. Previously serialized homogeneous relation records are incompatible.
 
 ## Rows and ownership
 
-`ygg::Builder<Relation>` owns a schema and `RawArraySet<std::byte>`.
+`urd::builder<Relation>` owns a schema and `RawArraySet<std::byte>`.
 `row(i)` exposes canonical bytes for prepared operations. `operator[]` and
 `at(i)` return a borrowed `Row`: `get<T>(label)` checks the requested type
 and returns a value; `visit(position, visitor)` dispatches a runtime column type.
@@ -69,9 +69,10 @@ span validates width and canonical field encodings before mutation. Inserting
 `std::tuple` values checks arity/types and encodes into a fixed-size stack buffer.
 `find` and `contains` offer the same tuple, typed-row, and raw-byte interfaces.
 
-Contextual `ygg::View` over relation `Builder`, `Data`, or `Index` handles uses
-`View<Row, Context>` for indexing and iteration. Primitive columns remain
-values; typed indices resolve through `make_view` and the context's repository.
+Relation views (`urd::view<Relation, Context>`, and `urd::borrowed_view` of a
+relation record or builder) yield `Row`s for indexing and iteration. Primitive
+columns remain values; typed indices resolve through `urd::resolve` and the
+context's repository.
 This keeps object-view construction at the external access boundary. Row and
 relation iterators borrow storage; they do not copy payloads.
 
@@ -112,7 +113,7 @@ Their byte slices resolve types, offsets, and widths outside the row loop:
 
 ```cpp
 const ProjectionPlan plan(paths.columns().span(), {source, target});
-ygg::Builder<Relation> output(plan.output_columns().span());
+urd::builder<Relation> output(plan.output_columns().span());
 Workspace workspace;
 project(paths, plan, output, workspace);
 ```
@@ -129,7 +130,7 @@ Renaming labels can still reuse a compatible index.
 
 Keep a `Workspace` and output builders across evaluations. Scratch byte
 buffers, row containers, and hash tables retain capacity. `RelationPool`
-uses existing `UniqueObjectPool` instances grouped by **row byte width**, not
+uses existing urd slots Stores (`urd::Store<urd::slots<...>>`) grouped by **row byte width**, not
 logical arity. Prepare a schema once and pass its layout span to checkout to
 avoid rebuilding it in the update loop. Larger workloads may still grow storage.
 Each evaluator/thread needs its own mutable workspace and pools.
@@ -224,9 +225,9 @@ labels may differ. The distance field is a `uint_t` column.
 ```cpp
 using namespace ygg;
 using namespace ygg::database;
-Builder<Relation<>> sources({Index<Column>(10)});
-Builder<Relation<>> edges({Index<Column>(1), Index<Column>(2)});
-Builder<Relation<>> targets({Index<Column>(20)});
+urd::builder<Relation<>> sources({Index<Column>(10)});
+urd::builder<Relation<>> edges({Index<Column>(1), Index<Column>(2)});
+urd::builder<Relation<>> targets({Index<Column>(20)});
 sources.insert(std::tuple{uint_t(4)});
 edges.insert(std::tuple{uint_t(4), uint_t(7)});
 edges.insert(std::tuple{uint_t(7), uint_t(9)});
@@ -235,7 +236,7 @@ targets.insert(std::tuple{uint_t(9)});
 DistancePlan<> plan(sources.columns().span(), edges.columns().span(),
                     targets.columns().span(), Index<Column>(3));
 DistanceWorkspace<> workspace(plan);
-Builder<Relation<>> result(plan.output_columns().span());
+urd::builder<Relation<>> result(plan.output_columns().span());
 distance(sources, edges, targets, plan, result, workspace);
 assert(result.contains(std::tuple{uint_t(4), uint_t(9), uint_t(2)}));
 ```
@@ -307,8 +308,10 @@ Equal-length replacements can cancel before descendant distances change.
 
 For one surviving source, let `C = |δ|` count modified edges and vertices whose
 final distances change. Let `D = ||δ||` also include their incident dependency
-edges. Repair takes expected/amortized `O(D log(2 + D))` for mixed batches, or
-`O(D + C log(2 + C))` for insertion-only batches with Fibonacci heaps.
+edges. Repair takes expected/amortized `O(D log(2 + D))`, for mixed and
+insertion-only batches alike: the heaps are indexed binary heaps, whose push and
+update take `O(log n)` (Fibonacci heaps would give insertion-only batches
+`O(D + C log(2 + C))`).
 
 Hash lookups contribute the expected qualification; heap operations contribute
 the amortized qualification. These are per-source repair bounds. The complete
@@ -326,13 +329,12 @@ not complete paths. The source has an independent zero-length support. During
 repair, `SP` also includes contributions below the tentative distance; its
 infinity case follows the same comparison rule.
 
-`ygg::FibonacciHeap` configures Boost's mutable heap with PMR allocation. One workspace owns the global
-heap, vertex-local heaps, and a map from queued endpoint pairs to their local handles.
-These heaps are empty between repairs and are reused across source trees, so
-heap storage is not duplicated per source. A private
-`std::pmr::unsynchronized_pool_resource` retains node allocations for reuse; a
-`ygg::CountingMemoryResource` upstream records its retained chunks for `memory_usage()`.
-The resource and its heaps have stable ownership when the evaluator moves.
+The heaps are urd Stores, `urd::Store<urd::queue<Entry>, urd::by_priority, urd::handles>`
+(urd's addressable heap: the least entry first, `push` gives a handle that `update` and
+`erase` take). One workspace owns the global heap, vertex-local heaps, and a map from
+queued endpoint pairs to their local handles. These heaps are empty between repairs and
+are reused across source trees, so heap storage is not duplicated per source; each keeps
+its storage when cleared, and `memory_usage()` counts it with `urd::memory_usage`.
 There is no process-wide heap pool or per-source edge-handle array.
 
 Initialization and newly added sources use BFS. Removed sources release their
@@ -381,7 +383,7 @@ aggregates over the same plans. They reuse `distance` and `incremental::Distance
 unchanged and read the distance column:
 
 ```cpp
-Builder<Relation<>> result(plan.output_columns().span());
+urd::builder<Relation<>> result(plan.output_columns().span());
 const uint_t full = min_distance(sources, edges, targets, plan, result, workspace);
 
 incremental::SourceMinDistance<> minimum(plan);
@@ -405,7 +407,7 @@ probes have one column, and a vertex contains an object if one of its columns of
 // sources (key…, vertex), edges (key…, from, to), targets (key…, vertex), probes (object)
 MustPassPlan<> plan(sources.columns().span(), edge_query.columns(), targets.columns().span(), probes.columns().span(), keys);
 MustPass<> must_pass(edge_query, plan);
-Builder<Relation<>> out(plan.output_columns().span());   // (key…, object)
+urd::builder<Relation<>> out(plan.output_columns().span());   // (key…, object)
 must_pass.must_pass(input, sources, targets, probes, out);
 ```
 
@@ -467,7 +469,7 @@ one `(added, removed)` tuple per input.
 capturing input rows. A `QueryRepository` only stores and interns query
 records; create repositories with a `QueryRepositoryFactory`, whose
 repositories have distinct identities. Queries are built like other interned
-data: check out a `Data<Query<Tag>>` from a `QueryBuilder`, fill
+data: check out a `urd::data<Query<Tag>>` from a `QueryBuilder`, fill
 its operands and parameters, and intern it with `insert_query(repository,
 builder, data)` from `query_construction.hpp`. That inserts the concrete record
 and its heterogeneous root. `prepare_for_insert` validates operands, schemas,
@@ -476,7 +478,7 @@ borrow the repository. Input-slot numbers identify bindings at evaluation time;
 repeated references to a slot use the same input relation.
 
 The data, view, and repository definitions are separated into
-`query_data.hpp`, `query_view.hpp`, and `query_repository.hpp`; the index is the generic `Index<T>`.
+`query_data.hpp`, `query_view.hpp`, and `query_repository.hpp`; the index is the generic `urd::index<T>`.
 `Query<Tag>` identifies a concrete operation; `Query<>` is the
 heterogeneous root whose data stores a variant of concrete query indices. Each
 concrete data type stores only its own operands and parameters. For example,
@@ -529,8 +531,8 @@ const auto input = [&](size_t slot, const auto& relation)
     return insert_query(repository, builder, *data);
 };
 auto join = checkout<Query<DefaultColumnTypes, QueryJoinTag>>(builder);
-join->lhs = input(0, left_relation).get_index();
-join->rhs = input(1, right_relation).get_index();
+join->lhs = input(0, left_relation).index();
+join->rhs = input(1, right_relation).index();
 const auto query = insert_query(repository, builder, *join);
 
 // Any range of relation views: interned RelationView or BorrowedRelationView over builders.
@@ -631,7 +633,7 @@ known means an unbounded domain:
   keyed by `Index<Column>`. A missing distinct count is the row count, capped by
   `objects`.
 - `expressions`: observed results of queries in the roots' repository, keyed by
-  `query.get_index()`. They replace the derived estimate of the equivalent planned
+  `query.index()`. They replace the derived estimate of the equivalent planned
   query [LEO01].
 
 Python keys distinct counts by plain column labels and expressions by

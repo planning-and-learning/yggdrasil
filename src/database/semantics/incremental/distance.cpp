@@ -6,6 +6,7 @@
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
 
 #include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
 
 namespace ygg::database::incremental
 {
@@ -22,7 +23,7 @@ namespace ygg::database::incremental
 {
 uint_t DistanceEvaluator::require_vertex(std::span<const std::byte> row) const
 {
-    const auto vertex = m_graph.vertices.find(row);
+    const auto vertex = m_graph.find_vertex(row);
     if (!vertex)
         throw std::invalid_argument("Incremental distance: removed vertex is absent.");
     return *vertex;
@@ -92,7 +93,7 @@ void DistanceEvaluator::remove_result(uint_t source, uint_t target, uint_t lengt
         return;
     const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_plan, m_row);
     const auto position = m_result.find(row);
-    YGG_ASSUME(position.has_value());  // only rows of the result are retracted
+    URD_ASSUME(position.has_value());  // only rows of the result are retracted
     m_delta.removed.insert(row);
     m_result.erase(*position);
 }
@@ -210,7 +211,7 @@ void DistanceEvaluator::clear_changes()
 
 namespace ygg::database::incremental
 {
-const Builder<Relation>& DistanceEvaluator::get_result() const&
+const urd::builder<Relation>& DistanceEvaluator::get_result() const&
 {
     detail::require_initialized(m_initialized);
     return m_result;
@@ -231,7 +232,7 @@ namespace ygg::database::incremental
 size_t DistanceEvaluator::memory_usage() const noexcept
 {
     size_t bytes =
-        m_graph.memory_usage() + m_reverse.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + (m_repair ? m_repair->memory_usage() : 0);
+        m_graph.memory_usage() + urd::memory_usage(m_reverse) + m_result.memory_usage() + m_delta.memory_usage() + (m_repair ? m_repair->memory_usage() : 0);
     bytes += m_sources.capacity() * sizeof(SourceState) + m_source_slots.capacity() * sizeof(size_t);
     for (const auto& source : m_sources)
         bytes += source.distances.capacity() * sizeof(uint_t) + source.supports.capacity() * sizeof(size_t);
@@ -246,7 +247,7 @@ size_t DistanceEvaluator::memory_usage() const noexcept
 
 namespace ygg::database::incremental
 {
-void SourceMinDistance::count(const Builder<Relation>& rows, bool add)
+void SourceMinDistance::count(const urd::builder<Relation>& rows, bool add)
 {
     const auto columns = rows.columns().span();
     for (size_t i = 0; i < rows.size(); ++i)

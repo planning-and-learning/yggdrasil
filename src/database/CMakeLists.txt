@@ -1,7 +1,7 @@
 # The database engine, compiled once (docs/TEMPLATE_RULES.md, rules 8 and 18).
 
-find_package(fmt CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(fmt CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(TBB CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
 file(GLOB_RECURSE YGGDRASIL_DATABASE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 
@@ -29,7 +29,7 @@ function(yggdrasil_add_database_library target)
     target_include_directories(
         ${target}
         SYSTEM PUBLIC
-            "$<BUILD_INTERFACE:${YGGDRASIL_NATIVE_PREFIX}/include>"
+            "$<BUILD_INTERFACE:${URD_NATIVE_PREFIX}/include>"
     )
     target_link_libraries(${target} PUBLIC fmt::fmt TBB::tbb)
     # Sources share the headers that dominate their cost; batches compile them once (docs/TEMPLATE_RULES.md, rule 11).
@@ -37,8 +37,9 @@ function(yggdrasil_add_database_library target)
     set_target_properties(
         ${target}
         PROPERTIES
-            BUILD_RPATH "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-            INSTALL_RPATH "${YGGDRASIL_DATABASE_ORIGIN}"
+            BUILD_RPATH "${URD_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
+            # <pyyggdrasil>/lib, and pyurd's libraries beside the package: <site>/pyurd/lib.
+            INSTALL_RPATH "${YGGDRASIL_DATABASE_ORIGIN};${YGGDRASIL_DATABASE_ORIGIN}/../../pyurd/${CMAKE_INSTALL_LIBDIR}"
     )
 endfunction()
 

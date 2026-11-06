@@ -5,7 +5,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_QUERY_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_QUERY_HPP_
 
-#include "yggdrasil/core/type_list.hpp"
+#include <boost/mp11.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
 #include "yggdrasil/database/semantics/incremental/generic_join.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
@@ -26,7 +28,7 @@ namespace detail
 {
 struct QueryValue
 {
-    Builder<Relation> result;
+    urd::builder<Relation> result;
     Delta delta;
     explicit QueryValue(std::span<const ColumnLayout> columns) : result(columns), delta(columns) {}
     [[nodiscard]] const auto& get_result() const noexcept { return result; }
@@ -165,12 +167,12 @@ struct NodeRules<QueryGenericJoinTag>
     template<RelationViewRange R, std::same_as<QueryEvaluator> Graph>
     static void initialize(State& state, QueryView<QueryGenericJoinTag> operation, const Graph& graph, const R&, Workspace&)
     {
-        state.initialize(operation.get_inputs() | std::views::transform([&](Index<Query<>> input) -> const auto& { return graph.result(input); }));
+        state.initialize(operation.get_inputs() | std::views::transform([&](urd::index<Query<>> input) -> const auto& { return graph.result(input); }));
     }
     template<RelationDeltaRange R, std::same_as<QueryEvaluator> Graph>
     static void update(State& state, QueryView<QueryGenericJoinTag> operation, const Graph& graph, const R&, Workspace&)
     {
-        state.apply(operation.get_inputs() | std::views::transform([&](Index<Query<>> input) { return graph.delta(input).change(); }));
+        state.apply(operation.get_inputs() | std::views::transform([&](urd::index<Query<>> input) { return graph.delta(input).change(); }));
     }
 };
 
@@ -202,29 +204,29 @@ struct QueryNode
 /// Input validation leaves results intact; execution failures require initialize().
 class QueryEvaluator
 {
-    using NodeId = Index<Query<>>;
+    using NodeId = urd::index<Query<>>;
     template<typename Tag>
     using Rules = detail::NodeRules<Tag>;
-    using Node = ApplyTypeListT<std::variant, MapTypeListT<detail::QueryNode, QueryConstructorTags>>;
+    using Node = boost::mp11::mp_apply<std::variant, boost::mp11::mp_transform<detail::QueryNode, QueryConstructorTags>>;
     QueryPlan m_plan;
-    std::vector<Node> m_nodes;
+    urd::Store<urd::sequence<Node>> m_nodes;
     Workspace m_workspace;
-    std::vector<const void*> m_storage_addresses;
+    urd::Store<urd::sequence<const void*>> m_storage_addresses;
     bool m_initialized = false;
 
     template<typename>
     friend struct detail::NodeRules;
 
-    [[nodiscard]] const Builder<Relation>& result(NodeId id) const
+    [[nodiscard]] const urd::builder<Relation>& result(NodeId id) const
     {
-        return std::visit([](const auto& node) -> const Builder<Relation>& { return node.state.get_result(); }, m_nodes[id.get_value()]);
+        return std::visit([](const auto& node) -> const urd::builder<Relation>& { return node.state.get_result(); }, m_nodes[id.value]);
     }
-    [[nodiscard]] const Builder<Relation>& result(QueryView<> query) const { return result(query.get_index()); }
+    [[nodiscard]] const urd::builder<Relation>& result(QueryView<> query) const { return result(query.index()); }
     [[nodiscard]] const Delta& delta(NodeId id) const
     {
-        return std::visit([](const auto& node) -> const Delta& { return node.state.get_delta(); }, m_nodes[id.get_value()]);
+        return std::visit([](const auto& node) -> const Delta& { return node.state.get_delta(); }, m_nodes[id.value]);
     }
-    [[nodiscard]] const Delta& delta(QueryView<> query) const { return delta(query.get_index()); }
+    [[nodiscard]] const Delta& delta(QueryView<> query) const { return delta(query.index()); }
     bool is_internal(const void* address) const { return std::ranges::find(m_storage_addresses, address) != m_storage_addresses.end(); }
 
 public:
@@ -232,7 +234,7 @@ public:
     {
         m_nodes.reserve(m_plan.node_count());
         for (size_t i = 0; i < m_plan.node_count(); ++i)
-            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+            std::visit([&]<typename Tag>(QueryView<Tag> operation)
                        { m_nodes.emplace_back(std::in_place_type<detail::QueryNode<Tag>>, Rules<Tag>::make(operation)); },
                        m_plan[NodeId(to_uint_t(i))].get_variant());
     }
@@ -242,7 +244,7 @@ public:
         database::detail::validate_bindings(m_plan, bindings, [&](const void* address) { return is_internal(address); });
         m_initialized = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
-            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+            std::visit([&]<typename Tag>(QueryView<Tag> operation)
                        { Rules<Tag>::initialize(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, bindings, m_workspace); },
                        m_plan[NodeId(to_uint_t(i))].get_variant());
         // Fixed-schema builders retain their storage identity, including after a failed update.
@@ -283,19 +285,19 @@ public:
         }
         m_initialized = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
-            ygg::visit([&]<typename Tag>(QueryView<Tag> operation)
+            std::visit([&]<typename Tag>(QueryView<Tag> operation)
                        { Rules<Tag>::update(std::get<detail::QueryNode<Tag>>(m_nodes[i]).state, operation, *this, changes, m_workspace); },
                        m_plan[NodeId(to_uint_t(i))].get_variant());
         m_initialized = true;
     }
-    [[nodiscard]] const Builder<Relation>& get_result(size_t root = 0) const&
+    [[nodiscard]] const urd::builder<Relation>& get_result(size_t root = 0) const&
     {
         detail::require_initialized(m_initialized);
         if (root >= m_plan.root_count())
             throw std::out_of_range("Incremental query: invalid root.");
         return result(m_plan.roots()[root]);
     }
-    [[nodiscard]] const Builder<Relation>& get_result(size_t = 0) const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result(size_t = 0) const&& = delete;
     [[nodiscard]] const Delta& get_delta(size_t root = 0) const&
     {
         detail::require_initialized(m_initialized);

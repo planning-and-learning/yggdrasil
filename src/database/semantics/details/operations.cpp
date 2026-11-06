@@ -4,10 +4,12 @@
  */
 
 #include "yggdrasil/database/semantics/operations.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
-void append_fields(std::vector<std::byte>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields)
+void append_fields(urd::Store<urd::sequence<std::byte>>& output, std::span<const std::byte> input, std::span<const ColumnSlice> fields)
 {
     for (const auto field : fields)
     {
@@ -19,7 +21,7 @@ void append_fields(std::vector<std::byte>& output, std::span<const std::byte> in
 
 namespace ygg::database::detail
 {
-void prepare_output(Builder<Relation>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs)
+void prepare_output(urd::builder<Relation>& out, std::span<const ColumnLayout> columns, std::initializer_list<const void*> inputs)
 {
     if (!std::ranges::equal(out.columns().span(), columns))
         throw std::invalid_argument("Relational operation: output schema does not match.");

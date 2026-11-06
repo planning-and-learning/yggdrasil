@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_MUST_PASS_PLAN_HPP_
 
 #include "yggdrasil/database/syntax/columns.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <cstddef>
 #include <span>
@@ -24,11 +26,11 @@ namespace ygg::database
 /// output has the key columns followed by the probe column.
 class MustPassPlan
 {
-    Builder<Columns> m_sources;
-    Builder<Columns> m_edges;
-    Builder<Columns> m_targets;
-    Builder<Columns> m_probes;
-    Builder<Columns> m_output;
+    urd::builder<Columns> m_sources;
+    urd::builder<Columns> m_edges;
+    urd::builder<Columns> m_targets;
+    urd::builder<Columns> m_probes;
+    urd::builder<Columns> m_output;
     size_t m_keys = 0;
 
 public:
@@ -61,15 +63,15 @@ public:
         m_output.push_back(m_probes[0].label, m_probes[0].type);
     }
 
-    [[nodiscard]] auto source_columns() const& noexcept { return make_view(m_sources, *this); }
+    [[nodiscard]] auto source_columns() const& noexcept { return urd::resolve(m_sources, *this); }
     [[nodiscard]] auto source_columns() const&& = delete;
-    [[nodiscard]] auto edge_columns() const& noexcept { return make_view(m_edges, *this); }
+    [[nodiscard]] auto edge_columns() const& noexcept { return urd::resolve(m_edges, *this); }
     [[nodiscard]] auto edge_columns() const&& = delete;
-    [[nodiscard]] auto target_columns() const& noexcept { return make_view(m_targets, *this); }
+    [[nodiscard]] auto target_columns() const& noexcept { return urd::resolve(m_targets, *this); }
     [[nodiscard]] auto target_columns() const&& = delete;
-    [[nodiscard]] auto probe_columns() const& noexcept { return make_view(m_probes, *this); }
+    [[nodiscard]] auto probe_columns() const& noexcept { return urd::resolve(m_probes, *this); }
     [[nodiscard]] auto probe_columns() const&& = delete;
-    [[nodiscard]] auto output_columns() const& noexcept { return make_view(m_output, *this); }
+    [[nodiscard]] auto output_columns() const& noexcept { return urd::resolve(m_output, *this); }
     [[nodiscard]] auto output_columns() const&& = delete;
     [[nodiscard]] size_t keys() const noexcept { return m_keys; }
     /// k, the columns of a vertex.
@@ -81,9 +83,9 @@ public:
     /// Where an edge row's target vertex starts.
     [[nodiscard]] size_t edge_target_offset() const noexcept { return m_edges[m_keys + arity()].offset; }
     /// The byte offsets, within a vertex, of its columns of the probes' type.
-    [[nodiscard]] std::vector<size_t> probe_positions() const
+    [[nodiscard]] urd::Store<urd::sequence<size_t>> probe_positions() const
     {
-        auto result = std::vector<size_t>();
+        auto result = urd::Store<urd::sequence<size_t>>();
         for (size_t i = m_keys; i < m_sources.size(); ++i)
             if (m_sources[i].type == m_probes[0].type)
                 result.push_back(m_sources[i].offset - key_size());
@@ -92,7 +94,7 @@ public:
 
     static constexpr auto cista_members() noexcept
     {
-        return ygg::Members<&MustPassPlan::m_sources,
+        return urd::Members<&MustPassPlan::m_sources,
                             &MustPassPlan::m_edges,
                             &MustPassPlan::m_targets,
                             &MustPassPlan::m_probes,

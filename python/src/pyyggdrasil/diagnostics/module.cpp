@@ -1,4 +1,5 @@
 #include "module.hpp"
+#include "yggdrasil/python/type_casters.hpp"
 
 #include "yggdrasil/diagnostics/diagnostic.hpp"
 
@@ -6,6 +7,7 @@
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <urd/python/sequences/sequence.hpp>
 
 namespace yggdrasil
 {
@@ -32,10 +34,10 @@ void bind_diagnostics_module_definitions(nb::module_& m)
         .def_ro("location", &ygg::diagnostics::DiagnosticNote::location);
 
     nb::class_<ygg::diagnostics::Diagnostic>(m, "Diagnostic", "A diagnostic message with an optional source location and related notes.")
-        .def(nb::init<std::string, std::optional<ygg::diagnostics::SourceSpan>, std::vector<ygg::diagnostics::DiagnosticNote>>(),
+        .def(nb::init<std::string, std::optional<ygg::diagnostics::SourceSpan>, urd::Store<urd::sequence<ygg::diagnostics::DiagnosticNote>>>(),
              nb::arg("message"),
              nb::arg("location") = nb::none(),
-             nb::arg("notes") = std::vector<ygg::diagnostics::DiagnosticNote> {})
+             nb::arg("notes") = urd::Store<urd::sequence<ygg::diagnostics::DiagnosticNote>> {})
         .def_ro("message", &ygg::diagnostics::Diagnostic::message)
         .def_ro("location", &ygg::diagnostics::Diagnostic::location)
         .def_ro("notes", &ygg::diagnostics::Diagnostic::notes)

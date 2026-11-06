@@ -7,8 +7,11 @@
 #define YGG_DATABASE_SEMANTICS_GENERIC_JOIN_HPP_
 
 #include "yggdrasil/database/semantics/generic_join_plan.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/operations.hpp"
 
+#include <urd/memory.hpp>
 #include <cista/containers/vector.h>
 #include <memory>
 #include <tuple>
@@ -35,14 +38,37 @@ void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) 
 
 struct GenericJoinKey
 {
-    std::vector<std::byte> bytes;
-    [[nodiscard]] auto identifying_members() const noexcept { return std::make_tuple(std::span<const std::byte>(bytes)); }
+    urd::Store<urd::sequence<std::byte>> bytes;
+    /// The key as a span: lookups probe with a std::tuple of one, holding no key.
+    [[nodiscard]] std::span<const std::byte> byte_span() const noexcept { return bytes; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&GenericJoinKey::byte_span> {}; }
 };
+
+struct GenericJoinTrie;
+}  // namespace detail
+}  // namespace ygg::database
+
+/// A key owns its bytes; a trie node what its memory_usage() counts (its table, keys and children).
+template<>
+struct urd::memory_of<ygg::database::detail::GenericJoinKey>
+{
+    static std::size_t bytes(const ygg::database::detail::GenericJoinKey& key) { return urd::memory_usage(key.bytes); }
+};
+template<>
+struct urd::memory_of<ygg::database::detail::GenericJoinTrie>
+{
+    static std::size_t bytes(const ygg::database::detail::GenericJoinTrie& trie);
+};
+
+namespace ygg::database
+{
+namespace detail
+{
 
 /// Hash-trie nodes own distinct canonical values; input row movement is irrelevant.
 struct GenericJoinTrie
 {
-    UnorderedMap<GenericJoinKey, std::unique_ptr<GenericJoinTrie>> children;
+    urd::Store<urd::map<GenericJoinKey, std::unique_ptr<GenericJoinTrie>>> children;
     size_t rows = 0;
 
     [[nodiscard]] const GenericJoinTrie* find(std::span<const std::byte> value) const
@@ -63,15 +89,17 @@ struct GenericJoinTrie
         rows = 0;
     }
 
-    [[nodiscard]] size_t memory_usage() const noexcept
-    {
-        size_t result = children.capacity() * (sizeof(std::pair<const GenericJoinKey, std::unique_ptr<GenericJoinTrie>>) + sizeof(gtl::priv::ctrl_t));
-        for (const auto& [key, child] : children)
-            result += key.bytes.capacity() + sizeof(GenericJoinTrie) + child->memory_usage();
-        return result;
-    }
+    /// Its table, and each key's bytes and child node.
+    [[nodiscard]] size_t memory_usage() const noexcept { return urd::memory_usage(children); }
 };
 }  // namespace detail
+}  // namespace ygg::database
+
+inline std::size_t urd::memory_of<ygg::database::detail::GenericJoinTrie>::bytes(const ygg::database::detail::GenericJoinTrie& trie)
+{ return trie.memory_usage(); }
+
+namespace ygg::database
+{
 
 namespace incremental
 {
@@ -83,15 +111,15 @@ class GenericJoinEvaluator;
 class GenericJoinWorkspace
 {
     GenericJoinPlan m_plan;
-    std::vector<detail::GenericJoinTrie> m_tries;
-    std::vector<const detail::GenericJoinTrie*> m_cursors;
-    std::vector<std::byte> m_row;
+    urd::Store<urd::sequence<detail::GenericJoinTrie>> m_tries;
+    urd::Store<urd::sequence<const detail::GenericJoinTrie*>> m_cursors;
+    urd::Store<urd::sequence<std::byte>> m_row;
 
-    void enumerate(size_t depth, Builder<Relation>& out);
+    void enumerate(size_t depth, urd::builder<Relation>& out);
 
     /// Appends the full assignments over the tries returned by root(input).
     template<std::invocable<size_t> Root>
-    void append(Builder<Relation>& out, Root root)
+    void append(urd::builder<Relation>& out, Root root)
     {
         for (size_t input = 0; input < m_tries.size(); ++input)
         {
@@ -102,12 +130,12 @@ class GenericJoinWorkspace
         }
         enumerate(0, out);
     }
-    void append(Builder<Relation>& out)
+    void append(urd::builder<Relation>& out)
     {
         append(out, [&](size_t input) -> const auto& { return m_tries[input]; });
     }
     /// Appends the assignments that read the replacement trie for the replaced input.
-    void append(Builder<Relation>& out, size_t replaced, const detail::GenericJoinTrie& replacement)
+    void append(urd::builder<Relation>& out, size_t replaced, const detail::GenericJoinTrie& replacement)
     {
         append(out, [&](size_t input) -> const auto& { return input == replaced ? replacement : m_tries[input]; });
     }
@@ -128,7 +156,7 @@ public:
 
     /// Indexes the inputs, which match the plan, and appends their join to out.
     template<RelationViewRange R>
-    void append_join(const R& inputs, Builder<Relation>& out)
+    void append_join(const R& inputs, urd::builder<Relation>& out)
     {
         for (size_t input = 0; input < m_plan.input_count(); ++input)
         {
@@ -155,7 +183,7 @@ public:
 /// https://arxiv.org/abs/1310.3314. Hash costs are expected; no ordering is required.
 /// Output replaces its rows; schema/alias/plan errors precede mutation.
 template<RelationViewRange R>
-void generic_join(const R& inputs, const GenericJoinPlan& plan, Builder<Relation>& out, GenericJoinWorkspace& workspace)
+void generic_join(const R& inputs, const GenericJoinPlan& plan, urd::builder<Relation>& out, GenericJoinWorkspace& workspace)
 {
     if (std::ranges::size(inputs) != plan.input_count() || !workspace.matches(plan))
         throw std::invalid_argument("Generic join: inputs or workspace do not match the plan.");

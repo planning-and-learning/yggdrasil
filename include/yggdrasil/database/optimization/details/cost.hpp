@@ -5,10 +5,8 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_COST_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_COST_HPP_
 
-#include "yggdrasil/containers/associative_containers.hpp"
-#include "yggdrasil/core/bit.hpp"
+#include <urd/repr/containers/bit.hpp>
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/core/itertools.hpp"
 #include "yggdrasil/database/optimization/details/dpccp.hpp"
 #include "yggdrasil/database/optimization/details/estimation.hpp"
 #include "yggdrasil/database/optimization/details/join_block.hpp"
@@ -18,6 +16,11 @@
 #include <concepts>
 #include <cstdint>
 #include <optional>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/maps/unordered_flat_map.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -36,16 +39,16 @@ class CostBasedPlanner
     };
     const JoinBlock* m_block;
     OperatorBuilder* m_build;
-    std::vector<std::vector<Index<Column>>> m_variables;
-    std::vector<Index<Column>> m_required;
-    UnorderedMap<std::uint64_t, Estimate> m_estimates;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<urd::index<Column>>>>> m_variables;
+    urd::Store<urd::sequence<urd::index<Column>>> m_required;
+    urd::Store<urd::map<std::uint64_t, Estimate>> m_estimates;
     /// C_out of each subset's best plan and its left part; leaves cost nothing.
-    UnorderedMap<std::uint64_t, Split> m_best;
+    urd::Store<urd::map<std::uint64_t, Split>> m_best;
 
-    [[nodiscard]] std::vector<Index<Column>> labels(std::uint64_t subset) const
+    [[nodiscard]] urd::Store<urd::sequence<urd::index<Column>>> labels(std::uint64_t subset) const
     {
-        std::vector<Index<Column>> result;
-        bit::for_each_set_bit(subset, [&](size_t atom) { result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end()); });
+        urd::Store<urd::sequence<urd::index<Column>>> result;
+        urd::repr::bit::for_each_set_bit(subset, [&](size_t atom) { result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end()); });
         return ygg::canonicalized(std::move(result));
     }
     /// The subset's estimate; returned by value since recursion grows the memo.
@@ -64,9 +67,9 @@ class CostBasedPlanner
         return it != m_estimates.end() ? it->second.rows : estimate(subset).rows;
     }
     /// Variables of the subset still needed outside it: output and join variables.
-    [[nodiscard]] std::vector<Index<Column>> needed(std::uint64_t subset) const
+    [[nodiscard]] urd::Store<urd::sequence<urd::index<Column>>> needed(std::uint64_t subset) const
     {
-        std::vector<Index<Column>> result = m_required;
+        urd::Store<urd::sequence<urd::index<Column>>> result = m_required;
         for (size_t atom = 0; atom < m_variables.size(); ++atom)
             if (!(subset >> atom & 1))
                 result.insert(result.end(), m_variables[atom].begin(), m_variables[atom].end());
@@ -82,10 +85,10 @@ class CostBasedPlanner
     struct Refined
     {
         bool multiway = false;
-        std::vector<size_t> inputs;
+        urd::Store<urd::sequence<size_t>> inputs;
     };
-    std::vector<Node> m_tree;
-    std::vector<std::optional<Refined>> m_refined;
+    urd::Store<urd::sequence<Node>> m_tree;
+    urd::Store<urd::sequence<std::optional<Refined>>> m_refined;
 
     size_t add(Node node)
     {

@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_BOUND_UNION_NORMAL_FORM_HPP_
 
 #include "yggdrasil/database/syntax/query.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -23,7 +25,7 @@ namespace ygg::database::bound
 struct ConjunctiveAtom
 {
     size_t slot = 0;
-    std::vector<uint32_t> vars;
+    urd::Store<urd::sequence<uint32_t>> vars;
 };
 
 struct ConjunctiveBranch;
@@ -31,17 +33,17 @@ struct ConjunctiveBranch;
 /// Rows whose `outer` variables match some branch are rejected (a difference's right side).
 struct ConjunctiveNegation
 {
-    std::vector<uint32_t> outer;
-    std::vector<ConjunctiveBranch> branches;
+    urd::Store<urd::sequence<uint32_t>> outer;
+    std::vector<ConjunctiveBranch> branches;  // std::vector: of an incomplete type (a Store resolves its element type at once)
 };
 
 /// A conjunctive branch: one conjunctive query (a rule body) of the union, with its negated subqueries.
 struct ConjunctiveBranch
 {
-    std::vector<ConjunctiveAtom> atoms;
-    std::vector<std::pair<uint32_t, uint32_t>> equal;
-    std::vector<std::pair<uint32_t, std::vector<std::byte>>> value;
-    std::vector<ConjunctiveNegation> negations;
+    urd::Store<urd::sequence<ConjunctiveAtom>> atoms;
+    urd::Store<urd::sequence<std::pair<uint32_t, uint32_t>>> equal;
+    urd::Store<urd::sequence<std::pair<uint32_t, urd::Store<urd::sequence<std::byte>>>>> value;
+    urd::Store<urd::sequence<ConjunctiveNegation>> negations;
 };
 
 struct QueryVariable
@@ -56,11 +58,11 @@ struct QueryVariable
 /// only filters rows once its outer variables are bound (relational algebra is safe-range).
 struct UnionNormalForm
 {
-    std::vector<QueryVariable> variables;  ///< Byte ranges of the variables in a frame of `frame_size`.
+    urd::Store<urd::sequence<QueryVariable>> variables;  ///< Byte ranges of the variables in a frame of `frame_size`.
     size_t frame_size = 0;
-    std::vector<std::vector<ColumnLayout>> input_columns;  ///< The schema of each input slot.
-    std::vector<uint32_t> output;                          ///< The variable of each of the query's columns.
-    std::vector<ConjunctiveBranch> branches;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<ColumnLayout>>>> input_columns;  ///< The schema of each input slot.
+    urd::Store<urd::sequence<uint32_t>> output;                          ///< The variable of each of the query's columns.
+    std::vector<ConjunctiveBranch> branches;  // std::vector: of an incomplete type (a Store resolves its element type at once)
 };
 
 namespace detail
@@ -71,12 +73,12 @@ class UnionNormalFormBuilder
 {
     UnionNormalForm m_result;  ///< Variables, frame size and input schemas so far.
 
-    static std::vector<ConjunctiveBranch> product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs);
+    static std::vector<ConjunctiveBranch> product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs);  // std::vector: of an incomplete type (a Store resolves its element type at once)
 
     /// The child's variables: its columns found in `parent` take the parent's variable, others a fresh one.
-    std::vector<uint32_t> by_label(std::span<const ColumnLayout> child, std::span<const ColumnLayout> parent, std::span<const uint32_t> mapping)
+    urd::Store<urd::sequence<uint32_t>> by_label(std::span<const ColumnLayout> child, std::span<const ColumnLayout> parent, std::span<const uint32_t> mapping)
     {
-        std::vector<uint32_t> result;
+        urd::Store<urd::sequence<uint32_t>> result;
         for (const auto& column : child)
         {
             const auto found = std::ranges::find(parent, column.label, &ColumnLayout::label);
@@ -103,7 +105,7 @@ public:
     }
 
     /// `mapping` holds the variable of each of the query's columns, by position.
-    std::vector<ConjunctiveBranch> flatten(QueryView<> query, std::span<const uint32_t> mapping);
+    std::vector<ConjunctiveBranch> flatten(QueryView<> query, std::span<const uint32_t> mapping);  // std::vector: of an incomplete type (a Store resolves its element type at once)
 };
 
 }  // namespace detail

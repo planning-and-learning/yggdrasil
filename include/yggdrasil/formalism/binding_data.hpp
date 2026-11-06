@@ -18,45 +18,42 @@
 #ifndef YGG_FORMALISM_BINDING_DATA_HPP_
 #define YGG_FORMALISM_BINDING_DATA_HPP_
 
-#include "yggdrasil/core/types.hpp"
-#include "yggdrasil/core/types_utils.hpp"
+#include <urd/elements/flat.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/formalism/declarations.hpp"
 
 #include <tuple>
 #include <utility>
 #include <vector>
 
-namespace ygg
+namespace urd
 {
 
 template<typename RelationTag, typename ObjectTag>
-struct Data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
+struct data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 {
-    Index<RelationTag> relation;
-    IndexList<ygg::formalism::Object<ObjectTag>> objects;
+    urd::index<RelationTag> relation;
+    urd::flat_vector<urd::index<ygg::formalism::Object<ObjectTag>>> objects;
 
-    Data() = default;
-    Data(Index<RelationTag> relation_, IndexList<ygg::formalism::Object<ObjectTag>> objects_) : relation(relation_), objects(std::move(objects_)) {}
+    data() = default;
+    data(urd::index<RelationTag> relation_, urd::flat_vector<urd::index<ygg::formalism::Object<ObjectTag>>> objects_) : relation(relation_), objects(std::move(objects_)) {}
     // Python constructor
     template<typename C>
-    Data(::ygg::View<Index<RelationTag>, C> relation_, const std::vector<::ygg::View<Index<ygg::formalism::Object<ObjectTag>>, C>>& objects_) :
-        relation(),
-        objects()
+    data(urd::view<RelationTag, C> relation_, const urd::Store<urd::sequence<urd::view<ygg::formalism::Object<ObjectTag>, C>>>& objects_) :
+        relation(urd::to_stored(relation_)),
+        objects(urd::to_stored(objects_))
     {
-        set(relation_, relation);
-        set(objects_, objects);
     }
-    Data(const Data& other) = delete;
-    Data& operator=(const Data& other) = delete;
-    Data(Data&& other) = default;
-    Data& operator=(Data&& other) = default;
-    ~Data() = default;
+    data(const data& other) = delete;
+    data& operator=(const data& other) = delete;
+    data(data&& other) = default;
+    data& operator=(data&& other) = default;
 
-    static constexpr auto cista_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::relation, &Data::objects> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::relation, &data::objects> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::relation, &data::objects> {}; }
 };
 
-}  // namespace ygg
+}  // namespace urd
 
 #endif

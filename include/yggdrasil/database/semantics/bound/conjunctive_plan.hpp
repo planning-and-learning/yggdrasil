@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_BOUND_CONJUNCTIVE_PLAN_HPP_
 
 #include "yggdrasil/database/optimization/statistics.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 
 #include <algorithm>
@@ -25,9 +27,9 @@ namespace ygg::database::bound
 /// Filters of a branch that become checkable at one point of a plan.
 struct ConjunctiveFilters
 {
-    std::vector<std::pair<uint32_t, uint32_t>> equal;                ///< Variables that must hold equal values.
-    std::vector<std::pair<uint32_t, std::vector<std::byte>>> value;  ///< Variable, the constant it must hold.
-    std::vector<size_t> negations;                                   ///< Indices into the plan's negation_plans.
+    urd::Store<urd::sequence<std::pair<uint32_t, uint32_t>>> equal;                ///< Variables that must hold equal values.
+    urd::Store<urd::sequence<std::pair<uint32_t, urd::Store<urd::sequence<std::byte>>>>> value;  ///< Variable, the constant it must hold.
+    urd::Store<urd::sequence<size_t>> negations;                                   ///< Indices into the plan's negation_plans.
 };
 
 /// One atom of a conjunctive plan: its input slot, the columns bound on arrival (its lookup key), the variables it
@@ -37,9 +39,9 @@ struct ConjunctiveStep
     static constexpr size_t unresolved = std::numeric_limits<size_t>::max();
 
     size_t slot = 0;
-    std::vector<std::pair<size_t, uint32_t>> key;      ///< Column, variable bound on arrival, in column order.
-    std::vector<std::pair<size_t, uint32_t>> assign;   ///< Column, variable bound here.
-    std::vector<std::pair<size_t, uint32_t>> compare;  ///< Column, variable bound earlier in this row.
+    urd::Store<urd::sequence<std::pair<size_t, uint32_t>>> key;      ///< Column, variable bound on arrival, in column order.
+    urd::Store<urd::sequence<std::pair<size_t, uint32_t>>> assign;   ///< Column, variable bound here.
+    urd::Store<urd::sequence<std::pair<size_t, uint32_t>>> compare;  ///< Column, variable bound earlier in this row.
     ConjunctiveFilters filters;
     bool exists = false;        ///< No later step, filter or output reads its variables: one matching row suffices.
     size_t index = unresolved;  ///< The executor's lookup structure for (slot, key columns); set by the executor.
@@ -51,8 +53,8 @@ struct ConjunctiveStep
 struct ConjunctivePlan
 {
     ConjunctiveFilters filters;  ///< Checkable before the first step.
-    std::vector<ConjunctiveStep> steps;
-    std::vector<std::vector<ConjunctivePlan>> negation_plans;  ///< Per negation, per branch.
+    urd::Store<urd::sequence<ConjunctiveStep>> steps;
+    std::vector<std::vector<ConjunctivePlan>> negation_plans;  ///< Per negation, per branch. std::vector: of an incomplete type (a Store resolves its element type at once).
 };
 
 /// A greedy left-deep order for index nested-loop evaluation: next the atom with the smallest expected fanout, using
@@ -107,7 +109,7 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
             }
     };
     attach(plan.filters);
-    auto remaining = std::vector<size_t>(branch.atoms.size());
+    auto remaining = urd::Store<urd::sequence<size_t>>(branch.atoms.size());
     for (size_t i = 0; i < remaining.size(); ++i)
         remaining[i] = i;
     while (!remaining.empty())
@@ -116,7 +118,7 @@ ConjunctivePlan plan_branch(const UnionNormalForm& query, const ConjunctiveBranc
         const auto& atom = branch.atoms[*best];
         auto& step = plan.steps.emplace_back();
         step.slot = atom.slot;
-        auto assigned = std::vector<uint32_t>();
+        auto assigned = urd::Store<urd::sequence<uint32_t>>();
         for (size_t c = 0; c < atom.vars.size(); ++c)
         {
             const auto var = atom.vars[c];

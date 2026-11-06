@@ -6,7 +6,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_SEARCH_TREE_REPAIR_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_SEARCH_TREE_REPAIR_HPP_
 
-#include "yggdrasil/containers/raw_array_set.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 
@@ -24,9 +26,9 @@ namespace ygg::database::incremental
 class EdgeList
 {
 public:
-    explicit EdgeList(size_t vertex_size) : m_vertices(vertex_size) {}
+    EdgeList() : m_vertices() {}
 
-    void add(std::span<const std::byte> from, std::span<const std::byte> to) { m_edges.emplace_back(m_vertices.insert(from), m_vertices.insert(to)); }
+    void add(std::span<const std::byte> from, std::span<const std::byte> to) { m_edges.emplace_back(insert_vertex(m_vertices, from), insert_vertex(m_vertices, to)); }
     void clear() noexcept
     {
         m_vertices.clear();
@@ -34,12 +36,12 @@ public:
     }
     [[nodiscard]] bool empty() const noexcept { return m_edges.empty(); }
     [[nodiscard]] size_t size() const noexcept { return m_edges.size(); }
-    [[nodiscard]] std::span<const std::byte> from(size_t i) const { return m_vertices[m_edges[i].first]; }
-    [[nodiscard]] std::span<const std::byte> to(size_t i) const { return m_vertices[m_edges[i].second]; }
+    [[nodiscard]] std::span<const std::byte> from(size_t i) const { return vertex_at(m_vertices, m_edges[i].first); }
+    [[nodiscard]] std::span<const std::byte> to(size_t i) const { return vertex_at(m_vertices, m_edges[i].second); }
 
 private:
     VertexSet m_vertices;
-    std::vector<std::pair<uint_t, uint_t>> m_edges;
+    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_edges;
 };
 
 /// Generalized Adaptive A*'s ReestablishConsistency (Sun, Koenig & Yeoh, "Generalized Adaptive A*", AAMAS 2008) on a
@@ -82,8 +84,8 @@ public:
     }
 
 private:
-    std::vector<std::pair<uint_t, uint_t>> m_queue;  ///< A min-heap of (learned, vertex).
-    std::vector<std::byte> m_vertex;                 ///< A copy of the lowered vertex: storing vertices may move them.
+    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_queue;  ///< A min-heap of (learned, vertex).
+    urd::Store<urd::sequence<std::byte>> m_vertex;                 ///< A copy of the lowered vertex: storing vertices may move them.
 
     static bool lowers(const SearchTree& tree, uint_t from, uint_t to_value) noexcept { return to_value != infinity && tree.learned(from) > to_value + 1; }
     void lower(SearchTree& tree, uint_t from, uint_t to)

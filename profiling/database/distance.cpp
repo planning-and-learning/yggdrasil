@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/distance.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
 
@@ -19,8 +21,8 @@ namespace ygg::profiling
 {
 namespace
 {
-using Values = TypeList<uint_t>;
-using ColumnIndex = Index<database::Column>;
+using Values = boost::mp11::mp_list<uint_t>;
+using ColumnIndex = urd::index<database::Column>;
 using RelationBuilder = Builder<database::Relation>;
 
 Builder<database::Columns> columns(size_t arity, uint_t first_label)
@@ -31,7 +33,7 @@ Builder<database::Columns> columns(size_t arity, uint_t first_label)
     return result;
 }
 
-void append_vertex(std::vector<std::byte>& bytes, size_t arity, uint_t vertex)
+void append_vertex(urd::Store<urd::sequence<std::byte>>& bytes, size_t arity, uint_t vertex)
 {
     for (size_t field = 0; field < arity; ++field)
     {
@@ -43,14 +45,14 @@ void append_vertex(std::vector<std::byte>& bytes, size_t arity, uint_t vertex)
 
 void insert_vertex(RelationBuilder& relation, size_t arity, uint_t vertex)
 {
-    std::vector<std::byte> bytes;
+    urd::Store<urd::sequence<std::byte>> bytes;
     append_vertex(bytes, arity, vertex);
     relation.insert(std::span<const std::byte>(bytes));
 }
 
 void insert_edge(RelationBuilder& relation, size_t arity, uint_t from, uint_t to)
 {
-    std::vector<std::byte> bytes;
+    urd::Store<urd::sequence<std::byte>> bytes;
     append_vertex(bytes, arity, from);
     append_vertex(bytes, arity, to);
     relation.insert(std::span<const std::byte>(bytes));

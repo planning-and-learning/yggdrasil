@@ -19,7 +19,7 @@ JoinEvaluator::JoinEvaluator(JoinPlan plan) :
 
 namespace ygg::database::incremental
 {
-const Builder<Relation>& JoinEvaluator::get_result() const&
+const urd::builder<Relation>& JoinEvaluator::get_result() const&
 {
     detail::require_initialized(m_initialized);
     return m_result;
@@ -39,7 +39,7 @@ namespace ygg::database::incremental
 {
 size_t JoinEvaluator::memory_usage() const noexcept
 {
-    return m_lhs.memory_usage() + m_rhs.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + m_lhs_index.memory_usage()
-           + m_rhs_index.memory_usage();
+    return m_lhs.memory_usage() + m_rhs.memory_usage() + m_result.memory_usage() + m_delta.memory_usage() + urd::memory_usage(m_lhs_index)
+           + urd::memory_usage(m_rhs_index);
 }
 }

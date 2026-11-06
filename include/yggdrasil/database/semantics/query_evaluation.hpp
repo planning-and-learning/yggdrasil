@@ -6,6 +6,8 @@
 #define YGG_DATABASE_SEMANTICS_QUERY_EVALUATION_HPP_
 
 #include "yggdrasil/database/syntax/query.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <algorithm>
 #include <concepts>
@@ -28,7 +30,7 @@ void validate_bindings(const QueryPlan& plan, const R& bindings, IsInternal is_i
 {
     for (size_t i = 0; i < plan.node_count(); ++i)
     {
-        const auto query = plan[Index<Query<>>(to_uint_t(i))];
+        const auto query = plan[urd::index<Query<>>(to_uint_t(i))];
         if (!is<QueryInputTag>(query))
             continue;
         const auto slot = as<QueryInputTag>(query).get_input_slot();
@@ -55,7 +57,7 @@ concept StatelessQueryTag =
 
 /// Evaluates a stateless operator from the bound inputs and the operands' results.
 template<StatelessQueryTag Tag, RelationViewRange R, std::invocable<QueryView<>> GetResult>
-void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult result, Builder<Relation>& out)
+void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult result, urd::builder<Relation>& out)
 {
     if constexpr (std::same_as<Tag, QueryInputTag>)
         database::assign(out, bindings[operation.get_input_slot()]);
@@ -82,16 +84,16 @@ void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult r
 /// Schema/alias errors preserve results; failures during execution invalidate them.
 class QueryEvaluator
 {
-    using NodeId = Index<Query<>>;
+    using NodeId = urd::index<Query<>>;
     using DistanceState = detail::QueryDistanceWorkspace;
     using State = std::variant<std::monostate, GenericJoinWorkspace, DistanceState>;
     struct Node
     {
-        Builder<Relation> result;
+        urd::builder<Relation> result;
         State state;
         explicit Node(QueryView<> query) :
             result(query.columns()),
-            state(ygg::visit(
+            state(std::visit(
                 []<typename Tag>(QueryView<Tag> operation) -> State
                 {
                     if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
@@ -106,7 +108,7 @@ class QueryEvaluator
         }
     };
     QueryPlan m_plan;
-    std::vector<Node> m_nodes;
+    urd::Store<urd::sequence<Node>> m_nodes;
     Workspace m_workspace;
     bool m_ready = false;
 
@@ -129,8 +131,8 @@ public:
         {
             auto& state = m_nodes[i];
             auto& out = state.result;
-            const auto child = [&](QueryView<> query) -> const auto& { return m_nodes[query.get_index().get_value()].result; };
-            ygg::visit(
+            const auto child = [&](QueryView<> query) -> const auto& { return m_nodes[query.index().value].result; };
+            std::visit(
                 [&]<typename Tag>(QueryView<Tag> operation)
                 {
                     if constexpr (detail::StatelessQueryTag<Tag>)
@@ -146,7 +148,7 @@ public:
                     else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                     {
                         const auto inputs =
-                            operation.get_inputs() | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.get_value()].result; });
+                            operation.get_inputs() | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.value].result; });
                         generic_join(inputs, operation.get_plan(), out, std::get<GenericJoinWorkspace>(state.state));
                     }
                     else
@@ -164,15 +166,15 @@ public:
         }
         m_ready = true;
     }
-    [[nodiscard]] const Builder<Relation>& get_result(size_t root = 0) const&
+    [[nodiscard]] const urd::builder<Relation>& get_result(size_t root = 0) const&
     {
         if (!m_ready)
             throw std::logic_error("Query: evaluate before reading results.");
         if (root >= m_plan.root_count())
             throw std::out_of_range("Query: invalid root.");
-        return m_nodes.at(m_plan.roots()[root].get_value()).result;
+        return m_nodes.at(m_plan.roots()[root].value).result;
     }
-    [[nodiscard]] const Builder<Relation>& get_result(size_t = 0) const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result(size_t = 0) const&& = delete;
     /// Retained runtime storage; excludes the immutable query plan.
     [[nodiscard]] size_t memory_usage() const noexcept;
 };

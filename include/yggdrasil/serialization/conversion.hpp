@@ -1,8 +1,6 @@
 #ifndef YGG_SERIALIZATION_CONVERSION_HPP_
 #define YGG_SERIALIZATION_CONVERSION_HPP_
 
-#include "yggdrasil/containers/optional.hpp"
-#include "yggdrasil/containers/pair.hpp"
 
 #include <boost/json.hpp>
 #include <cista/containers/string.h>
@@ -18,22 +16,12 @@ struct is_string_like<cista::offset::string> : std::true_type
 {
 };
 
-// Read-only optional views have no reset(), which Boost's automatic detection requires.
-template<typename T, typename C>
-struct is_optional_like<ygg::View<cista::optional<T>, C>> : std::true_type
-{
-};
-
 }
 
 namespace ygg::serialization
 {
 
 class Dictionaries;
-
-template<typename First, typename Second, typename C>
-void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const ygg::View<cista::pair<First, Second>, C>& value, Dictionaries* dictionaries)
-{ result = boost::json::value_from(std::make_pair(value.get_first(), value.get_second()), dictionaries); }
 
 // Boost's sequence conversion requires legacy iterator traits, which some C++20 input views lack.
 template<std::ranges::view T>

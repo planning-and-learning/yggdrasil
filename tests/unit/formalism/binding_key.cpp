@@ -1,11 +1,15 @@
 #include "yggdrasil/formalism/binding_key.hpp"
 
-#include "yggdrasil/containers/associative_containers.hpp"
 
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <gtl/phmap.hpp>
 #include <ranges>
 #include <span>
+#include <urd/repr/maps/unordered_flat_map.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -17,7 +21,7 @@ namespace
 struct StoredBinding
 {
     int relation;
-    std::vector<int> objects;
+    urd::Store<urd::sequence<int>> objects;
 
     [[nodiscard]] auto get_key() const noexcept { return std::make_pair(relation, std::span<const int>(objects)); }
 };
@@ -26,7 +30,7 @@ struct StoredBinding
 struct PrefixBinding
 {
     int relation;
-    std::vector<int> row;
+    urd::Store<urd::sequence<int>> row;
     size_t arity;
 
     [[nodiscard]] auto get_key() const noexcept
@@ -37,7 +41,7 @@ struct PrefixBinding
 
 TEST(YggdrasilTests, BindingKeyLooksUpStoredBindingsByAnyKeyOfTheSameBinding)
 {
-    auto costs = ygg::UnorderedMap<StoredBinding, int, formalism::BindingKeyHash, formalism::BindingKeyEqualTo> {};
+    auto costs = gtl::flat_hash_map<StoredBinding, int, formalism::BindingKeyHash, formalism::BindingKeyEqualTo> {};
     costs.emplace(StoredBinding { 1, { 4, 5 } }, 7);
 
     const auto it = costs.find(PrefixBinding { 1, { 4, 5, 9 }, 2 });

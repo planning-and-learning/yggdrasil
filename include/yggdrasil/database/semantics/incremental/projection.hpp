@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_PROJECTION_HPP_
 
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/operations.hpp"
 
 #include <algorithm>
@@ -29,10 +31,10 @@ namespace ygg::database::incremental
 class ProjectionEvaluator
 {
     ProjectionPlan m_plan;
-    Builder<Relation> m_result;
-    std::vector<size_t> m_supports;
+    urd::builder<Relation> m_result;
+    urd::Store<urd::sequence<size_t>> m_supports;
     Delta m_delta;
-    std::vector<uint_t> m_pending_removals;
+    urd::Store<urd::sequence<uint_t>> m_pending_removals;
     bool m_initialized = false;
 
     std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace& workspace) const;
@@ -56,8 +58,8 @@ public:
     template<RelationChange C>
     void update(const C& change, Workspace& workspace);
 
-    [[nodiscard]] const Builder<Relation>& get_result() const&;
-    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&;
     [[nodiscard]] const Delta& get_delta() const&& = delete;
 

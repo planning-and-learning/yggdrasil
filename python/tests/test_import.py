@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import pyurd
 import pyyggdrasil
 from pyyggdrasil import execution
 
@@ -25,20 +26,20 @@ def test_native_prefix_layout() -> None:
     assert native_prefix / "lib" in pyyggdrasil.library_dirs()
     assert native_prefix / "lib" / "cmake" in pyyggdrasil.cmake_dirs()
     assert (native_prefix / "lib").is_dir()
-    assert (native_prefix / "include" / "boost").is_dir()
-    assert (native_prefix / "include" / "boost" / "hash2" / "sha2.hpp").is_file()
-    assert (native_prefix / "include" / "toml++" / "toml.hpp").is_file()
-    assert (native_prefix / "include" / "yggdrasil.hpp").is_file()
-    assert (native_prefix / "include" / "yggdrasil" / "containers" / "indexed_hash_set.hpp").is_file()
-    assert (native_prefix / "include" / "yggdrasil" / "buffer" / "indexed_hash_set.hpp").is_file()
+    assert (native_prefix / "include" / "yggdrasil" / "formalism" / "repository.hpp").is_file()
     assert (native_prefix / "lib" / "cmake").is_dir()
-    assert (native_prefix / "nanobind" / "cmake" / "nanobind-config.cmake").is_file()
     assert not list(native_prefix.glob("lib*/libnanobind*"))
     assert pyyggdrasil.cmake_prefix() == native_prefix
     assert pyyggdrasil.cmake_dir().name == "yggdrasil"
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfig.cmake").is_file()
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfigVersion.cmake").is_file()
-    assert (native_prefix / "lib" / "cmake" / "tomlplusplus" / "tomlplusplusConfig.cmake").is_file()
+    # The native dependencies are pyurd's.
+    urd_prefix = pyurd.native_prefix()
+    assert not (native_prefix / "include" / "boost").exists()
+    assert (urd_prefix / "include" / "boost" / "hash2" / "sha2.hpp").is_file()
+    assert (urd_prefix / "include" / "toml++" / "toml.hpp").is_file()
+    assert (urd_prefix / "nanobind" / "cmake" / "nanobind-config.cmake").is_file()
+    assert (urd_prefix / "lib" / "cmake" / "tomlplusplus" / "tomlplusplusConfig.cmake").is_file()
 
 
 def test_execution_submodule_is_public() -> None:
@@ -158,33 +159,33 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
     source.write_text(
         textwrap.dedent(
             """\
-            #include <yggdrasil/semantics/hash.hpp>
-            #include <yggdrasil/containers/indexed_hash_set.hpp>
-            #include <yggdrasil/containers/unordered_set.hpp>
-            #include <yggdrasil/core/types.hpp>
+            #include <urd/elements/hash.hpp>
+            #include <urd/repr/values/unordered_flat_set.hpp>
+            #include <urd/store.hpp>
+            #include <urd/elements/data.hpp>
+            #include <yggdrasil/core/config.hpp>
 
             #include <tuple>
 
             struct Item {};
             struct ItemData
             {
-                int value;
-                static constexpr auto identifying_members() noexcept { return ygg::Members<&ItemData::value> {}; }
+                ygg::uint_t value;
+                static constexpr auto cista_members() noexcept { return urd::Members<&ItemData::value> {}; }
+                static constexpr auto identifying_members() noexcept { return urd::Members<&ItemData::value> {}; }
             };
 
-            namespace ygg
-            {
             template<>
-            struct Data<Item> : ItemData
+            struct urd::data<Item> : ItemData
             {
                 using ItemData::ItemData;
             };
-            }
+            static_assert(urd::stored_record<Item>);
 
             int main()
             {
-                auto index = ygg::Index<Item>(1);
-                auto indices = ygg::UnorderedSet<ygg::Index<Item>> {};
+                auto index = urd::index<Item>(1);
+                auto indices = urd::Store<urd::set<urd::index<Item>>> {};
                 indices.insert(index);
                 return indices.contains(index) ? 0 : 1;
             }
@@ -198,6 +199,7 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
             compiler,
             "-std=c++20",
             f"-I{pyyggdrasil.include_dir()}",
+            f"-I{pyurd.include_dir()}",
             "-fsyntax-only",
             str(source),
         ],
@@ -238,7 +240,7 @@ def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
             str(source_dir),
             "-B",
             str(tmp_path / "build"),
-            f"-DCMAKE_PREFIX_PATH={pyyggdrasil.cmake_prefix()}",
+            f"-DCMAKE_PREFIX_PATH={pyyggdrasil.cmake_prefix()};{pyurd.cmake_prefix()}",
             f"-DYGGDRASIL_REQUIRED_VERSION={version('pyyggdrasil')}",
         ],
         check=True,

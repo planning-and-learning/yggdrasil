@@ -4,10 +4,12 @@
  */
 
 #include "yggdrasil/database/syntax/columns.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
-void validate_column_labels(std::span<const Index<Column>> columns)
+void validate_column_labels(std::span<const urd::index<Column>> columns)
 {
     // Schemas are small; validating labels needs no temporary allocation.
     for (auto it = columns.begin(); it != columns.end(); ++it)
@@ -78,7 +80,7 @@ void validate_relabel(std::span<const ColumnLayout> previous, std::span<const Co
 
 namespace ygg::database::detail
 {
-void assign_columns(Data<Columns>& data, std::span<const ColumnLayout> columns)
+void assign_columns(urd::data<Columns>& data, std::span<const ColumnLayout> columns)
 {
     validate_columns(columns);
     auto& values = data.values;
@@ -91,13 +93,13 @@ void assign_columns(Data<Columns>& data, std::span<const ColumnLayout> columns)
     }
     else
         values.set(columns.begin(), columns.end());
-    ygg::clear(data.index);
+    data.index = {};
 }
 }
 
 namespace ygg::database
 {
-size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column)
+size_t column_index(std::span<const ColumnLayout> columns, urd::index<Column> column)
 {
     const auto it = std::ranges::find(columns, column, &ColumnLayout::label);
     if (it == columns.end())
@@ -108,15 +110,15 @@ size_t column_index(std::span<const ColumnLayout> columns, Index<Column> column)
 
 namespace ygg::database
 {
-bool contains_column(std::span<const ColumnLayout> columns, Index<Column> column) noexcept
+bool contains_column(std::span<const ColumnLayout> columns, urd::index<Column> column) noexcept
 { return std::ranges::find(columns, column, &ColumnLayout::label) != columns.end(); }
 }
 
 namespace ygg::database
 {
-std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns)
+urd::Store<urd::sequence<urd::index<Column>>> column_labels(std::span<const ColumnLayout> columns)
 {
-    std::vector<Index<Column>> result;
+    urd::Store<urd::sequence<urd::index<Column>>> result;
     result.reserve(columns.size());
     for (const auto& column : columns)
         result.push_back(column.label);
@@ -124,29 +126,29 @@ std::vector<Index<Column>> column_labels(std::span<const ColumnLayout> columns)
 }
 }
 
-namespace ygg
+namespace urd
 {
-Builder<database::Columns>::Builder(std::span<const database::ColumnLayout> columns) { assign(columns); }
-}
+urd::builder<ygg::database::Columns>::builder(std::span<const ygg::database::ColumnLayout> columns) { assign(columns); }
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Columns>::Builder(std::initializer_list<database::ColumnLayout> columns) : Builder(std::span<const database::ColumnLayout>(columns)) {}
-}
+urd::builder<ygg::database::Columns>::builder(std::initializer_list<ygg::database::ColumnLayout> columns) : builder(std::span<const ygg::database::ColumnLayout>(columns)) {}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Columns>::Builder(std::span<const Index<database::Column>> columns) { assign<>(columns); }
-}
+urd::builder<ygg::database::Columns>::builder(std::span<const urd::index<ygg::database::Column>> columns) { assign<>(columns); }
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Columns>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns)) {}
-}
+urd::builder<ygg::database::Columns>::builder(std::initializer_list<urd::index<ygg::database::Column>> columns) : builder(std::span<const urd::index<ygg::database::Column>>(columns)) {}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Columns>::push_back(Index<database::Column> column, ygg::TypeId type)
+void urd::builder<ygg::database::Columns>::push_back(urd::index<ygg::database::Column> column, ygg::TypeId type)
 {
     for (const auto& existing : span())
         if (existing.label == column)
@@ -157,30 +159,30 @@ void Builder<database::Columns>::push_back(Index<database::Column> column, ygg::
         throw std::invalid_argument("Columns: invalid column type.");
     if (size > std::numeric_limits<size_t>::max() - offset)
         throw std::length_error("Columns: row byte width exceeds addressable memory.");
-    m_data.values.push_back(database::ColumnLayout { column, type, offset, size });
-    ygg::clear(m_data.index);
+    m_data.values.push_back(ygg::database::ColumnLayout { column, type, offset, size });
+    m_data.index = {};
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Columns>::assign(std::span<const database::ColumnLayout> columns) { database::detail::assign_columns(m_data, columns); }
-}
+void urd::builder<ygg::database::Columns>::assign(std::span<const ygg::database::ColumnLayout> columns) { ygg::database::detail::assign_columns(m_data, columns); }
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Columns>::assign(std::initializer_list<database::ColumnLayout> columns) { assign(std::span<const database::ColumnLayout>(columns)); }
-}
+void urd::builder<ygg::database::Columns>::assign(std::initializer_list<ygg::database::ColumnLayout> columns) { assign(std::span<const ygg::database::ColumnLayout>(columns)); }
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Columns>::rename(std::span<const Index<database::Column>> columns)
+void urd::builder<ygg::database::Columns>::rename(std::span<const urd::index<ygg::database::Column>> columns)
 {
     if (columns.size() != size())
         throw std::invalid_argument("Columns: renaming must preserve arity.");
-    database::detail::validate_column_labels(columns);
+    ygg::database::detail::validate_column_labels(columns);
     for (size_t i = 0; i < columns.size(); ++i)
         m_data.values[i].label = columns[i];
-    ygg::clear(m_data.index);
+    m_data.index = {};
 }
-}
+}  // namespace urd

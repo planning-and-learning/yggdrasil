@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/min_distance.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "query_helpers.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
@@ -19,8 +21,8 @@
 
 namespace
 {
-using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation>;
+using Column = urd::index<ygg::database::Column>;
+using Relation = urd::builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 
@@ -30,18 +32,18 @@ View borrow(const Relation& relation)
     return { relation, context };
 }
 
-std::vector<View> borrow_all(const std::vector<Relation>& relations)
+urd::Store<urd::sequence<View>> borrow_all(const urd::Store<urd::sequence<Relation>>& relations)
 {
-    std::vector<View> views;
+    urd::Store<urd::sequence<View>> views;
     views.reserve(relations.size());
     for (const auto& relation : relations)
         views.push_back(borrow(relation));
     return views;
 }
 
-std::vector<uint_t> decode(std::span<const std::byte> bytes, std::span<const ygg::database::ColumnLayout> columns)
+urd::Store<urd::sequence<uint_t>> decode(std::span<const std::byte> bytes, std::span<const ygg::database::ColumnLayout> columns)
 {
-    std::vector<uint_t> values;
+    urd::Store<urd::sequence<uint_t>> values;
     values.reserve(columns.size());
     for (size_t c = 0; c < columns.size(); ++c)
         values.push_back(ygg::database::Row(bytes, columns).get<uint_t>(c));
@@ -51,7 +53,7 @@ std::vector<uint_t> decode(std::span<const std::byte> bytes, std::span<const ygg
 /// Half the distance to the targets in a supergraph of every state: consistent in all of them.
 struct HalfDistance
 {
-    std::map<std::vector<uint_t>, uint_t> distances;
+    std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances;
     std::span<const ygg::database::ColumnLayout> columns;
 
     [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const
@@ -62,10 +64,10 @@ struct HalfDistance
 };
 
 /// Backward breadth-first distances to the targets over materialized edges.
-std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const Relation& targets, size_t k)
+std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances_to(const Relation& edges, const Relation& targets, size_t k)
 {
-    std::map<std::vector<uint_t>, uint_t> result;
-    std::vector<std::vector<uint_t>> frontier;
+    std::map<urd::Store<urd::sequence<uint_t>>, uint_t> result;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> frontier;
     for (size_t i = 0; i < targets.size(); ++i)
     {
         const auto vertex = decode(targets.row(i), targets.columns().span());
@@ -74,12 +76,12 @@ std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const 
     }
     for (uint_t level = 1; !frontier.empty(); ++level)
     {
-        std::vector<std::vector<uint_t>> next;
+        urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> next;
         for (size_t i = 0; i < edges.size(); ++i)
         {
             const auto edge = decode(edges.row(i), edges.columns().span());
-            const auto from = std::vector<uint_t>(edge.begin(), edge.begin() + static_cast<std::ptrdiff_t>(k));
-            const auto to = std::vector<uint_t>(edge.begin() + static_cast<std::ptrdiff_t>(k), edge.end());
+            const auto from = urd::Store<urd::sequence<uint_t>>(edge.begin(), edge.begin() + static_cast<std::ptrdiff_t>(k));
+            const auto to = urd::Store<urd::sequence<uint_t>>(edge.begin() + static_cast<std::ptrdiff_t>(k), edge.end());
             if (std::ranges::find(frontier, to) != frontier.end() && result.emplace(from, level).second)
                 next.push_back(from);
         }
@@ -93,8 +95,8 @@ std::map<std::vector<uint_t>, uint_t> distances_to(const Relation& edges, const 
 /// `maximal` are inputs whose edges include those of every state.
 template<typename Mutate>
 void check_sequence(ygg::database::QueryView<> edges,
-                    const std::vector<Relation>& maximal,
-                    std::vector<Relation>& inputs,
+                    const urd::Store<urd::sequence<Relation>>& maximal,
+                    urd::Store<urd::sequence<Relation>>& inputs,
                     const std::vector<bool>& static_slots,
                     Relation& sources,
                     Relation& targets,
@@ -146,13 +148,13 @@ TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
 {
     auto repository = ygg::tests::qb::repository();
     const auto edges = ygg::tests::qb::input(repository, 0, { x, y });
-    auto inputs = std::vector<Relation>();
+    auto inputs = urd::Store<urd::sequence<Relation>>();
     inputs.emplace_back(std::initializer_list<Column> { x, y });
     auto sources = Relation({ x });
     auto targets = Relation({ y });
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return static_cast<uint_t>(random() % 12); };
-    auto maximal = std::vector<Relation>();
+    auto maximal = urd::Store<urd::sequence<Relation>>();
     maximal.emplace_back(std::initializer_list<Column> { x, y });
     for (uint_t v = 0; v < 12; ++v)
         for (uint_t w = 0; w < 12; ++w)
@@ -218,8 +220,8 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
     const auto diagonal = qb::select_equal(repository, all, a2, b2);
     const auto edges = qb::difference(repository, qb::antijoin(repository, all, qb::rename(repository, blocked, { a2, b2 })), diagonal);
 
-    auto inputs = std::vector<Relation>();
-    for (const auto& columns : std::vector<std::vector<Column>> { { x, y }, { x }, { x, y }, { x, y }, { x, y } })
+    auto inputs = urd::Store<urd::sequence<Relation>>();
+    for (const auto& columns : urd::Store<urd::sequence<urd::Store<urd::sequence<Column>>>> { { x, y }, { x }, { x, y }, { x, y }, { x, y } })
         inputs.emplace_back(std::span<const Column>(columns));
     constexpr uint_t n = 6;
     for (uint_t v = 0; v < n; ++v)
@@ -241,7 +243,7 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
         else
             relation.insert(row);
     };
-    auto maximal = std::vector<Relation>();
+    auto maximal = urd::Store<urd::sequence<Relation>>();
     for (const auto& input : inputs)
         maximal.emplace_back(input.columns().span());
     for (uint_t v = 0; v < n; ++v)
@@ -328,8 +330,8 @@ struct ListGraph
 {
     using Bytes = std::array<std::byte, sizeof(uint_t)>;
 
-    std::vector<std::vector<uint_t>> out;
-    std::vector<std::vector<uint_t>> in;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> out;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> in;
 
     static uint_t id(std::span<const std::byte> vertex)
     {
@@ -344,7 +346,7 @@ struct ListGraph
         return result;
     }
     template<typename OnVertex>
-    static void each(const std::vector<uint_t>& vertices, const OnVertex& on_vertex)
+    static void each(const urd::Store<urd::sequence<uint_t>>& vertices, const OnVertex& on_vertex)
     {
         for (const auto w : vertices)
             if (const auto encoded = bytes(w); !on_vertex(std::span<const std::byte>(encoded)))
@@ -361,7 +363,7 @@ struct ListGraph
 
 struct ListVertices
 {
-    std::vector<ListGraph::Bytes> rows;
+    urd::Store<urd::sequence<ListGraph::Bytes>> rows;
 
     [[nodiscard]] size_t size() const noexcept { return rows.size(); }
     [[nodiscard]] std::span<const std::byte> row(size_t i) const { return rows[i]; }
@@ -376,12 +378,12 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
     auto paths = static_cast<size_t>(0);
     auto chains = static_cast<size_t>(0);  // Paths that end on a stored chain.
     auto heuristic = ygg::database::BlindDistanceHeuristic {};
-    auto tree = ygg::database::SearchTree(sizeof(uint_t));
+    auto tree = ygg::database::SearchTree {};
     auto backward = ygg::database::BackwardFrontier {};
-    auto storage = ygg::database::AStarStorage(sizeof(uint_t));
+    auto storage = ygg::database::AStarStorage {};
     for (size_t trial = 0; trial < 50; ++trial)
     {
-        auto graph = ListGraph { std::vector<std::vector<uint_t>>(n), std::vector<std::vector<uint_t>>(n) };
+        auto graph = ListGraph { urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>>(n), urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>>(n) };
         for (size_t e = 0; e < 70; ++e)
         {
             const auto u = static_cast<uint_t>(rng() % n);
@@ -393,22 +395,22 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
             }
         }
         auto sources = ListVertices {};
-        auto targets = ygg::database::VertexSet(sizeof(uint_t));
+        auto targets = ygg::database::VertexSet();
         for (size_t i = 0; i < 2; ++i)
         {
             sources.rows.push_back(ListGraph::bytes(static_cast<uint_t>(rng() % n)));
             targets.insert(std::span<const std::byte>(ListGraph::bytes(static_cast<uint_t>(rng() % n))));
         }
         tree.clear();
-        auto ids = std::vector<uint_t>();
+        auto ids = urd::Store<urd::sequence<uint_t>>();
         for (size_t i = 0; i < targets.size(); ++i)
-            ids.push_back(tree.ensure(targets[static_cast<uint_t>(i)], heuristic));
+            ids.push_back(tree.ensure(ygg::database::vertex_at(targets, static_cast<uint_t>(i)), heuristic));
         backward.start(ids);
         auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0);
         const auto distance = search.run(sources);
         if (distance == std::numeric_limits<uint_t>::max())
             continue;
-        auto path = std::vector<uint_t>();
+        auto path = urd::Store<urd::sequence<uint_t>>();
         search.path([&](std::span<const std::byte> vertex) { path.push_back(ListGraph::id(vertex)); });
         // Visited: where the search ended back to its source (the only source on the path, as sources have g = 0),
         // then the stored chain from where it ended to a target.

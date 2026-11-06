@@ -6,6 +6,8 @@
 #define YGG_DATABASE_OPTIMIZATION_OPTIMIZATION_HPP_
 
 #include "yggdrasil/database/optimization/details/optimization.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
@@ -54,9 +56,9 @@ public:
     /// [1, rows]. A key empty in every sample keeps 0 rows and adds a warning naming it with describe(key).
     template<typename Describe>
         requires std::invocable<Describe&, const Key&> && std::convertible_to<std::invoke_result_t<Describe&, const Key&>, std::string>
-    UnorderedMap<Key, RelationStatistics> finish(diagnostics::Warnings& warnings, Describe describe) const
+    urd::Store<urd::map<Key, RelationStatistics>> finish(diagnostics::Warnings& warnings, Describe describe) const
     {
-        UnorderedMap<Key, RelationStatistics> result;
+        urd::Store<urd::map<Key, RelationStatistics>> result;
         for (const auto& [key, total] : m_totals)
         {
             const auto samples = static_cast<double>(total.samples);
@@ -65,8 +67,8 @@ public:
                 warnings.add(diagnostics::Diagnostic { "Statistics: " + std::string(describe(key)) + " was empty in all " + std::to_string(total.samples)
                                                        + " samples; its size is estimated as 0." });
             mean.rows = mean.rows > 0 ? std::max(mean.rows / samples, 1.0) : 0.0;
-            for (auto& [column, distinct] : mean.distinct)
-                distinct = mean.rows > 0 ? std::clamp(distinct / samples, 1.0, mean.rows) : 0.0;
+            for (const auto& [column, distinct] : mean.distinct)
+                mean.distinct.at(column) = mean.rows > 0 ? std::clamp(distinct / samples, 1.0, mean.rows) : 0.0;
             result.emplace(key, std::move(mean));
         }
         return result;
@@ -78,7 +80,7 @@ private:
         size_t samples = 0;
         RelationStatistics statistics;
     };
-    UnorderedMap<Key, Total> m_totals;
+    urd::Store<urd::map<Key, Total>> m_totals;
 };
 
 /// Plans the roots by applying established query optimization methods:
@@ -143,7 +145,7 @@ inline QueryPlan optimize(std::span<const QueryView<>> roots, std::span<const Ev
 /// Plans roots that are all evaluated fully.
 inline QueryPlan optimize(std::span<const QueryView<>> roots, const std::type_identity_t<Statistics>& statistics = {})
 {
-    const auto evaluations = std::vector<Evaluation>(roots.size(), Evaluation::full);
+    const auto evaluations = urd::Store<urd::sequence<Evaluation>>(roots.size(), Evaluation::full);
     return optimize(roots, std::span<const Evaluation>(evaluations), statistics);
 }
 

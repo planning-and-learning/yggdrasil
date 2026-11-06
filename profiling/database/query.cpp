@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "yggdrasil/database/semantics/incremental/query.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "yggdrasil/database/optimization/optimization.hpp"
 #include "yggdrasil/database/semantics/generic_join.hpp"
@@ -21,7 +23,7 @@ namespace ygg::profiling
 namespace
 {
 using Relation = Builder<database::Relation>;
-using Column = Index<database::Column>;
+using Column = urd::index<database::Column>;
 
 struct Triangle
 {
@@ -61,8 +63,8 @@ struct Triangle
     database::QueryView<> join(database::QueryView<> lhs, database::QueryView<> rhs)
     {
         auto data = database::checkout<database::Query<database::QueryJoinTag>>(builder);
-        data->lhs = lhs.get_index();
-        data->rhs = rhs.get_index();
+        data->lhs = lhs.index();
+        data->rhs = rhs.index();
         return database::insert_query(repository, builder, *data);
     }
 
@@ -213,7 +215,7 @@ void generic_join_full(benchmark::State& state)
 {
     Triangle trace(static_cast<uint_t>(state.range(0)));
     const auto& input = trace.initial;
-    std::vector<std::vector<database::ColumnLayout>> schemas;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
     schemas.reserve(trace.initial.size());
     for (const auto& value : trace.initial)
         schemas.emplace_back(value.columns().span().begin(), value.columns().span().end());

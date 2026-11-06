@@ -18,7 +18,7 @@
 #ifndef YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 
-#include "yggdrasil/core/bit.hpp"
+#include <urd/repr/containers/bit.hpp>
 #include "yggdrasil/formalism/repository.hpp"
 
 #include <algorithm>
@@ -38,7 +38,7 @@ private:
         if (num_objects > std::numeric_limits<ygg::uint_t>::max())
             throw std::invalid_argument("RepositoryFactory: number of objects exceeds the object index domain.");
 
-        auto config = RelationRepositoryConfig(static_cast<std::uint8_t>(ygg::bit::bits_needed(num_objects)));
+        auto config = RelationRepositoryConfig(static_cast<std::uint8_t>(urd::repr::bit::bits_needed(num_objects)));
         if (parent)
             config.object_index_width = std::max(config.object_index_width, parent->get_object_index_width());
         return config;

@@ -11,6 +11,8 @@
 #define YGG_DIAGNOSTICS_X3_HPP_
 
 #include "yggdrasil/diagnostics/diagnostic.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/utility/error_reporting.hpp>
@@ -36,7 +38,7 @@ public:
     {
         It position;
         std::string message;
-        std::vector<DiagnosticNote> notes = {};
+        urd::Store<urd::sequence<DiagnosticNote>> notes = {};
     };
 
     ErrorHandler(It first, It last, std::ostream& output, std::string file = "", int tabs = 4) :
@@ -54,7 +56,7 @@ public:
     void clear_error() noexcept { m_error.reset(); }
     const std::optional<RecordedError>& last_error() const noexcept { return m_error; }
 
-    void record_error(It position, std::string message, std::vector<DiagnosticNote> notes = {})
+    void record_error(It position, std::string message, urd::Store<urd::sequence<DiagnosticNote>> notes = {})
     {
         if (!m_error)
             m_error = RecordedError { position, std::move(message), std::move(notes) };

@@ -30,12 +30,12 @@ struct NodeRules;
 /// Exchanging the two inputs to update() reverses the change.
 struct Delta
 {
-    Builder<Relation> added;
-    Builder<Relation> removed;
+    urd::builder<Relation> added;
+    urd::builder<Relation> removed;
 
     explicit Delta(std::span<const ColumnLayout> columns) : added(columns), removed(columns) {}
-    explicit Delta(std::span<const Index<Column>> columns) : added(columns), removed(columns) {}
-    Delta(std::initializer_list<Index<Column>> columns) : Delta(std::span<const Index<Column>>(columns.begin(), columns.size())) {}
+    explicit Delta(std::span<const urd::index<Column>> columns) : added(columns), removed(columns) {}
+    Delta(std::initializer_list<urd::index<Column>> columns) : Delta(std::span<const urd::index<Column>>(columns.begin(), columns.size())) {}
 
     void clear() noexcept
     {
@@ -43,7 +43,7 @@ struct Delta
         removed.clear();
     }
     /// The (added, removed) change.
-    [[nodiscard]] std::pair<const Builder<Relation>&, const Builder<Relation>&> change() const noexcept { return { added, removed }; }
+    [[nodiscard]] std::pair<const urd::builder<Relation>&, const urd::builder<Relation>&> change() const noexcept { return { added, removed }; }
     [[nodiscard]] size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
 };
 
@@ -84,7 +84,7 @@ void require_initialized(bool initialized);
 
 /// Inputs are borrowed during a call and must not be the evaluator's own result or delta.
 template<RelationViewConcept V>
-void require_unaliased(const V& input, const Builder<Relation>& result, const Delta& delta)
+void require_unaliased(const V& input, const urd::builder<Relation>& result, const Delta& delta)
 {
     const auto* address = input.get_storage_address();
     if (address == result.get_storage_address() || address == delta.added.get_storage_address() || address == delta.removed.get_storage_address())
@@ -93,7 +93,7 @@ void require_unaliased(const V& input, const Builder<Relation>& result, const De
 
 /// A change of an input with the given columns is disjoint and borrows no evaluator storage.
 template<RelationChange C>
-void require_change(const C& change, std::span<const ColumnLayout> columns, const Builder<Relation>& result, const Delta& delta)
+void require_change(const C& change, std::span<const ColumnLayout> columns, const urd::builder<Relation>& result, const Delta& delta)
 {
     require_delta(std::get<0>(change), std::get<1>(change), columns);
     require_unaliased(std::get<0>(change), result, delta);
@@ -101,7 +101,7 @@ void require_change(const C& change, std::span<const ColumnLayout> columns, cons
 }
 
 /// Applies an exact delta of the result: removed rows are present, added rows absent.
-void apply_delta(const Delta& delta, Builder<Relation>& result);
+void apply_delta(const Delta& delta, urd::builder<Relation>& result);
 }  // namespace detail
 
 }  // namespace ygg::database::incremental

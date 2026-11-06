@@ -5,7 +5,6 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_ESTIMATION_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_ESTIMATION_HPP_
 
-#include "yggdrasil/containers/associative_containers.hpp"
 #include "yggdrasil/database/optimization/statistics.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 
@@ -16,6 +15,12 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/maps/unordered_flat_map.hpp>
+#include <urd/repr/values/std_set.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <variant>
 #include <vector>
 
@@ -42,7 +47,7 @@ using FactorIdentity = std::variant<InputFactorIdentity, QueryFactorIdentity>;
 struct Attribute
 {
     size_t position = 0;
-    Index<Column> column;
+    urd::index<Column> column;
     double distinct = 0;
     auto operator<=>(const Attribute&) const = default;
 };
@@ -50,16 +55,16 @@ struct Factor
 {
     FactorIdentity identity;
     double rows;
-    std::vector<Attribute> attributes;
+    urd::Store<urd::sequence<Attribute>> attributes;
 };
 /// A conjunction of factors, equalities, and constants, independent of join order.
 struct Estimate
 {
     double rows = 0;
-    UnorderedMap<Index<Column>, double> distinct;
-    std::vector<Factor> factors;
-    Set<std::pair<Index<Column>, Index<Column>>> equalities;
-    Set<std::pair<Index<Column>, std::vector<std::byte>>> constants;
+    urd::Store<urd::map<urd::index<Column>, double>> distinct;
+    urd::Store<urd::sequence<Factor>> factors;
+    urd::Store<urd::set<std::pair<urd::index<Column>, urd::index<Column>>>, urd::sorted> equalities;
+    urd::Store<urd::set<std::pair<urd::index<Column>, urd::Store<urd::sequence<std::byte>>>>, urd::sorted> constants;
 };
 
 /// Estimates saturate here instead of overflowing to infinity.
@@ -74,7 +79,7 @@ Estimate factor(const RelationStatistics& stats, std::span<const ColumnLayout> c
 /// The conjunction's rows: the product of distinct factors divided, per column class,
 /// by all but the smallest distinct count (one factor of a constant class), as in
 /// System R's |R ⋈ S| = |R|·|S| / max(V(R,A), V(S,A)).
-Estimate conjunction(Estimate result, std::span<const Index<Column>> labels);
+Estimate conjunction(Estimate result, std::span<const urd::index<Column>> labels);
 
 Estimate combine(Estimate lhs, const Estimate& rhs);
 
@@ -103,9 +108,9 @@ Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity
     const auto inputs = query.get_inputs();
     if (inputs.empty())
         return factor({ 1, {} }, query.columns(), identity);
-    auto result = child(QueryView<>(inputs.front(), query.get_repository()));
+    auto result = child(QueryView<>(inputs.front(), get_repository(query.context())));
     for (const auto input : inputs.subspan(1))
-        result = combine(std::move(result), child(QueryView<>(input, query.get_repository())));
+        result = combine(std::move(result), child(QueryView<>(input, get_repository(query.context()))));
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<class GetEstimate>
@@ -121,24 +126,24 @@ Estimate estimate_operation(QueryView<QuerySelectValueTag> query, FactorIdentity
 {
     auto result = child(query.get_arg());
     const auto constant = query.get_constant();
-    result.constants.emplace(query.get_column(), std::vector<std::byte>(constant.begin(), constant.end()));
+    result.constants.emplace(query.get_column(), urd::Store<urd::sequence<std::byte>>(constant.begin(), constant.end()));
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryRenameTag> query, FactorIdentity, GetEstimate child, const Statistics&)
 {
     auto result = child(query.get_arg());
-    UnorderedMap<Index<Column>, Index<Column>> renamed;
+    urd::Store<urd::map<urd::index<Column>, urd::index<Column>>> renamed;
     const auto before = query.get_arg().columns(), after = query.columns();
     for (size_t i = 0; i < before.size(); ++i)
         renamed[before[i].label] = after[i].label;
     for (auto& single : result.factors)
         for (auto& attribute : single.attributes)
             attribute.column = renamed.at(attribute.column);
-    Set<std::pair<Index<Column>, Index<Column>>> equalities;
+    urd::Store<urd::set<std::pair<urd::index<Column>, urd::index<Column>>>, urd::sorted> equalities;
     for (const auto& [lhs, rhs] : result.equalities)
         equalities.emplace(std::min(renamed.at(lhs), renamed.at(rhs)), std::max(renamed.at(lhs), renamed.at(rhs)));
-    Set<std::pair<Index<Column>, std::vector<std::byte>>> constants;
+    urd::Store<urd::set<std::pair<urd::index<Column>, urd::Store<urd::sequence<std::byte>>>>, urd::sorted> constants;
     for (const auto& [column, value] : result.constants)
         constants.emplace(renamed.at(column), value);
     result.equalities = std::move(equalities);
@@ -202,13 +207,13 @@ Estimate estimate_operation(QueryView<QueryDistanceTag>, FactorIdentity, GetEsti
 /// The System R estimate of a query from its children's estimates. An observation of
 /// the equivalent caller query replaces the derivation (LEO, VLDB 2001).
 template<std::invocable<QueryView<>> GetEstimate>
-Estimate estimate(QueryView<> query, std::type_identity_t<std::optional<Index<Query<>>>> source, GetEstimate child, const Statistics& statistics)
+Estimate estimate(QueryView<> query, std::type_identity_t<std::optional<urd::index<Query<>>>> source, GetEstimate child, const Statistics& statistics)
 {
-    const FactorIdentity identity = QueryFactorIdentity { query.get_index().get_value() };
+    const FactorIdentity identity = QueryFactorIdentity { query.index().value };
     if (source)
         if (const auto it = statistics.expressions.find(*source); it != statistics.expressions.end())
             return factor(with_default_distinct(it->second, query.columns(), statistics.objects), query.columns(), identity);
-    return ygg::visit([&]<typename Child>(Child operation) { return estimate_operation(operation, identity, child, statistics); }, query.get_variant());
+    return std::visit([&]<typename Child>(Child operation) { return estimate_operation(operation, identity, child, statistics); }, query.get_variant());
 }
 }  // namespace ygg::database::detail
 

@@ -4,12 +4,14 @@
  */
 
 #include "yggdrasil/database/syntax/query_construction.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
-std::span<const ColumnLayout> child_columns(Index<Query<>> child, const QueryRepository& repository)
+std::span<const ColumnLayout> child_columns(urd::index<Query<>> child, const QueryRepository& repository)
 {
-    if (child.get_value() >= repository.size())
+    if (child.value >= repository.size())
         throw std::invalid_argument("Query: children must precede their parent.");
     return QueryView<>(child, repository).columns();
 }
@@ -17,15 +19,15 @@ std::span<const ColumnLayout> child_columns(Index<Query<>> child, const QueryRep
 
 namespace ygg::database::detail
 {
-void prepare(Data<Query<QueryProjectTag>>& data, const QueryRepository& repository)
+void prepare(urd::data<Query<QueryProjectTag>>& data, const QueryRepository& repository)
 { data.plan = ProjectionPlan(child_columns(data.arg, repository), { data.labels.data(), data.labels.size() }); }
 }
 
 namespace ygg::database::detail
 {
-void prepare(Data<Query<QueryRenameTag>>& data, const QueryRepository& repository)
+void prepare(urd::data<Query<QueryRenameTag>>& data, const QueryRepository& repository)
 {
-    Builder<Columns> schema(child_columns(data.arg, repository));
+    urd::builder<Columns> schema(child_columns(data.arg, repository));
     schema.rename({ data.labels.data(), data.labels.size() });
     data.columns.set(schema.begin(), schema.end());
 }
@@ -33,7 +35,7 @@ void prepare(Data<Query<QueryRenameTag>>& data, const QueryRepository& repositor
 
 namespace ygg::database::detail
 {
-void prepare(Data<Query<QuerySelectEqualTag>>& data, const QueryRepository& repository)
+void prepare(urd::data<Query<QuerySelectEqualTag>>& data, const QueryRepository& repository)
 {
     const auto schema = child_columns(data.arg, repository);
     data.lhs_position = column_index(schema, data.lhs_column);
@@ -46,7 +48,7 @@ void prepare(Data<Query<QuerySelectEqualTag>>& data, const QueryRepository& repo
 
 namespace ygg::database::detail
 {
-void prepare(Data<Query<QuerySelectValueTag>>& data, const QueryRepository& repository)
+void prepare(urd::data<Query<QuerySelectValueTag>>& data, const QueryRepository& repository)
 {
     const auto schema = child_columns(data.arg, repository);
     data.column_position = column_index(schema, data.column);
@@ -60,7 +62,7 @@ void prepare(Data<Query<QuerySelectValueTag>>& data, const QueryRepository& repo
 
 namespace ygg::database::detail
 {
-void prepare(Data<Query<QueryDistanceTag>>& data, const QueryRepository& repository)
+void prepare(urd::data<Query<QueryDistanceTag>>& data, const QueryRepository& repository)
 {
     data.plan = DistancePlan(child_columns(data.sources, repository),
                              child_columns(data.edges, repository),
@@ -71,9 +73,9 @@ void prepare(Data<Query<QueryDistanceTag>>& data, const QueryRepository& reposit
 
 namespace ygg::database::detail
 {
-void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repository)
+void prepare(urd::data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repository)
 {
-    std::vector<std::vector<ColumnLayout>> schemas;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<ColumnLayout>>>> schemas;
     for (const auto child : data.inputs)
     {
         const auto schema = child_columns(child, repository);
@@ -90,12 +92,12 @@ void prepare(Data<Query<QueryGenericJoinTag>>& data, const QueryRepository& repo
 
 namespace ygg::database
 {
-void prepare_for_insert(QueryRepository& repository, Data<Query<>>& data)
+void prepare_for_insert(QueryRepository& repository, urd::data<Query<>>& data)
 {
     data.variant.apply(
-        [&]<typename Tag>(Index<Query<Tag>> index)
+        [&]<typename Tag>(urd::index<Query<Tag>> index)
         {
-            if (index.get_value() >= repository.template size<Query<Tag>>())
+            if (index.value >= repository.template size<Query<Tag>>())
                 throw std::invalid_argument("Query: root refers to a missing query.");
         });
 }

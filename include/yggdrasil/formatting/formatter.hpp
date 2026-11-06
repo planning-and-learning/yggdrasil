@@ -19,20 +19,20 @@
 #define YGG_FORMATTING_FORMATTER_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <fmt/format.h>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <string>
+#include <urd/elements/index.hpp>
 #include <variant>
 #include <vector>
 
 namespace ygg
 {
-
-template<typename T>
-struct Index;
 
 template<typename T, typename C>
 struct View;
@@ -48,13 +48,13 @@ namespace fmt
 {
 
 template<typename T>
-struct formatter<ygg::Index<T>, char>
+struct formatter<urd::index<T>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ygg::Index<T>& value, FormatContext& ctx) const
-    { return fmt::format_to(ctx.out(), "{}", ygg::uint_t(value)); }
+    auto format(const urd::index<T>& value, FormatContext& ctx) const
+    { return fmt::format_to(ctx.out(), "{}", value.value); }
 };
 
 template<typename T>
@@ -116,9 +116,9 @@ namespace ygg
 {
 
 template<std::ranges::input_range Range>
-std::vector<std::string> to_strings(Range&& range)
+urd::Store<urd::sequence<std::string>> to_strings(Range&& range)
 {
-    auto result = std::vector<std::string> {};
+    auto result = urd::Store<urd::sequence<std::string>> {};
     if constexpr (std::ranges::sized_range<Range>)
         result.reserve(std::ranges::size(range));
     for (const auto& element : std::forward<Range>(range))

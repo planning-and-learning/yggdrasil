@@ -10,10 +10,10 @@
 #ifndef YGG_FORMALISM_BUILDER_HPP_
 #define YGG_FORMALISM_BUILDER_HPP_
 
-#include "yggdrasil/containers/unique_object_pool.hpp"
-#include "yggdrasil/core/concepts.hpp"
-#include "yggdrasil/core/type_list.hpp"
-#include "yggdrasil/core/types.hpp"
+#include <urd/repr/slots/slots.hpp>
+#include <urd/store.hpp>
+#include <boost/mp11.hpp>
+#include <urd/elements/flat.hpp>
 
 namespace ygg::formalism
 {
@@ -22,25 +22,14 @@ namespace detail
 template<typename T>
 struct BuilderSlot
 {
-    UniqueObjectPool<Data<T>> pool;
+    urd::Store<urd::slots<urd::data<T>>> pool;
 };
 
 template<typename List>
 struct BuilderSlots;
 
 template<typename... Ts>
-struct BuilderSlots<TypeList<Ts...>> : BuilderSlot<Ts>...
-{
-};
-
-template<typename Reversed, typename... Ts>
-struct ReverseTypes
-{
-    using type = Reversed;
-};
-
-template<typename... Reversed, typename T, typename... Ts>
-struct ReverseTypes<TypeList<Reversed...>, T, Ts...> : ReverseTypes<TypeList<T, Reversed...>, Ts...>
+struct BuilderSlots<boost::mp11::mp_list<Ts...>> : BuilderSlot<Ts>...
 {
 };
 }  // namespace detail
@@ -49,10 +38,10 @@ struct ReverseTypes<TypeList<Reversed...>, T, Ts...> : ReverseTypes<TypeList<T, 
 /// _Tuple_impl chain and its constructor constraints. The bases are listed in reverse, so pools are
 /// destroyed in type order as in std::tuple: pooled objects may own handles into pools of later types.
 template<typename... Ts>
-class BuilderStorage : private detail::BuilderSlots<typename detail::ReverseTypes<TypeList<>, Ts...>::type>
+class BuilderStorage : private detail::BuilderSlots<boost::mp11::mp_reverse<boost::mp11::mp_list<Ts...>>>
 {
 public:
-    using Types = TypeList<Ts...>;
+    using Types = boost::mp11::mp_list<Ts...>;
 
     BuilderStorage() = default;
     BuilderStorage(const BuilderStorage&) = delete;
@@ -63,17 +52,17 @@ public:
 
     /// Acquire pooled data without resetting its contents.
     template<typename T>
-        requires(Types::template contains<T>)
+        requires(boost::mp11::mp_contains<Types, T>::value)
     [[nodiscard]] auto get_builder()
-    { return static_cast<detail::BuilderSlot<T>&>(*this).pool.get_or_allocate(); }
+    { return static_cast<detail::BuilderSlot<T>&>(*this).pool.acquire_unique(); }
 
-    /// Clear pooled data once, retaining its reusable buffers.
+    /// Clear pooled data once, member by member, retaining its reusable buffers.
     template<typename T>
-        requires(Types::template contains<T> && Clearable<Data<T>>)
+        requires(boost::mp11::mp_contains<Types, T>::value)
     [[nodiscard]] auto checkout()
     {
         auto data = get_builder<T>();
-        data->clear();
+        urd::clear_members(*data);
         return data;
     }
 };

@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/optimization/details/optimization.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
@@ -14,7 +16,7 @@ void validate(std::span<const QueryView<>> roots, const Statistics& statistics)
         if (is<QueryInputTag>(query))
             if (const auto it = statistics.inputs.find(as<QueryInputTag>(query).get_input_slot()); it != statistics.inputs.end())
                 validate_statistics(it->second, query.columns());
-        if (const auto it = statistics.expressions.find(query.get_index()); it != statistics.expressions.end())
+        if (const auto it = statistics.expressions.find(query.index()); it != statistics.expressions.end())
             validate_statistics(it->second, query.columns());
     }
 }
@@ -29,21 +31,21 @@ QueryPlan optimize(std::span<const QueryView<>> roots, std::span<const Evaluatio
     validate(roots, statistics);
     if (roots.empty())
         return {};
-    const auto& source = roots.front().get_repository();
+    const auto& source = get_repository(roots.front().context());
     QueryBuilder builder;
     auto normalized = source.get_factory().create();
     Normalizer normalize(normalized, builder, source.size());
-    std::vector<std::pair<Index<Query<>>, Index<Query<>>>> normalized_queries;
+    urd::Store<urd::sequence<std::pair<urd::index<Query<>>, urd::index<Query<>>>>> normalized_queries;
     for (const auto query : reachable(roots))
-        normalized_queries.emplace_back(normalize(query).get_index(), query.get_index());
+        normalized_queries.emplace_back(normalize(query).index(), query.index());
     // The equivalent caller query of each normalized query; the first one wins.
-    std::vector<std::optional<Index<Query<>>>> sources(normalized.size());
+    urd::Store<urd::sequence<std::optional<urd::index<Query<>>>>> sources(normalized.size());
     for (const auto& [normalized_query, caller] : normalized_queries)
-        if (auto& source_of = sources[normalized_query.get_value()]; !source_of)
+        if (auto& source_of = sources[normalized_query.value]; !source_of)
             source_of = caller;
     auto plans = source.get_factory().create();
     Planner planner(statistics, sources, normalized.size(), plans, builder);
-    std::vector<QueryView<>> outputs;
+    urd::Store<urd::sequence<QueryView<>>> outputs;
     for (size_t i = 0; i < roots.size(); ++i)
     {
         const auto root = roots[i];
@@ -84,7 +86,7 @@ namespace ygg::database::detail
 QueryView<> Planner::plan_block(QueryView<> join, std::span<const ColumnLayout> output)
 {
     JoinBlock block { {}, ygg::canonicalized(column_labels(output)) };
-    UnorderedSet<QueryIndex> seen;
+    urd::Store<urd::set<QueryIndex>> seen;
     collect(join, block.atoms, seen);
     if (block.atoms.empty())  // The empty join is the nullary relation with one row.
         return m_build.generic_join(block.atoms, {});
@@ -100,7 +102,7 @@ namespace ygg::database::detail
 {
 QueryView<> Planner::plan(QueryView<> normalized)
 {
-    if (const auto& planned = m_planned.at(normalized.get_index().get_value()))
+    if (const auto& planned = m_planned.at(normalized.index().value))
         return *planned;
     QueryView<> result = [&]
     {
@@ -111,13 +113,13 @@ QueryView<> Planner::plan(QueryView<> normalized)
             if (const auto projection = as<QueryProjectTag>(normalized); joins(projection.get_arg()))
                 return plan_block(projection.get_arg(), normalized.columns());
         }
-        std::vector<QueryView<>> children;
+        urd::Store<urd::sequence<QueryView<>>> children;
         for_each_child(normalized, [&](QueryView<> child) { children.push_back(plan(child)); });
         return m_build.clone(normalized, children);
     }();
-    if (const auto caller = m_normalized_sources[normalized.get_index().get_value()]; caller && !source(result))
+    if (const auto caller = m_normalized_sources[normalized.index().value]; caller && !source(result))
         slot(m_sources, result) = caller;
-    m_planned[normalized.get_index().get_value()] = result;
+    m_planned[normalized.index().value] = result;
     return result;
 }
 }

@@ -1,11 +1,12 @@
 #include "bindings.hpp"
+#include "yggdrasil/python/type_casters.hpp"
 
 namespace yggdrasil::database_python
 {
 namespace
 {
 template<typename... Tags>
-void bind_query_data_constructors(nb::class_<ygg::Data<ygg::database::Query<>>>& cls, ygg::TypeList<Tags...>)
+void bind_query_data_constructors(nb::class_<urd::data<ygg::database::Query<>>>& cls, boost::mp11::mp_list<Tags...>)
 {
     using namespace nb::literals;
     (cls.def(nb::init<ConcreteQueryView<Tags>>(), "query"_a), ...);
@@ -14,11 +15,11 @@ void bind_query_data_constructors(nb::class_<ygg::Data<ygg::database::Query<>>>&
 
 void bind_query(nb::module_& m, QueryRepositoryBinding& repository)
 {
-    ygg::bind_index<ygg::Index<ygg::database::Query<>>>(m, "QueryIndex");
+    urd::python::bind_index<urd::index<ygg::database::Query<>>>(m, "QueryIndex");
 
     {
-        using V = ygg::Data<ygg::database::Query<>>;
-        auto cls = ygg::bind_data<V>(m, "QueryData");
+        using V = urd::data<ygg::database::Query<>>;
+        auto cls = urd::python::bind_data<V>(m, "QueryData");
         bind_query_data_constructors(cls, ygg::database::QueryConstructorTags {});
         cls.def_rw("variant", &V::variant);
     }
@@ -26,9 +27,9 @@ void bind_query(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = QueryView;
         auto cls = nb::class_<V>(m, "Query", "Immutable interned query. Keeps its repository alive.");
-        cls.def("get_index", &V::get_index).def("get_variant", &V::get_variant, nb::keep_alive<0, 1>()).def("columns", &V::columns, nb::keep_alive<0, 1>());
-        ygg::add_comparison(cls);
-        ygg::add_hash(cls);
+        cls.def("get_index", &V::index).def("get_variant", &V::get_variant, nb::keep_alive<0, 1>()).def("columns", &V::columns, nb::keep_alive<0, 1>());
+        urd::python::add_comparison(cls);
+        urd::python::add_hash(cls);
     }
 
     ygg::bind_insert<ygg::database::Query<>>(repository);

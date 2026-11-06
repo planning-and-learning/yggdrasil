@@ -18,12 +18,13 @@
 #ifndef YGG_CORE_CLOSED_INTERVAL_HPP_
 #define YGG_CORE_CLOSED_INTERVAL_HPP_
 
-#include "yggdrasil/core/concepts.hpp"
 
 #include <boost/numeric/interval.hpp>
 #include <ostream>
 #include <tuple>
 #include <type_traits>
+#include <urd/elements/concepts.hpp>
+#include <urd/memory.hpp>
 
 namespace ygg
 {
@@ -102,11 +103,13 @@ public:
     friend A lower(const ClosedInterval& el) noexcept { return lower(el.get_interval()); }
     friend A upper(const ClosedInterval& el) noexcept { return upper(el.get_interval()); }
 
-    [[nodiscard]] auto identifying_members() const noexcept
+    /// Whether it is empty, and its bounds where it is not: every empty interval alike.
+    [[nodiscard]] auto normalized() const noexcept
     {
         const auto is_empty = empty(*this);
         return std::make_tuple(is_empty, is_empty ? A(0) : lower(*this), is_empty ? A(0) : upper(*this));
     }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&ClosedInterval::normalized> {}; }
 
 private:
     Interval m_interval;
@@ -129,5 +132,12 @@ inline std::ostream& operator<<(std::ostream& out, const ClosedInterval<A>& elem
 }
 
 }  // namespace ygg
+
+/// An interval holds its two bounds and owns no memory.
+template<std::floating_point A>
+struct urd::memory_of<ygg::ClosedInterval<A>>
+{
+    static constexpr std::size_t bytes(const ygg::ClosedInterval<A>& /*held*/) { return 0; }
+};
 
 #endif

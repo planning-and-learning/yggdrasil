@@ -18,8 +18,6 @@
 #ifndef YGG_FORMALISM_DETAIL_BASIC_SYMBOL_REPOSITORY_IMPL_HPP_
 #define YGG_FORMALISM_DETAIL_BASIC_SYMBOL_REPOSITORY_IMPL_HPP_
 
-#include "yggdrasil/buffer/detail/indexed_hash_set_impl.hpp"
-#include "yggdrasil/containers/detail/indexed_hash_set_impl.hpp"
 #include "yggdrasil/formalism/basic_symbol_repository.hpp"
 
 #include <cassert>
@@ -44,35 +42,20 @@ size_t BasicSymbolRepository<T, ThreadSafe>::memory_usage() const noexcept
 { return m_slot.memory_usage(); }
 
 template<typename T, bool ThreadSafe>
-std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
+std::optional<urd::index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const urd::data<T>& builder, size_t h) const noexcept
 {
-    const auto& container = m_slot.container;
-    assert(h == container.hash(builder));
-
-    if (auto index_or_nullopt = container.find_with_hash(builder, h))
-        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
-
+    assert(h == Slot::hash(builder));
+    if (const auto found = m_slot.records.find(urd::prehashed<urd::data<T>> { builder, h }); !found.is_none())
+        return urd::index<T>(static_cast<uint_t>(m_slot.parent_size + found.value));
     return std::nullopt;
 }
 
 template<typename T, bool ThreadSafe>
-std::optional<Index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
-{
-    const auto& container = m_slot.container;
-    assert(h == container.hash(builder));
-
-    if (auto index_or_nullopt = container.find_unsafe_with_hash(builder, h))
-        return Index<T>(m_slot.parent_size + ygg::uint_t(*index_or_nullopt));
-
-    return std::nullopt;
-}
-
-template<typename T, bool ThreadSafe>
-std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local(Data<T>& builder)
+std::pair<urd::index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local(urd::data<T>& builder)
 { return insert_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
 template<typename T, bool ThreadSafe>
-std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_with_hash(Data<T>& builder, size_t h)
+std::pair<urd::index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_with_hash(urd::data<T>& builder, size_t h)
 {
     if (const auto index = find_local_with_hash(builder, h))
     {
@@ -84,18 +67,16 @@ std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_local_wit
 }
 
 template<typename T, bool ThreadSafe>
-std::pair<Index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::create_local_with_hash(Data<T>& builder, size_t h)
+std::pair<urd::index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::create_local_with_hash(urd::data<T>& builder, size_t h)
 {
-    auto& container = m_slot.container;
-    const auto [index, created] = container.complete_miss_with_hash(h,
-                                                                    builder,
-                                                                    [&](Index<T> local_index) -> const Data<T>&
-                                                                    {
-                                                                        builder.index.value = m_slot.parent_size + ygg::uint_t(local_index);
-                                                                        assert(h == container.hash(builder) && "Symbol index must not affect identity.");
-                                                                        return builder;
-                                                                    });
-    builder.index.value = m_slot.parent_size + ygg::uint_t(index);
+    const auto [index, created] = m_slot.records.insert(urd::prehashed<urd::data<T>> { builder, h },
+                                                        [&](urd::index<urd::data<T>> local_index) -> const urd::data<T>&
+                                                        {
+                                                            builder.index.value = static_cast<uint_t>(m_slot.parent_size + local_index.value);
+                                                            assert(h == Slot::hash(builder) && "Symbol index must not affect identity.");
+                                                            return builder;
+                                                        });
+    builder.index.value = static_cast<uint_t>(m_slot.parent_size + index.value);
     return { builder.index, created };
 }
 

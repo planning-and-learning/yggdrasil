@@ -18,7 +18,7 @@
 #ifndef YGG_FORMATTING_DYNAMIC_BITSET_FORMATTERS_HPP_
 #define YGG_FORMATTING_DYNAMIC_BITSET_FORMATTERS_HPP_
 
-#include "yggdrasil/containers/dynamic_bitset.hpp"
+#include <boost/dynamic_bitset.hpp>
 #include "yggdrasil/core/config.hpp"
 
 #include <concepts>
@@ -26,6 +26,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <type_traits>
+#include <urd/repr/containers/bitset_span.hpp>
 
 #if YGG_ENABLE_FMT_FORMATTERS
 namespace fmt
@@ -57,17 +58,17 @@ struct formatter<boost::dynamic_bitset<Block, Allocator>, char>
 };
 
 template<std::unsigned_integral Block>
-struct formatter<ygg::BitsetSpan<Block>, char>
+struct formatter<urd::repr::BitsetSpan<Block>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ygg::BitsetSpan<Block>& value, FormatContext& ctx) const
+    auto format(const urd::repr::BitsetSpan<Block>& value, FormatContext& ctx) const
     {
         auto out = fmt::format_to(ctx.out(), "{{");
         size_t pos = value.find_first();
         bool first = true;
-        while (pos != ygg::BitsetSpan<Block>::npos)
+        while (pos != urd::repr::BitsetSpan<Block>::npos)
         {
             if (!first)
                 out = fmt::format_to(out, ", ");

@@ -1,16 +1,20 @@
 #include "bindings.hpp"
+#include "yggdrasil/python/type_casters.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
+#include <urd/python/sequences/sequence.hpp>
 
 namespace yggdrasil::database_python
 {
 void bind_query_project(nb::module_& m, QueryRepositoryBinding& repository)
 {
     using namespace nb::literals;
-    ygg::bind_index<ygg::Index<ygg::database::Query<ygg::database::QueryProjectTag>>>(m, "QueryProjectIndex");
+    urd::python::bind_index<urd::index<ygg::database::Query<ygg::database::QueryProjectTag>>>(m, "QueryProjectIndex");
 
     {
         using V = QueryData<ygg::database::QueryProjectTag>;
-        ygg::bind_data<V>(m, "QueryProjectData")
-            .def(nb::init<QueryView, std::vector<Column>>(), "arg"_a, "labels"_a)
+        urd::python::bind_data<V>(m, "QueryProjectData")
+            .def(nb::init<QueryView, urd::Store<urd::sequence<Column>>>(), "arg"_a, "labels"_a)
             .def_rw("arg", &V::arg)
             .def_rw("labels", &V::labels);
     }
@@ -18,9 +22,9 @@ void bind_query_project(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = ConcreteQueryView<ygg::database::QueryProjectTag>;
         auto cls = nb::class_<V>(m, "QueryProject");
-        cls.def("get_index", &V::get_index).def("columns", &V::columns, nb::keep_alive<0, 1>()).def("get_arg", &V::get_arg, nb::keep_alive<0, 1>());
-        ygg::add_comparison(cls);
-        ygg::add_hash(cls);
+        cls.def("get_index", &V::index).def("columns", &V::columns, nb::keep_alive<0, 1>()).def("get_arg", &V::get_arg, nb::keep_alive<0, 1>());
+        urd::python::add_comparison(cls);
+        urd::python::add_hash(cls);
     }
 
     ygg::bind_insert<ygg::database::Query<ygg::database::QueryProjectTag>>(repository);

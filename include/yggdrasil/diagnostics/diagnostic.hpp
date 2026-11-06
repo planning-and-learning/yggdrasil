@@ -11,6 +11,8 @@
 #define YGG_DIAGNOSTICS_DIAGNOSTIC_HPP_
 
 #include <algorithm>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -96,7 +98,7 @@ struct Diagnostic
 {
     std::string message;
     std::optional<SourceSpan> location = std::nullopt;
-    std::vector<DiagnosticNote> notes = {};
+    urd::Store<urd::sequence<DiagnosticNote>> notes = {};
 };
 
 namespace detail

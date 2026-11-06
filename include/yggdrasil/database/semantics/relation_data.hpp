@@ -6,25 +6,25 @@
 #ifndef YGG_DATABASE_SEMANTICS_RELATION_DATA_HPP_
 #define YGG_DATABASE_SEMANTICS_RELATION_DATA_HPP_
 
-#include "yggdrasil/core/types_utils.hpp"
+#include <urd/elements/flat.hpp>
 #include "yggdrasil/database/declarations.hpp"
 
 #include <cstddef>
 #include <tuple>
 #include <utility>
 
-namespace ygg
+namespace urd
 {
 template<>
-struct Data<database::Relation>
+struct data<ygg::database::Relation>
 {
-    Index<database::Relation> index;
-    Index<database::Columns> columns_index;
-    Index<database::RelationRowSet> row_set_index;
+    urd::index<ygg::database::Relation> index;
+    urd::index<ygg::database::Columns> columns_index;
+    urd::index<ygg::database::RelationRowSet> row_set_index;
     size_t schema_namespace = 0;
 
-    Data() = default;
-    Data(Index<database::Columns> columns_index_, Index<database::RelationRowSet> row_set_index_, size_t schema_namespace_) :
+    data() = default;
+    data(urd::index<ygg::database::Columns> columns_index_, urd::index<ygg::database::RelationRowSet> row_set_index_, size_t schema_namespace_) :
         index(),
         columns_index(columns_index_),
         row_set_index(row_set_index_),
@@ -32,18 +32,18 @@ struct Data<database::Relation>
     {
     }
     template<typename C>
-    Data(::ygg::View<Index<database::Columns>, C> columns_, Index<database::RelationRowSet> row_set_index_, size_t schema_namespace_) :
+    data(urd::view<ygg::database::Columns, C> columns_, urd::index<ygg::database::RelationRowSet> row_set_index_, size_t schema_namespace_) :
         index(),
-        columns_index(),
+        columns_index(urd::to_stored(columns_)),
         row_set_index(row_set_index_),
         schema_namespace(schema_namespace_)
-    { set(columns_, columns_index); }
+    {
+    }
 
     static constexpr auto cista_members() noexcept
-    { return ygg::Members<&Data::index, &Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::columns_index, &Data::row_set_index, &Data::schema_namespace> {}; }
-    void clear() noexcept { ygg::clear_members(*this); }
+    { return urd::Members<&data::index, &data::columns_index, &data::row_set_index, &data::schema_namespace> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::columns_index, &data::row_set_index, &data::schema_namespace> {}; }
 };
-}  // namespace ygg
+}  // namespace urd
 
 #endif

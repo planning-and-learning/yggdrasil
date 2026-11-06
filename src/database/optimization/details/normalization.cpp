@@ -7,7 +7,7 @@
 
 namespace ygg::database::detail
 {
-QueryView<> Normalizer::project(QueryView<> arg, std::span<const Index<Column>> columns)
+QueryView<> Normalizer::project(QueryView<> arg, std::span<const urd::index<Column>> columns)
 {
     if (std::ranges::equal(column_labels(arg.columns()), columns))
         return arg;

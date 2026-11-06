@@ -6,6 +6,8 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_STRUCTURAL_HPP_
 
 #include "yggdrasil/database/optimization/details/join_block.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <algorithm>
 #include <optional>
@@ -19,7 +21,7 @@ namespace ygg::database::detail
 /// COMPSAC 1979): repeatedly drop variables occurring in a single edge and edges
 /// contained in another edge. The hypergraph is acyclic iff one edge remains; each
 /// dropped edge's container is its parent in a join tree.
-std::optional<std::vector<std::optional<size_t>>> join_tree(std::vector<std::vector<Index<Column>>> edges);
+std::optional<urd::Store<urd::sequence<std::optional<size_t>>>> join_tree(urd::Store<urd::sequence<urd::Store<urd::sequence<urd::index<Column>>>>> edges);
 
 /// Yannakakis (M. Yannakakis, "Algorithms for Acyclic Database Schemes", VLDB 1981):
 /// a bottom-up and a top-down semijoin pass remove dangling tuples, then joins along

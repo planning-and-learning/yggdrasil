@@ -15,10 +15,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/core.hpp"
+#include "yggdrasil/core/chrono.hpp"
+#include "yggdrasil/core/closed_interval.hpp"
+#include "yggdrasil/core/memory.hpp"
+#include "yggdrasil/io/project_path.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
-#include "yggdrasil/core/atomic_bit.hpp"
-#include "yggdrasil/core/types.hpp"
+#include <urd/repr/containers/bit.hpp>
+#include <urd/elements/flat.hpp>
+#include "yggdrasil/core/config.hpp"
 
 #include <array>
 #include <chrono>
@@ -43,7 +49,7 @@ namespace ygg::tests
 TEST(YggdrasilTests, CommonAtomicIntReferencePreservesAdjacentBits)
 {
     auto blocks = std::array<uint8_t, 2> { 0b00111111, 0b11110000 };
-    auto reference = ygg::bit::atomic_int_reference<uint8_t>(blocks, 6, 6);
+    auto reference = urd::repr::bit::atomic_int_reference<uint8_t>(blocks, 6, 6);
 
     reference = uint8_t { 0b101011 };
 
@@ -62,11 +68,11 @@ TEST(YggdrasilTests, CommonAtomicPackedAccessMatchesNonAtomicAccess)
             auto actual = expected;
             constexpr auto value = uint8_t { 0b11010011 };
 
-            ygg::bit::write_int<uint8_t>(expected, value, offset, len);
-            ygg::bit::atomic_write_int<uint8_t>(actual, value, offset, len);
+            urd::repr::bit::write_int<uint8_t>(expected, value, offset, len);
+            urd::repr::bit::atomic_write_int<uint8_t>(actual, value, offset, len);
 
             EXPECT_EQ(actual, expected);
-            EXPECT_EQ(ygg::bit::atomic_read_int<uint8_t>(actual, offset, len), ygg::bit::read_int<uint8_t>(expected, offset, len));
+            EXPECT_EQ(urd::repr::bit::atomic_read_int<uint8_t>(actual, offset, len), urd::repr::bit::read_int<uint8_t>(expected, offset, len));
         }
     }
 }
@@ -77,9 +83,9 @@ TEST(YggdrasilTests, CommonAtomicPackedAccessRejectsInvalidRanges)
     auto blocks = std::array<uint8_t, 2> {};
     constexpr auto digits = std::numeric_limits<uint8_t>::digits;
 
-    EXPECT_DEATH((void) ygg::bit::atomic_read_int<uint8_t>(blocks, digits, 1), "Offset");
-    EXPECT_DEATH(ygg::bit::atomic_write_int<uint8_t>(blocks, uint8_t { 0 }, 0, digits + 1), "Width");
-    EXPECT_DEATH((void) ygg::bit::atomic_int_reference<uint8_t>(blocks, digits, 1), "Offset");
+    EXPECT_DEATH((void) urd::repr::bit::atomic_read_int<uint8_t>(blocks, digits, 1), "Offset");
+    EXPECT_DEATH(urd::repr::bit::atomic_write_int<uint8_t>(blocks, uint8_t { 0 }, 0, digits + 1), "Width");
+    EXPECT_DEATH((void) urd::repr::bit::atomic_int_reference<uint8_t>(blocks, digits, 1), "Offset");
 }
 #endif
 
@@ -87,7 +93,7 @@ namespace
 {
 struct CoreConceptFixture
 {
-    [[nodiscard]] auto identifying_members() const noexcept { return 0; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<> {}; }
 };
 }  // namespace
 
@@ -101,21 +107,22 @@ struct CoreTypeUtilsData
     explicit CoreTypeUtilsData(int value_) : value(value_) {}
 
     int value {};
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&CoreTypeUtilsData::value> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&CoreTypeUtilsData::value> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&CoreTypeUtilsData::value> {}; }
 };
 }  // namespace
 
 }  // namespace ygg::tests
 
-namespace ygg
+namespace urd
 {
 template<>
-struct Data<tests::CoreTypeUtilsTag> : tests::CoreTypeUtilsData
+struct data<ygg::tests::CoreTypeUtilsTag> : ygg::tests::CoreTypeUtilsData
 {
     using CoreTypeUtilsData::CoreTypeUtilsData;
 };
 
-}  // namespace ygg
+}  // namespace urd
 
 namespace ygg::tests
 {
@@ -124,49 +131,22 @@ namespace
 {
 struct CoreTypeUtilsContext
 {
-    std::vector<ygg::Data<CoreTypeUtilsTag>> data;
+    urd::Store<urd::sequence<urd::data<CoreTypeUtilsTag>>> data;
 
-    const ygg::Data<CoreTypeUtilsTag>& operator[](ygg::Index<CoreTypeUtilsTag> index) const { return data.at(index.get_value()); }
+    const urd::data<CoreTypeUtilsTag>& operator[](urd::index<CoreTypeUtilsTag> index) const { return data.at(index.value); }
 };
 }  // namespace
-
-template<typename Range, typename List>
-concept CanExtendCoreRange = requires(const Range& range, List& list) { ygg::extend(range, list); };
-
-template<typename Range, typename List>
-concept CanSetCoreRange = requires(const Range& range, List& list) { ygg::set(range, list); };
-
-namespace
-{
-struct MutableAppendValue
-{
-};
-struct MutableAppendList
-{
-    void clear();
-};
-[[maybe_unused]] void append(MutableAppendValue&, MutableAppendList&) {}
-}  // namespace
-
-static_assert(!CanExtendCoreRange<std::span<MutableAppendValue>, MutableAppendList>);
-static_assert(!CanSetCoreRange<std::span<MutableAppendValue>, MutableAppendList>);
-
-template<typename T>
-using CoreAddConst = const T;
-
-template<typename Bound, typename T>
-using CorePair = std::pair<Bound, T>;
 
 TEST(YggdrasilTests, CommonCoreUmbrellaExposesLightweightHelpers)
 {
-    EXPECT_EQ(ygg::bit::ceil_div(0u, 2u), 0u);
-    EXPECT_EQ(ygg::bit::ceil_div(5u, 2u), 3u);
-    EXPECT_EQ(ygg::bit::ceil_div(std::numeric_limits<unsigned>::max(), 2u), std::numeric_limits<unsigned>::max() / 2u + 1u);
+    EXPECT_EQ(urd::repr::bit::ceil_div(0u, 2u), 0u);
+    EXPECT_EQ(urd::repr::bit::ceil_div(5u, 2u), 3u);
+    EXPECT_EQ(urd::repr::bit::ceil_div(std::numeric_limits<unsigned>::max(), 2u), std::numeric_limits<unsigned>::max() / 2u + 1u);
     auto packed_blocks = std::array<uint8_t, 2> {};
-    ygg::bit::write_int<uint8_t>(packed_blocks, uint8_t { 0b111111 }, 6, 6);
-    EXPECT_EQ(ygg::bit::read_int<uint8_t>(packed_blocks, 6, 6), uint8_t { 0b111111 });
+    urd::repr::bit::write_int<uint8_t>(packed_blocks, uint8_t { 0b111111 }, 6, 6);
+    EXPECT_EQ(urd::repr::bit::read_int<uint8_t>(packed_blocks, 6, 6), uint8_t { 0b111111 });
 
-    auto packed_ref = ygg::bit::int_reference<uint8_t>(packed_blocks, 0, 3);
+    auto packed_ref = urd::repr::bit::int_reference<uint8_t>(packed_blocks, 0, 3);
     packed_ref = uint8_t { 5 };
     EXPECT_EQ(static_cast<uint8_t>(packed_ref), uint8_t { 5 });
     EXPECT_THROW((packed_ref = uint8_t { 8 }), std::out_of_range);
@@ -177,20 +157,6 @@ TEST(YggdrasilTests, CommonCoreUmbrellaExposesLightweightHelpers)
     EXPECT_EQ(ygg::to_uint_t(7), ygg::uint_t { 7 });
     EXPECT_THROW(ygg::to_uint_t(static_cast<size_t>(std::numeric_limits<ygg::uint_t>::max()) + 1), std::overflow_error);
 
-    int value = 1;
-    auto observer = ygg::make_observer(value);
-    static_assert(std::is_same_v<decltype(observer), ygg::ObserverPtr<int>>);
-    EXPECT_EQ(*observer, 1);
-    *observer = 2;
-    EXPECT_EQ(value, 2);
-
-    const int const_value = 3;
-    auto const_observer = ygg::make_observer(const_value);
-    static_assert(std::is_same_v<decltype(const_observer), ygg::ObserverPtr<const int>>);
-    EXPECT_EQ(*const_observer, 3);
-    EXPECT_EQ(ygg::Hash<ygg::ObserverPtr<const int>> {}(const_observer), ygg::Hash<int> {}(3));
-    EXPECT_TRUE(ygg::EqualTo<ygg::ObserverPtr<const int>> {}(const_observer, ygg::make_observer(const_value)));
-
     const auto interval = ygg::ClosedInterval<double>(1.0, 2.0);
     EXPECT_TRUE(contains(interval, 1.5));
 
@@ -198,31 +164,7 @@ TEST(YggdrasilTests, CommonCoreUmbrellaExposesLightweightHelpers)
     EXPECT_EQ(ygg::common::resolve_path(prefix, "relative"), prefix / "relative");
     EXPECT_EQ(ygg::common::resolve_path(prefix, "/absolute"), std::filesystem::path("/absolute"));
 
-    auto optional = ::cista::optional<int> { 7 };
-    ygg::clear(optional);
-    EXPECT_FALSE(optional.has_value());
-
-    auto variant = ::cista::offset::variant<int, ::cista::offset::string> { ::cista::offset::string { "a string long enough to live on the heap" } };
-    ygg::clear(variant);
-    EXPECT_FALSE(variant.valid());
-    ygg::clear(variant);
-    EXPECT_FALSE(variant.valid());
-
-    static_assert(Identifiable<CoreConceptFixture>);
-    static_assert(InputRangeOf<std::vector<int>, int>);
-    static_assert(TriviallyCopyable<int>);
-
-    static_assert(TypeList<int, double>::contains<int>);
-    static_assert(TypeList<int, double>::contains<double>);
-    static_assert(!TypeList<int, double>::contains<char>);
-    static_assert(!TypeList<int, double>::contains<const int>);
-    static_assert(!TypeList<>::contains<int>);
-    using Tuple = TypeListToTupleT<TypeList<int, double>>;
-    static_assert(std::is_same_v<Tuple, std::tuple<int, double>>);
-    static_assert(std::is_same_v<ApplyTypeListT<std::tuple, TypeList<int, double>>, std::tuple<int, double>>);
-    static_assert(std::is_same_v<MapTypeListT<CoreAddConst, TypeList<int, double>>, TypeList<const int, const double>>);
-    static_assert(std::is_same_v<MapTypeListSecondT<CorePair, int, TypeList<float, double>>, TypeList<std::pair<int, float>, std::pair<int, double>>>);
-    static_assert(std::is_same_v<ConcatTypeListsT<TypeList<int>, TypeList<float, double>, TypeList<char>>, TypeList<int, float, double, char>>);
+    static_assert(urd::Identifiable<CoreConceptFixture>);
 
     static_assert(!std::is_copy_constructible_v<StopwatchScope<std::chrono::nanoseconds>>);
     static_assert(!std::is_move_constructible_v<StopwatchScope<std::chrono::nanoseconds>>);
@@ -242,105 +184,22 @@ TEST(YggdrasilTests, CommonCoreParsesLinuxPeakMemoryUsage)
 }
 #endif
 
-TEST(YggdrasilTests, CommonCoreObserverPtrExposesNonOwningValueSemantics)
+TEST(YggdrasilTests, CommonCoreViewsGiveTheirStoredForms)
 {
-    static_assert(!std::is_convertible_v<ygg::ObserverPtr<int>, int*>);
-    static_assert(!std::equality_comparable<ygg::ObserverPtr<int>>);
-    static_assert(!std::totally_ordered<ygg::ObserverPtr<int>>);
+    auto context = CoreTypeUtilsContext { { urd::data<CoreTypeUtilsTag> { 1 }, urd::data<CoreTypeUtilsTag> { 2 } } };
+    const auto first = urd::view<CoreTypeUtilsTag, CoreTypeUtilsContext>(urd::index<CoreTypeUtilsTag>(0), context);
+    const auto second = urd::view<CoreTypeUtilsTag, CoreTypeUtilsContext>(urd::index<CoreTypeUtilsTag>(1), context);
 
-    const auto empty = ygg::ObserverPtr<int>();
-    EXPECT_EQ(empty.get(), nullptr);
-    EXPECT_FALSE(empty);
-
-    auto first = 1;
-    auto also_first = 1;
-    auto second = 2;
-    auto first_observer = ygg::make_observer(first);
-    const auto also_first_observer = ygg::make_observer(also_first);
-    const auto second_observer = ygg::make_observer(second);
-
-    EXPECT_EQ(first_observer.get(), &first);
-    EXPECT_TRUE(first_observer);
-    EXPECT_EQ(*first_observer, 1);
-    *first_observer = 3;
-    EXPECT_EQ(first, 3);
-
-    first = 1;
-    EXPECT_TRUE(ygg::EqualTo<ygg::ObserverPtr<int>> {}(first_observer, also_first_observer));
-    EXPECT_FALSE(ygg::EqualTo<ygg::ObserverPtr<int>> {}(first_observer, second_observer));
-    EXPECT_TRUE(ygg::Less<ygg::ObserverPtr<int>> {}(first_observer, second_observer));
-    EXPECT_EQ(ygg::Hash<ygg::ObserverPtr<int>> {}(first_observer), ygg::Hash<int> {}(first));
-}
-
-TEST(YggdrasilTests, CommonCoreTypeUtilsExtendsAnyInputRange)
-{
-    auto context = CoreTypeUtilsContext { { ygg::Data<CoreTypeUtilsTag> { 1 }, ygg::Data<CoreTypeUtilsTag> { 2 } } };
-    const auto first = ygg::View<ygg::Index<CoreTypeUtilsTag>, CoreTypeUtilsContext>(ygg::Index<CoreTypeUtilsTag>(0), context);
-    const auto second = ygg::View<ygg::Index<CoreTypeUtilsTag>, CoreTypeUtilsContext>(ygg::Index<CoreTypeUtilsTag>(1), context);
+    // An index view as its index, a range of them as the flat vector of their indices.
+    EXPECT_EQ(urd::to_stored(second), urd::index<CoreTypeUtilsTag>(1));
     const auto views = std::array { first, second };
-    using MutableOnly = decltype(views | std::views::filter([](const auto&) { return true; }));
-    static_assert(std::ranges::input_range<MutableOnly>);
-    static_assert(!CanExtendCoreRange<const MutableOnly, IndexList<CoreTypeUtilsTag>>);
-    static_assert(!CanSetCoreRange<const MutableOnly, IndexList<CoreTypeUtilsTag>>);
-
-    auto indices = ygg::IndexList<CoreTypeUtilsTag> {};
-    ygg::extend(views, indices);
-
-    ASSERT_EQ(indices.size(), 2);
-    EXPECT_EQ(indices[0], ygg::Index<CoreTypeUtilsTag>(0));
-    EXPECT_EQ(indices[1], ygg::Index<CoreTypeUtilsTag>(1));
-
-    indices.push_back(ygg::Index<CoreTypeUtilsTag>(0));
-    ygg::set(views, indices);
-
-    ASSERT_EQ(indices.size(), 2);
-    EXPECT_EQ(indices[0], ygg::Index<CoreTypeUtilsTag>(0));
-    EXPECT_EQ(indices[1], ygg::Index<CoreTypeUtilsTag>(1));
-
     const auto values = views | std::views::transform([](auto view) { return view; });
-    static_assert(!std::is_reference_v<std::ranges::range_reference_t<decltype(values)>>);
-    static_assert(CanExtendCoreRange<decltype(values), IndexList<CoreTypeUtilsTag>>);
-    ygg::set(values, indices);
+    EXPECT_EQ(urd::to_stored(values), (urd::flat_vector<urd::index<CoreTypeUtilsTag>> { urd::index<CoreTypeUtilsTag>(0), urd::index<CoreTypeUtilsTag>(1) }));
 
-    ASSERT_EQ(indices.size(), 2);
-    EXPECT_EQ(indices[0], ygg::Index<CoreTypeUtilsTag>(0));
-    EXPECT_EQ(indices[1], ygg::Index<CoreTypeUtilsTag>(1));
-}
-
-TEST(YggdrasilTests, CommonCoreCartesianSetResetsWorkspaceOnEarlyReturns)
-{
-    auto workspace = ygg::itertools::cartesian_set::Workspace<int> {};
-    auto first_ranges = std::vector<std::vector<int>> { { 1, 2 }, { 3 } };
-    auto elements = std::vector<std::vector<int>> {};
-
-    ygg::itertools::cartesian_set::for_each_element(first_ranges.begin(),
-                                                    first_ranges.end(),
-                                                    workspace,
-                                                    [&](const auto& element) { elements.push_back(element); });
-
-    EXPECT_EQ(elements, (std::vector<std::vector<int>> { { 1, 3 }, { 2, 3 } }));
-    EXPECT_EQ(workspace.indices.size(), 2);
-
-    auto range_with_empty_inner = std::vector<std::vector<int>> { { 1 }, {} };
-    ygg::itertools::cartesian_set::for_each_element(range_with_empty_inner.begin(), range_with_empty_inner.end(), workspace, [&](const auto&) { FAIL(); });
-
-    EXPECT_EQ(workspace.element.size(), 2);
-    EXPECT_EQ(workspace.indices, (std::vector<size_t> { 0, 0 }));
-
-    auto empty_outer = std::vector<std::vector<int>> {};
-    auto saw_empty_element = false;
-    ygg::itertools::cartesian_set::for_each_element(empty_outer.begin(),
-                                                    empty_outer.end(),
-                                                    workspace,
-                                                    [&](const auto& element)
-                                                    {
-                                                        saw_empty_element = true;
-                                                        EXPECT_TRUE(element.empty());
-                                                    });
-
-    EXPECT_TRUE(saw_empty_element);
-    EXPECT_TRUE(workspace.element.empty());
-    EXPECT_TRUE(workspace.indices.empty());
+    // A data view as a copy of its record.
+    const auto record = urd::data<CoreTypeUtilsTag> { 3 };
+    const auto data = urd::borrowed_view<CoreTypeUtilsTag, CoreTypeUtilsContext>(record, context);
+    EXPECT_EQ(urd::to_stored(data).value, 3);
 }
 
 }  // namespace ygg::tests

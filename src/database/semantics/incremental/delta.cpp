@@ -5,7 +5,7 @@
 
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 
-#include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
 
 namespace ygg::database::incremental::detail
 {
@@ -18,13 +18,13 @@ void require_initialized(bool initialized)
 
 namespace ygg::database::incremental::detail
 {
-void apply_delta(const Delta& delta, Builder<Relation>& result)
+void apply_delta(const Delta& delta, urd::builder<Relation>& result)
 {
     const auto columns = result.columns().span();
     for (size_t i = 0; i < delta.removed.size(); ++i)
     {
         const auto position = result.find(Row(delta.removed.row(i), columns));
-        YGG_ASSUME(position.has_value());  // a removed row is in the result
+        URD_ASSUME(position.has_value());  // a removed row is in the result
         result.erase(*position);
     }
     for (size_t i = 0; i < delta.added.size(); ++i)

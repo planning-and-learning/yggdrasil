@@ -6,11 +6,14 @@
 #ifndef YGG_DATABASE_SEMANTICS_INCREMENTAL_JOIN_HPP_
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_JOIN_HPP_
 
-#include "yggdrasil/containers/unordered_multi_map.hpp"
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 
+#include <algorithm>
 #include <cassert>
+#include <urd/memory.hpp>
+#include <urd/repr/maps/postings.hpp>
+#include <urd/store.hpp>
 #include <utility>
 
 namespace ygg::database::incremental
@@ -19,10 +22,10 @@ namespace detail
 {
 /// Inserts rows absent from `rows`, indexing their positions by the hash of `keys`.
 template<RelationViewConcept V>
-void insert_rows(const V& input, Builder<Relation>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index)
+void insert_rows(const V& input, urd::builder<Relation>& rows, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains>& index)
 {
     if (!keys.empty())
-        index.reserve_values(rows.size() + input.size());
+        index.reserve(rows.size() + input.size());
     for (size_t i = 0; i < input.size(); ++i)
     {
         const auto row = input.row(i);
@@ -31,13 +34,13 @@ void insert_rows(const V& input, Builder<Relation>& rows, std::span<const Column
         if (position != previous_size)
             throw std::invalid_argument("Incremental evaluation: added row is already present in the input.");
         if (!keys.empty())
-            index.insert(database::detail::join_key_hash(row, keys), position);
+            index.insert({ database::detail::join_key_hash(row, keys), position });
     }
 }
 
 /// Erases rows present in `rows`, keeping the position index of insert_rows() current.
 template<RelationViewConcept V>
-void erase_rows(const V& input, Builder<Relation>& rows, std::span<const ColumnSlice> keys, UnorderedMultiMap<hash_t, uint_t>& index)
+void erase_rows(const V& input, urd::builder<Relation>& rows, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains>& index)
 {
     for (size_t i = 0; i < input.size(); ++i)
     {
@@ -52,13 +55,20 @@ void erase_rows(const V& input, Builder<Relation>& rows, std::span<const ColumnS
         }
         const auto removed_key = database::detail::join_key_hash(rows.row(*position), keys);
         rows.erase(*position);
-        [[maybe_unused]] const auto erased = index.erase(removed_key, *position);
-        assert(erased);
+        const auto erase = [&](hash_t key, uint_t value)
+        {
+            const auto matches = index.equal_range(key);
+            const auto found = std::find_if(matches.first, matches.second, [&](const auto& entry) { return entry.second == value; });
+            assert(found != matches.second);
+            index.erase(found);
+        };
+        erase(removed_key, *position);
         if (*position != last)
         {
+            // The last row moved into the erased one's position.
             const auto moved_key = database::detail::join_key_hash(rows.row(*position), keys);
-            [[maybe_unused]] const auto replaced = index.replace(moved_key, last, *position);
-            assert(replaced);
+            erase(moved_key, last);
+            index.insert({ moved_key, *position });
         }
     }
 }
@@ -78,16 +88,16 @@ void erase_rows(const V& input, Builder<Relation>& rows, std::span<const ColumnS
 class JoinEvaluator
 {
     JoinPlan m_plan;
-    Builder<Relation> m_lhs;
-    Builder<Relation> m_rhs;
-    UnorderedMultiMap<hash_t, uint_t> m_lhs_index;
-    UnorderedMultiMap<hash_t, uint_t> m_rhs_index;
-    Builder<Relation> m_result;
+    urd::builder<Relation> m_lhs;
+    urd::builder<Relation> m_rhs;
+    urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_lhs_index;
+    urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_rhs_index;
+    urd::builder<Relation> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
     template<RelationViewConcept L, RelationViewConcept R>
-    void join(const L& lhs, const R& rhs, bool build_left, Builder<Relation>& output, Workspace& workspace) const;
+    void join(const L& lhs, const R& rhs, bool build_left, urd::builder<Relation>& output, Workspace& workspace) const;
 
     /// Applies changes that are known to be valid.
     template<RelationChange L, RelationChange R>
@@ -108,8 +118,8 @@ public:
     template<RelationChange L, RelationChange R>
     void update(const L& lhs, const R& rhs, Workspace& workspace);
 
-    [[nodiscard]] const Builder<Relation>& get_result() const&;
-    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&;
     [[nodiscard]] const Delta& get_delta() const&& = delete;
 
@@ -118,7 +128,7 @@ public:
 };
 
 template<RelationViewConcept L, RelationViewConcept R>
-void JoinEvaluator::join(const L& lhs, const R& rhs, bool build_left, Builder<Relation>& output, Workspace& workspace) const
+void JoinEvaluator::join(const L& lhs, const R& rhs, bool build_left, urd::builder<Relation>& output, Workspace& workspace) const
 {
     database::detail::join_rows(lhs,
                                 rhs,

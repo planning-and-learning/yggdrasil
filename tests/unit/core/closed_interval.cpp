@@ -47,7 +47,7 @@ TEST(YggdrasilTests, CommonClosedIntervalProvidesBasicIntervalOperations)
     EXPECT_FALSE(contains(first, 0.0));
     EXPECT_FALSE(contains(first, 4.0));
 
-    EXPECT_EQ(first.identifying_members(), std::make_tuple(false, 1.0, 3.0));
+    EXPECT_EQ(first.normalized(), std::make_tuple(false, 1.0, 3.0));
 
     auto out = std::ostringstream();
     out << first;
@@ -62,7 +62,7 @@ TEST(YggdrasilTests, CommonClosedIntervalCanonicalizesEmptyIdentityMembers)
     EXPECT_TRUE(empty(first));
     EXPECT_EQ(first, second);
     EXPECT_FALSE(contains(first, 0.0));
-    EXPECT_EQ(first.identifying_members(), std::make_tuple(true, 0.0, 0.0));
+    EXPECT_EQ(first.normalized(), std::make_tuple(true, 0.0, 0.0));
 
     auto out = std::ostringstream();
     out << first;

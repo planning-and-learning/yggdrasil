@@ -1,11 +1,9 @@
 # Dependencies
 
-find_package(GTest "1.11.0" REQUIRED COMPONENTS GTest PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(Boost REQUIRED COMPONENTS json PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-yggdrasil_source(YGGDRASIL_BOOST_VERSION boost version)
-find_package(boost_heap ${YGGDRASIL_BOOST_VERSION} EXACT CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(fmt CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(GTest "1.11.0" REQUIRED COMPONENTS GTest PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(Boost REQUIRED COMPONENTS json PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(fmt CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(TBB CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 find_package(Threads REQUIRED)
 
 # Test helper
@@ -17,7 +15,7 @@ function(add_yggdrasil_gtest test_name source_file)
         "${PROJECT_SOURCE_DIR}/include"
     )
     target_include_directories(${test_name} SYSTEM PRIVATE
-        "${YGGDRASIL_NATIVE_PREFIX}/include"
+        "${URD_NATIVE_PREFIX}/include"
     )
     target_compile_definitions(${test_name} PRIVATE ROOT_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${test_name} PRIVATE GTest::gtest Boost::json fmt::fmt TBB::tbb)
@@ -28,78 +26,42 @@ endfunction()
 # Test sources mirror include/yggdrasil; target names use <dir>_<file>.
 
 add_yggdrasil_gtest(extensions "extensions.cpp")
+add_yggdrasil_gtest(urd "urd.cpp")
 
-add_yggdrasil_gtest(buffer_indexed_hash_set "buffer/indexed_hash_set.cpp")
-add_yggdrasil_gtest(buffer_segmented_buffer "buffer/segmented_buffer.cpp")
 
-add_yggdrasil_gtest(containers_associative_containers "containers/associative_containers.cpp")
-add_yggdrasil_gtest(containers_bit_packed_array_pool "containers/bit_packed_array_pool.cpp")
-add_yggdrasil_gtest(containers_bit_packed_array_set "containers/bit_packed_array_set.cpp")
-add_yggdrasil_gtest(containers_block_array_set "containers/block_array_set.cpp")
 add_yggdrasil_gtest(containers_concurrent_publication "containers/concurrent_publication.cpp")
 target_compile_definitions(containers_concurrent_publication PRIVATE NDEBUG)
 target_link_libraries(containers_concurrent_publication PRIVATE Threads::Threads)
-add_yggdrasil_gtest(containers_containers "containers/containers.cpp")
-add_yggdrasil_gtest(containers_dynamic_bitset "containers/dynamic_bitset.cpp")
-add_yggdrasil_gtest(containers_fibonacci_heap "containers/fibonacci_heap.cpp")
-target_link_libraries(containers_fibonacci_heap PRIVATE Boost::heap)
-add_yggdrasil_gtest(containers_indexed_hash_set "containers/indexed_hash_set.cpp")
-add_yggdrasil_gtest(containers_raw_array_pool "containers/raw_array_pool.cpp")
-add_yggdrasil_gtest(containers_raw_array_set "containers/raw_array_set.cpp")
-add_yggdrasil_gtest(containers_raw_vector_pool "containers/raw_vector_pool.cpp")
-add_yggdrasil_gtest(containers_raw_vector_set "containers/raw_vector_set.cpp")
 add_yggdrasil_gtest(containers_repository_types "containers/repository_types.cpp")
-add_yggdrasil_gtest(containers_segmented_bit_vector "containers/segmented_bit_vector.cpp")
-add_yggdrasil_gtest(containers_segmented_vector "containers/segmented_vector.cpp")
-add_yggdrasil_gtest(containers_shared_object_pool "containers/shared_object_pool.cpp")
-add_yggdrasil_gtest(containers_tree_bitset_set "containers/tree_bitset_set.cpp")
-add_yggdrasil_gtest(containers_tree_vector_set "containers/tree_vector_set.cpp")
-add_yggdrasil_gtest(containers_unique_object_pool "containers/unique_object_pool.cpp")
-target_link_libraries(containers_shared_object_pool PRIVATE Threads::Threads)
-target_link_libraries(containers_tree_bitset_set PRIVATE Threads::Threads)
-target_link_libraries(containers_tree_vector_set PRIVATE Threads::Threads)
-target_link_libraries(containers_unique_object_pool PRIVATE Threads::Threads)
-add_yggdrasil_gtest(containers_unordered_multi_map "containers/unordered_multi_map.cpp")
-add_yggdrasil_gtest(containers_span "containers/span.cpp")
-add_yggdrasil_gtest(containers_vector "containers/vector.cpp")
 
 add_yggdrasil_gtest(formalism_binding_key "formalism/binding_key.cpp")
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
 target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
-add_yggdrasil_gtest(core_bytes "core/bytes.cpp")
-add_yggdrasil_gtest(core_children "core/children.cpp")
 add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
-add_yggdrasil_gtest(core_concepts "core/concepts.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
-add_yggdrasil_gtest(core_counting_memory_resource "core/counting_memory_resource.cpp")
-add_yggdrasil_gtest(core_path "core/path.cpp")
 add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
 add_yggdrasil_gtest(database_operations "database/operations.cpp")
 add_yggdrasil_gtest(database_typed_operations "database/typed_operations.cpp")
 add_yggdrasil_gtest(database_distance "database/distance.cpp")
-target_link_libraries(database_distance PRIVATE Boost::heap)
 add_yggdrasil_gtest(database_min_distance "database/min_distance.cpp")
 add_yggdrasil_gtest(database_must_pass "database/must_pass.cpp")
 add_yggdrasil_gtest(database_relaxation "database/relaxation.cpp")
 add_yggdrasil_gtest(database_incremental_min_distance "database/incremental_min_distance.cpp")
 add_yggdrasil_gtest(database_incremental "database/incremental.cpp")
 add_yggdrasil_gtest(database_allocations "database/allocations.cpp")
-target_link_libraries(database_allocations PRIVATE Boost::heap)
 add_yggdrasil_gtest(database_relation_repository "database/relation_repository.cpp")
 add_yggdrasil_gtest(database_query "database/query.cpp")
-target_link_libraries(database_query PRIVATE Boost::heap)
 add_yggdrasil_gtest(database_generic_join "database/generic_join.cpp")
 add_yggdrasil_gtest(database_dpccp "database/dpccp.cpp")
 add_yggdrasil_gtest(database_optimization "database/optimization.cpp")
-target_link_libraries(database_optimization PRIVATE Boost::heap)
 add_yggdrasil_gtest(database_optimization_estimates "database/optimization_estimates.cpp")
 
 foreach(
     database_test
     IN ITEMS
-        containers_block_array_set database_operations database_typed_operations database_min_distance database_must_pass
+        database_operations database_typed_operations database_min_distance database_must_pass
         database_relaxation database_incremental_min_distance database_incremental database_allocations
         database_relation_repository database_query database_dpccp database_optimization database_optimization_estimates
 )
@@ -115,14 +77,10 @@ add_yggdrasil_gtest(formatting_formatter "formatting/formatter.cpp")
 target_link_libraries(formatting_formatter PRIVATE yggdrasil::database)
 
 add_yggdrasil_gtest(io_iostream "io/iostream.cpp")
-add_yggdrasil_gtest(io_project_adapters "io/project_adapters.cpp")
 add_yggdrasil_gtest(io_project_path "io/project_path.cpp")
 
 add_yggdrasil_gtest(semantics_canonicalization "semantics/canonicalization.cpp")
 add_yggdrasil_gtest(semantics_comparison "semantics/comparison.cpp")
-add_yggdrasil_gtest(semantics_comparators "semantics/comparators.cpp")
-add_yggdrasil_gtest(semantics_equal_to "semantics/equal_to.cpp")
-add_yggdrasil_gtest(semantics_hash "semantics/hash.cpp")
 
 add_yggdrasil_gtest(serialization_json "serialization/json.cpp")
 add_yggdrasil_gtest(serialization_json_loader "serialization/json_loader.cpp")
@@ -135,7 +93,7 @@ target_include_directories(serialization_dictionaries_library PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
 target_include_directories(serialization_dictionaries_library SYSTEM PRIVATE
-    "${YGGDRASIL_NATIVE_PREFIX}/include"
+    "${URD_NATIVE_PREFIX}/include"
 )
 target_link_libraries(serialization_dictionaries_library PRIVATE Boost::json fmt::fmt)
 include(GenerateExportHeader)

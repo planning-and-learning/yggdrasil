@@ -5,152 +5,152 @@
 
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 
-namespace ygg
+namespace urd
 {
-Builder<database::Relation>::Builder(Builder<database::Columns> columns) : m_columns(std::move(columns)), m_rows(m_columns.row_size()) {}
-}
+urd::builder<ygg::database::Relation>::builder(urd::builder<ygg::database::Columns> columns) : m_columns(std::move(columns)) {}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Relation>::Builder(std::span<const database::ColumnLayout> columns) : Builder(Builder<database::Columns>(columns)) {}
-}
+urd::builder<ygg::database::Relation>::builder(std::span<const ygg::database::ColumnLayout> columns) : builder(urd::builder<ygg::database::Columns>(columns)) {}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Relation>::Builder(std::span<const Index<database::Column>> columns) : Builder(Builder<database::Columns>(columns)) {}
-}
+urd::builder<ygg::database::Relation>::builder(std::span<const urd::index<ygg::database::Column>> columns) : builder(urd::builder<ygg::database::Columns>(columns)) {}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Relation>::Builder(std::initializer_list<Index<database::Column>> columns) : Builder(std::span<const Index<database::Column>>(columns)) {}
-}
+urd::builder<ygg::database::Relation>::builder(std::initializer_list<urd::index<ygg::database::Column>> columns) : builder(std::span<const urd::index<ygg::database::Column>>(columns)) {}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-uint_t Builder<database::Relation>::insert(std::span<const std::byte> row)
+ygg::uint_t urd::builder<ygg::database::Relation>::insert(std::span<const std::byte> row)
 {
     if (row.size() != m_columns.row_size())
         throw std::invalid_argument("Relation: row byte width does not match its schema.");
-    const auto index = m_rows.insert(row);
-    ygg::clear(m_index);
+    const auto index = m_rows.insert(row).first.value;
+    m_index = {};
     return index;
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-uint_t Builder<database::Relation>::insert(database::Row row)
+ygg::uint_t urd::builder<ygg::database::Relation>::insert(ygg::database::Row row)
 {
     if (!std::ranges::equal(row.columns(), m_columns.span()))
         throw std::invalid_argument("Relation: row schema does not match.");
-    const auto index = m_rows.insert(row.bytes());
-    ygg::clear(m_index);
+    const auto index = m_rows.insert(row.bytes()).first.value;
+    m_index = {};
     return index;
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-std::optional<uint_t> Builder<database::Relation>::find(std::span<const std::byte> row) const
+std::optional<ygg::uint_t> urd::builder<ygg::database::Relation>::find(std::span<const std::byte> row) const
 {
     if (row.size() != m_columns.row_size())
         throw std::invalid_argument("Relation: row byte width does not match its schema.");
-    return m_rows.find(row);
+    return position_of(row);
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-std::optional<uint_t> Builder<database::Relation>::find(database::Row row) const
+std::optional<ygg::uint_t> urd::builder<ygg::database::Relation>::find(ygg::database::Row row) const
 {
     if (!std::ranges::equal(row.columns(), m_columns.span()))
         throw std::invalid_argument("Relation: row schema does not match.");
-    return m_rows.find(row.bytes());
+    return position_of(row.bytes());
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::erase(size_t index)
+void urd::builder<ygg::database::Relation>::erase(size_t index)
 {
     if (index >= size())
         throw std::out_of_range("Relation: row index out of range.");
-    m_rows.erase(static_cast<uint_t>(index));
-    ygg::clear(m_index);
+    m_rows.erase(Rows::handle_type(static_cast<ygg::uint_t>(index)));
+    m_index = {};
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-std::span<const std::byte> Builder<database::Relation>::row(size_t index) const noexcept
+std::span<const std::byte> urd::builder<ygg::database::Relation>::row(size_t index) const noexcept
 {
     assert(index < size());
-    return m_rows[static_cast<uint_t>(index)];
+    return m_rows.view(Rows::handle_type(static_cast<ygg::uint_t>(index)));
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-database::Row Builder<database::Relation>::at(size_t index) const
+ygg::database::Row urd::builder<ygg::database::Relation>::at(size_t index) const
 {
     if (index >= size())
         throw std::out_of_range("Relation: row index out of range.");
     return (*this)[index];
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::clear() noexcept
+void urd::builder<ygg::database::Relation>::clear() noexcept
 {
-    ygg::clear(m_index);
+    m_index = {};
     m_rows.clear();
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::rename(std::span<const Index<database::Column>> columns)
+void urd::builder<ygg::database::Relation>::rename(std::span<const urd::index<ygg::database::Column>> columns)
 {
     m_columns.rename(columns);
-    ygg::clear(m_index);
+    m_index = {};
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::rename(std::span<const database::ColumnLayout> columns)
+void urd::builder<ygg::database::Relation>::rename(std::span<const ygg::database::ColumnLayout> columns)
 {
-    database::detail::validate_relabel(m_columns.span(), columns);
+    ygg::database::detail::validate_relabel(m_columns.span(), columns);
     m_columns.assign(columns);
-    ygg::clear(m_index);
+    m_index = {};
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::initialize(std::span<const database::ColumnLayout> columns)
+void urd::builder<ygg::database::Relation>::initialize(std::span<const ygg::database::ColumnLayout> columns)
 {
-    database::validate_columns(columns);
-    reinitialize(database::row_size(columns), columns);
+    ygg::database::validate_columns(columns);
+    reinitialize(ygg::database::row_size(columns), columns);
 }
-}
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::initialize(std::span<const Index<database::Column>> columns)
-{ reinitialize(database::detail::label_row_size<>(columns), columns); }
-}
+void urd::builder<ygg::database::Relation>::initialize(std::span<const urd::index<ygg::database::Column>> columns)
+{ reinitialize(ygg::database::detail::label_row_size<>(columns), columns); }
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-void Builder<database::Relation>::initialize(std::initializer_list<Index<database::Column>> columns)
-{ initialize(std::span<const Index<database::Column>>(columns)); }
-}
+void urd::builder<ygg::database::Relation>::initialize(std::initializer_list<urd::index<ygg::database::Column>> columns)
+{ initialize(std::span<const urd::index<ygg::database::Column>>(columns)); }
+}  // namespace urd
 
-namespace ygg
+namespace urd
 {
-Builder<database::Relation>::Builder(Builder&&) noexcept = default;
-Builder<database::Relation>& Builder<database::Relation>::operator=(Builder&&) noexcept = default;
-Builder<database::Relation>::~Builder() = default;
-}
+urd::builder<ygg::database::Relation>::builder(builder&&) noexcept = default;
+urd::builder<ygg::database::Relation>& urd::builder<ygg::database::Relation>::operator=(builder&&) noexcept = default;
+urd::builder<ygg::database::Relation>::~builder() = default;
+}  // namespace urd

@@ -1,10 +1,12 @@
 #include "yggdrasil/database/optimization/optimization.hpp"
+#include <urd/python/sequences/sequence.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "module.hpp"
 #include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/python/type_casters.hpp"
-#include "yggdrasil/python/type_casters/unordered_map.hpp"
 
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
@@ -19,9 +21,9 @@ namespace yggdrasil
 void bind_database_optimization(nb::module_& m)
 {
     using Plan = ygg::database::QueryPlan;
-    using Roots = std::vector<ygg::database::QueryView<>>;
+    using Roots = urd::Store<urd::sequence<ygg::database::QueryView<>>>;
     using Statistics = ygg::database::Statistics;
-    using Column = ygg::Index<ygg::database::Column>;
+    using Column = urd::index<ygg::database::Column>;
 
     nb::class_<Plan>(m, "QueryPlan", "Owns immutable query metadata; independent of the query repository.")
         .def_prop_ro("node_count", &Plan::node_count)
@@ -29,13 +31,13 @@ void bind_database_optimization(nb::module_& m)
         .def("explain", &ygg::database::explain);
     m.def("compile", &ygg::database::compile<Roots>, nb::arg("roots"), "Copy the queries reachable from the roots into an independent plan.");
 
-    using Distinct = ygg::UnorderedMap<Column, double>;
+    using Distinct = urd::Store<urd::map<Column, double>>;
     nb::class_<ygg::database::RelationStatistics>(m, "RelationStatistics")
         .def(nb::init<double, Distinct>(), nb::arg("rows") = 0, nb::arg("distinct") = Distinct {})
         .def_rw("rows", &ygg::database::RelationStatistics::rows)
         .def_rw("distinct", &ygg::database::RelationStatistics::distinct);
-    using InputStatistics = ygg::UnorderedMap<size_t, ygg::database::RelationStatistics>;
-    using ExpressionStatistics = ygg::UnorderedMap<ygg::Index<ygg::database::Query<>>, ygg::database::RelationStatistics>;
+    using InputStatistics = urd::Store<urd::map<size_t, ygg::database::RelationStatistics>>;
+    using ExpressionStatistics = urd::Store<urd::map<urd::index<ygg::database::Query<>>, ygg::database::RelationStatistics>>;
     nb::class_<Statistics>(m, "Statistics", "What is known about the data; everything is optional.")
         .def(nb::init<std::optional<size_t>, InputStatistics, ExpressionStatistics>(),
              nb::arg("objects") = nb::none(),
@@ -51,9 +53,9 @@ void bind_database_optimization(nb::module_& m)
         .value("BOUND", Evaluation::bound);
     m.def(
         "optimize",
-        [](const Roots& roots, const Statistics& statistics, const std::optional<std::vector<Evaluation>>& evaluations)
+        [](const Roots& roots, const Statistics& statistics, const std::optional<urd::Store<urd::sequence<Evaluation>>>& evaluations)
         {
-            const auto modes = evaluations.value_or(std::vector<Evaluation>(roots.size(), Evaluation::full));
+            const auto modes = evaluations.value_or(urd::Store<urd::sequence<Evaluation>>(roots.size(), Evaluation::full));
             return ygg::database::optimize(std::span<const ygg::database::QueryView<>>(roots), std::span<const Evaluation>(modes), statistics);
         },
         nb::arg("roots"),

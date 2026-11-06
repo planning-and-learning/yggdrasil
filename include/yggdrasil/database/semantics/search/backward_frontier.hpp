@@ -7,6 +7,8 @@
 #define YGG_DATABASE_SEMANTICS_SEARCH_BACKWARD_FRONTIER_HPP_
 
 #include "yggdrasil/database/semantics/search/concepts.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 
 #include <cstddef>
@@ -79,10 +81,10 @@ public:
     }
 
 private:
-    std::vector<uint_t> m_level;  ///< By the tree's vertex index.
-    std::vector<uint_t> m_frontier;
-    std::vector<uint_t> m_expanding;  ///< The level step() expands; kept with m_vertex to avoid allocations.
-    std::vector<std::byte> m_vertex;
+    urd::Store<urd::sequence<uint_t>> m_level;  ///< By the tree's vertex index.
+    urd::Store<urd::sequence<uint_t>> m_frontier;
+    urd::Store<urd::sequence<uint_t>> m_expanding;  ///< The level step() expands; kept with m_vertex to avoid allocations.
+    urd::Store<urd::sequence<std::byte>> m_vertex;
     uint_t m_depth = 0;
     bool m_exhausted = false;
 

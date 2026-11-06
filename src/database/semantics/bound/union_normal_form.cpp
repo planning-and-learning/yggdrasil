@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::bound
 {
@@ -12,9 +14,9 @@ UnionNormalForm union_normal_form(QueryView<> query) { return detail::UnionNorma
 
 namespace ygg::database::bound::detail
 {
-std::vector<ConjunctiveBranch> UnionNormalFormBuilder::product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs)
+std::vector<ConjunctiveBranch> UnionNormalFormBuilder::product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs)  // std::vector: of an incomplete type (a Store resolves its element type at once)
 {
-    std::vector<ConjunctiveBranch> result;
+    std::vector<ConjunctiveBranch> result;  // std::vector: of an incomplete type (a Store resolves its element type at once)
     for (const auto& l : lhs)
         for (const auto& r : rhs)
         {
@@ -30,11 +32,11 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::product(const std::vector
 
 namespace ygg::database::bound::detail
 {
-std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query, std::span<const uint32_t> mapping)
+std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query, std::span<const uint32_t> mapping)  // std::vector: of an incomplete type (a Store resolves its element type at once)
 {
     const auto columns = query.columns();
-    return ygg::visit(
-        [&]<typename Tag>(QueryView<Tag> concrete) -> std::vector<ConjunctiveBranch>
+    return std::visit(
+        [&]<typename Tag>(QueryView<Tag> concrete) -> std::vector<ConjunctiveBranch>  // std::vector: of an incomplete type (a Store resolves its element type at once)
         {
             if constexpr (std::same_as<Tag, QueryInputTag>)
             {
@@ -45,7 +47,7 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                     throw std::invalid_argument("Union normal form: an input slot has two schemas.");
                 m_result.input_columns[slot].assign(columns.begin(), columns.end());
                 auto branch = ConjunctiveBranch {};
-                branch.atoms.push_back(ConjunctiveAtom { concrete.get_input_slot(), std::vector<uint32_t>(mapping.begin(), mapping.end()) });
+                branch.atoms.push_back(ConjunctiveAtom { concrete.get_input_slot(), urd::Store<urd::sequence<uint32_t>>(mapping.begin(), mapping.end()) });
                 return { std::move(branch) };
             }
             else if constexpr (std::same_as<Tag, QueryEmptyTag>)
@@ -60,10 +62,10 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
             else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
             {
                 // Labels outside the output are shared by all inputs that name them.
-                std::vector<ColumnLayout> labels(columns.begin(), columns.end());
-                std::vector<uint32_t> variables(mapping.begin(), mapping.end());
-                auto result = std::vector<ConjunctiveBranch>(1);
-                const auto& repository = concrete.get_repository();
+                urd::Store<urd::sequence<ColumnLayout>> labels(columns.begin(), columns.end());
+                urd::Store<urd::sequence<uint32_t>> variables(mapping.begin(), mapping.end());
+                auto result = std::vector<ConjunctiveBranch>(1);  // std::vector: of an incomplete type (a Store resolves its element type at once)
+                const auto& repository = get_repository(concrete.context());
                 for (const auto input : concrete.get_inputs())
                 {
                     const auto child = QueryView<>(input, repository);
@@ -94,7 +96,7 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                     else
                     {
                         const auto constant = concrete.get_constant();
-                        branch.value.emplace_back(mapping[concrete.get_position()], std::vector<std::byte>(constant.begin(), constant.end()));
+                        branch.value.emplace_back(mapping[concrete.get_position()], urd::Store<urd::sequence<std::byte>>(constant.begin(), constant.end()));
                     }
                 }
                 return branches;
@@ -115,7 +117,7 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                 const auto rhs = concrete.get_rhs();
                 auto result = flatten(lhs, by_label(lhs.columns(), columns, mapping));
                 auto negation =
-                    ConjunctiveNegation { std::vector<uint32_t>(mapping.begin(), mapping.end()), flatten(rhs, by_label(rhs.columns(), columns, mapping)) };
+                    ConjunctiveNegation { urd::Store<urd::sequence<uint32_t>>(mapping.begin(), mapping.end()), flatten(rhs, by_label(rhs.columns(), columns, mapping)) };
                 for (auto& branch : result)
                     branch.negations.push_back(negation);
                 return result;

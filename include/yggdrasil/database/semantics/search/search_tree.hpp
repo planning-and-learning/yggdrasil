@@ -6,7 +6,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_SEARCH_SEARCH_TREE_HPP_
 #define YGG_DATABASE_SEMANTICS_SEARCH_SEARCH_TREE_HPP_
 
-#include "yggdrasil/containers/raw_array_set.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 
 #include <algorithm>
@@ -21,9 +23,20 @@
 namespace ygg::database
 {
 
-/// Vertices of a search as fixed-size byte arrays, stored in segments of vertex_segment_size arrays.
-inline constexpr size_t vertex_segment_size = 64;
-using VertexSet = RawArraySet<std::byte, vertex_segment_size>;
+/// Vertices of a search as byte rows of one size, interned in a urd pool (rows stored flat, never moved by inserts): a
+/// vertex's ID is its handle's value.
+using VertexSet = urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd::frozen>>>;
+
+/// The ID of a stored vertex, or none.
+inline std::optional<uint_t> vertex_id(const VertexSet& vertices, std::span<const std::byte> vertex)
+{
+    const auto found = vertices.find(vertex);
+    return found.is_none() ? std::nullopt : std::optional<uint_t>(found.value);
+}
+/// The ID of a vertex, stored where it is new.
+inline uint_t insert_vertex(VertexSet& vertices, std::span<const std::byte> vertex) { return vertices.insert(vertex).first.value; }
+/// The vertex of an ID.
+inline std::span<const std::byte> vertex_at(const VertexSet& vertices, uint_t id) { return vertices.view(VertexSet::handle_type(id)); }
 
 /// The stored vertices of searches towards fixed targets: per vertex a lower bound on its distance (learned) and one
 /// next pointer along a found path. A vertex whose next chain reaches a target, with values that drop by one per
@@ -37,7 +50,7 @@ using VertexSet = RawArraySet<std::byte, vertex_segment_size>;
 class SearchTree
 {
 public:
-    explicit SearchTree(size_t vertex_size) : m_vertices(vertex_size) {}
+    SearchTree() : m_vertices() {}
 
     void clear()
     {
@@ -46,18 +59,18 @@ public:
     }
 
     [[nodiscard]] size_t size() const noexcept { return m_nodes.size(); }
-    [[nodiscard]] std::optional<uint_t> find(std::span<const std::byte> vertex) const { return m_vertices.find(vertex); }
-    [[nodiscard]] std::span<const std::byte> vertex(uint_t id) const { return m_vertices[id]; }
+    [[nodiscard]] std::optional<uint_t> find(std::span<const std::byte> vertex) const { return vertex_id(m_vertices, vertex); }
+    [[nodiscard]] std::span<const std::byte> vertex(uint_t id) const { return vertex_at(m_vertices, id); }
 
     /// The stored index of a vertex, inserting it with its heuristic estimate as learned distance. The estimate is
     /// computed only on insertion.
     template<DistanceHeuristic H>
     uint_t ensure(std::span<const std::byte> vertex, const H& heuristic)
     {
-        if (const auto stored = m_vertices.find(vertex))
+        if (const auto stored = vertex_id(m_vertices, vertex))
             return *stored;
         const auto estimate = heuristic.estimate(vertex);
-        const auto id = m_vertices.insert(vertex);
+        const auto id = insert_vertex(m_vertices, vertex);
         m_nodes.push_back(Node { estimate });
         return id;
     }
@@ -65,7 +78,7 @@ public:
     template<DistanceHeuristic H>
     [[nodiscard]] uint_t value(std::span<const std::byte> vertex, const H& heuristic) const
     {
-        const auto stored = m_vertices.find(vertex);
+        const auto stored = vertex_id(m_vertices, vertex);
         return stored ? learned(*stored) : heuristic.estimate(vertex);
     }
 
@@ -148,9 +161,9 @@ private:
     }
 
     VertexSet m_vertices;
-    std::vector<Node> m_nodes;
+    urd::Store<urd::sequence<Node>> m_nodes;
     uint64_t m_epoch = 0;
-    std::vector<uint_t> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
+    urd::Store<urd::sequence<uint_t>> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
 };
 
 }  // namespace ygg::database

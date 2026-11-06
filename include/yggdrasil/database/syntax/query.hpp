@@ -5,7 +5,9 @@
 #ifndef YGG_DATABASE_SYNTAX_QUERY_HPP_
 #define YGG_DATABASE_SYNTAX_QUERY_HPP_
 
-#include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/syntax/query_construction.hpp"
 
 #include <algorithm>
@@ -17,6 +19,7 @@
 #include <ranges>
 #include <span>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ygg::database
@@ -24,11 +27,11 @@ namespace ygg::database
 /// Whether the query's operation has the tag.
 template<class Tag>
 bool is(QueryView<> query)
-{ return query.get_variant().template is<Index<Query<Tag>>>(); }
+{ return std::holds_alternative<QueryView<Tag>>(query.get_variant()); }
 /// The query's operation; requires is<Tag>(query).
 template<class Tag>
 QueryView<Tag> as(QueryView<> query)
-{ return query.get_variant().template get<Index<Query<Tag>>>(); }
+{ return std::get<QueryView<Tag>>(query.get_variant()); }
 
 namespace detail
 {
@@ -40,13 +43,13 @@ QueryView<> clone_query(QueryView<> source, std::span<const QueryView<>> childre
 /// Copies share its stable repository; repository indices are topological, while roots retain caller order.
 class QueryPlan
 {
-    using QueryIndex = Index<Query<>>;
+    using QueryIndex = urd::index<Query<>>;
     std::shared_ptr<const QueryRepository> m_repository;
-    std::vector<QueryIndex> m_roots;
+    urd::Store<urd::sequence<QueryIndex>> m_roots;
 
 public:
     QueryPlan() : m_repository(QueryRepositoryFactory {}.create_shared()) {}
-    QueryPlan(std::shared_ptr<const QueryRepository> repository, std::vector<QueryIndex> roots) : m_repository(std::move(repository)), m_roots(std::move(roots))
+    QueryPlan(std::shared_ptr<const QueryRepository> repository, urd::Store<urd::sequence<QueryIndex>> roots) : m_repository(std::move(repository)), m_roots(std::move(roots))
     {
     }
 
@@ -58,7 +61,7 @@ public:
     [[nodiscard]] const QueryRepository& get_repository() const&& = delete;
     QueryView<> operator[](QueryIndex id) const&
     {
-        if (id.get_value() >= node_count())
+        if (id.value >= node_count())
             throw std::out_of_range("Query plan: invalid query index.");
         return QueryView<>(id, *m_repository);
     }
@@ -66,7 +69,7 @@ public:
 };
 
 /// The queries reachable from roots of one repository, each once, children first.
-std::vector<QueryView<>> reachable(std::span<const QueryView<>> roots);
+urd::Store<urd::sequence<QueryView<>>> reachable(std::span<const QueryView<>> roots);
 
 }  // namespace ygg::database
 
@@ -74,21 +77,21 @@ namespace ygg::database
 {
 
 /// The input slots read by the queries reachable from `roots`, each once, in increasing order.
-std::vector<size_t> input_slots(std::span<const QueryView<>> roots);
+urd::Store<urd::sequence<size_t>> input_slots(std::span<const QueryView<>> roots);
 
 /// Copies the queries reachable from `roots` into `destination`, children first, each once, and returns the copy of
 /// each root. An input's slot s becomes slot_of(s).
 template<typename SlotOf>
     requires std::convertible_to<std::invoke_result_t<SlotOf&, size_t>, size_t>
-std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf slot_of, QueryRepository& destination, QueryBuilder& builder)
+urd::Store<urd::sequence<QueryView<>>> copy(std::span<const QueryView<>> roots, SlotOf slot_of, QueryRepository& destination, QueryBuilder& builder)
 {
     if (roots.empty())
         return {};
-    auto copies = std::vector<std::optional<QueryView<>>>(roots.front().get_repository().size());
-    auto children = std::vector<QueryView<>>();
+    auto copies = urd::Store<urd::sequence<std::optional<QueryView<>>>>(get_repository(roots.front().context()).size());
+    auto children = urd::Store<urd::sequence<QueryView<>>>();
     for (const auto query : reachable(roots))
     {
-        auto& copied = copies[query.get_index().get_value()];
+        auto& copied = copies[query.index().value];
         if (is<QueryInputTag>(query))
         {
             auto data = checkout<Query<QueryInputTag>>(builder);
@@ -99,14 +102,14 @@ std::vector<QueryView<>> copy(std::span<const QueryView<>> roots, SlotOf slot_of
             continue;
         }
         children.clear();
-        for_each_child(query, [&](QueryView<> child) { children.push_back(*copies[child.get_index().get_value()]); });
+        for_each_child(query, [&](QueryView<> child) { children.push_back(*copies[child.index().value]); });
         copied = detail::clone_query(query, std::span<const QueryView<>>(children), destination, builder);
     }
-    auto result = std::vector<QueryView<>>();
+    auto result = urd::Store<urd::sequence<QueryView<>>>();
     for (const auto root : roots)
     {
-        const auto& copy = copies[root.get_index().get_value()];
-        YGG_ASSUME(copy.has_value());  // the loop above copied every query reachable from a root
+        const auto& copy = copies[root.index().value];
+        URD_ASSUME(copy.has_value());  // the loop above copied every query reachable from a root
         result.push_back(*copy);
     }
     return result;

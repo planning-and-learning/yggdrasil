@@ -18,14 +18,21 @@
 #ifndef YGG_PYTHON_TYPE_CASTERS_HPP_
 #define YGG_PYTHON_TYPE_CASTERS_HPP_
 
-#include "yggdrasil/python/type_casters/array.hpp"
 #include "yggdrasil/python/type_casters/closed_interval.hpp"
-#include "yggdrasil/python/type_casters/optional.hpp"
-#include "yggdrasil/python/type_casters/pair.hpp"
-#include "yggdrasil/python/type_casters/string.hpp"
-#include "yggdrasil/python/type_casters/unordered_map.hpp"
-#include "yggdrasil/python/type_casters/unordered_set.hpp"
-#include "yggdrasil/python/type_casters/variant.hpp"
-#include "yggdrasil/python/type_casters/vector.hpp"
+#include <urd/python/flat.hpp>
+#include <urd/python/maps/flat_map.hpp>
+#include <urd/python/maps/index_map.hpp>
+#include <urd/python/maps/ordered_map.hpp>
+#include <urd/python/maps/parallel_hash_map.hpp>
+#include <urd/python/maps/unordered_flat_map.hpp>
+#include <urd/python/ranges.hpp>
+#include <urd/python/sequences/segmented.hpp>
+#include <urd/python/sequences/sequence.hpp>
+#include <urd/python/values/dense_set.hpp>
+#include <urd/python/values/flat_set.hpp>
+#include <urd/python/values/indexed.hpp>
+#include <urd/python/values/parallel_hash_set.hpp>
+#include <urd/python/values/sparse_set.hpp>
+#include <urd/python/values/unordered_flat_set.hpp>
 
 #endif

@@ -1,4 +1,8 @@
 #include "module.hpp"
+#include "yggdrasil/python/type_casters.hpp"
+#include <urd/python/sequences/sequence.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/optimization/optimization.hpp"
 #include "yggdrasil/database/semantics/incremental/query.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
@@ -20,8 +24,8 @@ using IncrementalEvaluator = ygg::database::incremental::QueryEvaluator;
 template<typename Input>
 void bind_inputs(nb::class_<FullEvaluator>& full, nb::class_<IncrementalEvaluator>& incremental, nb::module_& m)
 {
-    using Inputs = std::vector<Input>;
-    using Changes = std::vector<std::pair<Input, Input>>;
+    using Inputs = urd::Store<urd::sequence<Input>>;
+    using Changes = urd::Store<urd::sequence<std::pair<Input, Input>>>;
     full.def("evaluate", &FullEvaluator::template evaluate<Inputs>, nb::arg("inputs"));
     incremental.def("initialize", &IncrementalEvaluator::template initialize<Inputs>, nb::arg("inputs"))
         .def("update", &IncrementalEvaluator::template update<Changes>, nb::arg("changes"), "One (added, removed) pair per input slot.");
@@ -32,7 +36,7 @@ void bind_inputs(nb::class_<FullEvaluator>& full, nb::class_<IncrementalEvaluato
 void bind_database_evaluation(nb::module_& m)
 {
     using Borrowed = ygg::database::BorrowedRelationView;
-    const auto borrow = [](const ygg::Builder<ygg::database::Relation>& relation) { return Borrowed(relation, borrowed_relation_context()); };
+    const auto borrow = [](const urd::builder<ygg::database::Relation>& relation) { return Borrowed(relation, borrowed_relation_context()); };
 
     auto full = nb::class_<FullEvaluator>(m, "QueryEvaluator", "Evaluate a compiled query DAG. Input relations are borrowed only during each call.");
     full.def(nb::init<ygg::database::QueryPlan>(), nb::arg("plan"))

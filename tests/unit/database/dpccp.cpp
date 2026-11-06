@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/optimization/details/dpccp.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <array>
 #include <gtest/gtest.h>
@@ -55,7 +57,7 @@ void check_graph(std::span<const Mask> graph)
         ++totals[left | right];
     std::map<Mask, size_t> seen_counts;
     std::set<Pair> seen;
-    std::vector<Pair> sequence;
+    urd::Store<urd::sequence<Pair>> sequence;
     EXPECT_TRUE(database::detail::enumerate_connected_pairs(graph,
                                                             [&](Mask left, Mask right)
                                                             {
@@ -69,7 +71,7 @@ void check_graph(std::span<const Mask> graph)
                                                                 return true;
                                                             }));
     EXPECT_EQ(seen, expected);
-    std::vector<Pair> repeated;
+    urd::Store<urd::sequence<Pair>> repeated;
     EXPECT_TRUE(database::detail::enumerate_connected_pairs(graph,
                                                             [&](Mask left, Mask right)
                                                             {
@@ -87,7 +89,7 @@ TEST(YggdrasilTests, DatabaseDpccpMatchesEveryGraphThroughFiveVertices)
         const auto edge_count = vertices > 1 ? vertices * (vertices - 1) / 2 : 0;
         for (Mask edges = 0; edges < (Mask { 1 } << edge_count); ++edges)
         {
-            std::vector<Mask> graph(vertices);
+            urd::Store<urd::sequence<Mask>> graph(vertices);
             size_t bit = 0;
             for (size_t left = 0; left < vertices; ++left)
                 for (size_t right = left + 1; right < vertices; ++right, ++bit)
@@ -106,7 +108,7 @@ TEST(YggdrasilTests, DatabaseDpccpMatchesEveryGraphThroughFiveVertices)
 TEST(YggdrasilTests, DatabaseDpccpHandlesLargerChainStarCliqueAndArbitraryNumbering)
 {
     constexpr size_t count = 8;
-    std::vector<Mask> graph(count);
+    urd::Store<urd::sequence<Mask>> graph(count);
     for (size_t i = 0; i < count - 1; ++i)
     {
         graph[i] |= Mask { 1 } << (i + 1);
@@ -149,12 +151,12 @@ TEST(YggdrasilTests, DatabaseDpccpStopsAtBudgetAndChecksMaskBounds)
     EXPECT_FALSE(database::detail::enumerate_connected_pairs(clique, [&](Mask, Mask) { return ++emitted < 7; }));
     EXPECT_EQ(emitted, 7);
     const auto keep_going = [](Mask, Mask) { return true; };
-    std::vector<Mask> graph(64);
+    urd::Store<urd::sequence<Mask>> graph(64);
     EXPECT_THROW(database::detail::enumerate_connected_pairs(graph, keep_going), std::invalid_argument);
     graph.resize(63);
     graph[0] = Mask { 1 } << 62;
     graph[62] = 1;
-    std::vector<Pair> pairs;
+    urd::Store<urd::sequence<Pair>> pairs;
     EXPECT_TRUE(database::detail::enumerate_connected_pairs(graph,
                                                             [&](Mask left, Mask right)
                                                             {

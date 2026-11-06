@@ -4,10 +4,12 @@
  */
 
 #include "yggdrasil/database/optimization/details/join_block.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database::detail
 {
-std::vector<Index<Column>> variables(QueryView<> query) { return ygg::canonicalized(column_labels(query.columns())); }
+urd::Store<urd::sequence<urd::index<Column>>> variables(QueryView<> query) { return ygg::canonicalized(column_labels(query.columns())); }
 }
 
 namespace ygg::database::detail
@@ -17,9 +19,9 @@ QueryView<> semijoin(OperatorBuilder& build, QueryView<> lhs, QueryView<> rhs) {
 
 namespace ygg::database::detail
 {
-std::vector<Index<Column>> variable_order(std::span<const QueryView<>> atoms)
+urd::Store<urd::sequence<urd::index<Column>>> variable_order(std::span<const QueryView<>> atoms)
 {
-    std::vector<Index<Column>> result;
+    urd::Store<urd::sequence<urd::index<Column>>> result;
     for (const auto atom : atoms)
         for (const auto label : variables(atom))
             result.push_back(label);

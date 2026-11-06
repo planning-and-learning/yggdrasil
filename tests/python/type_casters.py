@@ -24,7 +24,6 @@ def main() -> None:
     assert module.array_view() == [1, 2, 3]
     assert module.pair_view() == (4, 5)
     assert module.nested_view() == [(6, 7), (8, 9)]
-    assert module.concurrent_bit_packed_view() == [1, 2, 3]
 
     assert module.roundtrip_pair((4, 5)) == (4, 5)
     assert module.roundtrip_pair([-3, 4]) == (-3, 4)

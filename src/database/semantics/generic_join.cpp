@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/generic_join.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <algorithm>
 #include <span>
@@ -12,9 +14,9 @@
 
 namespace ygg::database
 {
-GenericJoinPlan::GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inputs,
-                                 std::span<const Index<Column>> variable_order,
-                                 std::span<const Index<Column>> output_order) :
+GenericJoinPlan::GenericJoinPlan(std::span<const urd::Store<urd::sequence<ColumnLayout>>> inputs,
+                                 std::span<const urd::index<Column>> variable_order,
+                                 std::span<const urd::index<Column>> output_order) :
     m_inputs(inputs.size()),
     m_order(variable_order.begin(), variable_order.end()),
     m_keys(inputs.size()),
@@ -22,7 +24,7 @@ GenericJoinPlan::GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inpu
 {
     for (size_t i = 0; i < inputs.size(); ++i)
         m_inputs[i].set(inputs[i].begin(), inputs[i].end());
-    std::vector<ColumnLayout> combined;
+    urd::Store<urd::sequence<ColumnLayout>> combined;
     for (const auto& input : inputs)
     {
         validate_columns(input);
@@ -35,7 +37,7 @@ GenericJoinPlan::GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inpu
                 throw std::invalid_argument("Generic join: common columns must have the same type.");
         }
     }
-    const auto require_order = [&](std::span<const Index<Column>> order)
+    const auto require_order = [&](std::span<const urd::index<Column>> order)
     {
         if (order.size() != combined.size())
             throw std::invalid_argument("Generic join: orders must contain every output column exactly once.");
@@ -46,7 +48,7 @@ GenericJoinPlan::GenericJoinPlan(std::span<const std::vector<ColumnLayout>> inpu
     };
     require_order(variable_order);
     require_order(output_order);
-    std::vector<ColumnLayout> output;
+    urd::Store<urd::sequence<ColumnLayout>> output;
     for (const auto label : output_order)
         detail::append_column(output, combined[database::column_index(combined, label)]);
     m_output.assign(output);
@@ -139,7 +141,7 @@ bool GenericJoinTrie::erase(std::span<const std::byte> row, std::span<const Colu
 
 namespace ygg::database
 {
-void GenericJoinWorkspace::enumerate(size_t depth, Builder<Relation>& out)
+void GenericJoinWorkspace::enumerate(size_t depth, urd::builder<Relation>& out)
 {
     detail::count_generic_join_work(&detail::GenericJoinWork::prefixes);
     if (depth == m_plan.variable_order().size())

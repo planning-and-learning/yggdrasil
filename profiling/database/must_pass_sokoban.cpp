@@ -13,6 +13,8 @@
 // state.txt replaces the initial state: a line "robot <location>", then lines "<box> <location>".
 
 #include "../../tests/unit/database/query_helpers.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/optimization/optimization.hpp"
 #include "yggdrasil/database/semantics/bound/query_evaluation.hpp"
 #include "yggdrasil/database/semantics/must_pass.hpp"
@@ -40,7 +42,7 @@
 
 namespace
 {
-using Column = ygg::Index<ygg::database::Column>;
+using Column = urd::index<ygg::database::Column>;
 using Relation = ygg::Builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
@@ -53,15 +55,15 @@ View borrow(const Relation& relation)
 }
 
 /// The atoms "(name args...)" of a text.
-std::vector<std::vector<std::string>> atoms(const std::string& text)
+urd::Store<urd::sequence<urd::Store<urd::sequence<std::string>>>> atoms(const std::string& text)
 {
-    auto result = std::vector<std::vector<std::string>>();
+    auto result = urd::Store<urd::sequence<urd::Store<urd::sequence<std::string>>>>();
     for (size_t open = text.find('('); open != std::string::npos; open = text.find('(', open + 1))
     {
         const auto close = text.find_first_of("()", open + 1);
         if (close == std::string::npos || text[close] != ')')
             continue;
-        auto words = std::vector<std::string>();
+        auto words = urd::Store<urd::sequence<std::string>>();
         auto stream = std::istringstream(text.substr(open + 1, close - open - 1));
         for (std::string word; stream >> word;)
             words.push_back(word);
@@ -74,9 +76,9 @@ std::vector<std::vector<std::string>> atoms(const std::string& text)
 struct Task
 {
     std::unordered_map<std::string, uint_t> ids;
-    std::vector<std::string> names;
-    std::vector<std::tuple<uint_t, uint_t, uint_t>> adjacent;
-    std::vector<uint_t> locations;
+    urd::Store<urd::sequence<std::string>> names;
+    urd::Store<urd::sequence<std::tuple<uint_t, uint_t, uint_t>>> adjacent;
+    urd::Store<urd::sequence<uint_t>> locations;
     std::map<uint_t, uint_t> at;    ///< box -> location
     std::map<uint_t, uint_t> goal;  ///< box -> location
     uint_t robot = 0;
@@ -127,10 +129,10 @@ struct PushDistance
 {
     const Task* task;
     bool obstacles;
-    std::vector<std::vector<std::pair<uint_t, uint_t>>> into;         ///< cell -> (from, direction) of its incoming edges
-    std::map<std::pair<uint_t, uint_t>, std::vector<uint_t>> before;  ///< (cell, direction) -> cells c with c -d-> cell
-    std::map<uint_t, std::vector<uint_t>> pushes;                     ///< box -> pushes from each location, in the current search
-    std::map<uint_t, std::vector<uint_t>> base;                       ///< box -> pushes without an excluded cell
+    urd::Store<urd::sequence<urd::Store<urd::sequence<std::pair<uint_t, uint_t>>>>> into;         ///< cell -> (from, direction) of its incoming edges
+    std::map<std::pair<uint_t, uint_t>, urd::Store<urd::sequence<uint_t>>> before;  ///< (cell, direction) -> cells c with c -d-> cell
+    std::map<uint_t, urd::Store<urd::sequence<uint_t>>> pushes;                     ///< box -> pushes from each location, in the current search
+    std::map<uint_t, urd::Store<urd::sequence<uint_t>>> base;                       ///< box -> pushes without an excluded cell
 
     /// With `obstacles`, the other boxes' cells block a box in the current state; still admissible for this state.
     PushDistance(const Task& task_, bool obstacles_) : task(&task_), obstacles(obstacles_), into(task_.names.size())
@@ -146,7 +148,7 @@ struct PushDistance
     }
     /// Backward breadth-first pushes to the box's goal: a push from `from` to `to` in direction d needs a cell before
     /// `from` in direction d; blocked cells hold neither the box nor the agent.
-    [[nodiscard]] std::vector<uint_t> distances(uint_t b, uint_t excluded) const
+    [[nodiscard]] urd::Store<urd::sequence<uint_t>> distances(uint_t b, uint_t excluded) const
     {
         static const bool no_agent_cell = std::getenv("NO_AGENT_CELL") != nullptr;
         auto blocked = std::vector<bool>(task->names.size(), false);
@@ -155,11 +157,11 @@ struct PushDistance
                 blocked[location] = other != b;
         if (excluded != ygg::database::infinity)
             blocked[excluded] = true;
-        auto distance = std::vector<uint_t>(task->names.size(), ygg::database::infinity);
+        auto distance = urd::Store<urd::sequence<uint_t>>(task->names.size(), ygg::database::infinity);
         const auto goal = task->goal.at(b);
         if (blocked[goal])
             return distance;
-        auto frontier = std::vector<uint_t> { goal };
+        auto frontier = urd::Store<urd::sequence<uint_t>> { goal };
         distance[goal] = 0;
         for (size_t i = 0; i < frontier.size(); ++i)
             for (const auto& [from, d] : into[frontier[i]])
@@ -281,7 +283,7 @@ int run(std::span<char*> args)
     const auto plan = ygg::database::MustPassPlan(sources.columns().span(), edges.columns(), targets.columns().span(), probes.columns().span(), 1);
     auto must_pass = ygg::database::MustPass<PushDistance>(edges, plan);
     auto heuristic = PushDistance(task, std::getenv("STATIC_HEURISTIC") == nullptr);
-    auto views = std::vector<View>();
+    auto views = urd::Store<urd::sequence<View>>();
     for (const auto& relation : slots)
         views.push_back(borrow(relation));
     const auto slot_input = [&](size_t slot) { return views[slot]; };
@@ -314,7 +316,7 @@ int run(std::span<char*> args)
         const auto by_key = evaluator.prepare({ 0 });
         auto rows = static_cast<size_t>(0), loops = static_cast<size_t>(0);
         const auto start = std::chrono::steady_clock::now();
-        auto bytes = std::vector<std::byte>();
+        auto bytes = urd::Store<urd::sequence<std::byte>>();
         for (size_t r = 0; r < unfinished.size(); ++r)
         {
             const auto b = unfinished[r].get<uint_t>(0);
@@ -351,7 +353,7 @@ int run(std::span<char*> args)
     }
     if (std::getenv("PER_KEY"))  // Times each key alone.
     {
-        auto timings = std::vector<std::tuple<double, size_t, std::string>>();
+        auto timings = urd::Store<urd::sequence<std::tuple<double, size_t, std::string>>>();
         for (size_t r = 0; r < unfinished.size(); ++r)
         {
             const auto b = unfinished[r].get<uint_t>(0);
@@ -388,7 +390,7 @@ int run(std::span<char*> args)
                repeats);
 
     // The order key of every unfinished box: the other boxes for which its goal cell must be passed.
-    auto must = std::map<uint_t, std::vector<uint_t>>();
+    auto must = std::map<uint_t, urd::Store<urd::sequence<uint_t>>>();
     for (size_t r = 0; r < out.size(); ++r)
         must[out[r].get<uint_t>(0)].push_back(out[r].get<uint_t>(1));
     for (size_t r = 0; r < unfinished.size(); ++r)

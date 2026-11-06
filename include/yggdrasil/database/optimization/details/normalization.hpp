@@ -6,6 +6,8 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_NORMALIZATION_HPP_
 
 #include "yggdrasil/database/optimization/details/join_block.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/syntax/query.hpp"
 
 #include <algorithm>
@@ -28,10 +30,10 @@ namespace ygg::database::detail
 class Normalizer
 {
     template<class Tag>
-    using Operation = Data<Query<Tag>>;
+    using Operation = urd::data<Query<Tag>>;
 
     OperatorBuilder m_build;
-    std::vector<std::optional<QueryView<>>> m_normalized;
+    urd::Store<urd::sequence<std::optional<QueryView<>>>> m_normalized;
 
     QueryView<> join(QueryView<> lhs, QueryView<> rhs)
     {
@@ -63,39 +65,39 @@ class Normalizer
         return m_build.template binary<Tag>(lhs, rhs);
     }
     /// Labels of the renamed query's argument for the given renamed labels.
-    static std::vector<Index<Column>> inverse(QueryView<QueryRenameTag> rename, std::span<const Index<Column>> renamed)
+    static urd::Store<urd::sequence<urd::index<Column>>> inverse(QueryView<QueryRenameTag> rename, std::span<const urd::index<Column>> renamed)
     {
         const auto before = rename.get_arg().columns(), after = rename.columns();
-        std::vector<Index<Column>> result;
+        urd::Store<urd::sequence<urd::index<Column>>> result;
         for (const auto label : renamed)
             result.push_back(before[column_index(after, label)].label);
         return result;
     }
-    QueryView<> rename(QueryView<> arg, std::span<const Index<Column>> columns)
+    QueryView<> rename(QueryView<> arg, std::span<const urd::index<Column>> columns)
     {
         if (std::ranges::equal(column_labels(arg.columns()), columns))
             return arg;
         const auto result = m_build.template relabel<QueryRenameTag>(arg, columns);
         return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
     }
-    QueryView<> project(QueryView<> arg, std::span<const Index<Column>> columns);
-    QueryView<> finish_project(QueryView<> arg, std::span<const Index<Column>> columns)
+    QueryView<> project(QueryView<> arg, std::span<const urd::index<Column>> columns);
+    QueryView<> finish_project(QueryView<> arg, std::span<const urd::index<Column>> columns)
     {
         const auto result = m_build.template relabel<QueryProjectTag>(arg, columns);
         return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
     }
 
     /// The labels of `arg` in `columns` or in `extra`, in the order of `arg`.
-    static std::vector<Index<Column>> kept_labels(QueryView<> arg, std::span<const Index<Column>> columns, std::span<const Index<Column>> extra)
+    static urd::Store<urd::sequence<urd::index<Column>>> kept_labels(QueryView<> arg, std::span<const urd::index<Column>> columns, std::span<const urd::index<Column>> extra)
     {
-        std::vector<Index<Column>> labels;
+        urd::Store<urd::sequence<urd::index<Column>>> labels;
         for (const auto& column : arg.columns())
             if (std::ranges::find(columns, column.label) != columns.end() || std::ranges::find(extra, column.label) != extra.end())
                 labels.push_back(column.label);
         return labels;
     }
     template<class Tag>
-    QueryView<> project_filter_join(QueryView<> arg, std::span<const Index<Column>> columns)
+    QueryView<> project_filter_join(QueryView<> arg, std::span<const urd::index<Column>> columns)
     {
         const auto operation = as<Tag>(arg);
         const auto lhs = operation.get_lhs();
@@ -106,8 +108,8 @@ class Normalizer
         return project(filter_join<Tag>(project(lhs, kept), operation.get_rhs()), columns);
     }
 
-    static std::vector<Index<Column>> tested(const Operation<QuerySelectEqualTag>& data) { return { data.lhs_column, data.rhs_column }; }
-    static std::vector<Index<Column>> tested(const Operation<QuerySelectValueTag>& data) { return { data.column }; }
+    static urd::Store<urd::sequence<urd::index<Column>>> tested(const Operation<QuerySelectEqualTag>& data) { return { data.lhs_column, data.rhs_column }; }
+    static urd::Store<urd::sequence<urd::index<Column>>> tested(const Operation<QuerySelectValueTag>& data) { return { data.column }; }
     static void retarget(Operation<QuerySelectEqualTag>& data, QueryView<QueryRenameTag> rename)
     {
         const std::array renamed { data.lhs_column, data.rhs_column };
@@ -125,7 +127,7 @@ class Normalizer
     {
         const auto columns = tested(data);
         const auto within = [&](QueryView<> query)
-        { return std::ranges::all_of(columns, [&](Index<Column> label) { return contains_column(query.columns(), label); }); };
+        { return std::ranges::all_of(columns, [&](urd::index<Column> label) { return contains_column(query.columns(), label); }); };
         if (is<QueryEmptyTag>(arg))
             return arg;
         if (is<QueryJoinTag>(arg))
@@ -173,7 +175,7 @@ class Normalizer
             [&](auto& filtered)
             {
                 filtered = data;
-                filtered.arg = arg.get_index();
+                filtered.arg = arg.index();
             });
     }
 
@@ -195,10 +197,10 @@ class Normalizer
         else if constexpr (std::same_as<Tag, QueryRenameTag>)
             return rename(child(query.get_arg()), query.get_labels());
         else if constexpr (std::same_as<Tag, QuerySelectEqualTag> || std::same_as<Tag, QuerySelectValueTag>)
-            return select(query.get_data(), child(query.get_arg()));
+            return select(query.data(), child(query.get_arg()));
         else
         {
-            std::vector<QueryView<>> children;
+            urd::Store<urd::sequence<QueryView<>>> children;
             bool absent = false;
             for_each_child(query,
                            [&](QueryView<> operand)
@@ -220,9 +222,9 @@ public:
     /// The normalized equivalent of a query of the source repository.
     QueryView<> operator()(QueryView<> source)
     {
-        auto& normalized = m_normalized.at(source.get_index().get_value());
+        auto& normalized = m_normalized.at(source.index().value);
         if (!normalized)
-            normalized = ygg::visit([&](auto query) { return normalize(source, query); }, source.get_variant());
+            normalized = std::visit([&](auto query) { return normalize(source, query); }, source.get_variant());
         return *normalized;
     }
 };

@@ -59,7 +59,7 @@ ProjectionEvaluator::ProjectionEvaluator(ProjectionPlan plan) :
 
 namespace ygg::database::incremental
 {
-const Builder<Relation>& ProjectionEvaluator::get_result() const&
+const urd::builder<Relation>& ProjectionEvaluator::get_result() const&
 {
     detail::require_initialized(m_initialized);
     return m_result;

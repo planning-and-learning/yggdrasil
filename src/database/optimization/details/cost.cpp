@@ -5,6 +5,10 @@
 
 #include "yggdrasil/database/optimization/details/cost.hpp"
 
+#include <algorithm>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
+
 namespace ygg::database::detail
 {
 const CostBasedPlanner::Refined& CostBasedPlanner::refine(size_t node)
@@ -22,7 +26,7 @@ const CostBasedPlanner::Refined& CostBasedPlanner::refine(size_t node)
         const bool growing = rows(subset) - largest_input > FloatTolerance<float_t>::tolerance(rows(subset), largest_input);
         if (growing || left.multiway || right.multiway)
         {
-            std::vector<size_t> inputs;
+            urd::Store<urd::sequence<size_t>> inputs;
             for (const auto& [child, refined] : { std::pair(lhs, &left), std::pair(rhs, &right) })
                 if (refined->multiway)
                     inputs.insert(inputs.end(), refined->inputs.begin(), refined->inputs.end());
@@ -49,7 +53,7 @@ QueryView<> CostBasedPlanner::build(size_t node)
     const auto& refined = refine(node);
     if (!refined.multiway || refined.inputs.size() == 2)
         return m_build->restrict(m_build->join(build(lhs), build(rhs)), keep);
-    std::vector<QueryView<>> inputs;
+    urd::Store<urd::sequence<QueryView<>>> inputs;
     inputs.reserve(refined.inputs.size());
     for (const auto input : refined.inputs)
         inputs.push_back(build(input));
@@ -62,10 +66,10 @@ namespace ygg::database::detail
 QueryView<> CostBasedPlanner::plan() &&
 {
     const auto count = m_block->atoms.size();
-    std::vector<std::uint64_t> graph(count);
+    urd::Store<urd::sequence<std::uint64_t>> graph(count);
     for (size_t lhs = 0; lhs < count; ++lhs)
         for (size_t rhs = lhs + 1; rhs < count; ++rhs)
-            if (itertools::intersects(m_variables[lhs], m_variables[rhs]))
+            if (std::ranges::find_first_of(m_variables[lhs], m_variables[rhs]) != m_variables[lhs].end())
             {
                 graph[lhs] |= std::uint64_t { 1 } << rhs;
                 graph[rhs] |= std::uint64_t { 1 } << lhs;
@@ -79,14 +83,14 @@ QueryView<> CostBasedPlanner::plan() &&
                                       m_best.insert_or_assign(subset, Split { cost, lhs });
                                   return true;
                               });
-    std::vector<std::uint64_t> components;
-    for (auto unseen = bit::lo_set<std::uint64_t>[count]; unseen;)
+    urd::Store<urd::sequence<std::uint64_t>> components;
+    for (auto unseen = urd::repr::bit::lo_set<std::uint64_t>[count]; unseen;)
     {
         auto component = unseen & -unseen;
         for (std::uint64_t previous = 0; component != previous;)
         {
             previous = component;
-            bit::for_each_set_bit(previous, [&](size_t atom) { component |= graph[atom]; });
+            urd::repr::bit::for_each_set_bit(previous, [&](size_t atom) { component |= graph[atom]; });
         }
         components.push_back(component);
         unseen &= ~component;

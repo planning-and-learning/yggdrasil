@@ -6,6 +6,8 @@
 #define YGG_DATABASE_SYNTAX_FORMATTER_HPP_
 
 #include "yggdrasil/database/syntax/query.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/formatting/formatter.hpp"
 
 #include <fmt/ranges.h>
@@ -56,16 +58,16 @@ template<typename OutputIt>
 OutputIt format_query_plan(OutputIt out, const QueryPlan& plan)
 {
     // Plain values, so explanations do not depend on the optional public formatters.
-    const auto value = [](auto index) { return index.get_value(); };
+    const auto value = [](auto index) { return index.value; };
     for (size_t id = 0; id < plan.node_count(); ++id)
-        ygg::visit(
+        std::visit(
             [&]<typename Concrete>(Concrete operation)
             {
-                std::vector<uint_t> children;
-                for_each_child(operation, [&](QueryView<> child) { children.push_back(child.get_index().get_value()); });
+                urd::Store<urd::sequence<uint_t>> children;
+                for_each_child(operation, [&](QueryView<> child) { children.push_back(child.index().value); });
                 const auto columns =
                     operation.columns()
-                    | std::views::transform([](const ColumnLayout& column) { return fmt::format("{}:{}", column.label.get_value(), column.type); });
+                    | std::views::transform([](const ColumnLayout& column) { return fmt::format("{}:{}", column.label.value, column.type); });
                 out = fmt::format_to(out, "{}: {}({}) columns=[{}]", id, query_operation_name(operation), fmt::join(children, ","), fmt::join(columns, ","));
                 if constexpr (std::same_as<Concrete, QueryView<QueryInputTag>>)
                     out = fmt::format_to(out, " slot={}", operation.get_input_slot());
@@ -73,7 +75,7 @@ OutputIt format_query_plan(OutputIt out, const QueryPlan& plan)
                     out = fmt::format_to(out, " variables=[{}]", fmt::join(operation.get_variable_order() | std::views::transform(value), ","));
                 out = fmt::format_to(out, "\n");
             },
-            plan[Index<Query<>>(to_uint_t(id))].get_variant());
+            plan[urd::index<Query<>>(to_uint_t(id))].get_variant());
     return fmt::format_to(out, "roots=[{}]\n", fmt::join(plan.roots() | std::views::transform(value), ","));
 }
 }  // namespace detail

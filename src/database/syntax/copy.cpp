@@ -4,12 +4,14 @@
  */
 
 #include "yggdrasil/database/syntax/query.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::database
 {
-std::vector<size_t> input_slots(std::span<const QueryView<>> roots)
+urd::Store<urd::sequence<size_t>> input_slots(std::span<const QueryView<>> roots)
 {
-    auto slots = std::vector<size_t>();
+    auto slots = urd::Store<urd::sequence<size_t>>();
     for (const auto query : reachable(roots))
         if (is<QueryInputTag>(query))
             slots.push_back(as<QueryInputTag>(query).get_input_slot());
@@ -26,11 +28,11 @@ QueryPlan compile(std::span<const QueryView<>> roots)
 {
     if (roots.empty())
         return QueryPlan {};
-    auto repository = roots.front().get_repository().get_factory().create_shared();
+    auto repository = get_repository(roots.front().context()).get_factory().create_shared();
     QueryBuilder builder;
-    std::vector<Index<Query<>>> outputs;
+    urd::Store<urd::sequence<urd::index<Query<>>>> outputs;
     for (const auto copied : database::copy(roots, [](size_t slot) { return slot; }, *repository, builder))
-        outputs.push_back(copied.get_index());
+        outputs.push_back(copied.index());
     return QueryPlan(std::move(repository), std::move(outputs));
 }
 }

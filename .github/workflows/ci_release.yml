@@ -39,53 +39,6 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
-  build_corresponding_source:
-    needs: build_sdist
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Download source distribution
-        uses: actions/download-artifact@v5
-        with:
-          name: sdist
-          path: dist
-
-      - name: Download upstream sources
-        run: |
-          cmake -S src -B source-build \
-                -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/yggdrasil-source-prefix" \
-                -DCMAKE_INSTALL_LIBDIR=lib \
-                -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
-          cmake --build source-build --target corresponding-source-downloads --parallel 2
-
-      - name: Build corresponding-source bundle
-        run: |
-          SDISTS=(dist/*.tar.gz)
-          test "${#SDISTS[@]}" -eq 1
-          test -f "${SDISTS[0]}"
-          SOURCE_ARCHIVE=${SDISTS[0]#dist/}
-          SOURCE_ARCHIVE=${SOURCE_ARCHIVE%.tar.gz}-corresponding-source.tar.gz
-          mkdir -p release-assets
-          python cmake/build_corresponding_source.py \
-            --manifest docs/SOURCES.json \
-            --sdist "${SDISTS[0]}" \
-            --sources source-build \
-            --output "release-assets/${SOURCE_ARCHIVE}"
-
-      - name: Upload corresponding-source artifact
-        uses: actions/upload-artifact@v5
-        with:
-          name: corresponding-source
-          path: release-assets/*.tar.gz
-
   build_wheels_linux:
     runs-on: ubuntu-latest
     strategy:
@@ -163,7 +116,6 @@ jobs:
   validate_release:
     needs:
       - build_sdist
-      - build_corresponding_source
       - build_wheels_linux
       - build_wheels_macos
     runs-on: ubuntu-latest
@@ -182,15 +134,7 @@ jobs:
           name: sdist
           path: dist
 
-      - name: Download corresponding-source bundle
-        uses: actions/download-artifact@v5
-        with:
-          name: corresponding-source
-          path: release-assets
-
       - name: Validate release assets
         run: |
           test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
           test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 2
-          test "$(find release-assets -maxdepth 1 -type f -name '*-corresponding-source.tar.gz' | wc -l)" -eq 1
-          tar -tzf release-assets/*-corresponding-source.tar.gz >/dev/null

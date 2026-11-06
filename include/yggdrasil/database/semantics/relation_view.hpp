@@ -6,8 +6,7 @@
 #ifndef YGG_DATABASE_SEMANTICS_RELATION_VIEW_HPP_
 #define YGG_DATABASE_SEMANTICS_RELATION_VIEW_HPP_
 
-#include "yggdrasil/containers/span.hpp"
-#include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 #include "yggdrasil/database/semantics/relation_data.hpp"
 
@@ -29,7 +28,7 @@ namespace ygg::database
 /// Raw read-only row access shared by builders and contextual Builder/Data/Index views.
 /// Contextual indexing and iteration may resolve stored elements into semantic views.
 template<typename V>
-concept RelationViewConcept = requires(const std::remove_reference_t<V>& view, size_t i, Index<Column> column, std::span<const std::byte> row, Row typed_row) {
+concept RelationViewConcept = requires(const std::remove_reference_t<V>& view, size_t i, urd::index<Column> column, std::span<const std::byte> row, Row typed_row) {
     { view.columns() } -> ColumnsViewConcept;
     { view.arity() } -> std::same_as<size_t>;
     { view.size() } -> std::same_as<size_t>;
@@ -79,7 +78,7 @@ class RelationIterator
 
     [[nodiscard]] const V& view() const noexcept
     {
-        YGG_ASSUME(m_view.has_value());
+        URD_ASSUME(m_view.has_value());
         return *m_view;
     }
 
@@ -140,77 +139,78 @@ public:
 };
 }  // namespace ygg::database::detail
 
-namespace ygg
+/// The builder view reads the builder directly.
+template<typename V>
+struct urd::view_mixin<urd::builder<ygg::database::Relation>, V>
 {
-template<typename C>
-class View<Builder<database::Relation>, C> : public BuilderViewBase<database::Relation, C>
-{
-public:
-    using BuilderViewBase<database::Relation, C>::BuilderViewBase;
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
-    [[nodiscard]] auto get_index() const noexcept { return this->get_handle().get_index(); }
-    [[nodiscard]] auto columns() const noexcept { return make_view(this->get_handle().columns(), this->get_context()); }
-    [[nodiscard]] size_t arity() const noexcept { return this->get_handle().arity(); }
-    [[nodiscard]] size_t size() const noexcept { return this->get_handle().size(); }
-    [[nodiscard]] bool empty() const noexcept { return this->get_handle().empty(); }
-    [[nodiscard]] const void* get_storage_address() const noexcept { return this->get_handle().get_storage_address(); }
-    [[nodiscard]] size_t get_storage_index() const noexcept { return this->get_handle().get_storage_index(); }
-    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return this->get_handle().column_index(column); }
-    [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept { return this->get_handle().row(index); }
-    auto operator[](size_t index) const noexcept { return make_view(database::Row(row(index), columns().span()), this->get_repository()); }
+public:
+    [[nodiscard]] auto index() const noexcept { return self().data().get_index(); }
+    [[nodiscard]] auto columns() const noexcept { return urd::resolve(self().data().columns(), self().context()); }
+    [[nodiscard]] size_t arity() const noexcept { return self().data().arity(); }
+    [[nodiscard]] size_t size() const noexcept { return self().data().size(); }
+    [[nodiscard]] bool empty() const noexcept { return self().data().empty(); }
+    [[nodiscard]] const void* get_storage_address() const noexcept { return self().data().get_storage_address(); }
+    [[nodiscard]] size_t get_storage_index() const noexcept { return self().data().get_storage_index(); }
+    [[nodiscard]] size_t column_index(urd::index<ygg::database::Column> column) const { return self().data().column_index(column); }
+    [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept { return self().data().row(index); }
+    auto operator[](size_t index) const noexcept { return ygg::database::Row(row(index), columns().span()); }
     [[nodiscard]] auto at(size_t index) const
     {
         if (index >= size())
             throw std::out_of_range("Relation: row index out of range.");
         return (*this)[index];
     }
-    [[nodiscard]] auto begin() const noexcept { return database::detail::RelationIterator<View>(*this, 0); }
-    [[nodiscard]] auto end() const noexcept { return database::detail::RelationIterator<View>(*this, size()); }
+    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), 0); }
+    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), size()); }
     [[nodiscard]] auto cbegin() const noexcept { return begin(); }
     [[nodiscard]] auto cend() const noexcept { return end(); }
 
-    [[nodiscard]] bool contains(std::span<const std::byte> row) const { return this->get_handle().contains(row); }
-    [[nodiscard]] bool contains(database::Row row) const { return this->get_handle().contains(row); }
+    [[nodiscard]] bool contains(std::span<const std::byte> row) const { return self().data().contains(row); }
+    [[nodiscard]] bool contains(ygg::database::Row row) const { return self().data().contains(row); }
     template<ygg::ByteCodable... Ts>
     [[nodiscard]] bool contains(const std::tuple<Ts...>& values) const
-    { return this->get_handle().contains(values); }
+    { return self().data().contains(values); }
 };
-}  // namespace ygg
 
-namespace ygg
-{
 /// Read access to an interned relation record, shared by its index and data views.
-/// The builder view is specialized separately, since it reads the builder directly.
 template<typename V>
-class ViewMixin<database::Relation, V>
+struct urd::view_mixin<ygg::database::Relation, V>
 {
+private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
-    [[nodiscard]] const Data<database::Relation>& record() const noexcept { return self().get_record(); }
+    [[nodiscard]] const urd::data<ygg::database::Relation>& record() const noexcept { return self().data(); }
     [[nodiscard]] bool contains_canonical(std::span<const std::byte> row) const
     {
-        const auto index = self().get_repository().get_row_repository().find(row);
-        return index && std::ranges::binary_search(row_indices(), Index<database::RelationRow>(*index));
+        const auto index = get_repository(self().context()).get_row_repository().find(row);
+        return !index.is_none() && std::ranges::binary_search(row_indices(), urd::index<ygg::database::RelationRow>(index.value));
     }
 
 public:
-    [[nodiscard]] auto columns() const noexcept { return self().get_repository().get_columns(record().columns_index); }
+    [[nodiscard]] auto columns() const noexcept { return get_repository(self().context()).get_columns(record().columns_index); }
     [[nodiscard]] size_t arity() const noexcept { return columns().size(); }
     [[nodiscard]] size_t size() const noexcept { return row_indices().size(); }
     [[nodiscard]] bool empty() const noexcept { return row_indices().empty(); }
-    [[nodiscard]] std::span<const Index<database::RelationRow>> row_indices() const noexcept
-    { return self().get_repository().get_row_set_repository()[record().row_set_index.get_value()]; }
+    [[nodiscard]] std::span<const urd::index<ygg::database::RelationRow>> row_indices() const noexcept
+    {
+        using Handle = typename std::remove_cvref_t<decltype(get_repository(self().context()))>::RowSetPool::handle_type;
+        return get_repository(self().context()).get_row_set_repository().view(Handle(record().row_set_index.value));
+    }
     [[nodiscard]] const void* get_storage_address() const noexcept { return row_indices().data(); }
-    [[nodiscard]] size_t get_storage_index() const noexcept { return self().get_repository().get_storage_index(record().row_set_index); }
-    [[nodiscard]] size_t column_index(Index<database::Column> column) const { return columns().column_index(column); }
+    [[nodiscard]] size_t get_storage_index() const noexcept { return get_repository(self().context()).get_storage_index(record().row_set_index); }
+    [[nodiscard]] size_t column_index(urd::index<ygg::database::Column> column) const { return columns().column_index(column); }
 
     [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept
     {
         assert(index < size());
-        return self().get_repository().get_row_repository()[row_indices()[index].get_value()];
+        using Handle = typename std::remove_cvref_t<decltype(get_repository(self().context()))>::RowPool::handle_type;
+        return get_repository(self().context()).get_row_repository().view(Handle(row_indices()[index].value));
     }
 
-    /// Rows resolve indices the owning repository can view; others stay raw for the caller to resolve.
-    auto operator[](size_t index) const noexcept { return make_view(database::Row(row(index), columns().span()), self().get_repository()); }
+    /// A row: its bytes and schema; index values stay raw, for the caller to resolve in their owner.
+    auto operator[](size_t index) const noexcept { return ygg::database::Row(row(index), columns().span()); }
 
     [[nodiscard]] auto at(size_t index) const
     {
@@ -219,8 +219,8 @@ public:
         return (*this)[index];
     }
 
-    [[nodiscard]] auto begin() const noexcept { return database::detail::RelationIterator<V>(self(), 0); }
-    [[nodiscard]] auto end() const noexcept { return database::detail::RelationIterator<V>(self(), size()); }
+    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), 0); }
+    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), size()); }
     [[nodiscard]] auto cbegin() const noexcept { return begin(); }
     [[nodiscard]] auto cend() const noexcept { return end(); }
 
@@ -231,7 +231,7 @@ public:
         return contains_canonical(row);
     }
 
-    [[nodiscard]] bool contains(database::Row row) const
+    [[nodiscard]] bool contains(ygg::database::Row row) const
     {
         if (!std::ranges::equal(row.columns(), columns().span()))
             throw std::invalid_argument("Relation: row schema does not match.");
@@ -240,18 +240,18 @@ public:
 
     template<ygg::ByteCodable... Ts>
     [[nodiscard]] bool contains(const std::tuple<Ts...>& values) const
-    { return contains_canonical(database::encode_row(values, columns().span())); }
+    { return contains_canonical(ygg::database::encode_row(values, columns().span())); }
 };
-}  // namespace ygg
+
 
 namespace std::ranges
 {
 template<typename C>
-inline constexpr bool enable_borrowed_range<ygg::View<ygg::Builder<ygg::database::Relation>, C>> = true;
+inline constexpr bool enable_borrowed_range<urd::borrowed_view<ygg::database::Relation, C, urd::builder<ygg::database::Relation>>> = true;
 template<typename C>
-inline constexpr bool enable_borrowed_range<ygg::View<ygg::Data<ygg::database::Relation>, C>> = true;
+inline constexpr bool enable_borrowed_range<urd::borrowed_view<ygg::database::Relation, C>> = true;
 template<typename C>
-inline constexpr bool enable_borrowed_range<ygg::View<ygg::Index<ygg::database::Relation>, C>> = true;
+inline constexpr bool enable_borrowed_range<urd::view<ygg::database::Relation, C>> = true;
 }
 
 #endif

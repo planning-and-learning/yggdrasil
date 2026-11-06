@@ -7,6 +7,9 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_DISTANCE_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include <urd/config.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/incremental/delta.hpp"
 #include "yggdrasil/database/semantics/incremental/details/distance_repair.hpp"
@@ -50,35 +53,35 @@ class DistanceEvaluator
     struct SourceState
     {
         uint_t root = 0;
-        std::vector<uint_t> distances;
-        std::vector<size_t> supports;
+        urd::Store<urd::sequence<uint_t>> distances;
+        urd::Store<urd::sequence<size_t>> supports;
     };
 
     DistancePlan m_plan;
     database::detail::DistanceGraph m_graph;
-    UnorderedMultiMap<uint_t, uint_t> m_reverse;
-    std::vector<SourceState> m_sources;
+    urd::Store<urd::map<uint_t, uint_t>, urd::multi, urd::retains> m_reverse;
+    urd::Store<urd::sequence<SourceState>> m_sources;
     size_t m_active_sources = 0;
-    std::vector<size_t> m_source_slots;
-    std::vector<uint_t> m_targets;
-    std::vector<Flag> m_target_flags;
-    Builder<Relation> m_result;
+    urd::Store<urd::sequence<size_t>> m_source_slots;
+    urd::Store<urd::sequence<uint_t>> m_targets;
+    urd::Store<urd::sequence<Flag>> m_target_flags;
+    urd::builder<Relation> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
     // One scratch area serves all source trees sequentially.
-    std::vector<uint_t> m_queue;
+    urd::Store<urd::sequence<uint_t>> m_queue;
     std::unique_ptr<detail::DistanceRepairWorkspace> m_repair = std::make_unique<detail::DistanceRepairWorkspace>();
-    std::vector<std::pair<uint_t, uint_t>> m_changed;
-    std::vector<Flag> m_changed_flags;
-    std::vector<std::byte> m_row;
+    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_changed;
+    urd::Store<urd::sequence<Flag>> m_changed_flags;
+    urd::Store<urd::sequence<std::byte>> m_row;
 
-    std::vector<uint_t> m_sources_added;
-    std::vector<uint_t> m_sources_removed;
-    std::vector<uint_t> m_targets_added;
-    std::vector<uint_t> m_targets_removed;
-    std::vector<std::pair<uint_t, uint_t>> m_edges_added;
-    std::vector<std::pair<uint_t, uint_t>> m_edges_removed;
+    urd::Store<urd::sequence<uint_t>> m_sources_added;
+    urd::Store<urd::sequence<uint_t>> m_sources_removed;
+    urd::Store<urd::sequence<uint_t>> m_targets_added;
+    urd::Store<urd::sequence<uint_t>> m_targets_removed;
+    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_edges_added;
+    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_edges_removed;
 
     [[nodiscard]] uint_t require_vertex(std::span<const std::byte> row) const;
     [[nodiscard]] bool is_source(uint_t vertex) const noexcept;
@@ -114,8 +117,8 @@ public:
     template<RelationChange S, RelationChange E, RelationChange T>
     void update(const S& sources, const E& edges, const T& targets);
 
-    [[nodiscard]] const Builder<Relation>& get_result() const&;
-    [[nodiscard]] const Builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&;
+    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&;
     [[nodiscard]] const Delta& get_delta() const&& = delete;
     /// Retained storage, including inactive reusable source arrays; excludes the plan.
@@ -168,8 +171,8 @@ void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& ta
     for (size_t i = 0; i < edges.size(); ++i)
     {
         const auto [from, to] = m_graph.insert_endpoints(edges.row(i));
-        m_graph.outgoing.insert(from, to);
-        m_reverse.insert(to, from);
+        m_graph.outgoing.insert({ from, to });
+        m_reverse.insert({ to, from });
     }
     for (size_t i = 0; i < sources.size(); ++i)
         m_graph.insert_vertex(sources.row(i));
@@ -180,8 +183,8 @@ void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& ta
         m_target_flags[target] = Flag::SET;
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto source = m_graph.vertices.find(sources.row(i));
-        YGG_ASSUME(source.has_value());  // every source was inserted above
+        const auto source = m_graph.find_vertex(sources.row(i));
+        URD_ASSUME(source.has_value());  // every source was inserted above
         const auto& state = add_source(*source);
         for (const auto target : m_targets)
             if (state.distances[target] != infinity)
@@ -209,15 +212,15 @@ void DistanceEvaluator::require_actual(const S& sources, const E& edges, const T
     const auto& [targets_added, targets_removed] = targets;
     const auto contains_edge = [&](std::span<const std::byte> row)
     {
-        const auto from = m_graph.vertices.find(row.first(m_plan.tuple_size()));
-        const auto to = m_graph.vertices.find(row.subspan(m_plan.tuple_size()));
+        const auto from = m_graph.find_vertex(row.first(m_plan.tuple_size()));
+        const auto to = m_graph.find_vertex(row.subspan(m_plan.tuple_size()));
         return from && to && m_graph.contains_edge(*from, *to);
     };
     const auto require_members = [&](const auto& rows, auto is_member, bool removing)
     {
         for (size_t i = 0; i < rows.size(); ++i)
         {
-            const auto vertex = m_graph.vertices.find(rows.row(i));
+            const auto vertex = m_graph.find_vertex(rows.row(i));
             if ((vertex && (this->*is_member)(*vertex)) != removing)
                 throw std::invalid_argument(removing ? "Incremental distance: removed vertex is absent." :
                                                        "Incremental distance: added vertex is already present.");
@@ -305,16 +308,22 @@ void DistanceEvaluator::apply(const S& sources, const E& edges, const T& targets
     }
     for (const auto& [from, to] : m_edges_removed)
     {
-        [[maybe_unused]] const auto forward = m_graph.outgoing.erase(from, to);
-        [[maybe_unused]] const auto reverse = m_reverse.erase(to, from);
-        assert(forward && reverse);
+        const auto erase = [](urd::Store<urd::map<uint_t, uint_t>, urd::multi, urd::retains>& edges, uint_t key, uint_t value)
+        {
+            const auto matches = edges.equal_range(key);
+            const auto found = std::find_if(matches.first, matches.second, [&](const auto& entry) { return entry.second == value; });
+            assert(found != matches.second);
+            edges.erase(found);
+        };
+        erase(m_graph.outgoing, from, to);
+        erase(m_reverse, to, from);
     }
-    m_graph.outgoing.reserve_values(m_graph.outgoing.size() + m_edges_added.size());
-    m_reverse.reserve_values(m_reverse.size() + m_edges_added.size());
+    m_graph.outgoing.reserve(m_graph.outgoing.size() + m_edges_added.size());
+    m_reverse.reserve(m_reverse.size() + m_edges_added.size());
     for (const auto& [from, to] : m_edges_added)
     {
-        m_graph.outgoing.insert(from, to);
-        m_reverse.insert(to, from);
+        m_graph.outgoing.insert({ from, to });
+        m_reverse.insert({ to, from });
     }
     resize_vertices();
     if (!m_edges_added.empty() || !m_edges_removed.empty())
@@ -342,9 +351,9 @@ class SourceMinDistance
 {
     size_t m_position;  ///< The distance column follows the edge columns.
     DistanceEvaluator m_evaluator;
-    std::vector<size_t> m_counts;
+    urd::Store<urd::sequence<size_t>> m_counts;
 
-    void count(const Builder<Relation>& rows, bool add);
+    void count(const urd::builder<Relation>& rows, bool add);
 
 public:
     explicit SourceMinDistance(DistancePlan plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}

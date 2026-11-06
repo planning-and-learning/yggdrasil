@@ -15,14 +15,18 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/containers/tree_vector_set.hpp"
 
 #include <array>
 #include <benchmark/benchmark.h>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <urd/memory.hpp>
+#include <urd/repr/pools/tree_vector.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <vector>
 
 namespace ygg::profiling
@@ -41,12 +45,12 @@ constexpr auto kMixedInsertsPerThread = (static_cast<size_t>(kMixedIterations) +
 
 using Value = uint64_t;
 using Vector = std::array<Value, kVectorSize>;
-using SequentialSet = TreeVectorSet<Value>;
-using ConcurrentSet = TreeVectorSet<Value, 32, true>;
+using SequentialSet = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>, urd::structural_sharing>;
+using ConcurrentSet = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>, urd::structural_sharing, urd::concurrent>;
 
-std::vector<Vector>& corpus()
+urd::Store<urd::sequence<Vector>>& corpus()
 {
-    static std::vector<Vector> value;
+    static urd::Store<urd::sequence<Vector>> value;
     return value;
 }
 
@@ -58,9 +62,9 @@ std::unique_ptr<Set>& tree_set()
 }
 
 template<typename Set>
-std::vector<typename Set::index_type>& handles()
+urd::Store<urd::sequence<typename Set::handle_type>>& handles()
 {
-    static std::vector<typename Set::index_type> value;
+    static urd::Store<urd::sequence<typename Set::handle_type>> value;
     return value;
 }
 
@@ -98,7 +102,7 @@ void set_up_read(const benchmark::State& state)
     handles<Set>().clear();
     handles<Set>().reserve(corpus().size());
     for (const auto& values : corpus())
-        handles<Set>().push_back(tree_set<Set>()->insert(values));
+        handles<Set>().push_back(tree_set<Set>()->insert(values).first);
 }
 
 template<typename Set>
@@ -109,7 +113,7 @@ void set_up_mixed(const benchmark::State& state)
     handles<Set>().clear();
     handles<Set>().reserve(kMixedPrefill);
     for (size_t i = 0; i < kMixedPrefill; ++i)
-        handles<Set>().push_back(tree_set<Set>()->insert(corpus()[i]));
+        handles<Set>().push_back(tree_set<Set>()->insert(corpus()[i]).first);
 }
 
 template<typename Set>
@@ -125,12 +129,9 @@ void report(benchmark::State& state)
 {
     state.SetItemsProcessed(state.iterations());
     state.SetBytesProcessed(state.iterations() * static_cast<benchmark::IterationCount>(sizeof(Vector)));
-    if constexpr (!Set::thread_safe)
-    {
-        state.counters["bytes"] = static_cast<double>(tree_set<Set>()->memory_usage());
-        state.counters["leaves"] = static_cast<double>(tree_set<Set>()->num_leaves());
-        state.counters["nodes"] = static_cast<double>(tree_set<Set>()->num_nodes());
-    }
+    // The Store gives its memory; its node and leaf counts are its container's own.
+    if constexpr (std::same_as<Set, SequentialSet>)
+        state.counters["bytes"] = static_cast<double>(urd::memory_usage(*tree_set<Set>()));
 }
 
 template<typename Set>
@@ -139,7 +140,7 @@ void benchmark_insert(benchmark::State& state)
     auto position = static_cast<size_t>(state.thread_index()) * static_cast<size_t>(kInsertIterations);
     for (auto _ : state)
     {
-        auto index = tree_set<Set>()->insert(corpus()[position++]);
+        auto index = tree_set<Set>()->insert(corpus()[position++]).first;
         benchmark::DoNotOptimize(index);
     }
     report<Set>(state);
@@ -173,7 +174,7 @@ void benchmark_mixed(benchmark::State& state)
     {
         if ((operation + insert_phase) % kMixedInsertPeriod == 0)
         {
-            auto index = tree_set<Set>()->insert(corpus()[first_insert + inserted++]);
+            auto index = tree_set<Set>()->insert(corpus()[first_insert + inserted++]).first;
             benchmark::DoNotOptimize(index);
         }
         else

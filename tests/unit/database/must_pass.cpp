@@ -4,6 +4,8 @@
  */
 
 #include "yggdrasil/database/semantics/must_pass.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include "query_helpers.hpp"
 #include "yggdrasil/database/semantics/relation_repository.hpp"
@@ -19,8 +21,8 @@
 
 namespace
 {
-using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation>;
+using Column = urd::index<ygg::database::Column>;
+using Relation = urd::builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 namespace qb = ygg::tests::qb;
@@ -65,17 +67,17 @@ Pairs must_pass(const Relation& edges, const Relation& sources, const Relation& 
 
 Pairs must_pass(const Relation& edges, const Relation& sources, const Relation& targets) { return must_pass(edges, sources, targets, all_probes(10)); }
 
-using Vertex = std::vector<uint_t>;
+using Vertex = urd::Store<urd::sequence<uint_t>>;
 
 /// Whether a target of `key` is reachable from one of its sources without visiting a vertex containing `removed`.
-bool reachable(const std::vector<std::tuple<uint_t, Vertex, Vertex>>& edges,
-               const std::vector<std::pair<uint_t, Vertex>>& sources,
-               const std::vector<std::pair<uint_t, Vertex>>& targets,
+bool reachable(const urd::Store<urd::sequence<std::tuple<uint_t, Vertex, Vertex>>>& edges,
+               const urd::Store<urd::sequence<std::pair<uint_t, Vertex>>>& sources,
+               const urd::Store<urd::sequence<std::pair<uint_t, Vertex>>>& targets,
                uint_t of,
                std::optional<uint_t> removed)
 {
     const auto allowed = [&](const Vertex& vertex) { return !removed || std::ranges::find(vertex, *removed) == vertex.end(); };
-    auto frontier = std::vector<Vertex>();
+    auto frontier = urd::Store<urd::sequence<Vertex>>();
     auto seen = std::set<Vertex>();
     for (const auto& [k, s] : sources)
         if (k == of && allowed(s) && seen.insert(s).second)
@@ -116,7 +118,7 @@ TEST(DatabaseMustPass, SeveralSourcesAndTargets)
 {
     // 1 -> 3, 2 -> 3, 3 -> 4, 3 -> 5: from {1, 2} to {4, 5} only 3 must be passed.
     auto edges = Relation({ key, u, v });
-    for (const auto& [from, to] : std::vector<std::pair<uint_t, uint_t>> { { 1, 3 }, { 2, 3 }, { 3, 4 }, { 3, 5 } })
+    for (const auto& [from, to] : urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> { { 1, 3 }, { 2, 3 }, { 3, 4 }, { 3, 5 } })
         edges.insert(std::tuple { static_cast<uint_t>(0), from, to });
     auto sources = Relation({ key, u });
     auto targets = Relation({ key, u });
@@ -164,8 +166,8 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
                     vertex.push_back(static_cast<uint_t>(rng() % (k == 1 ? 9 : objects)));
                 return vertex;
             };
-            auto vertex_columns = std::vector<Column> { key };
-            auto edge_columns = std::vector<Column> { key };
+            auto vertex_columns = urd::Store<urd::sequence<Column>> { key };
+            auto edge_columns = urd::Store<urd::sequence<Column>> { key };
             for (size_t c = 0; c < k; ++c)
             {
                 vertex_columns.emplace_back(static_cast<ygg::uint_t>(c));
@@ -173,22 +175,22 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
             }
             for (size_t c = 0; c < k; ++c)
                 edge_columns.emplace_back(static_cast<ygg::uint_t>(k + c));
-            auto edge_list = std::vector<std::tuple<uint_t, Vertex, Vertex>>();
-            auto source_list = std::vector<std::pair<uint_t, Vertex>>();
-            auto target_list = std::vector<std::pair<uint_t, Vertex>>();
+            auto edge_list = urd::Store<urd::sequence<std::tuple<uint_t, Vertex, Vertex>>>();
+            auto source_list = urd::Store<urd::sequence<std::pair<uint_t, Vertex>>>();
+            auto target_list = urd::Store<urd::sequence<std::pair<uint_t, Vertex>>>();
             auto edges = Relation(std::span<const Column>(edge_columns));
             auto sources = Relation(std::span<const Column>(vertex_columns));
             auto targets = Relation(std::span<const Column>(vertex_columns));
             const auto row = [](uint_t of, const Vertex& a, const Vertex& b = {})
             {
-                auto values = std::vector<uint_t> { of };
+                auto values = urd::Store<urd::sequence<uint_t>> { of };
                 values.insert(values.end(), a.begin(), a.end());
                 values.insert(values.end(), b.begin(), b.end());
                 return values;
             };
-            const auto insert = [](Relation& relation, const std::vector<uint_t>& values)
+            const auto insert = [](Relation& relation, const urd::Store<urd::sequence<uint_t>>& values)
             {
-                auto bytes = std::vector<std::byte>();
+                auto bytes = urd::Store<urd::sequence<std::byte>>();
                 const auto encoded = ygg::database::encode_row<uint_t>(values, bytes);
                 if (relation.contains(encoded))
                     return false;

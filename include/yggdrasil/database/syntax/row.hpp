@@ -6,8 +6,9 @@
 #ifndef YGG_DATABASE_SYNTAX_ROW_HPP_
 #define YGG_DATABASE_SYNTAX_ROW_HPP_
 
-#include "yggdrasil/core/concepts.hpp"
-#include "yggdrasil/core/type_list.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
+#include <boost/mp11.hpp>
 #include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/syntax/columns.hpp"
 
@@ -43,9 +44,14 @@ public:
     template<ByteCodable T>
     [[nodiscard]] T get(size_t position) const
     { return detail::read_column<T>(m_bytes, m_columns, position); }
-    /// Decodes every column as T into the reusable buffer, which the result borrows.
-    template<ByteCodable T>
-    std::span<const T> get_all(std::vector<T>& buffer) const
+    /// Decodes every column as the buffer's elements into the reusable buffer (any contiguous sequence that clears and
+    /// appends), which the result borrows.
+    template<typename Buffer, typename T = std::ranges::range_value_t<Buffer>>
+        requires ByteCodable<T> && std::ranges::contiguous_range<Buffer> && requires(Buffer& buffer, T value) {
+            buffer.clear();
+            buffer.push_back(value);
+        }
+    std::span<const T> get_all(Buffer& buffer) const
     {
         buffer.clear();
         for (size_t position = 0; position < size(); ++position)
@@ -53,7 +59,7 @@ public:
         return buffer;
     }
     template<ByteCodable T>
-    [[nodiscard]] T get(Index<Column> column) const
+    [[nodiscard]] T get(urd::index<Column> column) const
     { return get<T>(column_index(m_columns, column)); }
 
     /// Calls visitor with the value at `position`, decoded as its column's type.
@@ -67,10 +73,12 @@ public:
     }
 };
 
-/// Encode a row whose columns all hold T into the reusable buffer, which the result borrows.
-template<ByteCodable T, std::ranges::sized_range R>
-    requires std::convertible_to<std::ranges::range_reference_t<const R&>, T>
-std::span<const std::byte> encode_row(const R& values, std::vector<std::byte>& buffer)
+/// Encode a row whose columns all hold T into the reusable buffer (any resizable, contiguous sequence of bytes), which
+/// the result borrows.
+template<ByteCodable T, std::ranges::sized_range R, typename Buffer>
+    requires std::convertible_to<std::ranges::range_reference_t<const R&>, T> && std::ranges::contiguous_range<Buffer>
+             && std::same_as<std::ranges::range_value_t<Buffer>, std::byte> && requires(Buffer& buffer, std::size_t size) { buffer.resize(size); }
+std::span<const std::byte> encode_row(const R& values, Buffer& buffer)
 {
     buffer.resize(std::ranges::size(values) * ByteCodec<T>::size);
     auto field = std::span<std::byte>(buffer);
@@ -96,38 +104,5 @@ std::array<std::byte, (ByteCodec<Ts>::size + ... + size_t { 0 })> encode_row(con
 }
 
 }  // namespace ygg::database
-
-namespace ygg
-{
-/// A row with its context. Index values stay raw: a relation's values may be owned by any repository, so callers
-/// resolve them in their owner. The row descriptor itself is retained by value.
-template<typename C>
-class View<database::Row, C>
-{
-    database::Row m_handle;
-    const C* m_context;
-
-public:
-    View(database::Row handle, const C& context) noexcept : m_handle(handle), m_context(&context) {}
-    [[nodiscard]] const auto& get_handle() const noexcept { return m_handle; }
-    [[nodiscard]] const auto& get_data() const noexcept { return m_handle; }
-    [[nodiscard]] const C& get_context() const noexcept { return *m_context; }
-    [[nodiscard]] std::span<const std::byte> bytes() const noexcept { return m_handle.bytes(); }
-    [[nodiscard]] std::span<const database::ColumnLayout> columns() const noexcept { return m_handle.columns(); }
-    [[nodiscard]] size_t size() const noexcept { return m_handle.size(); }
-    [[nodiscard]] bool empty() const noexcept { return m_handle.empty(); }
-
-    template<ygg::ByteCodable T>
-    [[nodiscard]] T get(size_t position) const
-    { return m_handle.template get<T>(position); }
-    template<ygg::ByteCodable T>
-    [[nodiscard]] T get(Index<database::Column> column) const
-    { return get<T>(database::column_index(columns(), column)); }
-
-    template<typename Visitor>
-    auto visit(size_t position, Visitor&& visitor) const
-    { return m_handle.visit(position, std::forward<Visitor>(visitor)); }
-};
-}  // namespace ygg
 
 #endif

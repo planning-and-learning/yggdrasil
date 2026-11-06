@@ -15,6 +15,7 @@
 #include <optional>
 #include <stdexcept>
 #include <utility>
+#include <urd/config.hpp>
 
 namespace ygg::database
 {
@@ -38,7 +39,7 @@ public:
 
 /// Interns typed query records. Records are prepared by prepare_for_insert
 /// The erased query record followed by one concrete record per constructor tag.
-using QuerySymbolTypes = ConcatTypeListsT<TypeList<Query<>>, MapTypeListT<Query, QueryConstructorTags>>;
+using QuerySymbolTypes = boost::mp11::mp_append<boost::mp11::mp_list<Query<>>, boost::mp11::mp_transform<Query, QueryConstructorTags>>;
 
 /// (query_construction.hpp) before insertion; children precede their parents.
 class QueryRepository
@@ -49,7 +50,7 @@ public:
     using SymbolTypes = QuerySymbolTypes;
 
 private:
-    ApplyTypeListT<formalism::SymbolRepository, QuerySymbolTypes> m_symbols;
+    boost::mp11::mp_apply<formalism::SymbolRepository, QuerySymbolTypes> m_symbols;
     QueryRepositoryFactory m_factory;
     size_t m_index;
 
@@ -57,14 +58,21 @@ private:
 
 public:
     ~QueryRepository();
+
+    /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
+    template<typename T>
+    [[nodiscard]] urd::view<T, QueryRepository> view(urd::index<T> index) const noexcept
+    { return { index, *this }; }
     QueryRepository(const QueryRepository&) = delete;
     QueryRepository& operator=(const QueryRepository&) = delete;
     QueryRepository(QueryRepository&&) = delete;
     QueryRepository& operator=(QueryRepository&&) = delete;
 
     [[nodiscard]] size_t get_index() const noexcept { return m_index; }
+    /// The repository's number, as urd::view asks of a context.
+    [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
     [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
-    friend const QueryRepository& get_repository(const QueryRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
+    friend const QueryRepository& get_repository(const QueryRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
     [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
 
@@ -75,25 +83,25 @@ public:
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
-    std::optional<View<Index<T>, QueryRepository>> find(const Data<T>& data) const noexcept
+    std::optional<urd::view<T, QueryRepository>> find(const urd::data<T>& data) const noexcept
     {
         if (const auto index = m_symbols.template find_local<T>(data))
-            return View<Index<T>, QueryRepository>(*index, *this);
+            return urd::view<T, QueryRepository>(*index, *this);
         return std::nullopt;
     }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
-    std::pair<View<Index<T>, QueryRepository>, bool> insert(Data<T>& data)
+    std::pair<urd::view<T, QueryRepository>, bool> insert(urd::data<T>& data)
     {
         const auto [index, created] = m_symbols.template insert_local<T>(data);
         data.index = index;
-        return { View<Index<T>, QueryRepository>(index, *this), created };
+        return { urd::view<T, QueryRepository>(index, *this), created };
     }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
-    const Data<T>& operator[](Index<T> index) const noexcept
+    const urd::data<T>& operator[](urd::index<T> index) const noexcept
     { return m_symbols.template local<T>(index); }
 };
 

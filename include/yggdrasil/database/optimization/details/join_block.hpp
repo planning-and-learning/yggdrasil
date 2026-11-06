@@ -6,6 +6,8 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_JOIN_BLOCK_HPP_
 
 #include "yggdrasil/database/syntax/operator_builder.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/semantics/canonicalization.hpp"
 
@@ -20,18 +22,18 @@ namespace ygg::database::detail
 /// Atoms are planned operands; columns with equal labels are join variables.
 struct JoinBlock
 {
-    std::vector<QueryView<>> atoms;
+    urd::Store<urd::sequence<QueryView<>>> atoms;
     /// The output variables as a sorted set.
-    std::vector<Index<Column>> required;
+    urd::Store<urd::sequence<urd::index<Column>>> required;
 };
 
-std::vector<Index<Column>> variables(QueryView<> query);
+urd::Store<urd::sequence<urd::index<Column>>> variables(QueryView<> query);
 
 /// R ⋉ S, written R ⋈ π_common(S) with the existing operators, as Yannakakis' semijoin programs use it.
 QueryView<> semijoin(OperatorBuilder& build, QueryView<> lhs, QueryView<> rhs);
 
 /// The atoms' variables ordered by label.
-std::vector<Index<Column>> variable_order(std::span<const QueryView<>> atoms);
+urd::Store<urd::sequence<urd::index<Column>>> variable_order(std::span<const QueryView<>> atoms);
 }  // namespace ygg::database::detail
 
 #endif

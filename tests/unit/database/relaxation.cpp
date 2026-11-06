@@ -1,4 +1,6 @@
 #include "query_helpers.hpp"
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 #include <algorithm>
 #include <array>
@@ -16,8 +18,8 @@
 
 namespace
 {
-using Column = ygg::Index<ygg::database::Column>;
-using Relation = ygg::Builder<ygg::database::Relation>;
+using Column = urd::index<ygg::database::Column>;
+using Relation = urd::builder<ygg::database::Relation>;
 using View = ygg::database::QueryView<>;
 namespace qb = ygg::tests::qb;
 const Column x(0), y(1), z(2);
@@ -29,9 +31,9 @@ ygg::database::BorrowedRelationView borrow(const Relation& relation)
 }
 
 /// Evaluates a query over the given inputs.
-Relation evaluate(View query, const std::vector<const Relation*>& inputs)
+Relation evaluate(View query, const urd::Store<urd::sequence<const Relation*>>& inputs)
 {
-    auto bindings = std::vector<ygg::database::BorrowedRelationView>();
+    auto bindings = urd::Store<urd::sequence<ygg::database::BorrowedRelationView>>();
     for (const auto* input : inputs)
         bindings.push_back(borrow(*input));
     auto evaluator = ygg::database::QueryEvaluator(ygg::database::compile({ query }));
@@ -62,7 +64,7 @@ void expect_superset(View query, const ygg::database::Relaxation& relaxation, si
     if (!relaxed_query)
         return;
     const auto full = evaluate(query, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
-    auto known = std::vector<const Relation*>();
+    auto known = urd::Store<urd::sequence<const Relation*>>();
     for (const auto slot : relaxation.slots)
         known.push_back(&inputs[slot]);
     const auto relaxed = evaluate(*relaxed_query, known);
@@ -86,7 +88,7 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
     auto random = std::mt19937(4711);
     const auto labels_of = [](View query)
     {
-        auto result = std::vector<Column>();
+        auto result = urd::Store<urd::sequence<Column>>();
         for (const auto& column : query.columns())
             result.push_back(column.label);
         return result;
@@ -180,7 +182,7 @@ TEST(DatabaseRelaxation, RandomExpressionsAreOverApproximatedAndExactWhenKnown)
         const auto all_known = relax(root, { true, true, true, true });
         ASSERT_TRUE(all_known->relaxation.queries[0].has_value());
         EXPECT_EQ(ygg::database::column_labels(all_known->relaxation.queries[0].value().columns()), labels_of(root));
-        auto all = std::vector<const Relation*>();
+        auto all = urd::Store<urd::sequence<const Relation*>>();
         for (const auto slot : all_known->relaxation.slots)
             all.push_back(&inputs[slot]);
         const auto expected = evaluate(root, { &inputs[0], &inputs[1], &inputs[2], &inputs[3] });
@@ -202,8 +204,8 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
     // An unknown conjunct drops out of a join; its label z is unconstrained.
     const auto joined = relax(qb::join(queries, known_edges, unknown), both_known);
     ASSERT_TRUE(joined->relaxation.queries[0].has_value());
-    EXPECT_EQ(ygg::database::column_labels(joined->relaxation.queries[0].value().columns()), (std::vector<Column> { x, y }));
-    EXPECT_EQ(joined->relaxation.slots, (std::vector<size_t> { 0 }));
+    EXPECT_EQ(ygg::database::column_labels(joined->relaxation.queries[0].value().columns()), (urd::Store<urd::sequence<Column>> { x, y }));
+    EXPECT_EQ(joined->relaxation.slots, (urd::Store<urd::sequence<size_t>> { 0 }));
 
     // A union with an unknown side constrains nothing.
     const auto renamed = qb::rename(queries, unknown, { x, y });
@@ -212,7 +214,7 @@ TEST(DatabaseRelaxation, UnknownInputsDropConstraints)
     // A semijoin with an unknown lhs still constrains the shared label y by its known rhs: ⊤ ⋉ B̂ = B̂ on y.
     const auto semi = relax(qb::semijoin(queries, unknown, known_edges), both_known);
     ASSERT_TRUE(semi->relaxation.queries[0].has_value());
-    EXPECT_EQ(ygg::database::column_labels(semi->relaxation.queries[0].value().columns()), (std::vector<Column> { y }));
+    EXPECT_EQ(ygg::database::column_labels(semi->relaxation.queries[0].value().columns()), (urd::Store<urd::sequence<Column>> { y }));
 
     // A known antijoin rhs stays: the result is exact.
     const auto anti = relax(qb::antijoin(queries, known_edges, blocked), both_known);
@@ -242,7 +244,7 @@ TEST(DatabaseRelaxation, ProjectedJoinEliminatesUnneededConjunctsAndAntijoins)
     const auto plan = ygg::database::compile({ relaxed->relaxation.queries[0].value() });
     for (size_t i = 0; i < plan.node_count(); ++i)
     {
-        const auto node = plan[ygg::Index<ygg::database::Query<>>(ygg::to_uint_t(i))];
+        const auto node = plan[urd::index<ygg::database::Query<>>(ygg::to_uint_t(i))];
         EXPECT_FALSE(ygg::database::is<ygg::database::QueryAntijoinTag>(node));
         // Every join has a nullary side: the existence test of I.
         if (ygg::database::is<ygg::database::QueryJoinTag>(node))
@@ -267,7 +269,7 @@ TEST(DatabaseRelaxation, RootsShareOneInputNumbering)
     const auto roots = std::array { qb::project(queries, joined, { x }), qb::project(queries, c, { z }) };
     const auto relaxed = relax(roots, { true, false, true, false });
     ASSERT_TRUE(relaxed->relaxation.queries[0].has_value() && relaxed->relaxation.queries[1].has_value());
-    EXPECT_EQ(relaxed->relaxation.slots, (std::vector<size_t> { 0, 2 }));
+    EXPECT_EQ(relaxed->relaxation.slots, (urd::Store<urd::sequence<size_t>> { 0, 2 }));
     auto inputs = std::array<Relation, 4> { Relation({ x, y }), Relation({ x, y }), Relation({ y, z }), Relation({ x, z }) };
     inputs[0].insert(std::tuple { static_cast<ygg::uint_t>(1), static_cast<ygg::uint_t>(2) });
     inputs[2].insert(std::tuple { static_cast<ygg::uint_t>(2), static_cast<ygg::uint_t>(3) });
@@ -296,8 +298,8 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
     evaluator.bind_slot(0, edges);
     evaluator.bind_slot(1, identity);
     const auto predecessors = evaluator.prepare({ 1 });
-    auto bytes = std::vector<std::byte>();
-    auto emitted = std::vector<ygg::uint_t>();
+    auto bytes = urd::Store<urd::sequence<std::byte>>();
+    auto emitted = urd::Store<urd::sequence<ygg::uint_t>>();
     evaluator.evaluate(predecessors,
                        ygg::database::encode_row<ygg::uint_t>(std::array { static_cast<ygg::uint_t>(0) }, bytes),
                        [&](std::span<const std::byte> row)
@@ -306,7 +308,7 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
                            return true;
                        });
     std::ranges::sort(emitted);
-    auto expected = std::vector<ygg::uint_t>();
+    auto expected = urd::Store<urd::sequence<ygg::uint_t>>();
     for (ygg::uint_t o = 0; o < objects; ++o)
         expected.push_back(o);
     EXPECT_EQ(emitted, expected);
@@ -314,14 +316,14 @@ TEST(DatabaseRelaxation, ProjectedAwayConjunctsAreTestedOnceByBoundEvaluation)
 
 /// The y of each row a bound evaluation of `query` (columns x, y) emits for x = 0, in order; on_row asks to stop after
 /// `limit` rows.
-std::vector<ygg::uint_t> bound_successors(View query, const std::vector<const Relation*>& inputs, size_t limit = std::numeric_limits<size_t>::max())
+urd::Store<urd::sequence<ygg::uint_t>> bound_successors(View query, const urd::Store<urd::sequence<const Relation*>>& inputs, size_t limit = std::numeric_limits<size_t>::max())
 {
     auto evaluator = ygg::database::bound::QueryEvaluator(query);
     for (size_t slot = 0; slot < inputs.size(); ++slot)
         evaluator.bind_slot(slot, *inputs[slot]);
     const auto successors = evaluator.prepare({ 0 });
-    auto bytes = std::vector<std::byte>();
-    auto emitted = std::vector<ygg::uint_t>();
+    auto bytes = urd::Store<urd::sequence<std::byte>>();
+    auto emitted = urd::Store<urd::sequence<ygg::uint_t>>();
     evaluator.evaluate(successors,
                        ygg::database::encode_row<ygg::uint_t>(std::array { static_cast<ygg::uint_t>(0) }, bytes),
                        [&](std::span<const std::byte> row)
@@ -353,7 +355,7 @@ TEST(DatabaseRelaxation, VariablesReadByLaterFiltersAreNotExistenceTests)
     const auto equal = qb::project(queries, qb::select_equal(queries, qb::join(queries, edges, identity), u, y), { x, y });
     auto successors = bound_successors(equal, { &e, &i });
     std::ranges::sort(successors);
-    EXPECT_EQ(successors, (std::vector<ygg::uint_t> { 5, 6, 7 }));
+    EXPECT_EQ(successors, (urd::Store<urd::sequence<ygg::uint_t>> { 5, 6, 7 }));
 
     // A later antijoin reads u as an outer variable; it rejects I's first row, u = 5. I binds u, so it may repeat rows.
     const auto anti =
@@ -412,7 +414,7 @@ TEST(DatabaseRelaxation, SharedSubqueriesKeepTheRequestedColumnOrder)
     const auto roots = std::array { qb::project(queries, qb::select_value(queries, r, x, static_cast<ygg::uint_t>(0)), { y }), r };
     const auto relaxed = relax(roots, { true, true, true, true });
     ASSERT_TRUE(relaxed->relaxation.queries[1].has_value());
-    EXPECT_EQ(ygg::database::column_labels(relaxed->relaxation.queries[1].value().columns()), (std::vector<Column> { x, y }));
+    EXPECT_EQ(ygg::database::column_labels(relaxed->relaxation.queries[1].value().columns()), (urd::Store<urd::sequence<Column>> { x, y }));
 }
 
 /// Whether the root's relaxation, evaluated on the known inputs, equals `expected` evaluated on all of them.
@@ -420,7 +422,7 @@ void expect_relaxes_to(View query, View expected, const std::array<bool, 4>& kno
 {
     const auto relaxed = relax(query, known);
     ASSERT_TRUE(relaxed->relaxation.queries[0].has_value());
-    auto bound = std::vector<const Relation*>();
+    auto bound = urd::Store<urd::sequence<const Relation*>>();
     for (const auto slot : relaxed->relaxation.slots)
         bound.push_back(&inputs[slot]);
     const auto actual = evaluate(relaxed->relaxation.queries[0].value(), bound);

@@ -3,16 +3,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef YGG_CORE_BYTE_CODEC_HPP_
-#define YGG_CORE_BYTE_CODEC_HPP_
-
-#include "yggdrasil/core/bytes.hpp"
-#include "yggdrasil/core/type_id.hpp"
+#ifndef YGG_DATABASE_BYTE_CODEC_HPP_
+#define YGG_DATABASE_BYTE_CODEC_HPP_
 
 #include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <span>
@@ -21,6 +19,22 @@
 
 namespace ygg
 {
+
+/// The value types of byte-encoded storage. Values are fixed and never reused.
+enum class TypeId : std::uint8_t
+{
+    none = 0,  // no type (yet)
+    uint32 = 1,
+    int32 = 2,
+    uint64 = 3,
+    int64 = 4,
+    float32 = 5,
+    float64 = 6,
+    boolean = 7,
+};
+
+/// Formats as its number.
+constexpr std::uint8_t format_as(TypeId id) noexcept { return static_cast<std::uint8_t>(id); }
 
 /// The value types of byte-encoded storage, one per TypeId.
 template<typename T>
@@ -47,13 +61,10 @@ struct ByteCodec
 
     static void encode(T value, std::span<std::byte> bytes)
     {
+        if (bytes.size() != size)
+            throw std::invalid_argument("ByteCodec: incorrect byte width.");
         if constexpr (std::same_as<T, bool>)
-        {
-            if (bytes.size() != size)
-                throw std::invalid_argument("ByteCodec<bool>: incorrect byte width.");
             bytes[0] = value ? std::byte { 1 } : std::byte { 0 };
-            return;
-        }
         else
         {
             // Match ygg::EqualTo: both signed zeros and all NaN payloads are equal.
@@ -64,20 +75,26 @@ struct ByteCodec
                 else if (value == T { 0 })
                     value = T { 0 };
             }
-            store_unaligned(bytes, value);
+            std::memcpy(bytes.data(), &value, size);
         }
     }
 
     static T decode(std::span<const std::byte> bytes)
     {
+        if (bytes.size() != size)
+            throw std::invalid_argument("ByteCodec: incorrect byte width.");
         if constexpr (std::same_as<T, bool>)
         {
-            if (bytes.size() != size || (bytes[0] != std::byte { 0 } && bytes[0] != std::byte { 1 }))
+            if (bytes[0] != std::byte { 0 } && bytes[0] != std::byte { 1 })
                 throw std::invalid_argument("ByteCodec<bool>: invalid encoding.");
             return bytes[0] == std::byte { 1 };
         }
         else
-            return load_unaligned<T>(bytes);
+        {
+            auto value = T {};
+            std::memcpy(&value, bytes.data(), size);
+            return value;
+        }
     }
 };
 

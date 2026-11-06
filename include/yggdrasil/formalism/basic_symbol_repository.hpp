@@ -18,16 +18,9 @@
 #ifndef YGG_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 #define YGG_FORMALISM_BASIC_SYMBOL_REPOSITORY_HPP_
 
-#include "yggdrasil/buffer/declarations.hpp"
-#include "yggdrasil/buffer/indexed_hash_set.hpp"
-#include "yggdrasil/buffer/segmented_buffer.hpp"
-#include "yggdrasil/containers/indexed_hash_set.hpp"
-#include "yggdrasil/containers/segment_sizes.hpp"
-#include "yggdrasil/containers/tuple.hpp"
-#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/semantics/hash.hpp"
+#include <urd/elements/flat.hpp>
 
 #include <cassert>
 #include <memory>
@@ -35,6 +28,13 @@
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
+#include <urd/elements/equal_to.hpp>
+#include <urd/elements/hash.hpp>
+#include <urd/elements/prehashed.hpp>
+#include <urd/memory.hpp>
+#include <urd/repr/records/arena.hpp>
+#include <urd/repr/records/records.hpp>
+#include <urd/store.hpp>
 #include <utility>
 
 namespace ygg::formalism
@@ -47,49 +47,24 @@ template<typename T, bool ThreadSafe = false>
 class BasicSymbolRepository
 {
 private:
-    template<typename U, bool Trivial = uses_trivial_storage_v<U>>
-    struct Slot;
-
-    template<typename U>
-    struct Slot<U, true>
+    /// The layer's records: a urd pool of them, each once, read by index; the request decides how they are stored
+    /// (in place or serialized into an arena), with references that hold while others are inserted (views borrow them).
+    struct Slot
     {
-        using Container = ::ygg::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, ::ygg::default_first_segment_size, ThreadSafe>;
+        using Records = urd::Store<urd::pool<urd::data<T>>, urd::flat, urd::stable_refs, std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
 
-        Container container;
+        Records records { urd::layer { 0 } };
         size_t parent_size = 0;
 
-        static size_t hash(const Data<U>& builder) noexcept { return Container::hash(builder); }
+        static size_t hash(const urd::data<T>& builder) noexcept { return urd::Hash<urd::data<T>> {}(builder); }
+        [[nodiscard]] const urd::data<T>& operator[](size_t local) const noexcept { return records[urd::index<urd::data<T>>(static_cast<uint_t>(local))]; }
 
-        void clear() noexcept { container.clear(); }
-        [[nodiscard]] size_t memory_usage() const noexcept { return container.memory_usage(); }
-    };
-
-    template<typename U>
-    struct Slot<U, false>
-    {
-        std::unique_ptr<ygg::buffer::SegmentedBuffer> arena;
-        std::unique_ptr<ygg::buffer::Buffer> buffer;
-        using Container = ygg::buffer::IndexedHashSet<U, ::ygg::Hash<Data<U>>, ::ygg::EqualTo<Data<U>>, ::ygg::default_first_segment_size, ThreadSafe>;
-
-        Container container;
-        size_t parent_size = 0;
-
-        static size_t hash(const Data<U>& builder) noexcept { return Container::hash(builder); }
-
-        Slot() : arena(std::make_unique<ygg::buffer::SegmentedBuffer>()), buffer(std::make_unique<ygg::buffer::Buffer>()), container(*buffer, *arena) {}
-
-        void clear() noexcept
-        {
-            container.clear();
-            arena->clear();
-        }
-
-        [[nodiscard]] size_t memory_usage() const noexcept
-        { return (arena ? arena->capacity() : 0) + (buffer ? buffer->buf_.capacity() : 0) + container.memory_usage(); }
+        void clear() noexcept { records.clear(); }
+        [[nodiscard]] size_t memory_usage() const noexcept { return urd::memory_usage(records); }
     };
 
     const BasicSymbolRepository* m_parent;
-    Slot<T> m_slot;
+    Slot m_slot;
 
     void clear_slot() noexcept
     {
@@ -106,53 +81,48 @@ public:
      * knows the context.
      */
 
-    [[nodiscard]] std::optional<Index<T>> find_local_with_hash(const Data<T>& builder, size_t h) const noexcept;
+    [[nodiscard]] std::optional<urd::index<T>> find_local_with_hash(const urd::data<T>& builder, size_t h) const noexcept;
 
-    /// Performs a local lookup without locking the underlying hash shard. The
-    /// underlying collection's unsafe publication, lifetime, and immutability
-    /// preconditions apply.
-    [[nodiscard]] std::optional<Index<T>> find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept;
-
-    [[nodiscard]] std::optional<Index<T>> find_local(const Data<T>& builder) const noexcept
+    [[nodiscard]] std::optional<urd::index<T>> find_local(const urd::data<T>& builder) const noexcept
     { return find_local_with_hash(builder, BasicSymbolRepository::hash(builder)); }
 
-    std::pair<Index<T>, bool> insert_local_with_hash(Data<T>& builder, size_t h);
+    std::pair<urd::index<T>, bool> insert_local_with_hash(urd::data<T>& builder, size_t h);
 
-    std::pair<Index<T>, bool> insert_local(Data<T>& builder);
+    std::pair<urd::index<T>, bool> insert_local(urd::data<T>& builder);
 
     /// Completes a hierarchy-wide miss by rechecking this layer before publishing
     /// storage.
-    std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h);
+    std::pair<urd::index<T>, bool> create_local_with_hash(urd::data<T>& builder, size_t h);
 
     /// Unchecked, like std::vector::operator[]: index must be local (asserted in Debug).
-    [[nodiscard]] const Data<T>& local(Index<T> index) const noexcept
+    [[nodiscard]] const urd::data<T>& local(urd::index<T> index) const noexcept
     {
         assert(is_local(index));
-        return m_slot.container[Index<T>(index.value - m_slot.parent_size)];
+        return m_slot[index.value - m_slot.parent_size];
     }
 
-    [[nodiscard]] const Data<T>& at_local(Index<T> index) const
+    [[nodiscard]] const urd::data<T>& at_local(urd::index<T> index) const
     {
         if (!is_local(index))
             throw std::out_of_range("Symbol index not found in local repository.");
         return local(index);
     }
 
-    [[nodiscard]] const Data<T>& front_local() const
+    [[nodiscard]] const urd::data<T>& front_local() const
     {
-        if (m_slot.container.empty())
+        if (m_slot.records.empty())
             throw std::out_of_range("Symbol index not found in local repository.");
-        return m_slot.container.front();
+        return m_slot[0];
     }
 
-    [[nodiscard]] size_t local_size() const noexcept { return m_slot.container.size(); }
+    [[nodiscard]] size_t local_size() const noexcept { return m_slot.records.size(); }
 
-    [[nodiscard]] size_t size() const noexcept { return m_slot.parent_size + m_slot.container.size(); }
+    [[nodiscard]] size_t size() const noexcept { return m_slot.parent_size + m_slot.records.size(); }
 
     [[nodiscard]] size_t parent_size() const noexcept { return m_slot.parent_size; }
 
-    [[nodiscard]] bool is_local(Index<T> index) const noexcept
-    { return index != Index<T>::max() && ygg::uint_t(index) >= m_slot.parent_size && ygg::uint_t(index) < size(); }
+    [[nodiscard]] bool is_local(urd::index<T> index) const noexcept
+    { return index != urd::index<T>() && ygg::uint_t(index.value) >= m_slot.parent_size && ygg::uint_t(index.value) < size(); }
 
     [[nodiscard]] bool exists_parent_mutation() const noexcept
     {
@@ -189,12 +159,12 @@ public:
 
     [[nodiscard]] size_t memory_usage() const noexcept;
 
-    static size_t hash(const Data<T>& builder) noexcept;
+    static size_t hash(const urd::data<T>& builder) noexcept;
 };
 
 template<typename T, bool ThreadSafe>
-size_t BasicSymbolRepository<T, ThreadSafe>::hash(const Data<T>& builder) noexcept
-{ return Slot<T>::hash(builder); }
+size_t BasicSymbolRepository<T, ThreadSafe>::hash(const urd::data<T>& builder) noexcept
+{ return Slot::hash(builder); }
 
 }  // namespace ygg::formalism
 

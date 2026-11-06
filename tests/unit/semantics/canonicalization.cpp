@@ -17,103 +17,40 @@
 
 #include "yggdrasil/semantics/canonicalization.hpp"
 
-#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/core/config.hpp"
+#include <urd/elements/flat.hpp>
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
-#include <string>
-#include <tuple>
 #include <vector>
 
 namespace ygg::tests
 {
 struct CanonicalizationTestTag;
-
-namespace
-{
-struct CanonicalizationContext
-{
-    const std::vector<ygg::Data<CanonicalizationTestTag>>* data = nullptr;
-    std::vector<std::string> labels;
-
-    const ygg::Data<CanonicalizationTestTag>& operator[](ygg::Index<CanonicalizationTestTag> index) const;
-    friend const CanonicalizationContext& get_repository(const CanonicalizationContext& context YGG_LIFETIMEBOUND) noexcept { return context; }
-};
-}  // namespace
+using Tag = CanonicalizationTestTag;
 }  // namespace ygg::tests
 
-namespace ygg
-{
 template<>
-struct Data<ygg::tests::CanonicalizationTestTag>
+struct urd::data<ygg::tests::CanonicalizationTestTag>
 {
     ygg::uint_t value {};
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Data::value> {}; }
+    data() = default;
+    explicit data(ygg::uint_t value_) noexcept : value(value_) {}
+
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::value> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::value> {}; }
 };
-
-}  // namespace ygg
-
-namespace fmt
-{
-template<typename T>
-struct formatter<ygg::View<T, ygg::tests::CanonicalizationContext>, char>
-{
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const ygg::View<T, ygg::tests::CanonicalizationContext>& value, FormatContext& ctx) const
-    { return fmt::format_to(ctx.out(), "{}", value.get_context().labels.at(value.get_data().value)); }
-};
-}  // namespace fmt
 
 namespace ygg::tests
 {
-const ygg::Data<CanonicalizationTestTag>& CanonicalizationContext::operator[](ygg::Index<CanonicalizationTestTag> index) const
-{ return data->at(index.get_value()); }
-
-namespace
-{
-struct InvalidCanonicalizationContext
-{
-};
-[[maybe_unused]] int get_canonical_context(const ygg::Index<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&) { return 0; }
-[[maybe_unused]] int get_canonical_context(const ygg::Data<CanonicalizationTestTag>&, const InvalidCanonicalizationContext&) { return 0; }
-}  // namespace
-
-namespace
-{
-using Tag = CanonicalizationTestTag;
-
-template<typename C, typename List>
-concept CanCheckCanonicalization = requires(const C& context, const List& list) {
-    ygg::is_canonical(context, list);
-    ygg::is_canonical<false>(context, list);
-};
-
-template<typename C, typename List>
-concept CanCanonicalize = requires(const C& context, List& list) {
-    ygg::canonicalize(context, list);
-    ygg::canonicalize<false>(context, list);
-};
-
-static_assert(CanCheckCanonicalization<CanonicalizationContext, ygg::IndexList<Tag>>);
-static_assert(CanCheckCanonicalization<CanonicalizationContext, ygg::DataList<Tag>>);
-static_assert(CanCanonicalize<CanonicalizationContext, ygg::IndexList<Tag>>);
-static_assert(CanCanonicalize<CanonicalizationContext, ygg::DataList<Tag>>);
-static_assert(!CanCheckCanonicalization<InvalidCanonicalizationContext, ygg::IndexList<Tag>>);
-static_assert(!CanCheckCanonicalization<InvalidCanonicalizationContext, ygg::DataList<Tag>>);
-static_assert(!CanCanonicalize<InvalidCanonicalizationContext, ygg::IndexList<Tag>>);
-static_assert(!CanCanonicalize<InvalidCanonicalizationContext, ygg::DataList<Tag>>);
-}
 
 TEST(YggdrasilTests, CommonCanonicalizeIndexListSortsAndDeduplicates)
 {
-    auto list = ygg::IndexList<Tag> {};
-    list.push_back(ygg::Index<Tag>(2));
-    list.push_back(ygg::Index<Tag>(1));
-    list.push_back(ygg::Index<Tag>(2));
-    list.push_back(ygg::Index<Tag>(3));
+    auto list = urd::flat_vector<urd::index<Tag>> {};
+    list.push_back(urd::index<Tag>(2));
+    list.push_back(urd::index<Tag>(1));
+    list.push_back(urd::index<Tag>(2));
+    list.push_back(urd::index<Tag>(3));
 
     EXPECT_FALSE(ygg::is_canonical(list));
     EXPECT_FALSE(ygg::is_canonical<false>(list));
@@ -123,27 +60,27 @@ TEST(YggdrasilTests, CommonCanonicalizeIndexListSortsAndDeduplicates)
     ASSERT_EQ(list.size(), 4);
     EXPECT_FALSE(ygg::is_canonical(list));
     EXPECT_TRUE(ygg::is_canonical<false>(list));
-    EXPECT_EQ(list[0].get_value(), 1);
-    EXPECT_EQ(list[1].get_value(), 2);
-    EXPECT_EQ(list[2].get_value(), 2);
-    EXPECT_EQ(list[3].get_value(), 3);
+    EXPECT_EQ(list[0].value, 1);
+    EXPECT_EQ(list[1].value, 2);
+    EXPECT_EQ(list[2].value, 2);
+    EXPECT_EQ(list[3].value, 3);
 
     ygg::canonicalize(list);
 
     ASSERT_EQ(list.size(), 3);
     EXPECT_TRUE(ygg::is_canonical(list));
-    EXPECT_EQ(list[0].get_value(), 1);
-    EXPECT_EQ(list[1].get_value(), 2);
-    EXPECT_EQ(list[2].get_value(), 3);
+    EXPECT_EQ(list[0].value, 1);
+    EXPECT_EQ(list[1].value, 2);
+    EXPECT_EQ(list[2].value, 3);
 }
 
-TEST(YggdrasilTests, CommonCanonicalizeDataListSortsAndDeduplicates)
+TEST(YggdrasilTests, CommonCanonicalizeRecordListSortsAndDeduplicates)
 {
-    auto list = ygg::DataList<Tag> {};
-    list.push_back(ygg::Data<Tag> { .value = 3 });
-    list.push_back(ygg::Data<Tag> { .value = 1 });
-    list.push_back(ygg::Data<Tag> { .value = 3 });
-    list.push_back(ygg::Data<Tag> { .value = 2 });
+    auto list = urd::flat_vector<urd::data<Tag>> {};
+    list.push_back(urd::data<Tag>(3));
+    list.push_back(urd::data<Tag>(1));
+    list.push_back(urd::data<Tag>(3));
+    list.push_back(urd::data<Tag>(2));
 
     EXPECT_FALSE(ygg::is_canonical(list));
     EXPECT_FALSE(ygg::is_canonical<false>(list));
@@ -165,63 +102,6 @@ TEST(YggdrasilTests, CommonCanonicalizeDataListSortsAndDeduplicates)
     EXPECT_EQ(list[0].value, 1);
     EXPECT_EQ(list[1].value, 2);
     EXPECT_EQ(list[2].value, 3);
-}
-
-TEST(YggdrasilTests, CommonCanonicalizeContextAwareIndexListSortsAndDeduplicatesByFormattedData)
-{
-    const auto data = std::vector<ygg::Data<Tag>> { { .value = 2 }, { .value = 0 }, { .value = 0 } };
-    const auto context = CanonicalizationContext { .data = &data, .labels = { "a", "b", "c" } };
-    auto list = ygg::IndexList<Tag> {};
-    list.push_back(ygg::Index<Tag>(0));
-    list.push_back(ygg::Index<Tag>(2));
-    list.push_back(ygg::Index<Tag>(1));
-
-    EXPECT_FALSE(ygg::is_canonical(context, list));
-    EXPECT_FALSE(ygg::is_canonical<false>(context, list));
-
-    ygg::canonicalize<false>(context, list);
-
-    ASSERT_EQ(list.size(), 3);
-    EXPECT_FALSE(ygg::is_canonical(context, list));
-    EXPECT_TRUE(ygg::is_canonical<false>(context, list));
-    EXPECT_EQ(list[0].get_value(), 1);
-    EXPECT_EQ(list[1].get_value(), 2);
-    EXPECT_EQ(list[2].get_value(), 0);
-
-    ygg::canonicalize(context, list);
-
-    ASSERT_EQ(list.size(), 2);
-    EXPECT_TRUE(ygg::is_canonical(context, list));
-    EXPECT_EQ(list[0].get_value(), 1);
-    EXPECT_EQ(list[1].get_value(), 0);
-}
-
-TEST(YggdrasilTests, CommonCanonicalizeContextAwareDataListSortsAndDeduplicatesByFormattedData)
-{
-    const auto context = CanonicalizationContext { .data = nullptr, .labels = { "a", "b", "c" } };
-    auto list = ygg::DataList<Tag> {};
-    list.push_back(ygg::Data<Tag> { .value = 2 });
-    list.push_back(ygg::Data<Tag> { .value = 0 });
-    list.push_back(ygg::Data<Tag> { .value = 2 });
-
-    EXPECT_FALSE(ygg::is_canonical(context, list));
-    EXPECT_FALSE(ygg::is_canonical<false>(context, list));
-
-    ygg::canonicalize<false>(context, list);
-
-    ASSERT_EQ(list.size(), 3);
-    EXPECT_FALSE(ygg::is_canonical(context, list));
-    EXPECT_TRUE(ygg::is_canonical<false>(context, list));
-    EXPECT_EQ(list[0].value, 0);
-    EXPECT_EQ(list[1].value, 2);
-    EXPECT_EQ(list[2].value, 2);
-
-    ygg::canonicalize(context, list);
-
-    ASSERT_EQ(list.size(), 2);
-    EXPECT_TRUE(ygg::is_canonical(context, list));
-    EXPECT_EQ(list[0].value, 0);
-    EXPECT_EQ(list[1].value, 2);
 }
 
 TEST(YggdrasilTests, CommonCanonicalizeOptionalIsNoOp)

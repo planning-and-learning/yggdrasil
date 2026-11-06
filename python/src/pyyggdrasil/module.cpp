@@ -1,4 +1,5 @@
 #include "module.hpp"
+#include "yggdrasil/python/type_casters.hpp"
 
 #include "pyyggdrasil/database/module.hpp"
 #include "pyyggdrasil/diagnostics/module.hpp"

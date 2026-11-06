@@ -6,7 +6,7 @@
 #ifndef YGG_DATABASE_OPTIMIZATION_DETAILS_DPCCP_HPP_
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_DPCCP_HPP_
 
-#include "yggdrasil/core/bit.hpp"
+#include <urd/repr/containers/bit.hpp>
 
 #include <bit>
 #include <concepts>
@@ -31,11 +31,11 @@ class DpccpEnumerator
     [[nodiscard]] std::uint64_t neighbors(std::uint64_t vertices) const
     {
         std::uint64_t result = 0;
-        bit::for_each_set_bit(vertices, [&](size_t vertex) { result |= m_adjacency[vertex]; });
+        urd::repr::bit::for_each_set_bit(vertices, [&](size_t vertex) { result |= m_adjacency[vertex]; });
         return result & ~vertices;
     }
 
-    static std::uint64_t through(size_t vertex) { return bit::lo_set<std::uint64_t>[vertex + 1]; }
+    static std::uint64_t through(size_t vertex) { return urd::repr::bit::lo_set<std::uint64_t>[vertex + 1]; }
 
     bool expand_complement(std::uint64_t left, std::uint64_t right, std::uint64_t excluded)
     {
@@ -106,13 +106,13 @@ bool enumerate_connected_pairs(std::span<const std::uint64_t> adjacency, Callbac
 {
     if (adjacency.size() > max_dpccp_vertices)
         throw std::invalid_argument("DPccp: at most 63 vertices are supported.");
-    const auto all = bit::lo_set<std::uint64_t>[adjacency.size()];
+    const auto all = urd::repr::bit::lo_set<std::uint64_t>[adjacency.size()];
     for (size_t vertex = 0; vertex < adjacency.size(); ++vertex)
     {
         const auto singleton = std::uint64_t { 1 } << vertex;
         if ((adjacency[vertex] & ~all) || (adjacency[vertex] & singleton))
             throw std::invalid_argument("DPccp: adjacency contains an invalid vertex or self edge.");
-        bit::for_each_set_bit(adjacency[vertex],
+        urd::repr::bit::for_each_set_bit(adjacency[vertex],
                               [&](size_t neighbor)
                               {
                                   if (!(adjacency[neighbor] & singleton))
