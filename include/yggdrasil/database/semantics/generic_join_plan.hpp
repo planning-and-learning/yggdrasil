@@ -10,7 +10,7 @@
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 
-#include <cista/containers/vector.h>
+#include <urd/elements/flat.hpp>
 #include <cstddef>
 #include <span>
 #include <vector>
@@ -21,12 +21,12 @@ namespace ygg::database
 /// independently preserves the caller's schema. Projection is a separate operator.
 class GenericJoinPlan
 {
-    cista::offset::vector<cista::offset::vector<ColumnLayout>> m_inputs;
+    urd::flat_vector<urd::flat_vector<ColumnLayout>> m_inputs;
     urd::builder<Columns> m_output;
-    cista::offset::vector<urd::index<Column>> m_order;
-    cista::offset::vector<cista::offset::vector<ColumnSlice>> m_keys;
-    cista::offset::vector<cista::offset::vector<size_t>> m_occurrences;
-    cista::offset::vector<ColumnSlice> m_output_positions;
+    urd::flat_vector<urd::index<Column>> m_order;
+    urd::flat_vector<urd::flat_vector<ColumnSlice>> m_keys;
+    urd::flat_vector<urd::flat_vector<size_t>> m_occurrences;
+    urd::flat_vector<ColumnSlice> m_output_positions;
 
 public:
     GenericJoinPlan() = default;

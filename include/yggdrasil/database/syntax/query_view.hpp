@@ -30,25 +30,21 @@ public:
     {
         if constexpr (std::same_as<Tag, void>)
             return std::visit([](auto concrete) { return concrete.columns(); }, get_variant());
-        else if constexpr (std::same_as<Tag, ygg::database::QueryJoinTag> || std::same_as<Tag, ygg::database::QueryProjectTag>
-                           || std::same_as<Tag, ygg::database::QueryDistanceTag> || std::same_as<Tag, ygg::database::QueryGenericJoinTag>)
-            return get_plan().output_columns().span();
         else if constexpr (std::same_as<Tag, ygg::database::QuerySemijoinTag> || std::same_as<Tag, ygg::database::QueryAntijoinTag>)
             return get_plan().lhs_columns().span();
+        else if constexpr (boost::mp11::mp_contains<ygg::database::QueryPlannedTags, Tag>::value)
+            return get_plan().output_columns().span();
         else
             return { self().data().columns.data(), self().data().columns.size() };
     }
     [[nodiscard]] auto get_arg() const
-        requires(std::same_as<Tag, ygg::database::QueryProjectTag> || std::same_as<Tag, ygg::database::QueryRenameTag> || std::same_as<Tag, ygg::database::QuerySelectEqualTag>
-                 || std::same_as<Tag, ygg::database::QuerySelectValueTag>)
+        requires boost::mp11::mp_contains<ygg::database::QueryUnaryTags, Tag>::value
     { return urd::resolve(self().data().arg, self().context()); }
     [[nodiscard]] auto get_lhs() const
-        requires(std::same_as<Tag, ygg::database::QueryJoinTag> || std::same_as<Tag, ygg::database::QueryUnionTag> || std::same_as<Tag, ygg::database::QueryDifferenceTag>
-                 || std::same_as<Tag, ygg::database::QuerySemijoinTag> || std::same_as<Tag, ygg::database::QueryAntijoinTag>)
+        requires boost::mp11::mp_contains<ygg::database::QueryBinaryTags, Tag>::value
     { return urd::resolve(self().data().lhs, self().context()); }
     [[nodiscard]] auto get_rhs() const
-        requires(std::same_as<Tag, ygg::database::QueryJoinTag> || std::same_as<Tag, ygg::database::QueryUnionTag> || std::same_as<Tag, ygg::database::QueryDifferenceTag>
-                 || std::same_as<Tag, ygg::database::QuerySemijoinTag> || std::same_as<Tag, ygg::database::QueryAntijoinTag>)
+        requires boost::mp11::mp_contains<ygg::database::QueryBinaryTags, Tag>::value
     { return urd::resolve(self().data().rhs, self().context()); }
     [[nodiscard]] auto get_sources() const
         requires std::same_as<Tag, ygg::database::QueryDistanceTag>
@@ -81,9 +77,7 @@ public:
         requires std::same_as<Tag, ygg::database::QueryDistanceTag>
     { return self().data().distance_column; }
     [[nodiscard]] const auto& get_plan() const
-        requires(std::same_as<Tag, ygg::database::QueryJoinTag> || std::same_as<Tag, ygg::database::QueryProjectTag> || std::same_as<Tag, ygg::database::QueryDistanceTag>
-                 || std::same_as<Tag, ygg::database::QueryGenericJoinTag> || std::same_as<Tag, ygg::database::QuerySemijoinTag>
-                 || std::same_as<Tag, ygg::database::QueryAntijoinTag>)
+        requires boost::mp11::mp_contains<ygg::database::QueryPlannedTags, Tag>::value
     { return self().data().plan; }
     [[nodiscard]] size_t get_lhs_position() const
         requires std::same_as<Tag, ygg::database::QuerySelectEqualTag>

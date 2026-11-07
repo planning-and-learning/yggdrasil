@@ -51,7 +51,7 @@ TEST(YggdrasilX3Diagnostics, GrammarSuccessTagsAstWithItsSourceRange)
     auto output = std::ostringstream {};
     auto handler = Handler(first, source.cend(), output, "numbers", 2);
     auto ast = Number {};
-    const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number()];
+    const auto grammar = boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(handler))[number()];
     ASSERT_TRUE(boost::spirit::x3::phrase_parse(first, source.cend(), grammar, boost::spirit::x3::ascii::space, ast));
     EXPECT_EQ(first, source.cend());
     EXPECT_EQ(ast.value, 42);
@@ -75,7 +75,7 @@ TEST(YggdrasilX3Diagnostics, GrammarExpectationFailureRecordsAndRendersEof)
     auto output = std::ostringstream {};
     auto handler = Handler(first, source.cend(), output);
     auto ast = Number {};
-    const auto grammar = boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[number()];
+    const auto grammar = boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(handler))[number()];
     EXPECT_FALSE(boost::spirit::x3::phrase_parse(first, source.cend(), grammar, boost::spirit::x3::ascii::space, ast));
     ASSERT_TRUE(handler.last_error());
     EXPECT_EQ(handler.last_error().value().position, source.cend());
@@ -158,7 +158,7 @@ TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttr
     auto ast = Number {};
     EXPECT_FALSE(boost::spirit::x3::phrase_parse(first,
                                                  source.cend(),
-                                                 boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[grammar],
+                                                 boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(handler))[grammar],
                                                  boost::spirit::x3::ascii::space,
                                                  ast));
     const auto diagnostic = handler.diagnostic("fallback", first);
@@ -176,7 +176,7 @@ TEST(YggdrasilX3Diagnostics, GrammarContextReportsInnermostStartAndPreservesAttr
     auto valid_handler = Handler(first, valid.cend(), output);
     ASSERT_TRUE(boost::spirit::x3::phrase_parse(first,
                                                 valid.cend(),
-                                                boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(valid_handler))[grammar],
+                                                boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(valid_handler))[grammar],
                                                 boost::spirit::x3::ascii::space,
                                                 ast));
     EXPECT_EQ(ast.value, 42);
@@ -205,7 +205,7 @@ TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
             const auto grammar = boost::spirit::x3::rule<NumberRule, Number> { "outer" } = diagnostics::context(":outer")[body];
             EXPECT_FALSE(boost::spirit::x3::phrase_parse(first,
                                                          source.cend(),
-                                                         boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[grammar],
+                                                         boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(handler))[grammar],
                                                          skipper,
                                                          ast));
         }
@@ -214,7 +214,7 @@ TEST(YggdrasilX3Diagnostics, FailedChildPointsPastSkippedWhitespaceAndComments)
             const auto grammar = boost::spirit::x3::rule<NumberRule, Number> { "outer" } = body;
             EXPECT_FALSE(boost::spirit::x3::phrase_parse(first,
                                                          source.cend(),
-                                                         boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[grammar],
+                                                         boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(handler))[grammar],
                                                          skipper,
                                                          ast));
         }
@@ -237,7 +237,7 @@ TEST(YggdrasilX3Diagnostics, ExpectedContextUsesItsNameWithoutChangingErrorOwner
     auto ast = Number {};
     EXPECT_FALSE(boost::spirit::x3::phrase_parse(first,
                                                  source.cend(),
-                                                 boost::spirit::x3::with<diagnostics::ErrorHandlerTag>(std::ref(handler))[grammar],
+                                                 boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(handler))[grammar],
                                                  boost::spirit::x3::ascii::space,
                                                  ast));
     const auto diagnostic = handler.diagnostic("fallback", first);

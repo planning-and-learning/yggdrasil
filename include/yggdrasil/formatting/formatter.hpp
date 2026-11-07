@@ -34,9 +34,6 @@
 namespace ygg
 {
 
-template<typename T, typename C>
-struct View;
-
 template<typename T>
 std::string to_string(const T& element)
 { return fmt::format("{}", element); }

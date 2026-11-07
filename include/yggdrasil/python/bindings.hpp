@@ -54,11 +54,12 @@ void bind_unsigned_integer(nb::module_& m, const std::string& name)
         .def("__repr__", [name](const T& i) { return name + "(" + std::to_string(i.value) + ")"; });
 }
 
-/// Binds repository.insert(data) -> (view, created); the view keeps the repository alive.
+/// Binds repository.insert(data) -> (view, created); the view keeps the repository alive. Takes data by reference, as
+/// C++ insert does: no copy, and the caller's object is canonicalized in place.
 template<typename T, typename Repository>
 void bind_insert(nb::class_<Repository>& repository)
 {
-    repository.def("insert", [](Repository& self, urd::data<T> data) { return formalism::insert(self, data); }, nb::arg("data"));
+    repository.def("insert", [](Repository& self, urd::data<T>& data) { return formalism::insert(self, data); }, nb::arg("data"));
 }
 
 }  // namespace ygg

@@ -69,8 +69,8 @@ public:
     builder& operator=(builder&&) noexcept;
     ~builder();
 
-    [[nodiscard]] urd::index<ygg::database::Relation> get_index() const noexcept { return m_index; }
-    void set_index(urd::index<ygg::database::Relation> index) noexcept { m_index = index; }
+    [[nodiscard]] urd::index<ygg::database::Relation> index() const noexcept { return m_index; }
+    void set_index(urd::index<ygg::database::Relation> relation) noexcept { m_index = relation; }
     /// Factory-local identity, stable across clear/initialize/rename.
     [[nodiscard]] size_t get_storage_index() const noexcept { return m_storage_index; }
     [[nodiscard]] const urd::builder<ygg::database::Columns>& columns() const& noexcept { return m_columns; }

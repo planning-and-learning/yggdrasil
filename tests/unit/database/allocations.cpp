@@ -476,12 +476,11 @@ struct PreparedPooledEvaluation
 struct InterningEvaluation
 {
     database::RelationPoolFactory row_factory;
-    database::RelationPool pool = row_factory.create_pool();
+    database::RelationPool pool { row_factory };
     database::RelationRepositoryFactory factory { row_factory };
     database::RelationRepository repository = factory.create();
     database::RelationRepository copied_repository = factory.create();
     urd::builder<database::Columns> schema_builder;
-    urd::data<database::Columns> schema_data;
     const std::array<ColumnIndex, 3> columns { ColumnIndex(11), ColumnIndex(12), ColumnIndex(13) };
     std::array<ColumnIndex, 3> renamed_columns { ColumnIndex(21), ColumnIndex(22), ColumnIndex(23) };
 
@@ -499,8 +498,7 @@ struct InterningEvaluation
             const auto schema = std::span<const ColumnIndex>(columns.data(), arity);
             schema_builder.assign(schema);
             const auto interned_schema = insert(repository, schema_builder).first;
-            assign(schema_data, schema_builder);
-            const auto [duplicate_schema, schema_created] = repository.insert(schema_data);
+            const auto [duplicate_schema, schema_created] = repository.insert(schema_builder.span());
             valid &= !schema_created && interned_schema.index() == duplicate_schema.index();
             valid &= std::ranges::equal(interned_schema.span(), schema, {}, &database::ColumnLayout::label);
             auto builder = pool.get_or_allocate(schema);
@@ -519,7 +517,7 @@ struct InterningEvaluation
             assign(*extracted, copied);
             assign(*extracted, *extracted);
             assign(*extracted, urd::resolve(*extracted, repository));
-            valid &= extracted->get_index().is_none() && extracted->size() == original.size();
+            valid &= extracted->index().is_none() && extracted->size() == original.size();
             valid &= extracted->get_storage_index() == storage_index && extracted->columns().data() == schema_storage;
             valid &= std::ranges::equal(extracted->columns(), schema, {}, &database::ColumnLayout::label);
             valid &= extracted->contains(std::span<const std::byte>(packed(first_row)).first(arity * ygg::ByteCodec<uint_t>::size));
@@ -686,8 +684,6 @@ TEST(YggdrasilTests, DatabaseWarmedRelationInterningRetainsStorageAcrossReordere
     ASSERT_TRUE(valid);
 
     const auto* schema_builder_storage = evaluation.schema_builder.span().data();
-    const auto* schema_data_storage = evaluation.schema_data.values.data();
-    const auto schema_data_capacity = evaluation.schema_data.values.allocated_size_;
 
     allocation_tracking::Scope measured;
     for (uint_t generation = 8; generation < 108; ++generation)
@@ -697,8 +693,6 @@ TEST(YggdrasilTests, DatabaseWarmedRelationInterningRetainsStorageAcrossReordere
     EXPECT_EQ(counts.allocated, 0);
     EXPECT_EQ(counts.deallocated, 0);
     EXPECT_EQ(evaluation.schema_builder.span().data(), schema_builder_storage);
-    EXPECT_EQ(evaluation.schema_data.values.data(), schema_data_storage);
-    EXPECT_EQ(evaluation.schema_data.values.allocated_size_, schema_data_capacity);
 }
 
 TEST(YggdrasilTests, DatabaseWarmedTypedTupleInsertionAllocatesAndFreesNothing)

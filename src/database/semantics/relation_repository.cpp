@@ -50,7 +50,7 @@ std::pair<RelationView, bool> RelationRepository::insert(urd::data<Relation>& da
 {
     if (!m_symbols.template is_local<Columns>(data.columns_index) || data.row_set_index.value >= m_row_sets.size())
         throw std::invalid_argument("RelationRepository: invalid schema or row-set index.");
-    const auto columns = get_columns(data.columns_index);
+    const auto columns = view(data.columns_index);
     const auto rows = m_row_sets.view(RowSetPool::handle_type(data.row_set_index.value));
     for (size_t i = 0; i < rows.size(); ++i)
     {

@@ -1,7 +1,10 @@
 #ifndef PYYGGDRASIL_DATABASE_MODULE_HPP_
 #define PYYGGDRASIL_DATABASE_MODULE_HPP_
 
-#include "yggdrasil/database/semantics/relation.hpp"
+#include "yggdrasil/database/semantics/relation_builder.hpp"
+#include "yggdrasil/database/semantics/relation_data.hpp"
+#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <cstddef>
 #include <cstdint>

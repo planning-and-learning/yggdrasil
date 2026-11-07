@@ -40,7 +40,7 @@ template<>
 struct data<ygg::database::Columns>
 {
     urd::index<ygg::database::Columns> index;
-    ::cista::offset::vector<ygg::database::ColumnLayout> values;
+    urd::flat_vector<ygg::database::ColumnLayout> values;
 
     data() = default;
     explicit data(std::span<const ygg::database::ColumnLayout> values_) : index() { values.set(values_.begin(), values_.end()); }

@@ -82,13 +82,6 @@ public:
         return distance;
     }
 
-    /// The minimum distance over an edge relation (for the relation constructor).
-    template<RelationViewConcept E, RelationViewConcept S, RelationViewConcept T>
-    uint_t min_distance_edges(const E& edges, const S& sources, const T& targets, const H& heuristic = {})
-    {
-        return min_distance([&](size_t) -> const E& { return edges; }, sources, targets, heuristic);
-    }
-
     [[nodiscard]] const MinDistanceStatistics& statistics() const noexcept { return m_statistics; }
 
 private:

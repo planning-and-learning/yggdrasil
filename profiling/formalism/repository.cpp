@@ -129,7 +129,7 @@ void set_key(urd::data<Binding>& data, std::uint64_t key) noexcept
 
 template<typename Repository>
 void set_up_empty(const benchmark::State&)
-{ repository<Repository>() = std::make_unique<Repository>(0, nullptr, formalism::RelationRepositoryConfig(12)); }
+{ repository<Repository>() = std::make_unique<Repository>(0, nullptr, urd::bit_width { 12 }); }
 
 template<typename Repository, typename Symbol>
 void set_up_symbol(const benchmark::State& state)

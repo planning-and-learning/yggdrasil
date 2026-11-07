@@ -52,7 +52,7 @@ public:
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const
+    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const noexcept
     { return { index, &repository() }; }
 
     static constexpr bool thread_safe = ThreadSafe;

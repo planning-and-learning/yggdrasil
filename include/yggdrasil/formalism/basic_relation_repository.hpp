@@ -48,18 +48,8 @@
 namespace ygg::formalism
 {
 
-struct RelationRepositoryConfig
-{
-    static constexpr std::uint8_t default_object_index_width = static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits);
-
-    explicit RelationRepositoryConfig(std::uint8_t object_index_width_ = default_object_index_width) : object_index_width(object_index_width_)
-    {
-        if (object_index_width_ == 0 || object_index_width_ > default_object_index_width)
-            throw std::invalid_argument("RelationRepositoryConfig: object index width must be between 1 and the encoded object width.");
-    }
-
-    std::uint8_t object_index_width;
-};
+/// The width of a whole object index, the widest a relation repository stores.
+inline constexpr auto default_object_index_width = urd::bit_width { static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits) };
 
 /// How a relation repository stores its bindings' objects, per object tag: each index whole (urd::word), or in the
 /// object_index_width bits the largest needs (urd::bit).
@@ -461,14 +451,13 @@ public:
      * Common methods do not depend on lookup scope.
      */
 
-    BasicRelationRepository() : BasicRelationRepository(nullptr) {}
-    explicit BasicRelationRepository(const BasicRelationRepository* parent) : BasicRelationRepository(parent, RelationRepositoryConfig()) {}
-
-    BasicRelationRepository(const BasicRelationRepository* parent, RelationRepositoryConfig config) :
+    explicit BasicRelationRepository(const BasicRelationRepository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
         m_parent(parent),
-        m_object_index_width(config.object_index_width),
+        m_object_index_width(object_index_width.bits),
         m_slots()
     {
+        if (m_object_index_width == 0 || m_object_index_width > default_object_index_width.bits)
+            throw std::invalid_argument("BasicRelationRepository: object index width must be between 1 and the encoded object width.");
         if (m_parent && m_object_index_width < m_parent->m_object_index_width)
             throw std::invalid_argument("BasicRelationRepository: child object index width must not be smaller than its parent's.");
         clear_slots();

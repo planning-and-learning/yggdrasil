@@ -47,6 +47,19 @@ nb::typed<nb::iterator, Element> iterate(nb::typed<nb::handle, T> self)
     const auto builtins = nb::module_::import_("builtins");
     return nb::borrow<nb::typed<nb::iterator, Element>>(builtins.attr("map")(self.attr("__getitem__"), builtins.attr("range")(nb::len(self))));
 }
+
+/// The read members of every relation class: rows by position, arity and columns.
+template<typename R>
+void bind_relation_reads(nb::class_<R>& cls)
+{
+    cls.def("__len__", &R::size)
+        .def("__getitem__", &row_at<R>, nb::keep_alive<0, 1>())
+        .def("__iter__", &iterate<ygg::database::Row, R>)
+        .def("arity", &R::arity)
+        .def("empty", &R::empty)
+        .def("at", [](const R& relation, std::size_t index) { return relation.at(index); }, nb::arg("index"), nb::keep_alive<0, 1>())
+        .def("columns", [](const R& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
+}
 }  // namespace
 
 const ygg::database::RelationRepository& borrowed_relation_context()
@@ -116,22 +129,13 @@ void bind_database_module_definitions(nb::module_& m)
         .def("__len__", &Columns::size)
         .def("columns", [](const Columns& columns) { return columns.span(); }, nb::keep_alive<0, 1>());
 
-    nb::class_<Relation>(m, "Relation", "Mutable builder of fixed-arity tuples with unique column labels.")
-        .def(nb::init<>())
-        .def(nb::init<Columns>(), nb::arg("columns"))
-        .def(nb::init<ColumnIndices>(), nb::arg("columns"))
-        .def(nb::init<urd::Store<urd::sequence<Column>>>(), nb::arg("labels"))
-        .def("__len__", &Relation::size)
-        .def("__getitem__", &row_at<Relation>, nb::keep_alive<0, 1>())
-        .def("__iter__", &iterate<Row, Relation>)
-        .def("arity", &Relation::arity)
-        .def("empty", &Relation::empty)
-        .def("at", &Relation::at, nb::arg("index"), nb::keep_alive<0, 1>())
-        .def(
-            "columns",
-            [](const Relation& relation) { return relation.columns().span(); },
-            nb::keep_alive<0, 1>())
-        .def("clear", &Relation::clear)
+    auto relation = nb::class_<Relation>(m, "Relation", "Mutable builder of fixed-arity tuples with unique column labels.")
+                        .def(nb::init<>())
+                        .def(nb::init<Columns>(), nb::arg("columns"))
+                        .def(nb::init<ColumnIndices>(), nb::arg("columns"))
+                        .def(nb::init<urd::Store<urd::sequence<Column>>>(), nb::arg("labels"));
+    bind_relation_reads(relation);
+    relation.def("clear", &Relation::clear)
         .def(
             "insert",
             [](Relation& relation, nb::typed<nb::sequence, nb::object> row)
@@ -148,7 +152,7 @@ void bind_database_module_definitions(nb::module_& m)
             },
             nb::arg("row"));
 
-    nb::class_<BorrowedRelationView>(m,
+    auto borrowed = nb::class_<BorrowedRelationView>(m,
                                      "BorrowedRelation",
                                      "Read-only view of a relation owned elsewhere, e.g. an evaluator result. Keeps its owner alive; "
                                      "the owner's next mutation invalidates the view and its rows.")
@@ -156,23 +160,8 @@ void bind_database_module_definitions(nb::module_& m)
             "__init__",
             [](BorrowedRelationView* self, const Relation& relation) { new (self) BorrowedRelationView(&relation, &borrowed_relation_context()); },
             nb::arg("relation"),
-            nb::keep_alive<1, 2>())
-        .def("__len__", &BorrowedRelationView::size)
-        .def("__getitem__", &row_at<BorrowedRelationView>, nb::keep_alive<0, 1>())
-        .def("__iter__", &iterate<Row, BorrowedRelationView>)
-        .def("arity", &BorrowedRelationView::arity)
-        .def("empty", &BorrowedRelationView::empty)
-        .def(
-            "at",
-            [](const BorrowedRelationView& relation, std::size_t index)
-            {
-                if (index >= relation.size())
-                    throw nb::index_error();
-                return Row(relation.row(index), relation.columns().span());
-            },
-            nb::arg("index"),
-            nb::keep_alive<0, 1>())
-        .def("columns", [](const BorrowedRelationView& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
+            nb::keep_alive<1, 2>());
+    bind_relation_reads(borrowed);
 
     nb::class_<RelationPtr>(m, "RelationPtr", "Owns a pooled relation until the handle and its borrowed rows are released.")
         .def("get", &RelationPtr::get, nb::rv_policy::reference_internal);
@@ -190,23 +179,8 @@ void bind_database_module_definitions(nb::module_& m)
                                              "RelationView",
                                              "Read-only canonical relation. Keeps its repository alive; clearing the "
                                              "repository invalidates the view, its rows, and its column labels.")
-                        .def("get_index", &RelationView::index)
-                        .def("__len__", &RelationView::size)
-                        .def("__getitem__", &row_at<RelationView>, nb::keep_alive<0, 1>())
-                        .def("__iter__", &iterate<Row, RelationView>)
-                        .def("arity", &RelationView::arity)
-                        .def("empty", &RelationView::empty)
-                        .def(
-                            "at",
-                            [](const RelationView& relation, std::size_t index)
-                            {
-                                if (index >= relation.size())
-                                    throw nb::index_error();
-                                return Row(relation.row(index), relation.columns().span());
-                            },
-                            nb::arg("index"),
-                            nb::keep_alive<0, 1>())
-                        .def("columns", [](const RelationView& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
+                        .def("get_index", &RelationView::index);
+    bind_relation_reads(interned);
     urd::python::add_comparison(interned);
     urd::python::add_hash(interned);
 
@@ -226,7 +200,7 @@ void bind_database_module_definitions(nb::module_& m)
         .def(
             "rename",
             [](RelationRepository& repository, RelationView relation, const urd::Store<urd::sequence<Column>>& labels, std::optional<std::size_t> schema_namespace)
-            { return schema_namespace ? repository.rename(relation, labels, *schema_namespace) : repository.rename(relation, labels); },
+            { return repository.rename(relation, labels, schema_namespace); },
             nb::arg("relation"),
             nb::arg("columns"),
             nb::arg("schema_namespace") = nb::none(),

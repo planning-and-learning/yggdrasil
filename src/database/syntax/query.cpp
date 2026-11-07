@@ -5,6 +5,7 @@
 
 #include "yggdrasil/database/syntax/query.hpp"
 #include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/values/dense_set.hpp>
 #include <urd/store.hpp>
 
 namespace ygg::database::detail
@@ -40,7 +41,7 @@ urd::Store<urd::sequence<QueryView<>>> reachable(std::span<const QueryView<>> ro
     if (roots.empty())
         return {};
     const auto& repository = get_repository(roots.front().context());
-    std::vector<bool> seen(repository.size());
+    urd::Store<urd::set<urd::index<Query<>>>, urd::dense> seen;
     urd::Store<urd::sequence<QueryView<>>> pending;
     for (const auto root : roots)
     {
@@ -52,15 +53,13 @@ urd::Store<urd::sequence<QueryView<>>> reachable(std::span<const QueryView<>> ro
     {
         const auto query = pending.back();
         pending.pop_back();
-        if (seen[query.index().value])
+        if (!seen.insert(query.index()).second)
             continue;
-        seen[query.index().value] = true;
         for_each_child(query, [&](QueryView<> child) { pending.push_back(child); });
     }
     urd::Store<urd::sequence<QueryView<>>> result;
-    for (size_t value = 0; value < seen.size(); ++value)
-        if (seen[value])
-            result.push_back(repository.view(urd::index<Query<>>(to_uint_t(value))));
+    for (const auto index : seen)  // in index order
+        result.push_back(repository.view(index));
     return result;
 }
 }

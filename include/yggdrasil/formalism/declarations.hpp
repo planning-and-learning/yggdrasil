@@ -74,9 +74,6 @@ inline constexpr bool is_relation_binding_v = is_relation_binding<std::remove_cv
 template<typename T>
 concept RelationBindingConcept = is_relation_binding_v<T>;
 
-template<typename T>
-concept NonRelationBindingConcept = !RelationBindingConcept<T>;
-
 /// The handle of a relation binding: its relation and its row in that relation's table.
 template<typename RelationTag, typename ObjectTag>
 struct RelationBindingIndex

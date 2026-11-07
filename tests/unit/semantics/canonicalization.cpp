@@ -106,7 +106,7 @@ TEST(YggdrasilTests, CommonCanonicalizeRecordListSortsAndDeduplicates)
 
 TEST(YggdrasilTests, CommonCanonicalizeOptionalIsNoOp)
 {
-    auto value = ::cista::optional<int> { 4 };
+    auto value = urd::flat_optional<int> { 4 };
 
     EXPECT_TRUE(ygg::is_canonical(value));
     ygg::canonicalize(value);

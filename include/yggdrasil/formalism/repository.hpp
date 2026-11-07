@@ -57,7 +57,7 @@ private:
     size_t m_index;
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] const Repository* find_canonical_context(urd::index<T> index) const noexcept
     {
         const auto* current = this;
@@ -93,7 +93,7 @@ private:
      */
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] std::optional<urd::index_view<T, Repository>> find_with_hash(const urd::data<T>& builder, size_t h) const noexcept
     {
         if (auto index_or_nullopt = m_symbol_repository.find_local_with_hash(builder, h))
@@ -114,7 +114,7 @@ private:
     /// Cold half of insert_with_hash, see URD_NOINLINE. Rechecks the local
     /// layer before publishing.
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     URD_NOINLINE std::pair<urd::index_view<T, Repository>, bool> create_local_with_hash(urd::data<T>& builder, size_t h)
     {
         assert(!m_symbol_repository.template exists_parent_mutation<T>()
@@ -126,7 +126,7 @@ private:
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     std::pair<urd::index_view<T, Repository>, bool> insert_with_hash(urd::data<T>& builder, size_t h)
     {
         if (auto found = find_with_hash(builder, h))
@@ -209,17 +209,17 @@ public:
      */
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const noexcept
     { return find_with_hash(builder, SymbolRepo::hash(builder)); }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
     { return insert_with_hash(builder, SymbolRepo::hash(builder)); }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     const urd::data<T>& operator[](urd::index<T> index) const
     {
         if (const auto* owner = find_canonical_context(index))
@@ -228,28 +228,28 @@ public:
     }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] const urd::data<T>& front() const
     { return (*this)[urd::index<T>(0)]; }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] size_t size() const noexcept
     { return m_symbol_repository.template size<T>(); }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] size_t memory_usage() const noexcept
     { return m_symbol_repository.template memory_usage<T>(); }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] bool contains(urd::index<T> index) const noexcept
     { return find_canonical_context(index) != nullptr; }
 
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const
     { return { index, &get_canonical_context(index) }; }
     /// A record held outside the repository as its view here, which points at it (the record must outlive the view;
@@ -266,7 +266,7 @@ public:
     { return { index, &get_canonical_context(index) }; }
 
     template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
+        requires SupportsSymbol<Repository, T>
     [[nodiscard]] const Repository& get_canonical_context(urd::index<T> index) const
     {
         if (const auto* owner = find_canonical_context(index))
@@ -354,11 +354,11 @@ public:
         m_index(index)
     { clear(); }
 
-    Repository(size_t index, const Repository* parent, RelationRepositoryConfig config) :
+    Repository(size_t index, const Repository* parent, urd::bit_width object_index_width) :
         m_parent(parent),
         m_root(m_parent ? m_parent->m_root : this),
         m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
-        m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr, config),
+        m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr, object_index_width),
         m_index(index)
     { clear(); }
     ~Repository() = default;

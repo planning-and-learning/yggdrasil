@@ -3,7 +3,6 @@
 
 #include "module.hpp"
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
-#include "yggdrasil/database/semantics/relation.hpp"
 
 #include <nanobind/stl/pair.h>
 #include <span>
@@ -46,7 +45,7 @@ void bind_inputs(nb::class_<Evaluator>& evaluator, nb::module_& m)
 void bind_database_distance(nb::module_& m)
 {
     using Borrowed = ygg::database::BorrowedRelationView;
-    const auto borrow = [](const Relation& relation) { return Borrowed(relation, borrowed_relation_context()); };
+    const auto borrow = [](const Relation& relation) { return Borrowed(&relation, &borrowed_relation_context()); };
 
     nb::class_<Plan>(m, "DistancePlan", "Validated schemas for directed, unweighted distances between endpoint tuples.")
         .def(nb::init<ColumnIndices, ColumnIndices, ColumnIndices, Column>(),

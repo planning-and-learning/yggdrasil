@@ -7,11 +7,6 @@
 
 namespace ygg::database
 {
-RelationPool RelationPoolFactory::create_pool() { return RelationPool(*this); }
-}
-
-namespace ygg::database
-{
 urd::unique_slot_ptr<urd::builder<Relation>> RelationPool::get_or_allocate(std::span<const ColumnLayout> columns)
 {
     validate_columns(columns);

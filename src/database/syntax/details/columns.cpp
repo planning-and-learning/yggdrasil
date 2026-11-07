@@ -30,25 +30,6 @@ std::span<const std::byte> column_bytes(std::span<const std::byte> bytes, const 
 
 namespace ygg::database
 {
-void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns)
-{
-    if (bytes.size() != row_size(columns))
-        throw std::invalid_argument("Relation: row byte width does not match its schema.");
-    for (const auto& column : columns)
-        visit_type_id(column.type,
-                      [&]<typename T>(std::type_identity<T>)
-                      {
-                          const auto source = detail::column_bytes(bytes, column);
-                          auto canonical = std::array<std::byte, ByteCodec<T>::size> {};
-                          ByteCodec<T>::encode(ByteCodec<T>::decode(source), canonical);
-                          if (!std::ranges::equal(source, canonical))
-                              throw std::invalid_argument("Relation: row contains a noncanonical value encoding.");
-                      });
-}
-}
-
-namespace ygg::database
-{
 void validate_columns(std::span<const ColumnLayout> columns)
 {
     size_t offset = 0;

@@ -19,8 +19,7 @@
 #define YGG_SEMANTICS_CANONICALIZATION_HPP_
 
 #include <algorithm>
-#include <cista/containers/optional.h>
-#include <cista/containers/vector.h>
+#include <urd/elements/flat.hpp>
 #include <ranges>
 
 namespace ygg
@@ -28,7 +27,7 @@ namespace ygg
 
 /// A stored list (indices, records, variants of them): sorted, and deduplicated where asked.
 template<bool Deduplicate = true, typename E>
-bool is_canonical(const ::cista::offset::vector<E>& list)
+bool is_canonical(const urd::flat_vector<E>& list)
 {
     if (!std::is_sorted(list.begin(), list.end()))
         return false;
@@ -38,7 +37,7 @@ bool is_canonical(const ::cista::offset::vector<E>& list)
 }
 
 template<typename T>
-bool is_canonical(const ::cista::optional<T>&)
+bool is_canonical(const urd::flat_optional<T>&)
 { return true; }
 
 /// Any sequence that sorts and erases (std::vector, a sequence Store): sorted, and deduplicated where asked.
@@ -62,18 +61,8 @@ List canonicalized(List list)
     return list;
 }
 
-template<bool Deduplicate = true, typename E>
-void canonicalize(::cista::offset::vector<E>& list)
-{
-    if (!is_canonical<false>(list))
-        std::sort(list.begin(), list.end());
-
-    if constexpr (Deduplicate)
-        list.erase(std::unique(list.begin(), list.end()), list.end());
-}
-
 template<typename T>
-void canonicalize(::cista::optional<T>&)
+void canonicalize(urd::flat_optional<T>&)
 {
 }
 

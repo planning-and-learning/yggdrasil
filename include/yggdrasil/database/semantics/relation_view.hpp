@@ -73,17 +73,38 @@ struct RowAt
 template<typename V>
 auto rows_of(const V& view)
 { return urd::transform(std::views::iota(ygg::uint_t { 0 }, static_cast<ygg::uint_t>(view.size())), RowAt<V> { view }); }
+
+/// Rows by position, shared by the relation view mixins: V gives row(index), columns() and size().
+template<typename V>
+struct RelationRows
+{
+    /// A row: its bytes and schema; index values stay raw, for the caller to resolve in their owner.
+    auto operator[](size_t index) const noexcept { return Row(self().row(index), self().columns().span()); }
+    [[nodiscard]] auto at(size_t index) const
+    {
+        if (index >= self().size())
+            throw std::out_of_range("Relation: row index out of range.");
+        return (*this)[index];
+    }
+    [[nodiscard]] auto begin() const noexcept { return rows_of(self()).begin(); }
+    [[nodiscard]] auto end() const noexcept { return rows_of(self()).end(); }
+    [[nodiscard]] auto cbegin() const noexcept { return begin(); }
+    [[nodiscard]] auto cend() const noexcept { return end(); }
+
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+};
 }  // namespace ygg::database::detail
 
 /// The builder view reads the builder directly.
 template<typename V>
-struct urd::view_mixin<urd::builder<ygg::database::Relation>, V>
+struct urd::view_mixin<urd::builder<ygg::database::Relation>, V> : ygg::database::detail::RelationRows<V>
 {
 private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] auto index() const noexcept { return self().data().get_index(); }
+    [[nodiscard]] auto index() const noexcept { return self().data().index(); }
     [[nodiscard]] auto columns() const noexcept { return urd::resolve(self().data().columns(), self().context()); }
     [[nodiscard]] size_t arity() const noexcept { return self().data().arity(); }
     [[nodiscard]] size_t size() const noexcept { return self().data().size(); }
@@ -92,17 +113,6 @@ public:
     [[nodiscard]] size_t get_storage_index() const noexcept { return self().data().get_storage_index(); }
     [[nodiscard]] size_t column_index(urd::index<ygg::database::Column> column) const { return self().data().column_index(column); }
     [[nodiscard]] std::span<const std::byte> row(size_t index) const noexcept { return self().data().row(index); }
-    auto operator[](size_t index) const noexcept { return ygg::database::Row(row(index), columns().span()); }
-    [[nodiscard]] auto at(size_t index) const
-    {
-        if (index >= size())
-            throw std::out_of_range("Relation: row index out of range.");
-        return (*this)[index];
-    }
-    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::rows_of(self()).begin(); }
-    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::rows_of(self()).end(); }
-    [[nodiscard]] auto cbegin() const noexcept { return begin(); }
-    [[nodiscard]] auto cend() const noexcept { return end(); }
 
     [[nodiscard]] bool contains(std::span<const std::byte> row) const { return self().data().contains(row); }
     [[nodiscard]] bool contains(ygg::database::Row row) const { return self().data().contains(row); }
@@ -113,7 +123,7 @@ public:
 
 /// Read access to an interned relation record, shared by its index and data views.
 template<typename V>
-struct urd::view_mixin<ygg::database::Relation, V>
+struct urd::view_mixin<ygg::database::Relation, V> : ygg::database::detail::RelationRows<V>
 {
 private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
@@ -125,7 +135,7 @@ private:
     }
 
 public:
-    [[nodiscard]] auto columns() const noexcept { return get_repository(self().context()).get_columns(record().columns_index); }
+    [[nodiscard]] auto columns() const noexcept { return get_repository(self().context()).view(record().columns_index); }
     [[nodiscard]] size_t arity() const noexcept { return columns().size(); }
     [[nodiscard]] size_t size() const noexcept { return row_indices().size(); }
     [[nodiscard]] bool empty() const noexcept { return row_indices().empty(); }
@@ -144,21 +154,6 @@ public:
         using Handle = typename std::remove_cvref_t<decltype(get_repository(self().context()))>::RowPool::handle_type;
         return get_repository(self().context()).get_row_repository().view(Handle(row_indices()[index].value));
     }
-
-    /// A row: its bytes and schema; index values stay raw, for the caller to resolve in their owner.
-    auto operator[](size_t index) const noexcept { return ygg::database::Row(row(index), columns().span()); }
-
-    [[nodiscard]] auto at(size_t index) const
-    {
-        if (index >= size())
-            throw std::out_of_range("Relation: row index out of range.");
-        return (*this)[index];
-    }
-
-    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::rows_of(self()).begin(); }
-    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::rows_of(self()).end(); }
-    [[nodiscard]] auto cbegin() const noexcept { return begin(); }
-    [[nodiscard]] auto cend() const noexcept { return end(); }
 
     [[nodiscard]] bool contains(std::span<const std::byte> row) const
     {

@@ -1,10 +1,15 @@
 #ifndef YGG_TESTS_UNIT_DATABASE_QUERY_HELPERS_HPP_
 #define YGG_TESTS_UNIT_DATABASE_QUERY_HELPERS_HPP_
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
+#include <limits>
+#include <map>
 #include <initializer_list>
 #include <span>
 #include <stdexcept>
+#include <yggdrasil/database/semantics/relation_repository.hpp>
 #include <yggdrasil/database/syntax/query.hpp>
 
 /// Test-only query construction on top of checkout + insert_query.
@@ -170,5 +175,73 @@ inline database::QueryView<> generic_join(database::QueryRepository& repository,
                         std::span<const urd::index<database::Column>>(output_order));
 }
 }  // namespace ygg::tests::qb
+
+/// Shared by the min-distance tests: relations borrowed as views, rows decoded to uint_t values, reference distances.
+namespace ygg::tests::distances
+{
+inline database::BorrowedRelationView borrow(const urd::builder<database::Relation>& relation)
+{
+    static const auto context = database::RelationRepositoryFactory {}.create();
+    return { &relation, &context };
+}
+
+inline urd::Store<urd::sequence<database::BorrowedRelationView>> borrow_all(const urd::Store<urd::sequence<urd::builder<database::Relation>>>& relations)
+{
+    urd::Store<urd::sequence<database::BorrowedRelationView>> views;
+    views.reserve(relations.size());
+    for (const auto& relation : relations)
+        views.push_back(borrow(relation));
+    return views;
+}
+
+inline urd::Store<urd::sequence<uint_t>> decode(std::span<const std::byte> bytes, std::span<const database::ColumnLayout> columns)
+{
+    urd::Store<urd::sequence<uint_t>> values;
+    values.reserve(columns.size());
+    for (size_t c = 0; c < columns.size(); ++c)
+        values.push_back(database::Row(bytes, columns).get<uint_t>(c));
+    return values;
+}
+
+/// Half the distance to the targets in a supergraph of every state: consistent in all of them.
+struct HalfDistance
+{
+    std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances;
+    std::span<const database::ColumnLayout> columns;
+
+    [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const
+    {
+        const auto found = distances.find(decode(vertex, columns));
+        return found == distances.end() ? std::numeric_limits<uint_t>::max() : found->second / 2;
+    }
+};
+
+/// Backward breadth-first distances to the targets over materialized edges.
+inline std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances_to(const urd::builder<database::Relation>& edges, const urd::builder<database::Relation>& targets, size_t k)
+{
+    std::map<urd::Store<urd::sequence<uint_t>>, uint_t> result;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> frontier;
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
+        const auto vertex = decode(targets.row(i), targets.columns().span());
+        if (result.emplace(vertex, 0).second)
+            frontier.push_back(vertex);
+    }
+    for (uint_t level = 1; !frontier.empty(); ++level)
+    {
+        urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> next;
+        for (size_t i = 0; i < edges.size(); ++i)
+        {
+            const auto edge = decode(edges.row(i), edges.columns().span());
+            const auto from = urd::Store<urd::sequence<uint_t>>(edge.begin(), edge.begin() + static_cast<std::ptrdiff_t>(k));
+            const auto to = urd::Store<urd::sequence<uint_t>>(edge.begin() + static_cast<std::ptrdiff_t>(k), edge.end());
+            if (std::ranges::find(frontier, to) != frontier.end() && result.emplace(from, level).second)
+                next.push_back(from);
+        }
+        frontier = std::move(next);
+    }
+    return result;
+}
+}  // namespace ygg::tests::distances
 
 #endif

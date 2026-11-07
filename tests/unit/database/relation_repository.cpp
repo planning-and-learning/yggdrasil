@@ -169,10 +169,10 @@ TEST(YggdrasilTests, DatabaseColumnsInternOrderedSchemasThroughBuilderDataAndInd
     const auto [original, created] = insert(repository, builder);
     ASSERT_TRUE(created);
     EXPECT_EQ(builder.index(), original.index());
-    EXPECT_EQ(repository.get_columns(original.index()).index(), original.index());
+    EXPECT_EQ(repository.view(original.index()).index(), original.index());
 
     urd::data<database::Columns> pending;
-    assign(pending, builder);
+    pending.values.set(builder.span().begin(), builder.span().end());
     const auto builder_view = urd::resolve(builder, repository);
     const auto data_view = urd::resolve(pending, repository);
     const auto index_view = repository.view(original.index());
@@ -238,7 +238,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryInternsRowSetsWithOrderedSchemasA
     builder.insert(cells(20, 21));
     const auto [first, created] = insert(repository, builder, 7);
     ASSERT_TRUE(created);
-    EXPECT_EQ(builder.get_index(), first.index());
+    EXPECT_EQ(builder.index(), first.index());
     EXPECT_EQ(first.data().index, first.index());
     EXPECT_EQ(first.data().schema_namespace, 7);
 
@@ -400,7 +400,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
 TEST(YggdrasilTests, DatabaseInternedRowsOutliveBuilderReuseAndRenamesShareStorage)
 {
     database::RelationPoolFactory row_factory;
-    auto builders = row_factory.create_pool();
+    auto builders = database::RelationPool(row_factory);
     database::RelationRepositoryFactory factory(row_factory);
     auto repository = factory.create();
     auto builder = builders.get_or_allocate({ ColumnIndex(1), ColumnIndex(2) });
@@ -525,7 +525,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryRejectsInvalidDataAndForeignRenam
     const std::span<const ColumnIndex> duplicate_view { std::span(duplicate_schema) };
     EXPECT_THROW(builder.rename(duplicate_view), std::invalid_argument);
     EXPECT_THROW(builder.initialize(duplicate_view), std::invalid_argument);
-    EXPECT_EQ(builder.get_index(), original.index());
+    EXPECT_EQ(builder.index(), original.index());
     EXPECT_TRUE(std::ranges::equal(builder.columns(), original.columns()));
     expect_rows(builder, { { 10, 20 }, { 30, 40 } });
     urd::data<database::Columns> invalid_schema;
@@ -592,9 +592,9 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
     const auto capacity = output.memory_usage();
     const auto* columns_storage = output.columns().data();
     const auto canonical = insert(source_repository, output).first;
-    EXPECT_FALSE(output.get_index().is_none());
+    EXPECT_FALSE(output.index().is_none());
     EXPECT_EQ(&assign(output, target), &output);
-    EXPECT_TRUE(output.get_index().is_none());
+    EXPECT_TRUE(output.index().is_none());
     EXPECT_EQ(output.memory_usage(), capacity);
     EXPECT_EQ(output.columns().data(), columns_storage);
     EXPECT_EQ(output.get_storage_index(), storage_index);
@@ -603,11 +603,11 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
     const auto* first_row = output.row(0).data();
     (void) insert(source_repository, output);
     EXPECT_EQ(&assign(output, output), &output);
-    EXPECT_TRUE(output.get_index().is_none());
+    EXPECT_TRUE(output.index().is_none());
     EXPECT_EQ(output.row(0).data(), first_row);
     (void) insert(source_repository, output);
     EXPECT_EQ(&assign(output, urd::resolve(output, source_repository)), &output);
-    EXPECT_TRUE(output.get_index().is_none());
+    EXPECT_TRUE(output.index().is_none());
     EXPECT_EQ(output.row(0).data(), first_row);
     EXPECT_EQ(output.columns().data(), columns_storage);
     EXPECT_EQ(output.memory_usage(), capacity);
@@ -616,7 +616,7 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
 
     // A changed arity replaces storage; row values follow the source's column order.
     assign(seed, source_builder);
-    EXPECT_TRUE(seed.get_index().is_none());
+    EXPECT_TRUE(seed.index().is_none());
     EXPECT_TRUE(std::ranges::equal(seed.columns(), source.columns()));
     expect_rows(seed, { { 4, 5 }, { 1, 2 } });
     assign(seed, urd::resolve(pending, source_repository));
@@ -891,7 +891,7 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
     EXPECT_DOUBLE_EQ(restored->read<double>(encoded, ColumnIndex(9)), -2.5);
 
     urd::data<database::Columns> data;
-    database::assign(data, columns);
+    data.values.set(columns.span().begin(), columns.span().end());
     auto data_bytes = cista::serialize(data);
     const auto* restored_data = cista::deserialize<urd::data<database::Columns>>(data_bytes);
     EXPECT_TRUE(std::ranges::equal(restored_data->values, columns.span()));
@@ -923,22 +923,12 @@ TEST(YggdrasilTests, DatabaseFloatingPointRowsInternCanonicalNaNsAndSignedZero)
     EXPECT_EQ(first.index(), second.index());
     EXPECT_TRUE(second.contains(std::tuple { first_nan, true }));
 
-    const auto canonical = builder.get_index();
-    auto invalid = database::encode_row(std::tuple { +0.0, false }, columns.span());
-    const double negative_zero = -0.0;
-    // Raw rows are only checked for width; callers holding the type list validate canonical encodings.
-    std::memcpy(invalid.data(), &negative_zero, sizeof(negative_zero));
-    EXPECT_THROW(columns.validate_row(invalid), std::invalid_argument);
-    std::memcpy(invalid.data(), &first_nan, sizeof(first_nan));
-    EXPECT_THROW(columns.validate_row(invalid), std::invalid_argument);
-    invalid = database::encode_row(std::tuple { +0.0, false }, columns.span());
-    invalid.back() = std::byte { 2 };
-    EXPECT_THROW(columns.validate_row(invalid), std::invalid_argument);
-    EXPECT_NO_THROW(columns.validate_row(database::encode_row(std::tuple { first_nan, true }, columns.span())));
+    const auto canonical = builder.index();
+    const auto invalid = database::encode_row(std::tuple { +0.0, false }, columns.span());
     const auto truncated = std::span<const std::byte>(invalid).first(invalid.size() - 1);
     EXPECT_THROW(builder.insert(truncated), std::invalid_argument);
     EXPECT_THROW((void) builder.contains(truncated), std::invalid_argument);
-    EXPECT_EQ(builder.get_index(), canonical);
+    EXPECT_EQ(builder.index(), canonical);
     EXPECT_EQ(builder.size(), 2);
 }
 
@@ -963,7 +953,7 @@ TEST(YggdrasilTests, DatabaseTypedSchemaRejectsMalformedMetadataBeforeMutation)
     invalid[1].type = ygg::TypeId { 99 };
     EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
     EXPECT_THROW(relation.insert(std::tuple { 3.25, uint_t { 7 } }), std::invalid_argument);
-    EXPECT_EQ(relation.get_index(), canonical);
+    EXPECT_EQ(relation.index(), canonical);
     ASSERT_EQ(relation.size(), 1);
     EXPECT_TRUE(relation.contains(std::tuple { uint_t { 7 }, 3.25 }));
 }

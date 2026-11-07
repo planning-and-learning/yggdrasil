@@ -80,8 +80,6 @@ public:
     [[nodiscard]] size_t key_size() const noexcept { return m_keys == 0 ? 0 : m_sources[m_keys].offset; }
     [[nodiscard]] size_t vertex_size() const noexcept { return m_sources.row_size() - key_size(); }
     [[nodiscard]] size_t probe_size() const noexcept { return m_probes.row_size(); }
-    /// Where an edge row's target vertex starts.
-    [[nodiscard]] size_t edge_target_offset() const noexcept { return m_edges[m_keys + arity()].offset; }
     /// The byte offsets, within a vertex, of its columns of the probes' type.
     [[nodiscard]] urd::Store<urd::sequence<size_t>> probe_positions() const
     {

@@ -17,6 +17,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <urd/repr/maps/index_map.hpp>
 #include <urd/repr/maps/unordered_flat_map.hpp>
 #include <urd/repr/values/std_set.hpp>
 #include <urd/repr/values/unordered_flat_set.hpp>
@@ -44,39 +45,30 @@ class Planner
     using QueryIndex = urd::index<Query<>>;
 
     const Statistics* m_statistics;
-    std::span<const std::optional<QueryIndex>> m_normalized_sources;
+    const urd::Store<urd::map<QueryIndex, QueryIndex>, urd::dense>* m_normalized_sources;
     OperatorBuilder m_build;
-    // Memos indexed by query index; computed values are stored after recursing,
-    // because recursion may grow the vectors.
-    urd::Store<urd::sequence<std::optional<QueryView<>>>> m_planned;
+    // Memos by query; computed values are stored after recursing, because recursion may grow the maps.
+    urd::Store<urd::map<QueryIndex, QueryView<>>, urd::dense> m_planned;
     /// Equivalent caller query of a plan query, for observed statistics.
-    urd::Store<urd::sequence<std::optional<QueryIndex>>> m_sources;
-    urd::Store<urd::sequence<std::optional<Estimate>>> m_estimates;
-    urd::Store<urd::sequence<std::optional<bool>>> m_known;
+    urd::Store<urd::map<QueryIndex, QueryIndex>, urd::dense> m_sources;
+    urd::Store<urd::map<QueryIndex, Estimate>, urd::dense> m_estimates;
+    urd::Store<urd::map<QueryIndex, bool>, urd::dense> m_known;
 
-    template<class T>
-    static std::optional<T>& slot(urd::Store<urd::sequence<std::optional<T>>>& memo, QueryView<> query)
-    {
-        const auto position = query.index().value;
-        if (memo.size() <= position)
-            memo.resize(position + 1);
-        return memo[position];
-    }
     static bool joins(QueryView<> query) { return is<QueryJoinTag>(query) || is<QueryGenericJoinTag>(query); }
 
     [[nodiscard]] std::optional<QueryIndex> source(QueryView<> plan) const
     {
-        const auto position = plan.index().value;
-        return position < m_sources.size() ? m_sources[position] : std::nullopt;
+        const auto it = m_sources.find(plan.index());
+        return it != m_sources.end() ? std::optional(it->second) : std::nullopt;
     }
     /// Whether the plan query's rows are measured or derivable from measured inputs.
     bool known(QueryView<> plan);
     Estimate estimate(QueryView<> plan)
     {
-        if (const auto& cached = slot(m_estimates, plan))
-            return *cached;
+        if (const auto it = m_estimates.find(plan.index()); it != m_estimates.end())
+            return it->second;
         auto result = detail::estimate(plan, source(plan), [&](QueryView<> child) { return estimate(child); }, *m_statistics);
-        slot(m_estimates, plan) = result;
+        m_estimates.insert_or_assign(plan.index(), result);
         return result;
     }
 
@@ -96,14 +88,12 @@ class Planner
 
 public:
     Planner(const Statistics& statistics,
-            std::span<const std::optional<QueryIndex>> normalized_sources,
-            size_t normalized_size,
+            const urd::Store<urd::map<QueryIndex, QueryIndex>, urd::dense>& normalized_sources,
             QueryRepository& plans,
             QueryBuilder& builder) :
         m_statistics(&statistics),
-        m_normalized_sources(normalized_sources),
-        m_build(plans, builder),
-        m_planned(normalized_size)
+        m_normalized_sources(&normalized_sources),
+        m_build(plans, builder)
     {
     }
 

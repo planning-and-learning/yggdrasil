@@ -11,7 +11,7 @@
 #include <urd/store.hpp>
 
 #include <algorithm>
-#include <cista/containers/vector.h>
+#include <urd/elements/flat.hpp>
 #include <cstddef>
 #include <initializer_list>
 #include <limits>
@@ -42,7 +42,7 @@ class ProjectionPlan
 {
     urd::builder<Columns> m_input;
     urd::builder<Columns> m_output;
-    cista::offset::vector<ColumnSlice> m_positions;
+    urd::flat_vector<ColumnSlice> m_positions;
 
     void compile(std::span<const urd::index<Column>> columns);
 
@@ -71,9 +71,9 @@ class JoinPlan
     urd::builder<Columns> m_lhs;
     urd::builder<Columns> m_rhs;
     urd::builder<Columns> m_output;
-    cista::offset::vector<ColumnSlice> m_lhs_keys;
-    cista::offset::vector<ColumnSlice> m_rhs_keys;
-    cista::offset::vector<ColumnSlice> m_rhs_payload;
+    urd::flat_vector<ColumnSlice> m_lhs_keys;
+    urd::flat_vector<ColumnSlice> m_rhs_keys;
+    urd::flat_vector<ColumnSlice> m_rhs_payload;
 
     void compile();
 

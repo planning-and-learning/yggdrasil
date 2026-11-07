@@ -33,12 +33,7 @@ namespace ygg
 
 struct ExecutionContext
 {
-private:
-    using size_type = std::size_t;
-    using uint_t = size_type;
-
-public:
-    explicit ExecutionContext(uint_t num_threads) : m_num_threads(num_threads), m_arena()
+    explicit ExecutionContext(std::size_t num_threads) : m_arena()
     {
         if (num_threads == 0)
         {
@@ -56,18 +51,17 @@ public:
         m_arena.initialize(static_cast<int>(num_threads));
     }
 
-    static std::shared_ptr<ExecutionContext> create(uint_t num_threads) { return std::make_shared<ExecutionContext>(num_threads); }
+    static std::shared_ptr<ExecutionContext> create(std::size_t num_threads) { return std::make_shared<ExecutionContext>(num_threads); }
 
-    static uint_t get_max_num_threads() noexcept { return static_cast<uint_t>(oneapi::tbb::info::default_concurrency()); }
+    static std::size_t get_max_num_threads() noexcept { return static_cast<std::size_t>(oneapi::tbb::info::default_concurrency()); }
 
-    [[nodiscard]] uint_t get_num_threads() const noexcept { return m_num_threads; }
+    [[nodiscard]] std::size_t get_num_threads() const noexcept { return static_cast<std::size_t>(m_arena.max_concurrency()); }
 
     oneapi::tbb::task_arena& arena() noexcept { return m_arena; }
 
     [[nodiscard]] const oneapi::tbb::task_arena& arena() const noexcept { return m_arena; }
 
 private:
-    uint_t m_num_threads;
     oneapi::tbb::task_arena m_arena;
 };
 

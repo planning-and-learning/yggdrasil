@@ -48,7 +48,7 @@ struct data<ygg::database::Query<ygg::database::QueryInputTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryInputTag>> index;
     size_t input_slot = 0;
-    cista::offset::vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::database::ColumnLayout> columns;
 
     data() = default;
     data(size_t input_slot_, std::span<const ygg::database::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
@@ -61,7 +61,7 @@ template<>
 struct data<ygg::database::Query<ygg::database::QueryEmptyTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryEmptyTag>> index;
-    cista::offset::vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::database::ColumnLayout> columns;
 
     data() = default;
     explicit data(std::span<const ygg::database::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
@@ -72,7 +72,7 @@ struct data<ygg::database::Query<ygg::database::QueryEmptyTag>>
 
 // Prepared schemas and positions are serialized but do not define operator identity.
 template<typename Tag>
-    requires(std::same_as<Tag, ygg::database::QueryJoinTag> || std::same_as<Tag, ygg::database::QuerySemijoinTag> || std::same_as<Tag, ygg::database::QueryAntijoinTag>)
+    requires boost::mp11::mp_contains<ygg::database::QueryJoinTags, Tag>::value
 struct data<ygg::database::Query<Tag>>
 {
     urd::index<ygg::database::Query<Tag>> index;
@@ -88,13 +88,13 @@ struct data<ygg::database::Query<Tag>>
 };
 
 template<typename Tag>
-    requires(std::same_as<Tag, ygg::database::QueryUnionTag> || std::same_as<Tag, ygg::database::QueryDifferenceTag>)
+    requires boost::mp11::mp_contains<ygg::database::QuerySetTags, Tag>::value
 struct data<ygg::database::Query<Tag>>
 {
     urd::index<ygg::database::Query<Tag>> index;
     urd::index<ygg::database::Query<>> lhs;
     urd::index<ygg::database::Query<>> rhs;
-    cista::offset::vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::database::ColumnLayout> columns;
 
     data() = default;
     data(urd::index<ygg::database::Query<>> lhs_, urd::index<ygg::database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
@@ -108,7 +108,7 @@ struct data<ygg::database::Query<ygg::database::QueryProjectTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryProjectTag>> index;
     urd::index<ygg::database::Query<>> arg;
-    cista::offset::vector<urd::index<ygg::database::Column>> labels;
+    urd::flat_vector<urd::index<ygg::database::Column>> labels;
     ygg::database::ProjectionPlan plan;
 
     data() = default;
@@ -123,8 +123,8 @@ struct data<ygg::database::Query<ygg::database::QueryRenameTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryRenameTag>> index;
     urd::index<ygg::database::Query<>> arg;
-    cista::offset::vector<urd::index<ygg::database::Column>> labels;
-    cista::offset::vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<urd::index<ygg::database::Column>> labels;
+    urd::flat_vector<ygg::database::ColumnLayout> columns;
 
     data() = default;
     data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
@@ -140,7 +140,7 @@ struct data<ygg::database::Query<ygg::database::QuerySelectEqualTag>>
     urd::index<ygg::database::Query<>> arg;
     urd::index<ygg::database::Column> lhs_column;
     urd::index<ygg::database::Column> rhs_column;
-    cista::offset::vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::database::ColumnLayout> columns;
     size_t lhs_position = 0;
     size_t rhs_position = 0;
 
@@ -163,10 +163,10 @@ struct data<ygg::database::Query<ygg::database::QuerySelectValueTag>>
     urd::index<ygg::database::Query<ygg::database::QuerySelectValueTag>> index;
     urd::index<ygg::database::Query<>> arg;
     urd::index<ygg::database::Column> column;
-    cista::offset::vector<std::byte> constant;
+    urd::flat_vector<std::byte> constant;
     /// The type of the encoded constant.
     ygg::TypeId constant_type = ygg::TypeId::none;
-    cista::offset::vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::database::ColumnLayout> columns;
     size_t column_position = 0;
 
     data() = default;
@@ -212,9 +212,9 @@ template<>
 struct data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryGenericJoinTag>> index;
-    cista::offset::vector<urd::index<ygg::database::Query<>>> inputs;
-    cista::offset::vector<urd::index<ygg::database::Column>> variable_order;
-    cista::offset::vector<urd::index<ygg::database::Column>> output_order;
+    urd::flat_vector<urd::index<ygg::database::Query<>>> inputs;
+    urd::flat_vector<urd::index<ygg::database::Column>> variable_order;
+    urd::flat_vector<urd::index<ygg::database::Column>> output_order;
     ygg::database::GenericJoinPlan plan;
 
     data() = default;

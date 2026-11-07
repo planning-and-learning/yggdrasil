@@ -102,7 +102,7 @@ TEST(YggdrasilTests, CommonFormatterHandlesNullableWrappers)
 
 TEST(YggdrasilTests, CommonCistaFormatterFormatsOffsetString)
 {
-    auto value = ::cista::offset::string {};
+    auto value = urd::flat_string {};
     value = "hello";
 
     EXPECT_EQ(fmt::format("{}", value), "hello");
@@ -110,17 +110,17 @@ TEST(YggdrasilTests, CommonCistaFormatterFormatsOffsetString)
 
 TEST(YggdrasilTests, CommonCistaFormatterFormatsOptionalVectorAndVariant)
 {
-    auto empty = ::cista::optional<int> {};
-    auto optional = ::cista::optional<int> { 7 };
+    auto empty = urd::flat_optional<int> {};
+    auto optional = urd::flat_optional<int> { 7 };
     EXPECT_EQ(fmt::format("{}", empty), "<nullopt>");
     EXPECT_EQ(fmt::format("{}", optional), "7");
 
-    auto vector = ::cista::offset::vector<int> {};
+    auto vector = urd::flat_vector<int> {};
     vector.emplace_back(1);
     vector.emplace_back(2);
     EXPECT_EQ(fmt::format("{}", vector), "[1, 2]");
 
-    using Variant = ::cista::offset::variant<int, unsigned>;
+    using Variant = urd::flat_variant<int, unsigned>;
     auto variant = Variant { 9U };
     EXPECT_EQ(fmt::format("{}", variant), "9");
     EXPECT_EQ(fmt::format("{}", Variant {}), "<invalid>");

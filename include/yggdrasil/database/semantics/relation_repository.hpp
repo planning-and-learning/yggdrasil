@@ -16,7 +16,6 @@
 #include "yggdrasil/formalism/symbol_repository.hpp"
 
 #include <algorithm>
-#include <cassert>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -61,7 +60,7 @@ private:
     RowPool m_rows;
     RowSetPool m_row_sets;
     urd::Store<urd::sequence<urd::index<RelationRow>>> m_row_indices;
-    urd::Store<urd::sequence<size_t>> m_storage_indices;
+    urd::Store<urd::sequence<size_t, urd::index<RelationRowSet>>> m_storage_indices;
     RelationRepositoryFactory m_factory;
     size_t m_index;
 
@@ -139,16 +138,13 @@ public:
     [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
     [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
-    [[nodiscard]] urd::index_view<Columns, RelationRepository> get_columns(urd::index<Columns> index) const noexcept { return { index, this }; }
-
     [[nodiscard]] size_t get_storage_index(urd::index<RelationRowSet> row_set_index) const noexcept
-    {
-        assert(row_set_index.value < m_storage_indices.size());
-        return m_storage_indices[row_set_index.value];
-    }
+    { return m_storage_indices[row_set_index]; }
 
+    /// The source relabelled, in `schema_namespace` (by default the source's).
     template<typename C>
-    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
+    urd::index_view<Relation, C>
+    rename(urd::index_view<Relation, C> source, std::span<const ColumnLayout> columns, std::optional<size_t> schema_namespace = std::nullopt)
     {
         if (&get_repository(source.context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
@@ -156,25 +152,18 @@ public:
         auto data = source.data();
         data.index = {};
         data.columns_index = insert(columns).first.index();
-        data.schema_namespace = schema_namespace;
+        data.schema_namespace = schema_namespace.value_or(data.schema_namespace);
         return source.context().view(insert(data).first.index());
     }
 
     template<typename C>
-    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const ColumnLayout> columns)
-    { return rename(source, columns, source.data().schema_namespace); }
-
-    template<typename C>
-    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const urd::index<Column>> columns, size_t schema_namespace)
+    urd::index_view<Relation, C>
+    rename(urd::index_view<Relation, C> source, std::span<const urd::index<Column>> columns, std::optional<size_t> schema_namespace = std::nullopt)
     {
         auto schema = urd::builder<Columns>(source.columns().span());
         schema.rename(columns);
         return rename(source, schema.span(), schema_namespace);
     }
-
-    template<typename C>
-    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const urd::index<Column>> columns)
-    { return rename(source, columns, source.data().schema_namespace); }
 
     void clear() noexcept
     {

@@ -33,8 +33,6 @@ bool contains_column(std::span<const ColumnLayout> columns, urd::index<Column> c
 /// The labels in schema order.
 urd::Store<urd::sequence<urd::index<Column>>> column_labels(std::span<const ColumnLayout> columns);
 size_t row_size(std::span<const ColumnLayout> columns) noexcept;
-/// The schema is already validated; validate the width and canonical field encodings.
-void validate_row(std::span<const std::byte> bytes, std::span<const ColumnLayout> columns);
 
 namespace detail
 {
@@ -89,10 +87,6 @@ public:
     void assign(std::span<const urd::index<ygg::database::Column>> columns);
     template<ygg::ByteCodable T = ygg::uint_t>
     void assign(std::initializer_list<urd::index<ygg::database::Column>> columns);
-    void initialize(std::span<const ygg::database::ColumnLayout> columns) { assign(columns); }
-    void initialize(std::initializer_list<ygg::database::ColumnLayout> columns) { assign(columns); }
-    void initialize(std::span<const urd::index<ygg::database::Column>> columns) { assign(columns); }
-    void initialize(std::initializer_list<urd::index<ygg::database::Column>> columns) { assign(columns); }
     /// Relabel without changing types or layout; validates before mutating.
     void rename(std::span<const urd::index<ygg::database::Column>> columns);
     void rename(std::initializer_list<urd::index<ygg::database::Column>> columns) { rename(std::span<const urd::index<ygg::database::Column>>(columns)); }
@@ -104,7 +98,6 @@ public:
     template<ygg::ByteCodable T>
     void write(std::span<std::byte> bytes, urd::index<ygg::database::Column> column, T value) const
     { ygg::database::detail::write_column<T>(bytes, span(), column_index(column), value); }
-    void validate_row(std::span<const std::byte> bytes) const { ygg::database::validate_row(bytes, span()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&builder::m_data> {}; }
     static constexpr auto identifying_members() noexcept { return urd::Members<&builder::m_data> {}; }
@@ -157,7 +150,6 @@ public:
     template<ygg::ByteCodable T>
     void write(std::span<std::byte> bytes, urd::index<ygg::database::Column> column, T value) const
     { ygg::database::detail::write_column<T>(bytes, span(), column_index(column), value); }
-    void validate_row(std::span<const std::byte> bytes) const { ygg::database::validate_row(bytes, span()); }
 };
 namespace ygg::database
 {
@@ -238,22 +230,5 @@ void urd::builder<ygg::database::Columns>::assign(std::initializer_list<urd::ind
 { assign<T>(std::span<const urd::index<ygg::database::Column>>(columns)); }
 
 }  // namespace urd
-
-namespace ygg::database
-{
-template<ColumnsViewConcept V>
-urd::data<Columns>& assign(urd::data<Columns>& data, const V& source)
-{
-    detail::assign_columns(data, source.span());
-    return data;
-}
-
-template<ColumnsViewConcept V>
-urd::builder<Columns>& assign(urd::builder<Columns>& builder, const V& source)
-{
-    builder.assign(source.span());
-    return builder;
-}
-}  // namespace ygg::database
 
 #endif

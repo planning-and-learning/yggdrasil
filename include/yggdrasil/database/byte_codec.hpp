@@ -6,6 +6,7 @@
 #ifndef YGG_DATABASE_BYTE_CODEC_HPP_
 #define YGG_DATABASE_BYTE_CODEC_HPP_
 
+#include <boost/mp11.hpp>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
@@ -36,19 +37,14 @@ enum class TypeId : std::uint8_t
 /// Formats as its number.
 constexpr std::uint8_t format_as(TypeId id) noexcept { return static_cast<std::uint8_t>(id); }
 
-/// The value types of byte-encoded storage, one per TypeId.
+/// The value types of byte-encoded storage, in TypeId order: the i-th has TypeId i + 1.
+using ByteCodableTypes = boost::mp11::mp_list<std::uint32_t, std::int32_t, std::uint64_t, std::int64_t, float, double, bool>;
+
 template<typename T>
-concept ByteCodable = std::same_as<T, std::uint32_t> || std::same_as<T, std::int32_t> || std::same_as<T, std::uint64_t> || std::same_as<T, std::int64_t>
-                      || std::same_as<T, float> || std::same_as<T, double> || std::same_as<T, bool>;
+concept ByteCodable = boost::mp11::mp_contains<ByteCodableTypes, T>::value;
 
 template<ByteCodable T>
-inline constexpr TypeId type_id = std::same_as<T, std::uint32_t> ? TypeId::uint32 :
-                                  std::same_as<T, std::int32_t>  ? TypeId::int32 :
-                                  std::same_as<T, std::uint64_t> ? TypeId::uint64 :
-                                  std::same_as<T, std::int64_t>  ? TypeId::int64 :
-                                  std::same_as<T, float>         ? TypeId::float32 :
-                                  std::same_as<T, double>        ? TypeId::float64 :
-                                                                   TypeId::boolean;
+inline constexpr TypeId type_id = static_cast<TypeId>(boost::mp11::mp_find<ByteCodableTypes, T>::value + 1);
 
 /// Fixed-width, canonical in-memory encoding: equal values encode to identical bytes and decoding preserves the value.
 /// Not a portable file format.
@@ -100,10 +96,8 @@ struct ByteCodec
 
 /// Invocable with std::type_identity<T> for every byte-codable T.
 template<typename Visitor>
-concept TypeIdVisitor = std::invocable<Visitor&, std::type_identity<std::uint32_t>> && std::invocable<Visitor&, std::type_identity<std::int32_t>>
-                        && std::invocable<Visitor&, std::type_identity<std::uint64_t>> && std::invocable<Visitor&, std::type_identity<std::int64_t>>
-                        && std::invocable<Visitor&, std::type_identity<float>> && std::invocable<Visitor&, std::type_identity<double>>
-                        && std::invocable<Visitor&, std::type_identity<bool>>;
+concept TypeIdVisitor =
+    boost::mp11::mp_all_of_q<boost::mp11::mp_transform<std::type_identity, ByteCodableTypes>, boost::mp11::mp_bind_front<std::is_invocable, Visitor&>>::value;
 
 /// Calls visitor with std::type_identity<T> for the type T of `id`; every call returns the same type.
 template<TypeIdVisitor Visitor>
@@ -116,51 +110,23 @@ decltype(auto) visit_type_id(TypeId id, Visitor visitor)
                       "visit_type_id: the visitor must return the same type for every type id.");
         return std::invoke(visitor, type);
     };
-    switch (id)
-    {
-        case TypeId::uint32:
-            return call(std::type_identity<std::uint32_t> {});
-        case TypeId::int32:
-            return call(std::type_identity<std::int32_t> {});
-        case TypeId::uint64:
-            return call(std::type_identity<std::uint64_t> {});
-        case TypeId::int64:
-            return call(std::type_identity<std::int64_t> {});
-        case TypeId::float32:
-            return call(std::type_identity<float> {});
-        case TypeId::float64:
-            return call(std::type_identity<double> {});
-        case TypeId::boolean:
-            return call(std::type_identity<bool> {});
-        case TypeId::none:
-            break;
-    }
-    throw std::invalid_argument("visit_type_id: invalid type id.");
+    const auto index = static_cast<std::size_t>(id);
+    if (index == 0 || index > boost::mp11::mp_size<ByteCodableTypes>::value)
+        throw std::invalid_argument("visit_type_id: invalid type id.");
+    return boost::mp11::mp_with_index<boost::mp11::mp_size<ByteCodableTypes>::value>(
+        index - 1,
+        [&](auto position) -> Result { return call(std::type_identity<boost::mp11::mp_at<ByteCodableTypes, decltype(position)>> {}); });
 }
 
 /// The byte width of the type of `id`, or 0 if `id` names no type.
 constexpr std::size_t byte_size(TypeId id) noexcept
 {
-    switch (id)
-    {
-        case TypeId::uint32:
-            return ByteCodec<std::uint32_t>::size;
-        case TypeId::int32:
-            return ByteCodec<std::int32_t>::size;
-        case TypeId::uint64:
-            return ByteCodec<std::uint64_t>::size;
-        case TypeId::int64:
-            return ByteCodec<std::int64_t>::size;
-        case TypeId::float32:
-            return ByteCodec<float>::size;
-        case TypeId::float64:
-            return ByteCodec<double>::size;
-        case TypeId::boolean:
-            return ByteCodec<bool>::size;
-        case TypeId::none:
-            break;
-    }
-    return 0;
+    const auto index = static_cast<std::size_t>(id);
+    if (index == 0 || index > boost::mp11::mp_size<ByteCodableTypes>::value)
+        return 0;
+    return boost::mp11::mp_with_index<boost::mp11::mp_size<ByteCodableTypes>::value>(
+        index - 1,
+        [](auto position) { return ByteCodec<boost::mp11::mp_at<ByteCodableTypes, decltype(position)>>::size; });
 }
 
 }  // namespace ygg

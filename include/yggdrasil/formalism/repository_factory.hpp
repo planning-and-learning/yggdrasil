@@ -18,7 +18,7 @@
 #ifndef YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 
-#include <urd/repr/containers/bit.hpp>
+#include <urd/tags.hpp>
 #include "yggdrasil/core/index_sequence.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 
@@ -34,15 +34,15 @@ template<typename SymbolRepo, typename RelationRepo>
 class RepositoryFactory
 {
 private:
-    static RelationRepositoryConfig make_relation_repository_config(size_t num_objects, const Repository<SymbolRepo, RelationRepo>* parent)
+    static urd::bit_width object_index_width(size_t num_objects, const Repository<SymbolRepo, RelationRepo>* parent)
     {
         if (num_objects > std::numeric_limits<ygg::uint_t>::max())
             throw std::invalid_argument("RepositoryFactory: number of objects exceeds the object index domain.");
 
-        auto config = RelationRepositoryConfig(static_cast<std::uint8_t>(urd::repr::bit::bits_needed(num_objects)));
+        auto width = urd::bit_width::for_bound(num_objects);
         if (parent)
-            config.object_index_width = std::max(config.object_index_width, parent->get_object_index_width());
-        return config;
+            width.bits = std::max(width.bits, parent->get_object_index_width());
+        return width;
     }
 
 public:
@@ -51,21 +51,21 @@ public:
     Repository<SymbolRepo, RelationRepo> create(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
     { return Repository<SymbolRepo, RelationRepo>(m_indices.next(), parent); }
 
-    Repository<SymbolRepo, RelationRepo> create(RelationRepositoryConfig config, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return Repository<SymbolRepo, RelationRepo>(m_indices.next(), parent, config); }
+    Repository<SymbolRepo, RelationRepo> create(urd::bit_width object_index_width, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
+    { return Repository<SymbolRepo, RelationRepo>(m_indices.next(), parent, object_index_width); }
 
     Repository<SymbolRepo, RelationRepo> create(size_t num_objects, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return create(make_relation_repository_config(num_objects, parent), parent); }
+    { return create(object_index_width(num_objects, parent), parent); }
 
     std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
     { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_indices.next(), parent); }
 
-    std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(RelationRepositoryConfig config,
+    std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(urd::bit_width object_index_width,
                                                                         const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_indices.next(), parent, config); }
+    { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_indices.next(), parent, object_index_width); }
 
     std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(size_t num_objects, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return create_shared(make_relation_repository_config(num_objects, parent), parent); }
+    { return create_shared(object_index_width(num_objects, parent), parent); }
 
 private:
     IndexSequence m_indices;

@@ -3,7 +3,7 @@
 
 
 #include <boost/json.hpp>
-#include <cista/containers/string.h>
+#include <urd/elements/flat.hpp>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -12,7 +12,7 @@ namespace boost::json
 {
 
 template<>
-struct is_string_like<cista::offset::string> : std::true_type
+struct is_string_like<urd::flat_string> : std::true_type
 {
 };
 

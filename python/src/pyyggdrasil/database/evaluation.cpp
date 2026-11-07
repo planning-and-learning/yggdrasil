@@ -36,7 +36,7 @@ void bind_inputs(nb::class_<FullEvaluator>& full, nb::class_<IncrementalEvaluato
 void bind_database_evaluation(nb::module_& m)
 {
     using Borrowed = ygg::database::BorrowedRelationView;
-    const auto borrow = [](const urd::builder<ygg::database::Relation>& relation) { return Borrowed(relation, borrowed_relation_context()); };
+    const auto borrow = [](const urd::builder<ygg::database::Relation>& relation) { return Borrowed(&relation, &borrowed_relation_context()); };
 
     auto full = nb::class_<FullEvaluator>(m, "QueryEvaluator", "Evaluate a compiled query DAG. Input relations are borrowed only during each call.");
     full.def(nb::init<ygg::database::QueryPlan>(), nb::arg("plan"))

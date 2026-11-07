@@ -32,12 +32,12 @@ void prepare(urd::data<Query<Tag>>& data, const QueryRepository&)
 { validate_columns({ data.columns.data(), data.columns.size() }); }
 
 template<typename Tag>
-    requires(std::same_as<Tag, QueryJoinTag> || std::same_as<Tag, QuerySemijoinTag> || std::same_as<Tag, QueryAntijoinTag>)
+    requires boost::mp11::mp_contains<QueryJoinTags, Tag>::value
 void prepare(urd::data<Query<Tag>>& data, const QueryRepository& repository)
 { data.plan = JoinPlan(child_columns(data.lhs, repository), child_columns(data.rhs, repository)); }
 
 template<typename Tag>
-    requires(std::same_as<Tag, QueryUnionTag> || std::same_as<Tag, QueryDifferenceTag>)
+    requires boost::mp11::mp_contains<QuerySetTags, Tag>::value
 void prepare(urd::data<Query<Tag>>& data, const QueryRepository& repository)
 {
     const auto schema = child_columns(data.lhs, repository);

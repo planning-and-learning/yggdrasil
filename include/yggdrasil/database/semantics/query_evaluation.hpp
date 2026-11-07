@@ -108,7 +108,7 @@ class QueryEvaluator
         }
     };
     QueryPlan m_plan;
-    urd::Store<urd::sequence<Node>> m_nodes;
+    urd::Store<urd::sequence<Node, NodeId>> m_nodes;
     Workspace m_workspace;
     bool m_ready = false;
 
@@ -129,9 +129,10 @@ public:
         m_ready = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
         {
-            auto& state = m_nodes[i];
+            const auto id = NodeId(to_uint_t(i));
+            auto& state = m_nodes[id];
             auto& out = state.result;
-            const auto child = [&](QueryView<> query) -> const auto& { return m_nodes[query.index().value].result; };
+            const auto child = [&](QueryView<> query) -> const auto& { return m_nodes[query.index()].result; };
             std::visit(
                 [&]<typename Tag>(QueryView<Tag> operation)
                 {
@@ -148,7 +149,7 @@ public:
                     else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                     {
                         const auto inputs =
-                            operation.get_inputs() | std::views::transform([&](NodeId id) -> const auto& { return m_nodes[id.value].result; });
+                            operation.get_inputs() | std::views::transform([&](NodeId input) -> const auto& { return m_nodes[input].result; });
                         generic_join(inputs, operation.get_plan(), out, std::get<GenericJoinWorkspace>(state.state));
                     }
                     else
@@ -162,7 +163,7 @@ public:
                                            std::get<DistanceState>(state.state).workspace);
                     }
                 },
-                m_plan[NodeId(to_uint_t(i))].get_variant());
+                m_plan[id].get_variant());
         }
         m_ready = true;
     }
@@ -172,7 +173,7 @@ public:
             throw std::logic_error("Query: evaluate before reading results.");
         if (root >= m_plan.root_count())
             throw std::out_of_range("Query: invalid root.");
-        return m_nodes.at(m_plan.roots()[root].value).result;
+        return m_nodes.at(m_plan.roots()[root]).result;
     }
     [[nodiscard]] const urd::builder<Relation>& get_result(size_t = 0) const&& = delete;
     /// Retained runtime storage; excludes the immutable query plan.

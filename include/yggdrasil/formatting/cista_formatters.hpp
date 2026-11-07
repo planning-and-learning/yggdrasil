@@ -21,11 +21,7 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
 
-#include <cista/containers/optional.h>
-#include <cista/containers/pair.h>
-#include <cista/containers/string.h>
-#include <cista/containers/variant.h>
-#include <cista/containers/vector.h>
+#include <urd/elements/flat.hpp>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <string_view>
@@ -56,12 +52,12 @@ struct formatter<::cista::basic_string<Ptr>, char>
 };
 
 template<typename T>
-struct formatter<::cista::optional<T>, char>
+struct formatter<urd::flat_optional<T>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ::cista::optional<T>& value, FormatContext& ctx) const
+    auto format(const urd::flat_optional<T>& value, FormatContext& ctx) const
     {
         if (value.has_value())
             return fmt::format_to(ctx.out(), "{}", value.value());
@@ -70,12 +66,12 @@ struct formatter<::cista::optional<T>, char>
 };
 
 template<typename T, typename... Ts>
-struct formatter<::cista::offset::variant<T, Ts...>, char>
+struct formatter<urd::flat_variant<T, Ts...>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ::cista::offset::variant<T, Ts...>& value, FormatContext& ctx) const
+    auto format(const urd::flat_variant<T, Ts...>& value, FormatContext& ctx) const
     {
         if (!value.valid())
             return fmt::format_to(ctx.out(), "<invalid>");

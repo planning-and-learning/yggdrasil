@@ -977,17 +977,17 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 
 TEST(YggdrasilTests, CommonRelationRepositoryValidatesObjectIndexWidth)
 {
-    using Config = ygg::formalism::RelationRepositoryConfig;
     using Repository = ygg::formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation>;
     using SymbolRepository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
     using Factory = ygg::formalism::RepositoryFactory<SymbolRepository, Repository>;
+    constexpr auto full_width = ygg::formalism::default_object_index_width.bits;
 
-    EXPECT_EQ(Config().object_index_width, Config::default_object_index_width);
-    EXPECT_THROW((Config(0)), std::invalid_argument);
-    EXPECT_THROW((Config(static_cast<std::uint8_t>(Config::default_object_index_width + 1))), std::invalid_argument);
+    EXPECT_EQ(Repository(0).get_object_index_width(), full_width);
+    EXPECT_THROW((Repository(0, nullptr, urd::bit_width { 0 })), std::invalid_argument);
+    EXPECT_THROW((Repository(0, nullptr, urd::bit_width { static_cast<std::uint8_t>(full_width + 1) })), std::invalid_argument);
 
-    auto parent = Repository(0, nullptr, Config(2));
-    EXPECT_THROW((Repository(1, &parent, Config(1))), std::invalid_argument);
+    auto parent = Repository(0, nullptr, urd::bit_width { 2 });
+    EXPECT_THROW((Repository(1, &parent, urd::bit_width { 1 })), std::invalid_argument);
 
     auto factory = Factory();
     EXPECT_NO_THROW(factory.create(size_t { 0 }));

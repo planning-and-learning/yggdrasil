@@ -8,13 +8,12 @@
 
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/repr/pools/pools.hpp>
+#include <urd/repr/queues/queue.hpp>
 #include <urd/store.hpp>
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 
-#include <algorithm>
 #include <cstddef>
-#include <functional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -66,9 +65,8 @@ public:
         auto lowered = static_cast<size_t>(0);
         while (!m_queue.empty())
         {
-            std::ranges::pop_heap(m_queue, std::greater<> {});
-            const auto [learned, id] = m_queue.back();
-            m_queue.pop_back();
+            const auto [learned, id] = m_queue.top();
+            m_queue.pop();
             if (learned != tree.learned(id))
                 continue;
             ++lowered;
@@ -85,7 +83,7 @@ public:
     }
 
 private:
-    urd::Store<urd::sequence<std::pair<uint_t, VertexSet::handle_type>>> m_queue;  ///< A min-heap of (learned, vertex).
+    urd::Store<urd::queue<std::pair<uint_t, VertexSet::handle_type>>, urd::by_priority> m_queue;  ///< (learned, vertex), the least first.
     urd::Store<urd::sequence<std::byte>> m_vertex;                 ///< A copy of the lowered vertex: storing vertices may move them.
 
     static bool lowers(const SearchTree& tree, VertexSet::handle_type from, uint_t to_value) noexcept
@@ -94,8 +92,7 @@ private:
     {
         tree.lower(from, tree.learned(to) + 1);
         tree.link(from, to);
-        m_queue.emplace_back(tree.learned(from), from);
-        std::ranges::push_heap(m_queue, std::greater<> {});
+        m_queue.emplace(tree.learned(from), from);
     }
 };
 

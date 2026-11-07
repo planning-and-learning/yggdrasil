@@ -151,6 +151,16 @@ public:
     {
         if constexpr (requires { serialize_as(*this, value); })
             return convert(serialize_as(*this, value));
+        else if constexpr (std::ranges::view<T> && std::ranges::input_range<T> && !std::ranges::input_range<const T>)
+        {
+            // A view iterable only when mutable (std::views::filter caches its begin): read from a copy.
+            auto range = value;
+            auto result = boost::json::value {};
+            auto& array = result.emplace_array();
+            for (auto&& item : range)
+                array.push_back(convert(item));
+            return result;
+        }
         else if constexpr (Described<T>)
         {
             auto result = boost::json::value {};

@@ -31,9 +31,6 @@ private:
 
     friend class RelationPool;
     friend class RelationRepository;
-
-public:
-    [[nodiscard]] RelationPool create_pool();
 };
 
 /// Reuses temporary relations by byte width, retaining their tuple/hash buffers.

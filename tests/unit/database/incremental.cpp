@@ -107,9 +107,9 @@ TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
     const auto canonical = urd::index<database::Relation>(9);
     relation.set_index(canonical);
     EXPECT_THROW(relation.erase(relation.size()), std::out_of_range);
-    EXPECT_EQ(relation.get_index(), canonical);
+    EXPECT_EQ(relation.index(), canonical);
     relation.erase(first);
-    EXPECT_EQ(relation.get_index(), urd::index<database::Relation>());
+    EXPECT_EQ(relation.index(), urd::index<database::Relation>());
     EXPECT_FALSE(relation.contains(cells(1, 2)));
     EXPECT_TRUE(relation.contains(cells(3, 4)));
     EXPECT_TRUE(relation.contains(cells(5, 6)));

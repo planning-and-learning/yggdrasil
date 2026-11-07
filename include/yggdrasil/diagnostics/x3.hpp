@@ -19,12 +19,11 @@
 #include <concepts>
 #include <functional>
 #include <iterator>
+#include <string>
 #include <string_view>
 
 namespace ygg::diagnostics
 {
-
-using ErrorHandlerTag = boost::spirit::x3::error_handler_tag;
 
 /// Input iterators and stream are borrowed during parsing; make_diagnostic() returns an owned snapshot.
 /// The input must remain unchanged and all positions/AST tags must belong to this handler.
@@ -124,13 +123,13 @@ struct ErrorHandlerBase
 {
     template<typename It, typename Ast, typename Context>
     void on_success(const It& first, const It& last, Ast& ast, const Context& context)
-    { boost::spirit::x3::get<ErrorHandlerTag>(context).get().tag(ast, first, last); }
+    { boost::spirit::x3::get<boost::spirit::x3::error_handler_tag>(context).get().tag(ast, first, last); }
 
     template<typename It, typename Exception, typename Context>
     boost::spirit::x3::error_handler_result on_error(It&, const It& last, const Exception& error, const Context& context)
     {
         auto message = "Error! Expecting: " + std::string(error.which()) + " here:";
-        auto& handler = boost::spirit::x3::get<ErrorHandlerTag>(context).get();
+        auto& handler = boost::spirit::x3::get<boost::spirit::x3::error_handler_tag>(context).get();
         auto position = error.where();
         boost::spirit::x3::skip_over(position, last, context);
         handler.record_error(position, message);
@@ -157,7 +156,7 @@ struct ContextDirective
         boost::spirit::x3::skip_over(start, last, parser_context);
         auto position = error.where();
         boost::spirit::x3::skip_over(position, last, parser_context);
-        auto& handler = boost::spirit::x3::get<ErrorHandlerTag>(parser_context).get();
+        auto& handler = boost::spirit::x3::get<boost::spirit::x3::error_handler_tag>(parser_context).get();
         handler.record_error(position,
                              "Expected " + std::string(error.which()) + " while parsing " + std::string(name),
                              { DiagnosticNote { std::string(name) + " starts here", handler.source_span(start, start) } });
@@ -174,7 +173,28 @@ inline auto comment_skipper()
 /// The x3 context of rules parsed with comment_skipper() that report errors through Handler.
 template<typename Handler>
 using ParserContext =
-    boost::spirit::x3::context<ErrorHandlerTag, std::reference_wrapper<Handler>, boost::spirit::x3::phrase_parse_context<decltype(comment_skipper())>::type>;
+    boost::spirit::x3::context<boost::spirit::x3::error_handler_tag, std::reference_wrapper<Handler>, boost::spirit::x3::phrase_parse_context<decltype(comment_skipper())>::type>;
+
+/// Parses all of [first, last) with comment_skipper(); a recorded error or trailing input fails the parse.
+template<typename It, typename Parser, typename Ast>
+bool parse_full(It& first, It last, const Parser& parser, Ast& ast, ErrorHandler<It>& error_handler)
+{
+    error_handler.clear_error();
+    ast = Ast {};
+    const auto grammar = boost::spirit::x3::with<boost::spirit::x3::error_handler_tag>(std::ref(error_handler))[parser];
+    if (!boost::spirit::x3::phrase_parse(first, last, grammar, comment_skipper(), ast) || error_handler.last_error())
+        return false;
+    if (first != last)
+        error_handler.record_error(first, "Unexpected trailing input.");
+    return first == last;
+}
+
+template<typename Parser, typename Ast>
+bool parse_full(const std::string& source, const Parser& parser, Ast& ast, ErrorHandler<std::string::const_iterator>& error_handler)
+{
+    auto first = source.begin();
+    return parse_full(first, source.end(), parser, ast, error_handler);
+}
 
 }  // namespace ygg::diagnostics
 

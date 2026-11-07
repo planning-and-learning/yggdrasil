@@ -140,10 +140,8 @@ public:
      */
 
     /// Parent layers must remain frozen and outlive this repository.
-    explicit RelationRepositoryBase(size_t index, const Repository* parent = nullptr) : RelationRepositoryBase(index, parent, RelationRepositoryConfig()) {}
-
-    RelationRepositoryBase(size_t index, const Repository* parent, RelationRepositoryConfig config) :
-        BasicRelationRepository<ObjectTag, Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr, config)...,
+    explicit RelationRepositoryBase(size_t index, const Repository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
+        BasicRelationRepository<ObjectTag, Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr, object_index_width)...,
         m_index(index)
     {
     }
@@ -175,8 +173,10 @@ class RelationRepository : public detail::RelationRepositoryBase<RelationReposit
     using Base = detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>;
 
 public:
-    explicit RelationRepository(size_t index, const RelationRepository* parent = nullptr) : Base(index, parent) {}
-    RelationRepository(size_t index, const RelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
+    explicit RelationRepository(size_t index, const RelationRepository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
+        Base(index, parent, object_index_width)
+    {
+    }
 };
 
 template<typename ObjectTag, typename... Ts>
@@ -185,8 +185,12 @@ class ConcurrentRelationRepository : public detail::RelationRepositoryBase<Concu
     using Base = detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>;
 
 public:
-    explicit ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent = nullptr) : Base(index, parent) {}
-    ConcurrentRelationRepository(size_t index, const ConcurrentRelationRepository* parent, RelationRepositoryConfig config) : Base(index, parent, config) {}
+    explicit ConcurrentRelationRepository(size_t index,
+                                          const ConcurrentRelationRepository* parent = nullptr,
+                                          urd::bit_width object_index_width = default_object_index_width) :
+        Base(index, parent, object_index_width)
+    {
+    }
 };
 }  // namespace ygg::formalism
 

@@ -151,7 +151,7 @@ private:
                 conjuncts = { concrete.get_lhs(), concrete.get_rhs() };
             else
                 for (const auto input : concrete.get_inputs())
-                    conjuncts.emplace_back(input, get_repository(concrete.context()));
+                    conjuncts.emplace_back(input, &concrete.context());
             // A conjunct needs its labels that are needed above or shared with another conjunct (early elimination).
             auto result = std::optional<QueryView<>>();
             for (size_t k = 0; k < conjuncts.size(); ++k)

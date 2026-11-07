@@ -34,17 +34,13 @@ QueryPlan optimize(std::span<const QueryView<>> roots, std::span<const Evaluatio
     const auto& source = get_repository(roots.front().context());
     QueryBuilder builder;
     auto normalized = source.get_factory().create();
-    Normalizer normalize(normalized, builder, source.size());
-    urd::Store<urd::sequence<std::pair<urd::index<Query<>>, urd::index<Query<>>>>> normalized_queries;
-    for (const auto query : reachable(roots))
-        normalized_queries.emplace_back(normalize(query).index(), query.index());
+    Normalizer normalize(normalized, builder);
     // The equivalent caller query of each normalized query; the first one wins.
-    urd::Store<urd::sequence<std::optional<urd::index<Query<>>>>> sources(normalized.size());
-    for (const auto& [normalized_query, caller] : normalized_queries)
-        if (auto& source_of = sources[normalized_query.value]; !source_of)
-            source_of = caller;
+    urd::Store<urd::map<urd::index<Query<>>, urd::index<Query<>>>, urd::dense> sources;
+    for (const auto query : reachable(roots))
+        sources.try_emplace(normalize(query).index(), query.index());
     auto plans = source.get_factory().create();
-    Planner planner(statistics, sources, normalized.size(), plans, builder);
+    Planner planner(statistics, sources, plans, builder);
     urd::Store<urd::sequence<QueryView<>>> outputs;
     for (size_t i = 0; i < roots.size(); ++i)
     {
@@ -62,8 +58,8 @@ namespace ygg::database::detail
 {
 bool Planner::known(QueryView<> plan)
 {
-    if (const auto cached = slot(m_known, plan))
-        return *cached;
+    if (const auto it = m_known.find(plan.index()); it != m_known.end())
+        return it->second;
     bool result = false;
     if (const auto caller = source(plan); caller && m_statistics->expressions.contains(*caller))
         result = true;
@@ -76,7 +72,7 @@ bool Planner::known(QueryView<> plan)
         result = true;
         for_each_child(plan, [&](QueryView<> child) { result = result && known(child); });
     }
-    slot(m_known, plan) = result;
+    m_known.insert_or_assign(plan.index(), result);
     return result;
 }
 }
@@ -102,8 +98,8 @@ namespace ygg::database::detail
 {
 QueryView<> Planner::plan(QueryView<> normalized)
 {
-    if (const auto& planned = m_planned.at(normalized.index().value))
-        return *planned;
+    if (const auto it = m_planned.find(normalized.index()); it != m_planned.end())
+        return it->second;
     QueryView<> result = [&]
     {
         if (joins(normalized))
@@ -117,9 +113,9 @@ QueryView<> Planner::plan(QueryView<> normalized)
         for_each_child(normalized, [&](QueryView<> child) { children.push_back(plan(child)); });
         return m_build.clone(normalized, children);
     }();
-    if (const auto caller = m_normalized_sources[normalized.index().value]; caller && !source(result))
-        slot(m_sources, result) = caller;
-    m_planned[normalized.index().value] = result;
+    if (const auto caller = m_normalized_sources->find(normalized.index()); caller != m_normalized_sources->end())
+        m_sources.try_emplace(result.index(), caller->second);
+    m_planned.insert_or_assign(normalized.index(), result);
     return result;
 }
 }

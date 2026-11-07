@@ -6,6 +6,7 @@
 #define YGG_DATABASE_OPTIMIZATION_DETAILS_NORMALIZATION_HPP_
 
 #include "yggdrasil/database/optimization/details/join_block.hpp"
+#include <urd/repr/maps/index_map.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include "yggdrasil/database/syntax/query.hpp"
@@ -33,7 +34,7 @@ class Normalizer
     using Operation = urd::data<Query<Tag>>;
 
     OperatorBuilder m_build;
-    urd::Store<urd::sequence<std::optional<QueryView<>>>> m_normalized;
+    urd::Store<urd::map<urd::index<Query<>>, QueryView<>>, urd::dense> m_normalized;
 
     QueryView<> join(QueryView<> lhs, QueryView<> rhs)
     {
@@ -217,15 +218,16 @@ class Normalizer
     }
 
 public:
-    Normalizer(QueryRepository& repository, QueryBuilder& builder, size_t source_size) : m_build(repository, builder), m_normalized(source_size) {}
+    Normalizer(QueryRepository& repository, QueryBuilder& builder) : m_build(repository, builder) {}
 
     /// The normalized equivalent of a query of the source repository.
     QueryView<> operator()(QueryView<> source)
     {
-        auto& normalized = m_normalized.at(source.index().value);
-        if (!normalized)
-            normalized = std::visit([&](auto query) { return normalize(source, query); }, source.get_variant());
-        return *normalized;
+        if (const auto it = m_normalized.find(source.index()); it != m_normalized.end())
+            return it->second;
+        const auto normalized = std::visit([&](auto query) { return normalize(source, query); }, source.get_variant());
+        m_normalized.insert_or_assign(source.index(), normalized);
+        return normalized;
     }
 };
 }  // namespace ygg::database::detail

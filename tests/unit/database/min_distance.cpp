@@ -26,69 +26,7 @@ using Relation = urd::builder<ygg::database::Relation>;
 using View = ygg::database::BorrowedRelationView;
 using ygg::uint_t;
 
-View borrow(const Relation& relation)
-{
-    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { &relation, &context };
-}
-
-urd::Store<urd::sequence<View>> borrow_all(const urd::Store<urd::sequence<Relation>>& relations)
-{
-    urd::Store<urd::sequence<View>> views;
-    views.reserve(relations.size());
-    for (const auto& relation : relations)
-        views.push_back(borrow(relation));
-    return views;
-}
-
-urd::Store<urd::sequence<uint_t>> decode(std::span<const std::byte> bytes, std::span<const ygg::database::ColumnLayout> columns)
-{
-    urd::Store<urd::sequence<uint_t>> values;
-    values.reserve(columns.size());
-    for (size_t c = 0; c < columns.size(); ++c)
-        values.push_back(ygg::database::Row(bytes, columns).get<uint_t>(c));
-    return values;
-}
-
-/// Half the distance to the targets in a supergraph of every state: consistent in all of them.
-struct HalfDistance
-{
-    std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances;
-    std::span<const ygg::database::ColumnLayout> columns;
-
-    [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const
-    {
-        const auto found = distances.find(decode(vertex, columns));
-        return found == distances.end() ? std::numeric_limits<uint_t>::max() : found->second / 2;
-    }
-};
-
-/// Backward breadth-first distances to the targets over materialized edges.
-std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances_to(const Relation& edges, const Relation& targets, size_t k)
-{
-    std::map<urd::Store<urd::sequence<uint_t>>, uint_t> result;
-    urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> frontier;
-    for (size_t i = 0; i < targets.size(); ++i)
-    {
-        const auto vertex = decode(targets.row(i), targets.columns().span());
-        if (result.emplace(vertex, 0).second)
-            frontier.push_back(vertex);
-    }
-    for (uint_t level = 1; !frontier.empty(); ++level)
-    {
-        urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> next;
-        for (size_t i = 0; i < edges.size(); ++i)
-        {
-            const auto edge = decode(edges.row(i), edges.columns().span());
-            const auto from = urd::Store<urd::sequence<uint_t>>(edge.begin(), edge.begin() + static_cast<std::ptrdiff_t>(k));
-            const auto to = urd::Store<urd::sequence<uint_t>>(edge.begin() + static_cast<std::ptrdiff_t>(k), edge.end());
-            if (std::ranges::find(frontier, to) != frontier.end() && result.emplace(from, level).second)
-                next.push_back(from);
-        }
-        frontier = std::move(next);
-    }
-    return result;
-}
+using namespace ygg::tests::distances;
 
 /// Runs `steps` states; each mutates the inputs and maybe the sources and targets, then compares guided distances
 /// (blind and with a consistent heuristic) against ygg::database::min_distance over the fully evaluated edges.
@@ -319,8 +257,10 @@ TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
                     edges.insert(edge);
             }
         const auto expected = ygg::database::min_distance(borrow(sources), borrow(edges), borrow(targets), plan, result, workspace);
-        ASSERT_EQ(blind.min_distance_edges(borrow(edges), borrow(sources), borrow(targets)), expected) << "step " << step;
-        ASSERT_EQ(guided.min_distance_edges(borrow(edges), borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        const auto edge_view = borrow(edges);
+        const auto edge_input = [&](size_t) -> const auto& { return edge_view; };
+        ASSERT_EQ(blind.min_distance(edge_input, borrow(sources), borrow(targets)), expected) << "step " << step;
+        ASSERT_EQ(guided.min_distance(edge_input, borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
     }
     EXPECT_GT(guided.statistics().tree_hits, 0);
 }

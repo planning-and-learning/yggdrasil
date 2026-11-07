@@ -29,6 +29,30 @@
 #include <urd/repr/containers/bitset_span.hpp>
 
 #if YGG_ENABLE_FMT_FORMATTERS
+namespace ygg::detail
+{
+/// Formats the positions of a bitset's set bits as {p, q, ...}.
+struct SetBitsFormatter
+{
+    constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+    template<typename Bits, typename FormatContext>
+    auto format(const Bits& value, FormatContext& ctx) const
+    {
+        auto out = fmt::format_to(ctx.out(), "{{");
+        auto first = true;
+        for (auto pos = value.find_first(); pos != Bits::npos; pos = value.find_next(pos))
+        {
+            if (!first)
+                out = fmt::format_to(out, ", ");
+            first = false;
+            out = fmt::format_to(out, "{}", pos);
+        }
+        return fmt::format_to(out, "}}");
+    }
+};
+}  // namespace ygg::detail
+
 namespace fmt
 {
 template<typename Block, typename Allocator, typename Char>
@@ -37,47 +61,13 @@ struct range_format_kind<boost::dynamic_bitset<Block, Allocator>, Char, void> : 
 };
 
 template<typename Block, typename Allocator>
-struct formatter<boost::dynamic_bitset<Block, Allocator>, char>
+struct formatter<boost::dynamic_bitset<Block, Allocator>, char> : ygg::detail::SetBitsFormatter
 {
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const boost::dynamic_bitset<Block, Allocator>& value, FormatContext& ctx) const
-    {
-        auto out = fmt::format_to(ctx.out(), "{{");
-        auto first = true;
-        for (auto pos = value.find_first(); pos != boost::dynamic_bitset<Block, Allocator>::npos; pos = value.find_next(pos))
-        {
-            if (!first)
-                out = fmt::format_to(out, ", ");
-            first = false;
-            out = fmt::format_to(out, "{}", pos);
-        }
-        return fmt::format_to(out, "}}");
-    }
 };
 
 template<std::unsigned_integral Block>
-struct formatter<urd::repr::BitsetSpan<Block>, char>
+struct formatter<urd::repr::BitsetSpan<Block>, char> : ygg::detail::SetBitsFormatter
 {
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const urd::repr::BitsetSpan<Block>& value, FormatContext& ctx) const
-    {
-        auto out = fmt::format_to(ctx.out(), "{{");
-        size_t pos = value.find_first();
-        bool first = true;
-        while (pos != urd::repr::BitsetSpan<Block>::npos)
-        {
-            if (!first)
-                out = fmt::format_to(out, ", ");
-            first = false;
-            out = fmt::format_to(out, "{}", pos);
-            pos = value.find_next(pos);
-        }
-        return fmt::format_to(out, "}}");
-    }
 };
 }
 #endif

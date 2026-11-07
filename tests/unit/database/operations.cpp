@@ -31,7 +31,7 @@ using Values = boost::mp11::mp_list<uint_t>;
 using ColumnIndex = urd::index<database::Column>;
 
 static_assert(database::detail::ColumnSliceBuffer<urd::Store<urd::sequence<database::ColumnSlice>>>);
-static_assert(database::detail::ColumnSliceBuffer<::cista::offset::vector<database::ColumnSlice>>);
+static_assert(database::detail::ColumnSliceBuffer<urd::flat_vector<database::ColumnSlice>>);
 static_assert(!database::detail::ColumnSliceBuffer<std::span<database::ColumnSlice>>);
 
 static_assert(!std::is_copy_constructible_v<urd::builder<database::Relation>>);
@@ -653,8 +653,8 @@ TEST(YggdrasilTests, DatabasePoolFactoryIdentifiesStorageAcrossPoolsAndRenames)
 {
     database::RelationPoolFactory factory;
     auto copy = factory;
-    auto first_pool = factory.create_pool();
-    auto second_pool = copy.create_pool();
+    auto first_pool = database::RelationPool(factory);
+    auto second_pool = database::RelationPool(copy);
     auto first = first_pool.get_or_allocate({ ColumnIndex(1) });
     auto second = second_pool.get_or_allocate({ ColumnIndex(1) });
     EXPECT_NE(first->get_storage_index(), second->get_storage_index());
@@ -1147,7 +1147,7 @@ TEST(YggdrasilTests, DatabaseRelationInsertsTypedTuplesAndCanonicalBytesWithoutS
     EXPECT_EQ(relation.insert(values), 0);
     relation.set_index(urd::index<database::Relation>(17));
     EXPECT_EQ(relation.insert(encoded), 0);
-    EXPECT_NE(relation.get_index(), urd::index<database::Relation>(17));
+    EXPECT_NE(relation.index(), urd::index<database::Relation>(17));
     EXPECT_EQ(relation.size(), 1);
     EXPECT_TRUE(relation.contains(values));
     EXPECT_TRUE(relation.contains(encoded));
@@ -1209,11 +1209,11 @@ TEST(YggdrasilTests, DatabaseRelationRejectedInsertPreservesCanonicalIndex)
     relation.set_index(canonical);
     EXPECT_THROW(relation.insert(std::tuple { uint_t { 2 } }), std::invalid_argument);
     EXPECT_THROW(relation.insert(std::tuple { 2.0, 5.0 }), std::invalid_argument);
-    EXPECT_EQ(relation.get_index(), canonical);
+    EXPECT_EQ(relation.index(), canonical);
     EXPECT_TRUE(relation.empty());
     const auto values = std::tuple { uint_t { 2 }, uint_t { 5 } };
     EXPECT_EQ(relation.insert(values), 0);
-    EXPECT_NE(relation.get_index(), canonical);
+    EXPECT_NE(relation.index(), canonical);
     EXPECT_TRUE(relation.contains(values));
 }
 

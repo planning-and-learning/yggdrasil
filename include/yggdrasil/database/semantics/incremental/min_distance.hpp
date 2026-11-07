@@ -60,7 +60,7 @@ public:
     {
     }
 
-    /// Edges given as a relation with the plan's edge columns, bound by bind_edges().
+    /// Edges given as a relation with the plan's edge columns, input 0 of bind().
     explicit MinDistance(const DistancePlan& plan, bool static_edges = false) :
         MinDistance(database::detail::relation_edges<incremental::bound::QueryEvaluator>(plan, static_edges), plan)
     {
@@ -113,14 +113,6 @@ public:
                     if (changed[slot])
                         seed(slot, change(slot).added, change(slot).removed);
             });
-    }
-
-    /// Binds the edge relation of a relation-edged instance; unchanged edges are not compared.
-    template<RelationViewConcept E>
-    void bind_edges(const E& edges, bool maybe_changed = true)
-    {
-        m_edges_changed.assign(1, maybe_changed);
-        bind([&](size_t) -> const E& { return edges; }, m_edges_changed);
     }
 
     /// Sets the targets; different targets discard the stored search. Callers that know the targets are unchanged
@@ -195,7 +187,6 @@ private:
     bool m_restart_backward = false;  ///< An added edge breaks the backward frontier's bounds.
     bool m_reset_pending = true;
     bool m_targets_set = false;
-    std::vector<bool> m_edges_changed;  ///< bind_edges()'s flag for bind(), kept to avoid allocations.
     TreeRepair m_repair;
     AStarStorage m_search;
     MinDistanceStatistics m_statistics;
