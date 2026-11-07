@@ -80,7 +80,7 @@ namespace ygg::formalism
 template<>
 struct RelationRepositoryTraits<tests::ConcurrentPackedObjectTag>
 {
-    using storage_type = BitRowPoolStorage;
+    using width = urd::bit;
 };
 }
 

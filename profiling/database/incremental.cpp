@@ -38,7 +38,7 @@ void append_only(benchmark::State& state)
 {
     const auto rows = static_cast<size_t>(state.range(0));
     const auto repetitions = static_cast<size_t>(state.range(1));
-    Builder<database::Relation> relation { ColumnIndex(1), ColumnIndex(2) };
+    urd::builder<database::Relation> relation { ColumnIndex(1), ColumnIndex(2) };
     const auto refill = [&]
     {
         relation.clear();
@@ -62,12 +62,12 @@ void append_only(benchmark::State& state)
 struct Transition
 {
     database::incremental::Delta delta { ColumnIndex(1), ColumnIndex(2) };
-    Builder<database::Relation> snapshot { ColumnIndex(1), ColumnIndex(2) };
+    urd::builder<database::Relation> snapshot { ColumnIndex(1), ColumnIndex(2) };
 };
 
 struct Trace
 {
-    Builder<database::Relation> initial { ColumnIndex(1), ColumnIndex(2) };
+    urd::builder<database::Relation> initial { ColumnIndex(1), ColumnIndex(2) };
     std::array<Transition, 6> transitions {};
     size_t rows;
     size_t changed_rows;
@@ -154,7 +154,7 @@ struct JoinTrace
     }
 };
 
-bool equal_rows(const Builder<database::Relation>& lhs, const Builder<database::Relation>& rhs)
+bool equal_rows(const urd::builder<database::Relation>& lhs, const urd::builder<database::Relation>& rhs)
 {
     if (lhs.size() != rhs.size())
         return false;
@@ -164,7 +164,7 @@ bool equal_rows(const Builder<database::Relation>& lhs, const Builder<database::
     return true;
 }
 
-size_t changed_rows(const Builder<database::Relation>& before, const Builder<database::Relation>& after)
+size_t changed_rows(const urd::builder<database::Relation>& before, const urd::builder<database::Relation>& after)
 {
     size_t result = 0;
     for (size_t i = 0; i < before.size(); ++i)
@@ -174,7 +174,7 @@ size_t changed_rows(const Builder<database::Relation>& before, const Builder<dat
     return result;
 }
 
-bool equal_delta(const database::incremental::Delta& delta, const Builder<database::Relation>& before, const Builder<database::Relation>& after)
+bool equal_delta(const database::incremental::Delta& delta, const urd::builder<database::Relation>& before, const urd::builder<database::Relation>& after)
 {
     size_t added = 0;
     size_t removed = 0;
@@ -264,7 +264,7 @@ void projection(benchmark::State& state)
         if constexpr (Incremental)
             return database::incremental::ProjectionEvaluator(plan);
         else
-            return Builder<database::Relation>(plan.output_columns().span());
+            return urd::builder<database::Relation>(plan.output_columns().span());
     }();
     if constexpr (Incremental)
         evaluation.initialize(trace.initial, workspace);
@@ -275,7 +275,7 @@ void projection(benchmark::State& state)
         else
             database::project(transition.snapshot, plan, evaluation, workspace);
     };
-    const auto result = [&]() -> const Builder<database::Relation>&
+    const auto result = [&]() -> const urd::builder<database::Relation>&
     {
         if constexpr (Incremental)
             return evaluation.get_result();
@@ -283,8 +283,8 @@ void projection(benchmark::State& state)
             return evaluation;
     };
     // Validate every transition outside timing, not just the restored root.
-    Builder<database::Relation> reference(plan.output_columns().span());
-    Builder<database::Relation> previous(plan.output_columns().span());
+    urd::builder<database::Relation> reference(plan.output_columns().span());
+    urd::builder<database::Relation> previous(plan.output_columns().span());
     database::Workspace reference_workspace;
     database::project(trace.initial, plan, previous, reference_workspace);
     size_t output_delta_rows = 0;
@@ -322,14 +322,14 @@ void fixed_input_join(benchmark::State& state)
         for (size_t match = 0; match < fanout; ++match)
             fixed->insert(std::tuple { static_cast<uint_t>(key), static_cast<uint_t>(match) });
     const database::JoinPlan plan(trace.initial.columns().span(), fixed->columns().span());
-    const Builder<database::Relation> unchanged(fixed->columns().span());
+    const urd::builder<database::Relation> unchanged(fixed->columns().span());
     database::Workspace workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
             return database::incremental::JoinEvaluator(plan);
         else
-            return Builder<database::Relation>(plan.output_columns().span());
+            return urd::builder<database::Relation>(plan.output_columns().span());
     }();
     // Full recomputation also retains its index on the unchanged input.
     const database::JoinIndex index(*fixed, plan.rhs_keys());
@@ -342,15 +342,15 @@ void fixed_input_join(benchmark::State& state)
         else
             database::join(transition.snapshot, *fixed, plan, index, evaluation, workspace);
     };
-    const auto result = [&]() -> const Builder<database::Relation>&
+    const auto result = [&]() -> const urd::builder<database::Relation>&
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
             return evaluation;
     };
-    Builder<database::Relation> reference(plan.output_columns().span());
-    Builder<database::Relation> previous(plan.output_columns().span());
+    urd::builder<database::Relation> reference(plan.output_columns().span());
+    urd::builder<database::Relation> previous(plan.output_columns().span());
     database::Workspace reference_workspace;
     database::join(trace.initial, *fixed, plan, index, previous, reference_workspace);
     size_t output_delta_rows = 0;
@@ -397,7 +397,7 @@ void changing_join(benchmark::State& state)
         if constexpr (Incremental)
             return database::incremental::JoinEvaluator(plan);
         else
-            return Builder<database::Relation>(plan.output_columns().span());
+            return urd::builder<database::Relation>(plan.output_columns().span());
     }();
     if constexpr (Incremental)
         evaluation.initialize(trace.lhs.initial, trace.rhs.initial, workspace);
@@ -412,15 +412,15 @@ void changing_join(benchmark::State& state)
             // hash index in retained storage using the already prepared plan.
             database::join(left.snapshot, right.snapshot, plan, evaluation, workspace);
     };
-    const auto result = [&]() -> const Builder<database::Relation>&
+    const auto result = [&]() -> const urd::builder<database::Relation>&
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
             return evaluation;
     };
-    Builder<database::Relation> reference(plan.output_columns().span());
-    Builder<database::Relation> previous(plan.output_columns().span());
+    urd::builder<database::Relation> reference(plan.output_columns().span());
+    urd::builder<database::Relation> previous(plan.output_columns().span());
     database::Workspace reference_workspace;
     database::join(trace.lhs.initial, trace.rhs.initial, plan, previous, reference_workspace);
     size_t output_delta_rows = 0;

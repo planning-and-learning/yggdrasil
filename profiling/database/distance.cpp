@@ -23,11 +23,11 @@ namespace
 {
 using Values = boost::mp11::mp_list<uint_t>;
 using ColumnIndex = urd::index<database::Column>;
-using RelationBuilder = Builder<database::Relation>;
+using RelationBuilder = urd::builder<database::Relation>;
 
-Builder<database::Columns> columns(size_t arity, uint_t first_label)
+urd::builder<database::Columns> columns(size_t arity, uint_t first_label)
 {
-    Builder<database::Columns> result;
+    urd::builder<database::Columns> result;
     for (size_t i = 0; i < arity; ++i)
         result.push_back<uint_t>(ColumnIndex(first_label + static_cast<uint_t>(i)));
     return result;

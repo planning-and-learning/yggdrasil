@@ -61,61 +61,12 @@ struct RelationRepositoryConfig
     std::uint8_t object_index_width;
 };
 
-/// How a relation repository stores the objects of its bindings, one container per relation: what it is (make) and the
-/// few operations the repository uses (by a binding's objects with their hash, which the repository computes once for
-/// every layer it looks in).
-
-/// The objects' indices as they are, one row per binding, in a urd pool: rows of one width (the arity) stored flat.
-struct RowPoolStorage
-{
-    template<typename Object, bool ThreadSafe>
-    using container_type = urd::Store<urd::pool<urd::Store<urd::sequence<Object>, urd::frozen>>,
-                                      std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
-
-    template<typename Object, bool ThreadSafe>
-    static container_type<Object, ThreadSafe> make(size_t /*arity*/, std::uint8_t /*object_index_width*/)
-    { return {}; }
-    template<typename Objects>
-    static size_t hash(const Objects& objects) noexcept
-    { return urd::hash_range(objects); }
-    template<typename Container, typename Objects>
-    static std::optional<ygg::uint_t> find(const Container& container, const Objects& objects, size_t hash)
-    {
-        const auto found = container.find(urd::prehashed<Objects> { objects, hash });
-        return found.is_none() ? std::nullopt : std::optional<ygg::uint_t>(found.value);
-    }
-    template<typename Container, typename Objects>
-    static std::pair<ygg::uint_t, bool> insert(Container& container, const Objects& objects, size_t hash)
-    {
-        const auto [handle, inserted] = container.insert(urd::prehashed<Objects> { objects, hash });
-        return { handle.value, inserted };
-    }
-    template<typename Container>
-    static auto at(const Container& container, size_t row)
-    { return container.view(typename Container::handle_type(static_cast<ygg::uint_t>(row))); }
-    template<typename Container>
-    static size_t memory_usage(const Container& container) noexcept
-    { return urd::memory_usage(container); }
-};
-
-/// The objects' indices in as many bits as the largest needs (object_index_width), one row per binding: a urd pool of
-/// urd::bit, the same operations as RowPoolStorage.
-struct BitRowPoolStorage : RowPoolStorage
-{
-    template<typename Object, bool ThreadSafe>
-    using container_type = urd::Store<urd::pool<urd::Store<urd::sequence<Object>, urd::frozen>>,
-                                      urd::bit,
-                                      std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
-
-    template<typename Object, bool ThreadSafe>
-    static container_type<Object, ThreadSafe> make(size_t /*arity*/, std::uint8_t object_index_width)
-    { return container_type<Object, ThreadSafe>(urd::bit_width { object_index_width }); }
-};
-
+/// How a relation repository stores its bindings' objects, per object tag: each index whole (urd::word), or in the
+/// object_index_width bits the largest needs (urd::bit).
 template<typename ObjectTag>
 struct RelationRepositoryTraits
 {
-    using storage_type = RowPoolStorage;
+    using width = urd::word;
 };
 
 template<typename ObjectTag, typename T, bool ThreadSafe = false>
@@ -124,12 +75,11 @@ class BasicRelationRepository
 private:
     static constexpr ygg::uint_t kInvalid = std::numeric_limits<ygg::uint_t>::max();
 
-    using storage_type = typename RelationRepositoryTraits<ObjectTag>::storage_type;
-
-    static auto make_container(size_t arity, std::uint8_t object_index_width)
-    { return storage_type::template make<urd::index<Object<ObjectTag>>, ThreadSafe>(arity, object_index_width); }
-
-    using internal_container_type = decltype(make_container(size_t {}, std::uint8_t {}));
+    /// The objects' indices, one row per binding, in a urd pool: rows of one width (the arity) stored flat.
+    using internal_container_type = urd::Store<urd::pool<urd::Store<urd::sequence<urd::index<Object<ObjectTag>>>, urd::frozen>>,
+                                               typename RelationRepositoryTraits<ObjectTag>::width,
+                                               std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
+    using Objects = urd::flat_vector<urd::index<Object<ObjectTag>>>;
 
     struct Slot
     {
@@ -139,12 +89,26 @@ private:
         size_t arity;
 
         Slot(urd::index<T> g_, size_t arity_, size_t parent_size_, std::uint8_t object_index_width) :
-            container(make_container(arity_, object_index_width)),
+            container(make_container(object_index_width)),
             parent_size(parent_size_),
             g(g_),
             arity(arity_)
         {
         }
+        /// A row of the hierarchy from the handle of one of this layer's, and back: the repository's row arithmetic.
+        [[nodiscard]] urd::index<Row> row(typename internal_container_type::handle_type handle) const noexcept
+        { return urd::index<Row>(static_cast<ygg::uint_t>(parent_size + handle.value)); }
+        [[nodiscard]] typename internal_container_type::handle_type handle(urd::index<Row> row) const noexcept
+        { return typename internal_container_type::handle_type(static_cast<ygg::uint_t>(row.value - parent_size)); }
+
+        static internal_container_type make_container(std::uint8_t object_index_width)
+        {
+            if constexpr (std::constructible_from<internal_container_type, urd::bit_width>)
+                return internal_container_type(urd::bit_width { object_index_width });
+            else
+                return internal_container_type();
+        }
+
         /// A binding of this relation has one object per argument.
         void check_arity(size_t objects) const
         {
@@ -382,7 +346,7 @@ public:
     using container_type = internal_container_type;
 
 private:
-    using ConstViewType = decltype(storage_type::at(std::declval<const container_type&>(), size_t {}));
+    using ConstViewType = decltype(std::declval<const container_type&>().view(typename container_type::handle_type()));
 
 public:
     /**
@@ -399,8 +363,8 @@ public:
             return std::nullopt;
         slot->check_arity(builder.objects.size());
 
-        if (auto row_or_nullopt = storage_type::find(slot->container, builder.objects, h))
-            return urd::index<Row>(slot->parent_size + *row_or_nullopt);
+        if (const auto found = slot->container.find(urd::prehashed<Objects> { builder.objects, h }); !found.is_none())
+            return slot->row(found);
 
         return std::nullopt;
     }
@@ -424,8 +388,8 @@ public:
     {
         auto& slot = get_or_create_slot(builder.relation, builder.objects.size());
         slot.check_arity(builder.objects.size());
-        const auto [row, created] = storage_type::insert(slot.container, builder.objects, h);
-        return { urd::index<Row>(slot.parent_size + row), created };
+        const auto [handle, created] = slot.container.insert(urd::prehashed<Objects> { builder.objects, h });
+        return { slot.row(handle), created };
     }
 
     [[nodiscard]] ConstViewType at_local(ygg::formalism::RelationBindingIndex<T, ObjectTag> index) const
@@ -436,7 +400,7 @@ public:
         if (!slot || row.value < slot->parent_size || row.value >= slot->parent_size + slot->container.size())
             throw std::out_of_range("Relation binding index not found in local repository.");
 
-        return storage_type::at(slot->container, row.value - slot->parent_size);
+        return slot->container.view(slot->handle(row));
     }
 
     [[nodiscard]] ConstViewType front_local(urd::index<T> g) const
@@ -444,7 +408,7 @@ public:
         const auto* slot = find_slot(g);
         if (!slot || slot->container.size() == 0)
             throw std::out_of_range("Relation binding index not found in local repository.");
-        return storage_type::at(slot->container, 0);
+        return slot->container.view(typename container_type::handle_type(0));
     }
 
     [[nodiscard]] size_t local_size(urd::index<T> g) const noexcept
@@ -532,13 +496,13 @@ public:
     [[nodiscard]] size_t memory_usage() const noexcept
     {
         size_t bytes = m_slots.memory_usage();
-        m_slots.for_each([&](const Slot& slot) { bytes += storage_type::memory_usage(slot.container); });
+        m_slots.for_each([&](const Slot& slot) { bytes += urd::memory_usage(slot.container); });
         return bytes;
     }
 
     [[nodiscard]] std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
 
-    static size_t hash(const urd::data<RelationBinding<T, ObjectTag>>& builder) noexcept { return storage_type::hash(builder.objects); }
+    static size_t hash(const urd::data<RelationBinding<T, ObjectTag>>& builder) noexcept { return urd::hash_range(builder.objects); }
 };
 }  // namespace ygg::formalism
 

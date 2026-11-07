@@ -22,7 +22,7 @@ namespace ygg::profiling
 {
 namespace
 {
-using Relation = Builder<database::Relation>;
+using Relation = urd::builder<database::Relation>;
 using Column = urd::index<database::Column>;
 
 struct Triangle

@@ -49,28 +49,18 @@ class BasicSymbolRepository
 private:
     /// The layer's records: a urd pool of them, each once, read by index; the request decides how they are stored
     /// (in place or serialized into an arena), with references that hold while others are inserted (views borrow them).
-    struct Slot
-    {
-        using Records = urd::Store<urd::pool<urd::data<T>>, urd::flat, urd::stable_refs, std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
-
-        Records records { urd::layer { 0 } };
-        size_t parent_size = 0;
-
-        static size_t hash(const urd::data<T>& builder) noexcept { return urd::Hash<urd::data<T>> {}(builder); }
-        [[nodiscard]] const urd::data<T>& operator[](size_t local) const noexcept { return records[urd::index<urd::data<T>>(static_cast<uint_t>(local))]; }
-
-        void clear() noexcept { records.clear(); }
-        [[nodiscard]] size_t memory_usage() const noexcept { return urd::memory_usage(records); }
-    };
+    using Records = urd::Store<urd::pool<urd::data<T>>, urd::flat, urd::stable_refs, std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
 
     const BasicSymbolRepository* m_parent;
-    Slot m_slot;
+    Records m_records { urd::layer { 0 } };
+    size_t m_parent_size = 0;
 
-    void clear_slot() noexcept
+    void clear_records() noexcept
     {
-        m_slot.clear();
-        m_slot.parent_size = m_parent ? m_parent->size() : size_t { 0 };
+        m_records.clear();
+        m_parent_size = m_parent ? m_parent->size() : size_t { 0 };
     }
+    [[nodiscard]] const urd::data<T>& record(size_t local) const noexcept { return m_records[urd::index<urd::data<T>>(static_cast<uint_t>(local))]; }
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
@@ -98,7 +88,7 @@ public:
     [[nodiscard]] const urd::data<T>& local(urd::index<T> index) const noexcept
     {
         assert(is_local(index));
-        return m_slot[index.value - m_slot.parent_size];
+        return record(index.value - m_parent_size);
     }
 
     [[nodiscard]] const urd::data<T>& at_local(urd::index<T> index) const
@@ -110,26 +100,26 @@ public:
 
     [[nodiscard]] const urd::data<T>& front_local() const
     {
-        if (m_slot.records.empty())
+        if (m_records.empty())
             throw std::out_of_range("Symbol index not found in local repository.");
-        return m_slot[0];
+        return record(0);
     }
 
-    [[nodiscard]] size_t local_size() const noexcept { return m_slot.records.size(); }
+    [[nodiscard]] size_t local_size() const noexcept { return m_records.size(); }
 
-    [[nodiscard]] size_t size() const noexcept { return m_slot.parent_size + m_slot.records.size(); }
+    [[nodiscard]] size_t size() const noexcept { return m_parent_size + m_records.size(); }
 
-    [[nodiscard]] size_t parent_size() const noexcept { return m_slot.parent_size; }
+    [[nodiscard]] size_t parent_size() const noexcept { return m_parent_size; }
 
     [[nodiscard]] bool is_local(urd::index<T> index) const noexcept
-    { return index != urd::index<T>() && ygg::uint_t(index.value) >= m_slot.parent_size && ygg::uint_t(index.value) < size(); }
+    { return index != urd::index<T>() && ygg::uint_t(index.value) >= m_parent_size && ygg::uint_t(index.value) < size(); }
 
     [[nodiscard]] bool exists_parent_mutation() const noexcept
     {
         if (!m_parent)
             return false;
 
-        return m_parent->size() > m_slot.parent_size;
+        return m_parent->size() > m_parent_size;
     }
 
     /**
@@ -164,7 +154,7 @@ public:
 
 template<typename T, bool ThreadSafe>
 size_t BasicSymbolRepository<T, ThreadSafe>::hash(const urd::data<T>& builder) noexcept
-{ return Slot::hash(builder); }
+{ return urd::Hash<urd::data<T>> {}(builder); }
 
 }  // namespace ygg::formalism
 

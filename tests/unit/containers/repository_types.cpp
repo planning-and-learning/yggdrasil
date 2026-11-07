@@ -159,7 +159,7 @@ namespace ygg::formalism
 template<>
 struct RelationRepositoryTraits<tests::RepositoryTypesPackedObjectTag>
 {
-    using storage_type = BitRowPoolStorage;
+    using width = urd::bit;
 };
 
 }  // namespace ygg::formalism

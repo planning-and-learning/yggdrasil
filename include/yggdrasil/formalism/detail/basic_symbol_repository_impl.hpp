@@ -27,26 +27,26 @@ namespace ygg::formalism
 {
 
 template<typename T, bool ThreadSafe>
-BasicSymbolRepository<T, ThreadSafe>::BasicSymbolRepository(const BasicSymbolRepository* parent) : m_parent(parent), m_slot()
-{ clear_slot(); }
+BasicSymbolRepository<T, ThreadSafe>::BasicSymbolRepository(const BasicSymbolRepository* parent) : m_parent(parent)
+{ clear_records(); }
 
 template<typename T, bool ThreadSafe>
 BasicSymbolRepository<T, ThreadSafe>::~BasicSymbolRepository() = default;
 
 template<typename T, bool ThreadSafe>
 void BasicSymbolRepository<T, ThreadSafe>::clear() noexcept
-{ clear_slot(); }
+{ clear_records(); }
 
 template<typename T, bool ThreadSafe>
 size_t BasicSymbolRepository<T, ThreadSafe>::memory_usage() const noexcept
-{ return m_slot.memory_usage(); }
+{ return urd::memory_usage(m_records); }
 
 template<typename T, bool ThreadSafe>
 std::optional<urd::index<T>> BasicSymbolRepository<T, ThreadSafe>::find_local_with_hash(const urd::data<T>& builder, size_t h) const noexcept
 {
-    assert(h == Slot::hash(builder));
-    if (const auto found = m_slot.records.find(urd::prehashed<urd::data<T>> { builder, h }); !found.is_none())
-        return urd::index<T>(static_cast<uint_t>(m_slot.parent_size + found.value));
+    assert(h == BasicSymbolRepository::hash(builder));
+    if (const auto found = m_records.find(urd::prehashed<urd::data<T>> { builder, h }); !found.is_none())
+        return urd::index<T>(static_cast<uint_t>(m_parent_size + found.value));
     return std::nullopt;
 }
 
@@ -69,14 +69,14 @@ std::pair<urd::index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::insert_loca
 template<typename T, bool ThreadSafe>
 std::pair<urd::index<T>, bool> BasicSymbolRepository<T, ThreadSafe>::create_local_with_hash(urd::data<T>& builder, size_t h)
 {
-    const auto [index, created] = m_slot.records.insert(urd::prehashed<urd::data<T>> { builder, h },
+    const auto [index, created] = m_records.insert(urd::prehashed<urd::data<T>> { builder, h },
                                                         [&](urd::index<urd::data<T>> local_index) -> const urd::data<T>&
                                                         {
-                                                            builder.index.value = static_cast<uint_t>(m_slot.parent_size + local_index.value);
-                                                            assert(h == Slot::hash(builder) && "Symbol index must not affect identity.");
+                                                            builder.index.value = static_cast<uint_t>(m_parent_size + local_index.value);
+                                                            assert(h == BasicSymbolRepository::hash(builder) && "Symbol index must not affect identity.");
                                                             return builder;
                                                         });
-    builder.index.value = static_cast<uint_t>(m_slot.parent_size + index.value);
+    builder.index.value = static_cast<uint_t>(m_parent_size + index.value);
     return { builder.index, created };
 }
 
