@@ -20,12 +20,12 @@ namespace ygg
 {
 
 /// Preserve each library's exception hierarchy and attach an owned diagnostic.
-/// Error must provide what() and diagnostic() returning const diagnostics::Diagnostic&.
+/// Error must provide what() and diagnostic() returning const diagnostics::Diagnostic&. pyyggdrasil.diagnostics must be
+/// imported (it binds Diagnostic): a library's errors derive from its SemanticError (import it from there).
 template<typename Error>
 nanobind::exception<Error> bind_diagnostic_exception(nanobind::handle scope, const char* name, nanobind::handle base = PyExc_Exception)
 {
     namespace nb = nanobind;
-    nb::module_::import_("pyyggdrasil.diagnostics");
     auto type = nb::exception<Error>(scope, name, base);
     if (!nb::hasattr(base, "diagnostic"))
         type.attr("diagnostic") = nb::module_::import_("builtins")

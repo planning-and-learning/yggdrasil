@@ -170,6 +170,16 @@ constexpr auto context(std::string_view name) { return ContextDirective { name }
 inline auto comment_skipper()
 { return boost::spirit::x3::ascii::space | (';' >> *(boost::spirit::x3::char_ - boost::spirit::x3::eol) >> (boost::spirit::x3::eol | boost::spirit::x3::eoi)); }
 
+/// A character of a symbol: anything but parentheses, ';' and whitespace, which end one in that layout.
+inline constexpr auto symbol_character = boost::spirit::x3::char_ - '(' - ')' - ';' - boost::spirit::x3::ascii::space;
+
+/// The keyword `text` in any case, as a whole symbol: not followed by another symbol character.
+constexpr auto keyword(const char* text)
+{
+    return boost::spirit::x3::rule<class KeywordClass> { text } =
+               boost::spirit::x3::lexeme[boost::spirit::x3::no_case[boost::spirit::x3::lit(text)] >> !symbol_character];
+}
+
 /// The x3 context of rules parsed with comment_skipper() that report errors through Handler.
 template<typename Handler>
 using ParserContext =

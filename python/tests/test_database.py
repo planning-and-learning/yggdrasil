@@ -167,7 +167,7 @@ def test_interned_relations_use_typed_identity_and_independent_storage() -> None
     assert duplicate_created is False
     del result
     assert isinstance(relation, database.RelationView)
-    assert isinstance(relation.get_index(), database.RelationIndex)
+    assert isinstance(relation.index(), database.RelationIndex)
     assert relation == duplicate
     assert hash(relation) == hash(duplicate)
     assert len({relation, duplicate}) == 1
@@ -262,7 +262,7 @@ def test_interning_ignores_row_insertion_order() -> None:
     reverse = repository.insert(builder)[0]
 
     assert forward == reverse
-    assert forward.get_index() == reverse.get_index()
+    assert forward.index() == reverse.index()
     assert hash(forward) == hash(reverse)
     assert len(repository) == 2
     # Row IDs follow the repository's row-interning history; canonical

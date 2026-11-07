@@ -112,12 +112,12 @@ def test_records_views_and_insertion_identity() -> None:
     a, b = inputs_of(repo, [relation([0, 1]), relation([1, 2])])
     data = db.QueryJoinData(a, b)
     assert data == db.QueryJoinData(a, b)
-    assert data.lhs == a.get_index()
-    assert data.rhs == b.get_index()
+    assert data.lhs == a.index()
+    assert data.rhs == b.index()
     join, created = repo.insert(data)
     assert created
     assert isinstance(join, db.QueryJoin)
-    assert isinstance(join.get_index(), db.QueryJoinIndex)
+    assert isinstance(join.index(), db.QueryJoinIndex)
     assert join.get_lhs() == a
     assert join.get_rhs() == b
     assert tuple(join.columns()) == tuple(columns(0, 1, 2))
@@ -148,7 +148,7 @@ def test_semijoin_and_antijoin_filter_their_lhs() -> None:
     edges_query, reached_query = inputs_of(repo, [edges, reached])
     semijoin, _ = repo.insert(db.QuerySemijoinData(edges_query, reached_query))
     assert isinstance(semijoin, db.QuerySemijoin)
-    assert isinstance(semijoin.get_index(), db.QuerySemijoinIndex)
+    assert isinstance(semijoin.index(), db.QuerySemijoinIndex)
     assert tuple(semijoin.columns()) == tuple(columns(0, 1))
     antijoin, _ = repo.insert(db.QueryAntijoinData(edges_query, reached_query))
     assert isinstance(antijoin, db.QueryAntijoin)

@@ -12,7 +12,6 @@
 #include <urd/elements/flat.hpp>
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
-#include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 
 #include <benchmark/benchmark.h>
 #include <cstdint>

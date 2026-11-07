@@ -18,17 +18,42 @@
 #ifndef YGG_FORMALISM_RELATION_REPOSITORY_HPP_
 #define YGG_FORMALISM_RELATION_REPOSITORY_HPP_
 
-#include <boost/mp11.hpp>
-#include <urd/elements/flat.hpp>
-#include "yggdrasil/formalism/basic_relation_repository.hpp"
+#include "yggdrasil/core/config.hpp"
+#include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 
+#include <boost/mp11.hpp>
+#include <concepts>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
 #include <type_traits>
+#include <urd/elements/flat.hpp>
+#include <urd/elements/hash.hpp>
+#include <urd/elements/prehashed.hpp>
+#include <urd/memory.hpp>
+#include <urd/repr/maps/index_map.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/repr/wrappers/layer.hpp>
+#include <urd/repr/wrappers/layered_pool.hpp>
+#include <urd/store.hpp>
+#include <urd/utils/family.hpp>
 #include <utility>
-#include <urd/config.hpp>
 
 namespace ygg::formalism
 {
+
+/// The width of a whole object index, the widest a relation repository stores.
+inline constexpr auto default_object_index_width = urd::bit_width { static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits) };
+
+/// How a relation repository stores its bindings' objects, per object tag: each index whole (urd::word), or in the
+/// object_index_width bits the largest needs (urd::bit).
+template<typename ObjectTag>
+struct RelationRepositoryTraits
+{
+    using width = urd::word;
+};
+
 template<typename ObjectTag, typename... Ts>
 class RelationRepository;
 
@@ -37,113 +62,78 @@ class ConcurrentRelationRepository;
 
 namespace detail
 {
-template<typename Repository, typename ObjectTag, bool ThreadSafe, typename... Ts>
-class RelationRepositoryBase : private BasicRelationRepository<ObjectTag, Ts, ThreadSafe>...
+/// The bindings of a repository, per relation type in a urd family: per relation, a pool of its bindings' rows of
+/// objects (each row once, its index the binding's row), in a dense map by relation. Over a parent, both levels layer:
+/// a relation this layer never touched reads the parent's pool; one it touched has a pool of its own over the parent's,
+/// its rows numbered after the parent's.
+template<typename ObjectTag, bool ThreadSafe, typename... Ts>
+class RelationRepositoryBase
 {
-private:
-    template<typename T, typename...>
-    struct FirstType
-    {
-        using type = T;
-    };
-
-    size_t m_index;
+    using Threading = std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>;
+    using Objects = urd::flat_vector<urd::index<Object<ObjectTag>>>;
 
 public:
     using object_tag = ObjectTag;
     using RelationTypes = boost::mp11::mp_list<Ts...>;
-    using container_type = typename BasicRelationRepository<ObjectTag, typename FirstType<Ts...>::type, ThreadSafe>::container_type;
     static constexpr bool thread_safe = ThreadSafe;
 
+    /// One relation's rows.
+    using Rows = urd::Store<urd::pool<urd::Store<urd::sequence<urd::index<Object<ObjectTag>>>, urd::frozen>, urd::index<Row>>,
+                            urd::monotone,
+                            typename RelationRepositoryTraits<ObjectTag>::width,
+                            urd::layered,
+                            Threading>;
+    /// The rows of each relation of type T.
     template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] size_t size(urd::index<T> g) const noexcept
-    { return get<T>().size(g); }
+    using Relations = urd::Store<urd::map<urd::index<T>, Rows>, urd::dense, urd::layered, Threading>;
 
-    /**
-     * Local methods access only the current repository layer.
-     * Handle-producing methods return raw handles because the caller already knows the context.
-     */
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() noexcept
-    { return static_cast<BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] const BasicRelationRepository<ObjectTag, T, ThreadSafe>& get() const noexcept
-    { return static_cast<const BasicRelationRepository<ObjectTag, T, ThreadSafe>&>(*this); }
+private:
+    urd::utils::Family<Relations, Ts...> m_relations;
+    std::uint8_t m_object_index_width;
 
     template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] auto find_local_with_hash(const urd::data<RelationBinding<T, ObjectTag>>& builder, size_t h) const
-    { return get<T>().find_local_with_hash(builder, h); }
+    static urd::prehashed<Objects> key(const urd::data<RelationBinding<T, ObjectTag>>& builder)
+    { return { builder.objects, urd::hash_range(builder.objects) }; }
 
+public:
+    /// The relations of type T, as this layer reads them.
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    auto find_local(const urd::data<RelationBinding<T, ObjectTag>>& builder) const
-    { return get<T>().find_local(builder); }
+    [[nodiscard]] const Relations<T>& get() const
+    { return m_relations.template get<T>(); }
 
+    /// The binding's row, in whichever layer holds it, or none.
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    auto insert_local_with_hash(const urd::data<RelationBinding<T, ObjectTag>>& builder, size_t h)
-    { return get<T>().insert_local_with_hash(builder, h); }
+    [[nodiscard]] urd::index<Row> find(const urd::data<RelationBinding<T, ObjectTag>>& builder) const
+    { return get<T>().read(builder.relation, [&builder](const Rows& rows) { return rows.find(key(builder)); }, urd::index<Row>()); }
 
+    /// The binding's row, stored in this layer's own pool of its relation where no layer holds it, and whether it was
+    /// stored now. Every row of a relation has one object per argument (checked against its first).
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    std::pair<urd::index<Row>, bool> create_local_with_hash(const urd::data<RelationBinding<T, ObjectTag>>& builder, size_t h)
-    { return get<T>().create_local_with_hash(builder, h); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    auto insert_local(const urd::data<RelationBinding<T, ObjectTag>>& builder)
-    { return get<T>().insert_local(builder); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] auto at_local(ygg::formalism::RelationBindingIndex<T, ObjectTag> index) const
-    { return get<T>().at_local(index); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    auto front_local(urd::index<T> g) const
-    { return get<T>().front_local(g); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    size_t local_size(urd::index<T> g) const noexcept
-    { return get<T>().local_size(g); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    size_t parent_size(urd::index<T> g) const noexcept
-    { return get<T>().parent_size(g); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] bool is_local(ygg::formalism::RelationBindingIndex<T, ObjectTag> index) const noexcept
-    { return get<T>().is_local(index); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] bool exists_parent_mutation(urd::index<T> g) const noexcept
-    { return get<T>().exists_parent_mutation(g); }
-
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] size_t memory_usage() const noexcept
-    { return get<T>().memory_usage(); }
-
-    /**
-     * Common methods do not depend on lookup scope.
-     */
+    std::pair<urd::index<Row>, bool> insert(const urd::data<RelationBinding<T, ObjectTag>>& builder)
+    {
+        if (builder.relation.is_none())
+            throw std::invalid_argument("RelationRepository: the maximum relation index is reserved.");
+        auto& relations = m_relations.template get<T>();
+        if constexpr (std::constructible_from<Rows, urd::bit_width>)
+            relations.try_emplace(builder.relation, urd::bit_width { m_object_index_width });
+        auto& rows = relations.at(builder.relation);
+        if (rows.size() != 0 && rows.row_size(urd::index<Row>(0)) != builder.objects.size())
+            throw std::invalid_argument("RelationRepository: wrong number of objects for the relation.");
+        return rows.insert(key(builder));
+    }
 
     /// Parent layers must remain frozen and outlive this repository.
-    explicit RelationRepositoryBase(size_t index, const Repository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
-        BasicRelationRepository<ObjectTag, Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr, object_index_width)...,
-        m_index(index)
+    explicit RelationRepositoryBase(const RelationRepositoryBase* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
+        m_relations(parent == nullptr ? nullptr : &parent->m_relations),
+        m_object_index_width(object_index_width.bits)
     {
+        if (m_object_index_width == 0 || m_object_index_width > default_object_index_width.bits)
+            throw std::invalid_argument("RelationRepository: object index width must be between 1 and the encoded object width.");
+        if (parent && m_object_index_width < parent->m_object_index_width)
+            throw std::invalid_argument("RelationRepository: child object index width must not be smaller than its parent's.");
     }
 
     ~RelationRepositoryBase() = default;
@@ -152,43 +142,36 @@ public:
     RelationRepositoryBase(RelationRepositoryBase&&) = delete;
     RelationRepositoryBase& operator=(RelationRepositoryBase&&) = delete;
 
-    [[nodiscard]] const auto& get_index() const noexcept { return m_index; }
-    /// The repository's number, as urd's views ask of a context.
-    [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
-    [[nodiscard]] std::uint8_t get_object_index_width() const noexcept
-    { return this->template get<typename FirstType<Ts...>::type>().get_object_index_width(); }
+    [[nodiscard]] std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
 
-    void clear() noexcept { (this->template get<Ts>().clear(), ...); }
-
+    /// This layer's own storage of T's bindings.
     template<typename T>
         requires SupportsRelation<RelationRepositoryBase, T>
-    static size_t hash(const urd::data<RelationBinding<T, ObjectTag>>& builder) noexcept
-    { return BasicRelationRepository<ObjectTag, T, ThreadSafe>::hash(builder); }
+    [[nodiscard]] size_t memory_usage() const
+    { return urd::memory_usage(get<T>()); }
+
+    /// Forgets this layer's own bindings; the parent's stay.
+    void clear() { m_relations.clear(); }
 };
 }  // namespace detail
 
 template<typename ObjectTag, typename... Ts>
-class RelationRepository : public detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>
+class RelationRepository : public detail::RelationRepositoryBase<ObjectTag, false, Ts...>
 {
-    using Base = detail::RelationRepositoryBase<RelationRepository<ObjectTag, Ts...>, ObjectTag, false, Ts...>;
-
 public:
-    explicit RelationRepository(size_t index, const RelationRepository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
-        Base(index, parent, object_index_width)
+    explicit RelationRepository(const RelationRepository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
+        detail::RelationRepositoryBase<ObjectTag, false, Ts...>(parent, object_index_width)
     {
     }
 };
 
 template<typename ObjectTag, typename... Ts>
-class ConcurrentRelationRepository : public detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>
+class ConcurrentRelationRepository : public detail::RelationRepositoryBase<ObjectTag, true, Ts...>
 {
-    using Base = detail::RelationRepositoryBase<ConcurrentRelationRepository<ObjectTag, Ts...>, ObjectTag, true, Ts...>;
-
 public:
-    explicit ConcurrentRelationRepository(size_t index,
-                                          const ConcurrentRelationRepository* parent = nullptr,
+    explicit ConcurrentRelationRepository(const ConcurrentRelationRepository* parent = nullptr,
                                           urd::bit_width object_index_width = default_object_index_width) :
-        Base(index, parent, object_index_width)
+        detail::RelationRepositoryBase<ObjectTag, true, Ts...>(parent, object_index_width)
     {
     }
 };

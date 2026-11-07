@@ -5,8 +5,6 @@
 
 #include "yggdrasil/database/syntax/query_repository.hpp"
 
-#include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
-
 namespace ygg::database
 {
 QueryRepository QueryRepositoryFactory::create() { return QueryRepository(m_indices.next(), *this); }
@@ -24,17 +22,3 @@ QueryRepository::QueryRepository(size_t index, QueryRepositoryFactory factory) :
 QueryRepository::~QueryRepository() = default;
 }
 
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryInputTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryEmptyTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryJoinTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryProjectTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryRenameTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySelectEqualTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySelectValueTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryUnionTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryDifferenceTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryDistanceTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryGenericJoinTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySemijoinTag>, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAntijoinTag>, false>;

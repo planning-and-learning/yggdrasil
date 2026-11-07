@@ -62,25 +62,24 @@ public:
     QueryRepository(QueryRepository&&) = delete;
     QueryRepository& operator=(QueryRepository&&) = delete;
 
-    [[nodiscard]] size_t get_index() const noexcept { return m_index; }
     /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
     [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
     friend const QueryRepository& get_repository(const QueryRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
-    [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Query<>>(); }
+    [[nodiscard]] size_t size() const noexcept { return m_symbols.template size<Query<>>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     [[nodiscard]] size_t size() const noexcept
-    { return m_symbols.template local_size<T>(); }
+    { return m_symbols.template size<T>(); }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     std::optional<urd::index_view<T, QueryRepository>> find(const urd::data<T>& data) const noexcept
     {
-        if (const auto index = m_symbols.template find_local<T>(data))
-            return urd::index_view<T, QueryRepository>(*index, this);
+        if (const auto index = m_symbols.template get<T>().find(data); !index.is_none())
+            return urd::index_view<T, QueryRepository>(index, this);
         return std::nullopt;
     }
 
@@ -88,33 +87,16 @@ public:
         requires formalism::SupportsSymbol<QueryRepository, T>
     std::pair<urd::index_view<T, QueryRepository>, bool> insert(urd::data<T>& data)
     {
-        const auto [index, created] = m_symbols.template insert_local<T>(data);
-        data.index = index;
+        const auto [index, created] = formalism::intern(m_symbols.template get<T>(), data);
         return { urd::index_view<T, QueryRepository>(index, this), created };
     }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
     const urd::data<T>& operator[](urd::index<T> index) const noexcept
-    { return m_symbols.template local<T>(index); }
+    { return m_symbols[index]; }
 };
 
 }  // namespace ygg::database
-
-// The symbol storage of every query record type is instantiated in the database library (docs/TEMPLATE_RULES.md, rule 9).
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryInputTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryEmptyTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryJoinTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryProjectTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryRenameTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySelectEqualTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySelectValueTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryUnionTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryDifferenceTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryDistanceTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryGenericJoinTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QuerySemijoinTag>, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Query<ygg::database::QueryAntijoinTag>, false>;
 
 #endif

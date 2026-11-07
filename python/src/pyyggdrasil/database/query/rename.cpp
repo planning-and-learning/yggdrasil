@@ -22,7 +22,7 @@ void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = ConcreteQueryView<ygg::database::QueryRenameTag>;
         auto cls = nb::class_<V>(m, "QueryRename");
-        cls.def("get_index", &V::index).def("columns", &V::columns, nb::keep_alive<0, 1>()).def("get_arg", &V::get_arg, nb::keep_alive<0, 1>());
+        cls.def("index", &V::index).def("columns", &V::columns, nb::keep_alive<0, 1>()).def("get_arg", &V::get_arg, nb::keep_alive<0, 1>());
         urd::python::add_comparison(cls);
         urd::python::add_hash(cls);
     }

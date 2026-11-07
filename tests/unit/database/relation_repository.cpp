@@ -451,7 +451,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryViewsKeepRepositoryIdentity)
     const auto first = insert(first_repository, builder).first;
     const auto second = insert(second_repository, builder).first;
     EXPECT_EQ(first.index(), second.index());
-    EXPECT_NE(first_repository.get_index(), second_repository.get_index());
+    EXPECT_NE(first_repository.layer(), second_repository.layer());
     EXPECT_FALSE(urd::EqualTo<IndexView> {}(first, second));
     EXPECT_NE(first.get_storage_index(), second.get_storage_index());
 

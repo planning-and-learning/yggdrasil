@@ -20,7 +20,7 @@ void bind_query_select_equal(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = ConcreteQueryView<ygg::database::QuerySelectEqualTag>;
         auto cls = nb::class_<V>(m, "QuerySelectEqual");
-        cls.def("get_index", &V::index)
+        cls.def("index", &V::index)
             .def("columns", &V::columns, nb::keep_alive<0, 1>())
             .def("get_arg", &V::get_arg, nb::keep_alive<0, 1>())
             .def("get_lhs_column", &V::get_lhs_column)

@@ -14,7 +14,6 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/binding_data.hpp"
 #include "yggdrasil/formalism/binding_view.hpp"
-#include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 
 #include "gtest/gtest.h"
@@ -144,15 +143,9 @@ class PublishedRepository : public formalism::SymbolRepositoryBase<PublishedRepo
 public:
     template<typename T>
         requires formalism::SupportsSymbol<PublishedRepository, T>
-    const urd::data<T>& operator[](urd::index<T> index) const noexcept
-    { return local(index); }
-
-    template<typename T>
-        requires formalism::SupportsSymbol<PublishedRepository, T>
     [[nodiscard]] const PublishedRepository& get_canonical_context(urd::index<T>) const noexcept
     { return *this; }
 
-    [[nodiscard]] size_t get_index() const noexcept { return 0; }
     /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }
     friend const PublishedRepository& get_repository(const PublishedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
@@ -163,7 +156,6 @@ static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation
 static_assert(!std::is_move_constructible_v<PublishedRepository>);
 static_assert(!std::is_copy_constructible_v<PublishedRepository>);
 static_assert(std::same_as<decltype(get_repository(std::declval<const PublishedRepository&>())), const PublishedRepository&>);
-static_assert(noexcept(std::declval<const PublishedRepository&>()[std::declval<urd::index<ConcurrentElement>>()]));
 
 TEST(YggdrasilTests, PublicSymbolRepositoryBasePreservesPublishedContextAndScratchIndices)
 {
@@ -417,9 +409,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     objects.push_back(urd::index<Object>(1));
     objects.push_back(urd::index<Object>(2));
     const auto wrong = urd::data<Binding<ObjectTag>>(relation, std::move(objects));
-    static_assert(!noexcept(repository.find(wrong)));
-
-    EXPECT_THROW((void) repository.find(wrong), std::invalid_argument);
+    EXPECT_FALSE(repository.find(wrong));
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
     EXPECT_EQ(repository.size(relation), 1);
     EXPECT_EQ(view.data().objects.size(), 4);

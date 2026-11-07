@@ -5,7 +5,6 @@
 
 #include "yggdrasil/database/semantics/relation_repository.hpp"
 
-#include "yggdrasil/formalism/detail/basic_symbol_repository_impl.hpp"
 #include <urd/config.hpp>
 
 namespace ygg::database
@@ -41,14 +40,11 @@ RelationRepository::RelationRepository(size_t index, RelationRepositoryFactory f
 RelationRepository::~RelationRepository() = default;
 }
 
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Columns, false>;
-template class ygg::formalism::BasicSymbolRepository<ygg::database::Relation, false>;
-
 namespace ygg::database
 {
 std::pair<RelationView, bool> RelationRepository::insert(urd::data<Relation>& data)
 {
-    if (!m_symbols.template is_local<Columns>(data.columns_index) || data.row_set_index.value >= m_row_sets.size())
+    if (!m_symbols.contains(data.columns_index) || data.row_set_index.value >= m_row_sets.size())
         throw std::invalid_argument("RelationRepository: invalid schema or row-set index.");
     const auto columns = view(data.columns_index);
     const auto rows = m_row_sets.view(RowSetPool::handle_type(data.row_set_index.value));
@@ -60,7 +56,7 @@ std::pair<RelationView, bool> RelationRepository::insert(urd::data<Relation>& da
             throw std::invalid_argument("RelationRepository: row indices must be sorted and unique.");
     }
     ensure_storage_index(data.row_set_index);
-    const auto [index, created] = m_symbols.template insert_local<Relation>(data);
+    const auto [index, created] = formalism::intern(m_symbols.template get<Relation>(), data);
     return { RelationView(index, this), created };
 }
 }

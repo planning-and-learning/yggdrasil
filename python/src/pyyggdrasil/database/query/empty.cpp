@@ -16,7 +16,7 @@ void bind_query_empty(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = ConcreteQueryView<ygg::database::QueryEmptyTag>;
         auto cls = nb::class_<V>(m, "QueryEmpty");
-        cls.def("get_index", &V::index).def("columns", &V::columns, nb::keep_alive<0, 1>());
+        cls.def("index", &V::index).def("columns", &V::columns, nb::keep_alive<0, 1>());
         urd::python::add_comparison(cls);
         urd::python::add_hash(cls);
     }

@@ -163,7 +163,7 @@ TEST(DatabaseQuery, InternsValidatedNodesAndCompilesIndependentReachablePlan)
         EXPECT_EQ(a.index(), ygg::tests::qb::input(repository, 0, { x, y }).index());
         const auto same = ygg::tests::qb::input(repository, 0, { x, y });
         const auto foreign = ygg::tests::qb::input(other, 0, { x, y });
-        EXPECT_NE(repository.get_index(), other.get_index());
+        EXPECT_NE(repository.layer(), other.layer());
         EXPECT_TRUE(urd::EqualTo<decltype(a)> {}(a, same));
         EXPECT_FALSE(urd::EqualTo<decltype(a)> {}(a, foreign));
         EXPECT_EQ(urd::Hash<decltype(a)> {}(a), urd::Hash<decltype(a)> {}(same));

@@ -39,7 +39,7 @@ concept SymbolRepositoryFor = SupportsSymbol<Repository, T> && requires(const st
 template<typename C, typename T>
 concept SymbolContextFor = requires(const C& context) {
     { get_repository(context) } -> SymbolRepositoryFor<T>;
-    get_repository(context).get_index();
+    get_repository(context).layer();
 };
 
 template<typename Tag>

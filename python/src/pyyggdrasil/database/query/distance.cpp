@@ -21,7 +21,7 @@ void bind_query_distance(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = ConcreteQueryView<ygg::database::QueryDistanceTag>;
         auto cls = nb::class_<V>(m, "QueryDistance");
-        cls.def("get_index", &V::index)
+        cls.def("index", &V::index)
             .def("columns", &V::columns, nb::keep_alive<0, 1>())
             .def("get_sources", &V::get_sources, nb::keep_alive<0, 1>())
             .def("get_edges", &V::get_edges, nb::keep_alive<0, 1>())

@@ -250,4 +250,21 @@ TEST(YggdrasilX3Diagnostics, ExpectedContextUsesItsNameWithoutChangingErrorOwner
     EXPECT_EQ(diagnostic.notes.front().location.value().begin(), 0);
 }
 
+TEST(YggdrasilX3Diagnostics, KeywordMatchesAWholeSymbolInAnyCase)
+{
+    const auto matches = [](const std::string& input)
+    {
+        auto first = input.begin();
+        return boost::spirit::x3::parse(first, input.end(), diagnostics::keyword(":action")) && first == input.end();
+    };
+    EXPECT_TRUE(matches(":action"));
+    EXPECT_TRUE(matches(":ACTION"));
+    EXPECT_FALSE(matches(":actions"));
+    EXPECT_FALSE(matches(":action-cost"));
+    auto input = std::string(":action(");
+    auto first = input.cbegin();
+    EXPECT_TRUE(boost::spirit::x3::parse(first, input.cend(), diagnostics::keyword(":action")));
+    EXPECT_EQ(*first, '(');
+}
+
 }  // namespace ygg::tests

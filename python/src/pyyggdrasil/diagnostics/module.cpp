@@ -2,6 +2,8 @@
 #include "pyyggdrasil/module.hpp"
 
 #include "yggdrasil/diagnostics/diagnostic.hpp"
+#include "yggdrasil/diagnostics/errors.hpp"
+#include "yggdrasil/python/diagnostics.hpp"
 
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
@@ -44,6 +46,10 @@ void bind_diagnostics_module_definitions(nb::module_& m)
         .def("__str__", &ygg::diagnostics::format_diagnostic);
 
     m.def("format_diagnostic", &ygg::diagnostics::format_diagnostic, nb::arg("diagnostic"), "Render a diagnostic and its related notes with source locations.");
+
+    // The errors parsers raise (loki, runir), registered once, here; their subclasses derive from these.
+    const auto semantic_error = ygg::bind_diagnostic_exception<ygg::diagnostics::SemanticError>(m, "SemanticError");
+    ygg::bind_diagnostic_exception<ygg::diagnostics::ParseError>(m, "ParseError", semantic_error);
 }
 
 }  // namespace yggdrasil

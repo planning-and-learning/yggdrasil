@@ -85,7 +85,7 @@ follows.
    so small hot functions moved out of headers become calls.
 9. **Make extern lists opt-in when the definitions must stay visible.** Put
    `extern template` declarations for widely shared instantiations (such as
-   `BasicSymbolRepository<T>` of every symbol type) in a separate
+   the symbol storage of every symbol type) in a separate
    `detail/<name>_instantiations.hpp` that only the TUs doing that work
    include, e.g. parsers and translators that intern every type. Including
    such a list everywhere costs every light TU the class instantiations.

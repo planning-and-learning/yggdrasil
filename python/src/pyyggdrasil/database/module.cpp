@@ -179,7 +179,7 @@ void bind_database_module_definitions(nb::module_& m)
                                              "RelationView",
                                              "Read-only canonical relation. Keeps its repository alive; clearing the "
                                              "repository invalidates the view, its rows, and its column labels.")
-                        .def("get_index", &RelationView::index);
+                        .def("index", &RelationView::index);
     bind_relation_reads(interned);
     urd::python::add_comparison(interned);
     urd::python::add_hash(interned);

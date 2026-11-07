@@ -73,7 +73,6 @@ public:
     RelationRepository(RelationRepository&&) = delete;
     RelationRepository& operator=(RelationRepository&&) = delete;
 
-    [[nodiscard]] size_t get_index() const noexcept { return m_index; }
     /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
     [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
@@ -98,15 +97,15 @@ public:
         requires formalism::SupportsSymbol<RelationRepository, Entity>
     [[nodiscard]] std::optional<urd::index_view<Entity, RelationRepository>> find(const urd::data<Entity>& data) const noexcept
     {
-        if (const auto index = m_symbols.template find_local<Entity>(data))
-            return urd::index_view<Entity, RelationRepository>(*index, this);
+        if (const auto index = m_symbols.template get<Entity>().find(data); !index.is_none())
+            return urd::index_view<Entity, RelationRepository>(index, this);
         return std::nullopt;
     }
 
     std::pair<urd::index_view<Columns, RelationRepository>, bool> insert(urd::data<Columns>& data)
     {
         validate_columns(std::span<const ColumnLayout>(data.values.data(), data.values.size()));
-        const auto [index, created] = m_symbols.template insert_local<Columns>(data);
+        const auto [index, created] = formalism::intern(m_symbols.template get<Columns>(), data);
         return { urd::index_view<Columns, RelationRepository>(index, this), created };
     }
 
@@ -128,14 +127,14 @@ public:
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
     const urd::data<Entity>& operator[](urd::index<Entity> index) const noexcept
-    { return m_symbols.template local<Entity>(index); }
+    { return m_symbols[index]; }
 
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
     [[nodiscard]] urd::index_view<T, RelationRepository> view(urd::index<T> index) const noexcept
     { return { index, this }; }
 
-    [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
+    [[nodiscard]] size_t size() const noexcept { return m_symbols.template size<Relation>(); }
     [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
     [[nodiscard]] size_t get_storage_index(urd::index<RelationRowSet> row_set_index) const noexcept
@@ -231,9 +230,5 @@ auto copy(const V& source, RelationRepository& repository)
 { return repository.insert(source.span()); }
 
 }  // namespace ygg::database
-
-// The symbol storage of schemas and relations is instantiated in the database library (docs/TEMPLATE_RULES.md, rule 9).
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Columns, false>;
-extern template class ygg::formalism::BasicSymbolRepository<ygg::database::Relation, false>;
 
 #endif
