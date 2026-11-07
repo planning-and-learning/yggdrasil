@@ -153,7 +153,7 @@ public:
     { return *this; }
 
     [[nodiscard]] size_t get_index() const noexcept { return 0; }
-    /// The repository's number, as urd::view asks of a context.
+    /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }
     friend const PublishedRepository& get_repository(const PublishedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };

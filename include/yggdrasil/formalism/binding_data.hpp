@@ -38,13 +38,6 @@ struct data<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
 
     data() = default;
     data(urd::index<RelationTag> relation_, urd::flat_vector<urd::index<ygg::formalism::Object<ObjectTag>>> objects_) : relation(relation_), objects(std::move(objects_)) {}
-    // Python constructor
-    template<typename C>
-    data(urd::view<RelationTag, C> relation_, const urd::Store<urd::sequence<urd::view<ygg::formalism::Object<ObjectTag>, C>>>& objects_) :
-        relation(urd::to_stored(relation_)),
-        objects(urd::to_stored(objects_))
-    {
-    }
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;

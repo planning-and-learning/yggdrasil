@@ -6,13 +6,12 @@
 #ifndef YGG_DATABASE_SEMANTICS_RELATION_VIEW_HPP_
 #define YGG_DATABASE_SEMANTICS_RELATION_VIEW_HPP_
 
-#include <urd/config.hpp>
+#include <urd/elements/view.hpp>
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 #include "yggdrasil/database/semantics/relation_data.hpp"
 
 #include <algorithm>
 #include <cassert>
-#include <compare>
 #include <concepts>
 #include <iterator>
 #include <optional>
@@ -58,85 +57,22 @@ concept SlotRelations = std::invocable<const F&, size_t> && RelationViewConcept<
 
 namespace ygg::database::detail
 {
-/// Reads row i of a relation view, so the iterator can name the row type it yields.
+/// The row of a relation view at a position. It holds a copy of the lightweight view, so that iterators outlive the
+/// range expression; in a std::optional, which makes it semiregular (a view has no default).
+template<typename V>
 struct RowAt
 {
-    template<typename V>
-        requires requires(const V& view, size_t index) { view[index]; }
-    auto operator()(const V& view, size_t index) const
-    { return view[index]; }
+    std::optional<V> view;
+
+    auto operator()(ygg::uint_t position) const { return (*view)[position]; }
 };
 
-/// Keeps the lightweight relation view alive, independently of the range expression.
-/// Comparing or subtracting iterators requires that they belong to the same sequence.
-template<RelationViewConcept V>
-    requires std::copyable<V> && requires(const V& view, size_t position) { view[position]; }
-class RelationIterator
-{
-    std::optional<V> m_view;  ///< Empty only in a default-constructed iterator, which is never dereferenced.
-    std::ptrdiff_t m_position = 0;
-
-    [[nodiscard]] const V& view() const noexcept
-    {
-        URD_ASSUME(m_view.has_value());
-        return *m_view;
-    }
-
-public:
-    using difference_type = std::ptrdiff_t;
-    using value_type = std::invoke_result_t<RowAt, const V&, size_t>;
-    using reference = value_type;
-    using pointer = void;
-    using iterator_category = std::random_access_iterator_tag;
-    using iterator_concept = std::random_access_iterator_tag;
-
-    RelationIterator() noexcept = default;
-    RelationIterator(V view, size_t position) noexcept(std::is_nothrow_copy_constructible_v<V>) :
-        m_view(view),
-        m_position(static_cast<difference_type>(position))
-    {
-    }
-    reference operator*() const { return view()[static_cast<size_t>(m_position)]; }
-    reference operator[](difference_type n) const { return view()[static_cast<size_t>(m_position + n)]; }
-    RelationIterator& operator++() noexcept
-    {
-        ++m_position;
-        return *this;
-    }
-    RelationIterator operator++(int)
-    {
-        auto old = *this;
-        ++*this;
-        return old;
-    }
-    RelationIterator& operator--() noexcept
-    {
-        --m_position;
-        return *this;
-    }
-    RelationIterator operator--(int)
-    {
-        auto old = *this;
-        --*this;
-        return old;
-    }
-    RelationIterator& operator+=(difference_type n) noexcept
-    {
-        m_position += n;
-        return *this;
-    }
-    RelationIterator& operator-=(difference_type n) noexcept
-    {
-        m_position -= n;
-        return *this;
-    }
-    friend RelationIterator operator+(RelationIterator it, difference_type n) { return it += n; }
-    friend RelationIterator operator+(difference_type n, RelationIterator it) { return it += n; }
-    friend RelationIterator operator-(RelationIterator it, difference_type n) { return it -= n; }
-    friend difference_type operator-(const RelationIterator& lhs, const RelationIterator& rhs) noexcept { return lhs.m_position - rhs.m_position; }
-    friend bool operator==(const RelationIterator& lhs, const RelationIterator& rhs) noexcept { return lhs.m_position == rhs.m_position; }
-    friend auto operator<=>(const RelationIterator& lhs, const RelationIterator& rhs) noexcept { return lhs.m_position <=> rhs.m_position; }
-};
+/// The rows of a relation view by position: a borrowed random-access range whose iterators hold a copy of the
+/// lightweight view, independently of the range expression.
+/// ponytail: positions are ygg::uint_t (so that the difference type is std::ptrdiff_t), as interned rows are numbered.
+template<typename V>
+auto rows_of(const V& view)
+{ return urd::transform(std::views::iota(ygg::uint_t { 0 }, static_cast<ygg::uint_t>(view.size())), RowAt<V> { view }); }
 }  // namespace ygg::database::detail
 
 /// The builder view reads the builder directly.
@@ -163,8 +99,8 @@ public:
             throw std::out_of_range("Relation: row index out of range.");
         return (*this)[index];
     }
-    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), 0); }
-    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), size()); }
+    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::rows_of(self()).begin(); }
+    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::rows_of(self()).end(); }
     [[nodiscard]] auto cbegin() const noexcept { return begin(); }
     [[nodiscard]] auto cend() const noexcept { return end(); }
 
@@ -219,8 +155,8 @@ public:
         return (*this)[index];
     }
 
-    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), 0); }
-    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::RelationIterator<V>(self(), size()); }
+    [[nodiscard]] auto begin() const noexcept { return ygg::database::detail::rows_of(self()).begin(); }
+    [[nodiscard]] auto end() const noexcept { return ygg::database::detail::rows_of(self()).end(); }
     [[nodiscard]] auto cbegin() const noexcept { return begin(); }
     [[nodiscard]] auto cend() const noexcept { return end(); }
 
@@ -251,7 +187,7 @@ inline constexpr bool enable_borrowed_range<urd::borrowed_view<ygg::database::Re
 template<typename C>
 inline constexpr bool enable_borrowed_range<urd::borrowed_view<ygg::database::Relation, C>> = true;
 template<typename C>
-inline constexpr bool enable_borrowed_range<urd::view<ygg::database::Relation, C>> = true;
+inline constexpr bool enable_borrowed_range<urd::index_view<ygg::database::Relation, C>> = true;
 }
 
 #endif

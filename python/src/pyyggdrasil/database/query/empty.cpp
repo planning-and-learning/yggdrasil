@@ -1,5 +1,5 @@
 #include "bindings.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 
 namespace yggdrasil::database_python
 {

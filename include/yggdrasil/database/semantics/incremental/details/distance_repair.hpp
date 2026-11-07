@@ -7,6 +7,7 @@
 #define YGG_DATABASE_SEMANTICS_INCREMENTAL_DETAILS_DISTANCE_REPAIR_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/database/semantics/search/concepts.hpp"
 
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
@@ -49,14 +50,14 @@ void count_distance_work([[maybe_unused]] size_t DistanceWork::* member) noexcep
 /// Shared across source trees: every heap is empty between completed repairs.
 class DistanceRepairWorkspace
 {
-    using Entry = std::pair<uint_t, uint_t>;  // Distance, then vertex (or predecessor in a local heap).
+    using Entry = std::pair<uint_t, VertexSet::handle_type>;  // Distance, then vertex (or predecessor in a local heap).
     // The least entry leaves first; push gives a handle that update and erase take.
     using Heap = urd::Store<urd::queue<Entry>, urd::by_priority, urd::handles>;
 
     Heap m_global;
-    urd::Store<urd::sequence<Heap>> m_local;
-    urd::Store<urd::sequence<std::optional<Heap::handle_type>>> m_vertices;
-    urd::Store<urd::map<std::pair<uint_t, uint_t>, Heap::handle_type>> m_edges;
+    urd::Store<urd::sequence<Heap, VertexSet::handle_type>> m_local;
+    urd::Store<urd::sequence<std::optional<Heap::handle_type>, VertexSet::handle_type>> m_vertices;
+    urd::Store<urd::map<std::pair<VertexSet::handle_type, VertexSet::handle_type>, Heap::handle_type>> m_edges;
 
     static void update(Heap& heap, Heap::handle_type handle, Entry entry)
     {
@@ -73,7 +74,7 @@ public:
     /// Whether any vertex is scheduled for settling.
     bool scheduled() const noexcept { return !m_global.empty(); }
     /// Whether the vertex has no pending candidate distances.
-    bool settled(uint_t vertex) const { return m_local.at(vertex).empty(); }
+    bool settled(VertexSet::handle_type vertex) const { return m_local.at(vertex).empty(); }
 
     void resize(size_t count)
     {
@@ -93,11 +94,11 @@ public:
         m_edges.clear();
     }
 
-    void set_edge(uint_t from, uint_t to, uint_t candidate, uint_t distance);
+    void set_edge(VertexSet::handle_type from, VertexSet::handle_type to, uint_t candidate, uint_t distance);
 
-    size_t accept_improvement(uint_t vertex, uint_t distance);
+    size_t accept_improvement(VertexSet::handle_type vertex, uint_t distance);
 
-    void schedule(uint_t vertex, uint_t distance, size_t supports);
+    void schedule(VertexSet::handle_type vertex, uint_t distance, size_t supports);
 
     Entry pop()
     {

@@ -13,7 +13,7 @@ std::span<const ColumnLayout> child_columns(urd::index<Query<>> child, const Que
 {
     if (child.value >= repository.size())
         throw std::invalid_argument("Query: children must precede their parent.");
-    return QueryView<>(child, repository).columns();
+    return repository.view(child).columns();
 }
 }
 

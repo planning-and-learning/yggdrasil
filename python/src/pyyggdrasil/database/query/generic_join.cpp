@@ -1,5 +1,5 @@
 #include "bindings.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 #include <urd/python/sequences/sequence.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
@@ -14,7 +14,7 @@ void bind_query_generic_join(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = QueryData<ygg::database::QueryGenericJoinTag>;
         urd::python::bind_data<V>(m, "QueryGenericJoinData")
-            .def(nb::init<urd::Store<urd::sequence<QueryView>>, urd::Store<urd::sequence<Column>>, urd::Store<urd::sequence<Column>>>(),
+            .def(urd::python::init_from_views<urd::Store<urd::sequence<QueryView>>, urd::Store<urd::sequence<Column>>, urd::Store<urd::sequence<Column>>>(),
                  "inputs"_a,
                  "variable_order"_a,
                  "output_order"_a = urd::Store<urd::sequence<Column>> {})

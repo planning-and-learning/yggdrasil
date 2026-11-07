@@ -38,11 +38,6 @@ struct data<ygg::database::Query<>>
 
     data() = default;
     explicit data(Variant variant_) : index(), variant(std::move(variant_)) {}
-    /// The erased record of an interned concrete query.
-    template<typename Tag, typename C>
-    explicit data(urd::view<ygg::database::Query<Tag>, C> concrete) : variant(concrete.index())
-    {
-    }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::variant> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::variant> {}; }
@@ -87,10 +82,6 @@ struct data<ygg::database::Query<Tag>>
 
     data() = default;
     data(urd::index<ygg::database::Query<>> lhs_, urd::index<ygg::database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
-    template<typename C>
-    data(urd::view<ygg::database::Query<>, C> lhs_, urd::view<ygg::database::Query<>, C> rhs_) : data(lhs_.index(), rhs_.index())
-    {
-    }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::lhs, &data::rhs> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lhs, &data::rhs, &data::plan> {}; }
@@ -107,10 +98,6 @@ struct data<ygg::database::Query<Tag>>
 
     data() = default;
     data(urd::index<ygg::database::Query<>> lhs_, urd::index<ygg::database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
-    template<typename C>
-    data(urd::view<ygg::database::Query<>, C> lhs_, urd::view<ygg::database::Query<>, C> rhs_) : data(lhs_.index(), rhs_.index())
-    {
-    }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::lhs, &data::rhs> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lhs, &data::rhs, &data::columns> {}; }
@@ -126,10 +113,6 @@ struct data<ygg::database::Query<ygg::database::QueryProjectTag>>
 
     data() = default;
     data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
-    template<typename C>
-    data(urd::view<ygg::database::Query<>, C> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : data(arg_.index(), labels_)
-    {
-    }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::labels> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::arg, &data::labels, &data::plan> {}; }
@@ -145,10 +128,6 @@ struct data<ygg::database::Query<ygg::database::QueryRenameTag>>
 
     data() = default;
     data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
-    template<typename C>
-    data(urd::view<ygg::database::Query<>, C> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : data(arg_.index(), labels_)
-    {
-    }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::labels> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::arg, &data::labels, &data::columns> {}; }
@@ -170,11 +149,6 @@ struct data<ygg::database::Query<ygg::database::QuerySelectEqualTag>>
         arg(arg_),
         lhs_column(lhs_column_),
         rhs_column(rhs_column_)
-    {
-    }
-    template<typename C>
-    data(urd::view<ygg::database::Query<>, C> arg_, urd::index<ygg::database::Column> lhs_column_, urd::index<ygg::database::Column> rhs_column_) :
-        data(arg_.index(), lhs_column_, rhs_column_)
     {
     }
 
@@ -204,10 +178,6 @@ struct data<ygg::database::Query<ygg::database::QuerySelectValueTag>>
         ygg::ByteCodec<T>::encode(value, bytes);
         constant.set(bytes.begin(), bytes.end());
     }
-    template<typename C, ygg::ByteCodable T>
-    data(urd::view<ygg::database::Query<>, C> arg_, urd::index<ygg::database::Column> column_, T value) : data(arg_.index(), column_, value)
-    {
-    }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::column, &data::constant> {}; }
     static constexpr auto cista_members() noexcept
@@ -230,14 +200,6 @@ struct data<ygg::database::Query<ygg::database::QueryDistanceTag>>
         edges(edges_),
         targets(targets_),
         distance_column(distance_column_)
-    {
-    }
-    template<typename C>
-    data(urd::view<ygg::database::Query<>, C> sources_,
-         urd::view<ygg::database::Query<>, C> edges_,
-         urd::view<ygg::database::Query<>, C> targets_,
-         urd::index<ygg::database::Column> distance_column_) :
-        data(sources_.index(), edges_.index(), targets_.index(), distance_column_)
     {
     }
 
@@ -263,18 +225,6 @@ struct data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>
         index()
     {
         inputs.set(inputs_.begin(), inputs_.end());
-        variable_order.set(variable_order_.begin(), variable_order_.end());
-        output_order.set(output_order_.begin(), output_order_.end());
-    }
-    /// From any range of query views (a sequence Store, std::vector, an array).
-    template<std::ranges::input_range Views>
-        requires std::same_as<std::ranges::range_value_t<Views>, urd::view<ygg::database::Query<>, ygg::database::QueryRepository>>
-    data(const Views& inputs_,
-         std::span<const urd::index<ygg::database::Column>> variable_order_,
-         std::span<const urd::index<ygg::database::Column>> output_order_ = {}) :
-        index()
-    {
-        inputs = urd::to_stored(inputs_);
         variable_order.set(variable_order_.begin(), variable_order_.end());
         output_order.set(output_order_.begin(), output_order_.end());
     }

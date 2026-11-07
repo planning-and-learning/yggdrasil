@@ -5,6 +5,7 @@
 #ifndef YGG_DATABASE_SYNTAX_QUERY_REPOSITORY_HPP_
 #define YGG_DATABASE_SYNTAX_QUERY_REPOSITORY_HPP_
 
+#include "yggdrasil/core/index_sequence.hpp"
 #include "yggdrasil/database/syntax/query_view.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
@@ -23,14 +24,7 @@ namespace ygg::database
 /// or hashed together must come from the same factory.
 class QueryRepositoryFactory
 {
-    std::shared_ptr<size_t> m_next_index = std::make_shared<size_t>(0);
-
-    size_t next_index()
-    {
-        if (*m_next_index == std::numeric_limits<size_t>::max())
-            throw std::overflow_error("QueryRepositoryFactory: index space exhausted.");
-        return (*m_next_index)++;
-    }
+    IndexSequence m_indices;
 
 public:
     [[nodiscard]] QueryRepository create();
@@ -61,15 +55,15 @@ public:
 
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
-    [[nodiscard]] urd::view<T, QueryRepository> view(urd::index<T> index) const noexcept
-    { return { index, *this }; }
+    [[nodiscard]] urd::index_view<T, QueryRepository> view(urd::index<T> index) const noexcept
+    { return { index, this }; }
     QueryRepository(const QueryRepository&) = delete;
     QueryRepository& operator=(const QueryRepository&) = delete;
     QueryRepository(QueryRepository&&) = delete;
     QueryRepository& operator=(QueryRepository&&) = delete;
 
     [[nodiscard]] size_t get_index() const noexcept { return m_index; }
-    /// The repository's number, as urd::view asks of a context.
+    /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
     [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
     friend const QueryRepository& get_repository(const QueryRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
@@ -83,20 +77,20 @@ public:
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
-    std::optional<urd::view<T, QueryRepository>> find(const urd::data<T>& data) const noexcept
+    std::optional<urd::index_view<T, QueryRepository>> find(const urd::data<T>& data) const noexcept
     {
         if (const auto index = m_symbols.template find_local<T>(data))
-            return urd::view<T, QueryRepository>(*index, *this);
+            return urd::index_view<T, QueryRepository>(*index, this);
         return std::nullopt;
     }
 
     template<typename T>
         requires formalism::SupportsSymbol<QueryRepository, T>
-    std::pair<urd::view<T, QueryRepository>, bool> insert(urd::data<T>& data)
+    std::pair<urd::index_view<T, QueryRepository>, bool> insert(urd::data<T>& data)
     {
         const auto [index, created] = m_symbols.template insert_local<T>(data);
         data.index = index;
-        return { urd::view<T, QueryRepository>(index, *this), created };
+        return { urd::index_view<T, QueryRepository>(index, this), created };
     }
 
     template<typename T>

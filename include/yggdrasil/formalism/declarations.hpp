@@ -81,7 +81,7 @@ concept NonRelationBindingConcept = !RelationBindingConcept<T>;
 template<typename RelationTag, typename ObjectTag>
 struct RelationBindingIndex
 {
-    /// What it locates: a binding handle is an urd::handle, resolved through its context.
+    /// What it locates: a binding handle is an urd::handle, read through its context (context[h]).
     using located = RelationBinding<RelationTag, ObjectTag>;
 
     urd::index<RelationTag> relation;
@@ -89,8 +89,6 @@ struct RelationBindingIndex
 
     friend constexpr auto operator<=>(const RelationBindingIndex&, const RelationBindingIndex&) = default;
     static constexpr auto identifying_members() noexcept { return urd::Members<&RelationBindingIndex::relation, &RelationBindingIndex::row> {}; }
-    /// The binding it locates, as its context gives it (what its view reads).
-    [[nodiscard]] decltype(auto) read(const auto& context) const { return context[*this]; }
 };
 
 /// Read access to a supported binding's row representation.
@@ -117,9 +115,9 @@ struct RelationBindingRow
     Objects objects;
 };
 
-/// The view of a binding (H = RelationBindingIndex) through its context C: the urd::view of the binding it locates.
+/// The view of a binding (H = RelationBindingIndex) through its context C: the urd::index_view of the binding it locates.
 template<typename H, typename C>
-using RelationBindingView = urd::view<typename H::located, C, H>;
+using RelationBindingView = urd::index_view<typename H::located, C, H>;
 
 /// What the rows of one relation's bindings give through their context C: each row as the view of its binding.
 template<typename RelationTag, typename ObjectTag, typename C>
@@ -132,16 +130,16 @@ struct RelationBindingOfRow
 };
 
 /// The bindings of one relation, stored as its rows, read through their context C: each row transformed into its
-/// binding's view (std::views::transform: it traverses as the rows do). It holds rows that are a view, else borrows
-/// them; borrowed rows and the context must outlive it, and its iterators must not outlive it.
+/// binding's view (urd::transformed_range: it traverses as the rows do, and is a borrowed range). Rows that are not a
+/// borrowed view and the context must outlive it; its iterators may outlive it.
 template<typename RelationTag, typename ObjectTag, typename Rows, typename C>
-using RelationBindingsView = std::ranges::transform_view<std::views::all_t<const Rows&>, RelationBindingOfRow<RelationTag, ObjectTag, C>>;
+using RelationBindingsView = urd::transformed_range<Rows, RelationBindingOfRow<RelationTag, ObjectTag, C>>;
 
 /// The bindings of `relation` stored as `rows`, read through `context`.
 template<typename ObjectTag, typename RelationTag, std::ranges::forward_range Rows, typename C>
     requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<const Rows>>, urd::index<Row>>
 RelationBindingsView<RelationTag, ObjectTag, Rows, C> bindings_view(urd::index<RelationTag> relation, const Rows& rows, const C& context)
-{ return { std::views::all(rows), { relation, &context } }; }
+{ return { rows, { relation, &context } }; }
 }  // namespace ygg::formalism
 
 #endif

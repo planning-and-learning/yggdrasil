@@ -1131,7 +1131,7 @@ concept CanQueryTypedRow = requires(const V& view, const R& row) {
 using TypedRelationRepository = database::RelationRepository;
 using TypedBuilderView = urd::borrowed_view<database::Relation, TypedRelationRepository, urd::builder<database::Relation>>;
 using TypedDataView = urd::borrowed_view<database::Relation, TypedRelationRepository>;
-using TypedIndexView = urd::view<database::Relation, TypedRelationRepository>;
+using TypedIndexView = urd::index_view<database::Relation, TypedRelationRepository>;
 static_assert(CanQueryTypedRow<TypedBuilderView, std::tuple<uint_t, uint_t>>);
 static_assert(CanQueryTypedRow<TypedDataView, std::tuple<uint_t, uint_t>>);
 static_assert(CanQueryTypedRow<TypedIndexView, std::tuple<uint_t, uint_t>>);

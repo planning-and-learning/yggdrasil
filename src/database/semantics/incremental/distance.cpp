@@ -21,23 +21,25 @@ DistanceEvaluator::DistanceEvaluator(DistancePlan plan) :
 
 namespace ygg::database::incremental
 {
-uint_t DistanceEvaluator::require_vertex(std::span<const std::byte> row) const
+VertexSet::handle_type DistanceEvaluator::require_vertex(std::span<const std::byte> row) const
 {
-    const auto vertex = m_graph.find_vertex(row);
-    if (!vertex)
+    const auto vertex = m_graph.vertices.find(row);
+    if (vertex.is_none())
         throw std::invalid_argument("Incremental distance: removed vertex is absent.");
-    return *vertex;
+    return vertex;
 }
 }
 
 namespace ygg::database::incremental
 {
-bool DistanceEvaluator::is_source(uint_t vertex) const noexcept { return vertex < m_source_slots.size() && m_source_slots[vertex] != absent; }
+bool DistanceEvaluator::is_source(VertexSet::handle_type vertex) const noexcept
+{ return vertex < m_source_slots.position(m_source_slots.end()) && m_source_slots[vertex] != absent; }
 }
 
 namespace ygg::database::incremental
 {
-bool DistanceEvaluator::is_target(uint_t vertex) const noexcept { return vertex < m_target_flags.size() && m_target_flags[vertex] == Flag::SET; }
+bool DistanceEvaluator::is_target(VertexSet::handle_type vertex) const noexcept
+{ return vertex < m_target_flags.position(m_target_flags.end()) && m_target_flags[vertex] == Flag::SET; }
 }
 
 namespace ygg::database::incremental
@@ -59,7 +61,7 @@ void DistanceEvaluator::resize_vertices()
 
 namespace ygg::database::incremental
 {
-void DistanceEvaluator::remove_source(uint_t root)
+void DistanceEvaluator::remove_source(VertexSet::handle_type root)
 {
     const auto position = m_source_slots[root];
     assert(position < m_active_sources);
@@ -75,7 +77,7 @@ void DistanceEvaluator::remove_source(uint_t root)
 
 namespace ygg::database::incremental
 {
-void DistanceEvaluator::insert_result(uint_t source, uint_t target, uint_t length)
+void DistanceEvaluator::insert_result(VertexSet::handle_type source, VertexSet::handle_type target, uint_t length)
 {
     if (length == infinity)
         return;
@@ -87,7 +89,7 @@ void DistanceEvaluator::insert_result(uint_t source, uint_t target, uint_t lengt
 
 namespace ygg::database::incremental
 {
-void DistanceEvaluator::remove_result(uint_t source, uint_t target, uint_t length)
+void DistanceEvaluator::remove_result(VertexSet::handle_type source, VertexSet::handle_type target, uint_t length)
 {
     if (length == infinity)
         return;
@@ -101,7 +103,7 @@ void DistanceEvaluator::remove_result(uint_t source, uint_t target, uint_t lengt
 
 namespace ygg::database::incremental
 {
-void DistanceEvaluator::set_distance(SourceState& state, uint_t vertex, uint_t length)
+void DistanceEvaluator::set_distance(SourceState& state, VertexSet::handle_type vertex, uint_t length)
 {
     if (m_changed_flags[vertex] == Flag::CLEAR)
     {
@@ -119,7 +121,11 @@ uint_t DistanceEvaluator::successor_distance(uint_t distance) noexcept { return 
 
 namespace ygg::database::incremental
 {
-void DistanceEvaluator::update_edge(SourceState& state, uint_t from, uint_t to, std::optional<uint_t> before, std::optional<uint_t> after)
+void DistanceEvaluator::update_edge(SourceState& state,
+                                    VertexSet::handle_type from,
+                                    VertexSet::handle_type to,
+                                    std::optional<uint_t> before,
+                                    std::optional<uint_t> after)
 {
     // Presence is separate from infinity: deleting an unreachable edge still removes it from SP.
     auto& supports = state.supports[to];
@@ -137,7 +143,7 @@ void DistanceEvaluator::update_edge(SourceState& state, uint_t from, uint_t to, 
 
 namespace ygg::database::incremental
 {
-void DistanceEvaluator::rebuild_incoming(SourceState& state, uint_t vertex)
+void DistanceEvaluator::rebuild_incoming(SourceState& state, VertexSet::handle_type vertex)
 {
     assert(m_repair->settled(vertex));
     auto& supports = state.supports[vertex];
@@ -238,8 +244,9 @@ size_t DistanceEvaluator::memory_usage() const noexcept
         bytes += source.distances.capacity() * sizeof(uint_t) + source.supports.capacity() * sizeof(size_t);
     bytes += (m_targets.capacity() + m_queue.capacity() + m_sources_added.capacity() + m_sources_removed.capacity() + m_targets_added.capacity()
               + m_targets_removed.capacity())
-             * sizeof(uint_t);
-    bytes += (m_changed.capacity() + m_edges_added.capacity() + m_edges_removed.capacity()) * sizeof(std::pair<uint_t, uint_t>);
+             * sizeof(VertexSet::handle_type);
+    bytes += m_changed.capacity() * sizeof(std::pair<VertexSet::handle_type, uint_t>)
+             + (m_edges_added.capacity() + m_edges_removed.capacity()) * sizeof(std::pair<VertexSet::handle_type, VertexSet::handle_type>);
     bytes += (m_target_flags.capacity() + m_changed_flags.capacity()) * sizeof(Flag) + m_row.capacity();
     return bytes;
 }

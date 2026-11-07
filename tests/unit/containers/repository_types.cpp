@@ -78,8 +78,8 @@ struct RepositoryTypesContext
     [[nodiscard]] size_t get_index() const noexcept { return 0; }
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }
     urd::Store<urd::sequence<urd::index<formalism::Object<RepositoryTypesObjectTag>>>> operator[](Binding) const { return {}; }
-    [[nodiscard]] formalism::RelationBindingView<Binding, RepositoryTypesContext> view(Binding index) const { return { index, *this }; }
-    [[nodiscard]] urd::view<RepositoryTypesRelation, RepositoryTypesContext> view(urd::index<RepositoryTypesRelation> index) const { return { index, *this }; }
+    [[nodiscard]] formalism::RelationBindingView<Binding, RepositoryTypesContext> view(Binding index) const { return { index, this }; }
+    [[nodiscard]] urd::index_view<RepositoryTypesRelation, RepositoryTypesContext> view(urd::index<RepositoryTypesRelation> index) const { return { index, this }; }
 };
 }  // namespace
 
@@ -315,14 +315,12 @@ static_assert(std::same_as<ContractConcurrentRelations::RelationTypes, ContractR
 static_assert(std::same_as<ContractRepository::RelationTypes, ContractRelations::RelationTypes>);
 static_assert(formalism::SupportsRelation<ContractRelations, RepositoryTypesRelation>);
 static_assert(formalism::SupportsRelation<ContractRepository, RepositoryTypesRelation>);
-static_assert(formalism::RelationRepositoryFor<ContractRelations, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(formalism::RelationContextFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesElement, RepositoryTypesObjectTag>);
 static_assert(!formalism::RelationContextFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
 static_assert(!formalism::SupportsRelation<ContractRelations, RepositoryTypesElement>);
 static_assert(!formalism::SupportsRelation<int, RepositoryTypesRelation>);
-static_assert(formalism::SymbolRepositoryFor<const ContractSymbols&, RepositoryTypesElement>);
 static_assert(!formalism::SymbolContextFor<ContractSymbols, RepositoryTypesElement>);
 static_assert(formalism::SymbolContextFor<ContractRepository, RepositoryTypesElement>);
 static_assert(!formalism::SymbolContextFor<ContractSymbols, RepositoryTypesSerializedElement>);
@@ -347,7 +345,7 @@ TEST(YggdrasilTests, CommonIndexedViewPreservesLookupHandleAndOwner)
     urd::data<RepositoryTypesElement> data;
     data.value = 31;
     const auto published = repository.insert(data).first;
-    const auto view = urd::view<RepositoryTypesElement, ContractRepository>(published.index(), repository);
+    const auto view = urd::index_view<RepositoryTypesElement, ContractRepository>(published.index(), &repository);
     EXPECT_EQ(view.index(), published.index());
     EXPECT_EQ(&view.context(), &repository);
     EXPECT_EQ(&view.data(), &published.data());
@@ -411,8 +409,6 @@ static void expect_binding_access_for_each_relation_type()
     using FirstBinding = formalism::RelationBinding<RepositoryTypesRelation, ObjectTag>;
     using SecondBinding = formalism::RelationBinding<RepositoryTypesElement, ObjectTag>;
     using Repository = formalism::Repository<ContractConcurrentSymbols, Relations>;
-    static_assert(formalism::RelationRepositoryFor<Relations, RepositoryTypesRelation, ObjectTag>);
-    static_assert(formalism::RelationRepositoryFor<Relations, RepositoryTypesElement, ObjectTag>);
     static_assert(formalism::RelationContextFor<Repository, RepositoryTypesRelation, ObjectTag>);
     static_assert(formalism::RelationContextFor<Repository, RepositoryTypesElement, ObjectTag>);
     static_assert(Viewable<ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, ObjectTag>, Repository>);
@@ -454,13 +450,13 @@ struct PreparedRepository
     size_t preparation_count = 0;
     size_t raw_count = 0;
 
-    std::pair<urd::view<RepositoryTypesElement, PreparedRepository>, bool> insert(urd::data<RepositoryTypesElement>& data)
+    std::pair<urd::index_view<RepositoryTypesElement, PreparedRepository>, bool> insert(urd::data<RepositoryTypesElement>& data)
     {
         ++raw_count;
         const auto [index, created] = symbols.insert_local(data);
-        return { urd::view<RepositoryTypesElement, PreparedRepository>(index, *this), created };
+        return { urd::index_view<RepositoryTypesElement, PreparedRepository>(index, this), created };
     }
-    const auto& operator[](urd::index<RepositoryTypesElement> index) const { return symbols[index]; }
+    const auto& operator[](urd::index<RepositoryTypesElement> index) const { return symbols.local(index); }
     friend const PreparedRepository& get_repository(const PreparedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
@@ -475,11 +471,11 @@ namespace
 {
 struct MissingPreparationRepository
 {
-    std::pair<urd::view<RepositoryTypesElement, MissingPreparationRepository>, bool> insert(urd::data<RepositoryTypesElement>&);
+    std::pair<urd::index_view<RepositoryTypesElement, MissingPreparationRepository>, bool> insert(urd::data<RepositoryTypesElement>&);
 };
 struct WrongPreparationRepository
 {
-    std::pair<urd::view<RepositoryTypesElement, WrongPreparationRepository>, bool> insert(urd::data<RepositoryTypesElement>&);
+    std::pair<urd::index_view<RepositoryTypesElement, WrongPreparationRepository>, bool> insert(urd::data<RepositoryTypesElement>&);
 };
 [[maybe_unused]] int prepare_for_insert(WrongPreparationRepository&, urd::data<RepositoryTypesElement>&) { return 0; }
 }  // namespace
@@ -830,76 +826,6 @@ TEST(YggdrasilTests, CommonSymbolRepositoryTracksParentAndLocalSize)
     EXPECT_EQ(child.size<RepositoryTypesElement>(), 2);
 }
 
-TEST(YggdrasilTests, CommonSymbolRepositoryForwardsAcrossParents)
-{
-    using Repository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
-    static_assert(Viewable<urd::index<RepositoryTypesElement>, Repository>);
-
-    auto root = Repository();
-    const auto missing = urd::index<RepositoryTypesElement>(0);
-    auto data = urd::data<RepositoryTypesElement> {};
-    data.value = 7;
-    const auto hash = Repository::hash(data);
-
-    EXPECT_EQ(root.find_with_hash(data, hash), std::nullopt);
-    EXPECT_EQ(root.find(data), std::nullopt);
-    EXPECT_THROW(root[missing], std::out_of_range);
-    EXPECT_THROW((void) root.front<RepositoryTypesElement>(), std::out_of_range);
-    EXPECT_THROW((void) root.get_canonical_context(missing), std::out_of_range);
-
-    const auto [view, created] = root.insert(data);
-
-    EXPECT_TRUE(created);
-    EXPECT_EQ(view.index(), urd::index<RepositoryTypesElement>(0));
-    EXPECT_EQ(view.data().value, 7);
-    EXPECT_EQ(&view.context(), &root);
-    const auto root_found = root.find_with_hash(data, hash);
-    ASSERT_TRUE(root_found.has_value());
-    EXPECT_EQ(root_found.value().index(), view.index());
-    EXPECT_EQ(&root_found.value().context(), &root);
-    EXPECT_EQ(root[view.index()].value, 7);
-    EXPECT_EQ(root.front<RepositoryTypesElement>().value, 7);
-    EXPECT_EQ(&root.get_canonical_context(view.index()), &root);
-
-    data.index = urd::index<RepositoryTypesElement>(99);
-    const auto [duplicate_view, duplicate_created] = root.insert(data);
-    EXPECT_FALSE(duplicate_created);
-    EXPECT_EQ(data.index, view.index());
-    EXPECT_EQ(duplicate_view.index(), view.index());
-
-    auto child = Repository(&root);
-    data.index = urd::index<RepositoryTypesElement>(99);
-    const auto [child_view, child_created] = child.insert(data);
-    EXPECT_EQ(data.index, view.index());
-
-    EXPECT_FALSE(child_created);
-    EXPECT_EQ(child_view.index(), view.index());
-    EXPECT_EQ(&child_view.context(), &root);
-    const auto child_found = child.find(data);
-    ASSERT_TRUE(child_found.has_value());
-    EXPECT_EQ(child_found.value().index(), view.index());
-    EXPECT_EQ(&child_found.value().context(), &root);
-    EXPECT_EQ(child[view.index()].value, 7);
-    EXPECT_EQ(child.front<RepositoryTypesElement>().value, 7);
-    EXPECT_EQ(&child.get_canonical_context(view.index()), &root);
-    EXPECT_EQ(&child.view(view.index()).context(), &root);
-
-    auto child_data = urd::data<RepositoryTypesElement> {};
-    child_data.value = 11;
-    const auto [local_view, local_created] = child.insert(child_data);
-
-    EXPECT_TRUE(local_created);
-    EXPECT_EQ(local_view.index(), urd::index<RepositoryTypesElement>(1));
-    EXPECT_EQ(&local_view.context(), &child);
-    EXPECT_EQ(root.find(child_data), std::nullopt);
-    const auto local_found = child.find(child_data);
-    ASSERT_TRUE(local_found.has_value());
-    EXPECT_EQ(local_found.value().index(), local_view.index());
-    EXPECT_EQ(&local_found.value().context(), &child);
-    EXPECT_EQ(child[local_view.index()].value, 11);
-    EXPECT_EQ(&child.get_canonical_context(local_view.index()), &child);
-}
-
 TEST(YggdrasilTests, CommonBasicRelationRepositoryFrontLocalIsChecked)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
@@ -925,85 +851,12 @@ TEST(YggdrasilTests, CommonBasicRelationRepositoryFrontLocalIsChecked)
     EXPECT_THROW((void) repository.front_local(relation), std::out_of_range);
 }
 
-TEST(YggdrasilTests, CommonRelationRepositoryForwardsAcrossParents)
+TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
     using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
-    using Repository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
-    static_assert(Viewable<ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>, Repository>);
 
-    auto root = Repository(0);
-    const auto relation = urd::index<RepositoryTypesRelation>(0);
-    const auto missing = ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag> { relation, urd::index<ygg::formalism::Row>(0) };
-
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
-    objects.push_back(urd::index<Object>(1));
-    const auto data = urd::data<Binding>(relation, objects);
-
-    EXPECT_EQ(root.find(data), std::nullopt);
-    EXPECT_THROW(root[missing], std::out_of_range);
-    EXPECT_THROW((void) root.front(relation), std::out_of_range);
-    EXPECT_THROW((void) root.get_canonical_context(missing), std::out_of_range);
-
-    const auto [view, created] = root.insert(data);
-
-    EXPECT_TRUE(created);
-    const auto root_found = root.find(data);
-    ASSERT_TRUE(root_found.has_value());
-    EXPECT_EQ(root_found.value().index().relation, view.index().relation);
-    EXPECT_EQ(root_found.value().index().row, view.index().row);
-    EXPECT_EQ(&root_found.value().context(), &root);
-    EXPECT_EQ(view.data().objects.size(), 2);
-    EXPECT_EQ(view.get_relation().index(), relation);
-    EXPECT_EQ(view.get_objects().size(), 2);
-    EXPECT_EQ(std::get<1>(urd::detail::identity(view)), root.get_index());
-    EXPECT_EQ(&view.context(), &root);
-    EXPECT_EQ(root[view.index()].objects.size(), 2);
-    EXPECT_EQ(root.front(relation).objects.size(), 2);
-    EXPECT_EQ(&root.get_canonical_context(view.index()), &root);
-
-    auto child = Repository(1, &root);
-    const auto [child_view, child_created] = child.insert(data);
-
-    EXPECT_FALSE(child_created);
-    EXPECT_EQ(child_view.index().relation, view.index().relation);
-    EXPECT_EQ(child_view.index().row, view.index().row);
-    EXPECT_EQ(&child_view.context(), &root);
-    const auto child_found = child.find(data);
-    ASSERT_TRUE(child_found.has_value());
-    EXPECT_EQ(child_found.value().index().relation, view.index().relation);
-    EXPECT_EQ(child_found.value().index().row, view.index().row);
-    EXPECT_EQ(&child_found.value().context(), &root);
-    EXPECT_EQ(child[view.index()].objects.size(), 2);
-    EXPECT_EQ(child.front(relation).objects.size(), 2);
-    EXPECT_EQ(&child.get_canonical_context(view.index()), &root);
-    EXPECT_EQ(&child.view(view.index()).context(), &root);
-
-    auto child_objects = urd::flat_vector<urd::index<Object>> {};
-    child_objects.push_back(urd::index<Object>(1));
-    child_objects.push_back(urd::index<Object>(0));
-    const auto child_data = urd::data<Binding>(relation, child_objects);
-    const auto [local_view, local_created] = child.insert(child_data);
-
-    EXPECT_TRUE(local_created);
-    EXPECT_EQ(local_view.index().row, urd::index<ygg::formalism::Row>(1));
-    EXPECT_EQ(&local_view.context(), &child);
-    EXPECT_EQ(local_view.data().objects.size(), 2);
-    EXPECT_EQ(root.find(child_data), std::nullopt);
-    const auto local_found = child.find(child_data);
-    ASSERT_TRUE(local_found.has_value());
-    EXPECT_EQ(local_found.value().index().row, local_view.index().row);
-    EXPECT_EQ(&local_found.value().context(), &child);
-}
-
-TEST(YggdrasilTests, CommonRelationRepositoryRejectsWrongArityWithoutMutation)
-{
-    using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
-    using Repository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
-
-    auto repository = Repository(0);
+    auto repository = ContractRepository(0);
     const auto relation = urd::index<RepositoryTypesRelation>(0);
     auto objects = urd::flat_vector<urd::index<Object>> {};
     objects.push_back(urd::index<Object>(0));
@@ -1015,10 +868,8 @@ TEST(YggdrasilTests, CommonRelationRepositoryRejectsWrongArityWithoutMutation)
     auto wrong_objects = urd::flat_vector<urd::index<Object>> {};
     wrong_objects.push_back(urd::index<Object>(0));
     const auto wrong = urd::data<Binding>(relation, std::move(wrong_objects));
-    static_assert(!noexcept(repository.find_with_hash(wrong, Repository::hash(wrong))));
     static_assert(!noexcept(repository.find(wrong)));
 
-    EXPECT_THROW((void) repository.find_with_hash(wrong, Repository::hash(wrong)), std::invalid_argument);
     EXPECT_THROW((void) repository.find(wrong), std::invalid_argument);
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
     EXPECT_EQ(repository.size(relation), 1);
@@ -1215,27 +1066,18 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
 }
 
 template<typename Repository>
-static Repository make_membership_repository(size_t index, const Repository* parent = nullptr)
-{
-    if constexpr (std::constructible_from<Repository, size_t, const Repository*>)
-        return Repository(index, parent);
-    else
-        return Repository(parent);
-}
-
-template<typename Repository>
 static void check_symbol_membership()
 {
     using Handle = urd::index<RepositoryTypesElement>;
-    using ElementView = urd::view<RepositoryTypesElement, Repository>;
-    auto root = make_membership_repository<Repository>(0);
+    using ElementView = urd::index_view<RepositoryTypesElement, Repository>;
+    auto root = Repository(0);
     auto data = urd::data<RepositoryTypesElement> {};
     data.value = 7;
     const auto root_view = root.insert(data).first;
-    auto child = make_membership_repository<Repository>(1, &root);
+    auto child = Repository(1, &root);
     data.value = 11;
     const auto child_view = child.insert(data).first;
-    auto grandchild = make_membership_repository<Repository>(2, &child);
+    auto grandchild = Repository(2, &child);
     data.value = 13;
     const auto local_view = grandchild.insert(data).first;
 
@@ -1245,8 +1087,8 @@ static void check_symbol_membership()
     EXPECT_TRUE(grandchild.contains(local_view));
     EXPECT_FALSE(root.contains(child_view));
     EXPECT_FALSE(child.contains(local_view));
-    EXPECT_TRUE(root.contains(ElementView(root_view.index(), grandchild)));
-    EXPECT_FALSE(grandchild.contains(ElementView(local_view.index(), root)));
+    EXPECT_TRUE(root.contains(ElementView(root_view.index(), &grandchild)));
+    EXPECT_FALSE(grandchild.contains(ElementView(local_view.index(), &root)));
 
     const auto indices = std::array { root_view.index(), child_view.index(), local_view.index() };
     EXPECT_TRUE(std::ranges::all_of(indices, [&](const auto& value) { return grandchild.contains(value); }));
@@ -1256,10 +1098,10 @@ static void check_symbol_membership()
     EXPECT_TRUE(std::ranges::all_of(std::span<const ElementView> {}, [&](const auto& value) { return root.contains(value); }));
     EXPECT_FALSE(std::ranges::all_of(std::array { root_view.index(), Handle() }, [&](const auto& value) { return grandchild.contains(value); }));
     EXPECT_FALSE(grandchild.contains(Handle(3)));
-    EXPECT_FALSE(grandchild.contains(ElementView(Handle(), grandchild)));
+    EXPECT_FALSE(grandchild.contains(ElementView(Handle(), &grandchild)));
 
-    auto unrelated = make_membership_repository<Repository>(0);
-    EXPECT_FALSE(grandchild.contains(ElementView(root_view.index(), unrelated)));
+    auto unrelated = Repository(0);
+    EXPECT_FALSE(grandchild.contains(ElementView(root_view.index(), &unrelated)));
     data.value = 7;
     const auto unrelated_view = unrelated.insert(data).first;
     ASSERT_EQ(unrelated_view.index(), root_view.index());
@@ -1271,8 +1113,6 @@ static void check_symbol_membership()
 
 TEST(YggdrasilTests, CommonSymbolMembershipChecksCanonicalOwnersAcrossLayers)
 {
-    check_symbol_membership<ContractSymbols>();
-    check_symbol_membership<ContractConcurrentSymbols>();
     check_symbol_membership<ContractRepository>();
     check_symbol_membership<formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>>();
 }
@@ -1301,8 +1141,8 @@ static void check_relation_membership()
     EXPECT_TRUE(grandchild.contains(local_view));
     EXPECT_FALSE(root.contains(child_view));
     EXPECT_FALSE(child.contains(local_view));
-    EXPECT_TRUE(root.contains(BindingView(root_view.index(), grandchild)));
-    EXPECT_FALSE(grandchild.contains(BindingView(local_view.index(), root)));
+    EXPECT_TRUE(root.contains(BindingView(root_view.index(), &grandchild)));
+    EXPECT_FALSE(grandchild.contains(BindingView(local_view.index(), &root)));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view, child_view, local_view }, [&](const auto& value) { return grandchild.contains(value); }));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view.index(), child_view.index(), local_view.index() }, [&](const auto& value) { return grandchild.contains(value); }));
     EXPECT_TRUE(std::ranges::all_of(std::span<const Handle> {}, [&](const auto& value) { return root.contains(value); }));
@@ -1315,12 +1155,12 @@ static void check_relation_membership()
     for (const auto index : { missing_row, missing_relation, max_row, max_relation })
     {
         EXPECT_FALSE(grandchild.contains(index));
-        EXPECT_FALSE(grandchild.contains(BindingView(index, grandchild)));
+        EXPECT_FALSE(grandchild.contains(BindingView(index, &grandchild)));
     }
     EXPECT_FALSE(std::ranges::all_of(std::array { root_view.index(), max_row }, [&](const auto& value) { return grandchild.contains(value); }));
 
     auto unrelated = Repository(0);
-    EXPECT_FALSE(grandchild.contains(BindingView(root_view.index(), unrelated)));
+    EXPECT_FALSE(grandchild.contains(BindingView(root_view.index(), &unrelated)));
     objects[0] = urd::index<Object>(0);
     const auto unrelated_view = unrelated.insert(urd::data<ContractBinding>(relation, objects)).first;
     EXPECT_TRUE(grandchild.contains(unrelated_view.index()));
@@ -1330,8 +1170,6 @@ static void check_relation_membership()
 
 TEST(YggdrasilTests, CommonRelationMembershipChecksCanonicalOwnersAcrossLayers)
 {
-    check_relation_membership<ContractRelations>();
-    check_relation_membership<ContractConcurrentRelations>();
     check_relation_membership<ContractRepository>();
     check_relation_membership<formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>>();
 }

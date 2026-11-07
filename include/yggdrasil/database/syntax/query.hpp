@@ -63,7 +63,7 @@ public:
     {
         if (id.value >= node_count())
             throw std::out_of_range("Query plan: invalid query index.");
-        return QueryView<>(id, *m_repository);
+        return m_repository->view(id);
     }
     QueryView<> operator[](QueryIndex id) const&& = delete;
 };

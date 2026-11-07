@@ -35,7 +35,7 @@ namespace ygg::database
 class BackwardFrontier
 {
 public:
-    void start(std::span<const uint_t> targets);
+    void start(std::span<const VertexSet::handle_type> targets);
 
     /// Advances one level; returns the number of vertices found.
     template<PredecessorOracle Predecessors, DistanceHeuristic H>
@@ -70,28 +70,28 @@ public:
     [[nodiscard]] size_t frontier_size() const noexcept { return m_frontier.size(); }
     /// The distance of a found vertex, or none: exact on the edges of the search that found it, a lower bound after
     /// edges are removed.
-    [[nodiscard]] uint_t level(uint_t id) const noexcept { return id < m_level.size() ? m_level[id] : none; }
-    /// A lower bound on any vertex's distance: its level if found, otherwise one beyond the last level, or infinity
-    /// once the frontier is exhausted.
-    [[nodiscard]] uint_t bound(std::optional<uint_t> id) const noexcept
+    [[nodiscard]] uint_t level(VertexSet::handle_type id) const noexcept { return id < m_level.position(m_level.end()) ? m_level[id] : none; }
+    /// A lower bound on any vertex's distance (none: one not stored): its level if found, otherwise one beyond the last
+    /// level, or infinity once the frontier is exhausted.
+    [[nodiscard]] uint_t bound(VertexSet::handle_type id) const noexcept
     {
-        if (id && level(*id) != none)
-            return level(*id);
+        if (const auto found = level(id); found != none)
+            return found;
         return m_exhausted ? infinity : m_depth + 1;
     }
 
 private:
-    urd::Store<urd::sequence<uint_t>> m_level;  ///< By the tree's vertex index.
-    urd::Store<urd::sequence<uint_t>> m_frontier;
-    urd::Store<urd::sequence<uint_t>> m_expanding;  ///< The level step() expands; kept with m_vertex to avoid allocations.
+    urd::Store<urd::sequence<uint_t, VertexSet::handle_type>> m_level;  ///< By the tree's vertex.
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_frontier;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_expanding;  ///< The level step() expands; kept with m_vertex to avoid allocations.
     urd::Store<urd::sequence<std::byte>> m_vertex;
     uint_t m_depth = 0;
     bool m_exhausted = false;
 
-    uint_t& level_slot(uint_t id)
+    uint_t& level_slot(VertexSet::handle_type id)
     {
-        if (m_level.size() <= id)
-            m_level.resize(id + 1, none);
+        while (!(id < m_level.position(m_level.end())))
+            m_level.push_back(none);
         return m_level[id];
     }
 };

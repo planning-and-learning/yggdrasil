@@ -1,5 +1,5 @@
 #include "bindings.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 
 namespace yggdrasil::database_python
 {
@@ -22,7 +22,7 @@ void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
                                            T converted {};
                                            if (!nb::try_cast(value, converted))
                                                throw nb::type_error("Query selection: value does not match the column type.");
-                                           new (self) V(arg, column, converted);
+                                           new (self) V(arg.index(), column, converted);
                                        });
                 },
                 "arg"_a,

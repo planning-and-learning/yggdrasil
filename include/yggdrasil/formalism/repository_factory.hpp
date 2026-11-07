@@ -19,6 +19,7 @@
 #define YGG_FORMALISM_REPOSITORY_FACTORY_HPP_
 
 #include <urd/repr/containers/bit.hpp>
+#include "yggdrasil/core/index_sequence.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 
 #include <algorithm>
@@ -48,26 +49,26 @@ public:
     RepositoryFactory() = default;
 
     Repository<SymbolRepo, RelationRepo> create(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return Repository<SymbolRepo, RelationRepo>(m_next_index++, parent); }
+    { return Repository<SymbolRepo, RelationRepo>(m_indices.next(), parent); }
 
     Repository<SymbolRepo, RelationRepo> create(RelationRepositoryConfig config, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return Repository<SymbolRepo, RelationRepo>(m_next_index++, parent, config); }
+    { return Repository<SymbolRepo, RelationRepo>(m_indices.next(), parent, config); }
 
     Repository<SymbolRepo, RelationRepo> create(size_t num_objects, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
     { return create(make_relation_repository_config(num_objects, parent), parent); }
 
     std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_next_index++, parent); }
+    { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_indices.next(), parent); }
 
     std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(RelationRepositoryConfig config,
                                                                         const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
-    { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_next_index++, parent, config); }
+    { return std::make_shared<Repository<SymbolRepo, RelationRepo>>(m_indices.next(), parent, config); }
 
     std::shared_ptr<Repository<SymbolRepo, RelationRepo>> create_shared(size_t num_objects, const Repository<SymbolRepo, RelationRepo>* parent = nullptr)
     { return create_shared(make_relation_repository_config(num_objects, parent), parent); }
 
 private:
-    ygg::uint_t m_next_index = 0;
+    IndexSequence m_indices;
 };
 
 }  // namespace ygg::formalism

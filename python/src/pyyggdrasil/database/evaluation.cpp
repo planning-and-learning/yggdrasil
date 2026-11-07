@@ -1,5 +1,5 @@
 #include "module.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 #include <urd/python/sequences/sequence.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>

@@ -29,7 +29,7 @@ using ColumnIndex = urd::index<database::Column>;
 inline database::BorrowedRelationView borrow(const urd::builder<database::Relation>& relation)
 {
     static const auto context = database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 
 static_assert(database::RelationViewConcept<database::BorrowedRelationView>);

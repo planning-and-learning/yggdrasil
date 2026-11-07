@@ -10,13 +10,13 @@
 
 namespace ygg::database
 {
-RelationRepository RelationRepositoryFactory::create() { return RelationRepository(next_index(), *this); }
+RelationRepository RelationRepositoryFactory::create() { return RelationRepository(m_indices.next(), *this); }
 }
 
 namespace ygg::database
 {
 std::shared_ptr<RelationRepository> RelationRepositoryFactory::create_shared()
-{ return std::shared_ptr<RelationRepository>(new RelationRepository(next_index(), *this)); }
+{ return std::shared_ptr<RelationRepository>(new RelationRepository(m_indices.next(), *this)); }
 }
 
 namespace ygg::database
@@ -61,6 +61,6 @@ std::pair<RelationView, bool> RelationRepository::insert(urd::data<Relation>& da
     }
     ensure_storage_index(data.row_set_index);
     const auto [index, created] = m_symbols.template insert_local<Relation>(data);
-    return { RelationView(index, *this), created };
+    return { RelationView(index, this), created };
 }
 }

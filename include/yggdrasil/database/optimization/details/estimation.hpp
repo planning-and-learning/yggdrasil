@@ -108,9 +108,9 @@ Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity
     const auto inputs = query.get_inputs();
     if (inputs.empty())
         return factor({ 1, {} }, query.columns(), identity);
-    auto result = child(QueryView<>(inputs.front(), get_repository(query.context())));
+    auto result = child(query.context().view(inputs.front()));
     for (const auto input : inputs.subspan(1))
-        result = combine(std::move(result), child(QueryView<>(input, get_repository(query.context()))));
+        result = combine(std::move(result), child(query.context().view(input)));
     return conjunction(std::move(result), column_labels(query.columns()));
 }
 template<class GetEstimate>

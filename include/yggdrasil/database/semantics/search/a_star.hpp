@@ -48,8 +48,8 @@ struct OpenEntry
 {
     uint_t f = 0;
     uint_t g = 0;
-    uint_t push = 0;   ///< Push order.
-    uint_t index = 0;  ///< The generated vertex.
+    uint_t push = 0;               ///< Push order.
+    VertexSet::handle_type index;  ///< The generated vertex.
 };
 
 /// Whether lhs is popped before rhs: a total order, since pushes are unique.
@@ -71,7 +71,7 @@ class AStar;
 
 /// The generated vertices of one A* search and its open list, owned by the caller and reused across searches, so that
 /// a search allocates only when it generates more vertices than every earlier one. Opaque to the caller: m_nodes is
-/// indexed like m_vertices, which only AStar maintains.
+/// addressed by m_vertices' handles, which only AStar maintains.
 class AStarStorage
 {
 public:
@@ -88,8 +88,8 @@ private:
         uint_t g = 0;
         uint_t h = 0;        ///< The A* estimate when queued.
         uint_t h_learn = 0;  ///< max(heuristic, learned): the estimate learning may rely on.
-        uint_t parent = 0;
-        uint_t stored = 0;  ///< The tree index, or none if the vertex was not stored when last looked up.
+        VertexSet::handle_type parent;
+        VertexSet::handle_type stored;  ///< The tree's vertex, or none if the vertex was not stored when last looked up.
         bool closed = false;
     };
 
@@ -102,7 +102,7 @@ private:
     }
 
     VertexSet m_vertices;
-    urd::Store<urd::sequence<Node>> m_nodes;
+    urd::Store<urd::sequence<Node, VertexSet::handle_type>> m_nodes;
     /// A binary heap in one vector, so clear() keeps its capacity and a reused open list does not allocate.
     urd::Store<urd::queue<OpenEntry>, urd::by_priority, urd::order_by<PoppedFirst>> m_open_list;
     uint_t m_pushes = 0;
@@ -153,17 +153,17 @@ public:
         if (const auto distance = reuse(sources))
             return *distance;
         for (size_t i = 0; i < sources.size(); ++i)
-            push(sources.row(i), 0, none);
+            push(sources.row(i), 0, {});
         while (!m_storage->m_open_list.empty())
         {
             if (advance_backward(sources))
-                return finish(infinity, std::nullopt);
+                return finish(infinity, {});
             const auto entry = m_storage->m_open_list.top();
             m_storage->m_open_list.pop();
             if (const auto distance = visit(entry.index, entry.f))
                 return *distance;
         }
-        return finish(infinity, std::nullopt);
+        return finish(infinity, {});
     }
 
     [[nodiscard]] const AStarCounters& counters() const noexcept { return m_counters; }
@@ -174,17 +174,17 @@ public:
     void path(const OnVertex& on_vertex) const
     {
         auto end = m_reused;
-        if (m_last != none)
+        if (!m_last.is_none())
         {
-            for (auto index = m_last; index != none; index = m_storage->m_nodes[index].parent)
-                on_vertex(vertex_at(m_storage->m_vertices, index));
+            for (auto index = m_last; !index.is_none(); index = m_storage->m_nodes[index].parent)
+                on_vertex(m_storage->m_vertices.view(index));
             end = m_storage->m_nodes[m_last].stored;
         }
-        if (end == none)
+        if (end.is_none())
             return;
-        if (m_last == none)
+        if (m_last.is_none())
             on_vertex(m_tree->vertex(end));
-        for (auto id = m_tree->next(end); id != none; id = m_tree->next(id))
+        for (auto id = m_tree->next(end); !id.is_none(); id = m_tree->next(id))
             on_vertex(m_tree->vertex(id));
     }
 
@@ -198,21 +198,25 @@ private:
     uint64_t m_version;
     size_t m_open = 0;
     uint_t m_dropped = infinity;  ///< The smallest g + h_learn among vertices dropped by the backward bound alone.
-    uint_t m_last = none;         ///< The generated vertex the search ended at, if it ended at one.
-    uint_t m_reused = none;       ///< The stored source whose tree path ended the search without expanding, if any.
+    VertexSet::handle_type m_last;    ///< The generated vertex the search ended at, if it ended at one.
+    VertexSet::handle_type m_reused;  ///< The stored source whose tree path ended the search without expanding, if any.
     AStarCounters m_counters;
 
     /// The larger lower bound of a stored vertex; exact once its next chain is valid.
-    [[nodiscard]] uint_t value(uint_t id) const noexcept
+    [[nodiscard]] uint_t value(VertexSet::handle_type id) const noexcept
     {
         const auto level = m_backward->level(id);
         return level == none ? m_tree->learned(id) : std::max(m_tree->learned(id), level);
     }
 
-    bool on_valid_path(uint_t id)
+    bool on_valid_path(VertexSet::handle_type id)
     {
-        return m_tree
-            ->on_valid_path(id, [&](uint_t u) { return value(u); }, [&](uint_t u) { return m_targets->contains(m_tree->vertex(u)); }, *m_oracle, m_version);
+        return m_tree->on_valid_path(
+            id,
+            [&](VertexSet::handle_type u) { return value(u); },
+            [&](VertexSet::handle_type u) { return m_targets->contains(m_tree->vertex(u)); },
+            *m_oracle,
+            m_version);
     }
 
     /// Whether the exhausted backward frontier found no source.
@@ -221,7 +225,7 @@ private:
     {
         return m_backward->exhausted()
                && std::ranges::none_of(std::views::iota(static_cast<size_t>(0), sources.size()),
-                                       [&](size_t i) { return m_backward->level(m_tree->find(sources.row(i)).value_or(none)) != none; });
+                                       [&](size_t i) { return m_backward->level(m_tree->find(sources.row(i))) != none; });
     }
 
     /// A single stored source on a valid tree path has an exact value; a learned infinity proves it dead.
@@ -231,15 +235,15 @@ private:
         if (sources.size() != 1)
             return std::nullopt;
         const auto stored = m_tree->find(sources.row(0));
-        if (!stored)
+        if (stored.is_none())
             return std::nullopt;
-        if (m_tree->learned(*stored) == infinity)
+        if (m_tree->learned(stored) == infinity)
             return infinity;
-        if (!on_valid_path(*stored))
+        if (!on_valid_path(stored))
             return std::nullopt;
         ++m_counters.tree_hits;
-        m_reused = *stored;
-        return value(*stored);
+        m_reused = stored;
+        return value(stored);
     }
 
     /// Cardinality comparison; returns whether the exhausted backward frontier excludes every source.
@@ -255,33 +259,33 @@ private:
         return false;
     }
 
-    AStarStorage::Node& node(uint_t index) noexcept { return m_storage->m_nodes[index]; }
+    AStarStorage::Node& node(VertexSet::handle_type index) noexcept { return m_storage->m_nodes[index]; }
 
-    void enqueue(uint_t index)
+    void enqueue(VertexSet::handle_type index)
     { m_storage->m_open_list.push(OpenEntry { node(index).g + node(index).h, node(index).g, m_storage->m_pushes++, index }); }
 
-    /// The tree index of a generated vertex. A vertex not stored when generated is looked up again: the backward
-    /// frontier may have stored it since.
-    std::optional<uint_t> stored(uint_t index)
+    /// The tree's vertex of a generated vertex, or none. A vertex not stored when generated is looked up again: the
+    /// backward frontier may have stored it since.
+    VertexSet::handle_type stored(VertexSet::handle_type index)
     {
         auto& id = node(index).stored;
-        if (id == none)
-            id = m_tree->find(vertex_at(m_storage->m_vertices, index)).value_or(none);
-        return id == none ? std::nullopt : std::optional<uint_t>(id);
+        if (id.is_none())
+            id = m_tree->find(m_storage->m_vertices.view(index));
+        return id;
     }
 
-    void push(std::span<const std::byte> vertex, uint_t cost, uint_t from)
+    void push(std::span<const std::byte> vertex, uint_t cost, VertexSet::handle_type from)
     {
-        const auto found = vertex_id(m_storage->m_vertices, vertex);
-        if (found && (node(*found).closed || node(*found).g <= cost))
+        auto index = m_storage->m_vertices.find(vertex);
+        if (!index.is_none() && (node(index).closed || node(index).g <= cost))
             return;
-        if (!found)
+        if (index.is_none())
         {
             auto estimate = m_heuristic->estimate(vertex);
-            assert(from == none || estimate == infinity || m_heuristic->estimate(vertex_at(m_storage->m_vertices, from)) <= estimate + 1);  // Consistency.
+            assert(from.is_none() || estimate == infinity || m_heuristic->estimate(m_storage->m_vertices.view(from)) <= estimate + 1);  // Consistency.
             const auto stored = m_tree->find(vertex);
-            if (stored)
-                estimate = std::max(estimate, m_tree->learned(*stored));
+            if (!stored.is_none())
+                estimate = std::max(estimate, m_tree->learned(stored));
             if (estimate == infinity)
                 return;
             const auto bound = m_backward->bound(stored);
@@ -290,23 +294,22 @@ private:
                 m_dropped = std::min(m_dropped, cost + estimate);
                 return;
             }
-            m_storage->m_vertices.insert(vertex);
-            m_storage->m_nodes.push_back(AStarStorage::Node { .h = std::max(estimate, bound), .h_learn = estimate, .stored = stored.value_or(none) });
+            index = m_storage->m_vertices.insert(vertex).first;
+            m_storage->m_nodes.push_back(AStarStorage::Node { .h = std::max(estimate, bound), .h_learn = estimate, .stored = stored });
             ++m_open;
         }
-        const auto index = found ? *found : static_cast<uint_t>(m_storage->m_nodes.size() - 1);
         node(index).g = cost;
         node(index).parent = from;
         enqueue(index);
     }
 
     /// Pops a vertex queued at f; returns the distance if the search ends there.
-    std::optional<uint_t> visit(uint_t index, uint_t f)
+    std::optional<uint_t> visit(VertexSet::handle_type index, uint_t f)
     {
         auto& current = node(index);
         if (current.closed || current.g + current.h != f)
             return std::nullopt;
-        if (m_targets->contains(vertex_at(m_storage->m_vertices, index)))
+        if (m_targets->contains(m_storage->m_vertices.view(index)))
             return finish(f, index);
         const auto id = stored(index);
         // The backward frontier may have raised its bound since the vertex was queued.
@@ -326,20 +329,20 @@ private:
             return std::nullopt;
         }
         // It stays open for learning: its successors were not generated.
-        if (id && on_valid_path(*id))
+        if (!id.is_none() && on_valid_path(id))
         {
             ++m_counters.tree_hits;
-            return finish(current.g + value(*id), index);
+            return finish(current.g + value(id), index);
         }
         expand(index);
         return std::nullopt;
     }
 
-    void expand(uint_t index)
+    void expand(VertexSet::handle_type index)
     {
         node(index).closed = true;
         --m_open;
-        const auto vertex = vertex_at(m_storage->m_vertices, index);
+        const auto vertex = m_storage->m_vertices.view(index);
         m_storage->m_vertex.assign(vertex.begin(), vertex.end());
         const auto cost = node(index).g + 1;
         m_oracle->successors(m_storage->m_vertex,
@@ -355,31 +358,29 @@ private:
     /// learns nothing would record that estimate again. The stored values remain consistent: a closed vertex x that
     /// learns nothing has m <= g(x) + h(x), so a closed predecessor p learns m - g(p) <= 1 + h(x). As in LRTA*'s
     /// table of updated values (Korf, "Real-Time Heuristic Search", AIJ 1990), the tree holds only what was learned.
-    uint_t finish(uint_t distance, std::optional<uint_t> last)
+    uint_t finish(uint_t distance, VertexSet::handle_type last)
     {
         const auto& nodes = m_storage->m_nodes;
         auto m = std::min(distance, m_dropped);
         for (const auto& open : nodes)
             if (!open.closed && open.h_learn != infinity)
                 m = std::min(m, open.g + open.h_learn);
-        for (uint_t i = 0; i < nodes.size(); ++i)
-            if (nodes[i].closed && m > nodes[i].g)
-                if (const auto learned = m == infinity ? infinity : m - nodes[i].g; learned > nodes[i].h_learn)
-                    m_tree->learn(ensure(i), learned);
-        if (last)
-        {
-            m_last = *last;
-            for (auto child = *last; nodes[child].parent != none; child = nodes[child].parent)
+        for (auto it = nodes.begin(); it != nodes.end(); ++it)
+            if (it->closed && m > it->g)
+                if (const auto learned = m == infinity ? infinity : m - it->g; learned > it->h_learn)
+                    m_tree->learn(ensure(nodes.position(it)), learned);
+        m_last = last;
+        if (!last.is_none())
+            for (auto child = last; !nodes[child].parent.is_none(); child = nodes[child].parent)
                 m_tree->link(ensure(nodes[child].parent), ensure(child));
-        }
         return distance;
     }
 
-    uint_t ensure(uint_t index)
+    VertexSet::handle_type ensure(VertexSet::handle_type index)
     {
-        if (const auto id = stored(index))
-            return *id;
-        return node(index).stored = m_tree->ensure(vertex_at(m_storage->m_vertices, index), *m_heuristic);
+        if (const auto id = stored(index); !id.is_none())
+            return id;
+        return node(index).stored = m_tree->ensure(m_storage->m_vertices.view(index), *m_heuristic);
     }
 };
 

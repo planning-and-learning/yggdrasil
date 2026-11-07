@@ -56,13 +56,13 @@ using RelationBuilder = urd::builder<RelationTag>;
 using Repository = database::RelationRepository;
 using BuilderView = urd::borrowed_view<RelationTag, Repository, RelationBuilder>;
 using DataView = urd::borrowed_view<RelationTag, Repository>;
-using IndexView = urd::view<RelationTag, Repository>;
+using IndexView = urd::index_view<RelationTag, Repository>;
 using ColumnsIndex = urd::index<database::Columns>;
 using RowIndex = urd::index<database::RelationRow>;
 using RowSetIndex = urd::index<database::RelationRowSet>;
 using ColumnsBuilderView = urd::borrowed_view<database::Columns, Repository, urd::builder<database::Columns>>;
 using ColumnsDataView = urd::borrowed_view<database::Columns, Repository>;
-using ColumnsIndexView = urd::view<database::Columns, Repository>;
+using ColumnsIndexView = urd::index_view<database::Columns, Repository>;
 
 struct AliasFreeRelationView
 {
@@ -93,14 +93,6 @@ static_assert(std::same_as<IndexView, database::RelationView>);
 static_assert(database::RelationViewConcept<BuilderView>);
 static_assert(database::RelationViewConcept<DataView>);
 static_assert(database::RelationViewConcept<IndexView>);
-
-template<typename V>
-concept CanIterateRelation = requires { typename database::detail::RelationIterator<V>; };
-
-static_assert(CanIterateRelation<BuilderView> && CanIterateRelation<DataView> && CanIterateRelation<IndexView>);
-static_assert(!CanIterateRelation<AliasFreeRelationView>);
-static_assert(!CanIterateRelation<RelationBuilder>);
-static_assert(!CanIterateRelation<int>);
 
 static_assert(std::ranges::random_access_range<BuilderView>);
 static_assert(std::ranges::random_access_range<DataView>);

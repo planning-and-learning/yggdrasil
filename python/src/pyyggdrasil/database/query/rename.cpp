@@ -1,5 +1,5 @@
 #include "bindings.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include <urd/python/sequences/sequence.hpp>
@@ -14,7 +14,7 @@ void bind_query_rename(nb::module_& m, QueryRepositoryBinding& repository)
     {
         using V = QueryData<ygg::database::QueryRenameTag>;
         urd::python::bind_data<V>(m, "QueryRenameData")
-            .def(nb::init<QueryView, urd::Store<urd::sequence<Column>>>(), "arg"_a, "labels"_a)
+            .def(urd::python::init_from_views<QueryView, urd::Store<urd::sequence<Column>>>(), "arg"_a, "labels"_a)
             .def_rw("arg", &V::arg)
             .def_rw("labels", &V::labels);
     }

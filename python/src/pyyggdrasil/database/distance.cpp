@@ -1,5 +1,5 @@
 #include "yggdrasil/database/semantics/distance.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 
 #include "module.hpp"
 #include "yggdrasil/database/semantics/incremental/distance.hpp"

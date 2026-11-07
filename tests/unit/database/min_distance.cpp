@@ -29,7 +29,7 @@ using ygg::uint_t;
 View borrow(const Relation& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 
 urd::Store<urd::sequence<View>> borrow_all(const urd::Store<urd::sequence<Relation>>& relations)
@@ -396,15 +396,15 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         }
         auto sources = ListVertices {};
         auto targets = ygg::database::VertexSet();
+        tree.clear();
+        auto ids = urd::Store<urd::sequence<ygg::database::VertexSet::handle_type>>();
         for (size_t i = 0; i < 2; ++i)
         {
             sources.rows.push_back(ListGraph::bytes(static_cast<uint_t>(rng() % n)));
-            targets.insert(std::span<const std::byte>(ListGraph::bytes(static_cast<uint_t>(rng() % n))));
+            const auto target = ListGraph::bytes(static_cast<uint_t>(rng() % n));
+            if (targets.insert(std::span<const std::byte>(target)).second)
+                ids.push_back(tree.ensure(target, heuristic));
         }
-        tree.clear();
-        auto ids = urd::Store<urd::sequence<uint_t>>();
-        for (size_t i = 0; i < targets.size(); ++i)
-            ids.push_back(tree.ensure(ygg::database::vertex_at(targets, static_cast<uint_t>(i)), heuristic));
         backward.start(ids);
         auto search = ygg::database::AStar<ListGraph, ygg::database::BlindDistanceHeuristic>(graph, tree, backward, heuristic, targets, storage, 0);
         const auto distance = search.run(sources);

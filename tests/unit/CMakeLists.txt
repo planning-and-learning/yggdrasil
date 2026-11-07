@@ -26,12 +26,7 @@ endfunction()
 # Test sources mirror include/yggdrasil; target names use <dir>_<file>.
 
 add_yggdrasil_gtest(extensions "extensions.cpp")
-add_yggdrasil_gtest(urd "urd.cpp")
 
-
-add_yggdrasil_gtest(containers_concurrent_publication "containers/concurrent_publication.cpp")
-target_compile_definitions(containers_concurrent_publication PRIVATE NDEBUG)
-target_link_libraries(containers_concurrent_publication PRIVATE Threads::Threads)
 add_yggdrasil_gtest(containers_repository_types "containers/repository_types.cpp")
 
 add_yggdrasil_gtest(formalism_binding_key "formalism/binding_key.cpp")
@@ -80,7 +75,6 @@ add_yggdrasil_gtest(io_iostream "io/iostream.cpp")
 add_yggdrasil_gtest(io_project_path "io/project_path.cpp")
 
 add_yggdrasil_gtest(semantics_canonicalization "semantics/canonicalization.cpp")
-add_yggdrasil_gtest(semantics_comparison "semantics/comparison.cpp")
 
 add_yggdrasil_gtest(serialization_json "serialization/json.cpp")
 add_yggdrasil_gtest(serialization_json_loader "serialization/json_loader.cpp")

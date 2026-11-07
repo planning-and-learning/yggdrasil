@@ -9,12 +9,12 @@
 
 namespace ygg::database
 {
-QueryRepository QueryRepositoryFactory::create() { return QueryRepository(next_index(), *this); }
+QueryRepository QueryRepositoryFactory::create() { return QueryRepository(m_indices.next(), *this); }
 }
 
 namespace ygg::database
 {
-std::shared_ptr<QueryRepository> QueryRepositoryFactory::create_shared() { return std::shared_ptr<QueryRepository>(new QueryRepository(next_index(), *this)); }
+std::shared_ptr<QueryRepository> QueryRepositoryFactory::create_shared() { return std::shared_ptr<QueryRepository>(new QueryRepository(m_indices.next(), *this)); }
 }
 
 namespace ygg::database

@@ -29,17 +29,10 @@ namespace ygg::database
 /// used together in identity-keyed caches must come from the same factory.
 class RelationRepositoryFactory
 {
-    std::shared_ptr<size_t> m_next_index = std::make_shared<size_t>(0);
+    IndexSequence m_indices;
     RelationPoolFactory m_rows;
 
     friend class RelationRepository;
-
-    size_t next_index()
-    {
-        if (*m_next_index == std::numeric_limits<size_t>::max())
-            throw std::overflow_error("RelationRepositoryFactory: index space exhausted.");
-        return (*m_next_index)++;
-    }
 
 public:
     explicit RelationRepositoryFactory(RelationPoolFactory rows = {}) : m_rows(std::move(rows)) {}
@@ -82,7 +75,7 @@ public:
     RelationRepository& operator=(RelationRepository&&) = delete;
 
     [[nodiscard]] size_t get_index() const noexcept { return m_index; }
-    /// The repository's number, as urd::view asks of a context.
+    /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
     [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
     [[nodiscard]] const auto& get_row_repository() const noexcept { return m_rows; }
@@ -104,28 +97,28 @@ public:
 
     template<typename Entity>
         requires formalism::SupportsSymbol<RelationRepository, Entity>
-    [[nodiscard]] std::optional<urd::view<Entity, RelationRepository>> find(const urd::data<Entity>& data) const noexcept
+    [[nodiscard]] std::optional<urd::index_view<Entity, RelationRepository>> find(const urd::data<Entity>& data) const noexcept
     {
         if (const auto index = m_symbols.template find_local<Entity>(data))
-            return urd::view<Entity, RelationRepository>(*index, *this);
+            return urd::index_view<Entity, RelationRepository>(*index, this);
         return std::nullopt;
     }
 
-    std::pair<urd::view<Columns, RelationRepository>, bool> insert(urd::data<Columns>& data)
+    std::pair<urd::index_view<Columns, RelationRepository>, bool> insert(urd::data<Columns>& data)
     {
         validate_columns(std::span<const ColumnLayout>(data.values.data(), data.values.size()));
         const auto [index, created] = m_symbols.template insert_local<Columns>(data);
-        return { urd::view<Columns, RelationRepository>(index, *this), created };
+        return { urd::index_view<Columns, RelationRepository>(index, this), created };
     }
 
-    std::pair<urd::view<Columns, RelationRepository>, bool> insert(std::span<const ColumnLayout> columns)
+    std::pair<urd::index_view<Columns, RelationRepository>, bool> insert(std::span<const ColumnLayout> columns)
     {
         urd::clear_members(m_columns_data);
         m_columns_data.values.set(columns.begin(), columns.end());
         return insert(m_columns_data);
     }
 
-    std::pair<urd::view<Columns, RelationRepository>, bool> insert(std::span<const urd::index<Column>> columns)
+    std::pair<urd::index_view<Columns, RelationRepository>, bool> insert(std::span<const urd::index<Column>> columns)
     {
         const auto schema = urd::builder<Columns>(columns);
         return insert(schema.span());
@@ -140,13 +133,13 @@ public:
 
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
-    [[nodiscard]] urd::view<T, RelationRepository> view(urd::index<T> index) const noexcept
-    { return { index, *this }; }
+    [[nodiscard]] urd::index_view<T, RelationRepository> view(urd::index<T> index) const noexcept
+    { return { index, this }; }
 
     [[nodiscard]] size_t size() const noexcept { return m_symbols.template local_size<Relation>(); }
     [[nodiscard]] bool empty() const noexcept { return size() == 0; }
 
-    [[nodiscard]] urd::view<Columns, RelationRepository> get_columns(urd::index<Columns> index) const noexcept { return { index, *this }; }
+    [[nodiscard]] urd::index_view<Columns, RelationRepository> get_columns(urd::index<Columns> index) const noexcept { return { index, this }; }
 
     [[nodiscard]] size_t get_storage_index(urd::index<RelationRowSet> row_set_index) const noexcept
     {
@@ -155,7 +148,7 @@ public:
     }
 
     template<typename C>
-    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
+    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const ColumnLayout> columns, size_t schema_namespace)
     {
         if (&get_repository(source.context()) != this)
             throw std::invalid_argument("RelationRepository: rename requires a source in this repository.");
@@ -168,11 +161,11 @@ public:
     }
 
     template<typename C>
-    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const ColumnLayout> columns)
+    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const ColumnLayout> columns)
     { return rename(source, columns, source.data().schema_namespace); }
 
     template<typename C>
-    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const urd::index<Column>> columns, size_t schema_namespace)
+    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const urd::index<Column>> columns, size_t schema_namespace)
     {
         auto schema = urd::builder<Columns>(source.columns().span());
         schema.rename(columns);
@@ -180,7 +173,7 @@ public:
     }
 
     template<typename C>
-    urd::view<Relation, C> rename(urd::view<Relation, C> source, std::span<const urd::index<Column>> columns)
+    urd::index_view<Relation, C> rename(urd::index_view<Relation, C> source, std::span<const urd::index<Column>> columns)
     { return rename(source, columns, source.data().schema_namespace); }
 
     void clear() noexcept
@@ -196,7 +189,7 @@ private:
     void ensure_storage_index(urd::index<RelationRowSet> index)
     {
         while (m_storage_indices.size() <= index.value)
-            m_storage_indices.push_back(m_factory.m_rows.next_index());
+            m_storage_indices.push_back(m_factory.m_rows.m_indices.next());
     }
 };
 
@@ -237,7 +230,7 @@ auto copy(urd::borrowed_view<Relation, C> source, RelationRepository& repository
 }
 
 template<typename C>
-auto copy(urd::view<Relation, C> source, RelationRepository& repository)
+auto copy(urd::index_view<Relation, C> source, RelationRepository& repository)
 {
     if (&get_repository(source.context()) == &repository)
         return std::pair { repository.view(source.index()), false };

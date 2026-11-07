@@ -6,7 +6,7 @@
 #include "module.hpp"
 #include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>

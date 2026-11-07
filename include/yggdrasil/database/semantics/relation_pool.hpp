@@ -8,6 +8,7 @@
 
 #include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
+#include "yggdrasil/core/index_sequence.hpp"
 #include "yggdrasil/database/semantics/relation_builder.hpp"
 
 #include <memory>
@@ -26,17 +27,10 @@ namespace ygg::database
 class RelationPoolFactory
 {
 private:
-    std::shared_ptr<size_t> m_next_index = std::make_shared<size_t>(0);
+    IndexSequence m_indices;
 
     friend class RelationPool;
     friend class RelationRepository;
-
-    size_t next_index()
-    {
-        if (*m_next_index == std::numeric_limits<size_t>::max())
-            throw std::overflow_error("RelationPoolFactory: storage index space exhausted.");
-        return (*m_next_index)++;
-    }
 
 public:
     [[nodiscard]] RelationPool create_pool();
@@ -88,7 +82,7 @@ urd::unique_slot_ptr<urd::builder<Relation>> RelationPool::allocate(size_t width
     auto relation = pool->acquire_unique();
     relation->initialize(columns);
     if (relation->m_storage_index == std::numeric_limits<size_t>::max())
-        relation->m_storage_index = m_factory.next_index();
+        relation->m_storage_index = m_factory.m_indices.next();
     return relation;
 }
 

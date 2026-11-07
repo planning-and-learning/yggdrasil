@@ -22,11 +22,8 @@
 #include <urd/elements/flat.hpp>
 #include "yggdrasil/formalism/basic_symbol_repository.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/formalism/membership.hpp"
 
-#include <cassert>
 #include <optional>
-#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <urd/config.hpp>
@@ -39,7 +36,9 @@ class SymbolRepository;
 template<typename... Ts>
 class ConcurrentSymbolRepository;
 
-/// Owns symbol storage and publishes indexed views with the derived repository as context.
+/// One layer of symbol storage, read through its local API; views of its indices have the derived repository as
+/// context. The parent pointer only numbers the layer's indices after its parent's (parent_size); walking the parent
+/// chain is Repository's job (repository.hpp).
 template<typename Repository, typename Types, bool ThreadSafe = false>
 class SymbolRepositoryBase;
 
@@ -47,124 +46,42 @@ template<typename Repository, bool ThreadSafe, typename... Ts>
 class SymbolRepositoryBase<Repository, boost::mp11::mp_list<Ts...>, ThreadSafe> : private BasicSymbolRepository<Ts, ThreadSafe>...
 {
 private:
-    const SymbolRepositoryBase* m_parent;
-    const SymbolRepositoryBase* m_root;
-
     [[nodiscard]] const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 
 public:
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] urd::view<T, Repository> view(urd::index<T> index) const
-    { return { index, get_canonical_context(index) }; }
+    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const
+    { return { index, &repository() }; }
 
     static constexpr bool thread_safe = ThreadSafe;
 
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
 
-private:
+    /// The record's view in this layer, if this layer holds it.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const SymbolRepositoryBase* find_canonical_context(urd::index<T> index) const noexcept
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const noexcept
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->template get<T>().is_local(index))
-                return current;
-            current = current->m_parent;
-        }
-        return nullptr;
-    }
-
-public:
-    /**
-     * Global methods traverse the current repository layer and its parent
-     * hierarchy. Handle-producing methods return views that retain the discovered
-     * canonical context.
-     */
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] std::optional<urd::view<T, Repository>> find_with_hash(const urd::data<T>& builder, size_t h) const noexcept
-    {
-        if (auto index_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
-            return urd::view<T, Repository>(*index_or_nullopt, repository());
-
-        const auto* current = m_parent;
-        while (current != nullptr)
-        {
-            if (auto index_or_nullopt = current->template get<T>().find_local_with_hash(builder, h))
-                return urd::view<T, Repository>(*index_or_nullopt, current->repository());
-
-            current = current->m_parent;
-        }
-
+        if (const auto index = get<T>().find_local(builder))
+            return repository().view(*index);
         return std::nullopt;
     }
 
+    /// Interns the record in this layer; builder.index is set to its index.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] std::optional<urd::view<T, Repository>> find(const urd::data<T>& builder) const noexcept
-    { return find_with_hash(builder, SymbolRepositoryBase::hash(builder)); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::pair<urd::view<T, Repository>, bool> insert(urd::data<T>& builder)
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
     {
-        const auto h = SymbolRepositoryBase::hash(builder);
-        if (auto view_or_nullopt = find_with_hash(builder, h))
-        {
-            builder.index = view_or_nullopt->index();
-            return { *view_or_nullopt, false };
-        }
-
-        assert(!get<T>().exists_parent_mutation()
-               && "Integrity error: Parent SymbolRepository modified after child "
-                  "branching!");
-
-        const auto [index, success] = create_local_with_hash(builder, h);
-        return { urd::view<T, Repository>(index, repository()), success };
+        const auto [index, created] = get<T>().insert_local(builder);
+        return { repository().view(index), created };
     }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    const urd::data<T>& operator[](urd::index<T> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return owner->template get<T>().at_local(index);
-        throw std::out_of_range("Symbol index not found in any repository layer.");
-    }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const urd::data<T>& front() const
-    { return (*this)[urd::index<T>(0)]; }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] size_t size() const noexcept
     { return get<T>().size(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const Repository& get_canonical_context(urd::index<T> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return owner->repository();
-        throw std::out_of_range("Symbol index not found in any repository layer.");
-    }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] bool contains(urd::index<T> index) const noexcept
-    { return find_canonical_context(index) != nullptr; }
-
-    template<typename V>
-        requires requires(const Repository& repository, const V& view) { ::ygg::formalism::contains(repository, view); }
-    [[nodiscard]] bool contains(const V& view) const
-    { return ::ygg::formalism::contains(repository(), view); }
 
     /**
      * Local methods access only the current repository layer.
@@ -254,20 +171,13 @@ public:
     SymbolRepositoryBase() : SymbolRepositoryBase(nullptr) {}
 
     /// Parent layers must remain frozen and outlive this repository.
-    explicit SymbolRepositoryBase(const Repository* parent) :
-        BasicSymbolRepository<Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr)...,
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this)
-    {
-    }
+    explicit SymbolRepositoryBase(const Repository* parent) : BasicSymbolRepository<Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr)... {}
 
     ~SymbolRepositoryBase() = default;
     SymbolRepositoryBase(const SymbolRepositoryBase&) = delete;
     SymbolRepositoryBase& operator=(const SymbolRepositoryBase&) = delete;
     SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;
     SymbolRepositoryBase& operator=(SymbolRepositoryBase&&) = delete;
-
-    [[nodiscard]] const Repository& get_root() const noexcept { return m_root->repository(); }
 
     void clear() noexcept { (this->template get<Ts>().clear(), ...); }
 

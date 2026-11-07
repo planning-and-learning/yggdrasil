@@ -23,21 +23,6 @@
 namespace ygg::database
 {
 
-/// Vertices of a search as byte rows of one size, interned in a urd pool (rows stored flat, never moved by inserts): a
-/// vertex's ID is its handle's value.
-using VertexSet = urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd::frozen>>>;
-
-/// The ID of a stored vertex, or none.
-inline std::optional<uint_t> vertex_id(const VertexSet& vertices, std::span<const std::byte> vertex)
-{
-    const auto found = vertices.find(vertex);
-    return found.is_none() ? std::nullopt : std::optional<uint_t>(found.value);
-}
-/// The ID of a vertex, stored where it is new.
-inline uint_t insert_vertex(VertexSet& vertices, std::span<const std::byte> vertex) { return vertices.insert(vertex).first.value; }
-/// The vertex of an ID.
-inline std::span<const std::byte> vertex_at(const VertexSet& vertices, uint_t id) { return vertices.view(VertexSet::handle_type(id)); }
-
 /// The stored vertices of searches towards fixed targets: per vertex a lower bound on its distance (learned) and one
 /// next pointer along a found path. A vertex whose next chain reaches a target, with values that drop by one per
 /// existing edge, has an exact value: the goal condition of Multipath Generalized Adaptive A* (Hernández, Asín &
@@ -59,40 +44,41 @@ public:
     }
 
     [[nodiscard]] size_t size() const noexcept { return m_nodes.size(); }
-    [[nodiscard]] std::optional<uint_t> find(std::span<const std::byte> vertex) const { return vertex_id(m_vertices, vertex); }
-    [[nodiscard]] std::span<const std::byte> vertex(uint_t id) const { return vertex_at(m_vertices, id); }
+    /// A stored vertex, or none.
+    [[nodiscard]] VertexSet::handle_type find(std::span<const std::byte> vertex) const { return m_vertices.find(vertex); }
+    [[nodiscard]] std::span<const std::byte> vertex(VertexSet::handle_type id) const { return m_vertices.view(id); }
 
-    /// The stored index of a vertex, inserting it with its heuristic estimate as learned distance. The estimate is
-    /// computed only on insertion.
+    /// A stored vertex, inserted with its heuristic estimate as learned distance. The estimate is computed only on
+    /// insertion.
     template<DistanceHeuristic H>
-    uint_t ensure(std::span<const std::byte> vertex, const H& heuristic)
+    VertexSet::handle_type ensure(std::span<const std::byte> vertex, const H& heuristic)
     {
-        if (const auto stored = vertex_id(m_vertices, vertex))
-            return *stored;
+        if (const auto stored = m_vertices.find(vertex); !stored.is_none())
+            return stored;
         const auto estimate = heuristic.estimate(vertex);
-        const auto id = insert_vertex(m_vertices, vertex);
         m_nodes.push_back(Node { estimate });
-        return id;
+        return m_vertices.insert(vertex).first;
     }
     /// The learned distance of a vertex: its stored value, or the heuristic's estimate if it is not stored.
     template<DistanceHeuristic H>
     [[nodiscard]] uint_t value(std::span<const std::byte> vertex, const H& heuristic) const
     {
-        const auto stored = vertex_id(m_vertices, vertex);
-        return stored ? learned(*stored) : heuristic.estimate(vertex);
+        const auto stored = m_vertices.find(vertex);
+        return stored.is_none() ? heuristic.estimate(vertex) : learned(stored);
     }
 
-    [[nodiscard]] uint_t learned(uint_t id) const noexcept { return m_nodes[id].learned; }
+    [[nodiscard]] uint_t learned(VertexSet::handle_type id) const noexcept { return m_nodes[id].learned; }
     /// Raises the learned distance to a bound a search established (Generalized Adaptive A*).
-    void learn(uint_t id, uint_t bound) noexcept { m_nodes[id].learned = std::max(m_nodes[id].learned, bound); }
+    void learn(VertexSet::handle_type id, uint_t bound) noexcept { m_nodes[id].learned = std::max(m_nodes[id].learned, bound); }
     /// Lowers the learned distance and drops the next pointer, after edges were added.
-    void lower(uint_t id, uint_t bound) noexcept
+    void lower(VertexSet::handle_type id, uint_t bound) noexcept
     {
         m_nodes[id].learned = bound;
-        set_next(id, none);
+        set_next(id, {});
     }
-    [[nodiscard]] uint_t next(uint_t id) const noexcept { return m_nodes[id].next; }
-    void link(uint_t from, uint_t to) noexcept { set_next(from, to); }
+    /// The next vertex along a found path, or none.
+    [[nodiscard]] VertexSet::handle_type next(VertexSet::handle_type id) const noexcept { return m_nodes[id].next; }
+    void link(VertexSet::handle_type from, VertexSet::handle_type to) noexcept { set_next(from, to); }
 
     /// Starts a new search: chain checks of earlier searches are forgotten.
     void begin_search() noexcept { ++m_epoch; }
@@ -100,8 +86,8 @@ public:
     /// Whether the next chain from `start` reaches a target with values that drop by one per existing edge. Edge
     /// checks hold until `version` changes.
     template<typename Value, typename IsTarget, EdgeCheck Edges>
-        requires std::invocable<const Value&, uint_t> && std::predicate<const IsTarget&, uint_t>
-    bool on_valid_path(uint_t start, const Value& value, const IsTarget& is_target, Edges& edges, uint64_t version)
+        requires std::invocable<const Value&, VertexSet::handle_type> && std::predicate<const IsTarget&, VertexSet::handle_type>
+    bool on_valid_path(VertexSet::handle_type start, const Value& value, const IsTarget& is_target, Edges& edges, uint64_t version)
     {
         auto& chain = m_chain;
         chain.clear();
@@ -120,13 +106,13 @@ public:
                 break;
             }
             const auto v = m_nodes[u].next;
-            if (v == none || value(v) == infinity || value(u) != value(v) + 1)
+            if (v.is_none() || value(v) == infinity || value(u) != value(v) + 1)
                 break;
             if (m_nodes[u].edge_version != version)
             {
                 if (!edges.edge_exists(vertex(u), vertex(v)))
                 {
-                    set_next(u, none);
+                    set_next(u, {});
                     break;
                 }
                 m_nodes[u].edge_version = version;
@@ -147,23 +133,23 @@ private:
     struct Node
     {
         uint_t learned = 0;
-        uint_t next = none;
+        VertexSet::handle_type next;
         uint64_t checked = 0;               ///< Epoch of the last chain check.
         bool valid = false;                 ///< Its result.
         uint64_t edge_version = unchecked;  ///< Graph version at which the edge to next was checked.
     };
 
     /// A new next pointer has an unchecked edge.
-    void set_next(uint_t id, uint_t next) noexcept
+    void set_next(VertexSet::handle_type id, VertexSet::handle_type next) noexcept
     {
         m_nodes[id].next = next;
         m_nodes[id].edge_version = unchecked;
     }
 
     VertexSet m_vertices;
-    urd::Store<urd::sequence<Node>> m_nodes;
+    urd::Store<urd::sequence<Node, VertexSet::handle_type>> m_nodes;
     uint64_t m_epoch = 0;
-    urd::Store<urd::sequence<uint_t>> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_chain;  ///< Scratch of on_valid_path(), kept to avoid allocations.
 };
 
 }  // namespace ygg::database

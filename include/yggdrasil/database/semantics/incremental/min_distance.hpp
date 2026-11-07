@@ -230,7 +230,7 @@ private:
             const auto to_bound = m_backward.bound(m_tree.find(to));
             m_restart_backward = to_bound != infinity && m_backward.bound(stored) > to_bound + 1;
         }
-        if (stored)
+        if (!stored.is_none())
             m_added.add(from, to);
     }
 

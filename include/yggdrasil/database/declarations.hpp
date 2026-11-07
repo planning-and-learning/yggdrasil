@@ -89,7 +89,7 @@ class QueryPlan;
 class QueryRepository;
 class QueryRepositoryFactory;
 template<typename Tag = void>
-using QueryView = urd::view<Query<Tag>, QueryRepository>;
+using QueryView = urd::index_view<Query<Tag>, QueryRepository>;
 
 struct RelationRow
 {
@@ -102,7 +102,7 @@ class RelationPool;
 class RelationPoolFactory;
 class RelationRepository;
 class RelationRepositoryFactory;
-using RelationView = urd::view<Relation, RelationRepository>;
+using RelationView = urd::index_view<Relation, RelationRepository>;
 using BorrowedRelationView = urd::borrowed_view<Relation, RelationRepository, urd::builder<Relation>>;
 }  // namespace ygg::database
 

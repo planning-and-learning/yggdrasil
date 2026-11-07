@@ -6,6 +6,9 @@
 #ifndef YGG_DATABASE_SEMANTICS_SEARCH_CONCEPTS_HPP_
 #define YGG_DATABASE_SEMANTICS_SEARCH_CONCEPTS_HPP_
 
+#include <urd/repr/pools/pools.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include "yggdrasil/core/config.hpp"
 
 #include <concepts>
@@ -18,8 +21,13 @@ namespace ygg::database
 
 /// The distance of a vertex from which no target is reachable.
 inline constexpr uint_t infinity = std::numeric_limits<uint_t>::max();
-/// No vertex (e.g. an unset next or parent pointer).
+/// No level (BackwardFrontier).
 inline constexpr uint_t none = std::numeric_limits<uint_t>::max();
+
+/// Vertices of a search as byte rows of one size, interned in a urd pool (rows stored flat, never moved by inserts): a
+/// vertex is its handle (VertexSet::handle_type; none, its default, is no vertex), and what is kept per vertex is a
+/// urd::sequence addressed by it.
+using VertexSet = urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd::frozen>>>;
 
 /// An estimate of a vertex's distance to the targets; infinity means no target is reachable.
 ///

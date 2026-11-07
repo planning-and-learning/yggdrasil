@@ -117,8 +117,8 @@ public:
         if (m_probes.empty())
             return;
         group(sources, targets);
-        for (uint_t key = 0; key < m_key_targets.size(); ++key)
-            if (!m_key_sources[key].empty() && !m_key_targets[key].empty())
+        for (auto it = m_key_sources.begin(); it != m_key_sources.end(); ++it)
+            if (const auto key = m_key_sources.position(it); !m_key_sources[key].empty() && !m_key_targets[key].empty())
                 verify(sources, targets, key, out);
     }
 
@@ -133,14 +133,14 @@ public:
     [[nodiscard]] const MustPassStatistics& statistics() const noexcept { return m_statistics; }
 
 private:
-    /// Vertices of the current key by id, as a VertexRange.
+    /// Vertices of the current key, as a VertexRange.
     struct Vertices
     {
         const VertexSet* set = nullptr;
-        std::span<const uint_t> ids;
+        std::span<const VertexSet::handle_type> ids;
 
         [[nodiscard]] size_t size() const noexcept { return ids.size(); }
-        [[nodiscard]] std::span<const std::byte> row(size_t i) const { return vertex_at(*set, ids[i]); }
+        [[nodiscard]] std::span<const std::byte> row(size_t i) const { return set->view(ids[i]); }
     };
 
     using Edges = detail::EdgeQuery<bound::QueryEvaluator>;
@@ -205,41 +205,29 @@ private:
     [[nodiscard]] std::span<const std::byte> vertex_of(std::span<const std::byte> row) const noexcept
     { return row.subspan(m_plan.key_size(), m_plan.vertex_size()); }
 
-    /// The row positions of the sources and targets of each key; keys are numbered by their first source.
+    /// The row positions of the sources and targets of each key; keys are numbered by their first source. Without key
+    /// columns every row has the one empty key.
     template<RelationViewConcept S, RelationViewConcept T>
     void group(const S& sources, const T& targets)
     {
-        const auto keyed = m_plan.key_size() > 0;
         m_keys.clear();
-        if (keyed)
-            for (size_t r = 0; r < sources.size(); ++r)
-                m_keys.insert(key_of(sources.row(r)));
-        const auto keys = keyed ? m_keys.size() : static_cast<size_t>(1);
-        m_key_sources.resize(keys);
-        m_key_targets.resize(keys);
-        for (size_t key = 0; key < keys; ++key)
-        {
-            m_key_sources[key].clear();
-            m_key_targets[key].clear();
-        }
+        for (size_t r = 0; r < sources.size(); ++r)
+            m_keys.insert(key_of(sources.row(r)));
+        m_key_sources.resize(m_keys.size());
+        m_key_targets.resize(m_keys.size());
+        for (auto& rows : m_key_sources)
+            rows.clear();
+        for (auto& rows : m_key_targets)
+            rows.clear();
         for (size_t r = 0; r < sources.size(); ++r)
         {
-            if (!keyed)
-            {
-                m_key_sources[0].push_back(r);
-                continue;
-            }
-            const auto key = vertex_id(m_keys, key_of(sources.row(r)));
-            URD_ASSUME(key.has_value());  // every source's key was inserted above
-            m_key_sources[*key].push_back(r);
+            const auto key = m_keys.find(key_of(sources.row(r)));
+            URD_ASSUME(!key.is_none());  // every source's key was inserted above
+            m_key_sources[key].push_back(r);
         }
         for (size_t r = 0; r < targets.size(); ++r)
-        {
-            if (!keyed)
-                m_key_targets[0].push_back(r);
-            else if (const auto key = vertex_id(m_keys, key_of(targets.row(r))))  // A key without sources has no paths.
-                m_key_targets[*key].push_back(r);
-        }
+            if (const auto key = m_keys.find(key_of(targets.row(r))); !key.is_none())  // A key without sources has no paths.
+                m_key_targets[key].push_back(r);
     }
 
     /// Calls on_probe with each probe object a vertex contains (an object at several positions once per position).
@@ -247,17 +235,17 @@ private:
     void probes_of(std::span<const std::byte> vertex, const OnProbe& on_probe) const
     {
         for (const auto position : m_probe_positions)
-            if (const auto probe = vertex_id(m_probes, vertex.subspan(position, m_plan.probe_size())))
-                on_probe(static_cast<uint_t>(*probe));
+            if (const auto probe = m_probes.find(vertex.subspan(position, m_plan.probe_size())); !probe.is_none())
+                on_probe(probe);
     }
-    [[nodiscard]] bool contains(std::span<const std::byte> vertex, uint_t probe) const
+    [[nodiscard]] bool contains(std::span<const std::byte> vertex, VertexSet::handle_type probe) const
     {
-        const auto object = vertex_at(m_probes, probe);
+        const auto object = m_probes.view(probe);
         return std::ranges::any_of(m_probe_positions,
                                    [&](size_t position) { return std::ranges::equal(vertex.subspan(position, m_plan.probe_size()), object); });
     }
     /// Whether the current search may visit a vertex: it does not contain the excluded probe object.
-    [[nodiscard]] bool allowed(std::span<const std::byte> vertex) const { return m_excluded == none || !contains(vertex, m_excluded); }
+    [[nodiscard]] bool allowed(std::span<const std::byte> vertex) const { return m_excluded.is_none() || !contains(vertex, m_excluded); }
 
     /// The heuristic's estimate of a vertex of the current key.
     uint_t estimate(std::span<const std::byte> vertex)
@@ -269,22 +257,24 @@ private:
     /// Whether a target of the current key is reachable without the vertices containing `excluded` (none: any). The
     /// found path's vertices are passed to on_path.
     template<typename OnPath>
-    bool search(uint_t excluded, const OnPath& on_path)
+    bool search(VertexSet::handle_type excluded, const OnPath& on_path)
     {
         m_excluded = excluded;
         if constexpr (requires(H& h, std::span<const std::byte> bytes) { h.exclude(bytes, bytes); })
         {
-            m_heuristic->exclude(m_key, excluded == none ? std::span<const std::byte>() : std::span<const std::byte>(vertex_at(m_probes, excluded)));
+            m_heuristic->exclude(m_key, excluded.is_none() ? std::span<const std::byte>() : std::span<const std::byte>(m_probes.view(excluded)));
         }
-        const auto keep_allowed = [&](const VertexSet& vertices, urd::Store<urd::sequence<uint_t>>& out)
+        const auto keep_allowed = [&](const VertexSet& vertices,
+                                      const urd::Store<urd::sequence<VertexSet::handle_type>>& ids,
+                                      urd::Store<urd::sequence<VertexSet::handle_type>>& out)
         {
             out.clear();
-            for (uint_t id = 0; id < vertices.size(); ++id)
-                if (allowed(vertex_at(vertices, id)))
+            for (const auto id : ids)
+                if (allowed(vertices.view(id)))
                     out.push_back(id);
         };
-        keep_allowed(m_starts, m_allowed_starts);
-        keep_allowed(m_ends, m_allowed_ends);
+        keep_allowed(m_starts, m_start_ids, m_allowed_starts);
+        keep_allowed(m_ends, m_end_ids, m_allowed_ends);
         auto graph = Graph(m_edges.with_key(m_key), *this);
         const auto heuristic = KeyedHeuristic(*this);
         m_tree.clear();
@@ -299,42 +289,44 @@ private:
     }
 
     template<RelationViewConcept S, RelationViewConcept T>
-    void verify(const S& sources, const T& targets, uint_t key, urd::builder<Relation>& out)
+    void verify(const S& sources, const T& targets, VertexSet::handle_type key, urd::builder<Relation>& out)
     {
         const auto key_bytes = key_of(sources.row(m_key_sources[key].front()));
         m_key = key_bytes;
         std::ranges::copy(key_bytes, m_estimated.begin());
-        m_starts.clear();
-        for (const auto r : m_key_sources[key])
-            m_starts.insert(vertex_of(sources.row(r)));
-        m_ends.clear();
-        for (const auto r : m_key_targets[key])
-            m_ends.insert(vertex_of(targets.row(r)));
+        const auto intern = [&](VertexSet& vertices, urd::Store<urd::sequence<VertexSet::handle_type>>& ids, const auto& rows, const auto& positions)
+        {
+            vertices.clear();
+            ids.clear();
+            for (const auto r : positions)
+                if (const auto [id, added] = vertices.insert(vertex_of(rows.row(r))); added)
+                    ids.push_back(id);
+        };
+        intern(m_starts, m_start_ids, sources, m_key_sources[key]);
+        intern(m_ends, m_end_ids, targets, m_key_targets[key]);
         m_candidates.clear();
         const auto on_witness = [&](std::span<const std::byte> vertex)
         {
             probes_of(vertex,
-                      [&](uint_t probe)
+                      [&](VertexSet::handle_type probe)
                       {
                           if (std::ranges::find(m_candidates, probe) == m_candidates.end())
                               m_candidates.push_back(probe);
                       });
         };
-        if (!search(none, on_witness))
+        if (!search({}, on_witness))
             return;
         ++m_statistics.keys;
         m_row.assign(key_bytes.begin(), key_bytes.end());
         m_row.resize(m_plan.key_size() + m_plan.probe_size());
-        const auto in_all = [&](const VertexSet& vertices, uint_t probe)
-        {
-            return std::ranges::all_of(std::views::iota(static_cast<uint_t>(0), static_cast<uint_t>(vertices.size())),
-                                       [&](uint_t id) { return contains(vertex_at(vertices, id), probe); });
-        };
+        const auto in_all = [&](const VertexSet& vertices, const urd::Store<urd::sequence<VertexSet::handle_type>>& ids, VertexSet::handle_type probe)
+        { return std::ranges::all_of(ids, [&](VertexSet::handle_type id) { return contains(vertices.view(id), probe); }); };
         for (const auto probe : m_candidates)
             // An object in every source or every target is passed trivially, as initial facts and goals are landmarks.
-            if (in_all(m_starts, probe) || in_all(m_ends, probe) || (++m_statistics.removals, !search(probe, [](std::span<const std::byte>) {})))
+            if (in_all(m_starts, m_start_ids, probe) || in_all(m_ends, m_end_ids, probe)
+                || (++m_statistics.removals, !search(probe, [](std::span<const std::byte>) {})))
             {
-                std::ranges::copy(vertex_at(m_probes, probe), m_row.begin() + static_cast<std::ptrdiff_t>(m_plan.key_size()));
+                std::ranges::copy(m_probes.view(probe), m_row.begin() + static_cast<std::ptrdiff_t>(m_plan.key_size()));
                 out.insert(std::span<const std::byte>(m_row));
             }
     }
@@ -342,24 +334,26 @@ private:
     MustPassPlan m_plan;
     urd::Store<urd::sequence<size_t>> m_probe_positions;
     Edges m_edges;
-    VertexSet m_keys;    ///< Interned key bytes; unused without key columns.
+    VertexSet m_keys;    ///< Interned key bytes; the empty key without key columns.
     VertexSet m_probes;  ///< Interned probe objects.
-    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>>> m_key_sources;
-    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>>> m_key_targets;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>, VertexSet::handle_type>> m_key_sources;  ///< By key.
+    urd::Store<urd::sequence<urd::Store<urd::sequence<size_t>>, VertexSet::handle_type>> m_key_targets;  ///< By key.
     // The current key.
     std::span<const std::byte> m_key;  ///< Borrowed from the sources during must_pass().
     VertexSet m_starts;
     VertexSet m_ends;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_start_ids;  ///< Of m_starts, as inserted.
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_end_ids;    ///< Of m_ends, as inserted.
     // Searches.
     H* m_heuristic = nullptr;
-    uint_t m_excluded = none;  ///< The probe object whose vertices the current search avoids, or none.
-    urd::Store<urd::sequence<uint_t>> m_allowed_starts;
-    urd::Store<urd::sequence<uint_t>> m_allowed_ends;
+    VertexSet::handle_type m_excluded;  ///< The probe object whose vertices the current search avoids, or none.
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_allowed_starts;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_allowed_ends;
     SearchTree m_tree;
     BackwardFrontier m_frontier;
     detail::TargetSet m_targets;
     AStarStorage m_search;
-    urd::Store<urd::sequence<uint_t>> m_candidates;    ///< Probe objects on the witness.
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_candidates;  ///< Probe objects on the witness.
     urd::Store<urd::sequence<std::byte>> m_estimated;  ///< The key and a vertex, as given to the heuristic.
     urd::Store<urd::sequence<std::byte>> m_row;
     MustPassStatistics m_statistics;

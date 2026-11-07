@@ -17,7 +17,7 @@ void count_distance_work([[maybe_unused]] size_t DistanceWork::* member) noexcep
 
 namespace ygg::database::incremental::detail
 {
-void DistanceRepairWorkspace::set_edge(uint_t from, uint_t to, uint_t candidate, uint_t distance)
+void DistanceRepairWorkspace::set_edge(VertexSet::handle_type from, VertexSet::handle_type to, uint_t candidate, uint_t distance)
 {
     auto& heap = m_local[to];
     if (candidate >= distance && heap.empty())
@@ -45,7 +45,7 @@ void DistanceRepairWorkspace::set_edge(uint_t from, uint_t to, uint_t candidate,
 
 namespace ygg::database::incremental::detail
 {
-size_t DistanceRepairWorkspace::accept_improvement(uint_t vertex, uint_t distance)
+size_t DistanceRepairWorkspace::accept_improvement(VertexSet::handle_type vertex, uint_t distance)
 {
     // Every support for the new minimum is already in this heap (Figure 4, lines 24–25).
     size_t supports = 0;
@@ -63,7 +63,7 @@ size_t DistanceRepairWorkspace::accept_improvement(uint_t vertex, uint_t distanc
 
 namespace ygg::database::incremental::detail
 {
-void DistanceRepairWorkspace::schedule(uint_t vertex, uint_t distance, size_t supports)
+void DistanceRepairWorkspace::schedule(VertexSet::handle_type vertex, uint_t distance, size_t supports)
 {
     constexpr auto infinity = std::numeric_limits<uint_t>::max();
     auto key = infinity;

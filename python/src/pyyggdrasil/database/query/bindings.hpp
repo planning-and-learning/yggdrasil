@@ -4,7 +4,7 @@
 #include "../module.hpp"
 #include "yggdrasil/database/syntax/query.hpp"
 #include "yggdrasil/python/bindings.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>

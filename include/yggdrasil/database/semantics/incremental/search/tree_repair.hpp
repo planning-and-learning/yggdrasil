@@ -28,7 +28,8 @@ class EdgeList
 public:
     EdgeList() : m_vertices() {}
 
-    void add(std::span<const std::byte> from, std::span<const std::byte> to) { m_edges.emplace_back(insert_vertex(m_vertices, from), insert_vertex(m_vertices, to)); }
+    void add(std::span<const std::byte> from, std::span<const std::byte> to)
+    { m_edges.emplace_back(m_vertices.insert(from).first, m_vertices.insert(to).first); }
     void clear() noexcept
     {
         m_vertices.clear();
@@ -36,12 +37,12 @@ public:
     }
     [[nodiscard]] bool empty() const noexcept { return m_edges.empty(); }
     [[nodiscard]] size_t size() const noexcept { return m_edges.size(); }
-    [[nodiscard]] std::span<const std::byte> from(size_t i) const { return vertex_at(m_vertices, m_edges[i].first); }
-    [[nodiscard]] std::span<const std::byte> to(size_t i) const { return vertex_at(m_vertices, m_edges[i].second); }
+    [[nodiscard]] std::span<const std::byte> from(size_t i) const { return m_vertices.view(m_edges[i].first); }
+    [[nodiscard]] std::span<const std::byte> to(size_t i) const { return m_vertices.view(m_edges[i].second); }
 
 private:
     VertexSet m_vertices;
-    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_edges;
+    urd::Store<urd::sequence<std::pair<VertexSet::handle_type, VertexSet::handle_type>>> m_edges;
 };
 
 /// Generalized Adaptive A*'s ReestablishConsistency (Sun, Koenig & Yeoh, "Generalized Adaptive A*", AAMAS 2008) on a
@@ -60,8 +61,8 @@ public:
     {
         m_queue.clear();
         for (size_t i = 0; i < added.size(); ++i)
-            if (const auto from = tree.find(added.from(i)); from && lowers(tree, *from, tree.value(added.to(i), heuristic)))
-                lower(tree, *from, tree.ensure(added.to(i), heuristic));
+            if (const auto from = tree.find(added.from(i)); !from.is_none() && lowers(tree, from, tree.value(added.to(i), heuristic)))
+                lower(tree, from, tree.ensure(added.to(i), heuristic));
         auto lowered = static_cast<size_t>(0);
         while (!m_queue.empty())
         {
@@ -75,8 +76,8 @@ public:
             predecessors.predecessors(m_vertex,
                                       [&](std::span<const std::byte> from)
                                       {
-                                          if (const auto stored = tree.find(from); stored && lowers(tree, *stored, tree.learned(id)))
-                                              lower(tree, *stored, id);
+                                          if (const auto stored = tree.find(from); !stored.is_none() && lowers(tree, stored, tree.learned(id)))
+                                              lower(tree, stored, id);
                                           return true;
                                       });
         }
@@ -84,11 +85,12 @@ public:
     }
 
 private:
-    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_queue;  ///< A min-heap of (learned, vertex).
+    urd::Store<urd::sequence<std::pair<uint_t, VertexSet::handle_type>>> m_queue;  ///< A min-heap of (learned, vertex).
     urd::Store<urd::sequence<std::byte>> m_vertex;                 ///< A copy of the lowered vertex: storing vertices may move them.
 
-    static bool lowers(const SearchTree& tree, uint_t from, uint_t to_value) noexcept { return to_value != infinity && tree.learned(from) > to_value + 1; }
-    void lower(SearchTree& tree, uint_t from, uint_t to)
+    static bool lowers(const SearchTree& tree, VertexSet::handle_type from, uint_t to_value) noexcept
+    { return to_value != infinity && tree.learned(from) > to_value + 1; }
+    void lower(SearchTree& tree, VertexSet::handle_type from, VertexSet::handle_type to)
     {
         tree.lower(from, tree.learned(to) + 1);
         tree.link(from, to);

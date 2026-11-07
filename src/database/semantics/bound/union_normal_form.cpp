@@ -68,7 +68,7 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                 const auto& repository = get_repository(concrete.context());
                 for (const auto input : concrete.get_inputs())
                 {
-                    const auto child = QueryView<>(input, repository);
+                    const auto child = repository.view(input);
                     for (const auto& column : child.columns())
                         if (std::ranges::find(labels, column.label, &ColumnLayout::label) == labels.end())
                         {

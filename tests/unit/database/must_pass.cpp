@@ -30,7 +30,7 @@ namespace qb = ygg::tests::qb;
 View borrow(const Relation& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 
 const Column key(20), u(0), v(1);

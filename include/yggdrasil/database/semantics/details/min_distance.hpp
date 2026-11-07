@@ -165,24 +165,27 @@ public:
     void assign(const Targets& targets)
     {
         m_vertices.clear();
+        m_handles.clear();
         for (size_t i = 0; i < targets.size(); ++i)
-            m_vertices.insert(targets.row(i));
+            if (const auto [handle, added] = m_vertices.insert(targets.row(i)); added)
+                m_handles.push_back(handle);
     }
     [[nodiscard]] const VertexSet& vertices() const noexcept { return m_vertices; }
 
-    /// The targets' indices in the tree, stored with their estimates; valid until the next call.
+    /// The targets' vertices in the tree, stored with their estimates; valid until the next call.
     template<DistanceHeuristic H>
-    std::span<const uint_t> ensure_in(SearchTree& tree, const H& heuristic)
+    std::span<const VertexSet::handle_type> ensure_in(SearchTree& tree, const H& heuristic)
     {
         m_ids.clear();
-        for (size_t i = 0; i < m_vertices.size(); ++i)
-            m_ids.push_back(tree.ensure(vertex_at(m_vertices, static_cast<uint_t>(i)), heuristic));
+        for (const auto handle : m_handles)
+            m_ids.push_back(tree.ensure(m_vertices.view(handle), heuristic));
         return m_ids;
     }
 
 private:
     VertexSet m_vertices;
-    urd::Store<urd::sequence<uint_t>> m_ids;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_handles;  ///< Of m_vertices, as inserted.
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_ids;
 };
 
 }  // namespace ygg::database::detail

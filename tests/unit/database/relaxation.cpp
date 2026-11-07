@@ -27,7 +27,7 @@ const Column x(0), y(1), z(2);
 ygg::database::BorrowedRelationView borrow(const Relation& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 
 /// Evaluates a query over the given inputs.

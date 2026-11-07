@@ -1,5 +1,5 @@
 #include "bindings.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 
 namespace yggdrasil::database_python
 {
@@ -9,7 +9,7 @@ template<typename... Tags>
 void bind_query_data_constructors(nb::class_<urd::data<ygg::database::Query<>>>& cls, boost::mp11::mp_list<Tags...>)
 {
     using namespace nb::literals;
-    (cls.def(nb::init<ConcreteQueryView<Tags>>(), "query"_a), ...);
+    (cls.def(urd::python::init_from_views<ConcreteQueryView<Tags>>(), "query"_a), ...);
 }
 }  // namespace
 

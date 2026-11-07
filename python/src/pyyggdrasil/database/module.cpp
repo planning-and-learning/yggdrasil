@@ -1,5 +1,5 @@
 #include "module.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "pyyggdrasil/module.hpp"
 #include <urd/python/sequences/sequence.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
@@ -154,7 +154,7 @@ void bind_database_module_definitions(nb::module_& m)
                                      "the owner's next mutation invalidates the view and its rows.")
         .def(
             "__init__",
-            [](BorrowedRelationView* self, const Relation& relation) { new (self) BorrowedRelationView(relation, borrowed_relation_context()); },
+            [](BorrowedRelationView* self, const Relation& relation) { new (self) BorrowedRelationView(&relation, &borrowed_relation_context()); },
             nb::arg("relation"),
             nb::keep_alive<1, 2>())
         .def("__len__", &BorrowedRelationView::size)

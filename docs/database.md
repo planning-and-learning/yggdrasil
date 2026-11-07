@@ -69,7 +69,7 @@ span validates width and canonical field encodings before mutation. Inserting
 `std::tuple` values checks arity/types and encodes into a fixed-size stack buffer.
 `find` and `contains` offer the same tuple, typed-row, and raw-byte interfaces.
 
-Relation views (`urd::view<Relation, Context>`, and `urd::borrowed_view` of a
+Relation views (`urd::index_view<Relation, Context>`, and `urd::borrowed_view` of a
 relation record or builder) yield `Row`s for indexing and iteration. Primitive
 columns remain values; typed indices resolve through `urd::resolve` and the
 context's repository.

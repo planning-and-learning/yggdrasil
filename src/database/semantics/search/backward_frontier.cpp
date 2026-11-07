@@ -7,7 +7,7 @@
 
 namespace ygg::database
 {
-void BackwardFrontier::start(std::span<const uint_t> targets)
+void BackwardFrontier::start(std::span<const VertexSet::handle_type> targets)
 {
     m_level.clear();
     m_frontier.clear();

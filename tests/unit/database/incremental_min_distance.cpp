@@ -26,7 +26,7 @@ using ygg::uint_t;
 View borrow(const Relation& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 
 urd::Store<urd::sequence<View>> borrow_all(const urd::Store<urd::sequence<Relation>>& relations)

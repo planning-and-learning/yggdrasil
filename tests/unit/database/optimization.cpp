@@ -31,7 +31,7 @@ using Change = std::pair<ygg::database::BorrowedRelationView, ygg::database::Bor
 inline ygg::database::BorrowedRelationView borrow(const urd::builder<ygg::database::Relation>& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 const Column w(3), x(0), y(1), z(2);
 

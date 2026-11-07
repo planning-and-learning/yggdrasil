@@ -25,7 +25,7 @@ using Change = std::pair<ygg::database::BorrowedRelationView, ygg::database::Bor
 inline ygg::database::BorrowedRelationView borrow(const urd::builder<ygg::database::Relation>& relation)
 {
     static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { relation, context };
+    return { &relation, &context };
 }
 const Column x(0), y(1), z(2), d(3);
 
@@ -131,26 +131,24 @@ TEST(DatabaseQuery, RecordConstructorsMatchFieldsAndValidateConstantTypes)
     const auto insert = [&]<typename Tag>(urd::data<ygg::database::Query<Tag>> data)
     {
         const auto concrete = ygg::database::insert(repository, data).first;
-        auto erased = urd::data<ygg::database::Query<>>(concrete);
+        auto erased = urd::data<ygg::database::Query<>>(concrete.index());
         return ygg::database::insert(repository, erased).first;
     };
 
-    const urd::data<ygg::database::Query<ygg::database::QueryJoinTag>> by_view(a, b);
     const urd::data<ygg::database::Query<ygg::database::QueryJoinTag>> by_index(a.index(), b.index());
-    EXPECT_EQ(by_view.lhs, a.index());
-    EXPECT_EQ(by_view.rhs, b.index());
-    EXPECT_TRUE(urd::EqualTo<urd::data<ygg::database::Query<ygg::database::QueryJoinTag>>> {}(by_view, by_index));
-    EXPECT_EQ(insert(by_view).index(), ygg::tests::qb::join(repository, a, b).index());
+    EXPECT_EQ(by_index.lhs, a.index());
+    EXPECT_EQ(by_index.rhs, b.index());
+    EXPECT_EQ(insert(by_index).index(), ygg::tests::qb::join(repository, a, b).index());
 
     const std::array labels { x };
-    EXPECT_EQ(insert(urd::data<ygg::database::Query<ygg::database::QueryProjectTag>>(a, labels)).index(),
+    EXPECT_EQ(insert(urd::data<ygg::database::Query<ygg::database::QueryProjectTag>>(a.index(), labels)).index(),
               ygg::tests::qb::project(repository, a, { x }).index());
-    EXPECT_EQ(insert(urd::data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a, x, ygg::uint_t(7))).index(),
+    EXPECT_EQ(insert(urd::data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a.index(), x, ygg::uint_t(7))).index(),
               ygg::tests::qb::select_value(repository, a, x, ygg::uint_t(7)).index());
-    const auto generic = insert(urd::data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>(std::vector { a, b }, std::array { y, x, z }));
+    const auto generic = insert(urd::data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>(std::array { a.index(), b.index() }, std::array { y, x, z }));
     EXPECT_TRUE(std::ranges::equal(ygg::database::column_labels(generic.columns()), std::array { x, y, z }));
 
-    auto mismatched = urd::data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a, x, static_cast<std::int32_t>(7));
+    auto mismatched = urd::data<ygg::database::Query<ygg::database::QuerySelectValueTag>>(a.index(), x, static_cast<std::int32_t>(7));
     EXPECT_EQ(mismatched.constant_type, (ygg::type_id<std::int32_t>) );
     EXPECT_THROW(static_cast<void>(ygg::database::insert(repository, mismatched)), std::invalid_argument);
 }

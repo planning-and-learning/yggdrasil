@@ -121,9 +121,15 @@ public:
     void initialize(std::span<const urd::index<ygg::database::Column>> columns);
     void initialize(std::initializer_list<urd::index<ygg::database::Column>> columns);
 
+    /// The row of a builder at a position.
+    struct RowAt
+    {
+        const builder* relation = nullptr;
+
+        [[nodiscard]] std::span<const std::byte> operator()(size_t index) const noexcept { return relation->row(index); }
+    };
     /// The rows, in order, as byte spans.
-    [[nodiscard]] auto all_rows() const noexcept
-    { return std::views::iota(size_t { 0 }, size()) | std::views::transform([this](size_t i) { return row(i); }); }
+    [[nodiscard]] auto all_rows() const noexcept { return urd::transform(std::views::iota(size_t { 0 }, size()), RowAt { this }); }
     [[nodiscard]] std::span<const ygg::database::ColumnLayout> column_layouts() const noexcept { return columns().span(); }
     static constexpr auto identifying_members() noexcept { return urd::Members<&builder::column_layouts, &builder::all_rows> {}; }
 };

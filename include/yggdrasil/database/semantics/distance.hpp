@@ -13,6 +13,7 @@
 #include <urd/config.hpp>
 #include "yggdrasil/database/semantics/distance_plan.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
+#include "yggdrasil/database/semantics/search/concepts.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -29,25 +30,19 @@ namespace ygg::database
 
 namespace detail
 {
-/// Append-only tuple IDs remain valid until clear(); adjacency stores IDs only.
+/// Append-only vertex handles remain valid until clear(); adjacency stores handles only.
 struct DistanceGraph
 {
     size_t tuple_bytes;
-    /// The vertices' tuples, interned in a urd pool: a handle's value is the vertex ID.
-    urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd::frozen>>> vertices;
-    urd::Store<urd::map<uint_t, uint_t>, urd::multi, urd::retains> outgoing;
+    /// The vertices' tuples, interned in a urd pool.
+    VertexSet vertices;
+    urd::Store<urd::map<VertexSet::handle_type, VertexSet::handle_type>, urd::multi, urd::retains> outgoing;
 
     explicit DistanceGraph(size_t tuple_bytes);
-    uint_t insert_vertex(std::span<const std::byte> tuple);
-    /// The ID of a stored vertex, or none.
-    [[nodiscard]] std::optional<uint_t> find_vertex(std::span<const std::byte> tuple) const
-    {
-        const auto found = vertices.find(tuple);
-        return found.is_none() ? std::nullopt : std::optional<uint_t>(found.value);
-    }
-    /// Inserts both endpoint tuples of an edge row; returns their IDs.
-    std::pair<uint_t, uint_t> insert_endpoints(std::span<const std::byte> edge);
-    [[nodiscard]] bool contains_edge(uint_t from, uint_t to) const;
+    VertexSet::handle_type insert_vertex(std::span<const std::byte> tuple);
+    /// Inserts both endpoint tuples of an edge row; returns their handles.
+    std::pair<VertexSet::handle_type, VertexSet::handle_type> insert_endpoints(std::span<const std::byte> edge);
+    [[nodiscard]] bool contains_edge(VertexSet::handle_type from, VertexSet::handle_type to) const;
     void clear();
     [[nodiscard]] size_t memory_usage() const noexcept;
 };
@@ -58,9 +53,9 @@ struct DistanceGraph
 class DistanceWorkspace
 {
     detail::DistanceGraph m_graph;
-    urd::Store<urd::sequence<uint_t>> m_distances;
-    urd::Store<urd::sequence<uint_t>> m_queue;
-    urd::Store<urd::sequence<uint_t>> m_targets;
+    urd::Store<urd::sequence<uint_t, VertexSet::handle_type>> m_distances;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_queue;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_targets;
     urd::Store<urd::sequence<std::byte>> m_row;
 
 public:
@@ -102,9 +97,17 @@ inline DistanceGraph::DistanceGraph(size_t tuple_bytes_) : tuple_bytes(tuple_byt
 
 inline size_t DistanceGraph::memory_usage() const noexcept { return urd::memory_usage(vertices) + urd::memory_usage(outgoing); }
 
-void breadth_first_search(const DistanceGraph& graph, uint_t root, urd::Store<urd::sequence<uint_t>>& distances, urd::Store<urd::sequence<uint_t>>& queue);
+void breadth_first_search(const DistanceGraph& graph,
+                          VertexSet::handle_type root,
+                          urd::Store<urd::sequence<uint_t, VertexSet::handle_type>>& distances,
+                          urd::Store<urd::sequence<VertexSet::handle_type>>& queue);
 
-Row make_distance_row(const DistanceGraph& graph, uint_t from, uint_t to, uint_t length, const DistancePlan& plan, urd::Store<urd::sequence<std::byte>>& row);
+Row make_distance_row(const DistanceGraph& graph,
+                      VertexSet::handle_type from,
+                      VertexSet::handle_type to,
+                      uint_t length,
+                      const DistancePlan& plan,
+                      urd::Store<urd::sequence<std::byte>>& row);
 }  // namespace detail
 
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
@@ -128,9 +131,8 @@ void DistanceWorkspace::append_distances(const S& sources, const E& edges, const
 
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto found = m_graph.find_vertex(sources.row(i));
-        URD_ASSUME(found.has_value());  // every source was inserted above
-        const auto from = *found;
+        const auto from = m_graph.vertices.find(sources.row(i));
+        URD_ASSUME(!from.is_none());  // every source was inserted above
         detail::breadth_first_search(m_graph, from, m_distances, m_queue);
         for (const auto to : m_targets)
             if (m_distances[to] != detail::distance_infinity)

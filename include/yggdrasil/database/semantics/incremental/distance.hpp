@@ -52,49 +52,49 @@ class DistanceEvaluator
 
     struct SourceState
     {
-        uint_t root = 0;
-        urd::Store<urd::sequence<uint_t>> distances;
-        urd::Store<urd::sequence<size_t>> supports;
+        VertexSet::handle_type root;
+        urd::Store<urd::sequence<uint_t, VertexSet::handle_type>> distances;
+        urd::Store<urd::sequence<size_t, VertexSet::handle_type>> supports;
     };
 
     DistancePlan m_plan;
     database::detail::DistanceGraph m_graph;
-    urd::Store<urd::map<uint_t, uint_t>, urd::multi, urd::retains> m_reverse;
+    urd::Store<urd::map<VertexSet::handle_type, VertexSet::handle_type>, urd::multi, urd::retains> m_reverse;
     urd::Store<urd::sequence<SourceState>> m_sources;
     size_t m_active_sources = 0;
-    urd::Store<urd::sequence<size_t>> m_source_slots;
-    urd::Store<urd::sequence<uint_t>> m_targets;
-    urd::Store<urd::sequence<Flag>> m_target_flags;
+    urd::Store<urd::sequence<size_t, VertexSet::handle_type>> m_source_slots;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_targets;
+    urd::Store<urd::sequence<Flag, VertexSet::handle_type>> m_target_flags;
     urd::builder<Relation> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
     // One scratch area serves all source trees sequentially.
-    urd::Store<urd::sequence<uint_t>> m_queue;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_queue;
     std::unique_ptr<detail::DistanceRepairWorkspace> m_repair = std::make_unique<detail::DistanceRepairWorkspace>();
-    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_changed;
-    urd::Store<urd::sequence<Flag>> m_changed_flags;
+    urd::Store<urd::sequence<std::pair<VertexSet::handle_type, uint_t>>> m_changed;  ///< Vertex, distance before.
+    urd::Store<urd::sequence<Flag, VertexSet::handle_type>> m_changed_flags;
     urd::Store<urd::sequence<std::byte>> m_row;
 
-    urd::Store<urd::sequence<uint_t>> m_sources_added;
-    urd::Store<urd::sequence<uint_t>> m_sources_removed;
-    urd::Store<urd::sequence<uint_t>> m_targets_added;
-    urd::Store<urd::sequence<uint_t>> m_targets_removed;
-    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_edges_added;
-    urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> m_edges_removed;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_sources_added;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_sources_removed;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_targets_added;
+    urd::Store<urd::sequence<VertexSet::handle_type>> m_targets_removed;
+    urd::Store<urd::sequence<std::pair<VertexSet::handle_type, VertexSet::handle_type>>> m_edges_added;
+    urd::Store<urd::sequence<std::pair<VertexSet::handle_type, VertexSet::handle_type>>> m_edges_removed;
 
-    [[nodiscard]] uint_t require_vertex(std::span<const std::byte> row) const;
-    [[nodiscard]] bool is_source(uint_t vertex) const noexcept;
-    [[nodiscard]] bool is_target(uint_t vertex) const noexcept;
+    [[nodiscard]] VertexSet::handle_type require_vertex(std::span<const std::byte> row) const;
+    [[nodiscard]] bool is_source(VertexSet::handle_type vertex) const noexcept;
+    [[nodiscard]] bool is_target(VertexSet::handle_type vertex) const noexcept;
     void resize_vertices();
-    SourceState& add_source(uint_t root);
-    void remove_source(uint_t root);
-    void insert_result(uint_t source, uint_t target, uint_t length);
-    void remove_result(uint_t source, uint_t target, uint_t length);
-    void set_distance(SourceState& state, uint_t vertex, uint_t length);
+    SourceState& add_source(VertexSet::handle_type root);
+    void remove_source(VertexSet::handle_type root);
+    void insert_result(VertexSet::handle_type source, VertexSet::handle_type target, uint_t length);
+    void remove_result(VertexSet::handle_type source, VertexSet::handle_type target, uint_t length);
+    void set_distance(SourceState& state, VertexSet::handle_type vertex, uint_t length);
     static uint_t successor_distance(uint_t distance) noexcept;
-    void update_edge(SourceState& state, uint_t from, uint_t to, std::optional<uint_t> before, std::optional<uint_t> after);
-    void rebuild_incoming(SourceState& state, uint_t vertex);
+    void update_edge(SourceState& state, VertexSet::handle_type from, VertexSet::handle_type to, std::optional<uint_t> before, std::optional<uint_t> after);
+    void rebuild_incoming(SourceState& state, VertexSet::handle_type vertex);
     void repair(SourceState& state);
     void clear_changes();
     /// Throws unless the changes describe actual set changes of the current inputs.
@@ -125,7 +125,7 @@ public:
     [[nodiscard]] size_t memory_usage() const noexcept;
 };
 
-inline auto DistanceEvaluator::add_source(uint_t root) -> SourceState&
+inline auto DistanceEvaluator::add_source(VertexSet::handle_type root) -> SourceState&
 {
     if (m_active_sources == m_sources.size())
         m_sources.emplace_back();
@@ -135,10 +135,9 @@ inline auto DistanceEvaluator::add_source(uint_t root) -> SourceState&
     state.supports.assign(m_graph.vertices.size(), 0);
     state.supports[root] = 1;  // The root has a constant zero-distance contribution.
     // SP includes infinite contributions to unreachable vertices (infinity <= infinity).
-    for (uint_t to = 0; to < m_graph.vertices.size(); ++to)
-        for (const auto from : m_reverse.values(to))
-            if (successor_distance(state.distances[from]) <= state.distances[to])
-                ++state.supports[to];
+    for (const auto& [to, from] : m_reverse)
+        if (successor_distance(state.distances[from]) <= state.distances[to])
+            ++state.supports[to];
     m_source_slots[root] = m_active_sources++;
     return state;
 }
@@ -183,9 +182,9 @@ void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& ta
         m_target_flags[target] = Flag::SET;
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto source = m_graph.find_vertex(sources.row(i));
-        URD_ASSUME(source.has_value());  // every source was inserted above
-        const auto& state = add_source(*source);
+        const auto source = m_graph.vertices.find(sources.row(i));
+        URD_ASSUME(!source.is_none());  // every source was inserted above
+        const auto& state = add_source(source);
         for (const auto target : m_targets)
             if (state.distances[target] != infinity)
                 m_result.insert(database::detail::make_distance_row(m_graph, state.root, target, state.distances[target], m_plan, m_row));
@@ -212,16 +211,16 @@ void DistanceEvaluator::require_actual(const S& sources, const E& edges, const T
     const auto& [targets_added, targets_removed] = targets;
     const auto contains_edge = [&](std::span<const std::byte> row)
     {
-        const auto from = m_graph.find_vertex(row.first(m_plan.tuple_size()));
-        const auto to = m_graph.find_vertex(row.subspan(m_plan.tuple_size()));
-        return from && to && m_graph.contains_edge(*from, *to);
+        const auto from = m_graph.vertices.find(row.first(m_plan.tuple_size()));
+        const auto to = m_graph.vertices.find(row.subspan(m_plan.tuple_size()));
+        return !from.is_none() && !to.is_none() && m_graph.contains_edge(from, to);
     };
     const auto require_members = [&](const auto& rows, auto is_member, bool removing)
     {
         for (size_t i = 0; i < rows.size(); ++i)
         {
-            const auto vertex = m_graph.find_vertex(rows.row(i));
-            if ((vertex && (this->*is_member)(*vertex)) != removing)
+            const auto vertex = m_graph.vertices.find(rows.row(i));
+            if ((!vertex.is_none() && (this->*is_member)(vertex)) != removing)
                 throw std::invalid_argument(removing ? "Incremental distance: removed vertex is absent." :
                                                        "Incremental distance: added vertex is already present.");
         }
@@ -308,7 +307,7 @@ void DistanceEvaluator::apply(const S& sources, const E& edges, const T& targets
     }
     for (const auto& [from, to] : m_edges_removed)
     {
-        const auto erase = [](urd::Store<urd::map<uint_t, uint_t>, urd::multi, urd::retains>& edges, uint_t key, uint_t value)
+        const auto erase = [](auto& edges, VertexSet::handle_type key, VertexSet::handle_type value)
         {
             const auto matches = edges.equal_range(key);
             const auto found = std::find_if(matches.first, matches.second, [&](const auto& entry) { return entry.second == value; });

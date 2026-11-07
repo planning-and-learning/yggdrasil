@@ -60,7 +60,7 @@ urd::Store<urd::sequence<QueryView<>>> reachable(std::span<const QueryView<>> ro
     urd::Store<urd::sequence<QueryView<>>> result;
     for (size_t value = 0; value < seen.size(); ++value)
         if (seen[value])
-            result.emplace_back(urd::index<Query<>>(to_uint_t(value)), repository);
+            result.push_back(repository.view(urd::index<Query<>>(to_uint_t(value))));
     return result;
 }
 }
