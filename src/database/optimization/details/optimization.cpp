@@ -31,15 +31,14 @@ QueryPlan optimize(std::span<const QueryView<>> roots, std::span<const Evaluatio
     validate(roots, statistics);
     if (roots.empty())
         return {};
-    const auto& source = get_repository(roots.front().context());
     QueryBuilder builder;
-    auto normalized = source.get_factory().create();
+    QueryRepository normalized;
     Normalizer normalize(normalized, builder);
     // The equivalent caller query of each normalized query; the first one wins.
     urd::Store<urd::map<urd::index<Query<>>, urd::index<Query<>>>, urd::dense> sources;
     for (const auto query : reachable(roots))
         sources.try_emplace(normalize(query).index(), query.index());
-    auto plans = source.get_factory().create();
+    QueryRepository plans;
     Planner planner(statistics, sources, plans, builder);
     urd::Store<urd::sequence<QueryView<>>> outputs;
     for (size_t i = 0; i < roots.size(); ++i)
@@ -81,7 +80,10 @@ namespace ygg::database::detail
 {
 QueryView<> Planner::plan_block(QueryView<> join, std::span<const ColumnLayout> output)
 {
-    JoinBlock block { {}, ygg::canonicalized(column_labels(output)) };
+    auto labels = urd::Store<urd::sequence<urd::index<Column>>>();
+    for (const auto& column : output)
+        labels.push_back(column.label);
+    JoinBlock block { {}, ygg::canonicalized(labels) };
     urd::Store<urd::set<QueryIndex>> seen;
     collect(join, block.atoms, seen);
     if (block.atoms.empty())  // The empty join is the nullary relation with one row.
@@ -90,7 +92,7 @@ QueryView<> Planner::plan_block(QueryView<> join, std::span<const ColumnLayout> 
     const auto result = block.atoms.size() == 1 ? block.atoms.front() :
                         measured                ? CostBasedPlanner(block, m_build, [&](QueryView<> atom) { return estimate(atom); }).plan() :
                                                   structural_plan(block, m_build);
-    return m_build.project(result, column_labels(output));
+    return m_build.project(result, labels);
 }
 }
 

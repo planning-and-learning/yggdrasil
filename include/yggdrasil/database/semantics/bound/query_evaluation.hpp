@@ -13,7 +13,6 @@
 #include "yggdrasil/database/semantics/bound/union_normal_form.hpp"
 #include "yggdrasil/database/semantics/join_index.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
@@ -21,6 +20,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -42,27 +42,35 @@ namespace ygg::database::bound
 /// indexes of a changed input current row by row, as the incremental join's indexes are (incremental/join.hpp).
 ///
 /// Inputs are borrowed during bind() only. incremental::bound::QueryEvaluator wraps one to keep it bound across input
-/// changes, and runs its plans with variables bound by changed rows (plans(), bind_atom(), run_plan()).
+/// changes, and runs its plans with variables bound by changed rows (plans(), bind_atom(), run_plan()). The snapshots
+/// are builders of `layer`, read through it; it must outlive the evaluator.
 class QueryEvaluator
 {
 public:
     /// `static_slots` marks inputs that never change after the first bind().
-    explicit QueryEvaluator(QueryView<> query, const std::vector<bool>& static_slots = {}) :
+    QueryEvaluator(const Repository& layer, QueryView<> query, const std::vector<bool>& static_slots = {}) :
+        m_layer(&layer),
         m_query(union_normal_form(query)),
         m_columns(query.columns().begin(), query.columns().end())
     {
-        m_frame.resize(m_query.frame_size);
+        m_frame.resize(m_query.variables.size());
         m_static.assign(input_count(), false);
         for (size_t slot = 0; slot < std::min(static_slots.size(), m_static.size()); ++slot)
             m_static[slot] = static_slots[slot];
         for (const auto& columns : m_query.input_columns)
-            m_inputs.push_back(m_pool.get_or_allocate(std::span<const ColumnLayout>(columns)));
+            m_inputs.push_back(layer.get_relation_builder(urd::index<Schema>(), std::span<const ColumnLayout>(columns)));  // never interned: no key
         m_bound.assign(input_count(), false);
     }
+    // Its snapshots are its own: shared with no copy.
+    QueryEvaluator(const QueryEvaluator&) = delete;
+    QueryEvaluator& operator=(const QueryEvaluator&) = delete;
+    QueryEvaluator(QueryEvaluator&&) noexcept = default;
+    QueryEvaluator& operator=(QueryEvaluator&&) noexcept = default;
+    ~QueryEvaluator() = default;
 
     [[nodiscard]] size_t input_count() const noexcept { return m_query.input_columns.size(); }
     [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_columns; }
-    [[nodiscard]] const urd::builder<Relation>& input(size_t slot) const { return *m_inputs.at(slot); }
+    [[nodiscard]] BuilderRelationView input(size_t slot) const { return m_layer->view(*m_inputs.at(slot)); }
     [[nodiscard]] bool bound() const noexcept { return std::ranges::find(m_bound, false) == m_bound.end(); }
     /// Increases whenever an input changes.
     [[nodiscard]] uint64_t version() const noexcept { return m_version; }
@@ -84,7 +92,7 @@ public:
     template<RelationViewConcept V>
     void bind_slot(size_t slot, const V& rows)
     {
-        database::detail::require_plan_columns(rows.columns().span(), m_query.input_columns[slot]);
+        assert(std::ranges::equal(rows.columns(), m_query.input_columns[slot]));
         auto& snapshot = *m_inputs[slot];
         snapshot.clear();
         for (size_t r = 0; r < rows.size(); ++r)
@@ -102,16 +110,17 @@ public:
         if (added.empty() && removed.empty())
             return;
         auto& snapshot = *m_inputs[slot];
+        const auto stored = m_layer->view(snapshot);
         const auto columns = std::span<const ColumnLayout>(m_query.input_columns[slot]);
         for (size_t r = 0; r < removed.size(); ++r)
-            if (!snapshot.contains(Row(removed.row(r), columns)))
+            if (!snapshot.contains(removed.row(r)))
                 throw std::invalid_argument("bound::QueryEvaluator: removed row is absent from the input.");
         for (size_t r = 0; r < added.size(); ++r)
-            if (snapshot.contains(Row(added.row(r), columns)))
+            if (snapshot.contains(added.row(r)))
                 throw std::invalid_argument("bound::QueryEvaluator: added row is already present in the input.");
         for (size_t r = 0; r < removed.size(); ++r)
         {
-            const auto found = snapshot.find(Row(removed.row(r), columns));
+            const auto found = snapshot.find(removed.row(r));
             URD_ASSUME(found.has_value());  // every removed row was checked present above
             const auto position = *found;
             const auto last = to_uint_t(snapshot.size() - 1);
@@ -122,21 +131,21 @@ public:
                 URD_ASSUME(found != matches.second);  // every indexed row is in its key's entries
                 rows.erase(found);
             };
-            for_each_index(slot, [&](KeyIndex& entry) { erase(entry.rows, database::detail::join_key_hash(snapshot.row(position), entry.keys), position); });
+            for_each_index(slot, [&](KeyIndex& entry) { erase(entry.rows, database::detail::join_key_hash(stored.row(position), entry.keys), position); });
             snapshot.erase(position);
             if (position != last)
                 for_each_index(slot,
                                [&](KeyIndex& entry)
                                {
                                    // The last row moved into the erased one's position.
-                                   const auto key = database::detail::join_key_hash(snapshot.row(position), entry.keys);
+                                   const auto key = database::detail::join_key_hash(stored.row(position), entry.keys);
                                    erase(entry.rows, key, last);
                                    entry.rows.insert({ key, position });
                                });
         }
         for (size_t r = 0; r < added.size(); ++r)
         {
-            const auto position = snapshot.insert(Row(added.row(r), columns));
+            const auto position = snapshot.insert(added.row(r));
             for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert({ database::detail::join_key_hash(added.row(r), entry.keys), position }); });
         }
         ++m_version;
@@ -153,23 +162,18 @@ public:
         return m_bindings.size() - 1;
     }
 
-    /// Calls on_row(row) for each output row whose prepared columns hold `values` (their bytes, concatenated in the
+    /// Calls on_row(row) for each output row whose prepared columns hold `values` (their canonical values, in the
     /// prepared order); stops when on_row returns false.
     template<RowPredicate OnRow>
-    void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
+    void evaluate(size_t binding, std::span<const Value> values, const OnRow& on_row)
     {
         auto& prepared = m_bindings.at(binding);
         if (prepared.plans.empty() && !m_query.branches.empty())
             prepared.plans = plans(bound_variables(prepared.positions));
         for (const auto& plan : prepared.plans)
         {
-            auto offset = static_cast<size_t>(0);
-            for (const auto position : prepared.positions)
-            {
-                const auto size = m_columns[position].size;
-                std::ranges::copy(values.subspan(offset, size), variable(m_query.output[position]).begin());
-                offset += size;
-            }
+            for (size_t i = 0; i < prepared.positions.size(); ++i)
+                m_frame[m_query.output[prepared.positions[i]]] = values[i];
             if (!run_plan(plan, on_row))
                 return;
         }
@@ -181,7 +185,7 @@ public:
     std::vector<ConjunctivePlan> plans(const std::vector<bool>& bound);  // std::vector: of an incomplete type (a Store resolves its element type at once)
 
     /// Binds the atom's variables to an input row; false if the row repeats a variable with different values.
-    bool bind_atom(const ConjunctiveAtom& atom, std::span<const std::byte> row);
+    bool bind_atom(const ConjunctiveAtom& atom, const RowPool::row_type& row);
 
     /// Runs a plan whose initially bound variables are set, calling on_row(row) for each output row; returns false
     /// once on_row returned false.
@@ -213,29 +217,24 @@ private:
         urd::Store<urd::sequence<ColumnSlice>> probe;
     };
 
+    const Repository* m_layer;
     UnionNormalForm m_query;
     urd::Store<urd::sequence<ColumnLayout>> m_columns;
-    RelationPool m_pool;             ///< Owns the input snapshots; declared before them, so it outlives them.
-    urd::Store<urd::sequence<std::byte>> m_frame;  ///< The variables' values while a branch runs.
+    urd::Store<urd::sequence<Value>> m_frame;  ///< The variables' values while a branch runs, by variable.
     std::vector<bool> m_static;
-    urd::Store<urd::sequence<urd::unique_slot_ptr<urd::builder<Relation>>>> m_inputs;
+    urd::Store<urd::sequence<std::shared_ptr<urd::builder<Relation<Schema>>>>> m_inputs;  ///< The input snapshots, from the layer.
     std::vector<bool> m_bound;
     urd::Store<urd::sequence<KeyIndex>, urd::stable_refs> m_indexes;
     urd::Store<urd::sequence<Lookup>, urd::stable_refs> m_lookups;  ///< By ConjunctiveStep::index.
     urd::Store<urd::sequence<Binding>> m_bindings;
-    urd::Store<urd::sequence<std::byte>> m_row;
+    urd::Store<urd::sequence<Value>> m_row;
     uint64_t m_version = 0;
 
-    std::span<std::byte> variable(uint32_t var) noexcept { return std::span(m_frame).subspan(m_query.variables[var].offset, m_query.variables[var].size); }
-
-    std::span<const std::byte> output_row()
+    std::span<const Value> output_row()
     {
         m_row.clear();
         for (const auto var : m_query.output)
-        {
-            const auto bytes = variable(var);
-            m_row.insert(m_row.end(), bytes.begin(), bytes.end());
-        }
+            m_row.push_back(m_frame[var]);
         return m_row;
     }
 
@@ -287,16 +286,15 @@ private:
             return emit();
         const auto& step = plan.steps[step_index];
         assert(step.index != ConjunctiveStep::unresolved);
-        const auto& rows = *m_inputs[step.slot];
-        const auto& columns = m_query.input_columns[step.slot];
+        const auto rows = m_layer->view(*m_inputs[step.slot]);
         auto proceed = true;  // False once emit asked to stop.
         const auto visit = [&](size_t r)
         {
             const auto row = rows.row(r);
             for (const auto& [c, var] : step.assign)
-                std::ranges::copy(database::detail::column_bytes(row, columns[c]), variable(var).begin());
+                m_frame[var] = row.get(c);
             for (const auto& [c, var] : step.compare)
-                if (!std::ranges::equal(database::detail::column_bytes(row, columns[c]), variable(var)))
+                if (row.get(c) != m_frame[var])
                     return true;
             if (!accepts(plan, step.filters))
                 return true;
@@ -321,7 +319,7 @@ private:
             entry.built = true;
         }
         // The key's variables stay bound while this step iterates, so the frame is the probe.
-        const auto probe = std::span<const std::byte>(m_frame);
+        const auto probe = std::span<const Value>(m_frame);
         for (const auto r : entry.rows.values(database::detail::join_key_hash(probe, lookup.probe)))
             if (database::detail::join_keys_equal(rows.row(r), entry.keys, probe, lookup.probe) && !visit(r))
                 return proceed;

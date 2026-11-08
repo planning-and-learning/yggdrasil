@@ -40,9 +40,15 @@ RelationStatistics measure_relation(const Relation& relation)
 {
     RelationStatistics stats;
     stats.rows = static_cast<double>(relation.size());
-    const auto& columns = relation.columns();
-    for (const auto& column : columns.span())
-        stats.distinct[column.label] = static_cast<double>(project(relation, { column.label }).size());
+    const auto columns = relation.columns();
+    auto seen = urd::Store<urd::set<Value>>();
+    for (size_t c = 0; c < columns.size(); ++c)
+    {
+        seen.clear();
+        for (size_t i = 0; i < relation.size(); ++i)
+            seen.insert(relation.row(i).get(c));
+        stats.distinct[columns[c].label] = static_cast<double>(seen.size());
+    }
     return stats;
 }
 }  // namespace ygg::database

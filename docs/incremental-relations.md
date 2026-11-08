@@ -3,7 +3,7 @@
 The C++ interfaces in `yggdrasil/database/incremental/` maintain projection and
 natural join, including joins where both inputs change. Full `project` and `join`
 use the same typed schemas and packed rows. All results use the
-existing `urd::builder<Relation<Values>>` and contextual `View` interfaces (`Values` is the registered type list); publishing them
+existing `urd::builder<Relation<Schema>>` and contextual `View` interfaces; publishing them
 in a repository is optional.
 
 ## Projection
@@ -12,21 +12,24 @@ in a repository is optional.
 using namespace ygg;
 using namespace ygg::database;
 
-urd::builder<Relation<>> input({ Index<Column>(0), Index<Column>(1) });
-input.insert(std::tuple { uint_t(7), uint_t(10) });
-input.insert(std::tuple { uint_t(7), uint_t(11) });
+Repository repository;
+const std::array columns { ColumnLayout { urd::index<Column>(0), type_id<uint_t> }, ColumnLayout { urd::index<Column>(1), type_id<uint_t> } };
+const auto input = repository.get_relation_builder(repository.schema(columns), columns);
+input->insert(std::array { encode_value(uint_t(7)), encode_value(uint_t(10)) });
+input->insert(std::array { encode_value(uint_t(7)), encode_value(uint_t(11)) });
 
-Workspace<> workspace;
-incremental::ProjectionEvaluator<> projection(
-    ProjectionPlan<>(input.columns().span(), { Index<Column>(0) }));
-projection.initialize(input, workspace);
+Workspace workspace;
+const std::array kept { urd::index<Column>(0) };
+incremental::ProjectionEvaluator projection(repository, ProjectionPlan(input->columns(), kept));
+projection.initialize(repository.view(*input), workspace);
 
-incremental::Delta<> change(input.columns().span());
-change.removed.insert(std::tuple { uint_t(7), uint_t(10) });
-projection.update(change.added, change.removed, workspace);
+incremental::Delta change(repository, input->columns());
+change.removed.insert(std::array { encode_value(uint_t(7)), encode_value(uint_t(10)) });
+projection.update(change.change(), workspace);
 // (7) still has one witness, so get_delta() is empty and get_result() contains it.
 
-projection.update(change.removed, change.added, workspace); // undo
+const auto [added, removed] = change.change();
+projection.update(std::pair { removed, added }, workspace); // undo
 ```
 
 Each evaluator owns its maintained result, last output delta, and persistent
@@ -49,11 +52,11 @@ Witness-only replacement avoids this growth and avoids result erasure entirely.
 
 ## Natural join
 
-Include `incremental/join.hpp` and construct `JoinEvaluator<Values>(plan)`. The
-interface accepts existing relation builders or views:
+Include `incremental/join.hpp` and construct `JoinEvaluator(layer, plan)`. The
+interface accepts relation views (a builder is read as `layer.view(builder)`):
 
 ```cpp
-incremental::JoinEvaluator<> joined(JoinPlan<>(lhs.columns(), rhs.columns()));
+incremental::JoinEvaluator joined(repository, JoinPlan(lhs.columns(), rhs.columns()));
 joined.initialize(lhs, rhs, workspace);
 joined.update(lhs_change.added, lhs_change.removed,
               rhs_change.added, rhs_change.removed, workspace);
@@ -70,7 +73,7 @@ input views need to stay alive between calls, and no repository is needed.
 For example, when only the left input changes:
 
 ```cpp
-urd::builder<Relation<>> unchanged(rhs.columns().span());
+urd::builder<Relation<Schema>> unchanged(rhs.columns());
 joined.update(lhs_change.added, lhs_change.removed, unchanged, unchanged, workspace);
 ```
 
@@ -100,20 +103,21 @@ promise for arbitrarily growing relations.
 
 ## Delta and lifetime contract
 
-- `Delta<Values>` owns reusable `added` and `removed` relation builders with identical
-  ordered schemas. `clear()` retains their buffers.
+- `Delta` owns reusable `added` and `removed` relation builders with identical
+  ordered schemas, read through the layer it holds (`change()` gives their views).
+  `clear()` retains their buffers.
 - Input deltas must be actual set changes: added rows were absent, removed rows
-  were present, and the sets are disjoint. Schema and overlap errors are checked
-  before mutation. Source membership is a caller
+  were present, and the sets are disjoint. Overlap errors are checked before mutation; schemas against the plan are
+  asserted in debug builds. Source membership is a caller
   precondition for projection. Join retains both inputs for evaluation and rejects
   absent removals or already-present additions while applying them. Detected invalid changes raise `std::invalid_argument`.
 - Inputs are borrowed during the call only. They cannot alias the evaluator's
   result, delta, or the workspace buffers. This nonaliasing requirement is a caller
-  precondition, not a runtime storage-identity check. Calls must be sequential and
+  precondition beyond the `relation_identity()` check against the evaluator's own builders. Calls must be sequential and
   nonreentrant.
 - `initialize` produces the baseline and an empty delta. Reinitialization keeps
   reusable capacities. `update` before initialization throws `std::logic_error`.
-- `get_result()` and `get_delta()` return const references. Borrowed contents
+- `get_result()` returns a `BuilderRelationView` and `get_delta()` a const reference. Borrowed contents
   must not be retained across the next evaluator mutation. Persist input changes
   separately if they will be needed for undo; reversing a batch exchanges its
   added/removed inputs. Feed an upstream output delta to downstream operators

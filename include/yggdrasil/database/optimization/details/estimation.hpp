@@ -64,7 +64,7 @@ struct Estimate
     urd::Store<urd::map<urd::index<Column>, double>> distinct;
     urd::Store<urd::sequence<Factor>> factors;
     urd::Store<urd::set<std::pair<urd::index<Column>, urd::index<Column>>>, urd::sorted> equalities;
-    urd::Store<urd::set<std::pair<urd::index<Column>, urd::Store<urd::sequence<std::byte>>>>, urd::sorted> constants;
+    urd::Store<urd::set<std::pair<urd::index<Column>, Value>>, urd::sorted> constants;
 };
 
 /// Estimates saturate here instead of overflowing to infinity.
@@ -80,6 +80,8 @@ Estimate factor(const RelationStatistics& stats, std::span<const ColumnLayout> c
 /// by all but the smallest distinct count (one factor of a constant class), as in
 /// System R's |R ⋈ S| = |R|·|S| / max(V(R,A), V(S,A)).
 Estimate conjunction(Estimate result, std::span<const urd::index<Column>> labels);
+/// The conjunction over the labels of `columns`.
+Estimate conjunction(Estimate result, std::span<const ColumnLayout> columns);
 
 Estimate combine(Estimate lhs, const Estimate& rhs);
 
@@ -101,7 +103,7 @@ Estimate estimate_operation(QueryView<QueryEmptyTag> query, FactorIdentity ident
 { return factor({ 0, {} }, query.columns(), identity); }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryJoinTag> query, FactorIdentity, GetEstimate child, const Statistics&)
-{ return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), column_labels(query.columns())); }
+{ return conjunction(combine(child(query.get_lhs()), child(query.get_rhs())), query.columns()); }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
@@ -111,7 +113,7 @@ Estimate estimate_operation(QueryView<QueryGenericJoinTag> query, FactorIdentity
     auto result = child(query.context().view(inputs.front()));
     for (const auto input : inputs.subspan(1))
         result = combine(std::move(result), child(query.context().view(input)));
-    return conjunction(std::move(result), column_labels(query.columns()));
+    return conjunction(std::move(result), query.columns());
 }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QuerySelectEqualTag> query, FactorIdentity, GetEstimate child, const Statistics&)
@@ -119,15 +121,14 @@ Estimate estimate_operation(QueryView<QuerySelectEqualTag> query, FactorIdentity
     auto result = child(query.get_arg());
     const auto lhs = query.get_lhs_column(), rhs = query.get_rhs_column();
     result.equalities.emplace(std::min(lhs, rhs), std::max(lhs, rhs));
-    return conjunction(std::move(result), column_labels(query.columns()));
+    return conjunction(std::move(result), query.columns());
 }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QuerySelectValueTag> query, FactorIdentity, GetEstimate child, const Statistics&)
 {
     auto result = child(query.get_arg());
-    const auto constant = query.get_constant();
-    result.constants.emplace(query.get_column(), urd::Store<urd::sequence<std::byte>>(constant.begin(), constant.end()));
-    return conjunction(std::move(result), column_labels(query.columns()));
+    result.constants.emplace(query.get_column(), query.get_constant());
+    return conjunction(std::move(result), query.columns());
 }
 template<class GetEstimate>
 Estimate estimate_operation(QueryView<QueryRenameTag> query, FactorIdentity, GetEstimate child, const Statistics&)
@@ -143,12 +144,12 @@ Estimate estimate_operation(QueryView<QueryRenameTag> query, FactorIdentity, Get
     urd::Store<urd::set<std::pair<urd::index<Column>, urd::index<Column>>>, urd::sorted> equalities;
     for (const auto& [lhs, rhs] : result.equalities)
         equalities.emplace(std::min(renamed.at(lhs), renamed.at(rhs)), std::max(renamed.at(lhs), renamed.at(rhs)));
-    urd::Store<urd::set<std::pair<urd::index<Column>, urd::Store<urd::sequence<std::byte>>>>, urd::sorted> constants;
+    urd::Store<urd::set<std::pair<urd::index<Column>, Value>>, urd::sorted> constants;
     for (const auto& [column, value] : result.constants)
         constants.emplace(renamed.at(column), value);
     result.equalities = std::move(equalities);
     result.constants = std::move(constants);
-    return conjunction(std::move(result), column_labels(after));
+    return conjunction(std::move(result), after);
 }
 /// Operators beyond System R follow the textbook estimates of Garcia-Molina, Ullman,
 /// and Widom (Database Systems: The Complete Book, 2nd ed., 2008, §16.4), with distinct
@@ -195,7 +196,7 @@ template<typename Tag, class GetEstimate>
 Estimate estimate_operation(QueryView<Tag> query, FactorIdentity identity, GetEstimate child, const Statistics&)
 {
     const auto lhs = child(query.get_lhs());
-    const auto matched = std::min(lhs.rows, conjunction(combine(lhs, child(query.get_rhs())), column_labels(query.columns())).rows);
+    const auto matched = std::min(lhs.rows, conjunction(combine(lhs, child(query.get_rhs())), query.columns()).rows);
     const auto rows = std::same_as<Tag, QuerySemijoinTag> ? matched : std::max(0.0, lhs.rows - matched);
     return factor(capped({ rows, lhs.distinct }), query.columns(), identity);
 }

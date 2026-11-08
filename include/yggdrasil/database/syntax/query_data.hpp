@@ -8,7 +8,7 @@
 #include <urd/elements/flat.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
-#include "yggdrasil/database/byte_codec.hpp"
+#include "yggdrasil/formalism/values.hpp"
 #include <boost/mp11.hpp>
 #include "yggdrasil/database/declarations.hpp"
 #include "yggdrasil/database/semantics/distance.hpp"
@@ -48,10 +48,10 @@ struct data<ygg::database::Query<ygg::database::QueryInputTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryInputTag>> index;
     size_t input_slot = 0;
-    urd::flat_vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::ColumnLayout> columns;
 
     data() = default;
-    data(size_t input_slot_, std::span<const ygg::database::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
+    data(size_t input_slot_, std::span<const ygg::ColumnLayout> columns_) : input_slot(input_slot_) { columns.set(columns_.begin(), columns_.end()); }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::input_slot, &data::columns> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::input_slot, &data::columns> {}; }
@@ -61,10 +61,10 @@ template<>
 struct data<ygg::database::Query<ygg::database::QueryEmptyTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryEmptyTag>> index;
-    urd::flat_vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<ygg::ColumnLayout> columns;
 
     data() = default;
-    explicit data(std::span<const ygg::database::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
+    explicit data(std::span<const ygg::ColumnLayout> columns_) { columns.set(columns_.begin(), columns_.end()); }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::columns> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::columns> {}; }
@@ -94,13 +94,13 @@ struct data<ygg::database::Query<Tag>>
     urd::index<ygg::database::Query<Tag>> index;
     urd::index<ygg::database::Query<>> lhs;
     urd::index<ygg::database::Query<>> rhs;
-    urd::flat_vector<ygg::database::ColumnLayout> columns;
+    ygg::database::SetPlan plan;
 
     data() = default;
     data(urd::index<ygg::database::Query<>> lhs_, urd::index<ygg::database::Query<>> rhs_) : lhs(lhs_), rhs(rhs_) {}
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::lhs, &data::rhs> {}; }
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lhs, &data::rhs, &data::columns> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lhs, &data::rhs, &data::plan> {}; }
 };
 
 template<>
@@ -108,11 +108,11 @@ struct data<ygg::database::Query<ygg::database::QueryProjectTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryProjectTag>> index;
     urd::index<ygg::database::Query<>> arg;
-    urd::flat_vector<urd::index<ygg::database::Column>> labels;
+    urd::flat_vector<urd::index<ygg::Column>> labels;
     ygg::database::ProjectionPlan plan;
 
     data() = default;
-    data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
+    data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::labels> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::arg, &data::labels, &data::plan> {}; }
@@ -123,11 +123,11 @@ struct data<ygg::database::Query<ygg::database::QueryRenameTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryRenameTag>> index;
     urd::index<ygg::database::Query<>> arg;
-    urd::flat_vector<urd::index<ygg::database::Column>> labels;
-    urd::flat_vector<ygg::database::ColumnLayout> columns;
+    urd::flat_vector<urd::index<ygg::Column>> labels;
+    urd::flat_vector<ygg::ColumnLayout> columns;
 
     data() = default;
-    data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::database::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
+    data(urd::index<ygg::database::Query<>> arg_, std::span<const urd::index<ygg::Column>> labels_) : arg(arg_) { labels.set(labels_.begin(), labels_.end()); }
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::labels> {}; }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::arg, &data::labels, &data::columns> {}; }
@@ -138,14 +138,12 @@ struct data<ygg::database::Query<ygg::database::QuerySelectEqualTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QuerySelectEqualTag>> index;
     urd::index<ygg::database::Query<>> arg;
-    urd::index<ygg::database::Column> lhs_column;
-    urd::index<ygg::database::Column> rhs_column;
-    urd::flat_vector<ygg::database::ColumnLayout> columns;
-    size_t lhs_position = 0;
-    size_t rhs_position = 0;
+    urd::index<ygg::Column> lhs_column;
+    urd::index<ygg::Column> rhs_column;
+    ygg::database::SelectEqualPlan plan;
 
     data() = default;
-    data(urd::index<ygg::database::Query<>> arg_, urd::index<ygg::database::Column> lhs_column_, urd::index<ygg::database::Column> rhs_column_) :
+    data(urd::index<ygg::database::Query<>> arg_, urd::index<ygg::Column> lhs_column_, urd::index<ygg::Column> rhs_column_) :
         arg(arg_),
         lhs_column(lhs_column_),
         rhs_column(rhs_column_)
@@ -154,7 +152,7 @@ struct data<ygg::database::Query<ygg::database::QuerySelectEqualTag>>
 
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::lhs_column, &data::rhs_column> {}; }
     static constexpr auto cista_members() noexcept
-    { return urd::Members<&data::index, &data::arg, &data::lhs_column, &data::rhs_column, &data::columns, &data::lhs_position, &data::rhs_position> {}; }
+    { return urd::Members<&data::index, &data::arg, &data::lhs_column, &data::rhs_column, &data::plan> {}; }
 };
 
 template<>
@@ -162,26 +160,27 @@ struct data<ygg::database::Query<ygg::database::QuerySelectValueTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QuerySelectValueTag>> index;
     urd::index<ygg::database::Query<>> arg;
-    urd::index<ygg::database::Column> column;
-    urd::flat_vector<std::byte> constant;
-    /// The type of the encoded constant.
-    ygg::TypeId constant_type = ygg::TypeId::none;
-    urd::flat_vector<ygg::database::ColumnLayout> columns;
-    size_t column_position = 0;
+    urd::index<ygg::Column> column;
+    /// The constant's canonical value.
+    ygg::Value constant = 0;
+    /// The constant's type.
+    ygg::TypeId constant_type {};
+    ygg::database::SelectValuePlan plan;
 
     data() = default;
-    /// The constant is encoded with the column codec of its type.
-    template<ygg::ByteCodable T>
-    data(urd::index<ygg::database::Query<>> arg_, urd::index<ygg::database::Column> column_, T value) : arg(arg_), column(column_), constant_type(ygg::type_id<T>)
+    /// The constant as its canonical value (ygg::encode_value).
+    template<ygg::ColumnValueType T>
+    data(urd::index<ygg::database::Query<>> arg_, urd::index<ygg::Column> column_, T value) :
+        arg(arg_),
+        column(column_),
+        constant(ygg::encode_value(value)),
+        constant_type(ygg::type_id<T>)
     {
-        std::array<std::byte, ygg::ByteCodec<T>::size> bytes {};
-        ygg::ByteCodec<T>::encode(value, bytes);
-        constant.set(bytes.begin(), bytes.end());
     }
 
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::column, &data::constant> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arg, &data::column, &data::constant, &data::constant_type> {}; }
     static constexpr auto cista_members() noexcept
-    { return urd::Members<&data::index, &data::arg, &data::column, &data::constant, &data::constant_type, &data::columns, &data::column_position> {}; }
+    { return urd::Members<&data::index, &data::arg, &data::column, &data::constant, &data::constant_type, &data::plan> {}; }
 };
 
 template<>
@@ -191,11 +190,11 @@ struct data<ygg::database::Query<ygg::database::QueryDistanceTag>>
     urd::index<ygg::database::Query<>> sources;
     urd::index<ygg::database::Query<>> edges;
     urd::index<ygg::database::Query<>> targets;
-    urd::index<ygg::database::Column> distance_column;
+    urd::index<ygg::Column> distance_column;
     ygg::database::DistancePlan plan;
 
     data() = default;
-    data(urd::index<ygg::database::Query<>> sources_, urd::index<ygg::database::Query<>> edges_, urd::index<ygg::database::Query<>> targets_, urd::index<ygg::database::Column> distance_column_) :
+    data(urd::index<ygg::database::Query<>> sources_, urd::index<ygg::database::Query<>> edges_, urd::index<ygg::database::Query<>> targets_, urd::index<ygg::Column> distance_column_) :
         sources(sources_),
         edges(edges_),
         targets(targets_),
@@ -213,15 +212,15 @@ struct data<ygg::database::Query<ygg::database::QueryGenericJoinTag>>
 {
     urd::index<ygg::database::Query<ygg::database::QueryGenericJoinTag>> index;
     urd::flat_vector<urd::index<ygg::database::Query<>>> inputs;
-    urd::flat_vector<urd::index<ygg::database::Column>> variable_order;
-    urd::flat_vector<urd::index<ygg::database::Column>> output_order;
+    urd::flat_vector<urd::index<ygg::Column>> variable_order;
+    urd::flat_vector<urd::index<ygg::Column>> output_order;
     ygg::database::GenericJoinPlan plan;
 
     data() = default;
     /// An empty output order is canonicalized on insertion.
     data(std::span<const urd::index<ygg::database::Query<>>> inputs_,
-         std::span<const urd::index<ygg::database::Column>> variable_order_,
-         std::span<const urd::index<ygg::database::Column>> output_order_ = {}) :
+         std::span<const urd::index<ygg::Column>> variable_order_,
+         std::span<const urd::index<ygg::Column>> output_order_ = {}) :
         index()
     {
         inputs.set(inputs_.begin(), inputs_.end());

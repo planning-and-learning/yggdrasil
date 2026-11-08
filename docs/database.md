@@ -1,16 +1,20 @@
 # Relational algebra
 
 `<yggdrasil/database/semantics/operations.hpp>` provides header-only set operations in
-`ygg::database`. Relations have a runtime schema and packed, fixed-width rows.
+`ygg::database`, each in one form: its inputs, a plan built from their columns, an output builder and, where it needs
+scratch storage, a `Workspace`. Relations have runtime columns and rows packed by their widths (urd's rows of unsigned columns,
+`urd::by_column_widths`); the relation model itself (columns, schemas, row sets, relations) is yggdrasil formalism's.
 Different columns can hold different types without a tag or variant in every cell.
 Nullary relations and runtime arities remain supported.
 
 ## Types and schemas
 
-Columns hold one of a fixed set of value types: `uint32_t`, `int32_t`, `uint64_t`,
-`int64_t`, `float`, `double`, and `bool` (`ygg::ByteCodable`, in
-`<yggdrasil/database/byte_codec.hpp>`). Each has a `ygg::TypeId`, which schemas store,
-so relations, schemas, plans and repositories carry no list of value types.
+Columns hold one of a fixed set of value types, the alternatives of `ygg::ColumnValue` (in
+`<yggdrasil/formalism/values.hpp>`): `uint32_t`, `uint64_t`, `int32_t`, `int64_t`, `float`, `double`, `bool` and
+`ygg::ObjectIndex` (object indices, in the bits the layer gives them). A column's `ygg::TypeId` is its type's index in
+that variant (`type_id<T>`), which columns store, so relations, schemas, plans and repositories carry no list of
+value types. A row stores each value as an unsigned `ygg::Value` (`encode_value`, `decode_value`; `encode` and
+`decode(bits, type)` for a `ColumnValue`).
 Indices are stored as `uint_t` (`index.value`); the code that owns a relation
 knows which tag a column holds and converts back with `Index<Tag>(value)`.
 
@@ -20,59 +24,65 @@ knows which tag a column holds and converts back with `Index<Tag>(value)`.
 using namespace ygg::database;
 const urd::index<Column> source(0), target(1), distance(2);
 
-urd::builder<Columns> columns;
-columns.push_back<std::uint32_t>(source);
-columns.push_back<std::uint32_t>(target);
-columns.push_back<double>(distance);
-urd::builder<Relation> paths(std::move(columns));
-paths.insert(std::tuple { std::uint32_t(3), std::uint32_t(8), 2.5 });
-paths.insert(std::tuple { std::uint32_t(3), std::uint32_t(9), 4.0 });
+const std::array<ColumnLayout, 3> columns { ColumnLayout { source, type_id<std::uint32_t> },
+                                            ColumnLayout { target, type_id<std::uint32_t> },
+                                            ColumnLayout { distance, type_id<double> } };
+Repository repository;
+const auto paths = repository.get_relation_builder(repository.schema(columns), columns);
+const std::array<ygg::Value, 3> first { ygg::encode_value(3u), ygg::encode_value(8u), ygg::encode_value(2.5) };
+const std::array<ygg::Value, 3> second { ygg::encode_value(3u), ygg::encode_value(9u), ygg::encode_value(4.0) };
+paths->insert(first);
+paths->insert(second);
 
-const auto length = paths[0].get<double>(distance);
-auto reachable = project(paths, {source, target});
-auto exact = select_equal_value(paths, distance, 2.5);
+const auto view = repository.view(*paths);  // a BuilderRelationView
+const auto length = ygg::decode_value<double>(view.row(0).get(2));
+const std::array labels { source, target };
+const ProjectionPlan plan(view.columns(), labels);
+urd::builder<Relation<Schema>> reachable(plan.output_columns());
+Workspace workspace;
+project(view, plan, reachable, workspace);
 ```
 
-`Column` identifies a schema-local label. `Columns` follows the usual
-`Builder`, `Data`, `Index`, `View` structure. Each `ColumnLayout` records a label,
-`TypeId`, byte offset, and width. Identity depends on the ordered labels
-and types; offsets and widths are derived and validated. `.span()` borrows the
-layout, `.row_size()` returns its packed byte width, and `column_index(label)`
-resolves a label. Labels must be unique. Constructing a schema from labels alone
-uses `uint_t` for every column; `assign<T>(labels)` picks another type.
+`Column` identifies a schema-local label. Columns are a `std::span<const ColumnLayout>`: each `ColumnLayout` records a
+label and a `TypeId`; where a column lies in a row, the builder's widths say (`.widths()`, an `urd::column_widths`:
+each column whole, a bool in one bit, an object 32 bits; a layer's builders and pools: an object in the layer's object
+bits). Interned `Columns` records identify by the ordered labels and
+types. A label's position is found with `std::ranges::find(columns, label, &ColumnLayout::label)`. Labels must be
+unique and types valid: `builder<Relation<F>>` validates them in its constructor, `initialize` and `rename`, and the
+plans validate the columns they are built from (`ygg::validate_columns`).
 
-`ByteCodec<T>` encodes each of these types with a fixed width. Equal values have
-identical encodings and decoding preserves their value, so padding or
-uninitialized object bytes never become part of a key. The set of types is
-closed; `visit_type_id(id, visitor)` turns a stored `TypeId` back into its type.
-
-Integer and floating-point codecs copy through `memcpy`; packed fields need no
-alignment and never expose typed references into bytes. Floating-point encoding
-normalizes signed zero and all NaNs, preserving every other finite value and
-infinity exactly. Boolean encoding is one byte, 0 or 1. No tolerance rounding is
-performed. This is a native-endian in-process representation, not a portable wire
-format. Previously serialized homogeneous relation records are incompatible.
+A value is read, hashed, compared and written as unsigned bits (`ygg::Value`,
+`encode_value`/`decode_value`; urd's rows know no types): unsigned integers as they are,
+signed ones as their two's complement in their own width, floats as their bits with
+signed zero and all NaNs normalized, bools 0 or 1. Equal values have equal bits, so
+rows hash and compare by value. The set of types is closed; `decode(bits, type)` turns a
+stored value and its `TypeId` back into a `ColumnValue` (`std::visit` it). No tolerance rounding is performed. This is an
+in-process representation, not a portable wire format.
 
 ## Rows and ownership
 
-`urd::builder<Relation>` owns a schema and `RawArraySet<std::byte>`.
-`row(i)` exposes canonical bytes for prepared operations. `operator[]` and
-`at(i)` return a borrowed `Row`: `get<T>(label)` checks the requested type
-and returns a value; `visit(position, visitor)` dispatches a runtime column type.
-The visitor must return one common result type. `.bytes()` and `.columns()`
-expose the borrowed spans.
+The relation code is data (`formalism/relation_data.hpp`), builders
+(`formalism/relation_builder.hpp`: `builder<Relation<F>>` and its `RowPool`),
+views (`formalism/relation_view.hpp`) and the value encoding (`formalism/values.hpp`).
+A relation belongs to a family `F` of the layer's relation types, whose pools (one per key `index<F>`) hold its rows;
+free relations are the `Schema` family, keyed by their column types (`Repository::schema(columns)`). The database's
+`Repository` has `Relation<Schema>` among its symbols, so only free relations (`builder<Relation<Schema>>`,
+`index_view<Relation<Schema>, Repository>`). `urd::builder<Relation<F>>` owns its pool key (none for one made
+without a layer), its columns and a pool of its rows (`RowPool`, rows by the columns' widths). Like tyr's state builders it only holds data: it is read through a layer,
+`repository.view(builder)` or `urd::resolve(builder, repository)`, a `BuilderRelationView`
+(`urd::borrowed_view<Relation<Schema>, Repository, builder<Relation<Schema>>>`), and operations take only
+views. A builder holds its pool key, `urd::data<Columns>` and its rows, nothing else: no index and no content identity.
 
-A `Row` borrows an already validated schema and canonical bytes. Its construction
-has those preconditions, like constructing a span from valid storage. Inserting
-such a row checks the schema without decoding every field. Inserting a raw byte
-span validates width and canonical field encodings before mutation. Inserting
-`std::tuple` values checks arity/types and encodes into a fixed-size stack buffer.
-`find` and `contains` offer the same tuple, typed-row, and raw-byte interfaces.
-
-Relation views (`urd::index_view<Relation, Context>`, and `urd::borrowed_view` of a
-relation record or builder) yield `Row`s for indexing and iteration. Primitive
-columns remain values; typed indices resolve through `urd::resolve` and the
-context's repository.
+A view (interned `urd::index_view<Relation<F>, Context>` or `BuilderRelationView`) gives
+`columns()` (a span of `ColumnLayout`), `size()`, `row(i)`, `rows()`, `contains(row)` and `relation_identity()`. An
+interned view reads its row set over its pool through `urd::subset_view`; a builder's view reads the
+builder's pool by position. A row is the
+pool's stored row (`RowPool::row_type`): `get(i)` gives the i-th value, which
+`decode_value<T>` reads as the column's type; the columns give labels and types.
+Inserting, finding and testing membership take a stored row of equal widths or a span
+of values (`encode_value` each), handed to the pool: inserting checks count (`std::invalid_argument`) and fit
+(`std::out_of_range`) before mutation; values that do not fit are in no row.
+Typed indices resolve through `urd::resolve` and the context's repository.
 This keeps object-view construction at the external access boundary. Row and
 relation iterators borrow storage; they do not copy payloads.
 
@@ -84,81 +94,89 @@ through an old view. There is no internal synchronization.
 
 ## Operations
 
-All operations accept builders or contextual views satisfying
-`RelationViewConcept<V>`.
+All operations accept contextual views satisfying `RelationViewConcept<V>` (interned views or builders read through
+a repository), a plan built once from their columns, and an output builder initialized with the plan's output
+columns. Each replaces the output's rows.
 
-| Operation | Meaning |
-| --- | --- |
-| `select(input, predicate)` | Keep rows accepted by a predicate over `Row`. |
-| `select_equal_columns(input, a, b)` | Compare columns of the same type. |
-| `select_equal_value(input, column, value)` | Match a constant encoded by that column's codec. |
-| `project(input, labels)` | Keep the ordered columns and eliminate duplicate rows. |
-| `join(lhs, rhs)` | Natural join on common labels, followed by rhs-only columns. |
-| `union_(lhs, rhs)` | Union with an identical ordered typed schema. |
-| `difference(lhs, rhs)` | Difference with an identical ordered typed schema. |
-| `semijoin(lhs, rhs)` | lhs ⋉ rhs: the lhs rows with a match in rhs on the common labels. |
-| `antijoin(lhs, rhs)` | lhs ▷ rhs: the lhs rows without such a match. Without common labels, lhs if rhs is empty. |
-| `builder.rename(labels)` | Change labels while retaining types and rows. |
+| Operation | Plan | Meaning |
+| --- | --- | --- |
+| `select(input, predicate, out)` | none | Keep rows accepted by a predicate over a stored row. |
+| `select_equal_columns(input, plan, out)` | `SelectEqualPlan(input, a, b)` | Compare columns of the same type. |
+| `select_equal_value(input, plan, out)` | `SelectValuePlan(input, column, type, value)` | Match a canonical constant of the column's type. |
+| `project(input, plan, out, workspace)` | `ProjectionPlan(input, labels)` | Keep the ordered columns and eliminate duplicate rows. |
+| `join(lhs, rhs, plan, out, workspace)` | `JoinPlan(lhs, rhs)` | Natural join on common labels, followed by rhs-only columns. |
+| `join(lhs, rhs, plan, cache, reuse, out, workspace)` | `JoinPlan(lhs, rhs)` | As join, reusing `JoinIndexCache` indexes of inputs marked in `JoinReuse`. |
+| `union_(lhs, rhs, plan, out)` | `SetPlan(lhs, rhs)` | Union with an identical ordered typed schema. |
+| `difference(lhs, rhs, plan, out)` | `SetPlan(lhs, rhs)` | Difference with an identical ordered typed schema. |
+| `semijoin(lhs, rhs, plan, out, workspace)` | `JoinPlan(lhs, rhs)` | lhs ⋉ rhs: the lhs rows with a match in rhs on the common labels; the output has the lhs columns. |
+| `antijoin(lhs, rhs, plan, out, workspace)` | `JoinPlan(lhs, rhs)` | lhs ▷ rhs: the lhs rows without such a match. Without common labels, lhs if rhs is empty. |
+| `assign(destination, source)` | none | Replace the destination's columns and rows by the source's. |
+| `builder.rename(columns)` | none | Change labels while retaining types and rows. |
 
-Common join labels and equality columns must have matching types. Projection
-preserves field types and repacks offsets. Wrong types, incompatible schemas,
-duplicate labels, and wrong row widths throw before clearing the output.
-Unknown labels throw `std::out_of_range`. Exceptions during evaluation (for
-example, a throwing predicate) may leave partial output. An output cannot alias
-an input. `assign(destination, source)` supports self-assignment, replaces the
-schema and rows, and retains buffers when byte widths match.
+Plans take the inputs' `columns()` spans and do all validation: common join labels and equality columns must have
+matching types, set inputs equal columns, labels must exist (`std::out_of_range` otherwise) and outputs have unique
+labels (`std::invalid_argument`). Per call an operation only clears the output and throws `std::invalid_argument`
+where the output is one of its inputs (a builder input at the output's address; interned inputs never alias); debug
+builds assert that the inputs' and the output's columns are the plan's. Exceptions during evaluation (for example, a
+throwing predicate) may leave partial output. `assign` of a builder's own view leaves it as it is.
 
-Prepare `JoinPlan` and `ProjectionPlan` once per expression.
-Their byte slices resolve types, offsets, and widths outside the row loop:
+Plans resolve their fields (`ColumnSlice`: a column position) outside the row loop; copying a field copies its bits.
+A `Workspace` holds only an output row (`row`) and a join index (`join_index`):
 
 ```cpp
-const ProjectionPlan plan(paths.columns().span(), {source, target});
-urd::builder<Relation> output(plan.output_columns().span());
+const ProjectionPlan plan(view.columns(), labels);
+urd::builder<Relation<Schema>> output(plan.output_columns());
 Workspace workspace;
-project(paths, plan, output, workspace);
+project(view, plan, output, workspace);
 ```
 
-Full and incremental operations share byte-key hashing, equality, and field
-copying. Row hashing uses the existing byte hashing path. Join keys stream their
-selected slices into XXHash; collisions compare actual key bytes. A join indexes
-the smaller input with `UnorderedMultiMap`. `JoinIndexCache` may retain
-indexes for immutable inputs. Its key includes ordered field types and offsets,
-so equal bytes with different interpretations cannot reuse an incompatible index.
-Renaming labels can still reuse a compatible index.
+Full and incremental operations share key hashing, equality, and field copying.
+Join keys stream their fields' canonical values into XXHash (`urd::hash_columns`);
+collisions compare the values. A join indexes the smaller input with
+`UnorderedMultiMap`. `JoinIndexCache` may retain indexes for immutable inputs. Its
+key is the input's `relation_identity()` (an interned relation's layer number and index, a builder's address, valid
+while it is unchanged) and the ordered key positions.
 
 ## Reuse and interning
 
-Keep a `Workspace` and output builders across evaluations. Scratch byte
-buffers, row containers, and hash tables retain capacity. `RelationPool`
-uses existing urd slots Stores (`urd::Store<urd::slots<...>>`) grouped by **row byte width**, not
-logical arity. Prepare a schema once and pass its layout span to checkout to
-avoid rebuilding it in the update loop. Larger workloads may still grow storage.
-Each evaluator/thread needs its own mutable workspace and pools.
+Keep a `Workspace` and output builders across evaluations. Scratch rows, row
+containers, and hash tables retain capacity. `Repository::get_relation_builder(pool, columns)`
+hands out builders as tyr's `get_state_builder` does: a `std::shared_ptr` from the layer's
+urd slots Store of the family keyed by column widths (`urd::Store<urd::slots<builder<Relation<F>>>, urd::keyed<urd::column_widths>>`),
+whose control blocks come from the Store's pool; the slot goes back with its last owner under its widths and keeps its
+row storage, so it is reused only for columns of equal widths.
+`insert(builder)` interns one, as `register_state` does (a free relation's key is its column types, interned
+there, so key-less builders, e.g. those of evaluators holding a const layer, intern alike). The layer must outlive its
+builders. Prepare a schema once and pass its layout span to avoid rebuilding it in the
+update loop. Larger workloads may still grow storage. Each evaluator/thread needs its own
+mutable workspace; evaluators take the layer (`const Repository&`) their builders are read
+through, and return their results as `BuilderRelationView`s.
 
-`RelationRepository` interns schemas and compact relation records in the
-existing symbol repository. Individual byte rows and sorted row-ID vectors are
-interned in `RawVectorSet`s. Relations with identical typed schemas and row sets
-share identity regardless of insertion order. Identical bytes may share physical
-rows across schemas, but distinct typed schemas retain distinct relation identity.
-Iteration follows sorted interned row IDs, not value order.
+`ygg::database::Repository` is a yggdrasil formalism repository layer
+(`formalism::Repository`) whose symbols are the relation model: `Schema` (the column
+types), `Columns` (labels and types), `RowSet` (sorted row ids) and `Relation`
+(`{schema, columns, row_set}`). Rows are interned per schema, in one pool of the
+layer each (row IDs are per pool). Relations with identical columns and row sets
+share identity regardless of insertion order. Relations of the same column types
+share rows; renaming keeps the schema and the row set. Iteration follows sorted
+interned row IDs, not value order.
 
 ```cpp
-RelationRepositoryFactory factory;
-auto repository = factory.create();
-auto [stored, created] = insert(repository, paths);
+ygg::database::Repository repository;
+auto [stored, created] = repository.insert(paths);
 paths.clear(); // stored retains its canonical rows
 ```
 
-`insert(repository, builder)` publishes and synchronizes the builder's index.
-`copy(source, repository)` remaps canonical IDs to another repository.
-`repository.rename(view, labels)` preserves the source context, field types,
-row-ID set, and namespace. A caller may supply a different schema namespace.
-Repository clear invalidates all its views while retaining reusable storage.
-Reset caches borrowing those rows before clearing. When temporary and canonical
-inputs share a join cache, derive their factories from one `RelationPoolFactory`
-so storage IDs share one sequence.
+`repository.insert(builder)` interns the builder's relation and returns `(view, created)`; nothing is cached in the
+builder.
+`repository.copy(view)` interns a relation of another repository.
+`repository.rename(view, columns)` keeps the schema and row set of a source of
+this repository: only labels change. Repository clear invalidates all its views
+while retaining reusable storage. Reset caches borrowing those rows before
+clearing. A view's `relation_identity()` (an interned relation's layer number and
+index, a builder's address) is what alias checks and the join cache use.
 
-A zero-column empty relation represents false. `insert(std::tuple {})` makes it
+A zero-column empty relation represents false. Inserting the empty row makes it
 true. Projection of a nonempty input onto no columns yields true. An empty
 object domain needs no special-case representation.
 
@@ -166,14 +184,16 @@ object domain needs no special-case representation.
 
 `database/incremental/projection.hpp` and `database/incremental/join.hpp` retain
 current results and maintain added/removed row sets. Deltas use the same typed
-schemas and packed rows. Projection tracks witnesses; a change that replaces a
+schemas and rows. Projection tracks witnesses; a change that replaces a
 witness without changing membership produces no output delta. Join supports
 updates to either or both operands. `database/incremental/semijoin.hpp`
 maintains semijoins and antijoins: only the changed lhs rows and the lhs rows
 sharing a key with a changed rhs row can change membership. Every incremental evaluator's `update` takes
 one change per input: an `(added, removed)` pair read with `std::get`, such as
-`Delta::change()` or `std::tie(added, removed)`; `incremental::RelationChange`
-states the requirement. Prepared byte operations are shared with full
+`Delta::change()` (a `Delta` holds the layer its builders are read through) or
+`std::tie(added, removed)` of views; `incremental::RelationChange` states the requirement.
+Evaluators take the layer (`const Repository&`) first and return their results as
+`BuilderRelationView`s. Prepared field operations are shared with full
 recomputation. Existing reset, apply, undo, and storage ownership rules remain
 unchanged.
 
@@ -182,31 +202,43 @@ unchanged.
 ```python
 from pyyggdrasil import database as db
 
-columns = db.Columns()
-columns.push_back(db.ColumnIndex(0), db.ColumnType.UINT32)
-columns.push_back(db.ColumnIndex(1), db.ColumnType.UINT32)
-columns.push_back(db.ColumnIndex(2), db.ColumnType.FLOAT64)
+columns = [
+    db.ColumnLayout(db.ColumnIndex(0), db.ColumnType.UINT32),
+    db.ColumnLayout(db.ColumnIndex(1), db.ColumnType.UINT32),
+    db.ColumnLayout(db.ColumnIndex(2), db.ColumnType.FLOAT64),
+]
 relation = db.Relation(columns)
 relation.insert([3, 8, 2.5])
 
-repository = db.RelationRepositoryFactory().create()
+repository = db.RelationRepository()
 interned, created = repository.insert(relation)
 assert created and tuple(interned[0]) == (3, 8, 2.5)
-assert tuple(relation[0]) == (3, 8, 2.5)
+assert tuple(repository.view(relation)[0]) == (3, 8, 2.5)
 assert relation.columns().type(2) == db.ColumnType.FLOAT64
+
+plan = db.ProjectionPlan(interned.columns(), [db.ColumnIndex(0)])
+projected = db.Relation(plan.output_columns())
+db.project(interned, plan, projected, db.Workspace())
 ```
 
-The bindings expose the library types directly. A typed schema is a `Columns`
-builder; `Relation(labels)` (a list of `ColumnIndex`) defaults every column to
-`UINT32`, and `Relation(columns)` also accepts another relation's `columns()`.
-`ColumnType` also exposes `INT32`, `UINT64`, `INT64`, `FLOAT32`, and `BOOL`. Rows
+The bindings expose the library types directly. Columns are lists of `ColumnLayout(label, type)`;
+`Relation(labels)` (a list of `ColumnIndex`) gives every column `UINT32`, and `Relation(columns)` also accepts another
+relation's `columns()`. `ColumnType` also exposes `INT32`, `UINT64`, `INT64`, `FLOAT32`, `BOOL` and `OBJECT`. Rows
 yield Python values of the column's type; no packed bytes leak through the Python
-API. `RelationPool.get_or_allocate(columns)` takes a schema view, such as
-`Columns.columns()`. `RelationRepository.insert(relation, schema_namespace=0)`,
+API. `RelationRepository.get_relation_builder(columns)` takes a list of `ColumnLayout` or a relation's `columns()`
+(keyed by their schema),
+and `RelationRepository.view(relation)` reads a builder's rows
+(a `BorrowedRelation`). `RelationRepository.insert(relation)`,
 `copy(view)`, and `rename(view, labels)` intern relations. Labels are `ColumnIndex`
 values; `.columns()` remains a borrowed `ColumnIndex` sequence with
 `type(position)` for schema inspection. Rows, views, and schemas keep their
 Python owners alive; explicitly clearing an owner still invalidates them.
+
+The operations are bound as in C++, with nothing more: the plans (`ProjectionPlan`, `JoinPlan`, `SetPlan`,
+`SelectEqualPlan`, `SelectValuePlan(input, column, type, value)` with a Python value of the column's type), a
+`Workspace`, and `project`, `join`, `semijoin`, `antijoin`, `union`, `difference`, `select_equal_columns`,
+`select_equal_value` and `assign`, taking `(inputs..., plan, out[, workspace])`. Python is a trust boundary: the
+bindings check that the inputs' and the output's columns are the plan's (`ValueError`), which C++ only asserts.
 
 Run the native regression suite with
 `ctest --test-dir <build> -R '^database_' --output-on-failure`.
@@ -225,20 +257,23 @@ labels may differ. The distance field is a `uint_t` column.
 ```cpp
 using namespace ygg;
 using namespace ygg::database;
-urd::builder<Relation<>> sources({Index<Column>(10)});
-urd::builder<Relation<>> edges({Index<Column>(1), Index<Column>(2)});
-urd::builder<Relation<>> targets({Index<Column>(20)});
-sources.insert(std::tuple{uint_t(4)});
-edges.insert(std::tuple{uint_t(4), uint_t(7)});
-edges.insert(std::tuple{uint_t(7), uint_t(9)});
-targets.insert(std::tuple{uint_t(9)});
+const auto value = [](uint_t v) { return encode_value(v); };
+const auto column = [](std::uint32_t label) { return ColumnLayout { urd::index<Column>(label), type_id<uint_t> }; };
+const std::array source_columns { column(10) }, edge_columns { column(1), column(2) }, target_columns { column(20) };
+urd::builder<Relation<Schema>> sources(source_columns);
+urd::builder<Relation<Schema>> edges(edge_columns);
+urd::builder<Relation<Schema>> targets(target_columns);
+sources.insert(std::array{value(4)});
+edges.insert(std::array{value(4), value(7)});
+edges.insert(std::array{value(7), value(9)});
+targets.insert(std::array{value(9)});
 
-DistancePlan<> plan(sources.columns().span(), edges.columns().span(),
-                    targets.columns().span(), Index<Column>(3));
-DistanceWorkspace<> workspace(plan);
-urd::builder<Relation<>> result(plan.output_columns().span());
-distance(sources, edges, targets, plan, result, workspace);
-assert(result.contains(std::tuple{uint_t(4), uint_t(9), uint_t(2)}));
+Repository repository;
+DistancePlan plan(sources.columns(), edges.columns(), targets.columns(), urd::index<Column>(3));
+DistanceWorkspace workspace(plan);
+urd::builder<Relation<Schema>> result(plan.output_columns());
+distance(repository.view(sources), repository.view(edges), repository.view(targets), plan, result, workspace);
+assert(result.contains(std::array{value(4), value(9), value(2)}));
 ```
 
 The result has `2k + 1` columns: the original source tuple, the original target
@@ -251,16 +286,14 @@ other vertices. Empty source or target sets produce an empty result. Zero-column
 tuples are supported and represent the single empty vertex.
 
 The plan owns its schemas and checks arities/types once. Calls require each
-input's original ordered schema. The return-by-value form is
-`distance(sources, edges, targets, plan)`. The output/workspace form
-retains capacity between calls; the workspace is reusable for the same vertex
-byte width. Schema, workspace-width, and output-alias errors are rejected before
-clearing output. A later evaluation failure can leave partial output.
+input's original ordered schema and an output of the plan's output columns (asserted in debug builds). The
+workspace retains capacity between calls and is reusable for the same vertex size. An output aliasing an input is
+rejected before clearing it. A later evaluation failure can leave partial output.
 
-Tuple IDs are private. An existing `RawArraySet<std::byte>` maps canonical tuple
-bytes to dense IDs and IDs back to tuples; adjacency stores only pairs of IDs.
+Tuple IDs are private. A pool of vertices (`VertexSet`) maps a tuple's canonical
+values to dense IDs and IDs back to tuples; adjacency stores only pairs of IDs.
 The full evaluator rebuilds this graph and runs one breadth-first search per
-source. It needs graph storage proportional to unique tuple bytes plus edges,
+source. It needs graph storage proportional to unique tuples plus edges,
 and one vertex-sized distance/queue buffer. It does not materialize all-pairs
 distances. The expanded output can nevertheless contain every source/target
 pair, so output size can dominate memory. The maximum `uint_t` value is reserved
@@ -271,16 +304,16 @@ internally for infinity; attempting to exceed the supported vertex count throws.
 Include `<yggdrasil/database/semantics/incremental/distance.hpp>` and retain one evaluator:
 
 ```cpp
-incremental::DistanceEvaluator<> evaluator(plan);
+incremental::DistanceEvaluator evaluator(repository, plan);
 evaluator.initialize(sources, edges, targets);
-incremental::Delta<> source_change(sources.columns().span());
-incremental::Delta<> edge_change(edges.columns().span());
-incremental::Delta<> target_change(targets.columns().span());
-edge_change.removed.insert(std::tuple{uint_t(7), uint_t(9)});
+incremental::Delta source_change(repository, sources.columns());
+incremental::Delta edge_change(repository, edges.columns());
+incremental::Delta target_change(repository, targets.columns());
+edge_change.removed.insert(std::array{encode_value(uint_t(7)), encode_value(uint_t(9))});
 evaluator.update(source_change.change(), edge_change.change(), target_change.change());
 assert(evaluator.get_result().empty());
 assert(evaluator.get_delta().removed.contains(
-    std::tuple{uint_t(4), uint_t(9), uint_t(2)}));
+    std::array{encode_value(uint_t(4)), encode_value(uint_t(9)), encode_value(uint_t(2))}));
 ```
 
 The evaluator owns the compact graph, source/target membership, maintained
@@ -383,10 +416,10 @@ aggregates over the same plans. They reuse `distance` and `incremental::Distance
 unchanged and read the distance column:
 
 ```cpp
-urd::builder<Relation<>> result(plan.output_columns().span());
+urd::builder<Relation<Schema>> result(plan.output_columns());
 const uint_t full = min_distance(sources, edges, targets, plan, result, workspace);
 
-incremental::SourceMinDistance<> minimum(plan);
+incremental::SourceMinDistance minimum(repository, plan);
 minimum.initialize(sources, edges, targets);
 minimum.update(source_delta.change(), edge_delta.change(), target_delta.change());
 const uint_t current = minimum.get_result();
@@ -405,9 +438,9 @@ probes have one column, and a vertex contains an object if one of its columns of
 
 ```cpp
 // sources (key…, vertex), edges (key…, from, to), targets (key…, vertex), probes (object)
-MustPassPlan<> plan(sources.columns().span(), edge_query.columns(), targets.columns().span(), probes.columns().span(), keys);
-MustPass<> must_pass(edge_query, plan);
-urd::builder<Relation<>> out(plan.output_columns().span());   // (key…, object)
+MustPassPlan<> plan(sources.columns(), edge_query.columns(), targets.columns(), probes.columns(), keys);
+MustPass<> must_pass(repository, edge_query, plan);
+urd::builder<Relation<Schema>> out(plan.output_columns());   // (key…, object)
 must_pass.must_pass(input, sources, targets, probes, out);
 ```
 
@@ -427,7 +460,7 @@ projection must be passed by every original path too.
 
 Column labels are `ColumnIndex` values. Python evaluators and `distance` take
 `BorrowedRelation` inputs, or interned `RelationView` inputs when every input of
-the call is interned. Wrap a `Relation` explicitly with `db.BorrowedRelation(relation)`;
+the call is interned. Read a `Relation` through a repository with `repository.view(relation)`;
 to mix them, copy a view with `db.assign(db.Relation(), view)`. For vertices
 consisting of two integers:
 
@@ -445,18 +478,21 @@ targets = db.Relation(columns(2, 3))
 targets.insert([10, 21])
 plan = db.DistancePlan(sources.columns(), edges.columns(), targets.columns(), db.ColumnIndex(4))
 
-inputs = (db.BorrowedRelation(sources), db.BorrowedRelation(edges), db.BorrowedRelation(targets))
-result = db.distance(*inputs, plan)
-assert tuple(result[0]) == (10, 20, 10, 21, 1)
+repository = db.RelationRepository()
+inputs = (repository.view(sources), repository.view(edges), repository.view(targets))
+result = db.Relation(plan.output_columns())
+db.distance(*inputs, plan, result, db.DistanceWorkspace(plan))
+assert tuple(repository.view(result)[0]) == (10, 20, 10, 21, 1)
 
-evaluator = db.DistanceEvaluator(plan)
+evaluator = db.DistanceEvaluator(repository, plan)
 evaluator.initialize(*inputs)
 assert tuple(evaluator.get_result()[0]) == (10, 20, 10, 21, 1)
 assert evaluator.get_delta().added.empty()
 ```
 
-`distance` returns an independent owning `Relation`. Incremental `get_result()`
-returns a read-only `BorrowedRelation` (the library's `BorrowedRelationView`), and
+`distance(sources, edges, targets, plan, out, workspace)` replaces the rows of `out`, a `Relation` of the plan's
+output columns. Incremental `get_result()`
+returns a read-only `BorrowedRelation` (the library's `BuilderRelationView`), and
 `get_delta()` returns a `RelationDelta` whose `added` and `removed` relations are
 borrowed the same way. They and their borrowed rows keep the evaluator alive; rows
 must not be retained across an evaluator `initialize` or `update`;
@@ -467,8 +503,7 @@ one `(added, removed)` tuple per input.
 
 `<yggdrasil/database/syntax/query_repository.hpp>` adds an interned relational query graph without
 capturing input rows. A `QueryRepository` only stores and interns query
-records; create repositories with a `QueryRepositoryFactory`, whose
-repositories have distinct identities. Queries are built like other interned
+records; each repository has its own identity (a process-wide number). Queries are built like other interned
 data: check out a `urd::data<Query<Tag>>` from a `QueryBuilder`, fill
 its operands and parameters, and intern it with `insert_query(repository,
 builder, data)` from `query_construction.hpp`. That inserts the concrete record
@@ -520,8 +555,7 @@ when public formatters are disabled.
 
 ```cpp
 using namespace ygg::database;
-QueryRepositoryFactory<> factory;
-auto repository = factory.create();
+QueryRepository repository;
 QueryBuilder<> builder;
 const auto input = [&](size_t slot, const auto& relation)
 {
@@ -535,13 +569,13 @@ join->lhs = input(0, left_relation).index();
 join->rhs = input(1, right_relation).index();
 const auto query = insert_query(repository, builder, *join);
 
-// Any range of relation views: interned RelationView or BorrowedRelationView over builders.
+// Any range of relation views: interned RelationView or BuilderRelationView over builders.
 const std::array bindings { left_view, right_view };
 const auto structural = optimize(query);                                   // structure only
 const auto measured = optimize(query, collect_statistics<DefaultColumnTypes>(bindings));
-QueryEvaluator<> evaluator(measured);
+QueryEvaluator<> evaluator(repository, measured);
 evaluator.evaluate(bindings);
-const auto& result = evaluator.get_result();
+const auto result = evaluator.get_result();  // a BuilderRelationView
 ```
 
 `optimize(roots, statistics = {})` returns a `QueryPlan` with every root's ordered
@@ -714,7 +748,7 @@ left.insert((1, 2))
 right = db.Relation([y, z])
 right.insert((2, 3))
 
-repository = db.QueryRepositoryFactory().create()
+repository = db.QueryRepository()
 
 def insert(data):
     concrete, _ = repository.insert(data)  # e.g. a QueryJoin view
@@ -723,9 +757,10 @@ def insert(data):
 a = insert(db.QueryInputData(0, left.columns()))
 b = insert(db.QueryInputData(1, right.columns()))
 query = insert(db.QueryProjectData(insert(db.QueryJoinData(a, b)), [z, x]))
-inputs = [db.BorrowedRelation(left), db.BorrowedRelation(right)]
+relations = db.RelationRepository()
+inputs = [relations.view(left), relations.view(right)]
 optimized = db.optimize([query], db.collect_statistics(inputs))
-evaluator = db.QueryEvaluator(optimized)
+evaluator = db.QueryEvaluator(relations, optimized)
 evaluator.evaluate(inputs)
 assert {tuple(row) for row in evaluator.get_result()} == {(3, 1)}
 independent = db.assign(db.Relation(), evaluator.get_result())
@@ -741,11 +776,11 @@ operators take as operands. The records are `QueryInputData(slot, columns)`,
 `QuerySelectValueData(arg, column, type, value)`, `QueryDistanceData(sources, edges,
 targets, distance_column)`, and `QueryGenericJoinData(inputs, variable_order,
 output_order=[])`. A select constant must have the selected column's type.
-Query repositories come from a `QueryRepositoryFactory`; repositories of one factory
-have distinct identities, so queries compare across them. `compile(roots)` and
+Query repositories are made directly (`QueryRepository()`); each has its own identity,
+so queries compare across them. `compile(roots)` and
 `optimize(roots, statistics=Statistics())` take a list of roots and return a `QueryPlan`.
 
-`IncrementalQueryEvaluator(plan)` exposes `initialize(inputs)` and
+`IncrementalQueryEvaluator(repository, plan)` exposes `initialize(inputs)` and
 `update(changes)` with one `(added, removed)` pair per input slot. Its result and
 `RelationDelta` relations are read-only `BorrowedRelation` views that keep the
 evaluator alive; `db.assign(db.Relation(), relation)` copies one. Query

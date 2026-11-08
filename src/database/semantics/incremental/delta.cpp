@@ -18,16 +18,17 @@ void require_initialized(bool initialized)
 
 namespace ygg::database::incremental::detail
 {
-void apply_delta(const Delta& delta, urd::builder<Relation>& result)
+void apply_delta(const Delta& delta, urd::builder<Relation<Schema>>& result)
 {
-    const auto columns = result.columns().span();
-    for (size_t i = 0; i < delta.removed.size(); ++i)
+    const auto columns = result.columns();
+    const auto [added, removed] = delta.change();
+    for (size_t i = 0; i < removed.size(); ++i)
     {
-        const auto position = result.find(Row(delta.removed.row(i), columns));
+        const auto position = result.find(removed.row(i));
         URD_ASSUME(position.has_value());  // a removed row is in the result
         result.erase(*position);
     }
-    for (size_t i = 0; i < delta.added.size(); ++i)
-        result.insert(Row(delta.added.row(i), columns));
+    for (size_t i = 0; i < added.size(); ++i)
+        result.insert(added.row(i));
 }
 }

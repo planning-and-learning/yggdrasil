@@ -5,248 +5,236 @@
 
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <array>
 #include <bit>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <tuple>
+#include <vector>
 
 namespace ygg::tests
 {
 namespace
 {
-using ColumnIndex = urd::index<database::Column>;
-using RelationBuilder = urd::builder<database::Relation>;
+using ColumnIndex = urd::index<ygg::Column>;
+using RelationBuilder = urd::builder<ygg::Relation<ygg::Schema>>;
 
-void expect_same_rows(const RelationBuilder& actual, const RelationBuilder& expected)
+void expect_same_rows(const auto& actual, const auto& expected)
 {
     ASSERT_EQ(actual.size(), expected.size());
     for (size_t i = 0; i < expected.size(); ++i)
-        EXPECT_TRUE(actual.contains(expected[i]));
+        EXPECT_TRUE(actual.contains(expected.row(i)));
 }
 
 void apply_changes(RelationBuilder& input, const database::incremental::Delta& delta, bool undo = false)
 {
-    const auto& removed = undo ? delta.added : delta.removed;
-    const auto& added = undo ? delta.removed : delta.added;
-    for (size_t i = 0; i < removed.size(); ++i)
-        input.erase(input.find(removed[i]).value());
-    for (size_t i = 0; i < added.size(); ++i)
-        input.insert(added[i]);
+    const auto [added, removed] = delta.change();
+    for (const auto row : (undo ? added : removed).rows())
+        input.erase(input.find(row).value());
+    for (const auto row : (undo ? removed : added).rows())
+        input.insert(row);
 }
 
 void expect_delta(const database::incremental::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
-    RelationBuilder added(after.columns().span());
-    RelationBuilder removed(before.columns().span());
-    database::difference(after, before, added);
-    database::difference(before, after, removed);
-    expect_same_rows(actual.added, added);
-    expect_same_rows(actual.removed, removed);
+    const auto& layer = *actual.layer;
+    RelationBuilder added(after.columns());
+    RelationBuilder removed(before.columns());
+    const database::SetPlan plan(after.columns(), before.columns());
+    database::difference(layer.view(after), layer.view(before), plan, added);
+    database::difference(layer.view(before), layer.view(after), plan, removed);
+    const auto [actual_added, actual_removed] = actual.change();
+    expect_same_rows(actual_added, layer.view(added));
+    expect_same_rows(actual_removed, layer.view(removed));
 }
 }  // namespace
 
 TEST(YggdrasilTests, DatabaseTypedProjectionConsolidatesWitnessesAndUndoesMixedChanges)
 {
-    urd::builder<database::Columns> columns;
-    columns.push_back<uint_t>(ColumnIndex(1));
-    columns.push_back<double>(ColumnIndex(2));
-    columns.push_back<bool>(ColumnIndex(3));
-    RelationBuilder input(columns.span());
-    input.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
-    input.insert(std::tuple { static_cast<uint_t>(2), 1.5, true });
-    input.insert(std::tuple { static_cast<uint_t>(3), 2.5, false });
+    const std::vector<ygg::ColumnLayout> columns { { ColumnIndex(1), ygg::type_id<uint_t> }, { ColumnIndex(2), ygg::type_id<double> }, { ColumnIndex(3), ygg::type_id<bool> } };
+    RelationBuilder input(columns);
+    input.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    input.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    input.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)), ygg::encode_value(2.5), ygg::encode_value(false) });
 
-    const database::ProjectionPlan plan(columns.span(), { ColumnIndex(3), ColumnIndex(2) });
-    database::incremental::ProjectionEvaluator evaluator(plan);
+    const database::ProjectionPlan plan(columns, std::array { ColumnIndex(3), ColumnIndex(2) });
+    const database::Repository repository;
+    database::incremental::ProjectionEvaluator evaluator(repository, plan);
     database::Workspace workspace;
-    evaluator.initialize(input, workspace);
-    RelationBuilder initial(plan.output_columns().span());
-    database::project(input, plan, initial, workspace);
-    expect_same_rows(evaluator.get_result(), initial);
+    evaluator.initialize(repository.view(input), workspace);
+    RelationBuilder initial(plan.output_columns());
+    database::project(repository.view(input), plan, initial, workspace);
+    expect_same_rows(evaluator.get_result(), repository.view(initial));
     ASSERT_EQ(initial.size(), 2);
-    EXPECT_EQ(initial.columns()[1].offset, ygg::ByteCodec<bool>::size);
-    EXPECT_TRUE(initial.contains(std::tuple { true, 1.5 }));
+    EXPECT_EQ(initial.widths().at(1).at, 1U);  // after a bool of one bit
+    EXPECT_TRUE(initial.contains(std::array { ygg::encode_value(true), ygg::encode_value(1.5) }));
 
-    database::incremental::Delta changes(columns.span());
-    changes.removed.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
-    changes.removed.insert(std::tuple { static_cast<uint_t>(2), 1.5, true });
-    changes.added.insert(std::tuple { static_cast<uint_t>(4), 1.5, true });
-    changes.added.insert(std::tuple { static_cast<uint_t>(5), 3.5, false });
+    database::incremental::Delta changes(repository, columns);
+    changes.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    changes.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    changes.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(4)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    changes.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(5)), ygg::encode_value(3.5), ygg::encode_value(false) });
     evaluator.update(changes.change(), workspace);
     apply_changes(input, changes);
-    RelationBuilder updated(plan.output_columns().span());
-    database::project(input, plan, updated, workspace);
-    expect_same_rows(evaluator.get_result(), updated);
+    RelationBuilder updated(plan.output_columns());
+    database::project(repository.view(input), plan, updated, workspace);
+    expect_same_rows(evaluator.get_result(), repository.view(updated));
     expect_delta(evaluator.get_delta(), initial, updated);
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     ASSERT_EQ(evaluator.get_delta().added.size(), 1);
-    EXPECT_TRUE(evaluator.get_delta().added.contains(std::tuple { false, 3.5 }));
+    EXPECT_TRUE(evaluator.get_delta().added.contains(std::array { ygg::encode_value(false), ygg::encode_value(3.5) }));
 
-    evaluator.update(std::tie(changes.removed, changes.added), workspace);
+    evaluator.update(std::pair { repository.view(changes.removed), repository.view(changes.added) }, workspace);
     apply_changes(input, changes, true);
-    expect_same_rows(evaluator.get_result(), initial);
+    expect_same_rows(evaluator.get_result(), repository.view(initial));
     expect_delta(evaluator.get_delta(), updated, initial);
 }
 
 TEST(YggdrasilTests, DatabaseTypedJoinUpdatesBothInputsAndRepairsCompactedIndexes)
 {
-    urd::builder<database::Columns> left_columns;
-    left_columns.push_back<uint_t>(ColumnIndex(1));
-    left_columns.push_back<double>(ColumnIndex(2));
-    left_columns.push_back<bool>(ColumnIndex(3));
-    urd::builder<database::Columns> right_columns;
-    right_columns.push_back<bool>(ColumnIndex(3));
-    right_columns.push_back<uint_t>(ColumnIndex(1));
-    right_columns.push_back<double>(ColumnIndex(4));
-    RelationBuilder left(left_columns.span());
-    RelationBuilder right(right_columns.span());
-    left.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
-    left.insert(std::tuple { static_cast<uint_t>(2), 2.5, false });
-    left.insert(std::tuple { static_cast<uint_t>(3), 3.5, true });
-    right.insert(std::tuple { true, static_cast<uint_t>(1), 10.0 });
-    right.insert(std::tuple { false, static_cast<uint_t>(2), 20.0 });
-    right.insert(std::tuple { true, static_cast<uint_t>(3), 30.0 });
-    const database::JoinPlan plan(left_columns.span(), right_columns.span());
-    database::incremental::JoinEvaluator evaluator(plan);
+    const std::vector<ygg::ColumnLayout> left_columns { { ColumnIndex(1), ygg::type_id<uint_t> }, { ColumnIndex(2), ygg::type_id<double> }, { ColumnIndex(3), ygg::type_id<bool> } };
+    const std::vector<ygg::ColumnLayout> right_columns { { ColumnIndex(3), ygg::type_id<bool> }, { ColumnIndex(1), ygg::type_id<uint_t> }, { ColumnIndex(4), ygg::type_id<double> } };
+    RelationBuilder left(left_columns);
+    RelationBuilder right(right_columns);
+    left.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    left.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(2.5), ygg::encode_value(false) });
+    left.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)), ygg::encode_value(3.5), ygg::encode_value(true) });
+    right.insert(std::array { ygg::encode_value(true), ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(10.0) });
+    right.insert(std::array { ygg::encode_value(false), ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(20.0) });
+    right.insert(std::array { ygg::encode_value(true), ygg::encode_value(static_cast<uint_t>(3)), ygg::encode_value(30.0) });
+    const database::JoinPlan plan(left_columns, right_columns);
+    const database::Repository repository;
+    database::incremental::JoinEvaluator evaluator(repository, plan);
     database::Workspace workspace;
-    evaluator.initialize(left, right, workspace);
-    RelationBuilder initial(plan.output_columns().span());
-    database::join(left, right, plan, initial, workspace);
-    expect_same_rows(evaluator.get_result(), initial);
+    evaluator.initialize(repository.view(left), repository.view(right), workspace);
+    RelationBuilder initial(plan.output_columns());
+    database::join(repository.view(left), repository.view(right), plan, initial, workspace);
+    expect_same_rows(evaluator.get_result(), repository.view(initial));
     ASSERT_EQ(initial.size(), 3);
 
-    database::incremental::Delta left_changes(left_columns.span());
-    database::incremental::Delta right_changes(right_columns.span());
-    left_changes.removed.insert(std::tuple { static_cast<uint_t>(1), 1.5, true });
-    left_changes.added.insert(std::tuple { static_cast<uint_t>(1), 1.75, true });
-    left_changes.added.insert(std::tuple { static_cast<uint_t>(4), 4.5, false });
-    right_changes.removed.insert(std::tuple { false, static_cast<uint_t>(2), 20.0 });
-    right_changes.added.insert(std::tuple { false, static_cast<uint_t>(2), 22.0 });
-    right_changes.added.insert(std::tuple { false, static_cast<uint_t>(4), 40.0 });
+    database::incremental::Delta left_changes(repository, left_columns);
+    database::incremental::Delta right_changes(repository, right_columns);
+    left_changes.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(1.5), ygg::encode_value(true) });
+    left_changes.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(1.75), ygg::encode_value(true) });
+    left_changes.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(4)), ygg::encode_value(4.5), ygg::encode_value(false) });
+    right_changes.removed.insert(std::array { ygg::encode_value(false), ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(20.0) });
+    right_changes.added.insert(std::array { ygg::encode_value(false), ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(22.0) });
+    right_changes.added.insert(std::array { ygg::encode_value(false), ygg::encode_value(static_cast<uint_t>(4)), ygg::encode_value(40.0) });
     evaluator.update(left_changes.change(), right_changes.change(), workspace);
     apply_changes(left, left_changes);
     apply_changes(right, right_changes);
-    RelationBuilder updated(plan.output_columns().span());
-    database::join(left, right, plan, updated, workspace);
-    expect_same_rows(evaluator.get_result(), updated);
+    RelationBuilder updated(plan.output_columns());
+    database::join(repository.view(left), repository.view(right), plan, updated, workspace);
+    expect_same_rows(evaluator.get_result(), repository.view(updated));
     expect_delta(evaluator.get_delta(), initial, updated);
     ASSERT_EQ(updated.size(), 4);
-    EXPECT_TRUE(updated.contains(std::tuple { uint_t(1), 1.75, true, 10.0 }));
-    EXPECT_TRUE(updated.contains(std::tuple { uint_t(2), 2.5, false, 22.0 }));
-    EXPECT_TRUE(updated.contains(std::tuple { uint_t(4), 4.5, false, 40.0 }));
+    EXPECT_TRUE(updated.contains(std::array { ygg::encode_value(uint_t(1)), ygg::encode_value(1.75), ygg::encode_value(true), ygg::encode_value(10.0) }));
+    EXPECT_TRUE(updated.contains(std::array { ygg::encode_value(uint_t(2)), ygg::encode_value(2.5), ygg::encode_value(false), ygg::encode_value(22.0) }));
+    EXPECT_TRUE(updated.contains(std::array { ygg::encode_value(uint_t(4)), ygg::encode_value(4.5), ygg::encode_value(false), ygg::encode_value(40.0) }));
     EXPECT_EQ(evaluator.get_delta().added.size(), 3);
     EXPECT_EQ(evaluator.get_delta().removed.size(), 2);
 
-    evaluator.update(std::tie(left_changes.removed, left_changes.added), std::tie(right_changes.removed, right_changes.added), workspace);
+    evaluator.update(std::pair { repository.view(left_changes.removed), repository.view(left_changes.added) },
+                     std::pair { repository.view(right_changes.removed), repository.view(right_changes.added) },
+                     workspace);
     apply_changes(left, left_changes, true);
     apply_changes(right, right_changes, true);
-    expect_same_rows(evaluator.get_result(), initial);
+    expect_same_rows(evaluator.get_result(), repository.view(initial));
     expect_delta(evaluator.get_delta(), updated, initial);
 }
 
 TEST(YggdrasilTests, DatabaseTypedConstantSelectionUsesCanonicalFloatEquality)
 {
-    urd::builder<database::Columns> columns;
-    columns.push_back<double>(ColumnIndex(1));
-    columns.push_back<uint_t>(ColumnIndex(2));
-    RelationBuilder input(columns.span());
+    const std::vector<ygg::ColumnLayout> columns { { ColumnIndex(1), ygg::type_id<double> }, { ColumnIndex(2), ygg::type_id<uint_t> } };
+    RelationBuilder input(columns);
     const auto first_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000001 });
     const auto second_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000002 });
-    input.insert(std::tuple { 0.0, static_cast<uint_t>(1) });
-    input.insert(std::tuple { -0.0, static_cast<uint_t>(1) });
-    input.insert(std::tuple { first_nan, static_cast<uint_t>(2) });
-    input.insert(std::tuple { second_nan, static_cast<uint_t>(2) });
+    input.insert(std::array { ygg::encode_value(0.0), ygg::encode_value(static_cast<uint_t>(1)) });
+    input.insert(std::array { ygg::encode_value(-0.0), ygg::encode_value(static_cast<uint_t>(1)) });
+    input.insert(std::array { ygg::encode_value(first_nan), ygg::encode_value(static_cast<uint_t>(2)) });
+    input.insert(std::array { ygg::encode_value(second_nan), ygg::encode_value(static_cast<uint_t>(2)) });
     ASSERT_EQ(input.size(), 2);
-    RelationBuilder result(columns.span());
-    database::select_equal_value(input, ColumnIndex(1), -0.0, result);
+    RelationBuilder result(columns);
+    const database::Repository repository;
+    database::select_equal_value(repository.view(input), database::SelectValuePlan(columns, ColumnIndex(1), ygg::type_id<double>, ygg::encode_value(-0.0)), result);
     ASSERT_EQ(result.size(), 1);
-    EXPECT_TRUE(result.contains(std::tuple { 0.0, uint_t(1) }));
-    database::select_equal_value(input, ColumnIndex(1), second_nan, result);
+    EXPECT_TRUE(result.contains(std::array { ygg::encode_value(0.0), ygg::encode_value(uint_t(1)) }));
+    database::select_equal_value(repository.view(input), database::SelectValuePlan(columns, ColumnIndex(1), ygg::type_id<double>, ygg::encode_value(second_nan)), result);
     ASSERT_EQ(result.size(), 1);
-    EXPECT_TRUE(result.contains(std::tuple { first_nan, uint_t(2) }));
+    EXPECT_TRUE(result.contains(std::array { ygg::encode_value(first_nan), ygg::encode_value(uint_t(2)) }));
 }
 
 TEST(YggdrasilTests, DatabaseTypedSchemaErrorsPreserveOperatorAndIncrementalResults)
 {
-    urd::builder<database::Columns> columns;
-    columns.push_back<uint_t>(ColumnIndex(1));
-    columns.push_back<double>(ColumnIndex(2));
-    urd::builder<database::Columns> incompatible;
-    incompatible.push_back<double>(ColumnIndex(1));
-    incompatible.push_back<double>(ColumnIndex(2));
-    RelationBuilder input(columns.span());
-    RelationBuilder wrong(incompatible.span());
-    RelationBuilder output(columns.span());
-    input.insert(std::tuple { static_cast<uint_t>(1), 1.5 });
-    wrong.insert(std::tuple { 1.0, 1.5 });
-    output.insert(std::tuple { static_cast<uint_t>(99), 9.5 });
+    const std::vector<ygg::ColumnLayout> columns { { ColumnIndex(1), ygg::type_id<uint_t> }, { ColumnIndex(2), ygg::type_id<double> } };
+    const std::vector<ygg::ColumnLayout> incompatible { { ColumnIndex(1), ygg::type_id<double> }, { ColumnIndex(2), ygg::type_id<double> } };
+    RelationBuilder input(columns);
+    RelationBuilder wrong(incompatible);
+    RelationBuilder output(columns);
+    input.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(1.5) });
+    wrong.insert(std::array { ygg::encode_value(1.0), ygg::encode_value(1.5) });
+    output.insert(std::array { ygg::encode_value(static_cast<uint_t>(99)), ygg::encode_value(9.5) });
     database::Workspace workspace;
-    EXPECT_THROW(database::join(input, wrong, output, workspace), std::invalid_argument);
-    EXPECT_THROW(database::union_(input, wrong, output), std::invalid_argument);
-    EXPECT_THROW(database::difference(input, wrong, output), std::invalid_argument);
-    EXPECT_THROW(database::select_equal_columns(input, ColumnIndex(1), ColumnIndex(2), output), std::invalid_argument);
-    EXPECT_THROW(database::select_equal_value(input, ColumnIndex(1), 1.0, output), std::invalid_argument);
+    const database::Repository repository;
+    const auto input_view = repository.view(input);
+    const auto wrong_view = repository.view(wrong);
+    // Plans of incompatible column types are refused when built; the output is untouched.
+    EXPECT_THROW((database::JoinPlan(input_view.columns(), wrong_view.columns())), std::invalid_argument);
+    EXPECT_THROW((database::SetPlan(input_view.columns(), wrong_view.columns())), std::invalid_argument);
+    EXPECT_THROW((database::SelectEqualPlan(input_view.columns(), ColumnIndex(1), ColumnIndex(2))), std::invalid_argument);
+    EXPECT_THROW((database::SelectValuePlan(input_view.columns(), ColumnIndex(1), ygg::type_id<double>, ygg::encode_value(1.0))), std::invalid_argument);
     ASSERT_EQ(output.size(), 1);
-    EXPECT_TRUE(output.contains(std::tuple { uint_t(99), 9.5 }));
+    EXPECT_TRUE(output.contains(std::array { ygg::encode_value(uint_t(99)), ygg::encode_value(9.5) }));
 
-    const database::ProjectionPlan plan(columns.span(), { ColumnIndex(1) });
-    database::incremental::ProjectionEvaluator evaluator(plan);
-    evaluator.initialize(input, workspace);
-    RelationBuilder empty_wrong(incompatible.span());
-    EXPECT_THROW(evaluator.update(std::tie(wrong, empty_wrong), workspace), std::invalid_argument);
-    EXPECT_TRUE(evaluator.get_result().contains(std::tuple { uint_t(1) }));
+    const database::ProjectionPlan plan(columns, std::array { ColumnIndex(1) });
+    database::incremental::ProjectionEvaluator evaluator(repository, plan);
+    evaluator.initialize(input_view, workspace);
+    EXPECT_TRUE(evaluator.get_result().contains(std::array { ygg::encode_value(uint_t(1)) }));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    RelationBuilder empty(columns.span());
-    EXPECT_NO_THROW(evaluator.update(std::tie(empty, empty), workspace));
+    RelationBuilder empty(columns);
+    EXPECT_NO_THROW(evaluator.update(std::pair { repository.view(empty), repository.view(empty) }, workspace));
 }
 
-TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesSharedBytesByTypeAndLayout)
+TEST(YggdrasilTests, DatabaseTypedJoinCacheSeparatesRowsByTypeAndLayout)
 {
-    database::RelationRepositoryFactory factory;
-    auto repository = factory.create();
+    database::Repository repository;
     database::JoinIndexCache cache;
-    urd::builder<database::Columns> unsigned_columns;
-    unsigned_columns.push_back<std::uint64_t>(ColumnIndex(1));
-    urd::builder<database::Columns> float_columns;
-    float_columns.push_back<double>(ColumnIndex(1));
-    RelationBuilder unsigned_input(unsigned_columns.span());
-    RelationBuilder float_input(float_columns.span());
-    unsigned_input.insert(std::tuple { static_cast<std::uint64_t>(0) });
-    float_input.insert(std::tuple { 0.0 });
-    const auto unsigned_view = database::insert(repository, unsigned_input).first;
-    const auto float_view = database::insert(repository, float_input).first;
-    ASSERT_EQ(unsigned_view.get_storage_index(), float_view.get_storage_index());
-    const database::ProjectionPlan unsigned_key(unsigned_columns.span(), { ColumnIndex(1) });
-    const database::ProjectionPlan float_key(float_columns.span(), { ColumnIndex(1) });
+    const std::vector<ygg::ColumnLayout> unsigned_columns { { ColumnIndex(1), ygg::type_id<std::uint64_t> } };
+    const std::vector<ygg::ColumnLayout> float_columns { { ColumnIndex(1), ygg::type_id<double> } };
+    RelationBuilder unsigned_input(unsigned_columns);
+    RelationBuilder float_input(float_columns);
+    unsigned_input.insert(std::array { ygg::encode_value(static_cast<std::uint64_t>(0)) });
+    float_input.insert(std::array { ygg::encode_value(0.0) });
+    const auto unsigned_view = repository.insert(unsigned_input).first;
+    const auto float_view = repository.insert(float_input).first;
+    // Rows of other column types lie in other pools (schemas), even of equal widths: separate relations.
+    ASSERT_NE(unsigned_view.relation_identity(), float_view.relation_identity());
+    const database::ProjectionPlan unsigned_key(unsigned_columns, std::array { ColumnIndex(1) });
+    const database::ProjectionPlan float_key(float_columns, std::array { ColumnIndex(1) });
     cache.get_or_create(unsigned_view, unsigned_key.positions());
     cache.get_or_create(float_view, float_key.positions());
     EXPECT_EQ(cache.size(), 2);
-    const std::array renamed_label { ColumnIndex(9) };
-    const auto renamed = repository.rename(unsigned_view, renamed_label);
+    const std::vector<ygg::ColumnLayout> renamed_columns { { ColumnIndex(9), ygg::type_id<std::uint64_t> } };
+    const auto renamed = repository.rename(unsigned_view, renamed_columns);
     cache.get_or_create(renamed, unsigned_key.positions());
-    EXPECT_EQ(cache.size(), 2);
+    EXPECT_EQ(cache.size(), 3);  // a renamed relation is another relation
 
-    urd::builder<database::Columns> before_columns;
-    before_columns.push_back<bool>(ColumnIndex(2));
-    before_columns.push_back<uint_t>(ColumnIndex(1));
-    urd::builder<database::Columns> after_columns;
-    after_columns.push_back<uint_t>(ColumnIndex(1));
-    after_columns.push_back<bool>(ColumnIndex(2));
-    RelationBuilder before(before_columns.span());
-    RelationBuilder after(after_columns.span());
-    before.insert(std::tuple { false, static_cast<uint_t>(0) });
-    after.insert(std::tuple { static_cast<uint_t>(0), false });
-    const auto before_view = database::insert(repository, before).first;
-    const auto after_view = database::insert(repository, after).first;
-    ASSERT_EQ(before_view.get_storage_index(), after_view.get_storage_index());
-    const database::ProjectionPlan before_key(before_columns.span(), { ColumnIndex(1) });
-    const database::ProjectionPlan after_key(after_columns.span(), { ColumnIndex(1) });
+    const std::vector<ygg::ColumnLayout> before_columns { { ColumnIndex(2), ygg::type_id<bool> }, { ColumnIndex(1), ygg::type_id<uint_t> } };
+    const std::vector<ygg::ColumnLayout> after_columns { { ColumnIndex(1), ygg::type_id<uint_t> }, { ColumnIndex(2), ygg::type_id<bool> } };
+    RelationBuilder before(before_columns);
+    RelationBuilder after(after_columns);
+    before.insert(std::array { ygg::encode_value(false), ygg::encode_value(static_cast<uint_t>(0)) });
+    after.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(false) });
+    const auto before_view = repository.insert(before).first;
+    const auto after_view = repository.insert(after).first;
+    ASSERT_NE(before_view.relation_identity(), after_view.relation_identity());
+    const database::ProjectionPlan before_key(before_columns, std::array { ColumnIndex(1) });
+    const database::ProjectionPlan after_key(after_columns, std::array { ColumnIndex(1) });
     cache.get_or_create(before_view, before_key.positions());
     cache.get_or_create(after_view, after_key.positions());
-    EXPECT_EQ(cache.size(), 4);
+    EXPECT_EQ(cache.size(), 5);
 }
 }  // namespace ygg::tests

@@ -39,11 +39,7 @@ void prepare(urd::data<Query<Tag>>& data, const QueryRepository& repository)
 template<typename Tag>
     requires boost::mp11::mp_contains<QuerySetTags, Tag>::value
 void prepare(urd::data<Query<Tag>>& data, const QueryRepository& repository)
-{
-    const auto schema = child_columns(data.lhs, repository);
-    require_plan_columns(child_columns(data.rhs, repository), schema);
-    data.columns.set(schema.begin(), schema.end());
-}
+{ data.plan = SetPlan(child_columns(data.lhs, repository), child_columns(data.rhs, repository)); }
 
 void prepare(urd::data<Query<QueryProjectTag>>& data, const QueryRepository& repository);
 

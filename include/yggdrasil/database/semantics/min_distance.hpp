@@ -14,6 +14,7 @@
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 #include "yggdrasil/database/semantics/search/search_tree.hpp"
 
+#include <cassert>
 #include <cstddef>
 #include <span>
 #include <stdexcept>
@@ -52,14 +53,15 @@ class MinDistance
 public:
     /// Edges given by a query over inputs. `edges` has the plan's edge columns; `static_slots` marks its inputs that
     /// never change, which are then read on the first call only.
-    MinDistance(QueryView<> edges, const DistancePlan& plan, const std::vector<bool>& static_slots = {}) :
-        MinDistance(bound::QueryEvaluator(detail::checked_edges(edges, plan), static_slots), plan)
+    /// Its input snapshots are builders of `layer`, which must outlive it.
+    MinDistance(const Repository& layer, QueryView<> edges, const DistancePlan& plan, const std::vector<bool>& static_slots = {}) :
+        MinDistance(bound::QueryEvaluator(layer, detail::checked_edges(edges, plan), static_slots), plan)
     {
     }
 
     /// Edges given as a relation with the plan's edge columns.
-    explicit MinDistance(const DistancePlan& plan, bool static_edges = false) :
-        MinDistance(detail::relation_edges<bound::QueryEvaluator>(plan, static_edges), plan)
+    MinDistance(const Repository& layer, const DistancePlan& plan, bool static_edges = false) :
+        MinDistance(detail::relation_edges<bound::QueryEvaluator>(layer, plan, static_edges), plan)
     {
     }
 
@@ -69,8 +71,8 @@ public:
     template<SlotRelations Input, RelationViewConcept S, RelationViewConcept T>
     uint_t min_distance(const Input& input, const S& sources, const T& targets, const H& heuristic = {})
     {
-        detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
-        detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
+        assert(std::ranges::equal(sources.columns(), m_plan.source_columns()));
+        assert(std::ranges::equal(targets.columns(), m_plan.target_columns()));
         m_edges.evaluator().bind(input);
         m_tree.clear();
         m_targets.assign(targets);
@@ -89,7 +91,7 @@ private:
 
     MinDistance(bound::QueryEvaluator edges, const DistancePlan& plan) :
         m_plan(plan),
-        m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
+        m_edges(std::move(edges), plan.edge_columns(), 0, plan.arity()),
         m_tree(),
         m_targets(),
         m_search()

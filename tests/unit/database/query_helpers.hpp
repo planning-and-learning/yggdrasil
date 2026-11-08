@@ -9,26 +9,29 @@
 #include <initializer_list>
 #include <span>
 #include <stdexcept>
-#include <yggdrasil/database/semantics/relation_repository.hpp>
+#include <vector>
+#include <yggdrasil/database/semantics/distance.hpp>
+#include <yggdrasil/database/semantics/operations.hpp>
+#include <yggdrasil/database/semantics/relation_view.hpp>
 #include <yggdrasil/database/syntax/query.hpp>
 
 /// Test-only query construction on top of checkout + insert_query.
 namespace ygg::tests::qb
 {
-/// A schema whose columns all have type T.
-template<ygg::ByteCodable T>
-urd::builder<database::Columns> columns_of(std::initializer_list<urd::index<database::Column>> labels)
+/// A schema whose columns all have type T (by default ygg::uint_t).
+template<ygg::ColumnValueType T = ygg::uint_t>
+std::vector<ygg::ColumnLayout> columns_of(std::span<const urd::index<ygg::Column>> labels)
 {
-    urd::builder<database::Columns> columns;
-    columns.template assign<T>(labels);
+    std::vector<ygg::ColumnLayout> columns;
+    for (const auto label : labels)
+        columns.push_back({ label, ygg::type_id<T> });
     return columns;
 }
+template<ygg::ColumnValueType T = ygg::uint_t>
+std::vector<ygg::ColumnLayout> columns_of(std::initializer_list<urd::index<ygg::Column>> labels)
+{ return columns_of<T>(std::span<const urd::index<ygg::Column>>(labels)); }
 
-inline database::QueryRepository repository()
-{
-    static database::QueryRepositoryFactory factory;
-    return factory.create();
-}
+inline database::QueryRepository repository() { return database::QueryRepository(); }
 
 inline database::QueryBuilder& builder()
 {
@@ -43,34 +46,28 @@ inline urd::index<database::Query<>> require(const database::QueryRepository& re
     return query.index();
 }
 
-inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const database::ColumnLayout> columns)
+inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const ygg::ColumnLayout> columns)
 {
     auto data = database::checkout<database::Query<database::QueryInputTag>>(builder());
     data->input_slot = slot;
     data->columns.set(columns.begin(), columns.end());
     return database::insert_query(repository, builder(), *data);
 }
-inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const urd::index<database::Column>> columns)
-{
-    const urd::builder<database::Columns> schema(columns);
-    return input(repository, slot, schema.span());
-}
-inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::initializer_list<urd::index<database::Column>> columns)
-{ return input(repository, slot, std::span<const urd::index<database::Column>>(columns)); }
+inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::span<const urd::index<ygg::Column>> columns)
+{ return input(repository, slot, columns_of(columns)); }
+inline database::QueryView<> input(database::QueryRepository& repository, size_t slot, std::initializer_list<urd::index<ygg::Column>> columns)
+{ return input(repository, slot, std::span<const urd::index<ygg::Column>>(columns)); }
 
-inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const database::ColumnLayout> columns)
+inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const ygg::ColumnLayout> columns)
 {
     auto data = database::checkout<database::Query<database::QueryEmptyTag>>(builder());
     data->columns.set(columns.begin(), columns.end());
     return database::insert_query(repository, builder(), *data);
 }
-inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const urd::index<database::Column>> columns)
-{
-    const urd::builder<database::Columns> schema(columns);
-    return empty(repository, schema.span());
-}
-inline database::QueryView<> empty(database::QueryRepository& repository, std::initializer_list<urd::index<database::Column>> columns)
-{ return empty(repository, std::span<const urd::index<database::Column>>(columns)); }
+inline database::QueryView<> empty(database::QueryRepository& repository, std::span<const urd::index<ygg::Column>> columns)
+{ return empty(repository, columns_of(columns)); }
+inline database::QueryView<> empty(database::QueryRepository& repository, std::initializer_list<urd::index<ygg::Column>> columns)
+{ return empty(repository, std::span<const urd::index<ygg::Column>>(columns)); }
 
 template<typename Tag>
 database::QueryView<> binary(database::QueryRepository& repository, database::QueryView<> lhs, database::QueryView<> rhs)
@@ -93,24 +90,24 @@ inline database::QueryView<> antijoin(database::QueryRepository& repository, dat
 { return binary<database::QueryAntijoinTag>(repository, lhs, rhs); }
 
 template<typename Tag>
-database::QueryView<> relabel(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<database::Column>> labels)
+database::QueryView<> relabel(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<ygg::Column>> labels)
 {
     auto data = database::checkout<database::Query<Tag>>(builder());
     data->arg = require(repository, arg);
     data->labels.set(labels.begin(), labels.end());
     return database::insert_query(repository, builder(), *data);
 }
-inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<database::Column>> labels)
+inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<ygg::Column>> labels)
 { return relabel<database::QueryProjectTag>(repository, arg, labels); }
-inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<urd::index<database::Column>> labels)
-{ return project(repository, arg, std::span<const urd::index<database::Column>>(labels)); }
-inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<database::Column>> labels)
+inline database::QueryView<> project(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<urd::index<ygg::Column>> labels)
+{ return project(repository, arg, std::span<const urd::index<ygg::Column>>(labels)); }
+inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::span<const urd::index<ygg::Column>> labels)
 { return relabel<database::QueryRenameTag>(repository, arg, labels); }
-inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<urd::index<database::Column>> labels)
-{ return rename(repository, arg, std::span<const urd::index<database::Column>>(labels)); }
+inline database::QueryView<> rename(database::QueryRepository& repository, database::QueryView<> arg, std::initializer_list<urd::index<ygg::Column>> labels)
+{ return rename(repository, arg, std::span<const urd::index<ygg::Column>>(labels)); }
 
 inline database::QueryView<>
-select_equal(database::QueryRepository& repository, database::QueryView<> arg, urd::index<database::Column> lhs, urd::index<database::Column> rhs)
+select_equal(database::QueryRepository& repository, database::QueryView<> arg, urd::index<ygg::Column> lhs, urd::index<ygg::Column> rhs)
 {
     auto data = database::checkout<database::Query<database::QuerySelectEqualTag>>(builder());
     data->arg = require(repository, arg);
@@ -119,30 +116,32 @@ select_equal(database::QueryRepository& repository, database::QueryView<> arg, u
     return database::insert_query(repository, builder(), *data);
 }
 inline database::QueryView<>
-select_encoded(database::QueryRepository& repository, database::QueryView<> arg, urd::index<database::Column> column, std::span<const std::byte> value)
+select_encoded(database::QueryRepository& repository, database::QueryView<> arg, urd::index<ygg::Column> column, ygg::Value value, ygg::TypeId type)
 {
     auto data = database::checkout<database::Query<database::QuerySelectValueTag>>(builder());
     data->arg = require(repository, arg);
     data->column = column;
-    data->constant.set(value.begin(), value.end());
-    data->constant_type = arg.columns()[database::column_index(arg.columns(), column)].type;
+    data->constant = value;
+    data->constant_type = type;
     return database::insert_query(repository, builder(), *data);
 }
-template<ygg::ByteCodable T>
-database::QueryView<> select_value(database::QueryRepository& repository, database::QueryView<> arg, urd::index<database::Column> column, T value)
+template<ygg::ColumnValueType T>
+database::QueryView<> select_value(database::QueryRepository& repository, database::QueryView<> arg, urd::index<ygg::Column> column, T value)
 {
-    if (arg.columns()[database::column_index(arg.columns(), column)].type != ygg::type_id<T>)
+    const auto columns = arg.columns();
+    const auto found = std::ranges::find(columns, column, &ygg::ColumnLayout::label);
+    if (found == columns.end())
+        throw std::out_of_range("Columns: unknown column label.");
+    if (found->type != ygg::type_id<T>)
         throw std::invalid_argument("Query: constant type does not match selected column.");
-    std::array<std::byte, ygg::ByteCodec<T>::size> bytes {};
-    ygg::ByteCodec<T>::encode(value, bytes);
-    return select_encoded(repository, arg, column, bytes);
+    return select_encoded(repository, arg, column, ygg::encode_value(value), ygg::type_id<T>);
 }
 
 inline database::QueryView<> distance(database::QueryRepository& repository,
                                       database::QueryView<> sources,
                                       database::QueryView<> edges,
                                       database::QueryView<> targets,
-                                      urd::index<database::Column> distance_column)
+                                      urd::index<ygg::Column> distance_column)
 {
     auto data = database::checkout<database::Query<database::QueryDistanceTag>>(builder());
     data->sources = require(repository, sources);
@@ -154,8 +153,8 @@ inline database::QueryView<> distance(database::QueryRepository& repository,
 
 inline database::QueryView<> generic_join(database::QueryRepository& repository,
                                           std::span<const database::QueryView<>> inputs,
-                                          std::span<const urd::index<database::Column>> variable_order,
-                                          std::span<const urd::index<database::Column>> output_order = {})
+                                          std::span<const urd::index<ygg::Column>> variable_order,
+                                          std::span<const urd::index<ygg::Column>> output_order = {})
 {
     auto data = database::checkout<database::Query<database::QueryGenericJoinTag>>(builder());
     for (const auto input : inputs)
@@ -166,40 +165,100 @@ inline database::QueryView<> generic_join(database::QueryRepository& repository,
 }
 inline database::QueryView<> generic_join(database::QueryRepository& repository,
                                           std::initializer_list<database::QueryView<>> inputs,
-                                          std::initializer_list<urd::index<database::Column>> variable_order,
-                                          std::initializer_list<urd::index<database::Column>> output_order = {})
+                                          std::initializer_list<urd::index<ygg::Column>> variable_order,
+                                          std::initializer_list<urd::index<ygg::Column>> output_order = {})
 {
     return generic_join(repository,
                         std::span<const database::QueryView<>>(inputs),
-                        std::span<const urd::index<database::Column>>(variable_order),
-                        std::span<const urd::index<database::Column>>(output_order));
+                        std::span<const urd::index<ygg::Column>>(variable_order),
+                        std::span<const urd::index<ygg::Column>>(output_order));
 }
 }  // namespace ygg::tests::qb
+
+/// Test-only evaluation of one operation: its plan built from the inputs' columns, into a new output of the plan's
+/// columns (the library takes the plan, the output and the workspace explicitly).
+namespace ygg::tests::ops
+{
+/// uint_t columns labeled `labels`.
+inline std::vector<ygg::ColumnLayout> cols(std::initializer_list<urd::index<ygg::Column>> labels) { return qb::columns_of(labels); }
+
+template<typename V>
+urd::builder<ygg::Relation<ygg::Schema>> projected(const V& input, std::span<const urd::index<ygg::Column>> labels)
+{
+    const database::ProjectionPlan plan(input.columns(), labels);
+    urd::builder<ygg::Relation<ygg::Schema>> out(plan.output_columns());
+    database::Workspace workspace;
+    database::project(input, plan, out, workspace);
+    return out;
+}
+template<typename V>
+urd::builder<ygg::Relation<ygg::Schema>> projected(const V& input, std::initializer_list<urd::index<ygg::Column>> labels)
+{ return projected(input, std::span<const urd::index<ygg::Column>>(labels)); }
+template<typename L, typename R>
+urd::builder<ygg::Relation<ygg::Schema>> joined(const L& lhs, const R& rhs)
+{
+    const database::JoinPlan plan(lhs.columns(), rhs.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> out(plan.output_columns());
+    database::Workspace workspace;
+    database::join(lhs, rhs, plan, out, workspace);
+    return out;
+}
+template<typename L, typename R>
+urd::builder<ygg::Relation<ygg::Schema>> unioned(const L& lhs, const R& rhs)
+{
+    const database::SetPlan plan(lhs.columns(), rhs.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> out(plan.output_columns());
+    database::union_(lhs, rhs, plan, out);
+    return out;
+}
+template<typename L, typename R>
+urd::builder<ygg::Relation<ygg::Schema>> subtracted(const L& lhs, const R& rhs)
+{
+    const database::SetPlan plan(lhs.columns(), rhs.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> out(plan.output_columns());
+    database::difference(lhs, rhs, plan, out);
+    return out;
+}
+template<typename S, typename E, typename T>
+urd::builder<ygg::Relation<ygg::Schema>> distances(const S& sources, const E& edges, const T& targets, const database::DistancePlan& plan)
+{
+    urd::builder<ygg::Relation<ygg::Schema>> out(plan.output_columns());
+    database::DistanceWorkspace workspace(plan);
+    database::distance(sources, edges, targets, plan, out, workspace);
+    return out;
+}
+}  // namespace ygg::tests::ops
 
 /// Shared by the min-distance tests: relations borrowed as views, rows decoded to uint_t values, reference distances.
 namespace ygg::tests::distances
 {
-inline database::BorrowedRelationView borrow(const urd::builder<database::Relation>& relation)
-{
-    static const auto context = database::RelationRepositoryFactory {}.create();
-    return { &relation, &context };
-}
+inline database::BuilderRelationView borrow(const database::Repository& repository, const urd::builder<ygg::Relation<ygg::Schema>>& relation)
+{ return repository.view(relation); }
 
-inline urd::Store<urd::sequence<database::BorrowedRelationView>> borrow_all(const urd::Store<urd::sequence<urd::builder<database::Relation>>>& relations)
+inline urd::Store<urd::sequence<database::BuilderRelationView>> borrow_all(const database::Repository& repository,
+                                                                         const urd::Store<urd::sequence<urd::builder<ygg::Relation<ygg::Schema>>>>& relations)
 {
-    urd::Store<urd::sequence<database::BorrowedRelationView>> views;
+    urd::Store<urd::sequence<database::BuilderRelationView>> views;
     views.reserve(relations.size());
     for (const auto& relation : relations)
-        views.push_back(borrow(relation));
+        views.push_back(borrow(repository, relation));
     return views;
 }
 
-inline urd::Store<urd::sequence<uint_t>> decode(std::span<const std::byte> bytes, std::span<const database::ColumnLayout> columns)
+inline urd::Store<urd::sequence<uint_t>> decode(std::span<const ygg::Value> row)
 {
     urd::Store<urd::sequence<uint_t>> values;
-    values.reserve(columns.size());
-    for (size_t c = 0; c < columns.size(); ++c)
-        values.push_back(database::Row(bytes, columns).get<uint_t>(c));
+    values.reserve(row.size());
+    for (const auto value : row)
+        values.push_back(ygg::decode_value<uint_t>(value));
+    return values;
+}
+inline urd::Store<urd::sequence<uint_t>> decode(const database::RowPool::row_type& row)
+{
+    urd::Store<urd::sequence<uint_t>> values;
+    values.reserve(row.size());
+    for (size_t c = 0; c < row.size(); ++c)
+        values.push_back(ygg::decode_value<uint_t>(row.get(c)));
     return values;
 }
 
@@ -207,23 +266,23 @@ inline urd::Store<urd::sequence<uint_t>> decode(std::span<const std::byte> bytes
 struct HalfDistance
 {
     std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances;
-    std::span<const database::ColumnLayout> columns;
+    std::span<const ygg::ColumnLayout> columns;
 
-    [[nodiscard]] uint_t estimate(std::span<const std::byte> vertex) const
+    [[nodiscard]] uint_t estimate(std::span<const ygg::Value> vertex) const
     {
-        const auto found = distances.find(decode(vertex, columns));
+        const auto found = distances.find(decode(vertex));
         return found == distances.end() ? std::numeric_limits<uint_t>::max() : found->second / 2;
     }
 };
 
 /// Backward breadth-first distances to the targets over materialized edges.
-inline std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances_to(const urd::builder<database::Relation>& edges, const urd::builder<database::Relation>& targets, size_t k)
+inline std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances_to(database::BuilderRelationView edges, database::BuilderRelationView targets, size_t k)
 {
     std::map<urd::Store<urd::sequence<uint_t>>, uint_t> result;
     urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> frontier;
     for (size_t i = 0; i < targets.size(); ++i)
     {
-        const auto vertex = decode(targets.row(i), targets.columns().span());
+        const auto vertex = decode(targets.row(i));
         if (result.emplace(vertex, 0).second)
             frontier.push_back(vertex);
     }
@@ -232,7 +291,7 @@ inline std::map<urd::Store<urd::sequence<uint_t>>, uint_t> distances_to(const ur
         urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> next;
         for (size_t i = 0; i < edges.size(); ++i)
         {
-            const auto edge = decode(edges.row(i), edges.columns().span());
+            const auto edge = decode(edges.row(i));
             const auto from = urd::Store<urd::sequence<uint_t>>(edge.begin(), edge.begin() + static_cast<std::ptrdiff_t>(k));
             const auto to = urd::Store<urd::sequence<uint_t>>(edge.begin() + static_cast<std::ptrdiff_t>(k), edge.end());
             if (std::ranges::find(frontier, to) != frontier.end() && result.emplace(from, level).second)

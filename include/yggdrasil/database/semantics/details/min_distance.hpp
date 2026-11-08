@@ -31,15 +31,15 @@ QueryView<> checked_edges(QueryView<> edges, const DistancePlan& plan);
 /// An evaluator of a query of one input, slot 0, with the plan's edge columns. It compiles the query when constructed,
 /// so the repository may end afterwards.
 template<typename Evaluator>
-Evaluator relation_edges(const DistancePlan& plan, bool static_edges)
+Evaluator relation_edges(const Repository& layer, const DistancePlan& plan, bool static_edges)
 {
-    auto repository = QueryRepositoryFactory {}.create();
+    QueryRepository repository;
     auto builder = QueryBuilder {};
     auto input = checkout<Query<QueryInputTag>>(builder);
     input->input_slot = 0;
-    const auto columns = plan.edge_columns().span();
+    const auto columns = plan.edge_columns();
     input->columns.set(columns.begin(), columns.end());
-    return Evaluator(insert_query(repository, builder, *input), { static_edges });
+    return Evaluator(layer, insert_query(repository, builder, *input), { static_edges });
 }
 
 /// An edge query bound for search: `Evaluator` (a bound::QueryEvaluator or incremental::bound::QueryEvaluator) over
@@ -50,10 +50,10 @@ template<typename Evaluator>
 class EdgeQuery
 {
 public:
-    EdgeQuery(Evaluator edges, std::span<const ColumnLayout> edge_columns, size_t keys, size_t arity) :
-        m_key_size(keys == 0 ? 0 : edge_columns[keys].offset),
-        m_target_offset(edge_columns[keys + arity].offset),
-        m_vertex_size(m_target_offset - m_key_size),
+    EdgeQuery(Evaluator edges, std::span<const ColumnLayout> /*edge_columns*/, size_t keys, size_t arity) :
+        m_key_size(keys),
+        m_target_offset(keys + arity),
+        m_vertex_size(arity),
         m_edges(std::move(edges)),
         m_forward(m_edges.prepare(column_range(0, keys + arity))),
         m_backward(m_edges.prepare(key_and_target_positions(keys, arity))),
@@ -66,22 +66,22 @@ public:
     Evaluator& evaluator() noexcept { return m_edges; }
     [[nodiscard]] const Evaluator& evaluator() const noexcept { return m_edges; }
     [[nodiscard]] size_t vertex_size() const noexcept { return m_vertex_size; }
-    /// Where an edge row's target vertex starts.
+    /// Where an edge row's target vertex starts (a column position).
     [[nodiscard]] size_t target_offset() const noexcept { return m_target_offset; }
 
     template<RowPredicate OnVertex>
-    void successors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    void successors(std::span<const Value> key, std::span<const Value> vertex, const OnVertex& on_vertex)
     {
         m_edges.evaluate(m_forward,
                          bound(key, vertex),
-                         [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_target_offset, m_vertex_size)); });
+                         [&](std::span<const Value> edge) { return on_vertex(edge.subspan(m_target_offset, m_vertex_size)); });
     }
     template<RowPredicate OnVertex>
-    void predecessors(std::span<const std::byte> key, std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    void predecessors(std::span<const Value> key, std::span<const Value> vertex, const OnVertex& on_vertex)
     {
-        m_edges.evaluate(m_backward, bound(key, vertex), [&](std::span<const std::byte> edge) { return on_vertex(edge.subspan(m_key_size, m_vertex_size)); });
+        m_edges.evaluate(m_backward, bound(key, vertex), [&](std::span<const Value> edge) { return on_vertex(edge.subspan(m_key_size, m_vertex_size)); });
     }
-    bool edge_exists(std::span<const std::byte> key, std::span<const std::byte> from, std::span<const std::byte> to)
+    bool edge_exists(std::span<const Value> key, std::span<const Value> from, std::span<const Value> to)
     {
         std::ranges::copy(key, m_edge.begin());
         std::ranges::copy(from, m_edge.begin() + static_cast<std::ptrdiff_t>(m_key_size));
@@ -89,7 +89,7 @@ public:
         auto exists = false;
         m_edges.evaluate(m_check,
                          m_edge,
-                         [&](std::span<const std::byte>)
+                         [&](std::span<const Value>)
                          {
                              exists = true;
                              return false;
@@ -101,22 +101,22 @@ public:
     class Keyed
     {
     public:
-        Keyed(EdgeQuery& edges, std::span<const std::byte> key) : m_edges(&edges), m_key(key) {}
+        Keyed(EdgeQuery& edges, std::span<const Value> key) : m_edges(&edges), m_key(key) {}
 
         template<RowPredicate OnVertex>
-        void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+        void successors(std::span<const Value> vertex, const OnVertex& on_vertex)
         { m_edges->successors(m_key, vertex, on_vertex); }
         template<RowPredicate OnVertex>
-        void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+        void predecessors(std::span<const Value> vertex, const OnVertex& on_vertex)
         { m_edges->predecessors(m_key, vertex, on_vertex); }
-        bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return m_edges->edge_exists(m_key, from, to); }
+        bool edge_exists(std::span<const Value> from, std::span<const Value> to) { return m_edges->edge_exists(m_key, from, to); }
 
     private:
         EdgeQuery* m_edges;
-        std::span<const std::byte> m_key;
+        std::span<const Value> m_key;
     };
 
-    Keyed with_key(std::span<const std::byte> key) { return Keyed(*this, key); }
+    Keyed with_key(std::span<const Value> key) { return Keyed(*this, key); }
 
 private:
     /// The key columns and the target vertex of an edge, the bound columns of a predecessor query.
@@ -129,7 +129,7 @@ private:
     }
 
     /// The key and a vertex as one row of bound columns; without a key, the vertex itself.
-    std::span<const std::byte> bound(std::span<const std::byte> key, std::span<const std::byte> vertex)
+    std::span<const Value> bound(std::span<const Value> key, std::span<const Value> vertex)
     {
         if (key.empty())
             return vertex;
@@ -145,8 +145,8 @@ private:
     size_t m_forward;
     size_t m_backward;
     size_t m_check;
-    urd::Store<urd::sequence<std::byte>> m_bound;  ///< The key and a vertex, kept to avoid allocations.
-    urd::Store<urd::sequence<std::byte>> m_edge;   ///< The key and the vertices of the checked edge, kept to avoid allocations.
+    urd::Store<urd::sequence<Value>> m_bound;  ///< The key and a vertex, kept to avoid allocations.
+    urd::Store<urd::sequence<Value>> m_edge;   ///< The key and the vertices of the checked edge, kept to avoid allocations.
 };
 
 /// The targets of a search, as a vertex set.
@@ -159,7 +159,8 @@ public:
     [[nodiscard]] bool same(const Targets& targets) const
     {
         return targets.size() == m_vertices.size()
-               && std::ranges::all_of(std::views::iota(static_cast<size_t>(0), targets.size()), [&](size_t i) { return m_vertices.contains(targets.row(i)); });
+               && std::ranges::all_of(std::views::iota(static_cast<size_t>(0), targets.size()),
+                                      [&](size_t i) { return m_vertices.contains(vertex_values(targets.row(i), m_buffer)); });
     }
     template<VertexRange Targets>
     void assign(const Targets& targets)
@@ -167,7 +168,7 @@ public:
         m_vertices.clear();
         m_handles.clear();
         for (size_t i = 0; i < targets.size(); ++i)
-            if (const auto [handle, added] = m_vertices.insert(targets.row(i)); added)
+            if (const auto [handle, added] = m_vertices.insert(vertex_values(targets.row(i), m_buffer)); added)
                 m_handles.push_back(handle);
     }
     [[nodiscard]] const VertexSet& vertices() const noexcept { return m_vertices; }
@@ -184,6 +185,7 @@ public:
 
 private:
     VertexSet m_vertices;
+    mutable urd::Store<urd::sequence<Value>> m_buffer;  ///< A target's values, read from its row.
     urd::Store<urd::sequence<VertexSet::handle_type>> m_handles;  ///< Of m_vertices, as inserted.
     urd::Store<urd::sequence<VertexSet::handle_type>> m_ids;
 };

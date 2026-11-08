@@ -28,7 +28,7 @@ namespace ygg::database::bound
 struct ConjunctiveFilters
 {
     urd::Store<urd::sequence<std::pair<uint32_t, uint32_t>>> equal;                ///< Variables that must hold equal values.
-    urd::Store<urd::sequence<std::pair<uint32_t, urd::Store<urd::sequence<std::byte>>>>> value;  ///< Variable, the constant it must hold.
+    urd::Store<urd::sequence<std::pair<uint32_t, Value>>> value;  ///< Variable, the constant it must hold.
     urd::Store<urd::sequence<size_t>> negations;                                   ///< Indices into the plan's negation_plans.
 };
 

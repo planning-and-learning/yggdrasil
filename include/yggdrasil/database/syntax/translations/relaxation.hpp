@@ -66,12 +66,19 @@ public:
 
     urd::Store<urd::sequence<size_t>> slots() && { return std::move(m_slots); }
 
+    static Labels labels(QueryView<> query)
+    {
+        auto result = Labels();
+        for (const auto& column : query.columns())
+            result.push_back(column.label);
+        return result;
+    }
+
 private:
     OperatorBuilder m_build;
     Known m_known;
     urd::Store<urd::sequence<size_t>> m_slots;  ///< The original slot of each relaxed input.
 
-    static Labels labels(QueryView<> query) { return column_labels(query.columns()); }
     static bool contains(const Labels& labels, urd::index<Column> label) { return std::ranges::find(labels, label) != labels.end(); }
     /// The labels of `lhs` also in `rhs`, in the order of `lhs`.
     static Labels intersection(const Labels& lhs, const Labels& rhs)
@@ -173,14 +180,14 @@ private:
             const auto after = concrete.columns();
             auto inner = Labels();
             for (const auto label : needed)
-                inner.push_back(before[column_index(after, label)].label);
+                inner.push_back(before[static_cast<size_t>(std::ranges::find(after, label, &ColumnLayout::label) - after.begin())].label);
             const auto arg = relax(concrete.get_arg(), inner, polarity);
             if (!arg)
                 return std::nullopt;
             // The relaxed columns keep their labels' positions in the argument's schema.
             auto renamed = Labels();
             for (const auto& column : arg->columns())
-                renamed.push_back(after[column_index(before, column.label)].label);
+                renamed.push_back(after[static_cast<size_t>(std::ranges::find(before, column.label, &ColumnLayout::label) - before.begin())].label);
             return m_build.template relabel<QueryRenameTag>(*arg, renamed);
         }
         else if constexpr (std::same_as<Tag, QuerySelectEqualTag> || std::same_as<Tag, QuerySelectValueTag>)
@@ -317,7 +324,7 @@ Relaxation relax(std::span<const QueryView<>> roots, Known&& known, QueryReposit
     auto relaxer = detail::Relaxer<std::remove_cvref_t<Known>>(repository, builder, std::forward<Known>(known));
     auto queries = urd::Store<urd::sequence<std::optional<QueryView<>>>>();
     for (const auto root : roots)
-        queries.push_back(relaxer.relax(root, column_labels(root.columns()), detail::Polarity::over));
+        queries.push_back(relaxer.relax(root, relaxer.labels(root), detail::Polarity::over));
     return Relaxation { std::move(queries), std::move(relaxer).slots() };
 }
 

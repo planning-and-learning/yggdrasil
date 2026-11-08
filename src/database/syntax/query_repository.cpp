@@ -9,17 +9,7 @@
 
 namespace ygg::database
 {
-QueryRepository QueryRepositoryFactory::create() { return QueryRepository(m_indices.next(), *this); }
-}
-
-namespace ygg::database
-{
-std::shared_ptr<QueryRepository> QueryRepositoryFactory::create_shared() { return std::shared_ptr<QueryRepository>(new QueryRepository(m_indices.next(), *this)); }
-}
-
-namespace ygg::database
-{
-QueryRepository::QueryRepository(size_t index, QueryRepositoryFactory factory) : m_factory(std::move(factory)), m_index(index) {}
+QueryRepository::QueryRepository() : m_index(s_next_index.fetch_add(1, std::memory_order_relaxed)) {}
 
 QueryRepository::~QueryRepository() = default;
 }

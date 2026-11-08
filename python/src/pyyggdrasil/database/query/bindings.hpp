@@ -13,8 +13,8 @@ namespace yggdrasil::database_python
 {
 namespace nb = nanobind;
 
-using Column = urd::index<ygg::database::Column>;
-using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
+using Column = urd::index<ygg::Column>;
+using ColumnIndices = std::span<const ygg::ColumnLayout>;
 using QueryView = ygg::database::QueryView<>;
 using QueryRepositoryBinding = nb::class_<ygg::database::QueryRepository>;
 

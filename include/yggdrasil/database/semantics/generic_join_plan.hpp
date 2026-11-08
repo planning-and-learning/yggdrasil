@@ -22,7 +22,7 @@ namespace ygg::database
 class GenericJoinPlan
 {
     urd::flat_vector<urd::flat_vector<ColumnLayout>> m_inputs;
-    urd::builder<Columns> m_output;
+    urd::flat_vector<ColumnLayout> m_output;
     urd::flat_vector<urd::index<Column>> m_order;
     urd::flat_vector<urd::flat_vector<ColumnSlice>> m_keys;
     urd::flat_vector<urd::flat_vector<size_t>> m_occurrences;
@@ -40,8 +40,7 @@ public:
         const auto& columns = m_inputs.at(input);
         return { columns.data(), columns.size() };
     }
-    [[nodiscard]] const auto& output_columns() const& noexcept { return m_output; }
-    [[nodiscard]] const auto& output_columns() const&& = delete;
+    [[nodiscard]] std::span<const ColumnLayout> output_columns() const noexcept { return { m_output.data(), m_output.size() }; }
     [[nodiscard]] std::span<const urd::index<Column>> variable_order() const noexcept { return { m_order.data(), m_order.size() }; }
     [[nodiscard]] std::span<const ColumnSlice> input_keys(size_t input) const
     {

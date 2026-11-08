@@ -19,8 +19,40 @@
 #include <type_traits>
 #include <urd/elements/concepts.hpp>
 
+namespace ygg
+{
+/// The relation model (records in relation_data.hpp): a relation of family F is its pool (an index<F>: the layer's pool
+/// of F's rows that holds its rows), its Columns (labels and types) and its RowSet (the sorted ids of its rows there).
+/// A Schema (the column types) keys the pools of free relations.
+struct Schema
+{
+};
+/// Column labels, distinct from tuple values and positions.
+struct Column
+{
+};
+struct ColumnLayout;
+struct Columns
+{
+};
+struct RowSet
+{
+};
+template<typename F>
+struct Relation
+{
+};
+}  // namespace ygg
+
 namespace ygg::formalism
 {
+
+template<typename SymbolRepo, typename RelationRepo>
+class Repository;
+template<typename... Ts>
+class SymbolRepository;
+template<typename ObjectTag, typename... Ts>
+class RelationRepository;
 
 /// Whether a repository's symbol inventory contains T.
 template<typename Repository, typename T>
@@ -58,34 +90,26 @@ struct RelationBinding
     using object_tag = ObjectTag_;
 };
 
-template<typename T>
-struct is_relation_binding : std::false_type
-{
-};
-
-template<typename RelationTag, typename ObjectTag>
-struct is_relation_binding<RelationBinding<RelationTag, ObjectTag>> : std::true_type
-{
-};
-
-template<typename T>
-inline constexpr bool is_relation_binding_v = is_relation_binding<std::remove_cvref_t<T>>::value;
-
-template<typename T>
-concept RelationBindingConcept = is_relation_binding_v<T>;
-
-/// The handle of a relation binding: its relation and its row in that relation's table.
+/// The key of a published relation binding: its relation and its row in that relation's table. Its view is the
+/// urd::owning_view of the key (RelationBindingView); the context gives the row (context[key]).
 template<typename RelationTag, typename ObjectTag>
 struct RelationBindingIndex
 {
-    /// What it locates: a binding handle is an urd::handle, read through its context (context[h]).
-    using located = RelationBinding<RelationTag, ObjectTag>;
-
     urd::index<RelationTag> relation;
     urd::index<Row> row;
 
     friend constexpr auto operator<=>(const RelationBindingIndex&, const RelationBindingIndex&) = default;
     static constexpr auto identifying_members() noexcept { return urd::Members<&RelationBindingIndex::relation, &RelationBindingIndex::row> {}; }
+};
+
+/// The binding a key identifies.
+template<typename Key>
+struct binding_of;
+
+template<typename RelationTag, typename ObjectTag>
+struct binding_of<RelationBindingIndex<RelationTag, ObjectTag>>
+{
+    using type = RelationBinding<RelationTag, ObjectTag>;
 };
 
 /// Read access to a supported binding's row representation.
@@ -112,9 +136,9 @@ struct RelationBindingRow
     Objects objects;
 };
 
-/// The view of a binding (H = RelationBindingIndex) through its context C: the urd::index_view of the binding it locates.
+/// The view of a published binding through its context C: its key H (a RelationBindingIndex) held by value.
 template<typename H, typename C>
-using RelationBindingView = urd::index_view<typename H::located, C, H>;
+using RelationBindingView = urd::owning_view<typename binding_of<H>::type, C, H>;
 
 /// What the rows of one relation's bindings give through their context C: each row as the view of its binding.
 template<typename RelationTag, typename ObjectTag, typename C>

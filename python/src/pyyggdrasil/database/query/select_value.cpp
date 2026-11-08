@@ -16,14 +16,7 @@ void bind_query_select_value(nb::module_& m, QueryRepositoryBinding& repository)
                 "__init__",
                 [](V* self, QueryView arg, Column column, ColumnType type, nb::handle value)
                 {
-                    ygg::visit_type_id(type,
-                                       [&]<typename T>(std::type_identity<T>)
-                                       {
-                                           T converted {};
-                                           if (!nb::try_cast(value, converted))
-                                               throw nb::type_error("Query selection: value does not match the column type.");
-                                           new (self) V(arg.index(), column, converted);
-                                       });
+                    std::visit([&](auto converted) { new (self) V(arg.index(), column, converted); }, cast_value(value, type));
                 },
                 "arg"_a,
                 "column"_a,

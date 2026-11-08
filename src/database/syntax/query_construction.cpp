@@ -29,37 +29,26 @@ namespace ygg::database::detail
 {
 void prepare(urd::data<Query<QueryRenameTag>>& data, const QueryRepository& repository)
 {
-    urd::builder<Columns> schema(child_columns(data.arg, repository));
-    schema.rename({ data.labels.data(), data.labels.size() });
+    const auto schema = child_columns(data.arg, repository);
+    if (data.labels.size() != schema.size())
+        throw std::invalid_argument("Columns: renaming must preserve arity.");
     data.columns.set(schema.begin(), schema.end());
+    for (size_t i = 0; i < schema.size(); ++i)
+        data.columns[i].label = data.labels[i];
+    validate_columns({ data.columns.data(), data.columns.size() });
 }
 }
 
 namespace ygg::database::detail
 {
 void prepare(urd::data<Query<QuerySelectEqualTag>>& data, const QueryRepository& repository)
-{
-    const auto schema = child_columns(data.arg, repository);
-    data.lhs_position = column_index(schema, data.lhs_column);
-    data.rhs_position = column_index(schema, data.rhs_column);
-    if (schema[data.lhs_position].type != schema[data.rhs_position].type)
-        throw std::invalid_argument("Query: equality columns must have the same type.");
-    data.columns.set(schema.begin(), schema.end());
-}
+{ data.plan = SelectEqualPlan(child_columns(data.arg, repository), data.lhs_column, data.rhs_column); }
 }
 
 namespace ygg::database::detail
 {
 void prepare(urd::data<Query<QuerySelectValueTag>>& data, const QueryRepository& repository)
-{
-    const auto schema = child_columns(data.arg, repository);
-    data.column_position = column_index(schema, data.column);
-    if (schema[data.column_position].type != data.constant_type)
-        throw std::invalid_argument("Query: constant type does not match the selected column.");
-    if (data.constant.size() != schema[data.column_position].size)
-        throw std::invalid_argument("Query: constant width does not match the selected column.");
-    data.columns.set(schema.begin(), schema.end());
-}
+{ data.plan = SelectValuePlan(child_columns(data.arg, repository), data.column, data.constant_type, data.constant); }
 }
 
 namespace ygg::database::detail

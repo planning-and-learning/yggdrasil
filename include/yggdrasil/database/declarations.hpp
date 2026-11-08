@@ -6,24 +6,14 @@
 #ifndef YGG_DATABASE_DECLARATIONS_HPP_
 #define YGG_DATABASE_DECLARATIONS_HPP_
 
-#include "yggdrasil/database/byte_codec.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/values.hpp"
 #include <boost/mp11.hpp>
 #include <string_view>
 #include <urd/elements/flat.hpp>
 
 namespace ygg::database
 {
-/// Schema-local column identifiers, distinct from tuple values and positions.
-struct Column
-{
-};
-struct ColumnLayout;
-struct Columns
-{
-};
-struct Relation
-{
-};
 struct QueryInputTag
 {
     static constexpr std::string_view name = "input";
@@ -95,11 +85,13 @@ using QueryConstructorTags = boost::mp11::mp_list<QueryInputTag,
 
 /// Query tags grouped by the shape of their records.
 using QueryJoinTags = boost::mp11::mp_list<QueryJoinTag, QuerySemijoinTag, QueryAntijoinTag>;  ///< lhs, rhs and a JoinPlan
-using QuerySetTags = boost::mp11::mp_list<QueryUnionTag, QueryDifferenceTag>;                 ///< lhs, rhs and their columns
+using QuerySetTags = boost::mp11::mp_list<QueryUnionTag, QueryDifferenceTag>;                 ///< lhs, rhs and a SetPlan
 using QueryBinaryTags = boost::mp11::mp_append<QueryJoinTags, QuerySetTags>;                  ///< lhs and rhs
 using QueryUnaryTags = boost::mp11::mp_list<QueryProjectTag, QueryRenameTag, QuerySelectEqualTag, QuerySelectValueTag>;  ///< arg
 /// The queries with a prepared plan.
-using QueryPlannedTags = boost::mp11::mp_append<QueryJoinTags, boost::mp11::mp_list<QueryProjectTag, QueryDistanceTag, QueryGenericJoinTag>>;
+using QueryPlannedTags = boost::mp11::mp_append<QueryJoinTags,
+                                                QuerySetTags,
+                                                boost::mp11::mp_list<QueryProjectTag, QuerySelectEqualTag, QuerySelectValueTag, QueryDistanceTag, QueryGenericJoinTag>>;
 
 /// Tag void is the type-erased query holding one of the concrete query records.
 template<typename Tag = void>
@@ -109,23 +101,15 @@ struct Query
 };
 class QueryPlan;
 class QueryRepository;
-class QueryRepositoryFactory;
 template<typename Tag = void>
 using QueryView = urd::index_view<Query<Tag>, QueryRepository>;
 
-struct RelationRow
-{
-};
-struct RelationRowSet
-{
-};
-class Row;
-class RelationPool;
-class RelationPoolFactory;
-class RelationRepository;
-class RelationRepositoryFactory;
-using RelationView = urd::index_view<Relation, RelationRepository>;
-using BorrowedRelationView = urd::borrowed_view<Relation, RelationRepository, urd::builder<Relation>>;
+/// The relations of the database: free relations of the formalism's relation model, their rows in pools by Schema.
+using Repository = formalism::Repository<formalism::SymbolRepository<Schema, Columns, RowSet, Relation<Schema>>, formalism::RelationRepository<void, Schema>>;
+using RelationView = urd::index_view<Relation<Schema>, Repository>;
+/// A relation builder held elsewhere, read through a layer (urd::resolve(builder, layer) or layer.view(builder)), as
+/// tyr's BuilderStateView reads a state builder through its repository.
+using BuilderRelationView = urd::borrowed_view<Relation<Schema>, Repository, urd::builder<Relation<Schema>>>;
 }  // namespace ygg::database
 
 #endif

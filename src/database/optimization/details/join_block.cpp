@@ -9,7 +9,13 @@
 
 namespace ygg::database::detail
 {
-urd::Store<urd::sequence<urd::index<Column>>> variables(QueryView<> query) { return ygg::canonicalized(column_labels(query.columns())); }
+urd::Store<urd::sequence<urd::index<Column>>> variables(QueryView<> query)
+{
+    auto labels = urd::Store<urd::sequence<urd::index<Column>>>();
+    for (const auto& column : query.columns())
+        labels.push_back(column.label);
+    return ygg::canonicalized(std::move(labels));
+}
 }
 
 namespace ygg::database::detail

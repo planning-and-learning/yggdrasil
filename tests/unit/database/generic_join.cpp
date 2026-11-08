@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "query_helpers.hpp"
 #include "yggdrasil/database/semantics/incremental/generic_join.hpp"
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <array>
 #include <bit>
@@ -21,70 +22,73 @@ namespace ygg::tests
 namespace
 {
 using Values = boost::mp11::mp_list<uint_t>;
-using RelationBuilder = urd::builder<database::Relation>;
+using RelationBuilder = urd::builder<ygg::Relation<ygg::Schema>>;
 using Change = database::incremental::Delta;
-using ColumnIndex = urd::index<database::Column>;
+using ColumnIndex = urd::index<ygg::Column>;
 
-// Borrowed views use a relation repository only as their context.
-inline database::BorrowedRelationView borrow(const urd::builder<database::Relation>& relation)
+/// The layer the tests read their builders through.
+const database::Repository& layer()
 {
-    static const auto context = database::RelationRepositoryFactory {}.create();
-    return { &relation, &context };
+    static const database::Repository repository;
+    return repository;
 }
 
-static_assert(database::RelationViewConcept<database::BorrowedRelationView>);
+database::BuilderRelationView borrow(const urd::builder<ygg::Relation<ygg::Schema>>& relation) { return layer().view(relation); }
 
-struct ThrowingRelation : database::BorrowedRelationView
+static_assert(database::RelationViewConcept<database::BuilderRelationView>);
+
+struct ThrowingRelation : database::BuilderRelationView
 {
     size_t fail_on_row;
     mutable size_t row_calls = 0;
 
-    ThrowingRelation(const RelationBuilder& input, size_t fail_on) : database::BorrowedRelationView(borrow(input)), fail_on_row(fail_on) {}
+    ThrowingRelation(const RelationBuilder& input, size_t fail_on) : database::BuilderRelationView(borrow(input)), fail_on_row(fail_on) {}
 
-    std::span<const std::byte> row(size_t position) const
+    ygg::database::RowPool::row_type row(size_t position) const
     {
         if (++row_calls == fail_on_row)
             throw std::runtime_error("Injected relation read failure.");
-        return database::BorrowedRelationView::row(position);
+        return database::BuilderRelationView::row(position);
     }
 };
 
 template<database::RelationViewRange R>
 database::GenericJoinPlan plan_for(const R& inputs, std::initializer_list<ColumnIndex> variables, std::initializer_list<ColumnIndex> output)
 {
-    urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<ygg::ColumnLayout>>>> schemas;
     schemas.reserve(inputs.size());
     for (const auto& input : inputs)
-        schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
+        schemas.emplace_back(input.columns().begin(), input.columns().end());
     return database::GenericJoinPlan(schemas, { variables.begin(), variables.size() }, { output.begin(), output.size() });
 }
 
 template<database::RelationViewConcept A, database::RelationViewConcept E>
 void expect_same(const A& actual, const E& expected)
 {
-    ASSERT_TRUE(std::ranges::equal(actual.columns().span(), expected.columns().span()));
+    ASSERT_TRUE(std::ranges::equal(actual.columns(), expected.columns()));
     ASSERT_EQ(actual.size(), expected.size());
     for (size_t row = 0; row < expected.size(); ++row)
-        EXPECT_TRUE(actual.contains(database::Row(expected.row(row), expected.columns().span())));
+        EXPECT_TRUE(actual.contains(expected.row(row)));
 }
 
 template<database::RelationViewRange R>
-urd::builder<database::Relation> binary_reference(const R& inputs, const database::GenericJoinPlan& plan)
+urd::builder<ygg::Relation<ygg::Schema>> binary_reference(const R& inputs, const database::GenericJoinPlan& plan)
 {
-    urd::builder<database::Relation> result;
-    result.insert(std::tuple {});
+    urd::builder<ygg::Relation<ygg::Schema>> result;
+    result.insert(std::array<ygg::Value, 0> {});
     for (const auto input : inputs)
-        result = database::join(result, input);
+        result = ygg::tests::ops::joined(borrow(result), input);
     urd::Store<urd::sequence<ColumnIndex>> output;
-    for (const auto column : plan.output_columns().span())
+    for (const auto column : plan.output_columns())
         output.push_back(column.label);
-    return database::project(result, output);
+    return ygg::tests::ops::projected(borrow(result), std::span<const ColumnIndex>(output));
 }
 
 void apply(RelationBuilder& input, const Change& change, bool undo = false)
 {
-    const auto& removed = undo ? change.added : change.removed;
-    const auto& added = undo ? change.removed : change.added;
+    const auto [change_added, change_removed] = change.change();
+    const auto& removed = undo ? change_added : change_removed;
+    const auto& added = undo ? change_removed : change_added;
     for (size_t i = 0; i < removed.size(); ++i)
     {
         const auto position = input.find(removed.row(i));
@@ -97,46 +101,47 @@ void apply(RelationBuilder& input, const Change& change, bool undo = false)
 
 void expect_update(const database::incremental::GenericJoinEvaluator& evaluator, const RelationBuilder& before, const RelationBuilder& after)
 {
-    expect_same(evaluator.get_result(), after);
-    const auto added = database::difference(after, before);
-    const auto removed = database::difference(before, after);
-    expect_same(evaluator.get_delta().added, added);
-    expect_same(evaluator.get_delta().removed, removed);
+    expect_same(evaluator.get_result(), borrow(after));
+    const auto added = ygg::tests::ops::subtracted(borrow(after), borrow(before));
+    const auto removed = ygg::tests::ops::subtracted(borrow(before), borrow(after));
+    const auto [delta_added, delta_removed] = evaluator.get_delta().change();
+    expect_same(delta_added, borrow(added));
+    expect_same(delta_removed, borrow(removed));
 }
 }  // namespace
 
 TEST(YggdrasilTests, DatabaseGenericJoinTriangleMatchesBinaryForEveryVariableOrder)
 {
-    RelationBuilder r({ ColumnIndex(1), ColumnIndex(2) });
-    RelationBuilder s({ ColumnIndex(2), ColumnIndex(3) });
-    RelationBuilder t({ ColumnIndex(3), ColumnIndex(1) });
+    RelationBuilder r { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }) };
+    RelationBuilder s { ygg::tests::ops::cols({ ColumnIndex(2), ColumnIndex(3) }) };
+    RelationBuilder t { ygg::tests::ops::cols({ ColumnIndex(3), ColumnIndex(1) }) };
     for (uint_t i = 0; i < 12; ++i)
     {
-        r.insert(std::tuple { static_cast<uint_t>(0), i });
-        r.insert(std::tuple { i, static_cast<uint_t>(0) });
-        s.insert(std::tuple { static_cast<uint_t>(0), i });
-        s.insert(std::tuple { i, static_cast<uint_t>(0) });
-        t.insert(std::tuple { static_cast<uint_t>(0), i });
-        t.insert(std::tuple { i, static_cast<uint_t>(0) });
+        r.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(i) });
+        r.insert(std::array { ygg::encode_value(i), ygg::encode_value(static_cast<uint_t>(0)) });
+        s.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(i) });
+        s.insert(std::array { ygg::encode_value(i), ygg::encode_value(static_cast<uint_t>(0)) });
+        t.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(i) });
+        t.insert(std::array { ygg::encode_value(i), ygg::encode_value(static_cast<uint_t>(0)) });
     }
     const std::array inputs { borrow(r), borrow(s), borrow(t) };
     std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
     const std::array output { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) };
-    urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
+    urd::Store<urd::sequence<urd::Store<urd::sequence<ygg::ColumnLayout>>>> schemas;
     schemas.reserve(inputs.size());
     for (const auto input : inputs)
-        schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
+        schemas.emplace_back(input.columns().begin(), input.columns().end());
     for (bool more = true; more; more = std::ranges::next_permutation(variables).found)
     {
         const database::GenericJoinPlan plan(schemas, variables, output);
         database::GenericJoinWorkspace workspace(plan);
-        RelationBuilder result(plan.output_columns().span());
+        RelationBuilder result(plan.output_columns());
         const auto expected = binary_reference(inputs, plan);
         database::generic_join(inputs, plan, result, workspace);
-        expect_same(result, expected);
+        expect_same(borrow(result), borrow(expected));
         EXPECT_EQ(result.size(), 34);
         database::generic_join(inputs, plan, result, workspace);
-        expect_same(result, expected);
+        expect_same(borrow(result), borrow(expected));
         EXPECT_GT(workspace.memory_usage(), 0);
     }
 }
@@ -147,36 +152,36 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
     for (const uint_t count : { static_cast<uint_t>(8), static_cast<uint_t>(32), static_cast<uint_t>(128) })
     {
         SCOPED_TRACE(count);
-        RelationBuilder r({ ColumnIndex(1), ColumnIndex(2) });
-        RelationBuilder s({ ColumnIndex(2), ColumnIndex(3) });
-        RelationBuilder t({ ColumnIndex(1), ColumnIndex(3) });
+        RelationBuilder r { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }) };
+        RelationBuilder s { ygg::tests::ops::cols({ ColumnIndex(2), ColumnIndex(3) }) };
+        RelationBuilder t { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(3) }) };
         for (uint_t i = 0; i < count; ++i)
         {
-            r.insert(std::tuple { i, static_cast<uint_t>(0) });
-            s.insert(std::tuple { static_cast<uint_t>(0), i });
-            t.insert(std::tuple { i, i });
+            r.insert(std::array { ygg::encode_value(i), ygg::encode_value(static_cast<uint_t>(0)) });
+            s.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(i) });
+            t.insert(std::array { ygg::encode_value(i), ygg::encode_value(i) });
         }
-        const auto intermediate = database::join(r, s);
+        const auto intermediate = ygg::tests::ops::joined(borrow(r), borrow(s));
         ASSERT_EQ(intermediate.size(), count * count);
-        const auto expected = database::join(intermediate, t);
+        const auto expected = ygg::tests::ops::joined(borrow(intermediate), borrow(t));
         ASSERT_EQ(expected.size(), count);
 
         const std::array inputs { borrow(r), borrow(s), borrow(t) };
-        urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
+        urd::Store<urd::sequence<urd::Store<urd::sequence<ygg::ColumnLayout>>>> schemas;
         schemas.reserve(inputs.size());
         for (const auto input : inputs)
-            schemas.emplace_back(input.columns().span().begin(), input.columns().span().end());
+            schemas.emplace_back(input.columns().begin(), input.columns().end());
         std::array variables { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) };
         const auto output = variables;
         for (bool more = true; more; more = std::ranges::next_permutation(variables).found)
         {
             const database::GenericJoinPlan plan(schemas, variables, output);
             database::GenericJoinWorkspace workspace(plan);
-            RelationBuilder result(plan.output_columns().span());
+            RelationBuilder result(plan.output_columns());
             database::detail::generic_join_work() = {};
             database::generic_join(inputs, plan, result, workspace);
             const auto work = database::detail::generic_join_work();
-            expect_same(result, expected);
+            expect_same(borrow(result), borrow(expected));
             // This family has linear extension intersections in every order.
             // Counts cover traversal only; building the three tries reads 3n rows.
             EXPECT_GE(work.candidate_keys, 2 * count);
@@ -190,36 +195,36 @@ TEST(YggdrasilTests, DatabaseGenericJoinAvoidsQuadraticTriangleIntermediate)
 
 TEST(YggdrasilTests, DatabaseGenericJoinHandlesDisconnectedAndNullaryInputs)
 {
-    RelationBuilder a({ ColumnIndex(1) });
-    RelationBuilder b({ ColumnIndex(2) });
+    RelationBuilder a { ygg::tests::ops::cols({ ColumnIndex(1) }) };
+    RelationBuilder b { ygg::tests::ops::cols({ ColumnIndex(2) }) };
     RelationBuilder truth;
-    a.insert(std::tuple { static_cast<uint_t>(1) });
-    a.insert(std::tuple { static_cast<uint_t>(2) });
-    b.insert(std::tuple { static_cast<uint_t>(3) });
-    b.insert(std::tuple { static_cast<uint_t>(4) });
-    truth.insert(std::tuple {});
+    a.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)) });
+    a.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
+    b.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)) });
+    b.insert(std::array { ygg::encode_value(static_cast<uint_t>(4)) });
+    truth.insert(std::array<ygg::Value, 0> {});
     const std::array inputs { borrow(a), borrow(b), borrow(truth) };
     const auto plan = plan_for(inputs, { ColumnIndex(2), ColumnIndex(1) }, { ColumnIndex(1), ColumnIndex(2) });
     database::GenericJoinWorkspace workspace(plan);
-    RelationBuilder result(plan.output_columns().span());
+    RelationBuilder result(plan.output_columns());
     database::generic_join(inputs, plan, result, workspace);
     EXPECT_EQ(result.size(), 4);
     truth.clear();
     database::generic_join(inputs, plan, result, workspace);
     EXPECT_TRUE(result.empty());
 
-    const auto empty_plan = plan_for(std::array<database::BorrowedRelationView, 0> {}, {}, {});
+    const auto empty_plan = plan_for(std::array<database::BuilderRelationView, 0> {}, {}, {});
     database::GenericJoinWorkspace empty_workspace(empty_plan);
     RelationBuilder empty_result;
-    database::generic_join(std::array<database::BorrowedRelationView, 0> {}, empty_plan, empty_result, empty_workspace);
+    database::generic_join(std::array<database::BuilderRelationView, 0> {}, empty_plan, empty_result, empty_workspace);
     EXPECT_EQ(empty_result.size(), 1);
-    EXPECT_TRUE(empty_result.contains(std::tuple {}));
+    EXPECT_TRUE(empty_result.contains(std::array<ygg::Value, 0> {}));
     const std::array nullary_inputs { borrow(truth), borrow(truth) };
     const auto nullary_plan = plan_for(nullary_inputs, {}, {});
-    database::incremental::GenericJoinEvaluator evaluator(nullary_plan);
+    database::incremental::GenericJoinEvaluator evaluator(layer(), nullary_plan);
     evaluator.initialize(nullary_inputs);
-    Change change({});
-    change.added.insert(std::tuple {});
+    Change change(layer(), {});
+    change.added.insert(std::array<ygg::Value, 0> {});
     const std::array changes { std::pair { borrow(change.added), borrow(change.removed) }, std::pair { borrow(change.added), borrow(change.removed) } };
     evaluator.update(changes);
     EXPECT_EQ(evaluator.get_delta().added.size(), 1);
@@ -232,81 +237,75 @@ TEST(YggdrasilTests, DatabaseGenericJoinHandlesDisconnectedAndNullaryInputs)
 
 TEST(YggdrasilTests, DatabaseGenericJoinUsesCanonicalTypedBytesWithoutValueComparators)
 {
-    urd::builder<database::Columns> left_schema;
-    left_schema.push_back<std::uint64_t>(ColumnIndex(1));
-    left_schema.push_back<double>(ColumnIndex(2));
-    urd::builder<database::Columns> right_schema;
-    right_schema.push_back<double>(ColumnIndex(2));
-    right_schema.push_back<bool>(ColumnIndex(3));
-    urd::builder<database::Relation> left(left_schema.span());
-    urd::builder<database::Relation> right(right_schema.span());
+    const std::vector<ygg::ColumnLayout> left_schema { { ColumnIndex(1), ygg::type_id<std::uint64_t> }, { ColumnIndex(2), ygg::type_id<double> } };
+    const std::vector<ygg::ColumnLayout> right_schema { { ColumnIndex(2), ygg::type_id<double> }, { ColumnIndex(3), ygg::type_id<bool> } };
+    urd::builder<ygg::Relation<ygg::Schema>> left(left_schema);
+    urd::builder<ygg::Relation<ygg::Schema>> right(right_schema);
     const auto nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000001 });
     const auto other_nan = std::bit_cast<double>(std::uint64_t { 0x7ff8000000000002 });
-    left.insert(std::tuple { std::uint64_t { 4 }, -0.0 });
-    left.insert(std::tuple { std::uint64_t { 5 }, nan });
-    right.insert(std::tuple { 0.0, false });
-    right.insert(std::tuple { other_nan, true });
+    left.insert(std::array { ygg::encode_value(std::uint64_t { 4 }), ygg::encode_value(-0.0) });
+    left.insert(std::array { ygg::encode_value(std::uint64_t { 5 }), ygg::encode_value(nan) });
+    right.insert(std::array { ygg::encode_value(0.0), ygg::encode_value(false) });
+    right.insert(std::array { ygg::encode_value(other_nan), ygg::encode_value(true) });
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for(inputs, { ColumnIndex(2), ColumnIndex(3), ColumnIndex(1) }, { ColumnIndex(3), ColumnIndex(1), ColumnIndex(2) });
     database::GenericJoinWorkspace workspace(plan);
-    urd::builder<database::Relation> result(plan.output_columns().span());
+    urd::builder<ygg::Relation<ygg::Schema>> result(plan.output_columns());
     database::generic_join(inputs, plan, result, workspace);
     const auto expected = binary_reference(inputs, plan);
-    expect_same(result, expected);
+    expect_same(borrow(result), borrow(expected));
     ASSERT_EQ(result.size(), 2);
-    EXPECT_TRUE(result.contains(std::tuple { false, std::uint64_t { 4 }, 0.0 }));
-    database::incremental::GenericJoinEvaluator evaluator(plan);
+    EXPECT_TRUE(result.contains(std::array { ygg::encode_value(false), ygg::encode_value(std::uint64_t { 4 }), ygg::encode_value(0.0) }));
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
     evaluator.initialize(inputs);
-    database::incremental::Delta left_change(left_schema.span());
-    database::incremental::Delta right_change(right_schema.span());
-    left_change.removed.insert(std::tuple { std::uint64_t { 4 }, 0.0 });
-    left_change.added.insert(std::tuple { std::uint64_t { 6 }, -0.0 });
-    right_change.removed.insert(std::tuple { nan, true });
+    database::incremental::Delta left_change(layer(), left_schema);
+    database::incremental::Delta right_change(layer(), right_schema);
+    left_change.removed.insert(std::array { ygg::encode_value(std::uint64_t { 4 }), ygg::encode_value(0.0) });
+    left_change.added.insert(std::array { ygg::encode_value(std::uint64_t { 6 }), ygg::encode_value(-0.0) });
+    right_change.removed.insert(std::array { ygg::encode_value(nan), ygg::encode_value(true) });
     const std::array changes { std::pair { borrow(left_change.added), borrow(left_change.removed) },
                                std::pair { borrow(right_change.added), borrow(right_change.removed) } };
     evaluator.update(changes);
     ASSERT_EQ(evaluator.get_result().size(), 1);
-    EXPECT_TRUE(evaluator.get_result().contains(std::tuple { false, std::uint64_t { 6 }, 0.0 }));
+    EXPECT_TRUE(evaluator.get_result().contains(std::array { ygg::encode_value(false), ygg::encode_value(std::uint64_t { 6 }), ygg::encode_value(0.0) }));
     const std::array undo { std::pair { borrow(left_change.removed), borrow(left_change.added) },
                             std::pair { borrow(right_change.removed), borrow(right_change.added) } };
     evaluator.update(undo);
-    expect_same(evaluator.get_result(), expected);
+    expect_same(evaluator.get_result(), borrow(expected));
 }
 
 TEST(YggdrasilTests, DatabaseGenericJoinIncrementalConsolidatesMixedAliasChangesAndUndo)
 {
-    database::RelationRepositoryFactory factory;
-    auto repository = factory.create();
-    RelationBuilder edge({ ColumnIndex(1), ColumnIndex(2) });
-    edge.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(2) });
-    edge.insert(std::tuple { static_cast<uint_t>(2), static_cast<uint_t>(3) });
-    edge.insert(std::tuple { static_cast<uint_t>(3), static_cast<uint_t>(1) });
-    const auto first = database::insert(repository, edge).first;
-    const std::array labels { ColumnIndex(2), ColumnIndex(3) };
-    const auto second = repository.rename(first, labels);
-    ASSERT_EQ(first.get_storage_address(), second.get_storage_address());
+    database::Repository repository;
+    RelationBuilder edge { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }) };
+    edge.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(2)) });
+    edge.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(static_cast<uint_t>(3)) });
+    edge.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)), ygg::encode_value(static_cast<uint_t>(1)) });
+    const auto first = repository.insert(edge).first;
+    const auto second = repository.rename(first, ygg::tests::ops::cols({ ColumnIndex(2), ColumnIndex(3) }));
+    ASSERT_EQ(first.data().row_set, second.data().row_set);  // a rename keeps the rows
     const std::array inputs { first, second, first };
     const auto plan = plan_for(inputs, { ColumnIndex(2), ColumnIndex(1), ColumnIndex(3) }, { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) });
-    database::incremental::GenericJoinEvaluator evaluator(plan);
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
     evaluator.initialize(inputs);
     const auto before = binary_reference(inputs, plan);
-    Change change(edge.columns().span());
-    change.removed.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(2) });
-    change.added.insert(std::tuple { static_cast<uint_t>(4), static_cast<uint_t>(2) });
-    change.added.insert(std::tuple { static_cast<uint_t>(2), static_cast<uint_t>(4) });
-    Change renamed_change(second.columns().span());
+    Change change(layer(), edge.columns());
+    change.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(2)) });
+    change.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(4)), ygg::encode_value(static_cast<uint_t>(2)) });
+    change.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(static_cast<uint_t>(4)) });
+    Change renamed_change(layer(), second.columns());
     for (size_t i = 0; i < change.added.size(); ++i)
-        renamed_change.added.insert(change.added.row(i));
+        renamed_change.added.insert(borrow(change.added).row(i));
     for (size_t i = 0; i < change.removed.size(); ++i)
-        renamed_change.removed.insert(change.removed.row(i));
+        renamed_change.removed.insert(borrow(change.removed).row(i));
     const std::array changes { std::pair { borrow(change.added), borrow(change.removed) },
                                std::pair { borrow(renamed_change.added), borrow(renamed_change.removed) },
                                std::pair { borrow(change.added), borrow(change.removed) } };
     evaluator.update(changes);
     apply(edge, change);
-    RelationBuilder renamed(labels);
+    RelationBuilder renamed(second.columns());
     for (size_t i = 0; i < edge.size(); ++i)
-        renamed.insert(edge.row(i));
+        renamed.insert(borrow(edge).row(i));
     const std::array updated_inputs { borrow(edge), borrow(renamed), borrow(edge) };
     const auto after = binary_reference(updated_inputs, plan);
     expect_update(evaluator, before, after);
@@ -320,20 +319,20 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalConsolidatesMixedAliasChanges
 
 TEST(YggdrasilTests, DatabaseGenericJoinIncrementalAvoidsTransientCrossedMatches)
 {
-    RelationBuilder left({ ColumnIndex(1) });
-    RelationBuilder right({ ColumnIndex(1) });
-    left.insert(std::tuple { static_cast<uint_t>(1) });
-    right.insert(std::tuple { static_cast<uint_t>(2) });
+    RelationBuilder left { ygg::tests::ops::cols({ ColumnIndex(1) }) };
+    RelationBuilder right { ygg::tests::ops::cols({ ColumnIndex(1) }) };
+    left.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)) });
+    right.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for(inputs, { ColumnIndex(1) }, { ColumnIndex(1) });
-    database::incremental::GenericJoinEvaluator evaluator(plan);
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
     evaluator.initialize(inputs);
-    Change a(left.columns().span());
-    Change b(right.columns().span());
-    a.removed.insert(std::tuple { static_cast<uint_t>(1) });
-    a.added.insert(std::tuple { static_cast<uint_t>(2) });
-    b.removed.insert(std::tuple { static_cast<uint_t>(2) });
-    b.added.insert(std::tuple { static_cast<uint_t>(3) });
+    Change a(layer(), left.columns());
+    Change b(layer(), right.columns());
+    a.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)) });
+    a.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
+    b.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
+    b.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)) });
     const std::array changes { std::pair { borrow(a.added), borrow(a.removed) }, std::pair { borrow(b.added), borrow(b.removed) } };
     evaluator.update(changes);
     EXPECT_TRUE(evaluator.get_result().empty());
@@ -343,21 +342,21 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalAvoidsTransientCrossedMatches
 
 TEST(YggdrasilTests, DatabaseGenericJoinIncrementalProjectionPreservesReplacedWitnesses)
 {
-    RelationBuilder left({ ColumnIndex(1), ColumnIndex(2) });
-    RelationBuilder right({ ColumnIndex(2), ColumnIndex(3) });
-    left.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(10) });
-    right.insert(std::tuple { static_cast<uint_t>(10), static_cast<uint_t>(9) });
+    RelationBuilder left { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }) };
+    RelationBuilder right { ygg::tests::ops::cols({ ColumnIndex(2), ColumnIndex(3) }) };
+    left.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(10)) });
+    right.insert(std::array { ygg::encode_value(static_cast<uint_t>(10)), ygg::encode_value(static_cast<uint_t>(9)) });
     const std::array inputs { borrow(left), borrow(right) };
     const auto plan = plan_for(inputs, { ColumnIndex(2), ColumnIndex(1), ColumnIndex(3) }, { ColumnIndex(1), ColumnIndex(2), ColumnIndex(3) });
-    database::incremental::GenericJoinEvaluator evaluator(plan);
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
     evaluator.initialize(inputs);
-    database::incremental::ProjectionEvaluator projected(database::ProjectionPlan(plan.output_columns().span(), { ColumnIndex(3) }));
+    database::incremental::ProjectionEvaluator projected(layer(), database::ProjectionPlan(plan.output_columns(), std::array { ColumnIndex(3) }));
     database::Workspace workspace;
     projected.initialize(evaluator.get_result(), workspace);
-    Change a(left.columns().span());
-    Change b(right.columns().span());
-    a.removed.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(10) });
-    a.added.insert(std::tuple { static_cast<uint_t>(2), static_cast<uint_t>(10) });
+    Change a(layer(), left.columns());
+    Change b(layer(), right.columns());
+    a.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(10)) });
+    a.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(static_cast<uint_t>(10)) });
     const std::array changes { std::pair { borrow(a.added), borrow(a.removed) }, std::pair { borrow(b.added), borrow(b.removed) } };
     evaluator.update(changes);
     projected.update(evaluator.get_delta().change(), workspace);
@@ -368,24 +367,24 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalProjectionPreservesReplacedWi
 
 TEST(YggdrasilTests, DatabaseGenericJoinIncrementalRandomBatchesMatchFullReevaluation)
 {
-    std::array<RelationBuilder, 3> relations { RelationBuilder({ ColumnIndex(1), ColumnIndex(2) }),
-                                               RelationBuilder({ ColumnIndex(2), ColumnIndex(3) }),
-                                               RelationBuilder({ ColumnIndex(3), ColumnIndex(1) }) };
+    std::array<RelationBuilder, 3> relations { RelationBuilder(ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) })),
+                                               RelationBuilder(ygg::tests::ops::cols({ ColumnIndex(2), ColumnIndex(3) })),
+                                               RelationBuilder(ygg::tests::ops::cols({ ColumnIndex(3), ColumnIndex(1) })) };
     const std::array inputs { borrow(relations[0]), borrow(relations[1]), borrow(relations[2]) };
     const auto plan = plan_for(inputs, { ColumnIndex(2), ColumnIndex(3), ColumnIndex(1) }, { ColumnIndex(3), ColumnIndex(2), ColumnIndex(1) });
-    database::incremental::GenericJoinEvaluator evaluator(plan);
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
     evaluator.initialize(inputs);
     std::mt19937 random(42);
     for (size_t batch = 0; batch < 50; ++batch)
     {
         const auto before = binary_reference(inputs, plan);
-        std::array<Change, 3> changes { Change(relations[0].columns().span()), Change(relations[1].columns().span()), Change(relations[2].columns().span()) };
+        std::array<Change, 3> changes { Change(layer(), relations[0].columns()), Change(layer(), relations[1].columns()), Change(layer(), relations[2].columns()) };
         for (size_t input = 0; input < relations.size(); ++input)
             for (uint_t a = 0; a < 4; ++a)
                 for (uint_t b = 0; b < 4; ++b)
                     if (random() % 5 == 0)
                     {
-                        const auto row = std::tuple { a, b };
+                        const auto row = std::array { ygg::encode_value(a), ygg::encode_value(b) };
                         if (relations[input].contains(row))
                             changes[input].removed.insert(row);
                         else
@@ -414,67 +413,61 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalRandomBatchesMatchFullReevalu
 
 TEST(YggdrasilTests, DatabaseGenericJoinValidatesPlansInputsAndFailureRecovery)
 {
-    RelationBuilder input({ ColumnIndex(1) });
-    input.insert(std::tuple { static_cast<uint_t>(1) });
+    RelationBuilder input { ygg::tests::ops::cols({ ColumnIndex(1) }) };
+    input.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)) });
     const std::array inputs { borrow(input) };
     EXPECT_THROW(plan_for(inputs, {}, {}), std::invalid_argument);
     EXPECT_THROW(plan_for(inputs, { ColumnIndex(1) }, {}), std::invalid_argument);
     EXPECT_THROW(plan_for(inputs, { ColumnIndex(2) }, { ColumnIndex(1) }), std::invalid_argument);
-    RelationBuilder second({ ColumnIndex(2) });
+    RelationBuilder second { ygg::tests::ops::cols({ ColumnIndex(2) }) };
     const std::array two_inputs { borrow(input), borrow(second) };
     EXPECT_THROW((plan_for(two_inputs, { ColumnIndex(1), ColumnIndex(1) }, { ColumnIndex(1), ColumnIndex(2) })), std::invalid_argument);
     const auto plan = plan_for(inputs, { ColumnIndex(1) }, { ColumnIndex(1) });
     database::GenericJoinWorkspace workspace(plan);
-    RelationBuilder output(plan.output_columns().span());
-    output.insert(std::tuple { static_cast<uint_t>(99) });
-    const std::array wrong { borrow(second) };
-    EXPECT_THROW(database::generic_join(wrong, plan, output, workspace), std::invalid_argument);
-    EXPECT_TRUE(output.contains(std::tuple { uint_t(99) }));
+    RelationBuilder output(plan.output_columns());
+    output.insert(std::array { ygg::encode_value(static_cast<uint_t>(99)) });
     EXPECT_THROW(database::generic_join(inputs, plan, input, workspace), std::invalid_argument);
     EXPECT_EQ(input.size(), 1);
-    database::incremental::GenericJoinEvaluator evaluator(plan);
-    Change delta(input.columns().span());
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
+    Change delta(layer(), input.columns());
     const std::array change { std::pair { borrow(delta.added), borrow(delta.removed) } };
     EXPECT_THROW(evaluator.update(change), std::logic_error);
     EXPECT_THROW((void) evaluator.get_result(), std::logic_error);
     EXPECT_THROW((void) evaluator.get_delta(), std::logic_error);
     evaluator.initialize(inputs);
-    const std::array wrong_changes { std::pair { borrow(second), borrow(second) } };
-    EXPECT_THROW(evaluator.update(wrong_changes), std::invalid_argument);
-    expect_same(evaluator.get_result(), input);
-    delta.added.insert(std::tuple { static_cast<uint_t>(2) });
-    delta.removed.insert(std::tuple { static_cast<uint_t>(2) });
+    delta.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
+    delta.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
     EXPECT_THROW(evaluator.update(change), std::invalid_argument);
-    expect_same(evaluator.get_result(), input);
+    expect_same(evaluator.get_result(), borrow(input));
     delta.added.clear();
     EXPECT_THROW(evaluator.update(change), std::invalid_argument);
-    expect_same(evaluator.get_result(), input);
+    expect_same(evaluator.get_result(), borrow(input));
     EXPECT_THROW(evaluator.update(change), std::invalid_argument);
     delta.clear();
     EXPECT_NO_THROW(evaluator.update(change));
-    expect_same(evaluator.get_result(), input);
-    const std::array aliased { std::pair { borrow(evaluator.get_result()), borrow(delta.removed) } };
+    expect_same(evaluator.get_result(), borrow(input));
+    const std::array aliased { std::pair { evaluator.get_result(), borrow(delta.removed) } };
     EXPECT_THROW(evaluator.update(aliased), std::invalid_argument);
-    expect_same(evaluator.get_result(), input);
+    expect_same(evaluator.get_result(), borrow(input));
     auto moved = std::move(evaluator);
     EXPECT_NO_THROW(moved.update(change));
-    expect_same(moved.get_result(), input);
+    expect_same(moved.get_result(), borrow(input));
 }
 
 TEST(YggdrasilTests, DatabaseGenericJoinRejectsInvalidBatchesBeforeMutationAndGuardsFailedUpdates)
 {
-    RelationBuilder input({ ColumnIndex(1) });
-    input.insert(std::tuple { static_cast<uint_t>(1) });
+    RelationBuilder input { ygg::tests::ops::cols({ ColumnIndex(1) }) };
+    input.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)) });
     const std::array inputs { borrow(input), borrow(input) };
     const auto plan = plan_for(inputs, { ColumnIndex(1) }, { ColumnIndex(1) });
-    database::incremental::GenericJoinEvaluator evaluator(plan);
+    database::incremental::GenericJoinEvaluator evaluator(layer(), plan);
     evaluator.initialize(inputs);
-    Change first(input.columns().span()), second(input.columns().span());
-    first.removed.insert(std::tuple { static_cast<uint_t>(1) });
-    second.removed.insert(std::tuple { static_cast<uint_t>(99) });
+    Change first(layer(), input.columns()), second(layer(), input.columns());
+    first.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)) });
+    second.removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(99)) });
     const std::array invalid { std::pair { borrow(first.added), borrow(first.removed) }, std::pair { borrow(second.added), borrow(second.removed) } };
     EXPECT_THROW(evaluator.update(invalid), std::invalid_argument);
-    expect_same(evaluator.get_result(), input);
+    expect_same(evaluator.get_result(), borrow(input));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
@@ -482,18 +475,18 @@ TEST(YggdrasilTests, DatabaseGenericJoinRejectsInvalidBatchesBeforeMutationAndGu
     second.clear();
     EXPECT_NO_THROW(evaluator.update(invalid));
     EXPECT_TRUE(evaluator.get_result().empty());
-    expect_same(evaluator.get_delta().removed, input);
+    expect_same(evaluator.get_delta().change().second, borrow(input));
 
     const std::array single_input { borrow(input) };
     const auto single_plan = plan_for(single_input, { ColumnIndex(1) }, { ColumnIndex(1) });
-    database::incremental::GenericJoinEvaluator failing(single_plan);
+    database::incremental::GenericJoinEvaluator failing(layer(), single_plan);
     failing.initialize(single_input);
-    Change insertion(input.columns().span());
-    insertion.added.insert(std::tuple { static_cast<uint_t>(2) });
+    Change insertion(layer(), input.columns());
+    insertion.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
     // Validation and the delta trie read successfully; mutation then fails after
     // the new output has already been appended to the internal delta relation.
     const ThrowingRelation unstable(insertion.added, 4);
-    const std::array broken { std::pair<ThrowingRelation, database::BorrowedRelationView> { unstable, borrow(insertion.removed) } };
+    const std::array broken { std::pair<ThrowingRelation, database::BuilderRelationView> { unstable, borrow(insertion.removed) } };
     EXPECT_THROW(failing.update(broken), std::runtime_error);
     EXPECT_THROW((void) failing.get_result(), std::logic_error);
     EXPECT_THROW((void) failing.get_delta(), std::logic_error);
@@ -502,6 +495,6 @@ TEST(YggdrasilTests, DatabaseGenericJoinRejectsInvalidBatchesBeforeMutationAndGu
     const std::array valid { std::pair { borrow(insertion.added), borrow(insertion.removed) } };
     failing.update(valid);
     EXPECT_EQ(failing.get_result().size(), 2);
-    expect_same(failing.get_delta().added, insertion.added);
+    expect_same(failing.get_delta().change().first, borrow(insertion.added));
 }
 }  // namespace ygg::tests

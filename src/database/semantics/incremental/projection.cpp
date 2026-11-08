@@ -7,21 +7,20 @@
 
 namespace ygg::database::incremental
 {
-std::span<const std::byte> ProjectionEvaluator::project_row(std::span<const std::byte> input, Workspace& workspace) const
+RowPool::row_type ProjectionEvaluator::project_row(const RowPool::row_type& input, Workspace& workspace) const
 {
     auto& row = workspace.row;
-    row.clear();
-    row.reserve(m_plan.output_columns().row_size());
-    database::detail::append_fields(row, input, m_plan.positions());
-    return row;
+    row.reset(m_result.widths());
+    database::detail::copy_fields(row, 0, input, m_plan.positions());
+    return row.row();
 }
 }
 
 namespace ygg::database::incremental
 {
-bool ProjectionEvaluator::add(std::span<const std::byte> row)
+bool ProjectionEvaluator::add(const RowPool::row_type& row)
 {
-    const auto index = m_result.insert(Row(row, m_plan.output_columns().span()));
+    const auto index = m_result.insert(row);
     if (index == m_supports.size())
     {
         m_supports.push_back(1);
@@ -37,9 +36,9 @@ bool ProjectionEvaluator::add(std::span<const std::byte> row)
 
 namespace ygg::database::incremental
 {
-void ProjectionEvaluator::remove(std::span<const std::byte> row)
+void ProjectionEvaluator::remove(const RowPool::row_type& row)
 {
-    const auto index = m_result.find(Row(row, m_plan.output_columns().span()));
+    const auto index = m_result.find(row);
     if (!index || m_supports[*index] == 0)
         throw std::invalid_argument("Incremental projection: removal has no supporting row.");
     if (--m_supports[*index] == 0)
@@ -49,20 +48,21 @@ void ProjectionEvaluator::remove(std::span<const std::byte> row)
 
 namespace ygg::database::incremental
 {
-ProjectionEvaluator::ProjectionEvaluator(ProjectionPlan plan) :
+ProjectionEvaluator::ProjectionEvaluator(const Repository& layer, ProjectionPlan plan) :
+    m_layer(&layer),
     m_plan(std::move(plan)),
-    m_result(m_plan.output_columns().span()),
-    m_delta(m_plan.output_columns().span())
+    m_result(m_plan.output_columns()),
+    m_delta(layer, m_plan.output_columns())
 {
 }
 }
 
 namespace ygg::database::incremental
 {
-const urd::builder<Relation>& ProjectionEvaluator::get_result() const&
+BuilderRelationView ProjectionEvaluator::get_result() const&
 {
     detail::require_initialized(m_initialized);
-    return m_result;
+    return m_layer->view(m_result);
 }
 }
 

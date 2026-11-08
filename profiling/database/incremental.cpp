@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "yggdrasil/database/semantics/relation_builder.hpp"
+#include "yggdrasil/formalism/relation_view.hpp"
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 
 #ifndef YGG_DATABASE_APPEND_ONLY_PROFILE
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 #endif
 
 #include <algorithm>
@@ -18,6 +18,7 @@
 #include <benchmark/benchmark.h>
 #include <chrono>
 #include <cstddef>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -30,7 +31,16 @@ namespace ygg::profiling
 {
 namespace
 {
-using ColumnIndex = urd::index<database::Column>;
+using ColumnIndex = urd::index<ygg::Column>;
+
+/// Columns of type uint_t with these labels.
+std::vector<ygg::ColumnLayout> cols(std::initializer_list<ColumnIndex> labels)
+{
+    std::vector<ygg::ColumnLayout> result;
+    for (const auto label : labels)
+        result.push_back({ label, ygg::type_id<uint_t> });
+    return result;
+}
 
 // Define YGG_DATABASE_APPEND_ONLY_PROFILE to isolate the append/clear workload
 // without pulling in the incremental evaluators.
@@ -38,12 +48,12 @@ void append_only(benchmark::State& state)
 {
     const auto rows = static_cast<size_t>(state.range(0));
     const auto repetitions = static_cast<size_t>(state.range(1));
-    urd::builder<database::Relation> relation { ColumnIndex(1), ColumnIndex(2) };
+    urd::builder<ygg::Relation<ygg::Schema>> relation { cols({ ColumnIndex(1), ColumnIndex(2) }) };
     const auto refill = [&]
     {
         relation.clear();
         for (size_t i = 0; i < rows; ++i)
-            relation.insert(std::tuple { static_cast<uint_t>(i / repetitions), static_cast<uint_t>(i / repetitions + rows) });
+            relation.insert(std::array { ygg::encode_value(static_cast<uint_t>(i / repetitions)), ygg::encode_value(static_cast<uint_t>(i / repetitions + rows)) });
     };
     refill();
     for ([[maybe_unused]] auto _ : state)
@@ -59,15 +69,24 @@ void append_only(benchmark::State& state)
 
 #ifndef YGG_DATABASE_APPEND_ONLY_PROFILE
 
+/// The layer the benchmarks read their builders through.
+const database::Repository& layer()
+{
+    static const database::Repository repository;
+    return repository;
+}
+
+database::BuilderRelationView borrow(const urd::builder<ygg::Relation<ygg::Schema>>& relation) { return layer().view(relation); }
+
 struct Transition
 {
-    database::incremental::Delta delta { ColumnIndex(1), ColumnIndex(2) };
-    urd::builder<database::Relation> snapshot { ColumnIndex(1), ColumnIndex(2) };
+    database::incremental::Delta delta { layer(), cols({ ColumnIndex(1), ColumnIndex(2) }) };
+    urd::builder<ygg::Relation<ygg::Schema>> snapshot { cols({ ColumnIndex(1), ColumnIndex(2) }) };
 };
 
 struct Trace
 {
-    urd::builder<database::Relation> initial { ColumnIndex(1), ColumnIndex(2) };
+    urd::builder<ygg::Relation<ygg::Schema>> initial { cols({ ColumnIndex(1), ColumnIndex(2) }) };
     std::array<Transition, 6> transitions {};
     size_t rows;
     size_t changed_rows;
@@ -85,7 +104,7 @@ struct Trace
         if (rows > std::numeric_limits<uint_t>::max() / 4)
             throw std::overflow_error("Benchmark trace row count exceeds the tuple value range.");
         for (size_t i = 0; i < rows; ++i)
-            initial.insert(std::tuple { static_cast<uint_t>(i / witnesses), static_cast<uint_t>(i) });
+            initial.insert(std::array { ygg::encode_value(static_cast<uint_t>(i / witnesses)), ygg::encode_value(static_cast<uint_t>(i)) });
         refresh(0);
     }
 
@@ -108,12 +127,12 @@ struct Trace
             const auto offset = phase == 0 ? uint_t { 0 } : static_cast<uint_t>((generation + phase) * rows);
             for (size_t i = begin; i < begin + changed_rows; ++i)
             {
-                step.delta.removed.insert(std::tuple { current[i][0], current[i][1] });
+                step.delta.removed.insert(std::array { ygg::encode_value(current[i][0]), ygg::encode_value(current[i][1]) });
                 current[i] = { static_cast<uint_t>(i / witnesses + (changing_keys ? offset : 0)), static_cast<uint_t>(i + offset) };
-                step.delta.added.insert(std::tuple { current[i][0], current[i][1] });
+                step.delta.added.insert(std::array { ygg::encode_value(current[i][0]), ygg::encode_value(current[i][1]) });
             }
             for (const auto& row : current)
-                step.snapshot.insert(std::tuple { row[0], row[1] });
+                step.snapshot.insert(std::array { ygg::encode_value(row[0]), ygg::encode_value(row[1]) });
         };
         // A -> B -> C -> B -> A -> D -> A: two levels, undo, then a sibling.
         replace(0, 1);
@@ -137,7 +156,7 @@ struct JoinTrace
         rhs(rows_, changed_rows, witnesses, true),
         rows(rows_)
     {
-        const std::array columns { ColumnIndex(1), ColumnIndex(3) };
+        const auto columns = cols({ ColumnIndex(1), ColumnIndex(3) });
         rhs.initial.rename(columns);
         for (auto& transition : rhs.transitions)
         {
@@ -154,42 +173,42 @@ struct JoinTrace
     }
 };
 
-bool equal_rows(const urd::builder<database::Relation>& lhs, const urd::builder<database::Relation>& rhs)
+bool equal_rows(database::BuilderRelationView lhs, const urd::builder<ygg::Relation<ygg::Schema>>& rhs)
 {
     if (lhs.size() != rhs.size())
         return false;
-    for (size_t i = 0; i < lhs.size(); ++i)
-        if (!rhs.contains(lhs.row(i)))
+    for (const auto row : lhs.rows())
+        if (!rhs.contains(row))
             return false;
     return true;
 }
 
-size_t changed_rows(const urd::builder<database::Relation>& before, const urd::builder<database::Relation>& after)
+size_t changed_rows(const urd::builder<ygg::Relation<ygg::Schema>>& before, const urd::builder<ygg::Relation<ygg::Schema>>& after)
 {
     size_t result = 0;
-    for (size_t i = 0; i < before.size(); ++i)
-        result += !after.contains(before.row(i));
-    for (size_t i = 0; i < after.size(); ++i)
-        result += !before.contains(after.row(i));
+    for (const auto row : borrow(before).rows())
+        result += !after.contains(row);
+    for (const auto row : borrow(after).rows())
+        result += !before.contains(row);
     return result;
 }
 
-bool equal_delta(const database::incremental::Delta& delta, const urd::builder<database::Relation>& before, const urd::builder<database::Relation>& after)
+bool equal_delta(const database::incremental::Delta& delta, const urd::builder<ygg::Relation<ygg::Schema>>& before, const urd::builder<ygg::Relation<ygg::Schema>>& after)
 {
     size_t added = 0;
     size_t removed = 0;
-    for (size_t i = 0; i < before.size(); ++i)
-        if (!after.contains(before.row(i)))
+    for (const auto row : borrow(before).rows())
+        if (!after.contains(row))
         {
             ++removed;
-            if (!delta.removed.contains(before.row(i)))
+            if (!delta.removed.contains(row))
                 return false;
         }
-    for (size_t i = 0; i < after.size(); ++i)
-        if (!before.contains(after.row(i)))
+    for (const auto row : borrow(after).rows())
+        if (!before.contains(row))
         {
             ++added;
-            if (!delta.added.contains(after.row(i)))
+            if (!delta.added.contains(row))
                 return false;
         }
     return delta.added.size() == added && delta.removed.size() == removed;
@@ -226,7 +245,7 @@ void measure(benchmark::State& state, TraceType& trace, Update update, Result re
             {
                 const auto begin = std::chrono::steady_clock::now();
                 update(transition);
-                benchmark::DoNotOptimize(std::addressof(result()));
+                benchmark::DoNotOptimize(result().relation_identity());
                 benchmark::ClobberMemory();
                 const auto duration = std::chrono::steady_clock::now() - begin;
                 maximum = std::max(maximum, duration);
@@ -235,7 +254,7 @@ void measure(benchmark::State& state, TraceType& trace, Update update, Result re
             else
             {
                 update(transition);
-                benchmark::DoNotOptimize(std::addressof(result()));
+                benchmark::DoNotOptimize(result().relation_identity());
                 benchmark::ClobberMemory();
             }
         }
@@ -257,41 +276,41 @@ void projection(benchmark::State& state)
 {
     // Witness replacements change payloads while preserving projected keys.
     Trace trace(static_cast<size_t>(state.range(0)), static_cast<size_t>(state.range(1)), static_cast<size_t>(state.range(2)), !ReplaceWitnesses);
-    const database::ProjectionPlan plan(trace.initial.columns().span(), { ColumnIndex(1) });
+    const database::ProjectionPlan plan(trace.initial.columns(), std::array { ColumnIndex(1) });
     database::Workspace workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::ProjectionEvaluator(plan);
+            return database::incremental::ProjectionEvaluator(layer(), plan);
         else
-            return urd::builder<database::Relation>(plan.output_columns().span());
+            return urd::builder<ygg::Relation<ygg::Schema>>(plan.output_columns());
     }();
     if constexpr (Incremental)
-        evaluation.initialize(trace.initial, workspace);
+        evaluation.initialize(borrow(trace.initial), workspace);
     const auto update = [&](const Transition& transition)
     {
         if constexpr (Incremental)
             evaluation.update(transition.delta.change(), workspace);
         else
-            database::project(transition.snapshot, plan, evaluation, workspace);
+            database::project(borrow(transition.snapshot), plan, evaluation, workspace);
     };
-    const auto result = [&]() -> const urd::builder<database::Relation>&
+    const auto result = [&]() -> database::BuilderRelationView
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
-            return evaluation;
+            return borrow(evaluation);
     };
     // Validate every transition outside timing, not just the restored root.
-    urd::builder<database::Relation> reference(plan.output_columns().span());
-    urd::builder<database::Relation> previous(plan.output_columns().span());
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    urd::builder<ygg::Relation<ygg::Schema>> previous(plan.output_columns());
     database::Workspace reference_workspace;
-    database::project(trace.initial, plan, previous, reference_workspace);
+    database::project(borrow(trace.initial), plan, previous, reference_workspace);
     size_t output_delta_rows = 0;
     for (const auto& transition : trace.transitions)
     {
         update(transition);
-        database::project(transition.snapshot, plan, reference, reference_workspace);
+        database::project(borrow(transition.snapshot), plan, reference, reference_workspace);
         if (!equal_rows(result(), reference))
         {
             state.SkipWithError("projection trace disagrees with full recomputation");
@@ -307,7 +326,7 @@ void projection(benchmark::State& state)
         std::swap(previous, reference);
     }
     state.counters["mean_output_delta_rows"] = static_cast<double>(output_delta_rows) / trace.transitions.size();
-    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity(); });
+    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.memory_usage(); });
 }
 
 template<bool Incremental, bool Latency>
@@ -316,48 +335,47 @@ void fixed_input_join(benchmark::State& state)
     const auto rows = static_cast<size_t>(state.range(0));
     const auto fanout = static_cast<size_t>(state.range(2));
     Trace trace(rows, static_cast<size_t>(state.range(1)), 1, false);
-    database::RelationPool pool;
-    auto fixed = pool.get_or_allocate({ ColumnIndex(1), ColumnIndex(3) });
+    auto fixed = layer().get_relation_builder(cols({ ColumnIndex(1), ColumnIndex(3) }));
     for (size_t key = 0; key < rows; ++key)
         for (size_t match = 0; match < fanout; ++match)
-            fixed->insert(std::tuple { static_cast<uint_t>(key), static_cast<uint_t>(match) });
-    const database::JoinPlan plan(trace.initial.columns().span(), fixed->columns().span());
-    const urd::builder<database::Relation> unchanged(fixed->columns().span());
+            fixed->insert(std::array { ygg::encode_value(static_cast<uint_t>(key)), ygg::encode_value(static_cast<uint_t>(match)) });
+    const database::JoinPlan plan(trace.initial.columns(), fixed->columns());
+    const urd::builder<ygg::Relation<ygg::Schema>> unchanged(fixed->columns());
     database::Workspace workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::JoinEvaluator(plan);
+            return database::incremental::JoinEvaluator(layer(), plan);
         else
-            return urd::builder<database::Relation>(plan.output_columns().span());
+            return urd::builder<ygg::Relation<ygg::Schema>>(plan.output_columns());
     }();
     // Full recomputation also retains its index on the unchanged input.
-    const database::JoinIndex index(*fixed, plan.rhs_keys());
+    database::JoinIndexCache index;
     if constexpr (Incremental)
-        evaluation.initialize(trace.initial, *fixed, workspace);
+        evaluation.initialize(borrow(trace.initial), borrow(*fixed), workspace);
     const auto update = [&](const Transition& transition)
     {
         if constexpr (Incremental)
-            evaluation.update(transition.delta.change(), std::tie(unchanged, unchanged), workspace);
+            evaluation.update(transition.delta.change(), std::pair { borrow(unchanged), borrow(unchanged) }, workspace);
         else
-            database::join(transition.snapshot, *fixed, plan, index, evaluation, workspace);
+            database::join(borrow(transition.snapshot), borrow(*fixed), plan, index, database::JoinReuse { .rhs = true }, evaluation, workspace);
     };
-    const auto result = [&]() -> const urd::builder<database::Relation>&
+    const auto result = [&]() -> database::BuilderRelationView
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
-            return evaluation;
+            return borrow(evaluation);
     };
-    urd::builder<database::Relation> reference(plan.output_columns().span());
-    urd::builder<database::Relation> previous(plan.output_columns().span());
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    urd::builder<ygg::Relation<ygg::Schema>> previous(plan.output_columns());
     database::Workspace reference_workspace;
-    database::join(trace.initial, *fixed, plan, index, previous, reference_workspace);
+    database::join(borrow(trace.initial), borrow(*fixed), plan, index, database::JoinReuse { .rhs = true }, previous, reference_workspace);
     size_t output_delta_rows = 0;
     for (const auto& transition : trace.transitions)
     {
         update(transition);
-        database::join(transition.snapshot, *fixed, plan, index, reference, reference_workspace);
+        database::join(borrow(transition.snapshot), borrow(*fixed), plan, index, database::JoinReuse { .rhs = true }, reference, reference_workspace);
         if (!equal_rows(result(), reference))
         {
             state.SkipWithError("fixed-input join trace disagrees with full recomputation");
@@ -377,30 +395,24 @@ void fixed_input_join(benchmark::State& state)
                      trace,
                      update,
                      result,
-                     [&]
-                     {
-                         auto bytes = evaluation.memory_usage() + workspace.row.capacity();
-                         if constexpr (!Incremental)
-                             bytes += urd::memory_usage(index.index());
-                         return bytes;
-                     });
+                     [&] { return evaluation.memory_usage() + workspace.memory_usage(); });  // ponytail: excludes the join cache, which reports no memory
 }
 
 template<bool Incremental, bool Latency>
 void changing_join(benchmark::State& state)
 {
     JoinTrace trace(static_cast<size_t>(state.range(0)), static_cast<size_t>(state.range(1)), static_cast<size_t>(state.range(2)));
-    const database::JoinPlan plan(trace.lhs.initial.columns().span(), trace.rhs.initial.columns().span());
+    const database::JoinPlan plan(trace.lhs.initial.columns(), trace.rhs.initial.columns());
     database::Workspace workspace;
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::JoinEvaluator(plan);
+            return database::incremental::JoinEvaluator(layer(), plan);
         else
-            return urd::builder<database::Relation>(plan.output_columns().span());
+            return urd::builder<ygg::Relation<ygg::Schema>>(plan.output_columns());
     }();
     if constexpr (Incremental)
-        evaluation.initialize(trace.lhs.initial, trace.rhs.initial, workspace);
+        evaluation.initialize(borrow(trace.lhs.initial), borrow(trace.rhs.initial), workspace);
     const auto update = [&](size_t position)
     {
         const auto& left = trace.lhs.transitions[position];
@@ -410,24 +422,24 @@ void changing_join(benchmark::State& state)
         else
             // Both inputs change, so full recomputation rebuilds its transient
             // hash index in retained storage using the already prepared plan.
-            database::join(left.snapshot, right.snapshot, plan, evaluation, workspace);
+            database::join(borrow(left.snapshot), borrow(right.snapshot), plan, evaluation, workspace);
     };
-    const auto result = [&]() -> const urd::builder<database::Relation>&
+    const auto result = [&]() -> database::BuilderRelationView
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
-            return evaluation;
+            return borrow(evaluation);
     };
-    urd::builder<database::Relation> reference(plan.output_columns().span());
-    urd::builder<database::Relation> previous(plan.output_columns().span());
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    urd::builder<ygg::Relation<ygg::Schema>> previous(plan.output_columns());
     database::Workspace reference_workspace;
-    database::join(trace.lhs.initial, trace.rhs.initial, plan, previous, reference_workspace);
+    database::join(borrow(trace.lhs.initial), borrow(trace.rhs.initial), plan, previous, reference_workspace);
     size_t output_delta_rows = 0;
     for (const auto position : trace.transitions)
     {
         update(position);
-        database::join(trace.lhs.transitions[position].snapshot, trace.rhs.transitions[position].snapshot, plan, reference, reference_workspace);
+        database::join(borrow(trace.lhs.transitions[position].snapshot), borrow(trace.rhs.transitions[position].snapshot), plan, reference, reference_workspace);
         if (!equal_rows(result(), reference))
         {
             state.SkipWithError("changing join trace disagrees with full recomputation");
@@ -443,7 +455,7 @@ void changing_join(benchmark::State& state)
         std::swap(previous, reference);
     }
     state.counters["mean_output_delta_rows"] = static_cast<double>(output_delta_rows) / trace.transitions.size();
-    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.row.capacity() + urd::memory_usage(workspace.join_index); });
+    measure<Latency>(state, trace, update, result, [&] { return evaluation.memory_usage() + workspace.memory_usage() + urd::memory_usage(workspace.join_index); });
     // Each side removes and adds range(1) rows in the same overlapping key groups.
     state.counters["input_delta_rows"] = static_cast<double>(4 * state.range(1));
 }

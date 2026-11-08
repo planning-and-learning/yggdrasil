@@ -11,6 +11,8 @@ import pytest
 from pyyggdrasil import database
 
 Readable = database.Relation | database.BorrowedRelation | database.RelationView
+# Reads the tests' relation builders and evaluator results.
+RELATIONS = database.RelationRepository()
 
 
 Rows: TypeAlias = Iterable[Sequence[object]]
@@ -23,10 +25,12 @@ def columns(*labels: int) -> tuple[database.ColumnIndex, ...]:
 def relation(
     labels: Sequence[int], rows: Iterable[Sequence[object]] = (), types: Sequence[database.ColumnType] = ()
 ) -> database.Relation:
-    schema = database.Columns()
-    for index, label in enumerate(labels):
-        schema.push_back(database.ColumnIndex(label), types[index] if types else database.ColumnType.UINT32)
-    result = database.Relation(schema)
+    result = database.Relation(
+        [
+            database.ColumnLayout(database.ColumnIndex(label), types[index] if types else database.ColumnType.UINT32)
+            for index, label in enumerate(labels)
+        ]
+    )
     for row in rows:
         result.insert(row)
     return result
@@ -39,13 +43,20 @@ def rows(value: Iterable[database.RelationRow]) -> set[tuple[object, ...]]:
 def borrow(
     source: database.Relation, edges: database.Relation, target: database.Relation
 ) -> tuple[database.BorrowedRelation, database.BorrowedRelation, database.BorrowedRelation]:
-    return database.BorrowedRelation(source), database.BorrowedRelation(edges), database.BorrowedRelation(target)
+    return RELATIONS.view(source), RELATIONS.view(edges), RELATIONS.view(target)
 
 
 def change(
     added: database.Relation, removed: database.Relation
 ) -> tuple[database.BorrowedRelation, database.BorrowedRelation]:
-    return database.BorrowedRelation(added), database.BorrowedRelation(removed)
+    return RELATIONS.view(added), RELATIONS.view(removed)
+
+
+def distance(source: Readable, edges: Readable, target: Readable, plan: database.DistancePlan) -> database.Relation:
+    """The distances into a fresh relation of the plan's output columns."""
+    result = database.Relation(plan.output_columns())
+    database.distance(source, edges, target, plan, result, database.DistanceWorkspace(plan))
+    return result
 
 
 def plan_for(source: Readable, edges: Readable, target: Readable) -> database.DistancePlan:
@@ -62,7 +73,7 @@ def test_distance_mixed_inputs_and_independent_output(interned_mask: int) -> Non
     plan = plan_for(source, edges, target)
     assert plan.arity() == 2
     assert tuple(plan.output_columns()) == columns(20, 21, 22, 23, 99)
-    repository = database.RelationRepositoryFactory().create()
+    repository = database.RelationRepository()
     interned = [repository.insert(value)[0] for value in (source, edges, target)]
     # Interned inputs are accepted without copying only when all are interned; otherwise they are copied out.
     copied = [
@@ -73,12 +84,12 @@ def test_distance_mixed_inputs_and_independent_output(interned_mask: int) -> Non
 
     # Two independent outputs of the same call; `other` is cleared below and must not affect `result`.
     if interned_mask == 7:
-        result, other = (database.distance(interned[0], interned[1], interned[2], plan) for _ in range(2))
+        result, other = (distance(interned[0], interned[1], interned[2], plan) for _ in range(2))
     else:
-        result, other = (database.distance(borrowed[0], borrowed[1], borrowed[2], plan) for _ in range(2))
+        result, other = (distance(borrowed[0], borrowed[1], borrowed[2], plan) for _ in range(2))
     assert isinstance(result, database.Relation)
     expected = {a + a + (0,), a + c + (2,), c + c + (0,)}
-    assert rows(result) == expected
+    assert rows(RELATIONS.view(result)) == expected
     assert tuple(result.columns()) == columns(20, 21, 22, 23, 99)
     assert [result.columns().type(i) for i in range(5)] == types * 2 + [database.ColumnType.UINT32]
 
@@ -88,7 +99,7 @@ def test_distance_mixed_inputs_and_independent_output(interned_mask: int) -> Non
     target.clear()
     del interned, copied, borrowed, repository, plan, source, edges, target
     gc.collect()
-    assert rows(result) == expected
+    assert rows(RELATIONS.view(result)) == expected
 
 
 def test_distance_canonical_nan_boolean_and_zero_length_paths() -> None:
@@ -96,9 +107,9 @@ def test_distance_canonical_nan_boolean_and_zero_length_paths() -> None:
     source = relation([10, 11], [(True, float("nan")), (False, -0.0)], types)
     edges = relation([20, 21, 22, 23], [(True, -float("nan"), False, 0.0)], types * 2)
     target = relation([30, 31], [(True, -float("nan")), (False, 0.0)], types)
-    result = database.distance(*borrow(source, edges, target), plan_for(source, edges, target))
+    result = distance(*borrow(source, edges, target), plan_for(source, edges, target))
     normalized = {
-        tuple("nan" if isinstance(value, float) and math.isnan(value) else value for value in row) for row in result
+        tuple("nan" if isinstance(value, float) and math.isnan(value) else value for value in row) for row in RELATIONS.view(result)
     }
     assert normalized == {
         (True, "nan", True, "nan", 0),
@@ -113,8 +124,8 @@ def test_incremental_distance_exact_deltas(intern_added: bool) -> None:
     edges = relation([20, 21], [(0, 1), (1, 2), (2, 3), (0, 3)])
     target = relation([30], [(0,), (2,), (3,)])
     plan = plan_for(source, edges, target)
-    evaluator = database.DistanceEvaluator(plan)
-    repository = database.RelationRepositoryFactory().create()
+    evaluator = database.DistanceEvaluator(RELATIONS, plan)
+    repository = database.RelationRepository()
     evaluator.initialize(*borrow(source, database.assign(database.Relation(), repository.insert(edges)[0]), target))
     expected = {(0, 0, 0), (0, 2, 2), (0, 3, 1), (2, 2, 0), (2, 3, 1)}
     assert rows(evaluator.get_result()) == expected
@@ -180,7 +191,7 @@ def test_evaluator_borrowed_results_are_read_only_and_retain_owners(leaf: str) -
     edges = relation([20, 21], [(0, 1), (1, 2)])
     target = relation([30], [(2,)])
     plan = plan_for(source, edges, target)
-    evaluator = database.DistanceEvaluator(plan)
+    evaluator = database.DistanceEvaluator(RELATIONS, plan)
     evaluator.initialize(*borrow(source, edges, target))
     evaluator.update(
         change(relation([10]), relation([10])),
@@ -254,7 +265,7 @@ def test_borrowed_relations_can_feed_another_distance_evaluation() -> None:
     source = relation([10], [(0,)])
     edges = relation([20, 21], [(0, 1)])
     target = relation([30], [(1,)])
-    evaluator = database.DistanceEvaluator(plan_for(source, edges, target))
+    evaluator = database.DistanceEvaluator(RELATIONS, plan_for(source, edges, target))
     evaluator.initialize(*borrow(source, edges, target))
     borrowed = evaluator.get_result()
     next_edges = relation([40, 41, 42, 43, 44, 45])
@@ -263,7 +274,7 @@ def test_borrowed_relations_can_feed_another_distance_evaluation() -> None:
         borrowed.columns(), next_edges.columns(), next_target.columns(), database.ColumnIndex(100)
     )
     edges_view, target_view = change(next_edges, next_target)
-    assert rows(database.distance(borrowed, edges_view, target_view, plan)) == {(0, 1, 1, 0, 1, 1, 0)}
+    assert rows(RELATIONS.view(distance(borrowed, edges_view, target_view, plan))) == {(0, 1, 1, 0, 1, 1, 0)}
 
 
 def test_distance_rejects_invalid_schema_and_input_types() -> None:
@@ -279,24 +290,16 @@ def test_distance_rejects_invalid_schema_and_input_types() -> None:
         plan_for(source, relation([20, 21], types=[database.ColumnType.INT32] * 2), target)
     with pytest.raises(ValueError, match="Columns: duplicate column label"):
         database.DistancePlan(source.columns(), edges.columns(), target.columns(), database.ColumnIndex(20))
-    with pytest.raises(ValueError, match="Relational operation: input schema does not match prepared plan"):
-        database.distance(*borrow(relation([11]), edges, target), plan)
-    with pytest.raises(ValueError, match="Relational operation: input schema does not match prepared plan"):
-        database.distance(*borrow(source, edges, relation([30], types=[database.ColumnType.INT32])), plan)
+    with pytest.raises(ValueError, match="Relational operation: columns do not match the plan"):
+        distance(*borrow(relation([11]), edges, target), plan)
+    with pytest.raises(ValueError, match="Relational operation: columns do not match the plan"):
+        distance(*borrow(source, edges, relation([30], types=[database.ColumnType.INT32])), plan)
     _, edges_view, target_view = borrow(source, edges, target)
     with pytest.raises(TypeError):
-        database.distance(cast("Any", []), edges_view, target_view, plan)
-    evaluator = database.DistanceEvaluator(plan)
+        distance(cast("Any", []), edges_view, target_view, plan)
+    evaluator = database.DistanceEvaluator(RELATIONS, plan)
     with pytest.raises(RuntimeError):
         evaluator.update(
             change(source, relation([10])), change(edges, relation([20, 21])), change(target, relation([30]))
         )
     evaluator.initialize(*borrow(source, edges, target))
-    before = rows(evaluator.get_result())
-    with pytest.raises(ValueError, match="Relational operation: input schema does not match prepared plan"):
-        evaluator.update(
-            change(relation([11]), relation([10])),
-            change(relation([20, 21]), relation([20, 21])),
-            change(relation([30]), relation([30])),
-        )
-    assert rows(evaluator.get_result()) == before

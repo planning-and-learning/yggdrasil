@@ -35,24 +35,27 @@ void bind_inputs(nb::class_<FullEvaluator>& full, nb::class_<IncrementalEvaluato
 
 void bind_database_evaluation(nb::module_& m)
 {
-    using Borrowed = ygg::database::BorrowedRelationView;
-    const auto borrow = [](const urd::builder<ygg::database::Relation>& relation) { return Borrowed(&relation, &borrowed_relation_context()); };
+    using Repository = ygg::database::Repository;
+    using QueryPlan = ygg::database::QueryPlan;
 
-    auto full = nb::class_<FullEvaluator>(m, "QueryEvaluator", "Evaluate a compiled query DAG. Input relations are borrowed only during each call.");
-    full.def(nb::init<ygg::database::QueryPlan>(), nb::arg("plan"))
+    auto full = nb::class_<FullEvaluator>(m,
+                                          "QueryEvaluator",
+                                          "Evaluate a compiled query DAG; its results are read through the repository. Input relations are "
+                                          "borrowed only during each call.");
+    full.def(nb::init<const Repository&, QueryPlan>(), nb::arg("repository"), nb::arg("plan"), nb::keep_alive<1, 2>())
         .def(
             "get_result",
-            [borrow](const FullEvaluator& evaluator, size_t root) { return borrow(evaluator.get_result(root)); },
+            [](const FullEvaluator& evaluator, size_t root) { return evaluator.get_result(root); },
             nb::arg("root") = 0,
             nb::keep_alive<0, 1>(),
             "Borrowed result; the next evaluate invalidates it.")
         .def("memory_usage", &FullEvaluator::memory_usage);
 
     auto incremental = nb::class_<IncrementalEvaluator>(m, "IncrementalQueryEvaluator", "Maintain a compiled query DAG and exact net root deltas.");
-    incremental.def(nb::init<ygg::database::QueryPlan>(), nb::arg("plan"))
+    incremental.def(nb::init<const Repository&, QueryPlan>(), nb::arg("repository"), nb::arg("plan"), nb::keep_alive<1, 2>())
         .def(
             "get_result",
-            [borrow](const IncrementalEvaluator& evaluator, size_t root) { return borrow(evaluator.get_result(root)); },
+            [](const IncrementalEvaluator& evaluator, size_t root) { return evaluator.get_result(root); },
             nb::arg("root") = 0,
             nb::keep_alive<0, 1>(),
             "Borrowed result; the next initialize or update invalidates it.")
@@ -63,7 +66,7 @@ void bind_database_evaluation(nb::module_& m)
             nb::rv_policy::reference_internal)
         .def("memory_usage", &IncrementalEvaluator::memory_usage);
 
-    bind_inputs<Borrowed>(full, incremental, m);
+    bind_inputs<ygg::database::BuilderRelationView>(full, incremental, m);
     bind_inputs<ygg::database::RelationView>(full, incremental, m);
 }
 }  // namespace yggdrasil

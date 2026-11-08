@@ -10,6 +10,7 @@
 #include "yggdrasil/database/semantics/operations.hpp"
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
+#include <cassert>
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
@@ -31,8 +32,9 @@ namespace ygg::database::incremental::bound
 struct InputChange
 {
     size_t slot = 0;
-    urd::builder<Relation> added;
-    urd::builder<Relation> removed;
+    urd::builder<Relation<Schema>> added;
+    urd::builder<Relation<Schema>> removed;
+    SetPlan plan;  ///< Of the slot's columns: what diffs the slot's rows.
 };
 
 /// A bound::QueryEvaluator kept across input changes. initialize() binds the first inputs; update() takes a caller's
@@ -49,12 +51,15 @@ struct InputChange
 class QueryEvaluator
 {
 public:
-    explicit QueryEvaluator(QueryView<> query, const std::vector<bool>& static_slots = {}) : m_base(query, static_slots)
+    /// Its builders are read through `layer`, which must outlive it.
+    QueryEvaluator(const Repository& layer, QueryView<> query, const std::vector<bool>& static_slots = {}) :
+        m_layer(&layer),
+        m_base(layer, query, static_slots)
     {
         for (size_t slot = 0; slot < input_count(); ++slot)
         {
             const auto columns = std::span<const ColumnLayout>(m_base.query().input_columns[slot]);
-            m_changes.push_back(InputChange { slot, urd::builder<Relation>(columns), urd::builder<Relation>(columns) });
+            m_changes.push_back(InputChange { slot, urd::builder<Relation<Schema>>(columns), urd::builder<Relation<Schema>>(columns), SetPlan(columns, columns) });
         }
         m_changed.reserve(input_count());
         m_positive.assign(input_count(), false);
@@ -73,14 +78,14 @@ public:
 
     [[nodiscard]] size_t input_count() const noexcept { return m_base.input_count(); }
     [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_base.columns(); }
-    [[nodiscard]] const urd::builder<Relation>& input(size_t slot) const { return m_base.input(slot); }
+    [[nodiscard]] BuilderRelationView input(size_t slot) const { return m_base.input(slot); }
     [[nodiscard]] bool bound() const noexcept { return m_base.bound(); }
     [[nodiscard]] bool is_static(size_t slot) const noexcept { return m_base.is_static(slot); }
     /// Increases whenever a change can remove output rows (see the class comment).
     [[nodiscard]] uint64_t version() const noexcept { return m_version; }
     size_t prepare(urd::Store<urd::sequence<size_t>> positions) { return m_base.prepare(std::move(positions)); }
     template<RowPredicate OnRow>
-    void evaluate(size_t binding, std::span<const std::byte> values, const OnRow& on_row)
+    void evaluate(size_t binding, std::span<const Value> values, const OnRow& on_row)
     { m_base.evaluate(binding, values, on_row); }
 
     /// Binds every input, static ones included, as a new baseline: input(slot) returns slot's relation view.
@@ -114,13 +119,17 @@ public:
             diff(input(slot), change);
             if (change.added.empty() && change.removed.empty())
                 continue;
-            apply(slot, change.added, change.removed);
+            apply(slot, m_layer->view(change.added), m_layer->view(change.removed));
             m_changed.push_back(slot);
         }
         return m_changed;
     }
-    /// The change of a slot that the last bind() returned.
-    [[nodiscard]] const InputChange& change(size_t slot) const { return m_changes.at(slot); }
+    /// The (added, removed) change of a slot that the last bind() returned, as views.
+    [[nodiscard]] std::pair<BuilderRelationView, BuilderRelationView> change(size_t slot) const
+    {
+        const auto& change = m_changes.at(slot);
+        return { m_layer->view(change.added), m_layer->view(change.removed) };
+    }
 
     /// Applies an exact change to a bound, non-static slot: `removed` rows are in it, `added` rows are not. A change
     /// that throws leaves the slot and version() unchanged (bound::QueryEvaluator::replace).
@@ -129,8 +138,8 @@ public:
     {
         if (slot >= input_count())
             throw std::invalid_argument("incremental::bound::QueryEvaluator: slot is out of range.");
-        database::detail::require_plan_columns(added.columns().span(), m_base.query().input_columns[slot]);
-        database::detail::require_plan_columns(removed.columns().span(), m_base.query().input_columns[slot]);
+        assert(std::ranges::equal(added.columns(), m_base.query().input_columns[slot]));
+        assert(std::ranges::equal(removed.columns(), m_base.query().input_columns[slot]));
         if (!m_base.is_bound(slot) || m_base.is_static(slot))
             throw std::invalid_argument("incremental::bound::QueryEvaluator: changes apply to bound, non-static slots only.");
         apply(slot, added, removed);
@@ -140,10 +149,10 @@ public:
     /// that existed before. Returns false if a changed row binds variables outside its branch's atoms, which delta
     /// rules cannot express; then the added rows are unknown.
     template<RelationViewConcept A, RelationViewConcept R, typename OnRow>
-        requires std::invocable<const OnRow&, std::span<const std::byte>>
+        requires std::invocable<const OnRow&, std::span<const Value>>
     bool seed(size_t slot, const A& added, const R& removed, const OnRow& on_row)
     {
-        const auto each = [&](std::span<const std::byte> row)
+        const auto each = [&](std::span<const Value> row)
         {
             on_row(row);
             return true;
@@ -155,6 +164,7 @@ public:
     }
 
 private:
+    const Repository* m_layer;
     database::bound::QueryEvaluator m_base;
     urd::Store<urd::map<std::vector<bool>, std::vector<database::bound::ConjunctivePlan>>> m_seed_plans;  ///< By the variables bound on arrival. std::vector: filled from the plans, of an incomplete type.
     urd::Store<urd::sequence<InputChange>> m_changes;                                                           ///< By slot; reused across bind() calls.
@@ -178,9 +188,9 @@ private:
     template<RelationViewConcept V>
     void diff(const V& rows, InputChange& change) const
     {
-        const auto& snapshot = m_base.input(change.slot);
-        database::difference(rows, snapshot, change.added);
-        database::difference(snapshot, rows, change.removed);
+        const auto snapshot = m_base.input(change.slot);
+        database::difference(rows, snapshot, change.plan, change.added);
+        database::difference(snapshot, rows, change.plan, change.removed);
     }
 
     /// The plan of a branch with the atom's variables bound; valid until the next call.

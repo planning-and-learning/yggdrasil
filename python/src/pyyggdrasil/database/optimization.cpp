@@ -23,7 +23,7 @@ void bind_database_optimization(nb::module_& m)
     using Plan = ygg::database::QueryPlan;
     using Roots = urd::Store<urd::sequence<ygg::database::QueryView<>>>;
     using Statistics = ygg::database::Statistics;
-    using Column = urd::index<ygg::database::Column>;
+    using Column = urd::index<ygg::Column>;
 
     nb::class_<Plan>(m, "QueryPlan", "Owns immutable query metadata; independent of the query repository.")
         .def_prop_ro("node_count", &Plan::node_count)

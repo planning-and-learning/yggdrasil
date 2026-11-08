@@ -71,12 +71,12 @@ class Normalizer
         const auto before = rename.get_arg().columns(), after = rename.columns();
         urd::Store<urd::sequence<urd::index<Column>>> result;
         for (const auto label : renamed)
-            result.push_back(before[column_index(after, label)].label);
+            result.push_back(before[static_cast<size_t>(std::ranges::find(after, label, &ColumnLayout::label) - after.begin())].label);
         return result;
     }
     QueryView<> rename(QueryView<> arg, std::span<const urd::index<Column>> columns)
     {
-        if (std::ranges::equal(column_labels(arg.columns()), columns))
+        if (std::ranges::equal(arg.columns(), columns, {}, &ColumnLayout::label))
             return arg;
         const auto result = m_build.template relabel<QueryRenameTag>(arg, columns);
         return is<QueryEmptyTag>(arg) ? m_build.empty(result.columns()) : result;
@@ -89,11 +89,11 @@ class Normalizer
     }
 
     /// The labels of `arg` in `columns` or in `extra`, in the order of `arg`.
-    static urd::Store<urd::sequence<urd::index<Column>>> kept_labels(QueryView<> arg, std::span<const urd::index<Column>> columns, std::span<const urd::index<Column>> extra)
+    static urd::Store<urd::sequence<urd::index<Column>>> kept_labels(QueryView<> arg, std::span<const urd::index<Column>> columns, std::span<const ColumnLayout> extra)
     {
         urd::Store<urd::sequence<urd::index<Column>>> labels;
         for (const auto& column : arg.columns())
-            if (std::ranges::find(columns, column.label) != columns.end() || std::ranges::find(extra, column.label) != extra.end())
+            if (std::ranges::find(columns, column.label) != columns.end() || std::ranges::find(extra, column.label, &ColumnLayout::label) != extra.end())
                 labels.push_back(column.label);
         return labels;
     }
@@ -102,7 +102,7 @@ class Normalizer
     {
         const auto operation = as<Tag>(arg);
         const auto lhs = operation.get_lhs();
-        const auto kept = kept_labels(lhs, columns, column_labels(operation.get_rhs().columns()));
+        const auto kept = kept_labels(lhs, columns, operation.get_rhs().columns());
         // Nothing to drop below: the projection stays above.
         if (kept.size() == lhs.columns().size())
             return finish_project(arg, columns);
@@ -128,7 +128,8 @@ class Normalizer
     {
         const auto columns = tested(data);
         const auto within = [&](QueryView<> query)
-        { return std::ranges::all_of(columns, [&](urd::index<Column> label) { return contains_column(query.columns(), label); }); };
+        { return std::ranges::all_of(columns, [&](urd::index<Column> label) { const auto schema = query.columns();
+              return std::ranges::find(schema, label, &ColumnLayout::label) != schema.end(); }); };
         if (is<QueryEmptyTag>(arg))
             return arg;
         if (is<QueryJoinTag>(arg))

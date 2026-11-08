@@ -7,22 +7,23 @@
 
 namespace ygg::database::incremental
 {
-JoinEvaluator::JoinEvaluator(JoinPlan plan) :
+JoinEvaluator::JoinEvaluator(const Repository& layer, JoinPlan plan) :
+    m_layer(&layer),
     m_plan(std::move(plan)),
-    m_lhs(m_plan.lhs_columns().span()),
-    m_rhs(m_plan.rhs_columns().span()),
-    m_result(m_plan.output_columns().span()),
-    m_delta(m_plan.output_columns().span())
+    m_lhs(m_plan.lhs_columns()),
+    m_rhs(m_plan.rhs_columns()),
+    m_result(m_plan.output_columns()),
+    m_delta(layer, m_plan.output_columns())
 {
 }
 }
 
 namespace ygg::database::incremental
 {
-const urd::builder<Relation>& JoinEvaluator::get_result() const&
+BuilderRelationView JoinEvaluator::get_result() const&
 {
     detail::require_initialized(m_initialized);
-    return m_result;
+    return m_layer->view(m_result);
 }
 }
 

@@ -5,15 +5,21 @@
 #include <urd/store.hpp>
 
 #include "yggdrasil/database/semantics/operations.hpp"
-#include "yggdrasil/database/semantics/relation_pool.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/plans.hpp"
+#include "yggdrasil/formalism/relation_view.hpp"
 #include "yggdrasil/python/bindings.hpp"
 #include <urd/python/owner.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/operators.h>
 #include <nanobind/stl/vector.h>
+#include <initializer_list>
+#include <stdexcept>
+#include <type_traits>
 #include <optional>
 #include <span>
 #include <vector>
@@ -23,7 +29,7 @@ namespace yggdrasil
 
 namespace
 {
-using Column = urd::index<ygg::database::Column>;
+using Column = urd::index<ygg::Column>;
 
 /// A Python sequence index; negative values count from the end.
 size_t sequence_index(std::ptrdiff_t index, size_t size)
@@ -35,9 +41,16 @@ size_t sequence_index(std::ptrdiff_t index, size_t size)
     return static_cast<size_t>(index);
 }
 
+/// A row as Python reads it: the stored row with its relation's columns, which give its values' types.
+struct Row
+{
+    ygg::database::RowPool::row_type row;
+    std::span<const ygg::ColumnLayout> columns;
+};
+
 template<typename R>
-ygg::database::Row row_at(const R& relation, std::ptrdiff_t index)
-{ return ygg::database::Row(relation.row(sequence_index(index, relation.size())), relation.columns().span()); }
+Row row_at(const R& relation, std::ptrdiff_t index)
+{ return { relation.row(sequence_index(index, relation.size())), relation.columns() }; }
 
 /// Lazy iteration over a sequence binding: map(self.__getitem__, range(len(self))), so every element keeps the
 /// lifetime rules of __getitem__.
@@ -48,59 +61,209 @@ nb::typed<nb::iterator, Element> iterate(nb::typed<nb::handle, T> self)
     return nb::borrow<nb::typed<nb::iterator, Element>>(builtins.attr("map")(self.attr("__getitem__"), builtins.attr("range")(nb::len(self))));
 }
 
-/// The read members of every relation class: rows by position, arity and columns.
+/// The members of every relation class: size, arity and columns.
+template<typename R>
+void bind_relation_shape(nb::class_<R>& cls)
+{
+    cls.def("__len__", &R::size)
+        .def("arity", [](const R& relation) { return relation.columns().size(); })
+        .def("empty", &R::empty)
+        .def("columns", [](const R& relation) { return relation.columns(); }, nb::keep_alive<0, 1>());
+}
+
+/// The read members of every relation view class: its shape and its rows by position.
 template<typename R>
 void bind_relation_reads(nb::class_<R>& cls)
 {
-    cls.def("__len__", &R::size)
-        .def("__getitem__", &row_at<R>, nb::keep_alive<0, 1>())
-        .def("__iter__", &iterate<ygg::database::Row, R>)
-        .def("arity", &R::arity)
-        .def("empty", &R::empty)
-        .def("at", [](const R& relation, std::size_t index) { return relation.at(index); }, nb::arg("index"), nb::keep_alive<0, 1>())
-        .def("columns", [](const R& relation) { return relation.columns().span(); }, nb::keep_alive<0, 1>());
+    bind_relation_shape(cls);
+    cls.def("__getitem__", &row_at<R>, nb::keep_alive<0, 1>())
+        .def("__iter__", &iterate<Row, R>)
+        .def(
+            "at",
+            [](const R& relation, std::size_t index)
+            {
+                if (index >= relation.size())
+                    throw nb::index_error();
+                return Row { relation.row(index), relation.columns() };
+            },
+            nb::arg("index"),
+            nb::keep_alive<0, 1>());
+}
+using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
+using ColumnIndices = std::span<const ygg::ColumnLayout>;
+using Workspace = ygg::database::Workspace;
+using Layouts = urd::Store<urd::sequence<ygg::ColumnLayout>>;
+
+/// Columns of these labels, each of type uint_t.
+Layouts untyped(const urd::Store<urd::sequence<Column>>& labels)
+{
+    auto result = Layouts();
+    for (const auto label : labels)
+        result.push_back(ygg::ColumnLayout { label, ygg::type_id<ygg::uint_t> });
+    return result;
+}
+
+/// The plans, built from their inputs' columns (validated there), and the scratch storage of the operations.
+void bind_plans(nb::module_& m)
+{
+    using namespace ygg::database;
+    nb::class_<Workspace>(m, "Workspace", "Scratch storage of the relational operations; reuse one, never concurrently.")
+        .def(nb::init<>())
+        .def("memory_usage", &Workspace::memory_usage);
+    nb::class_<ProjectionPlan>(m, "ProjectionPlan", "Keeps the input's columns of these labels, in this order.")
+        .def(nb::init<ColumnIndices, urd::Store<urd::sequence<Column>>>(), nb::arg("input"), nb::arg("labels"))
+        .def("input_columns", &ProjectionPlan::input_columns, nb::keep_alive<0, 1>())
+        .def("output_columns", &ProjectionPlan::output_columns, nb::keep_alive<0, 1>());
+    nb::class_<JoinPlan>(m, "JoinPlan", "Natural join (also semijoin, antijoin) of inputs with these columns.")
+        .def(nb::init<ColumnIndices, ColumnIndices>(), nb::arg("lhs"), nb::arg("rhs"))
+        .def("lhs_columns", &JoinPlan::lhs_columns, nb::keep_alive<0, 1>())
+        .def("rhs_columns", &JoinPlan::rhs_columns, nb::keep_alive<0, 1>())
+        .def("output_columns", &JoinPlan::output_columns, nb::keep_alive<0, 1>());
+    nb::class_<SetPlan>(m, "SetPlan", "Union and difference of inputs with the same columns in the same order.")
+        .def(nb::init<ColumnIndices, ColumnIndices>(), nb::arg("lhs"), nb::arg("rhs"))
+        .def("output_columns", &SetPlan::output_columns, nb::keep_alive<0, 1>());
+    nb::class_<SelectEqualPlan>(m, "SelectEqualPlan", "The rows whose two columns (of one type) hold equal values.")
+        .def(nb::init<ColumnIndices, Column, Column>(), nb::arg("input"), nb::arg("lhs"), nb::arg("rhs"))
+        .def("output_columns", &SelectEqualPlan::output_columns, nb::keep_alive<0, 1>());
+    nb::class_<SelectValuePlan>(m, "SelectValuePlan", "The rows whose column holds a value of the column's type.")
+        .def(
+            "__init__",
+            [](SelectValuePlan* self, ColumnIndices input, Column column, ColumnType type, nb::handle value)
+            {
+                new (self) SelectValuePlan(input, column, type, ygg::encode(cast_value(value, type)));
+            },
+            nb::arg("input"),
+            nb::arg("column"),
+            nb::arg("type"),
+            nb::arg("value"))
+        .def("output_columns", &SelectValuePlan::output_columns, nb::keep_alive<0, 1>());
+}
+
+/// The operations of one input relation type.
+template<typename V>
+void bind_unary(nb::module_& m)
+{
+    using namespace ygg::database;
+    m.def(
+        "project",
+        [](const V& input, const ProjectionPlan& plan, Relation& out, Workspace& workspace)
+        {
+            require_columns(input.columns(), plan.input_columns());
+            require_columns(out.columns(), plan.output_columns());
+            project(input, plan, out, workspace);
+        },
+        nb::arg("input"),
+        nb::arg("plan"),
+        nb::arg("out"),
+        nb::arg("workspace"));
+    m.def(
+        "select_equal_columns",
+        [](const V& input, const SelectEqualPlan& plan, Relation& out)
+        {
+            require_columns(input.columns(), plan.output_columns());
+            require_columns(out.columns(), plan.output_columns());
+            select_equal_columns(input, plan, out);
+        },
+        nb::arg("input"),
+        nb::arg("plan"),
+        nb::arg("out"));
+    m.def(
+        "select_equal_value",
+        [](const V& input, const SelectValuePlan& plan, Relation& out)
+        {
+            require_columns(input.columns(), plan.output_columns());
+            require_columns(out.columns(), plan.output_columns());
+            select_equal_value(input, plan, out);
+        },
+        nb::arg("input"),
+        nb::arg("plan"),
+        nb::arg("out"));
+    m.def(
+        "assign",
+        [](nb::typed<nb::handle, Relation> destination, const V& source)
+        {
+            assign(nb::cast<Relation&>(destination), source);
+            return destination;
+        },
+        nb::arg("destination"),
+        nb::arg("source"));
+}
+
+/// The operations of one pair of input relation types.
+template<typename L, typename R>
+void bind_binary(nb::module_& m)
+{
+    using namespace ygg::database;
+    const auto bind_join = [&m](const char* name, auto operation, bool output_is_lhs)
+    {
+        m.def(
+            name,
+            [operation, output_is_lhs](const L& lhs, const R& rhs, const JoinPlan& plan, Relation& out, Workspace& workspace)
+            {
+                require_columns(lhs.columns(), plan.lhs_columns());
+                require_columns(rhs.columns(), plan.rhs_columns());
+                require_columns(out.columns(), output_is_lhs ? plan.lhs_columns() : plan.output_columns());
+                operation(lhs, rhs, plan, out, workspace);
+            },
+            nb::arg("lhs"),
+            nb::arg("rhs"),
+            nb::arg("plan"),
+            nb::arg("out"),
+            nb::arg("workspace"));
+    };
+    bind_join("join", [](auto&&... args) { join(args...); }, false);
+    bind_join("semijoin", [](auto&&... args) { semijoin(args...); }, true);
+    bind_join("antijoin", [](auto&&... args) { antijoin(args...); }, true);
+    const auto bind_set = [&m](const char* name, auto operation)
+    {
+        m.def(
+            name,
+            [operation](const L& lhs, const R& rhs, const SetPlan& plan, Relation& out)
+            {
+                for (const auto columns : { lhs.columns(), rhs.columns(), out.columns() })
+                    require_columns(columns, plan.output_columns());
+                operation(lhs, rhs, plan, out);
+            },
+            nb::arg("lhs"),
+            nb::arg("rhs"),
+            nb::arg("plan"),
+            nb::arg("out"));
+    };
+    bind_set("union", [](auto&&... args) { union_(args...); });
+    bind_set("difference", [](auto&&... args) { difference(args...); });
 }
 }  // namespace
 
-const ygg::database::RelationRepository& borrowed_relation_context()
-{
-    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return context;
-}
-
 void bind_database_module_definitions(nb::module_& m)
 {
-    using RelationTag = ygg::database::Relation;
-    using Relation = urd::builder<RelationTag>;
+    using RelationTag = ygg::Relation<ygg::Schema>;
     using RelationView = ygg::database::RelationView;
-    using BorrowedRelationView = ygg::database::BorrowedRelationView;
-    using RelationPtr = urd::unique_slot_ptr<Relation>;
-    using RelationPool = ygg::database::RelationPool;
-    using RelationRepository = ygg::database::RelationRepository;
-    using RelationRepositoryFactory = ygg::database::RelationRepositoryFactory;
-    using Row = ygg::database::Row;
-    using ColumnIndices = std::span<const ygg::database::ColumnLayout>;
-
+    using BuilderRelationView = ygg::database::BuilderRelationView;
+    using RelationRepository = ygg::database::Repository;
     urd::python::bind_index<Column>(m, "ColumnIndex");
 
     nb::enum_<ColumnType>(m, "ColumnType")
-        .value("UINT32", ColumnType::uint32)
-        .value("INT32", ColumnType::int32)
-        .value("UINT64", ColumnType::uint64)
-        .value("INT64", ColumnType::int64)
-        .value("FLOAT32", ColumnType::float32)
-        .value("FLOAT64", ColumnType::float64)
-        .value("BOOL", ColumnType::boolean);
+        .value("UINT32", ygg::type_id<std::uint32_t>)
+        .value("INT32", ygg::type_id<std::int32_t>)
+        .value("UINT64", ygg::type_id<std::uint64_t>)
+        .value("INT64", ygg::type_id<std::int64_t>)
+        .value("FLOAT32", ygg::type_id<float>)
+        .value("FLOAT64", ygg::type_id<double>)
+        .value("BOOL", ygg::type_id<bool>)
+        .value("OBJECT", ygg::type_id<ygg::ObjectIndex>);
 
     nb::class_<Row>(m,
                     "RelationRow",
                     "Read-only borrowed row. Keeps its Python owner alive, but clearing the owning "
                     "relation or repository invalidates the borrowed data. Memoization resets alone do not.")
-        .def("__len__", &Row::size)
+        .def("__len__", [](const Row& row) { return row.columns.size(); })
         .def("__iter__", &iterate<nb::object, Row>)
         .def("__getitem__",
-             [](Row row, std::ptrdiff_t index)
-             { return row.visit(sequence_index(index, row.size()), [](auto value) -> nb::object { return nb::cast(value); }); });
+             [](const Row& row, std::ptrdiff_t index)
+             {
+                 const auto position = sequence_index(index, row.columns.size());
+                 return ygg::decode(row.row.get(position), row.columns[position].type);
+             });
 
     nb::class_<ColumnIndices>(m,
                               "ColumnIndices",
@@ -117,61 +280,49 @@ void bind_database_module_definitions(nb::module_& m)
                  return columns[index].type;
              });
 
-    using Columns = urd::builder<ygg::database::Columns>;
-    nb::class_<Columns>(m, "Columns", "Mutable typed schema with unique column labels; untyped labels are UINT32.")
-        .def(nb::init<>())
-        .def(nb::init<urd::Store<urd::sequence<Column>>>(), nb::arg("labels"))
-        .def(
-            "push_back",
-            [](Columns& columns, Column label, ColumnType type) { columns.push_back(label, type); },
-            nb::arg("label"),
-            nb::arg("type"))
-        .def("__len__", &Columns::size)
-        .def("columns", [](const Columns& columns) { return columns.span(); }, nb::keep_alive<0, 1>());
+    nb::class_<ygg::ColumnLayout>(m, "ColumnLayout", "A column: its label and type.")
+        .def(nb::init<Column, ColumnType>(), nb::arg("label"), nb::arg("type"))
+        .def_rw("label", &ygg::ColumnLayout::label)
+        .def_rw("type", &ygg::ColumnLayout::type)
+        .def(nb::self == nb::self);  // NOLINT(misc-redundant-expression)
 
-    auto relation = nb::class_<Relation>(m, "Relation", "Mutable builder of fixed-arity tuples with unique column labels.")
+    auto relation = nb::class_<Relation>(m,
+                                         "Relation",
+                                         "Mutable builder of fixed-arity tuples with unique column labels. Its rows are read "
+                                         "through a repository: RelationRepository.view(relation).")
                         .def(nb::init<>())
-                        .def(nb::init<Columns>(), nb::arg("columns"))
                         .def(nb::init<ColumnIndices>(), nb::arg("columns"))
-                        .def(nb::init<urd::Store<urd::sequence<Column>>>(), nb::arg("labels"));
-    bind_relation_reads(relation);
+                        .def(
+                            "__init__",
+                            [](Relation* self, const Layouts& columns) { new (self) Relation(std::span<const ygg::ColumnLayout>(columns)); },
+                            nb::arg("columns"))
+                        .def(
+                            "__init__",
+                            [](Relation* self, const urd::Store<urd::sequence<Column>>& labels) { new (self) Relation(std::span<const ygg::ColumnLayout>(untyped(labels))); },
+                            nb::arg("labels"),
+                            "Columns of these labels, each of type UINT32.");
+    bind_relation_shape(relation);
     relation.def("clear", &Relation::clear)
         .def(
             "insert",
             [](Relation& relation, nb::typed<nb::sequence, nb::object> row)
             {
-                if (nb::len(row) != relation.arity())
+                if (nb::len(row) != relation.columns().size())
                     throw std::invalid_argument("Relation: row arity does not match schema.");
-                auto bytes = urd::Store<urd::sequence<std::byte>>(relation.columns().row_size());
-                const auto columns = relation.columns().span();
+                auto values = urd::Store<urd::sequence<ygg::Value>>(relation.columns().size());
+                const auto columns = relation.columns();
                 for (size_t i = 0; i < columns.size(); ++i)
-                    ygg::visit_type_id(columns[i].type,
-                                       [&]<typename T>(std::type_identity<T>)
-                                       { relation.columns().template write<T>(bytes, columns[i].label, nb::cast<T>(row[i])); });
-                return relation.insert(Row(bytes, columns));
+                    values[i] = ygg::encode(cast_value(row[i], columns[i].type));
+                return relation.insert(std::span<const ygg::Value>(values));
             },
             nb::arg("row"));
 
-    auto borrowed = nb::class_<BorrowedRelationView>(m,
-                                     "BorrowedRelation",
-                                     "Read-only view of a relation owned elsewhere, e.g. an evaluator result. Keeps its owner alive; "
-                                     "the owner's next mutation invalidates the view and its rows.")
-        .def(
-            "__init__",
-            [](BorrowedRelationView* self, const Relation& relation) { new (self) BorrowedRelationView(&relation, &borrowed_relation_context()); },
-            nb::arg("relation"),
-            nb::keep_alive<1, 2>());
+    auto borrowed = nb::class_<BuilderRelationView>(m,
+                                                    "BorrowedRelation",
+                                                    "Read-only view of a relation builder owned elsewhere (e.g. an evaluator result), read "
+                                                    "through its repository. Keeps its owner alive; the owner's next mutation invalidates "
+                                                    "the view and its rows.");
     bind_relation_reads(borrowed);
-
-    nb::class_<RelationPtr>(m, "RelationPtr", "Owns a pooled relation until the handle and its borrowed rows are released.")
-        .def("get", &RelationPtr::get, nb::rv_policy::reference_internal);
-
-    nb::class_<RelationPool>(m, "RelationPool", "Reuses released relations and their tuple storage.")
-        .def(nb::init<>())
-        .def("get_or_allocate",
-             static_cast<RelationPtr (RelationPool::*)(ColumnIndices)>(&RelationPool::get_or_allocate),
-             nb::arg("columns"),
-             nb::keep_alive<0, 1>());
 
     urd::python::bind_index<urd::index<RelationTag>>(m, "RelationIndex");
 
@@ -185,49 +336,59 @@ void bind_database_module_definitions(nb::module_& m)
     urd::python::add_hash(interned);
 
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")
-        .def("__len__", &RelationRepository::size)
+        .def(nb::init<>())
+        .def("__len__", [](const RelationRepository& repository) { return repository.symbols().template size<RelationTag>(); })
         .def("clear", &RelationRepository::clear)
+        .def("insert", [](RelationRepository& repository, const Relation& relation) { return repository.insert(relation); }, nb::arg("relation"))
         .def(
-            "insert",
-            [](RelationRepository& repository, Relation& relation, std::size_t schema_namespace)
-            { return ygg::database::insert(repository, relation, schema_namespace); },
+            "view",
+            [](const RelationRepository& repository, const Relation& relation) { return repository.view(relation); },
             nb::arg("relation"),
-            nb::arg("schema_namespace") = 0)
+            nb::keep_alive<0, 1>(),
+            nb::keep_alive<0, 2>(),
+            "The relation builder read through this repository.")
+        .def(
+            "get_relation_builder",
+            [](RelationRepository& repository, ColumnIndices columns) { return repository.get_relation_builder(repository.schema(columns), columns); },
+            nb::arg("columns"),
+            nb::keep_alive<0, 1>(),
+            "A relation builder from this repository's slots, keyed by its column widths (a builder handed back under equal "
+            "widths is reused, its row storage kept); it goes back with its last owner.")
+        .def(
+            "get_relation_builder",
+            [](RelationRepository& repository, const Layouts& columns)
+            {
+                const auto span = std::span<const ygg::ColumnLayout>(columns);
+                return repository.get_relation_builder(repository.schema(span), span);
+            },
+            nb::arg("columns"),
+            nb::keep_alive<0, 1>())
         .def(
             "copy",
-            [](RelationRepository& repository, RelationView source) { return ygg::database::copy(source, repository); },
+            [](RelationRepository& repository, RelationView source) { return repository.copy(source); },
             nb::arg("source"))
         .def(
             "rename",
-            [](RelationRepository& repository, RelationView relation, const urd::Store<urd::sequence<Column>>& labels, std::optional<std::size_t> schema_namespace)
-            { return repository.rename(relation, labels, schema_namespace); },
+            [](RelationRepository& repository, RelationView relation, const urd::Store<urd::sequence<Column>>& labels)
+            {
+                auto columns = Layouts(relation.columns().begin(), relation.columns().end());
+                if (labels.size() != columns.size())
+                    throw std::invalid_argument("Columns: renaming must preserve arity.");
+                for (size_t i = 0; i < columns.size(); ++i)
+                    columns[i].label = labels[i];
+                return repository.rename(relation, std::span<const ygg::ColumnLayout>(columns));
+            },
             nb::arg("relation"),
             nb::arg("columns"),
-            nb::arg("schema_namespace") = nb::none(),
             nb::keep_alive<0, 1>());
 
-    nb::class_<RelationRepositoryFactory>(m, "RelationRepositoryFactory", "Creates repositories with distinct identities within this factory.")
-        .def(nb::init<>())
-        .def("create", [](RelationRepositoryFactory& factory) { return new RelationRepository(factory.create()); }, nb::rv_policy::take_ownership);
-
-    m.def(
-        "assign",
-        [](nb::typed<nb::handle, Relation> destination, RelationView source)
-        {
-            ygg::database::assign(nb::cast<Relation&>(destination), source);
-            return destination;
-        },
-        nb::arg("destination"),
-        nb::arg("source"));
-    m.def(
-        "assign",
-        [](nb::typed<nb::handle, Relation> destination, const BorrowedRelationView& source)
-        {
-            ygg::database::assign(nb::cast<Relation&>(destination), source);
-            return destination;
-        },
-        nb::arg("destination"),
-        nb::arg("source"));
+    bind_plans(m);
+    bind_unary<RelationView>(m);
+    bind_unary<BuilderRelationView>(m);
+    bind_binary<RelationView, RelationView>(m);
+    bind_binary<RelationView, BuilderRelationView>(m);
+    bind_binary<BuilderRelationView, RelationView>(m);
+    bind_binary<BuilderRelationView, BuilderRelationView>(m);
     bind_database_queries(m);
     bind_database_optimization(m);
     bind_database_evaluation(m);

@@ -27,23 +27,23 @@ struct NodeRules;
 
 /// Actual set changes with one ordered schema. Added and removed rows are
 /// disjoint. The caller guarantees additions were absent and removals present.
-/// Exchanging the two inputs to update() reverses the change.
+/// Exchanging the two inputs to update() reverses the change. Its builders are read through the layer, which must
+/// outlive it.
 struct Delta
 {
-    urd::builder<Relation> added;
-    urd::builder<Relation> removed;
+    const Repository* layer;
+    urd::builder<Relation<Schema>> added;
+    urd::builder<Relation<Schema>> removed;
 
-    explicit Delta(std::span<const ColumnLayout> columns) : added(columns), removed(columns) {}
-    explicit Delta(std::span<const urd::index<Column>> columns) : added(columns), removed(columns) {}
-    Delta(std::initializer_list<urd::index<Column>> columns) : Delta(std::span<const urd::index<Column>>(columns.begin(), columns.size())) {}
+    Delta(const Repository& layer_, std::span<const ColumnLayout> columns) : layer(&layer_), added(columns), removed(columns) {}
 
     void clear() noexcept
     {
         added.clear();
         removed.clear();
     }
-    /// The (added, removed) change.
-    [[nodiscard]] std::pair<const urd::builder<Relation>&, const urd::builder<Relation>&> change() const noexcept { return { added, removed }; }
+    /// The (added, removed) change, as views.
+    [[nodiscard]] std::pair<BuilderRelationView, BuilderRelationView> change() const noexcept { return { layer->view(added), layer->view(removed) }; }
     [[nodiscard]] size_t memory_usage() const noexcept { return added.memory_usage() + removed.memory_usage(); }
 };
 
@@ -72,10 +72,10 @@ namespace detail
 template<RelationViewConcept A, RelationViewConcept R>
 void require_delta(const A& added, const R& removed, std::span<const ColumnLayout> columns)
 {
-    database::detail::require_plan_columns(added.columns().span(), columns);
-    database::detail::require_plan_columns(removed.columns().span(), columns);
+    assert(std::ranges::equal(added.columns(), columns));
+    assert(std::ranges::equal(removed.columns(), columns));
     for (size_t i = 0; i < added.size(); ++i)
-        if (removed.contains(Row(added.row(i), added.columns().span())))
+        if (removed.contains(added.row(i)))
             throw std::invalid_argument("Incremental evaluation: added and removed rows overlap.");
 }
 
@@ -84,16 +84,16 @@ void require_initialized(bool initialized);
 
 /// Inputs are borrowed during a call and must not be the evaluator's own result or delta.
 template<RelationViewConcept V>
-void require_unaliased(const V& input, const urd::builder<Relation>& result, const Delta& delta)
+void require_unaliased(const V& input, const urd::builder<Relation<Schema>>& result, const Delta& delta)
 {
-    const auto* address = input.get_storage_address();
-    if (address == result.get_storage_address() || address == delta.added.get_storage_address() || address == delta.removed.get_storage_address())
+    const auto storage = input.relation_identity();
+    if (storage == relation_identity(result) || storage == relation_identity(delta.added) || storage == relation_identity(delta.removed))
         throw std::invalid_argument("Incremental evaluation: input aliases the evaluator's result or delta.");
 }
 
 /// A change of an input with the given columns is disjoint and borrows no evaluator storage.
 template<RelationChange C>
-void require_change(const C& change, std::span<const ColumnLayout> columns, const urd::builder<Relation>& result, const Delta& delta)
+void require_change(const C& change, std::span<const ColumnLayout> columns, const urd::builder<Relation<Schema>>& result, const Delta& delta)
 {
     require_delta(std::get<0>(change), std::get<1>(change), columns);
     require_unaliased(std::get<0>(change), result, delta);
@@ -101,7 +101,7 @@ void require_change(const C& change, std::span<const ColumnLayout> columns, cons
 }
 
 /// Applies an exact delta of the result: removed rows are present, added rows absent.
-void apply_delta(const Delta& delta, urd::builder<Relation>& result);
+void apply_delta(const Delta& delta, urd::builder<Relation<Schema>>& result);
 }  // namespace detail
 
 }  // namespace ygg::database::incremental

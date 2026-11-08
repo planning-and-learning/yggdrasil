@@ -22,40 +22,54 @@ namespace ygg::profiling
 namespace
 {
 using Values = boost::mp11::mp_list<uint_t>;
-using ColumnIndex = urd::index<database::Column>;
-using RelationBuilder = urd::builder<database::Relation>;
+using ColumnIndex = urd::index<ygg::Column>;
+using RelationBuilder = urd::builder<ygg::Relation<ygg::Schema>>;
 
-urd::builder<database::Columns> columns(size_t arity, uint_t first_label)
+std::vector<ygg::ColumnLayout> columns(size_t arity, uint_t first_label)
 {
-    urd::builder<database::Columns> result;
+    std::vector<ygg::ColumnLayout> result;
     for (size_t i = 0; i < arity; ++i)
-        result.push_back<uint_t>(ColumnIndex(first_label + static_cast<uint_t>(i)));
+        result.push_back({ ColumnIndex(first_label + static_cast<uint_t>(i)), ygg::type_id<uint_t> });
     return result;
 }
 
-void append_vertex(urd::Store<urd::sequence<std::byte>>& bytes, size_t arity, uint_t vertex)
+/// The layer the benchmarks read their builders through.
+const database::Repository& layer()
+{
+    static const database::Repository repository;
+    return repository;
+}
+
+database::BuilderRelationView borrow(const RelationBuilder& relation) { return layer().view(relation); }
+
+/// The distances of the sources and targets over `edges`, fully evaluated.
+RelationBuilder full_distance(const RelationBuilder& sources, const RelationBuilder& edges, const RelationBuilder& targets, const database::DistancePlan& plan)
+{
+    RelationBuilder out(plan.output_columns());
+    database::DistanceWorkspace workspace(plan);
+    database::distance(borrow(sources), borrow(edges), borrow(targets), plan, out, workspace);
+    return out;
+}
+
+void append_vertex(urd::Store<urd::sequence<ygg::Value>>& values, size_t arity, uint_t vertex)
 {
     for (size_t field = 0; field < arity; ++field)
-    {
-        const auto offset = bytes.size();
-        bytes.resize(offset + ygg::ByteCodec<uint_t>::size);
-        ygg::ByteCodec<uint_t>::encode(vertex + 100000 * static_cast<uint_t>(field), std::span(bytes).subspan(offset));
-    }
+        values.push_back(ygg::encode_value(vertex + 100000 * static_cast<uint_t>(field)));
 }
 
 void insert_vertex(RelationBuilder& relation, size_t arity, uint_t vertex)
 {
-    urd::Store<urd::sequence<std::byte>> bytes;
-    append_vertex(bytes, arity, vertex);
-    relation.insert(std::span<const std::byte>(bytes));
+    urd::Store<urd::sequence<ygg::Value>> values;
+    append_vertex(values, arity, vertex);
+    relation.insert(std::span<const ygg::Value>(values));
 }
 
 void insert_edge(RelationBuilder& relation, size_t arity, uint_t from, uint_t to)
 {
-    urd::Store<urd::sequence<std::byte>> bytes;
-    append_vertex(bytes, arity, from);
-    append_vertex(bytes, arity, to);
-    relation.insert(std::span<const std::byte>(bytes));
+    urd::Store<urd::sequence<ygg::Value>> values;
+    append_vertex(values, arity, from);
+    append_vertex(values, arity, to);
+    relation.insert(std::span<const ygg::Value>(values));
 }
 
 enum class TraceKind : std::uint8_t
@@ -79,11 +93,11 @@ struct Trace
     Trace(size_t arity, uint_t vertices, uint_t source_count, uint_t changed, TraceKind kind = TraceKind::shortcuts) :
         sources(columns(arity, 1000)),
         edges(columns(2 * arity, 0)),
-        changed_edges(edges.columns().span()),
+        changed_edges(edges.columns()),
         targets(columns(arity, 2000)),
-        edge_change(edges.columns().span()),
-        no_sources(sources.columns().span()),
-        no_targets(targets.columns().span())
+        edge_change(layer(), edges.columns()),
+        no_sources(sources.columns()),
+        no_targets(targets.columns())
     {
         const auto common_edge = [&](uint_t from, uint_t to)
         {
@@ -163,12 +177,12 @@ struct Trace
     }
 };
 
-bool equal_rows(const RelationBuilder& actual, const RelationBuilder& expected)
+bool equal_rows(database::BuilderRelationView actual, const RelationBuilder& expected)
 {
     if (actual.size() != expected.size())
         return false;
-    for (size_t i = 0; i < expected.size(); ++i)
-        if (!actual.contains(expected[i]))
+    for (const auto row : borrow(expected).rows())
+        if (!actual.contains(row))
             return false;
     return true;
 }
@@ -176,18 +190,18 @@ bool equal_rows(const RelationBuilder& actual, const RelationBuilder& expected)
 bool equal_delta(const database::incremental::Delta& actual, const RelationBuilder& before, const RelationBuilder& after)
 {
     size_t added = 0, removed = 0;
-    for (size_t i = 0; i < after.size(); ++i)
-        if (!before.contains(after[i]))
+    for (const auto row : borrow(after).rows())
+        if (!before.contains(row))
         {
             ++added;
-            if (!actual.added.contains(after[i]))
+            if (!actual.added.contains(row))
                 return false;
         }
-    for (size_t i = 0; i < before.size(); ++i)
-        if (!after.contains(before[i]))
+    for (const auto row : borrow(before).rows())
+        if (!after.contains(row))
         {
             ++removed;
-            if (!actual.removed.contains(before[i]))
+            if (!actual.removed.contains(row))
                 return false;
         }
     return actual.added.size() == added && actual.removed.size() == removed;
@@ -201,38 +215,38 @@ void distance_changes(benchmark::State& state)
     const auto source_count = static_cast<uint_t>(state.range(2));
     const auto changed = static_cast<uint_t>(state.range(3));
     Trace trace(arity, vertices, source_count, changed, Kind);
-    const database::DistancePlan plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
+    const database::DistancePlan plan(trace.sources.columns(), trace.edges.columns(), trace.targets.columns(), ColumnIndex(5000));
     database::DistanceWorkspace workspace(plan);
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::DistanceEvaluator(plan);
+            return database::incremental::DistanceEvaluator(layer(), plan);
         else
-            return RelationBuilder(plan.output_columns().span());
+            return RelationBuilder(plan.output_columns());
     }();
     if constexpr (Incremental)
-        evaluation.initialize(trace.sources, trace.edges, trace.targets);
+        evaluation.initialize(borrow(trace.sources), borrow(trace.edges), borrow(trace.targets));
     const auto update = [&](bool forward)
     {
         if constexpr (Incremental)
             evaluation.update(
-                std::tie(trace.no_sources, trace.no_sources),
-                std::tie(forward ? trace.edge_change.added : trace.edge_change.removed, forward ? trace.edge_change.removed : trace.edge_change.added),
-                std::tie(trace.no_targets, trace.no_targets));
+                std::pair { borrow(trace.no_sources), borrow(trace.no_sources) },
+                std::pair { borrow(forward ? trace.edge_change.added : trace.edge_change.removed), borrow(forward ? trace.edge_change.removed : trace.edge_change.added) },
+                std::pair { borrow(trace.no_targets), borrow(trace.no_targets) });
         else
-            database::distance(trace.sources, forward ? trace.changed_edges : trace.edges, trace.targets, plan, evaluation, workspace);
+            database::distance(borrow(trace.sources), borrow(forward ? trace.changed_edges : trace.edges), borrow(trace.targets), plan, evaluation, workspace);
     };
-    const auto result = [&]() -> const RelationBuilder&
+    const auto result = [&]() -> database::BuilderRelationView
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
-            return evaluation;
+            return borrow(evaluation);
     };
 
     // Preparation, exact result/delta checks, and warmup are outside the timed loop.
-    auto before = database::distance(trace.sources, trace.edges, trace.targets, plan);
-    auto after = database::distance(trace.sources, trace.changed_edges, trace.targets, plan);
+    auto before = full_distance(trace.sources, trace.edges, trace.targets, plan);
+    auto after = full_distance(trace.sources, trace.changed_edges, trace.targets, plan);
     update(true);
     if (!equal_rows(result(), after))
     {
@@ -265,10 +279,10 @@ void distance_changes(benchmark::State& state)
     for (auto _ : state)
     {
         update(true);
-        benchmark::DoNotOptimize(std::addressof(result()));
+        benchmark::DoNotOptimize(result().relation_identity());
         benchmark::ClobberMemory();
         update(false);
-        benchmark::DoNotOptimize(std::addressof(result()));
+        benchmark::DoNotOptimize(result().relation_identity());
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations() * 2);
@@ -286,30 +300,30 @@ template<bool Incremental>
 void distance_initialize_warm(benchmark::State& state)
 {
     Trace trace(static_cast<size_t>(state.range(0)), static_cast<uint_t>(state.range(1)), static_cast<uint_t>(state.range(2)), 0);
-    const database::DistancePlan plan(trace.sources.columns().span(), trace.edges.columns().span(), trace.targets.columns().span(), ColumnIndex(5000));
+    const database::DistancePlan plan(trace.sources.columns(), trace.edges.columns(), trace.targets.columns(), ColumnIndex(5000));
     database::DistanceWorkspace workspace(plan);
     auto evaluation = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::DistanceEvaluator(plan);
+            return database::incremental::DistanceEvaluator(layer(), plan);
         else
-            return RelationBuilder(plan.output_columns().span());
+            return RelationBuilder(plan.output_columns());
     }();
     const auto initialize = [&]
     {
         if constexpr (Incremental)
-            evaluation.initialize(trace.sources, trace.edges, trace.targets);
+            evaluation.initialize(borrow(trace.sources), borrow(trace.edges), borrow(trace.targets));
         else
-            database::distance(trace.sources, trace.edges, trace.targets, plan, evaluation, workspace);
+            database::distance(borrow(trace.sources), borrow(trace.edges), borrow(trace.targets), plan, evaluation, workspace);
     };
-    const auto result = [&]() -> const RelationBuilder&
+    const auto result = [&]() -> database::BuilderRelationView
     {
         if constexpr (Incremental)
             return evaluation.get_result();
         else
-            return evaluation;
+            return borrow(evaluation);
     };
-    auto reference = database::distance(trace.sources, trace.edges, trace.targets, plan);
+    auto reference = full_distance(trace.sources, trace.edges, trace.targets, plan);
     for (size_t i = 0; i < 8; ++i)
         initialize();
     if (!equal_rows(result(), reference))
@@ -320,7 +334,7 @@ void distance_initialize_warm(benchmark::State& state)
     for (auto _ : state)
     {
         initialize();
-        benchmark::DoNotOptimize(std::addressof(result()));
+        benchmark::DoNotOptimize(result().relation_identity());
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations());

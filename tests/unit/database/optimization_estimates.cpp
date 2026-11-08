@@ -7,7 +7,7 @@
 
 namespace
 {
-using Column = urd::index<ygg::database::Column>;
+using Column = urd::index<ygg::Column>;
 using PlanId = urd::index<ygg::database::Query<>>;
 const Column x(0), y(1), z(2);
 
@@ -159,11 +159,10 @@ TEST(DatabaseOptimizationEstimates, BoundedDomainsCapDistinctCounts)
 
 TEST(DatabaseOptimizationEstimates, FactorIdentitySeparatesInputsAndQueries)
 {
-    urd::builder<ygg::database::Columns> columns;
-    columns.push_back<ygg::uint_t>(x);
+    const std::vector<ygg::ColumnLayout> columns { { x, ygg::type_id<ygg::uint_t> } };
     const ygg::database::RelationStatistics statistics { 10, { { x, 2 } } };
-    const auto input = ygg::database::detail::factor(statistics, columns.span(), ygg::database::detail::InputFactorIdentity { 7 });
-    const auto query = ygg::database::detail::factor(statistics, columns.span(), ygg::database::detail::QueryFactorIdentity { 7 });
+    const auto input = ygg::database::detail::factor(statistics, columns, ygg::database::detail::InputFactorIdentity { 7 });
+    const auto query = ygg::database::detail::factor(statistics, columns, ygg::database::detail::QueryFactorIdentity { 7 });
     const std::array labels { x };
     EXPECT_NEAR(ygg::database::detail::conjunction(ygg::database::detail::combine(input, input), labels).rows, 10, 1e-9);
     const auto combined = ygg::database::detail::conjunction(ygg::database::detail::combine(input, query), labels);

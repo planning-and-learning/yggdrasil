@@ -8,7 +8,7 @@
 #include <urd/store.hpp>
 #include "yggdrasil/database/semantics/incremental/min_distance.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <cstddef>
 #include <gtest/gtest.h>
@@ -18,12 +18,18 @@
 
 namespace
 {
-using Column = urd::index<ygg::database::Column>;
-using Relation = urd::builder<ygg::database::Relation>;
-using View = ygg::database::BorrowedRelationView;
+using Column = urd::index<ygg::Column>;
+using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
 using ygg::uint_t;
 
 using namespace ygg::tests::distances;
+
+/// An input slot's exact change, read through a layer (SlotChanges).
+struct ChangeView
+{
+    ygg::database::BuilderRelationView added;
+    ygg::database::BuilderRelationView removed;
+};
 
 /// Runs `steps` states; each mutates the inputs and maybe the sources and targets, then compares guided distances
 /// (blind and with a consistent heuristic) against ygg::database::min_distance over the fully evaluated edges.
@@ -38,12 +44,13 @@ void check_sequence(ygg::database::QueryView<> edges,
                     size_t steps,
                     Mutate mutate)
 {
-    const auto k = sources.arity();
-    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::incremental::MinDistance(edges, plan, static_slots);
-    auto guided = ygg::database::incremental::MinDistance<HalfDistance>(edges, plan, static_slots);
+    const auto k = sources.columns().size();
+    const ygg::database::Repository layer;
+    const auto plan = ygg::database::DistancePlan(sources.columns(), edges.columns(), targets.columns(), Column(99));
+    auto blind = ygg::database::incremental::MinDistance(layer, edges, plan, static_slots);
+    auto guided = ygg::database::incremental::MinDistance<HalfDistance>(layer, edges, plan, static_slots);
     // Fed the exact changes of its inputs (update()) instead of diffing them (bind()).
-    auto exact = ygg::database::incremental::MinDistance<HalfDistance>(edges, plan, static_slots);
+    auto exact = ygg::database::incremental::MinDistance<HalfDistance>(layer, edges, plan, static_slots);
     auto previous = urd::Store<urd::sequence<Relation>>();
     struct Change
     {
@@ -51,26 +58,27 @@ void check_sequence(ygg::database::QueryView<> edges,
         Relation removed;
     };
     auto changes = urd::Store<urd::sequence<Change>>();
-    auto evaluator = ygg::database::QueryEvaluator(ygg::database::compile({ edges }));
-    evaluator.evaluate(borrow_all(maximal));
-    auto supergraph = Relation(evaluator.get_result().columns().span());
+    auto evaluator = ygg::database::QueryEvaluator(layer, ygg::database::compile({ edges }));
+    evaluator.evaluate(borrow_all(layer, maximal));
+    auto supergraph = Relation(evaluator.get_result().columns());
     for (size_t i = 0; i < evaluator.get_result().size(); ++i)
         supergraph.insert(evaluator.get_result().row(i));
     auto heuristic = HalfDistance {};
-    heuristic.columns = sources.columns().span();
+    heuristic.columns = sources.columns();
     auto workspace = ygg::database::DistanceWorkspace(plan);
-    auto result = Relation(plan.output_columns().span());
+    auto result = Relation(plan.output_columns());
     auto checked = static_cast<size_t>(0);
     for (size_t step = 0; step < steps; ++step)
     {
         mutate(step);
-        const auto views = borrow_all(inputs);
+        const auto views = borrow_all(layer, inputs);
         evaluator.evaluate(views);
-        const auto& materialized = evaluator.get_result();
-        auto edge_relation = Relation(materialized.columns().span());
+        const auto materialized = evaluator.get_result();
+        auto edge_relation = Relation(materialized.columns());
         for (size_t i = 0; i < materialized.size(); ++i)
             edge_relation.insert(materialized.row(i));
-        const auto expected = ygg::database::min_distance(borrow(sources), borrow(edge_relation), borrow(targets), plan, result, workspace);
+        const auto expected =
+            ygg::database::min_distance(borrow(layer, sources), borrow(layer, edge_relation), borrow(layer, targets), plan, result, workspace);
         const auto input = [&](size_t slot) { return views[slot]; };
         blind.bind(input);
         guided.bind(input);
@@ -82,31 +90,31 @@ void check_sequence(ygg::database::QueryView<> edges,
             changes.clear();
             for (size_t slot = 0; slot < inputs.size(); ++slot)
             {
-                auto& change = changes.emplace_back(Change { Relation(inputs[slot].columns().span()), Relation(inputs[slot].columns().span()) });
-                for (size_t i = 0; i < inputs[slot].size(); ++i)
-                    if (!previous[slot].contains(inputs[slot].row(i)))
-                        change.added.insert(inputs[slot].row(i));
-                for (size_t i = 0; i < previous[slot].size(); ++i)
-                    if (!inputs[slot].contains(previous[slot].row(i)))
-                        change.removed.insert(previous[slot].row(i));
+                auto& change = changes.emplace_back(Change { Relation(inputs[slot].columns()), Relation(inputs[slot].columns()) });
+                for (const auto row : layer.view(inputs[slot]).rows())
+                    if (!previous[slot].contains(row))
+                        change.added.insert(row);
+                for (const auto row : layer.view(previous[slot]).rows())
+                    if (!inputs[slot].contains(row))
+                        change.removed.insert(row);
                 const auto is_static = slot < static_slots.size() && static_slots[slot];
                 changed[slot] = !is_static && (!change.added.empty() || !change.removed.empty());
             }
-            exact.update([&](size_t slot) -> const Change& { return changes[slot]; }, changed);
+            exact.update([&](size_t slot) { return ChangeView { layer.view(changes[slot].added), layer.view(changes[slot].removed) }; }, changed);
         }
         previous.clear();
         for (const auto& relation : inputs)
         {
-            auto& copy = previous.emplace_back(relation.columns().span());
-            for (size_t i = 0; i < relation.size(); ++i)
-                copy.insert(relation.row(i));
+            auto& copy = previous.emplace_back(relation.columns());
+            for (const auto row : layer.view(relation).rows())
+                copy.insert(row);
         }
-        heuristic.distances = distances_to(supergraph, targets, k);
-        ASSERT_EQ(blind.min_distance(borrow(sources), borrow(targets)), expected) << "step " << step;
-        ASSERT_EQ(guided.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
-        ASSERT_EQ(exact.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        heuristic.distances = distances_to(borrow(layer, supergraph), borrow(layer, targets), k);
+        ASSERT_EQ(blind.min_distance(borrow(layer, sources), borrow(layer, targets)), expected) << "step " << step;
+        ASSERT_EQ(guided.min_distance(borrow(layer, sources), borrow(layer, targets), heuristic), expected) << "step " << step;
+        ASSERT_EQ(exact.min_distance(borrow(layer, sources), borrow(layer, targets), heuristic), expected) << "step " << step;
         // Reuse across calls without changes.
-        ASSERT_EQ(guided.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        ASSERT_EQ(guided.min_distance(borrow(layer, sources), borrow(layer, targets), heuristic), expected) << "step " << step;
         checked += expected != std::numeric_limits<uint_t>::max();
     }
     EXPECT_GT(checked, steps / 8);
@@ -126,16 +134,16 @@ TEST_P(DatabaseIncrementalMinDistance, SingleColumnEdgesUnderChanges)
     auto repository = ygg::tests::qb::repository();
     const auto edges = ygg::tests::qb::input(repository, 0, { x, y });
     auto inputs = urd::Store<urd::sequence<Relation>>();
-    inputs.emplace_back(std::initializer_list<Column> { x, y });
-    auto sources = Relation({ x });
-    auto targets = Relation({ y });
+    inputs.emplace_back(ygg::tests::ops::cols({ x, y }));
+    auto sources = Relation(ygg::tests::ops::cols({ x }));
+    auto targets = Relation(ygg::tests::ops::cols({ y }));
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return static_cast<uint_t>(random() % 12); };
     auto maximal = urd::Store<urd::sequence<Relation>>();
-    maximal.emplace_back(std::initializer_list<Column> { x, y });
+    maximal.emplace_back(ygg::tests::ops::cols({ x, y }));
     for (uint_t v = 0; v < 12; ++v)
         for (uint_t w = 0; w < 12; ++w)
-            maximal[0].insert(std::tuple { v, w });
+            maximal[0].insert(std::array { ygg::encode_value(v), ygg::encode_value(w) });
     check_sequence(edges,
                    maximal,
                    inputs,
@@ -149,15 +157,15 @@ TEST_P(DatabaseIncrementalMinDistance, SingleColumnEdgesUnderChanges)
                        {
                            targets.clear();
                            for (int i = 0; i < 2; ++i)
-                               targets.insert(std::tuple { vertex() });
+                               targets.insert(std::array { ygg::encode_value(vertex()) });
                        }
                        sources.clear();
-                       sources.insert(std::tuple { vertex() });
+                       sources.insert(std::array { ygg::encode_value(vertex()) });
                        if (step % 7 == 0)
-                           sources.insert(std::tuple { vertex() });
+                           sources.insert(std::array { ygg::encode_value(vertex()) });
                        for (int i = 0; i < 3; ++i)
                        {
-                           const auto edge = std::tuple { vertex(), vertex() };
+                           const auto edge = std::array { ygg::encode_value(vertex()), ygg::encode_value(vertex()) };
                            if (inputs[0].contains(edge))
                                inputs[0].erase(*inputs[0].find(edge));
                            else
@@ -199,18 +207,18 @@ TEST_P(DatabaseIncrementalMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDiff
 
     auto inputs = urd::Store<urd::sequence<Relation>>();
     for (const auto& columns : urd::Store<urd::sequence<urd::Store<urd::sequence<Column>>>> { { x, y }, { x }, { x, y }, { x, y }, { x, y } })
-        inputs.emplace_back(std::span<const Column>(columns));
+        inputs.emplace_back(ygg::tests::qb::columns_of(std::span<const Column>(columns)));
     constexpr uint_t n = 6;
     for (uint_t v = 0; v < n; ++v)
     {
-        inputs[1].insert(std::tuple { v });
+        inputs[1].insert(std::array { ygg::encode_value(v) });
         for (uint_t w = 0; w < n; w += 2)
-            inputs[0].insert(std::tuple { v, ((v + w + 1) % n) });
-        inputs[4].insert(std::tuple { v, v });
-        inputs[3].insert(std::tuple { v, ((v + 1) % n) });
+            inputs[0].insert(std::array { ygg::encode_value(v), ygg::encode_value(((v + w + 1) % n)) });
+        inputs[4].insert(std::array { ygg::encode_value(v), ygg::encode_value(v) });
+        inputs[3].insert(std::array { ygg::encode_value(v), ygg::encode_value(((v + 1) % n)) });
     }
-    auto sources = Relation({ a, b });
-    auto targets = Relation({ a2, b2 });
+    auto sources = Relation(ygg::tests::ops::cols({ a, b }));
+    auto targets = Relation(ygg::tests::ops::cols({ a2, b2 }));
     auto random = std::mt19937(GetParam());
     const auto value = [&] { return static_cast<uint_t>(random() % n); };
     const auto toggle = [](Relation& relation, auto row)
@@ -222,14 +230,14 @@ TEST_P(DatabaseIncrementalMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDiff
     };
     auto maximal = urd::Store<urd::sequence<Relation>>();
     for (const auto& input : inputs)
-        maximal.emplace_back(input.columns().span());
+        maximal.emplace_back(input.columns());
     for (uint_t v = 0; v < n; ++v)
     {
-        maximal[1].insert(std::tuple { v });
+        maximal[1].insert(std::array { ygg::encode_value(v) });
         for (uint_t w = 0; w < n; ++w)
-            maximal[0].insert(std::tuple { v, w });
-        maximal[3].insert(std::tuple { v, ((v + 1) % n) });
-        maximal[4].insert(std::tuple { v, v });
+            maximal[0].insert(std::array { ygg::encode_value(v), ygg::encode_value(w) });
+        maximal[3].insert(std::array { ygg::encode_value(v), ygg::encode_value(((v + 1) % n)) });
+        maximal[4].insert(std::array { ygg::encode_value(v), ygg::encode_value(v) });
     }
     check_sequence(edges,
                    maximal,
@@ -243,35 +251,36 @@ TEST_P(DatabaseIncrementalMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDiff
                        if (step % 30 == 0)
                        {
                            targets.clear();
-                           targets.insert(std::tuple { value(), value() });
-                           targets.insert(std::tuple { value(), value() });
+                           targets.insert(std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
+                           targets.insert(std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
                        }
                        sources.clear();
-                       sources.insert(std::tuple { value(), value() });
-                       toggle(inputs[0], std::tuple { value(), value() });
-                       toggle(inputs[1], std::tuple { value() });
+                       sources.insert(std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
+                       toggle(inputs[0], std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
+                       toggle(inputs[1], std::array { ygg::encode_value(value()) });
                        if (step % 3 == 0)
-                           toggle(inputs[2], std::tuple { value(), value() });
+                           toggle(inputs[2], std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
                    });
 }
 
 TEST_P(DatabaseIncrementalMinDistance, RelationEdgesUnderChanges)
 {
     constexpr uint_t n = 12;
-    auto edges = Relation({ x, y });
-    auto sources = Relation({ x });
-    auto targets = Relation({ y });
-    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::incremental::MinDistance(plan);
-    auto guided = ygg::database::incremental::MinDistance<HalfDistance>(plan);
-    auto complete = Relation({ x, y });
+    auto edges = Relation(ygg::tests::ops::cols({ x, y }));
+    auto sources = Relation(ygg::tests::ops::cols({ x }));
+    auto targets = Relation(ygg::tests::ops::cols({ y }));
+    const auto plan = ygg::database::DistancePlan(sources.columns(), edges.columns(), targets.columns(), Column(99));
+    const ygg::database::Repository layer;
+    auto blind = ygg::database::incremental::MinDistance(layer, plan);
+    auto guided = ygg::database::incremental::MinDistance<HalfDistance>(layer, plan);
+    auto complete = Relation(ygg::tests::ops::cols({ x, y }));
     for (uint_t v = 0; v < n; ++v)
         for (uint_t w = 0; w < n; ++w)
-            complete.insert(std::tuple { v, w });
+            complete.insert(std::array { ygg::encode_value(v), ygg::encode_value(w) });
     auto heuristic = HalfDistance {};
-    heuristic.columns = sources.columns().span();
+    heuristic.columns = sources.columns();
     auto workspace = ygg::database::DistanceWorkspace(plan);
-    auto result = Relation(plan.output_columns().span());
+    auto result = Relation(plan.output_columns());
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return static_cast<uint_t>(random() % n); };
     for (size_t step = 0; step < 300; ++step)
@@ -279,30 +288,30 @@ TEST_P(DatabaseIncrementalMinDistance, RelationEdgesUnderChanges)
         if (step % 25 == 0)
         {
             targets.clear();
-            targets.insert(std::tuple { vertex() });
-            targets.insert(std::tuple { vertex() });
-            heuristic.distances = distances_to(complete, targets, 1);
+            targets.insert(std::array { ygg::encode_value(vertex()) });
+            targets.insert(std::array { ygg::encode_value(vertex()) });
+            heuristic.distances = distances_to(borrow(layer, complete), borrow(layer, targets), 1);
         }
         sources.clear();
-        sources.insert(std::tuple { vertex() });
+        sources.insert(std::array { ygg::encode_value(vertex()) });
         const auto changed = step % 3 == 0;
         if (changed)
             for (int i = 0; i < 3; ++i)
             {
-                const auto edge = std::tuple { vertex(), vertex() };
+                const auto edge = std::array { ygg::encode_value(vertex()), ygg::encode_value(vertex()) };
                 if (edges.contains(edge))
                     edges.erase(edges.find(edge).value());
                 else
                     edges.insert(edge);
             }
-        const auto expected = ygg::database::min_distance(borrow(sources), borrow(edges), borrow(targets), plan, result, workspace);
-        const auto edge_view = borrow(edges);
+        const auto expected = ygg::database::min_distance(borrow(layer, sources), borrow(layer, edges), borrow(layer, targets), plan, result, workspace);
+        const auto edge_view = borrow(layer, edges);
         const auto edge_input = [&](size_t) -> const auto& { return edge_view; };
         const auto maybe_changed = std::vector<bool> { changed || step == 0 };
         blind.bind(edge_input, maybe_changed);
         guided.bind(edge_input, maybe_changed);
-        ASSERT_EQ(blind.min_distance(borrow(sources), borrow(targets)), expected) << "step " << step;
-        ASSERT_EQ(guided.min_distance(borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        ASSERT_EQ(blind.min_distance(borrow(layer, sources), borrow(layer, targets)), expected) << "step " << step;
+        ASSERT_EQ(guided.min_distance(borrow(layer, sources), borrow(layer, targets), heuristic), expected) << "step " << step;
     }
     EXPECT_GT(guided.statistics().tree_hits, 0);
 }
@@ -315,68 +324,75 @@ TEST(DatabaseIncrementalBoundEvaluation, VersionChangesOnlyWhenRowsCanBeRemoved)
     auto repository = qb::repository();
     // E(x, y) without the edges into N(y).
     const auto edges = qb::antijoin(repository, qb::input(repository, 0, { x, y }), qb::rename(repository, qb::input(repository, 1, { x }), { y }));
-    auto e = Relation({ x, y });
-    auto n = Relation({ x });
-    e.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-    auto evaluator = ygg::database::incremental::bound::QueryEvaluator(edges);
-    evaluator.initialize([&](size_t slot) { return borrow(slot == 0 ? e : n); });
-    auto e_added = Relation({ x, y });
-    auto e_removed = Relation({ x, y });
-    auto n_added = Relation({ x });
-    auto n_removed = Relation({ x });
+    auto e = Relation(ygg::tests::ops::cols({ x, y }));
+    auto n = Relation(ygg::tests::ops::cols({ x }));
+    e.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+    const ygg::database::Repository layer;
+    auto evaluator = ygg::database::incremental::bound::QueryEvaluator(layer, edges);
+    evaluator.initialize([&](size_t slot) { return borrow(layer, slot == 0 ? e : n); });
+    auto e_added = Relation(ygg::tests::ops::cols({ x, y }));
+    auto e_removed = Relation(ygg::tests::ops::cols({ x, y }));
+    auto n_added = Relation(ygg::tests::ops::cols({ x }));
+    auto n_removed = Relation(ygg::tests::ops::cols({ x }));
     const auto bumps = [&](size_t slot)
     {
         const auto version = evaluator.version();
         if (slot == 0)
-            evaluator.update(0, e_added, e_removed);
+            evaluator.update(0, layer.view(e_added), layer.view(e_removed));
         else
-            evaluator.update(1, n_added, n_removed);
+            evaluator.update(1, layer.view(n_added), layer.view(n_removed));
         e_added.clear();
         e_removed.clear();
         n_added.clear();
         n_removed.clear();
         return evaluator.version() != version;
     };
-    e_added.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(2) });
+    e_added.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(2)) });
     EXPECT_FALSE(bumps(0));  // A positive input gains a row: no edge can disappear.
-    e_removed.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
+    e_removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
     EXPECT_TRUE(bumps(0));  // It loses one.
-    n_added.insert(std::tuple { static_cast<uint_t>(2) });
+    n_added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
     EXPECT_TRUE(bumps(1));  // The negated input gains a row.
-    n_removed.insert(std::tuple { static_cast<uint_t>(2) });
+    n_removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
     EXPECT_FALSE(bumps(1));  // It loses one.
 }
 
 /// The exact change of one input slot, for MinDistance::update().
 struct SlotChange
 {
-    Relation added = Relation({ x, y });
-    Relation removed = Relation({ x, y });
+    Relation added = Relation(ygg::tests::ops::cols({ x, y }));
+    Relation removed = Relation(ygg::tests::ops::cols({ x, y }));
 };
 
 /// Edges E0(x, y) ∪ E1(x, y) over slots 0 and 1, from source 0 to target 2.
 struct TwoSlotEdges
 {
+    ygg::database::Repository layer;
     ygg::database::QueryRepository repository = ygg::tests::qb::repository();
     ygg::database::QueryView<> edges =
         ygg::tests::qb::union_(repository, ygg::tests::qb::input(repository, 0, { x, y }), ygg::tests::qb::input(repository, 1, { x, y }));
-    Relation sources = Relation({ x });
-    Relation targets = Relation({ y });
-    ygg::database::DistancePlan plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
+    Relation sources = Relation(ygg::tests::ops::cols({ x }));
+    Relation targets = Relation(ygg::tests::ops::cols({ y }));
+    ygg::database::DistancePlan plan = ygg::database::DistancePlan(sources.columns(), edges.columns(), targets.columns(), Column(99));
     urd::Store<urd::sequence<Relation>> inputs;
 
     TwoSlotEdges()
     {
-        sources.insert(std::tuple { static_cast<uint_t>(0) });
-        targets.insert(std::tuple { static_cast<uint_t>(2) });
-        inputs.emplace_back(std::initializer_list<Column> { x, y });
-        inputs.emplace_back(std::initializer_list<Column> { x, y });
-        inputs[0].insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-        inputs[0].insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(2) });
+        sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)) });
+        targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)) });
+        inputs.emplace_back(ygg::tests::ops::cols({ x, y }));
+        inputs.emplace_back(ygg::tests::ops::cols({ x, y }));
+        inputs[0].insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+        inputs[0].insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(2)) });
     }
     [[nodiscard]] auto input() const
     {
-        return [this](size_t slot) { return borrow(inputs[slot]); };
+        return [this](size_t slot) { return borrow(layer, inputs[slot]); };
+    }
+    /// The changes as views (SlotChanges).
+    [[nodiscard]] auto changes_of(const urd::Store<urd::sequence<SlotChange>>& changes) const
+    {
+        return [this, &changes](size_t slot) { return ChangeView { layer.view(changes[slot].added), layer.view(changes[slot].removed) }; };
     }
 };
 
@@ -384,29 +400,29 @@ TEST(DatabaseIncrementalMinDistanceContract, InitializeDiscardsTheSearchWithUnch
 {
     auto graph = TwoSlotEdges();
     auto changes = urd::Store<urd::sequence<SlotChange>>(2);
-    const auto change = [&](size_t slot) -> const SlotChange& { return changes[slot]; };
+    const auto change = graph.changes_of(changes);
     for (const auto via_update : { false, true })
     {
         SCOPED_TRACE(via_update);
-        auto search = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
+        auto search = ygg::database::incremental::MinDistance(graph.layer, graph.edges, graph.plan);
         graph.inputs[0].clear();
-        graph.inputs[0].insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-        graph.inputs[0].insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(2) });
+        graph.inputs[0].insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+        graph.inputs[0].insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(2)) });
         graph.inputs[1].clear();
         if (via_update)
         {
             search.initialize(graph.input());
             changes[1].added.clear();
-            changes[1].added.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(1) });
+            changes[1].added.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(1)) });
             search.update(change, { false, true });
         }
         else
             search.bind(graph.input());
-        ASSERT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
+        ASSERT_EQ(search.min_distance(borrow(graph.layer, graph.sources), borrow(graph.layer, graph.targets)), 2);
         // A shortcut in a new baseline: the stored path 0 -> 1 -> 2 still exists but is no longer shortest.
-        graph.inputs[0].insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(2) });
+        graph.inputs[0].insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(2)) });
         search.initialize(graph.input());
-        EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 1);
+        EXPECT_EQ(search.min_distance(borrow(graph.layer, graph.sources), borrow(graph.layer, graph.targets)), 1);
     }
 }
 
@@ -414,54 +430,54 @@ TEST(DatabaseIncrementalMinDistanceContract, UpdateRejectsStaticUnboundAndOutOfR
 {
     auto graph = TwoSlotEdges();
     auto changes = urd::Store<urd::sequence<SlotChange>>(3);
-    changes[1].added.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(1) });
-    changes[2].added.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(1) });
-    const auto change = [&](size_t slot) -> const SlotChange& { return changes[slot]; };
+    changes[1].added.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(1)) });
+    changes[2].added.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(1)) });
+    const auto change = graph.changes_of(changes);
 
-    auto unbound = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
+    auto unbound = ygg::database::incremental::MinDistance(graph.layer, graph.edges, graph.plan);
     EXPECT_THROW(unbound.update(change, { false, true }), std::invalid_argument);
 
-    auto with_static = ygg::database::incremental::MinDistance(graph.edges, graph.plan, { false, true });
+    auto with_static = ygg::database::incremental::MinDistance(graph.layer, graph.edges, graph.plan, { false, true });
     with_static.initialize(graph.input());
     EXPECT_THROW(with_static.update(change, { false, true }), std::invalid_argument);
 
-    auto search = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
+    auto search = ygg::database::incremental::MinDistance(graph.layer, graph.edges, graph.plan);
     search.initialize(graph.input());
     EXPECT_THROW(search.update(change, { false, false, true }), std::invalid_argument);
-    EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
+    EXPECT_EQ(search.min_distance(borrow(graph.layer, graph.sources), borrow(graph.layer, graph.targets)), 2);
 }
 
 TEST(DatabaseIncrementalMinDistanceContract, DistancesStayExactAfterAThrowingUpdate)
 {
     auto graph = TwoSlotEdges();
-    auto search = ygg::database::incremental::MinDistance(graph.edges, graph.plan);
+    auto search = ygg::database::incremental::MinDistance(graph.layer, graph.edges, graph.plan);
     search.initialize(graph.input());
-    ASSERT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 2);
+    ASSERT_EQ(search.min_distance(borrow(graph.layer, graph.sources), borrow(graph.layer, graph.targets)), 2);
     // Slot 0 gains the shortcut 0 -> 2 before slot 1's change throws: its removed row is absent.
     auto changes = urd::Store<urd::sequence<SlotChange>>(2);
-    changes[0].added.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(2) });
-    changes[1].removed.insert(std::tuple { static_cast<uint_t>(5), static_cast<uint_t>(5) });
-    EXPECT_THROW(search.update([&](size_t slot) -> const SlotChange& { return changes[slot]; }, { true, true }), std::invalid_argument);
-    EXPECT_EQ(search.min_distance(borrow(graph.sources), borrow(graph.targets)), 1);
+    changes[0].added.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(2)) });
+    changes[1].removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(5)), ygg::encode_value(static_cast<uint_t>(5)) });
+    EXPECT_THROW(search.update(graph.changes_of(changes), { true, true }), std::invalid_argument);
+    EXPECT_EQ(search.min_distance(borrow(graph.layer, graph.sources), borrow(graph.layer, graph.targets)), 1);
 }
 
 TEST(DatabaseIncrementalBoundEvaluation, FailedChangesLeaveTheInputUnchanged)
 {
     namespace qb = ygg::tests::qb;
     auto repository = qb::repository();
-    auto e = Relation({ x, y });
-    e.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-    e.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(2) });
-    auto evaluator = ygg::database::incremental::bound::QueryEvaluator(qb::input(repository, 0, { x, y }));
-    evaluator.initialize([&](size_t) { return borrow(e); });
+    auto e = Relation(ygg::tests::ops::cols({ x, y }));
+    e.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+    e.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(2)) });
+    const ygg::database::Repository layer;
+    auto evaluator = ygg::database::incremental::bound::QueryEvaluator(layer, qb::input(repository, 0, { x, y }));
+    evaluator.initialize([&](size_t) { return borrow(layer, e); });
     const auto successors = evaluator.prepare({ 0 });
     const auto count = [&]
     {
-        auto bytes = urd::Store<urd::sequence<std::byte>>();
         auto rows = static_cast<size_t>(0);
         evaluator.evaluate(successors,
-                           ygg::database::encode_row<uint_t>(std::array { static_cast<uint_t>(0) }, bytes),
-                           [&](std::span<const std::byte>)
+                           std::array { ygg::encode_value(static_cast<uint_t>(0)) },
+                           [&](std::span<const ygg::Value>)
                            {
                                ++rows;
                                return true;
@@ -470,23 +486,23 @@ TEST(DatabaseIncrementalBoundEvaluation, FailedChangesLeaveTheInputUnchanged)
     };
     ASSERT_EQ(count(), 2);  // Builds the index on x.
     const auto version = evaluator.version();
-    auto added = Relation({ x, y });
-    auto removed = Relation({ x, y });
+    auto added = Relation(ygg::tests::ops::cols({ x, y }));
+    auto removed = Relation(ygg::tests::ops::cols({ x, y }));
     // A present row removed before an absent one.
-    removed.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-    removed.insert(std::tuple { static_cast<uint_t>(3), static_cast<uint_t>(3) });
-    EXPECT_THROW(evaluator.update(0, added, removed), std::invalid_argument);
+    removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+    removed.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)), ygg::encode_value(static_cast<uint_t>(3)) });
+    EXPECT_THROW(evaluator.update(0, layer.view(added), layer.view(removed)), std::invalid_argument);
     // A new row added before a present one.
     removed.clear();
-    added.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(3) });
-    added.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(2) });
-    EXPECT_THROW(evaluator.update(0, added, removed), std::invalid_argument);
+    added.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(3)) });
+    added.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(2)) });
+    EXPECT_THROW(evaluator.update(0, layer.view(added), layer.view(removed)), std::invalid_argument);
     EXPECT_EQ(evaluator.version(), version);
     EXPECT_EQ(evaluator.input(0).size(), 2);
-    EXPECT_TRUE(evaluator.input(0).contains(std::tuple { uint_t(0), uint_t(1) }));
-    EXPECT_FALSE(evaluator.input(0).contains(std::tuple { uint_t(0), uint_t(3) }));
+    EXPECT_TRUE(evaluator.input(0).contains(std::array { ygg::encode_value(uint_t(0)), ygg::encode_value(uint_t(1)) }));
+    EXPECT_FALSE(evaluator.input(0).contains(std::array { ygg::encode_value(uint_t(0)), ygg::encode_value(uint_t(3)) }));
     EXPECT_EQ(count(), 2);
-    EXPECT_THROW(evaluator.update(1, added, removed), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(1, layer.view(added), layer.view(removed)), std::invalid_argument);
 }
 
 }  // namespace

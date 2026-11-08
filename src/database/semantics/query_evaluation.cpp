@@ -9,17 +9,14 @@
 
 namespace ygg::database::detail
 {
-bool query_accepts(QueryView<QuerySelectEqualTag> selection, std::span<const std::byte> row)
-{
-    const auto columns = selection.columns();
-    return std::ranges::equal(column_bytes(row, columns[selection.get_lhs_position()]), column_bytes(row, columns[selection.get_rhs_position()]));
-}
+bool query_accepts(QueryView<QuerySelectEqualTag> selection, const RowPool::row_type& row)
+{ return row.get(selection.get_plan().lhs_position()) == row.get(selection.get_plan().rhs_position()); }
 }
 
 namespace ygg::database::detail
 {
-bool query_accepts(QueryView<QuerySelectValueTag> selection, std::span<const std::byte> row)
-{ return std::ranges::equal(column_bytes(row, selection.columns()[selection.get_position()]), selection.get_constant()); }
+bool query_accepts(QueryView<QuerySelectValueTag> selection, const RowPool::row_type& row)
+{ return row.get(selection.get_plan().position()) == selection.get_plan().value(); }
 }
 
 namespace ygg::database

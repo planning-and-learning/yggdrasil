@@ -92,11 +92,10 @@ std::vector<ConjunctiveBranch> UnionNormalFormBuilder::flatten(QueryView<> query
                 for (auto& branch : branches)
                 {
                     if constexpr (std::same_as<Tag, QuerySelectEqualTag>)
-                        branch.equal.emplace_back(mapping[concrete.get_lhs_position()], mapping[concrete.get_rhs_position()]);
+                        branch.equal.emplace_back(mapping[concrete.get_plan().lhs_position()], mapping[concrete.get_plan().rhs_position()]);
                     else
                     {
-                        const auto constant = concrete.get_constant();
-                        branch.value.emplace_back(mapping[concrete.get_position()], urd::Store<urd::sequence<std::byte>>(constant.begin(), constant.end()));
+                        branch.value.emplace_back(mapping[concrete.get_plan().position()], concrete.get_constant());
                     }
                 }
                 return branches;

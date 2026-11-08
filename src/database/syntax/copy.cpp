@@ -28,7 +28,7 @@ QueryPlan compile(std::span<const QueryView<>> roots)
 {
     if (roots.empty())
         return QueryPlan {};
-    auto repository = get_repository(roots.front().context()).get_factory().create_shared();
+    auto repository = std::make_shared<QueryRepository>();
     QueryBuilder builder;
     urd::Store<urd::sequence<urd::index<Query<>>>> outputs;
     for (const auto copied : database::copy(roots, [](size_t slot) { return slot; }, *repository, builder))

@@ -19,10 +19,11 @@ namespace ygg::database::incremental
 /// Invalid changes preserve state; mutation failures require initialize().
 class GenericJoinEvaluator
 {
+    const Repository* m_layer;
     GenericJoinPlan m_plan;
     GenericJoinWorkspace m_workspace;
     database::detail::GenericJoinTrie m_changed;
-    urd::builder<Relation> m_result;
+    urd::builder<Relation<Schema>> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
@@ -60,11 +61,13 @@ class GenericJoinEvaluator
     friend struct detail::NodeRules<QueryGenericJoinTag>;
 
 public:
-    explicit GenericJoinEvaluator(GenericJoinPlan plan) :
+    /// Its builders are read through `layer`, which must outlive it.
+    GenericJoinEvaluator(const Repository& layer, GenericJoinPlan plan) :
+        m_layer(&layer),
         m_plan(std::move(plan)),
         m_workspace(m_plan),
-        m_result(m_plan.output_columns().span()),
-        m_delta(m_plan.output_columns().span())
+        m_result(m_plan.output_columns()),
+        m_delta(layer, m_plan.output_columns())
     {
     }
 
@@ -75,7 +78,7 @@ public:
             throw std::invalid_argument("Incremental generic join: wrong input count.");
         for (size_t input = 0; input < m_plan.input_count(); ++input)
         {
-            database::detail::require_plan_columns(inputs[input].columns().span(), m_plan.input_columns(input));
+            assert(std::ranges::equal(inputs[input].columns(), m_plan.input_columns(input)));
             detail::require_unaliased(inputs[input], m_result, m_delta);
         }
         m_initialized = false;
@@ -112,12 +115,12 @@ public:
         apply(changes);
     }
 
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&
+    [[nodiscard]] BuilderRelationView get_result() const&
     {
         detail::require_initialized(m_initialized);
-        return m_result;
+        return m_layer->view(m_result);
     }
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] BuilderRelationView get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);

@@ -15,7 +15,7 @@ std::vector<ConjunctivePlan> QueryEvaluator::plans(const std::vector<bool>& boun
     const auto statistics = [&](size_t slot) -> const RelationStatistics&
     {
         if (!measured[slot])
-            measured[slot] = measure_relation(*m_inputs[slot]);
+            measured[slot] = measure_relation(input(slot));
         return *measured[slot];
     };
     auto compiled = std::vector<ConjunctivePlan>();  // std::vector: of an incomplete type (a Store resolves its element type at once)
@@ -30,15 +30,14 @@ std::vector<ConjunctivePlan> QueryEvaluator::plans(const std::vector<bool>& boun
 
 namespace ygg::database::bound
 {
-bool QueryEvaluator::bind_atom(const ConjunctiveAtom& atom, std::span<const std::byte> row)
+bool QueryEvaluator::bind_atom(const ConjunctiveAtom& atom, const RowPool::row_type& row)
 {
-    const auto& columns = m_query.input_columns[atom.slot];
     for (size_t c = 0; c < atom.vars.size(); ++c)
     {
-        const auto bytes = database::detail::column_bytes(row, columns[c]);
+        const auto value = row.get(c);
         if (static_cast<size_t>(std::ranges::find(atom.vars, atom.vars[c]) - atom.vars.begin()) == c)
-            std::ranges::copy(bytes, variable(atom.vars[c]).begin());
-        else if (!std::ranges::equal(bytes, variable(atom.vars[c])))
+            m_frame[atom.vars[c]] = value;
+        else if (value != m_frame[atom.vars[c]])
             return false;
     }
     return true;
@@ -58,7 +57,7 @@ size_t QueryEvaluator::index_id(size_t slot, std::span<const std::pair<size_t, u
     auto& entry = m_indexes.emplace_back();
     entry.slot = slot;
     for (const auto position : positions)
-        entry.keys.push_back(database::detail::column_slice(m_query.input_columns[slot][position]));
+        entry.keys.push_back(ColumnSlice { position });
     entry.positions = std::move(positions);
     return m_indexes.size() - 1;
 }
@@ -73,10 +72,7 @@ void QueryEvaluator::resolve(ConjunctivePlan& plan)
         auto& lookup = m_lookups.emplace_back();
         lookup.index = index_id(step.slot, step.key);
         for (const auto& [c, var] : step.key)
-        {
-            const auto& variable = m_query.variables[var];
-            lookup.probe.push_back(ColumnSlice { m_query.input_columns[step.slot][c].type, variable.offset, variable.size });
-        }
+            lookup.probe.push_back(ColumnSlice { var });  // the variable's place in the frame
         step.index = m_lookups.size() - 1;
     }
     for (auto& plans : plan.negation_plans)
@@ -90,10 +86,10 @@ namespace ygg::database::bound
 bool QueryEvaluator::accepts(const ConjunctivePlan& plan, const ConjunctiveFilters& filters)
 {
     for (const auto& [lhs, rhs] : filters.equal)
-        if (!std::ranges::equal(variable(lhs), variable(rhs)))
+        if (m_frame[lhs] != m_frame[rhs])
             return false;
     for (const auto& [var, constant] : filters.value)
-        if (!std::ranges::equal(variable(var), constant))
+        if (m_frame[var] != constant)
             return false;
     // A negation rejects the row if any of its branches matches (an anti-join, its outer variables bound).
     for (const auto i : filters.negations)

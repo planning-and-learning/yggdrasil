@@ -10,6 +10,7 @@
 #include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <boost/hash2/xxhash.hpp>
 #include <cstddef>
 #include <limits>
@@ -31,14 +32,13 @@
 namespace ygg::database
 {
 
-/// Reusable hash index for one immutable relation and ordered field slices.
-/// Indexed inputs must share one RelationPoolFactory; directly constructed inputs
-/// may be used as unindexed probes. Rows stay unchanged until the index is destroyed.
-/// Stores their factory-local identity; no row pointers or column labels are retained.
+/// Reusable hash index for one immutable relation and ordered key columns. Indexed inputs are told apart by their
+/// identity (an interned relation's layer and index, a builder's address); rows stay unchanged until the index is
+/// destroyed. No row pointers or column labels are retained.
 class JoinIndex
 {
 private:
-    size_t m_relation_index;
+    RelationIdentity m_relation;
     urd::Store<urd::sequence<ColumnSlice>> m_keys;
     urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains> m_index;
 
@@ -46,20 +46,17 @@ public:
     template<RelationViewConcept V>
     JoinIndex(const V& build, std::span<const ColumnSlice> keys);
 
-    template<RelationViewConcept V>
-    bool matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept;
     [[nodiscard]] const urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains>& index() const noexcept { return m_index; }
 
-    [[nodiscard]] size_t relation_index() const noexcept { return m_relation_index; }
-    /// The key slices as a span: lookups probe with a std::tuple of the relation index and one.
+    [[nodiscard]] RelationIdentity relation() const noexcept { return m_relation; }
+    /// The key slices as a span: lookups probe with a std::tuple of the relation identity and one.
     [[nodiscard]] std::span<const ColumnSlice> key_span() const noexcept { return m_keys; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&JoinIndex::relation_index, &JoinIndex::key_span> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&JoinIndex::relation, &JoinIndex::key_span> {}; }
 };
 
-/// Shares indexes across renamed views and plans using the same ordered key slices.
-/// All indexed inputs must come from the same RelationPoolFactory.
-/// Indexed rows must remain stationary and unchanged. Clear before any source
-/// is mutated, destroyed, moved, or reused. No schemas or views are retained.
+/// Shares indexes across plans using the same ordered key slices, keyed by the indexed input's identity. Indexed rows
+/// must remain stationary and unchanged: clear before any source is mutated, destroyed, moved, or reused. No schemas or
+/// views are retained.
 class JoinIndexCache
 {
 private:
@@ -82,15 +79,23 @@ namespace ygg::database
 
 namespace detail
 {
-/// Hash canonical field bytes in logical key order, without materializing a key.
-hash_t join_key_hash(std::span<const std::byte> row, std::span<const ColumnSlice> keys) noexcept;
+/// The value of a row's field: a stored row's, or a row of values' (a query's frame of variables).
+inline Value field_value(const RowPool::row_type& row, size_t position) noexcept { return row.get(position); }
+inline Value field_value(std::span<const Value> values, size_t position) noexcept { return values[position]; }
 
-bool join_keys_equal(std::span<const std::byte> lhs,
-                     std::span<const ColumnSlice> lhs_keys,
-                     std::span<const std::byte> rhs,
-                     std::span<const ColumnSlice> rhs_keys) noexcept;
+/// Hash the key fields' canonical values in logical key order, without materializing a key: as urd::hash_columns.
+template<typename R>
+hash_t join_key_hash(const R& row, std::span<const ColumnSlice> keys) noexcept
+{ return urd::hash_columns(keys.size(), [&](size_t i) { return field_value(row, keys[i].position); }); }
 
-void require_key_slices(std::span<const ColumnLayout> columns, std::span<const ColumnSlice> keys);
+template<typename L, typename R>
+bool join_keys_equal(const L& lhs, std::span<const ColumnSlice> lhs_keys, const R& rhs, std::span<const ColumnSlice> rhs_keys) noexcept
+{
+    for (size_t i = 0; i < lhs_keys.size(); ++i)
+        if (field_value(lhs, lhs_keys[i].position) != field_value(rhs, rhs_keys[i].position))
+            return false;
+    return true;
+}
 
 template<RelationViewConcept V>
 void build_join_index(const V& build, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, size_t>, urd::multi, urd::retains>& index)
@@ -103,26 +108,17 @@ void build_join_index(const V& build, std::span<const ColumnSlice> keys, urd::St
 }  // namespace detail
 
 template<RelationViewConcept V>
-JoinIndex::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_relation_index(build.get_storage_index()), m_keys(keys.begin(), keys.end())
+JoinIndex::JoinIndex(const V& build, std::span<const ColumnSlice> keys) : m_relation(build.relation_identity()), m_keys(keys.begin(), keys.end())
 {
-    if (m_relation_index == std::numeric_limits<size_t>::max())
-        throw std::invalid_argument("JoinIndex: use a RelationPool to create indexed inputs.");
-    detail::require_key_slices(build.columns().span(), keys);
+    assert(std::ranges::all_of(keys, [&build](ColumnSlice key) { return key.position < build.columns().size(); }));
     if (!keys.empty())
         detail::build_join_index(build, keys, m_index);
 }
 
 template<RelationViewConcept V>
-bool JoinIndex::matches(const V& relation, std::span<const ColumnSlice> keys) const noexcept
-{ return urd::EqualTo<JoinIndex> {}(*this, std::make_tuple(relation.get_storage_index(), keys)); }
-
-template<RelationViewConcept V>
 const JoinIndex& JoinIndexCache::get_or_create(const V& relation, std::span<const ColumnSlice> keys)
 {
-    // Canonical empty row sets can be shared across different schema arities.
-    // Validate the current schema even when the row-storage key is cached.
-    detail::require_key_slices(relation.columns().span(), keys);
-    const auto found = m_indexes.find(std::make_tuple(relation.get_storage_index(), keys));
+    const auto found = m_indexes.find(std::make_tuple(relation.relation_identity(), keys));
     if (found != m_indexes.end())
         return *found;
     return *m_indexes.emplace(relation, keys).first;

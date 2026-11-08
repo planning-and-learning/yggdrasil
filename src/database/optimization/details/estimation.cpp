@@ -47,7 +47,7 @@ Estimate conjunction(Estimate result, std::span<const urd::index<Column>> labels
         const auto left = find(lhs), right = find(rhs);
         parent[std::max(left, right)] = std::min(left, right);
     }
-    urd::Store<urd::map<urd::index<Column>, urd::Store<urd::sequence<std::byte>>>> bound;
+    urd::Store<urd::map<urd::index<Column>, Value>> bound;
     bool zero = false;
     for (const auto& [column, value] : result.constants)
     {
@@ -108,12 +108,23 @@ Estimate combine(Estimate lhs, const Estimate& rhs)
 
 namespace ygg::database::detail
 {
+Estimate conjunction(Estimate result, std::span<const ColumnLayout> columns)
+{
+    auto labels = urd::Store<urd::sequence<urd::index<Column>>>();
+    for (const auto& column : columns)
+        labels.push_back(column.label);
+    return conjunction(std::move(result), labels);
+}
+}
+
+namespace ygg::database::detail
+{
 void validate_statistics(const RelationStatistics& stats, std::span<const ColumnLayout> columns)
 {
     if (!std::isfinite(stats.rows) || stats.rows < 0 || (columns.empty() && stats.rows > 1))
         throw std::invalid_argument("Optimizer: invalid row count.");
     for (const auto& [label, count] : stats.distinct)
-        if (!contains_column(columns, label) || !std::isfinite(count) || count < 0 || count > stats.rows || (stats.rows > 0 && count < 1))
+        if (std::ranges::find(columns, label, &ColumnLayout::label) == columns.end() || !std::isfinite(count) || count < 0 || count > stats.rows || (stats.rows > 0 && count < 1))
             throw std::invalid_argument("Optimizer: invalid distinct count or column.");
 }
 }

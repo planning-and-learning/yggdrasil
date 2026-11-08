@@ -9,7 +9,7 @@
 
 #include "query_helpers.hpp"
 #include "yggdrasil/database/semantics/query_evaluation.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <array>
 #include <cstddef>
@@ -21,9 +21,8 @@
 
 namespace
 {
-using Column = urd::index<ygg::database::Column>;
-using Relation = urd::builder<ygg::database::Relation>;
-using View = ygg::database::BorrowedRelationView;
+using Column = urd::index<ygg::Column>;
+using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
 using ygg::uint_t;
 
 using namespace ygg::tests::distances;
@@ -41,34 +40,36 @@ void check_sequence(ygg::database::QueryView<> edges,
                     size_t steps,
                     Mutate mutate)
 {
-    const auto k = sources.arity();
-    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::MinDistance(edges, plan, static_slots);
-    auto guided = ygg::database::MinDistance<HalfDistance>(edges, plan, static_slots);
-    auto evaluator = ygg::database::QueryEvaluator(ygg::database::compile({ edges }));
-    evaluator.evaluate(borrow_all(maximal));
-    auto supergraph = Relation(evaluator.get_result().columns().span());
+    const auto k = sources.columns().size();
+    const ygg::database::Repository layer;
+    const auto plan = ygg::database::DistancePlan(sources.columns(), edges.columns(), targets.columns(), Column(99));
+    auto blind = ygg::database::MinDistance(layer, edges, plan, static_slots);
+    auto guided = ygg::database::MinDistance<HalfDistance>(layer, edges, plan, static_slots);
+    auto evaluator = ygg::database::QueryEvaluator(layer, ygg::database::compile({ edges }));
+    evaluator.evaluate(borrow_all(layer, maximal));
+    auto supergraph = Relation(evaluator.get_result().columns());
     for (size_t i = 0; i < evaluator.get_result().size(); ++i)
         supergraph.insert(evaluator.get_result().row(i));
     auto heuristic = HalfDistance {};
-    heuristic.columns = sources.columns().span();
+    heuristic.columns = sources.columns();
     auto workspace = ygg::database::DistanceWorkspace(plan);
-    auto result = Relation(plan.output_columns().span());
+    auto result = Relation(plan.output_columns());
     auto checked = static_cast<size_t>(0);
     for (size_t step = 0; step < steps; ++step)
     {
         mutate(step);
-        const auto views = borrow_all(inputs);
+        const auto views = borrow_all(layer, inputs);
         evaluator.evaluate(views);
-        const auto& materialized = evaluator.get_result();
-        auto edge_relation = Relation(materialized.columns().span());
+        const auto materialized = evaluator.get_result();
+        auto edge_relation = Relation(materialized.columns());
         for (size_t i = 0; i < materialized.size(); ++i)
             edge_relation.insert(materialized.row(i));
-        const auto expected = ygg::database::min_distance(borrow(sources), borrow(edge_relation), borrow(targets), plan, result, workspace);
+        const auto expected =
+            ygg::database::min_distance(borrow(layer, sources), borrow(layer, edge_relation), borrow(layer, targets), plan, result, workspace);
         const auto input = [&](size_t slot) { return views[slot]; };
-        heuristic.distances = distances_to(supergraph, targets, k);
-        ASSERT_EQ(blind.min_distance(input, borrow(sources), borrow(targets)), expected) << "step " << step;
-        ASSERT_EQ(guided.min_distance(input, borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        heuristic.distances = distances_to(borrow(layer, supergraph), borrow(layer, targets), k);
+        ASSERT_EQ(blind.min_distance(input, borrow(layer, sources), borrow(layer, targets)), expected) << "step " << step;
+        ASSERT_EQ(guided.min_distance(input, borrow(layer, sources), borrow(layer, targets), heuristic), expected) << "step " << step;
         checked += expected != std::numeric_limits<uint_t>::max();
     }
     EXPECT_GT(checked, steps / 8);
@@ -87,16 +88,16 @@ TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
     auto repository = ygg::tests::qb::repository();
     const auto edges = ygg::tests::qb::input(repository, 0, { x, y });
     auto inputs = urd::Store<urd::sequence<Relation>>();
-    inputs.emplace_back(std::initializer_list<Column> { x, y });
-    auto sources = Relation({ x });
-    auto targets = Relation({ y });
+    inputs.emplace_back(ygg::tests::ops::cols({ x, y }));
+    auto sources = Relation(ygg::tests::ops::cols({ x }));
+    auto targets = Relation(ygg::tests::ops::cols({ y }));
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return static_cast<uint_t>(random() % 12); };
     auto maximal = urd::Store<urd::sequence<Relation>>();
-    maximal.emplace_back(std::initializer_list<Column> { x, y });
+    maximal.emplace_back(ygg::tests::ops::cols({ x, y }));
     for (uint_t v = 0; v < 12; ++v)
         for (uint_t w = 0; w < 12; ++w)
-            maximal[0].insert(std::tuple { v, w });
+            maximal[0].insert(std::array { ygg::encode_value(v), ygg::encode_value(w) });
     check_sequence(edges,
                    maximal,
                    inputs,
@@ -110,15 +111,15 @@ TEST_P(DatabaseMinDistance, SingleColumnEdgesUnderChanges)
                        {
                            targets.clear();
                            for (int i = 0; i < 2; ++i)
-                               targets.insert(std::tuple { vertex() });
+                               targets.insert(std::array { ygg::encode_value(vertex()) });
                        }
                        sources.clear();
-                       sources.insert(std::tuple { vertex() });
+                       sources.insert(std::array { ygg::encode_value(vertex()) });
                        if (step % 7 == 0)
-                           sources.insert(std::tuple { vertex() });
+                           sources.insert(std::array { ygg::encode_value(vertex()) });
                        for (int i = 0; i < 3; ++i)
                        {
-                           const auto edge = std::tuple { vertex(), vertex() };
+                           const auto edge = std::array { ygg::encode_value(vertex()), ygg::encode_value(vertex()) };
                            if (inputs[0].contains(edge))
                                inputs[0].erase(*inputs[0].find(edge));
                            else
@@ -160,18 +161,18 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
 
     auto inputs = urd::Store<urd::sequence<Relation>>();
     for (const auto& columns : urd::Store<urd::sequence<urd::Store<urd::sequence<Column>>>> { { x, y }, { x }, { x, y }, { x, y }, { x, y } })
-        inputs.emplace_back(std::span<const Column>(columns));
+        inputs.emplace_back(ygg::tests::qb::columns_of(std::span<const Column>(columns)));
     constexpr uint_t n = 6;
     for (uint_t v = 0; v < n; ++v)
     {
-        inputs[1].insert(std::tuple { v });
+        inputs[1].insert(std::array { ygg::encode_value(v) });
         for (uint_t w = 0; w < n; w += 2)
-            inputs[0].insert(std::tuple { v, ((v + w + 1) % n) });
-        inputs[4].insert(std::tuple { v, v });
-        inputs[3].insert(std::tuple { v, ((v + 1) % n) });
+            inputs[0].insert(std::array { ygg::encode_value(v), ygg::encode_value(((v + w + 1) % n)) });
+        inputs[4].insert(std::array { ygg::encode_value(v), ygg::encode_value(v) });
+        inputs[3].insert(std::array { ygg::encode_value(v), ygg::encode_value(((v + 1) % n)) });
     }
-    auto sources = Relation({ a, b });
-    auto targets = Relation({ a2, b2 });
+    auto sources = Relation(ygg::tests::ops::cols({ a, b }));
+    auto targets = Relation(ygg::tests::ops::cols({ a2, b2 }));
     auto random = std::mt19937(GetParam());
     const auto value = [&] { return static_cast<uint_t>(random() % n); };
     const auto toggle = [](Relation& relation, auto row)
@@ -183,14 +184,14 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
     };
     auto maximal = urd::Store<urd::sequence<Relation>>();
     for (const auto& input : inputs)
-        maximal.emplace_back(input.columns().span());
+        maximal.emplace_back(input.columns());
     for (uint_t v = 0; v < n; ++v)
     {
-        maximal[1].insert(std::tuple { v });
+        maximal[1].insert(std::array { ygg::encode_value(v) });
         for (uint_t w = 0; w < n; ++w)
-            maximal[0].insert(std::tuple { v, w });
-        maximal[3].insert(std::tuple { v, ((v + 1) % n) });
-        maximal[4].insert(std::tuple { v, v });
+            maximal[0].insert(std::array { ygg::encode_value(v), ygg::encode_value(w) });
+        maximal[3].insert(std::array { ygg::encode_value(v), ygg::encode_value(((v + 1) % n)) });
+        maximal[4].insert(std::array { ygg::encode_value(v), ygg::encode_value(v) });
     }
     check_sequence(edges,
                    maximal,
@@ -204,35 +205,36 @@ TEST_P(DatabaseMinDistance, PairEdgesWithJoinsUnionsSelectionsAndDifferences)
                        if (step % 30 == 0)
                        {
                            targets.clear();
-                           targets.insert(std::tuple { value(), value() });
-                           targets.insert(std::tuple { value(), value() });
+                           targets.insert(std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
+                           targets.insert(std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
                        }
                        sources.clear();
-                       sources.insert(std::tuple { value(), value() });
-                       toggle(inputs[0], std::tuple { value(), value() });
-                       toggle(inputs[1], std::tuple { value() });
+                       sources.insert(std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
+                       toggle(inputs[0], std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
+                       toggle(inputs[1], std::array { ygg::encode_value(value()) });
                        if (step % 3 == 0)
-                           toggle(inputs[2], std::tuple { value(), value() });
+                           toggle(inputs[2], std::array { ygg::encode_value(value()), ygg::encode_value(value()) });
                    });
 }
 
 TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
 {
     constexpr uint_t n = 12;
-    auto edges = Relation({ x, y });
-    auto sources = Relation({ x });
-    auto targets = Relation({ y });
-    const auto plan = ygg::database::DistancePlan(sources.columns().span(), edges.columns().span(), targets.columns().span(), Column(99));
-    auto blind = ygg::database::MinDistance(plan);
-    auto guided = ygg::database::MinDistance<HalfDistance>(plan);
-    auto complete = Relation({ x, y });
+    auto edges = Relation(ygg::tests::ops::cols({ x, y }));
+    auto sources = Relation(ygg::tests::ops::cols({ x }));
+    auto targets = Relation(ygg::tests::ops::cols({ y }));
+    const auto plan = ygg::database::DistancePlan(sources.columns(), edges.columns(), targets.columns(), Column(99));
+    const ygg::database::Repository layer;
+    auto blind = ygg::database::MinDistance(layer, plan);
+    auto guided = ygg::database::MinDistance<HalfDistance>(layer, plan);
+    auto complete = Relation(ygg::tests::ops::cols({ x, y }));
     for (uint_t v = 0; v < n; ++v)
         for (uint_t w = 0; w < n; ++w)
-            complete.insert(std::tuple { v, w });
+            complete.insert(std::array { ygg::encode_value(v), ygg::encode_value(w) });
     auto heuristic = HalfDistance {};
-    heuristic.columns = sources.columns().span();
+    heuristic.columns = sources.columns();
     auto workspace = ygg::database::DistanceWorkspace(plan);
-    auto result = Relation(plan.output_columns().span());
+    auto result = Relation(plan.output_columns());
     auto random = std::mt19937(GetParam());
     const auto vertex = [&] { return static_cast<uint_t>(random() % n); };
     for (size_t step = 0; step < 300; ++step)
@@ -240,27 +242,27 @@ TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
         if (step % 25 == 0)
         {
             targets.clear();
-            targets.insert(std::tuple { vertex() });
-            targets.insert(std::tuple { vertex() });
-            heuristic.distances = distances_to(complete, targets, 1);
+            targets.insert(std::array { ygg::encode_value(vertex()) });
+            targets.insert(std::array { ygg::encode_value(vertex()) });
+            heuristic.distances = distances_to(borrow(layer, complete), borrow(layer, targets), 1);
         }
         sources.clear();
-        sources.insert(std::tuple { vertex() });
+        sources.insert(std::array { ygg::encode_value(vertex()) });
         const auto changed = step % 3 == 0;
         if (changed)
             for (int i = 0; i < 3; ++i)
             {
-                const auto edge = std::tuple { vertex(), vertex() };
+                const auto edge = std::array { ygg::encode_value(vertex()), ygg::encode_value(vertex()) };
                 if (edges.contains(edge))
                     edges.erase(edges.find(edge).value());
                 else
                     edges.insert(edge);
             }
-        const auto expected = ygg::database::min_distance(borrow(sources), borrow(edges), borrow(targets), plan, result, workspace);
-        const auto edge_view = borrow(edges);
+        const auto expected = ygg::database::min_distance(borrow(layer, sources), borrow(layer, edges), borrow(layer, targets), plan, result, workspace);
+        const auto edge_view = borrow(layer, edges);
         const auto edge_input = [&](size_t) -> const auto& { return edge_view; };
-        ASSERT_EQ(blind.min_distance(edge_input, borrow(sources), borrow(targets)), expected) << "step " << step;
-        ASSERT_EQ(guided.min_distance(edge_input, borrow(sources), borrow(targets), heuristic), expected) << "step " << step;
+        ASSERT_EQ(blind.min_distance(edge_input, borrow(layer, sources), borrow(layer, targets)), expected) << "step " << step;
+        ASSERT_EQ(guided.min_distance(edge_input, borrow(layer, sources), borrow(layer, targets), heuristic), expected) << "step " << step;
     }
     EXPECT_GT(guided.statistics().tree_hits, 0);
 }
@@ -268,37 +270,27 @@ TEST_P(DatabaseMinDistance, RelationEdgesUnderChanges)
 /// Vertices are uint_t values; edges are adjacency lists.
 struct ListGraph
 {
-    using Bytes = std::array<std::byte, sizeof(uint_t)>;
+    using Bytes = std::array<ygg::Value, 1>;
 
     urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> out;
     urd::Store<urd::sequence<urd::Store<urd::sequence<uint_t>>>> in;
 
-    static uint_t id(std::span<const std::byte> vertex)
-    {
-        auto value = static_cast<uint_t>(0);
-        std::memcpy(&value, vertex.data(), sizeof(value));
-        return value;
-    }
-    static Bytes bytes(uint_t value)
-    {
-        auto result = Bytes {};
-        std::memcpy(result.data(), &value, sizeof(value));
-        return result;
-    }
+    static uint_t id(std::span<const ygg::Value> vertex) { return ygg::decode_value<uint_t>(vertex[0]); }
+    static Bytes bytes(uint_t value) { return Bytes { ygg::encode_value(value) }; }
     template<typename OnVertex>
     static void each(const urd::Store<urd::sequence<uint_t>>& vertices, const OnVertex& on_vertex)
     {
         for (const auto w : vertices)
-            if (const auto encoded = bytes(w); !on_vertex(std::span<const std::byte>(encoded)))
+            if (const auto encoded = bytes(w); !on_vertex(std::span<const ygg::Value>(encoded)))
                 return;
     }
     template<typename OnVertex>
-    void successors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    void successors(std::span<const ygg::Value> vertex, const OnVertex& on_vertex)
     { each(out[id(vertex)], on_vertex); }
     template<typename OnVertex>
-    void predecessors(std::span<const std::byte> vertex, const OnVertex& on_vertex)
+    void predecessors(std::span<const ygg::Value> vertex, const OnVertex& on_vertex)
     { each(in[id(vertex)], on_vertex); }
-    bool edge_exists(std::span<const std::byte> from, std::span<const std::byte> to) { return std::ranges::find(out[id(from)], id(to)) != out[id(from)].end(); }
+    bool edge_exists(std::span<const ygg::Value> from, std::span<const ygg::Value> to) { return std::ranges::find(out[id(from)], id(to)) != out[id(from)].end(); }
 };
 
 struct ListVertices
@@ -306,7 +298,7 @@ struct ListVertices
     urd::Store<urd::sequence<ListGraph::Bytes>> rows;
 
     [[nodiscard]] size_t size() const noexcept { return rows.size(); }
-    [[nodiscard]] std::span<const std::byte> row(size_t i) const { return rows[i]; }
+    [[nodiscard]] std::span<const ygg::Value> row(size_t i) const { return rows[i]; }
 };
 
 /// AStar::path() visits a shortest path from a source to a target, whether the search ends at a target or on a stored
@@ -342,7 +334,7 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         {
             sources.rows.push_back(ListGraph::bytes(static_cast<uint_t>(rng() % n)));
             const auto target = ListGraph::bytes(static_cast<uint_t>(rng() % n));
-            if (targets.insert(std::span<const std::byte>(target)).second)
+            if (targets.insert(std::span<const ygg::Value>(target)).second)
                 ids.push_back(tree.ensure(target, heuristic));
         }
         backward.start(ids);
@@ -351,7 +343,7 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
         if (distance == std::numeric_limits<uint_t>::max())
             continue;
         auto path = urd::Store<urd::sequence<uint_t>>();
-        search.path([&](std::span<const std::byte> vertex) { path.push_back(ListGraph::id(vertex)); });
+        search.path([&](std::span<const ygg::Value> vertex) { path.push_back(ListGraph::id(vertex)); });
         // Visited: where the search ended back to its source (the only source on the path, as sources have g = 0),
         // then the stored chain from where it ended to a target.
         const auto is_source = [&](uint_t v) { return std::ranges::any_of(sources.rows, [&](const auto& row) { return ListGraph::id(row) == v; }); };
@@ -363,7 +355,7 @@ TEST_P(DatabaseMinDistance, AStarPathIsAShortestPath)
             EXPECT_TRUE(edge(path[i + 1], path[i])) << "trial " << trial;
         for (size_t i = source + 1; i < path.size(); ++i)
             EXPECT_TRUE(edge(i == source + 1 ? path.front() : path[i - 1], path[i])) << "trial " << trial;
-        EXPECT_TRUE(targets.contains(std::span<const std::byte>(ListGraph::bytes(source + 1 < path.size() ? path.back() : path.front()))));
+        EXPECT_TRUE(targets.contains(std::span<const ygg::Value>(ListGraph::bytes(source + 1 < path.size() ? path.back() : path.front()))));
         ++paths;
         chains += source + 1 < path.size();
     }

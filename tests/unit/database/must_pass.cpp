@@ -8,8 +8,8 @@
 #include <urd/store.hpp>
 
 #include "query_helpers.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
-#include "yggdrasil/database/syntax/row.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
+#include "yggdrasil/formalism/relation_view.hpp"
 
 #include <gtest/gtest.h>
 #include <map>
@@ -21,17 +21,11 @@
 
 namespace
 {
-using Column = urd::index<ygg::database::Column>;
-using Relation = urd::builder<ygg::database::Relation>;
-using View = ygg::database::BorrowedRelationView;
+using Column = urd::index<ygg::Column>;
+using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
 using ygg::uint_t;
 namespace qb = ygg::tests::qb;
-
-View borrow(const Relation& relation)
-{
-    static const auto context = ygg::database::RelationRepositoryFactory {}.create();
-    return { &relation, &context };
-}
+using ygg::tests::distances::borrow;
 
 const Column key(20), u(0), v(1);
 
@@ -42,9 +36,9 @@ const Column probe(30);
 /// All objects 0..objects-1 as probes.
 Relation all_probes(uint_t objects)
 {
-    auto probes = Relation({ probe });
+    auto probes = Relation(ygg::tests::ops::cols({ probe }));
     for (uint_t object = 0; object < objects; ++object)
-        probes.insert(std::tuple { object });
+        probes.insert(std::array { ygg::encode_value(object) });
     return probes;
 }
 
@@ -52,15 +46,16 @@ Relation all_probes(uint_t objects)
 Pairs must_pass(const Relation& edges, const Relation& sources, const Relation& targets, const Relation& probes)
 {
     auto queries = qb::repository();
-    const auto query = qb::input(queries, 0, edges.columns().span());
-    const auto plan = ygg::database::MustPassPlan(sources.columns().span(), query.columns(), targets.columns().span(), probes.columns().span(), 1);
-    auto computation = ygg::database::MustPass(query, plan);
-    auto out = Relation(plan.output_columns().span());
-    const auto view = borrow(edges);
-    computation.must_pass([&](size_t) { return view; }, borrow(sources), borrow(targets), borrow(probes), out);
+    const auto query = qb::input(queries, 0, edges.columns());
+    const auto plan = ygg::database::MustPassPlan(sources.columns(), query.columns(), targets.columns(), probes.columns(), 1);
+    const ygg::database::Repository layer;
+    auto computation = ygg::database::MustPass(layer, query, plan);
+    auto out = Relation(plan.output_columns());
+    const auto view = borrow(layer, edges);
+    computation.must_pass([&](size_t) { return view; }, borrow(layer, sources), borrow(layer, targets), borrow(layer, probes), out);
     auto result = Pairs();
-    for (size_t r = 0; r < out.size(); ++r)
-        result.emplace(out[r].get<uint_t>(0), out[r].get<uint_t>(1));
+    for (const auto row : layer.view(out).rows())
+        result.emplace(ygg::decode_value<uint_t>(row.get(0)), ygg::decode_value<uint_t>(row.get(1)));
     EXPECT_EQ(result.size(), out.size()) << "every must-pass object is reported once";
     return result;
 }
@@ -99,49 +94,49 @@ bool reachable(const urd::Store<urd::sequence<std::tuple<uint_t, Vertex, Vertex>
 TEST(DatabaseMustPass, ObjectsOnEveryPathPerKey)
 {
     // Key 0: a diamond 1 -> {2, 3} -> 4 -> 5; key 1: the same vertex numbers, but 2 -> 4 is the only route.
-    auto edges = Relation({ key, u, v });
+    auto edges = Relation(ygg::tests::ops::cols({ key, u, v }));
     for (const auto& [k, from, to] : std::vector<
              std::tuple<uint_t, uint_t, uint_t>> { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 4 }, { 0, 3, 4 }, { 0, 4, 5 }, { 1, 1, 2 }, { 1, 2, 4 }, { 1, 3, 4 } })
-        edges.insert(std::tuple { k, from, to });
-    auto sources = Relation({ key, u });
-    sources.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-    sources.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(1) });
-    sources.insert(std::tuple { static_cast<uint_t>(2), static_cast<uint_t>(1) });  // Key 2 has no edges and no targets.
-    auto targets = Relation({ key, u });
-    targets.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(5) });
-    targets.insert(std::tuple { static_cast<uint_t>(1), static_cast<uint_t>(4) });
-    targets.insert(std::tuple { static_cast<uint_t>(3), static_cast<uint_t>(4) });  // Key 3 has no sources.
+        edges.insert(std::array { ygg::encode_value(k), ygg::encode_value(from), ygg::encode_value(to) });
+    auto sources = Relation(ygg::tests::ops::cols({ key, u }));
+    sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+    sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(1)) });
+    sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(static_cast<uint_t>(1)) });  // Key 2 has no edges and no targets.
+    auto targets = Relation(ygg::tests::ops::cols({ key, u }));
+    targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(5)) });
+    targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(4)) });
+    targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(3)), ygg::encode_value(static_cast<uint_t>(4)) });  // Key 3 has no sources.
     EXPECT_EQ(must_pass(edges, sources, targets), (Pairs { { 0, 1 }, { 0, 4 }, { 0, 5 }, { 1, 1 }, { 1, 2 }, { 1, 4 } }));
 }
 
 TEST(DatabaseMustPass, SeveralSourcesAndTargets)
 {
     // 1 -> 3, 2 -> 3, 3 -> 4, 3 -> 5: from {1, 2} to {4, 5} only 3 must be passed.
-    auto edges = Relation({ key, u, v });
+    auto edges = Relation(ygg::tests::ops::cols({ key, u, v }));
     for (const auto& [from, to] : urd::Store<urd::sequence<std::pair<uint_t, uint_t>>> { { 1, 3 }, { 2, 3 }, { 3, 4 }, { 3, 5 } })
-        edges.insert(std::tuple { static_cast<uint_t>(0), from, to });
-    auto sources = Relation({ key, u });
-    auto targets = Relation({ key, u });
+        edges.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(from), ygg::encode_value(to) });
+    auto sources = Relation(ygg::tests::ops::cols({ key, u }));
+    auto targets = Relation(ygg::tests::ops::cols({ key, u }));
     for (const auto vertex : { static_cast<uint_t>(1), static_cast<uint_t>(2) })
-        sources.insert(std::tuple { static_cast<uint_t>(0), vertex });
+        sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(vertex) });
     for (const auto vertex : { static_cast<uint_t>(4), static_cast<uint_t>(5) })
-        targets.insert(std::tuple { static_cast<uint_t>(0), vertex });
+        targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(vertex) });
     EXPECT_EQ(must_pass(edges, sources, targets), (Pairs { { 0, 3 } }));
     // A source that is a target: the empty path passes nothing else.
-    targets.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
+    targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
     sources.clear();
-    sources.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
+    sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
     EXPECT_EQ(must_pass(edges, sources, targets), (Pairs { { 0, 1 } }));
 }
 
 TEST(DatabaseMustPass, UnreachableTargetsHaveNoMustPassVertices)
 {
-    auto edges = Relation({ key, u, v });
-    edges.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1), static_cast<uint_t>(2) });
-    auto sources = Relation({ key, u });
-    sources.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(1) });
-    auto targets = Relation({ key, u });
-    targets.insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(3) });
+    auto edges = Relation(ygg::tests::ops::cols({ key, u, v }));
+    edges.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)), ygg::encode_value(static_cast<uint_t>(2)) });
+    auto sources = Relation(ygg::tests::ops::cols({ key, u }));
+    sources.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(1)) });
+    auto targets = Relation(ygg::tests::ops::cols({ key, u }));
+    targets.insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(3)) });
     EXPECT_TRUE(must_pass(edges, sources, targets).empty());
 }
 
@@ -178,9 +173,9 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
             auto edge_list = urd::Store<urd::sequence<std::tuple<uint_t, Vertex, Vertex>>>();
             auto source_list = urd::Store<urd::sequence<std::pair<uint_t, Vertex>>>();
             auto target_list = urd::Store<urd::sequence<std::pair<uint_t, Vertex>>>();
-            auto edges = Relation(std::span<const Column>(edge_columns));
-            auto sources = Relation(std::span<const Column>(vertex_columns));
-            auto targets = Relation(std::span<const Column>(vertex_columns));
+            auto edges = Relation(ygg::tests::qb::columns_of(std::span<const Column>(edge_columns)));
+            auto sources = Relation(ygg::tests::qb::columns_of(std::span<const Column>(vertex_columns)));
+            auto targets = Relation(ygg::tests::qb::columns_of(std::span<const Column>(vertex_columns)));
             const auto row = [](uint_t of, const Vertex& a, const Vertex& b = {})
             {
                 auto values = urd::Store<urd::sequence<uint_t>> { of };
@@ -190,8 +185,9 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
             };
             const auto insert = [](Relation& relation, const urd::Store<urd::sequence<uint_t>>& values)
             {
-                auto bytes = urd::Store<urd::sequence<std::byte>>();
-                const auto encoded = ygg::database::encode_row<uint_t>(values, bytes);
+                auto encoded = urd::Store<urd::sequence<ygg::Value>>();
+                for (const auto value : values)
+                    encoded.push_back(ygg::encode_value(value));
                 if (relation.contains(encoded))
                     return false;
                 relation.insert(encoded);
@@ -213,9 +209,9 @@ TEST_P(DatabaseMustPassRandom, MatchesObjectRemoval)
                         target_list.emplace_back(of, t);
             }
             const auto probed = std::set<uint_t> { 0, 2, 3, 4, 5, 7 };
-            auto probes = Relation({ probe });
+            auto probes = Relation(ygg::tests::ops::cols({ probe }));
             for (const auto x : probed)
-                probes.insert(std::tuple { x });
+                probes.insert(std::array { ygg::encode_value(x) });
             auto expected = Pairs();
             for (uint_t of = 0; of < keys; ++of)
                 if (reachable(edge_list, source_list, target_list, of, std::nullopt))

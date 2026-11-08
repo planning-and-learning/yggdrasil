@@ -20,7 +20,8 @@ QueryView<> clone_query(QueryView<> source, std::span<const QueryView<>> childre
     {
         if (&get_repository(children[i].context()) != &destination)
             throw std::invalid_argument("Query clone: children must belong to the destination.");
-        require_plan_columns(children[i].columns(), original[i].columns());
+        if (!std::ranges::equal(children[i].columns(), original[i].columns()))
+            throw std::invalid_argument("Query clone: a child's columns differ from the original's.");
     }
     return std::visit(
         [&]<typename Tag>(QueryView<Tag> concrete)

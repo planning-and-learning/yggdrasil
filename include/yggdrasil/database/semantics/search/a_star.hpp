@@ -106,7 +106,8 @@ private:
     /// A binary heap in one vector, so clear() keeps its capacity and a reused open list does not allocate.
     urd::Store<urd::queue<OpenEntry>, urd::by_priority, urd::order_by<PoppedFirst>> m_open_list;
     uint_t m_pushes = 0;
-    urd::Store<urd::sequence<std::byte>> m_vertex;  ///< A copy of the expanded vertex: generating successors may move m_vertices.
+    urd::Store<urd::sequence<Value>> m_vertex;  ///< A copy of the expanded vertex: generating successors may move m_vertices.
+    urd::Store<urd::sequence<Value>> m_source;  ///< A source's values, read from its row.
 };
 
 /// One best-first search from sources to the targets with unit edge costs (Hart, Nilsson & Raphael, "A Formal Basis
@@ -153,7 +154,7 @@ public:
         if (const auto distance = reuse(sources))
             return *distance;
         for (size_t i = 0; i < sources.size(); ++i)
-            push(sources.row(i), 0, {});
+            push(vertex_values(sources.row(i), m_storage->m_source), 0, {});
         while (!m_storage->m_open_list.empty())
         {
             if (advance_backward(sources))
@@ -225,7 +226,7 @@ private:
     {
         return m_backward->exhausted()
                && std::ranges::none_of(std::views::iota(static_cast<size_t>(0), sources.size()),
-                                       [&](size_t i) { return m_backward->level(m_tree->find(sources.row(i))) != none; });
+                                       [&](size_t i) { return m_backward->level(m_tree->find(vertex_values(sources.row(i), m_storage->m_source))) != none; });
     }
 
     /// A single stored source on a valid tree path has an exact value; a learned infinity proves it dead.
@@ -234,7 +235,7 @@ private:
     {
         if (sources.size() != 1)
             return std::nullopt;
-        const auto stored = m_tree->find(sources.row(0));
+        const auto stored = m_tree->find(vertex_values(sources.row(0), m_storage->m_source));
         if (stored.is_none())
             return std::nullopt;
         if (m_tree->learned(stored) == infinity)
@@ -274,7 +275,7 @@ private:
         return id;
     }
 
-    void push(std::span<const std::byte> vertex, uint_t cost, VertexSet::handle_type from)
+    void push(std::span<const Value> vertex, uint_t cost, VertexSet::handle_type from)
     {
         auto index = m_storage->m_vertices.find(vertex);
         if (!index.is_none() && (node(index).closed || node(index).g <= cost))
@@ -346,7 +347,7 @@ private:
         m_storage->m_vertex.assign(vertex.begin(), vertex.end());
         const auto cost = node(index).g + 1;
         m_oracle->successors(m_storage->m_vertex,
-                             [&](std::span<const std::byte> to)
+                             [&](std::span<const Value> to)
                              {
                                  push(to, cost, index);
                                  return true;

@@ -22,7 +22,7 @@ namespace detail
 {
 /// Inserts rows absent from `rows`, indexing their positions by the hash of `keys`.
 template<RelationViewConcept V>
-void insert_rows(const V& input, urd::builder<Relation>& rows, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains>& index)
+void insert_rows(const V& input, urd::builder<Relation<Schema>>& rows, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains>& index)
 {
     if (!keys.empty())
         index.reserve(rows.size() + input.size());
@@ -30,7 +30,7 @@ void insert_rows(const V& input, urd::builder<Relation>& rows, std::span<const C
     {
         const auto row = input.row(i);
         const auto previous_size = rows.size();
-        const auto position = rows.insert(Row(row, input.columns().span()));
+        const auto position = rows.insert(row);
         if (position != previous_size)
             throw std::invalid_argument("Incremental evaluation: added row is already present in the input.");
         if (!keys.empty())
@@ -38,13 +38,18 @@ void insert_rows(const V& input, urd::builder<Relation>& rows, std::span<const C
     }
 }
 
-/// Erases rows present in `rows`, keeping the position index of insert_rows() current.
+/// Erases rows present in `rows` (read through `layer`), keeping the position index of insert_rows() current.
 template<RelationViewConcept V>
-void erase_rows(const V& input, urd::builder<Relation>& rows, std::span<const ColumnSlice> keys, urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains>& index)
+void erase_rows(const Repository& layer,
+                const V& input,
+                urd::builder<Relation<Schema>>& rows,
+                std::span<const ColumnSlice> keys,
+                urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains>& index)
 {
+    const auto stored = layer.view(rows);
     for (size_t i = 0; i < input.size(); ++i)
     {
-        const auto position = rows.find(Row(input.row(i), input.columns().span()));
+        const auto position = rows.find(input.row(i));
         if (!position)
             throw std::invalid_argument("Incremental evaluation: removed row is absent from the input.");
         const auto last = ygg::to_uint_t(rows.size() - 1);
@@ -53,7 +58,7 @@ void erase_rows(const V& input, urd::builder<Relation>& rows, std::span<const Co
             rows.erase(*position);
             continue;
         }
-        const auto removed_key = database::detail::join_key_hash(rows.row(*position), keys);
+        const auto removed_key = database::detail::join_key_hash(stored.row(*position), keys);
         rows.erase(*position);
         const auto erase = [&](hash_t key, uint_t value)
         {
@@ -66,7 +71,7 @@ void erase_rows(const V& input, urd::builder<Relation>& rows, std::span<const Co
         if (*position != last)
         {
             // The last row moved into the erased one's position.
-            const auto moved_key = database::detail::join_key_hash(rows.row(*position), keys);
+            const auto moved_key = database::detail::join_key_hash(stored.row(*position), keys);
             erase(moved_key, last);
             index.insert({ moved_key, *position });
         }
@@ -87,17 +92,18 @@ void erase_rows(const V& input, urd::builder<Relation>& rows, std::span<const Co
 /// No repository publication is required.
 class JoinEvaluator
 {
+    const Repository* m_layer;
     JoinPlan m_plan;
-    urd::builder<Relation> m_lhs;
-    urd::builder<Relation> m_rhs;
+    urd::builder<Relation<Schema>> m_lhs;
+    urd::builder<Relation<Schema>> m_rhs;
     urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_lhs_index;
     urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_rhs_index;
-    urd::builder<Relation> m_result;
+    urd::builder<Relation<Schema>> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
     template<RelationViewConcept L, RelationViewConcept R>
-    void join(const L& lhs, const R& rhs, bool build_left, urd::builder<Relation>& output, Workspace& workspace) const;
+    void join(const L& lhs, const R& rhs, bool build_left, urd::builder<Relation<Schema>>& output, Workspace& workspace) const;
 
     /// Applies changes that are known to be valid.
     template<RelationChange L, RelationChange R>
@@ -106,7 +112,8 @@ class JoinEvaluator
     friend struct detail::NodeRules<QueryJoinTag>;
 
 public:
-    explicit JoinEvaluator(JoinPlan plan);
+    /// Its builders are read through `layer`, which must outlive it.
+    JoinEvaluator(const Repository& layer, JoinPlan plan);
 
     /// Replace the baseline, retaining buffers, and clear the last output delta.
     template<RelationViewConcept L, RelationViewConcept R>
@@ -118,8 +125,8 @@ public:
     template<RelationChange L, RelationChange R>
     void update(const L& lhs, const R& rhs, Workspace& workspace);
 
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&;
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] BuilderRelationView get_result() const&;
+    [[nodiscard]] BuilderRelationView get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&;
     [[nodiscard]] const Delta& get_delta() const&& = delete;
 
@@ -128,25 +135,16 @@ public:
 };
 
 template<RelationViewConcept L, RelationViewConcept R>
-void JoinEvaluator::join(const L& lhs, const R& rhs, bool build_left, urd::builder<Relation>& output, Workspace& workspace) const
+void JoinEvaluator::join(const L& lhs, const R& rhs, bool build_left, urd::builder<Relation<Schema>>& output, Workspace& workspace) const
 {
-    database::detail::join_rows(lhs,
-                                rhs,
-                                m_plan.output_columns().span(),
-                                m_plan.lhs_keys(),
-                                m_plan.rhs_keys(),
-                                m_plan.rhs_payload(),
-                                build_left,
-                                build_left ? m_lhs_index : m_rhs_index,
-                                output,
-                                workspace);
+    database::detail::join_rows(lhs, rhs, m_plan, build_left, build_left ? m_lhs_index : m_rhs_index, output, workspace);
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
 void JoinEvaluator::initialize(const L& lhs, const R& rhs, Workspace& workspace)
 {
-    database::detail::require_plan_columns(lhs.columns().span(), m_plan.lhs_columns().span());
-    database::detail::require_plan_columns(rhs.columns().span(), m_plan.rhs_columns().span());
+    assert(std::ranges::equal(lhs.columns(), m_plan.lhs_columns()));
+    assert(std::ranges::equal(rhs.columns(), m_plan.rhs_columns()));
     detail::require_unaliased(lhs, m_result, m_delta);
     detail::require_unaliased(rhs, m_result, m_delta);
     m_initialized = false;
@@ -159,7 +157,7 @@ void JoinEvaluator::initialize(const L& lhs, const R& rhs, Workspace& workspace)
     detail::insert_rows(lhs, m_lhs, m_plan.lhs_keys(), m_lhs_index);
     detail::insert_rows(rhs, m_rhs, m_plan.rhs_keys(), m_rhs_index);
     // Both indexes are ready, so probe the smaller input.
-    join(m_lhs, m_rhs, m_lhs.size() >= m_rhs.size(), m_result, workspace);
+    join(m_layer->view(m_lhs), m_layer->view(m_rhs), m_lhs.size() >= m_rhs.size(), m_result, workspace);
     m_initialized = true;
 }
 
@@ -167,8 +165,8 @@ template<RelationChange L, RelationChange R>
 void JoinEvaluator::update(const L& lhs, const R& rhs, Workspace& workspace)
 {
     detail::require_initialized(m_initialized);
-    detail::require_change(lhs, m_plan.lhs_columns().span(), m_result, m_delta);
-    detail::require_change(rhs, m_plan.rhs_columns().span(), m_result, m_delta);
+    detail::require_change(lhs, m_plan.lhs_columns(), m_result, m_delta);
+    detail::require_change(rhs, m_plan.rhs_columns(), m_result, m_delta);
     apply(lhs, rhs, workspace);
 }
 
@@ -182,13 +180,15 @@ void JoinEvaluator::apply(const L& lhs, const R& rhs, Workspace& workspace)
 
     // Remove from both sides before inserting. Each old/new pair is visited
     // once, and no temporary match between an added and removed row is emitted.
-    join(lhs_removed, m_rhs, false, m_delta.removed, workspace);
-    detail::erase_rows(lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
-    join(m_lhs, rhs_removed, true, m_delta.removed, workspace);
-    detail::erase_rows(rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
-    join(lhs_added, m_rhs, false, m_delta.added, workspace);
+    const auto current_lhs = m_layer->view(m_lhs);
+    const auto current_rhs = m_layer->view(m_rhs);
+    join(lhs_removed, current_rhs, false, m_delta.removed, workspace);
+    detail::erase_rows(*m_layer, lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
+    join(current_lhs, rhs_removed, true, m_delta.removed, workspace);
+    detail::erase_rows(*m_layer, rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
+    join(lhs_added, current_rhs, false, m_delta.added, workspace);
     detail::insert_rows(lhs_added, m_lhs, m_plan.lhs_keys(), m_lhs_index);
-    join(m_lhs, rhs_added, true, m_delta.added, workspace);
+    join(current_lhs, rhs_added, true, m_delta.added, workspace);
     detail::insert_rows(rhs_added, m_rhs, m_plan.rhs_keys(), m_rhs_index);
 
     detail::apply_delta(m_delta, m_result);

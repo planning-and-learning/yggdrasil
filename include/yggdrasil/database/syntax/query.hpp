@@ -48,7 +48,7 @@ class QueryPlan
     urd::Store<urd::sequence<QueryIndex>> m_roots;
 
 public:
-    QueryPlan() : m_repository(QueryRepositoryFactory {}.create_shared()) {}
+    QueryPlan() : m_repository(std::make_shared<QueryRepository>()) {}
     QueryPlan(std::shared_ptr<const QueryRepository> repository, urd::Store<urd::sequence<QueryIndex>> roots) : m_repository(std::move(repository)), m_roots(std::move(roots))
     {
     }

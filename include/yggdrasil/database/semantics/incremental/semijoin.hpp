@@ -10,6 +10,7 @@
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include "yggdrasil/database/semantics/operations.hpp"
 
+#include <cassert>
 #include <span>
 #include <urd/memory.hpp>
 #include <urd/repr/maps/postings.hpp>
@@ -27,25 +28,25 @@ namespace ygg::database::incremental
 /// After a failure during mutation, results and deltas are unavailable until initialize().
 class SemijoinEvaluator
 {
+    const Repository* m_layer;
     JoinPlan m_plan;
     bool m_anti;
-    urd::builder<Relation> m_lhs;
-    urd::builder<Relation> m_rhs;
+    urd::builder<Relation<Schema>> m_lhs;
+    urd::builder<Relation<Schema>> m_rhs;
     urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_lhs_index;
     urd::Store<urd::map<hash_t, uint_t>, urd::multi, urd::retains> m_rhs_index;
-    urd::builder<Relation> m_result;
+    urd::builder<Relation<Schema>> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
-    [[nodiscard]] bool matched(std::span<const std::byte> lhs_row) const;
-    [[nodiscard]] bool kept(std::span<const std::byte> lhs_row) const { return matched(lhs_row) != m_anti; }
+    [[nodiscard]] bool matched(const RowPool::row_type& lhs_row) const;
+    [[nodiscard]] bool kept(const RowPool::row_type& lhs_row) const { return matched(lhs_row) != m_anti; }
 
     /// Records the change of a row of the current L against the result before this update.
-    void reconcile(std::span<const std::byte> lhs_row)
+    void reconcile(const RowPool::row_type& row)
     {
-        const auto row = Row(lhs_row, m_lhs.columns().span());
         const auto was = m_result.contains(row);
-        const auto is = kept(lhs_row);
+        const auto is = kept(row);
         if (is && !was)
             m_delta.added.insert(row);
         else if (!is && was)
@@ -59,18 +60,19 @@ class SemijoinEvaluator
         const auto rhs_keys = m_plan.rhs_keys();
         if (rhs_rows.empty())
             return;
+        const auto current = m_layer->view(m_lhs);
         if (lhs_keys.empty())
         {
-            for (size_t i = 0; i < m_lhs.size(); ++i)
-                reconcile(m_lhs.row(i));
+            for (size_t i = 0; i < current.size(); ++i)
+                reconcile(current.row(i));
             return;
         }
         for (size_t i = 0; i < rhs_rows.size(); ++i)
         {
             const auto rhs_row = rhs_rows.row(i);
             for (const auto position : m_lhs_index.values(database::detail::join_key_hash(rhs_row, rhs_keys)))
-                if (database::detail::join_keys_equal(m_lhs.row(position), lhs_keys, rhs_row, rhs_keys))
-                    reconcile(m_lhs.row(position));
+                if (database::detail::join_keys_equal(current.row(position), lhs_keys, rhs_row, rhs_keys))
+                    reconcile(current.row(position));
         }
     }
 
@@ -82,10 +84,10 @@ class SemijoinEvaluator
         m_initialized = false;
         m_delta.clear();
         for (size_t i = 0; i < lhs_removed.size(); ++i)
-            if (const auto row = Row(lhs_removed.row(i), m_lhs.columns().span()); m_result.contains(row))
+            if (const auto row = lhs_removed.row(i); m_result.contains(row))
                 m_delta.removed.insert(row);
-        detail::erase_rows(lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
-        detail::erase_rows(rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
+        detail::erase_rows(*m_layer, lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
+        detail::erase_rows(*m_layer, rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
         detail::insert_rows(rhs_added, m_rhs, m_plan.rhs_keys(), m_rhs_index);
         detail::insert_rows(lhs_added, m_lhs, m_plan.lhs_keys(), m_lhs_index);
         for (size_t i = 0; i < lhs_added.size(); ++i)
@@ -105,13 +107,15 @@ class SemijoinEvaluator
     friend struct detail::NodeRules;
 
 public:
-    SemijoinEvaluator(JoinPlan plan, bool anti) :
+    /// Its builders are read through `layer`, which must outlive it.
+    SemijoinEvaluator(const Repository& layer, JoinPlan plan, bool anti) :
+        m_layer(&layer),
         m_plan(std::move(plan)),
         m_anti(anti),
-        m_lhs(m_plan.lhs_columns().span()),
-        m_rhs(m_plan.rhs_columns().span()),
-        m_result(m_plan.lhs_columns().span()),
-        m_delta(m_plan.lhs_columns().span())
+        m_lhs(m_plan.lhs_columns()),
+        m_rhs(m_plan.rhs_columns()),
+        m_result(m_plan.lhs_columns()),
+        m_delta(layer, m_plan.lhs_columns())
     {
     }
 
@@ -119,8 +123,8 @@ public:
     template<RelationViewConcept L, RelationViewConcept R>
     void initialize(const L& lhs, const R& rhs)
     {
-        database::detail::require_plan_columns(lhs.columns().span(), m_plan.lhs_columns().span());
-        database::detail::require_plan_columns(rhs.columns().span(), m_plan.rhs_columns().span());
+        assert(std::ranges::equal(lhs.columns(), m_plan.lhs_columns()));
+        assert(std::ranges::equal(rhs.columns(), m_plan.rhs_columns()));
         detail::require_unaliased(lhs, m_result, m_delta);
         detail::require_unaliased(rhs, m_result, m_delta);
         m_initialized = false;
@@ -132,9 +136,10 @@ public:
         m_delta.clear();
         detail::insert_rows(lhs, m_lhs, m_plan.lhs_keys(), m_lhs_index);
         detail::insert_rows(rhs, m_rhs, m_plan.rhs_keys(), m_rhs_index);
-        for (size_t i = 0; i < m_lhs.size(); ++i)
-            if (kept(m_lhs.row(i)))
-                m_result.insert(Row(m_lhs.row(i), m_lhs.columns().span()));
+        const auto current = m_layer->view(m_lhs);
+        for (size_t i = 0; i < current.size(); ++i)
+            if (kept(current.row(i)))
+                m_result.insert(current.row(i));
         m_initialized = true;
     }
 
@@ -143,17 +148,17 @@ public:
     void update(const L& lhs, const R& rhs)
     {
         detail::require_initialized(m_initialized);
-        detail::require_change(lhs, m_plan.lhs_columns().span(), m_result, m_delta);
-        detail::require_change(rhs, m_plan.rhs_columns().span(), m_result, m_delta);
+        detail::require_change(lhs, m_plan.lhs_columns(), m_result, m_delta);
+        detail::require_change(rhs, m_plan.rhs_columns(), m_result, m_delta);
         apply(lhs, rhs);
     }
 
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&
+    [[nodiscard]] BuilderRelationView get_result() const&
     {
         detail::require_initialized(m_initialized);
-        return m_result;
+        return m_layer->view(m_result);
     }
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] BuilderRelationView get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&
     {
         detail::require_initialized(m_initialized);

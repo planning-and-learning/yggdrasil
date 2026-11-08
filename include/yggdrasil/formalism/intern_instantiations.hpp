@@ -53,7 +53,7 @@ using InternStore = SymbolStore<InternType<Types, I>, ThreadSafe>;
 
 /// Explicit instantiations (PREFIX extern: declarations) of intern for each of the Count symbol types of the list given
 /// last (a repository's SymbolTypes, or several lists' boost::mp11::mp_unique<boost::mp11::mp_append<...>>: a
-/// specialization is explicitly instantiated once), interned in stores ThreadSafe or not (the repository's
+/// specialization is explicitly instantiated once), interned in stores ThreadSafe or not (the symbol repository's
 /// thread_safe). Count is checked against the list.
 #define YGG_FORMALISM_INTERNS(PREFIX, Count, ThreadSafe, ...)                                         \
     static_assert(boost::mp11::mp_size<__VA_ARGS__>::value == (Count),                                 \

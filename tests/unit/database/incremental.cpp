@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include "query_helpers.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include "yggdrasil/database/semantics/incremental/projection.hpp"
-#include "yggdrasil/database/semantics/relation_repository.hpp"
+#include "yggdrasil/database/semantics/relation_view.hpp"
 
 #include <algorithm>
 #include <array>
@@ -22,28 +23,31 @@
 namespace ygg::tests
 {
 using Values = boost::mp11::mp_list<uint_t>;
-using ColumnIndex = urd::index<database::Column>;
+using ColumnIndex = urd::index<ygg::Column>;
 
 namespace
 {
 
-template<ygg::ByteCodable T>
-urd::builder<database::Columns> columns_of(std::initializer_list<urd::index<database::Column>> labels)
+/// The layer the tests read their builders through.
+const database::Repository& layer()
 {
-    urd::builder<database::Columns> columns;
-    columns.template assign<T>(labels);
-    return columns;
+    static const database::Repository repository;
+    return repository;
 }
+
+database::BuilderRelationView borrow(const urd::builder<ygg::Relation<ygg::Schema>>& relation) { return layer().view(relation); }
+
+using ygg::tests::qb::columns_of;
 template<typename T = uint_t, typename... Args>
 auto cells(Args... values)
-{ return std::tuple { T(values)... }; }
+{ return std::array<ygg::Value, sizeof...(Args)> { ygg::encode_value(T(values))... }; }
 
 template<typename T, size_t N>
 auto packed(const std::array<T, N>& values)
 {
-    std::array<std::byte, N * ygg::ByteCodec<T>::size> result {};
+    std::array<ygg::Value, N> result {};
     for (size_t i = 0; i < N; ++i)
-        ygg::ByteCodec<T>::encode(values[i], std::span(result).subspan(i * ygg::ByteCodec<T>::size, ygg::ByteCodec<T>::size));
+        result[i] = ygg::encode_value(values[i]);
     return result;
 }
 
@@ -53,7 +57,7 @@ std::set<urd::Store<urd::sequence<T>>> rows(const V& relation)
     std::set<urd::Store<urd::sequence<T>>> result;
     for (size_t i = 0; i < relation.size(); ++i)
     {
-        const auto row = database::Row(relation.row(i), relation.columns().span());
+        const auto row = relation.row(i);
         urd::Store<urd::sequence<T>> values;
         values.reserve(row.size());
         for (size_t column = 0; column < row.size(); ++column)
@@ -64,9 +68,9 @@ std::set<urd::Store<urd::sequence<T>>> rows(const V& relation)
 }
 
 template<typename T, typename Evaluator>
-void expect_update(const Evaluator& evaluator, const std::set<urd::Store<urd::sequence<T>>>& before, const urd::builder<database::Relation>& reference)
+void expect_update(const Evaluator& evaluator, const std::set<urd::Store<urd::sequence<T>>>& before, const urd::builder<ygg::Relation<ygg::Schema>>& reference)
 {
-    const auto after = rows<T>(reference);
+    const auto after = rows<T>(borrow(reference));
     EXPECT_TRUE(std::ranges::equal(evaluator.get_result().columns(), reference.columns()));
     EXPECT_TRUE(std::ranges::equal(evaluator.get_delta().added.columns(), reference.columns()));
     EXPECT_TRUE(std::ranges::equal(evaluator.get_delta().removed.columns(), reference.columns()));
@@ -79,22 +83,22 @@ void expect_update(const Evaluator& evaluator, const std::set<urd::Store<urd::se
     for (const auto& row : before)
         if (!after.contains(row))
             removed.insert(row);
-    EXPECT_EQ(rows<T>(evaluator.get_delta().added), added);
-    EXPECT_EQ(rows<T>(evaluator.get_delta().removed), removed);
+    EXPECT_EQ(rows<T>(evaluator.get_delta().change().first), added);
+    EXPECT_EQ(rows<T>(evaluator.get_delta().change().second), removed);
 }
 
-void apply_batch(urd::builder<database::Relation>& input, const urd::builder<database::Relation>& added, const urd::builder<database::Relation>& removed)
+void apply_batch(urd::builder<ygg::Relation<ygg::Schema>>& input, const urd::builder<ygg::Relation<ygg::Schema>>& added, const urd::builder<ygg::Relation<ygg::Schema>>& removed)
 {
-    for (size_t i = 0; i < removed.size(); ++i)
-        input.erase(input.find(removed.row(i)).value());
-    for (size_t i = 0; i < added.size(); ++i)
-        input.insert(added.row(i));
+    for (const auto row : borrow(removed).rows())
+        input.erase(input.find(row).value());
+    for (const auto row : borrow(added).rows())
+        input.insert(row);
 }
 }  // namespace
 
-TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
+TEST(YggdrasilTests, DatabaseRelationErasureMovesTheLastRow)
 {
-    urd::builder<database::Relation> relation({ ColumnIndex(7), ColumnIndex(3) });
+    urd::builder<ygg::Relation<ygg::Schema>> relation { ygg::tests::ops::cols({ ColumnIndex(7), ColumnIndex(3) }) };
     const auto first = relation.insert(cells(1, 2));
     relation.insert(cells(3, 4));
     relation.insert(cells(5, 6));
@@ -103,13 +107,9 @@ TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
     EXPECT_EQ(relation.find(packed(sought)), first);
     EXPECT_EQ(relation.find(cells(1, 2)), first);
     EXPECT_FALSE(relation.find(cells(9, 9)));
-    EXPECT_THROW((void) relation.find(cells(1)), std::invalid_argument);
-    const auto canonical = urd::index<database::Relation>(9);
-    relation.set_index(canonical);
+    EXPECT_FALSE(relation.find(cells(1)));  // not one value per column
     EXPECT_THROW(relation.erase(relation.size()), std::out_of_range);
-    EXPECT_EQ(relation.index(), canonical);
     relation.erase(first);
-    EXPECT_EQ(relation.index(), urd::index<database::Relation>());
     EXPECT_FALSE(relation.contains(cells(1, 2)));
     EXPECT_TRUE(relation.contains(cells(3, 4)));
     EXPECT_TRUE(relation.contains(cells(5, 6)));
@@ -119,54 +119,56 @@ TEST(YggdrasilTests, DatabaseRelationErasureInvalidatesIdentityOnlyAfterSuccess)
 TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionAndUndo)
 {
     const auto large = ColumnIndex();
-    urd::builder<database::Relation> input({ large, ColumnIndex(4), ColumnIndex(11) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ large, ColumnIndex(4), ColumnIndex(11) }) };
     input.insert(cells(1, 10, 7));
     input.insert(cells(1, 11, 7));
     input.insert(cells(2, 10, 8));
     input.insert(cells(3, 10, 9));
-    const database::ProjectionPlan plan(input.columns(), { ColumnIndex(11), large });
-    database::incremental::ProjectionEvaluator evaluator(plan);
+    const database::ProjectionPlan plan(input.columns(), std::array { ColumnIndex(11), large });
+    database::incremental::ProjectionEvaluator evaluator(layer(), plan);
     database::Workspace workspace;
-    urd::builder<database::Relation> reference(plan.output_columns());
-    evaluator.initialize(input, workspace);
-    database::project(input, plan, reference, workspace);
-    EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    evaluator.initialize(borrow(input), workspace);
+    database::project(borrow(input), plan, reference, workspace);
+    EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(borrow(reference)));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
-    database::incremental::Delta replacement(input.columns());
+    database::incremental::Delta replacement(layer(), input.columns());
     replacement.removed.insert(cells(1, 10, 7));
     replacement.removed.insert(cells(1, 11, 7));
     replacement.added.insert(cells(1, 12, 7));
-    database::incremental::Delta erase_first(input.columns());
+    database::incremental::Delta erase_first(layer(), input.columns());
     erase_first.removed.insert(cells(1, 12, 7));
     erase_first.added.insert(cells(4, 1, 10));
-    database::incremental::Delta erase_moved(input.columns());
+    database::incremental::Delta erase_moved(layer(), input.columns());
     erase_moved.removed.insert(cells(3, 10, 9));
     erase_moved.added.insert(cells(2, 11, 8));
     const auto update = [&](const auto& added, const auto& removed)
     {
-        const auto before = rows<uint_t>(reference);
+        const auto before = rows<uint_t>(borrow(reference));
         apply_batch(input, added, removed);
-        evaluator.update(std::tie(added, removed), workspace);
-        database::project(input, plan, reference, workspace);
+        evaluator.update(std::pair { borrow(added), borrow(removed) }, workspace);
+        database::project(borrow(input), plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
-    const auto replaced_index = evaluator.get_result().find(cells(7, 1)).value();
-    const auto untouched_index = evaluator.get_result().find(cells(9, 3)).value();
+    const auto replaced_index = evaluator.get_result().data().find(cells(7, 1)).value();
+    const auto untouched_index = evaluator.get_result().data().find(cells(9, 3)).value();
     const auto replaced_row = evaluator.get_result().row(replaced_index);
     const auto untouched_row = evaluator.get_result().row(untouched_index);
     update(replacement.added, replacement.removed);
     // Consolidating witnesses must not erase/reinsert an unchanged output or
     // move the last output into its slot as a temporary consequence.
-    EXPECT_EQ(evaluator.get_result().find(cells(7, 1)).value(), replaced_index);
-    EXPECT_EQ(evaluator.get_result().find(cells(9, 3)).value(), untouched_index);
-    EXPECT_EQ(evaluator.get_result().row(replaced_index).data(), replaced_row.data());
-    EXPECT_EQ(evaluator.get_result().row(untouched_index).data(), untouched_row.data());
-    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(replaced_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 7);
-    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(replaced_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 1);
-    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(untouched_row.subspan(0 * sizeof(uint_t), sizeof(uint_t))), 9);
-    EXPECT_EQ(ygg::ByteCodec<uint_t>::decode(untouched_row.subspan(1 * sizeof(uint_t), sizeof(uint_t))), 3);
+    EXPECT_EQ(evaluator.get_result().data().find(cells(7, 1)).value(), replaced_index);
+    EXPECT_EQ(evaluator.get_result().data().find(cells(9, 3)).value(), untouched_index);
+    const auto same_storage = [](const ygg::database::RowPool::row_type& lhs, const ygg::database::RowPool::row_type& rhs)
+    { return lhs.data() == rhs.data() && lhs.first_bit() == rhs.first_bit(); };
+    EXPECT_TRUE(same_storage(evaluator.get_result().row(replaced_index), replaced_row));
+    EXPECT_TRUE(same_storage(evaluator.get_result().row(untouched_index), untouched_row));
+    EXPECT_EQ(ygg::decode_value<uint_t>(replaced_row.get(size_t { 0 })), 7);
+    EXPECT_EQ(ygg::decode_value<uint_t>(replaced_row.get(size_t { 1 })), 1);
+    EXPECT_EQ(ygg::decode_value<uint_t>(untouched_row.get(size_t { 0 })), 9);
+    EXPECT_EQ(ygg::decode_value<uint_t>(untouched_row.get(size_t { 1 })), 3);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     update(erase_first.added, erase_first.removed);
@@ -175,7 +177,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
     update(erase_first.removed, erase_first.added);
     update(replacement.removed, replacement.added);
     const auto retained = evaluator.memory_usage();
-    evaluator.initialize(input, workspace);
+    evaluator.initialize(borrow(input), workspace);
     EXPECT_EQ(evaluator.memory_usage(), retained);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
@@ -183,7 +185,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUndo)
 {
-    urd::builder<database::Relation> input({ ColumnIndex(1), ColumnIndex(2) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }) };
     input.insert(cells(1, 10));
     input.insert(cells(1, 11));
     input.insert(cells(1, 12));
@@ -192,14 +194,14 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     input.insert(cells(3, 30));
     input.insert(cells(4, 40));
     input.insert(cells(5, 50));
-    const auto initial = rows<uint_t>(input);
-    const database::ProjectionPlan plan(input.columns(), { ColumnIndex(1) });
-    database::incremental::ProjectionEvaluator evaluator(plan);
+    const auto initial = rows<uint_t>(borrow(input));
+    const database::ProjectionPlan plan(input.columns(), std::array { ColumnIndex(1) });
+    database::incremental::ProjectionEvaluator evaluator(layer(), plan);
     database::Workspace workspace;
-    urd::builder<database::Relation> reference(plan.output_columns());
-    evaluator.initialize(input, workspace);
-    database::project(input, plan, reference, workspace);
-    database::incremental::Delta delta(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    evaluator.initialize(borrow(input), workspace);
+    database::project(borrow(input), plan, reference, workspace);
+    database::incremental::Delta delta(layer(), input.columns());
     delta.removed.insert(cells(1, 10));
     delta.removed.insert(cells(1, 11));
     delta.added.insert(cells(1, 13));  // Fewer witnesses, same output.
@@ -213,10 +215,10 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     delta.added.insert(cells(6, 61));
     const auto update = [&](const auto& added, const auto& removed)
     {
-        const auto before = rows<uint_t>(reference);
+        const auto before = rows<uint_t>(borrow(reference));
         apply_batch(input, added, removed);
-        evaluator.update(std::tie(added, removed), workspace);
-        database::project(input, plan, reference, workspace);
+        evaluator.update(std::pair { borrow(added), borrow(removed) }, workspace);
+        database::project(borrow(input), plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
     update(delta.added, delta.removed);
@@ -225,65 +227,65 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     EXPECT_EQ(evaluator.get_delta().removed.size(), 1);
     EXPECT_TRUE(evaluator.get_delta().removed.contains(cells(3)));
     update(delta.removed, delta.added);
-    EXPECT_EQ(rows<uint_t>(input), initial);
+    EXPECT_EQ(rows<uint_t>(borrow(input)), initial);
     // Removing the restored input checks every consolidated support count,
     // including unchanged membership and rows moved by compact erasure.
-    urd::builder<database::Relation> empty(input.columns());
-    urd::builder<database::Relation> all(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> empty(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> all(input.columns());
     for (size_t i = 0; i < input.size(); ++i)
-        all.insert(input.row(i));
+        all.insert(borrow(input).row(i));
     update(empty, all);
     EXPECT_TRUE(evaluator.get_result().empty());
     update(all, empty);
-    EXPECT_EQ(rows<uint_t>(input), initial);
+    EXPECT_EQ(rows<uint_t>(borrow(input)), initial);
 }
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionDoesNotHideRemovalUnderflowWithAdditions)
 {
-    urd::builder<database::Relation> input({ ColumnIndex(1), ColumnIndex(2) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }) };
     input.insert(cells(7, 10));
-    database::incremental::ProjectionEvaluator evaluator(database::ProjectionPlan(input.columns(), { ColumnIndex(1) }));
+    database::incremental::ProjectionEvaluator evaluator(layer(), database::ProjectionPlan(input.columns(), std::array { ColumnIndex(1) }));
     database::Workspace workspace;
-    evaluator.initialize(input, workspace);
-    database::incremental::Delta invalid(input.columns());
+    evaluator.initialize(borrow(input), workspace);
+    database::incremental::Delta invalid(layer(), input.columns());
     invalid.removed.insert(cells(7, 10));
     invalid.removed.insert(cells(7, 11));  // Only one existing witness is available.
     invalid.added.insert(cells(7, 12));
     invalid.added.insert(cells(7, 13));  // Net support change is zero, but removal is invalid.
     EXPECT_THROW(evaluator.update(invalid.change(), workspace), std::invalid_argument);
-    urd::builder<database::Relation> empty(input.columns());
-    EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
-    evaluator.initialize(input, workspace);
-    database::incremental::Delta valid(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> empty(input.columns());
+    EXPECT_THROW(evaluator.update(std::pair { borrow(empty), borrow(empty) }, workspace), std::logic_error);
+    evaluator.initialize(borrow(input), workspace);
+    database::incremental::Delta valid(layer(), input.columns());
     valid.removed.insert(cells(7, 10));
     valid.added.insert(cells(7, 12));
     evaluator.update(valid.change(), workspace);
     EXPECT_TRUE(evaluator.get_result().contains(cells(7)));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    evaluator.update(std::tie(empty, valid.added), workspace);
+    evaluator.update(std::pair { borrow(empty), borrow(valid.added) }, workspace);
     EXPECT_TRUE(evaluator.get_result().empty());
     EXPECT_TRUE(evaluator.get_delta().removed.contains(cells(7)));
 }
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelations)
 {
-    urd::builder<database::Relation> input({ ColumnIndex(4) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ ColumnIndex(4) }) };
     const database::ProjectionPlan plan(input.columns(), {});
-    database::incremental::ProjectionEvaluator evaluator(plan);
+    database::incremental::ProjectionEvaluator evaluator(layer(), plan);
     database::Workspace workspace;
-    urd::builder<database::Relation> reference;
-    evaluator.initialize(input, workspace);
+    urd::builder<ygg::Relation<ygg::Schema>> reference;
+    evaluator.initialize(borrow(input), workspace);
     EXPECT_TRUE(evaluator.get_result().empty());
-    database::incremental::Delta delta(input.columns());
+    database::incremental::Delta delta(layer(), input.columns());
     delta.added.insert(cells(1));
     delta.added.insert(cells(2));
     const auto update = [&]
     {
-        const auto before = rows<uint_t>(reference);
+        const auto before = rows<uint_t>(borrow(reference));
         apply_batch(input, delta.added, delta.removed);
         evaluator.update(delta.change(), workspace);
-        database::project(input, plan, reference, workspace);
+        database::project(borrow(input), plan, reference, workspace);
         expect_update(evaluator, before, reference);
     };
     update();
@@ -301,23 +303,23 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionHandlesEmptyAndNullaryRelation
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 
-    urd::builder<database::Relation> nullary;
-    database::incremental::Delta nullary_delta({});
-    database::incremental::ProjectionEvaluator identity(database::ProjectionPlan({}, {}));
-    identity.initialize(nullary, workspace);
+    urd::builder<ygg::Relation<ygg::Schema>> nullary;
+    database::incremental::Delta nullary_delta(layer(), {});
+    database::incremental::ProjectionEvaluator identity(layer(), database::ProjectionPlan({}, {}));
+    identity.initialize(borrow(nullary), workspace);
     nullary_delta.added.insert(cells());
     identity.update(nullary_delta.change(), workspace);
     EXPECT_TRUE(identity.get_result().contains(cells()));
     EXPECT_TRUE(identity.get_delta().added.contains(cells()));
-    identity.update(std::tie(nullary_delta.removed, nullary_delta.added), workspace);
+    identity.update(std::pair { borrow(nullary_delta.removed), borrow(nullary_delta.added) }, workspace);
     EXPECT_TRUE(identity.get_result().empty());
     EXPECT_TRUE(identity.get_delta().removed.contains(cells()));
 }
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
 {
-    urd::builder<database::Relation> lhs({ ColumnIndex(7), ColumnIndex(2), ColumnIndex(9) });
-    urd::builder<database::Relation> rhs({ ColumnIndex(9), ColumnIndex(11), ColumnIndex(2) });
+    urd::builder<ygg::Relation<ygg::Schema>> lhs { ygg::tests::ops::cols({ ColumnIndex(7), ColumnIndex(2), ColumnIndex(9) }) };
+    urd::builder<ygg::Relation<ygg::Schema>> rhs { ygg::tests::ops::cols({ ColumnIndex(9), ColumnIndex(11), ColumnIndex(2) }) };
     lhs.insert(cells(1, 2, 3));
     lhs.insert(cells(4, 2, 3));
     lhs.insert(cells(5, 8, 3));
@@ -326,34 +328,34 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
     rhs.insert(cells(3, 22, 8));
     rhs.insert(cells(9, 23, 2));
     const database::JoinPlan plan(lhs.columns(), rhs.columns());
-    auto repository = database::RelationRepositoryFactory().create();
+    database::Repository repository;
     database::Workspace workspace;
     for (const bool change_left : { false, true })
     {
         auto& dynamic = change_left ? lhs : rhs;
-        urd::builder<database::Relation> unchanged(change_left ? rhs.columns() : lhs.columns());
-        database::incremental::JoinEvaluator evaluator(plan);
-        urd::builder<database::Relation> reference(plan.output_columns());
+        urd::builder<ygg::Relation<ygg::Schema>> unchanged(change_left ? rhs.columns() : lhs.columns());
+        database::incremental::JoinEvaluator evaluator(layer(), plan);
+        urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
         evaluator.initialize(urd::resolve(lhs, repository), urd::resolve(rhs, repository), workspace);
-        database::join(lhs, rhs, plan, reference, workspace);
-        EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
+        database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
+        EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(borrow(reference)));
         EXPECT_TRUE(evaluator.get_delta().added.empty());
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
-        database::incremental::Delta delta(dynamic.columns());
-        delta.removed.insert(dynamic.row(0));
+        database::incremental::Delta delta(layer(), dynamic.columns());
+        delta.removed.insert(borrow(dynamic).row(0));
         if (!change_left)
             delta.added.insert(cells(3, 30, 2));
         else
             delta.added.insert(cells(6, 2, 3));
         const auto update = [&](const auto& added, const auto& removed)
         {
-            const auto before = rows<uint_t>(reference);
+            const auto before = rows<uint_t>(borrow(reference));
             apply_batch(dynamic, added, removed);
             if (change_left)
-                evaluator.update(std::tie(added, removed), std::tie(unchanged, unchanged), workspace);
+                evaluator.update(std::pair { borrow(added), borrow(removed) }, std::pair { borrow(unchanged), borrow(unchanged) }, workspace);
             else
-                evaluator.update(std::tie(unchanged, unchanged), std::tie(added, removed), workspace);
-            database::join(lhs, rhs, plan, reference, workspace);
+                evaluator.update(std::pair { borrow(unchanged), borrow(unchanged) }, std::pair { borrow(added), borrow(removed) }, workspace);
+            database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
             expect_update(evaluator, before, reference);
         };
         update(delta.added, delta.removed);
@@ -366,56 +368,52 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
 TEST(YggdrasilTests, DatabaseIncrementalJoinAcceptsInternedWideInputs)
 {
     using Value = std::uint64_t;
-    urd::builder<database::Relation> dynamic(columns_of<Value>({ ColumnIndex(1), ColumnIndex(2) }));
-    urd::builder<database::Relation> immutable(columns_of<Value>({ ColumnIndex(2), ColumnIndex(3) }));
-    dynamic.insert(std::tuple { Value { 1 }, Value { 10 } });
-    immutable.insert(std::tuple { Value { 10 }, Value { 100 } });
-    immutable.insert(std::tuple { Value { 20 }, Value { 200 } });
-    immutable.insert(std::tuple { Value { 30 }, Value { 300 } });
-    auto repository = database::RelationRepositoryFactory().create();
-    const auto view = database::insert(repository, immutable).first;
+    urd::builder<ygg::Relation<ygg::Schema>> dynamic(columns_of<Value>({ ColumnIndex(1), ColumnIndex(2) }));
+    urd::builder<ygg::Relation<ygg::Schema>> immutable(columns_of<Value>({ ColumnIndex(2), ColumnIndex(3) }));
+    dynamic.insert(std::array { ygg::encode_value(Value { 1 }), ygg::encode_value(Value { 10 }) });
+    immutable.insert(std::array { ygg::encode_value(Value { 10 }), ygg::encode_value(Value { 100 }) });
+    immutable.insert(std::array { ygg::encode_value(Value { 20 }), ygg::encode_value(Value { 200 }) });
+    immutable.insert(std::array { ygg::encode_value(Value { 30 }), ygg::encode_value(Value { 300 }) });
+    database::Repository repository;
+    const auto view = repository.insert(immutable).first;
     const database::JoinPlan plan(dynamic.columns(), immutable.columns());
-    database::incremental::JoinEvaluator evaluator(plan);
-    urd::builder<database::Relation> unchanged(immutable.columns());
+    database::incremental::JoinEvaluator evaluator(layer(), plan);
+    urd::builder<ygg::Relation<ygg::Schema>> unchanged(immutable.columns());
     database::Workspace workspace;
-    urd::builder<database::Relation> reference(plan.output_columns());
-    evaluator.initialize(dynamic, view, workspace);
-    database::join(dynamic, immutable, plan, reference, workspace);
-    EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(reference));
-    database::incremental::Delta delta(dynamic.columns());
-    delta.removed.insert(std::tuple { Value { 1 }, Value { 10 } });
-    delta.added.insert(std::tuple { Value { 2 }, Value { 20 } });
-    delta.added.insert(std::tuple { Value { 3 }, Value { 40 } });
-    const auto before = rows<Value>(reference);
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    evaluator.initialize(borrow(dynamic), view, workspace);
+    database::join(borrow(dynamic), borrow(immutable), plan, reference, workspace);
+    EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(borrow(reference)));
+    database::incremental::Delta delta(layer(), dynamic.columns());
+    delta.removed.insert(std::array { ygg::encode_value(Value { 1 }), ygg::encode_value(Value { 10 }) });
+    delta.added.insert(std::array { ygg::encode_value(Value { 2 }), ygg::encode_value(Value { 20 }) });
+    delta.added.insert(std::array { ygg::encode_value(Value { 3 }), ygg::encode_value(Value { 40 }) });
+    const auto before = rows<Value>(borrow(reference));
     apply_batch(dynamic, delta.added, delta.removed);
-    evaluator.update(delta.change(), std::tie(unchanged, unchanged), workspace);
-    database::join(dynamic, immutable, plan, reference, workspace);
+    evaluator.update(delta.change(), std::pair { borrow(unchanged), borrow(unchanged) }, workspace);
+    database::join(borrow(dynamic), borrow(immutable), plan, reference, workspace);
     expect_update(evaluator, before, reference);
 }
 
 TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
 {
-    urd::builder<database::Relation> input({ ColumnIndex(1) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ ColumnIndex(1) }) };
     input.insert(cells(1));
-    urd::builder<database::Relation> empty(input.columns());
-    urd::builder<database::Relation> wrong({ ColumnIndex(2) });
-    urd::builder<database::Relation> overlap(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> empty(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> overlap(input.columns());
     overlap.insert(cells(1));
-    database::incremental::ProjectionEvaluator evaluator(database::ProjectionPlan(input.columns(), { ColumnIndex(1) }));
+    database::incremental::ProjectionEvaluator evaluator(layer(), database::ProjectionPlan(input.columns(), std::array { ColumnIndex(1) }));
     database::Workspace workspace;
-    EXPECT_THROW(evaluator.update(std::tie(empty, empty), workspace), std::logic_error);
-    evaluator.initialize(input, workspace);
+    EXPECT_THROW(evaluator.update(std::pair { borrow(empty), borrow(empty) }, workspace), std::logic_error);
+    evaluator.initialize(borrow(input), workspace);
     const auto before = rows<uint_t>(evaluator.get_result());
-    EXPECT_THROW(evaluator.initialize(wrong, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(wrong, empty), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(empty, wrong), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(overlap, overlap), workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::pair { borrow(overlap), borrow(overlap) }, workspace), std::invalid_argument);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
-    evaluator.update(std::tie(empty, empty), workspace);
+    evaluator.update(std::pair { borrow(empty), borrow(empty) }, workspace);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
-    database::incremental::Delta delta(input.columns());
+    database::incremental::Delta delta(layer(), input.columns());
     delta.added.insert(cells(1));
     delta.removed.insert(cells(2));
     const auto memory = delta.added.memory_usage() + delta.removed.memory_usage();
@@ -427,8 +425,8 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionValidationPrecedesMutation)
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches)
 {
-    urd::builder<database::Relation> lhs({ ColumnIndex(9), ColumnIndex(2), ColumnIndex(7) });
-    urd::builder<database::Relation> rhs({ ColumnIndex(7), ColumnIndex(11), ColumnIndex(2) });
+    urd::builder<ygg::Relation<ygg::Schema>> lhs { ygg::tests::ops::cols({ ColumnIndex(9), ColumnIndex(2), ColumnIndex(7) }) };
+    urd::builder<ygg::Relation<ygg::Schema>> rhs { ygg::tests::ops::cols({ ColumnIndex(7), ColumnIndex(11), ColumnIndex(2) }) };
     lhs.insert(cells(1, 10, 100));
     lhs.insert(cells(2, 10, 100));
     lhs.insert(cells(3, 20, 200));
@@ -437,40 +435,40 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     rhs.insert(cells(100, 8, 10));
     rhs.insert(cells(200, 7, 20));
     rhs.insert(cells(300, 9, 30));
-    const auto initial_lhs = rows<uint_t>(lhs);
-    const auto initial_rhs = rows<uint_t>(rhs);
+    const auto initial_lhs = rows<uint_t>(borrow(lhs));
+    const auto initial_rhs = rows<uint_t>(borrow(rhs));
     const database::JoinPlan plan(lhs.columns(), rhs.columns());
-    const database::ProjectionPlan projection_plan(plan.output_columns(), { ColumnIndex(11) });
-    database::incremental::JoinEvaluator evaluator(plan);
-    database::incremental::ProjectionEvaluator projected(projection_plan);
+    const database::ProjectionPlan projection_plan(plan.output_columns(), std::array { ColumnIndex(11) });
+    database::incremental::JoinEvaluator evaluator(layer(), plan);
+    database::incremental::ProjectionEvaluator projected(layer(), projection_plan);
     database::Workspace workspace;
-    auto repository = database::RelationRepositoryFactory().create();
+    database::Repository repository;
     evaluator.initialize(urd::resolve(lhs, repository), urd::resolve(rhs, repository), workspace);
     projected.initialize(evaluator.get_result(), workspace);
-    urd::builder<database::Relation> reference(plan.output_columns());
-    urd::builder<database::Relation> reference_projection(projection_plan.output_columns());
-    database::join(lhs, rhs, plan, reference, workspace);
-    database::project(reference, projection_plan, reference_projection, workspace);
-    EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    urd::builder<ygg::Relation<ygg::Schema>> reference_projection(projection_plan.output_columns());
+    database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
+    database::project(borrow(reference), projection_plan, reference_projection, workspace);
+    EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(borrow(reference)));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     const auto update = [&](const auto& lhs_added, const auto& lhs_removed, const auto& rhs_added, const auto& rhs_removed)
     {
-        const auto before = rows<uint_t>(reference);
-        const auto projection_before = rows<uint_t>(reference_projection);
+        const auto before = rows<uint_t>(borrow(reference));
+        const auto projection_before = rows<uint_t>(borrow(reference_projection));
         apply_batch(lhs, lhs_added, lhs_removed);
         apply_batch(rhs, rhs_added, rhs_removed);
         evaluator.update(std::pair(urd::resolve(lhs_added, repository), urd::resolve(lhs_removed, repository)),
                          std::pair(urd::resolve(rhs_added, repository), urd::resolve(rhs_removed, repository)),
                          workspace);
         projected.update(evaluator.get_delta().change(), workspace);
-        database::join(lhs, rhs, plan, reference, workspace);
-        database::project(reference, projection_plan, reference_projection, workspace);
+        database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
+        database::project(borrow(reference), projection_plan, reference_projection, workspace);
         expect_update(evaluator, before, reference);
         expect_update(projected, projection_before, reference_projection);
     };
-    database::incremental::Delta lhs_a(lhs.columns());
-    database::incremental::Delta rhs_a(rhs.columns());
+    database::incremental::Delta lhs_a(layer(), lhs.columns());
+    database::incremental::Delta rhs_a(layer(), rhs.columns());
     lhs_a.removed.insert(cells(1, 10, 100));
     lhs_a.removed.insert(cells(3, 20, 200));
     lhs_a.added.insert(cells(5, 40, 400));
@@ -484,8 +482,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     EXPECT_TRUE(evaluator.get_delta().added.contains(cells(5, 40, 400, 10)));
     EXPECT_FALSE(evaluator.get_delta().added.contains(cells(1, 10, 100, 11)));
     EXPECT_FALSE(evaluator.get_delta().added.contains(cells(6, 10, 100, 8)));
-    database::incremental::Delta lhs_b(lhs.columns());
-    database::incremental::Delta rhs_b(rhs.columns());
+    database::incremental::Delta lhs_b(layer(), lhs.columns());
+    database::incremental::Delta rhs_b(layer(), rhs.columns());
     lhs_b.removed.insert(cells(4, 30, 300));
     lhs_b.added.insert(cells(7, 40, 400));
     rhs_b.removed.insert(cells(300, 9, 30));
@@ -493,18 +491,18 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
     update(lhs_b.added, lhs_b.removed, rhs_b.added, rhs_b.removed);
     update(lhs_b.removed, lhs_b.added, rhs_b.removed, rhs_b.added);
     update(lhs_a.removed, lhs_a.added, rhs_a.removed, rhs_a.added);
-    EXPECT_EQ(rows<uint_t>(lhs), initial_lhs);
-    EXPECT_EQ(rows<uint_t>(rhs), initial_rhs);
-    database::incremental::Delta sibling(lhs.columns());
-    database::incremental::Delta unchanged(rhs.columns());
+    EXPECT_EQ(rows<uint_t>(borrow(lhs)), initial_lhs);
+    EXPECT_EQ(rows<uint_t>(borrow(rhs)), initial_rhs);
+    database::incremental::Delta sibling(layer(), lhs.columns());
+    database::incremental::Delta unchanged(layer(), rhs.columns());
     sibling.removed.insert(cells(2, 10, 100));
     sibling.added.insert(cells(8, 30, 300));
     update(sibling.added, sibling.removed, unchanged.added, unchanged.removed);
     update(sibling.removed, sibling.added, unchanged.added, unchanged.removed);
-    EXPECT_EQ(rows<uint_t>(lhs), initial_lhs);
-    EXPECT_EQ(rows<uint_t>(rhs), initial_rhs);
-    evaluator.initialize(lhs, rhs, workspace);
-    EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(reference));
+    EXPECT_EQ(rows<uint_t>(borrow(lhs)), initial_lhs);
+    EXPECT_EQ(rows<uint_t>(borrow(rhs)), initial_rhs);
+    evaluator.initialize(borrow(lhs), borrow(rhs), workspace);
+    EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(borrow(reference)));
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
 }
@@ -512,41 +510,41 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesBothInputsAndRestoresBranches
 TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsWideIndexesAcrossRowCompaction)
 {
     using Value = std::uint64_t;
-    urd::builder<database::Relation> lhs(columns_of<Value>({ ColumnIndex(1), ColumnIndex(2) }));
-    urd::builder<database::Relation> rhs(columns_of<Value>({ ColumnIndex(2), ColumnIndex(3) }));
+    urd::builder<ygg::Relation<ygg::Schema>> lhs(columns_of<Value>({ ColumnIndex(1), ColumnIndex(2) }));
+    urd::builder<ygg::Relation<ygg::Schema>> rhs(columns_of<Value>({ ColumnIndex(2), ColumnIndex(3) }));
     for (uint_t i = 0; i < 5; ++i)
     {
-        lhs.insert(std::tuple { Value { i }, Value { i % 3 } });
-        rhs.insert(std::tuple { Value { i % 3 }, Value { i } });
+        lhs.insert(std::array { ygg::encode_value(Value { i }), ygg::encode_value(Value { i % 3 }) });
+        rhs.insert(std::array { ygg::encode_value(Value { i % 3 }), ygg::encode_value(Value { i }) });
     }
     const database::JoinPlan plan(lhs.columns(), rhs.columns());
-    database::incremental::JoinEvaluator evaluator(plan);
+    database::incremental::JoinEvaluator evaluator(layer(), plan);
     database::Workspace workspace;
-    urd::builder<database::Relation> reference(plan.output_columns());
-    evaluator.initialize(lhs, rhs, workspace);
-    database::join(lhs, rhs, plan, reference, workspace);
-    EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(reference));
-    database::incremental::Delta lhs_delta(lhs.columns());
-    database::incremental::Delta rhs_delta(rhs.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+    evaluator.initialize(borrow(lhs), borrow(rhs), workspace);
+    database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
+    EXPECT_EQ(rows<Value>(evaluator.get_result()), rows<Value>(borrow(reference)));
+    database::incremental::Delta lhs_delta(layer(), lhs.columns());
+    database::incremental::Delta rhs_delta(layer(), rhs.columns());
     for (uint_t generation = 0; generation < 24; ++generation)
     {
         lhs_delta.clear();
         rhs_delta.clear();
         if (generation % 3 != 1)
         {
-            lhs_delta.removed.insert(lhs.row(generation % lhs.size()));
-            lhs_delta.added.insert(std::tuple { Value { 100 + generation }, Value { generation % 3 } });
+            lhs_delta.removed.insert(borrow(lhs).row(generation % lhs.size()));
+            lhs_delta.added.insert(std::array { ygg::encode_value(Value { 100 + generation }), ygg::encode_value(Value { generation % 3 }) });
         }
         if (generation % 3 != 2)
         {
-            rhs_delta.removed.insert(rhs.row((generation + 1) % rhs.size()));
-            rhs_delta.added.insert(std::tuple { Value { generation % 3 }, Value { 100 + generation } });
+            rhs_delta.removed.insert(borrow(rhs).row((generation + 1) % rhs.size()));
+            rhs_delta.added.insert(std::array { ygg::encode_value(Value { generation % 3 }), ygg::encode_value(Value { 100 + generation }) });
         }
-        const auto before = rows<Value>(reference);
+        const auto before = rows<Value>(borrow(reference));
         apply_batch(lhs, lhs_delta.added, lhs_delta.removed);
         apply_batch(rhs, rhs_delta.added, rhs_delta.removed);
         evaluator.update(lhs_delta.change(), rhs_delta.change(), workspace);
-        database::join(lhs, rhs, plan, reference, workspace);
+        database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
         expect_update(evaluator, before, reference);
     }
 }
@@ -556,27 +554,27 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
     database::Workspace workspace;
     for (unsigned nullary_sides = 0; nullary_sides < 4; ++nullary_sides)
     {
-        urd::builder<database::Relation> lhs;
-        urd::builder<database::Relation> rhs;
+        urd::builder<ygg::Relation<ygg::Schema>> lhs;
+        urd::builder<ygg::Relation<ygg::Schema>> rhs;
         if (!(nullary_sides & 1))
-            lhs.initialize({ ColumnIndex(1) });
+            lhs.initialize({}, ygg::tests::ops::cols({ ColumnIndex(1) }));
         if (!(nullary_sides & 2))
-            rhs.initialize({ ColumnIndex(2) });
+            rhs.initialize({}, ygg::tests::ops::cols({ ColumnIndex(2) }));
         const database::JoinPlan plan(lhs.columns(), rhs.columns());
-        database::incremental::JoinEvaluator evaluator(plan);
-        urd::builder<database::Relation> reference(plan.output_columns());
-        evaluator.initialize(lhs, rhs, workspace);
+        database::incremental::JoinEvaluator evaluator(layer(), plan);
+        urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
+        evaluator.initialize(borrow(lhs), borrow(rhs), workspace);
         EXPECT_TRUE(evaluator.get_result().empty());
-        database::incremental::Delta lhs_delta(lhs.columns());
-        database::incremental::Delta rhs_delta(rhs.columns());
-        if (lhs.arity() == 0)
+        database::incremental::Delta lhs_delta(layer(), lhs.columns());
+        database::incremental::Delta rhs_delta(layer(), rhs.columns());
+        if (lhs.columns().size() == 0)
             lhs_delta.added.insert(cells());
         else
         {
             lhs_delta.added.insert(cells(1));
             lhs_delta.added.insert(cells(2));
         }
-        if (rhs.arity() == 0)
+        if (rhs.columns().size() == 0)
             rhs_delta.added.insert(cells());
         else
         {
@@ -585,18 +583,18 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
         }
         const auto update = [&](const auto& lhs_added, const auto& lhs_removed, const auto& rhs_added, const auto& rhs_removed)
         {
-            const auto before = rows<uint_t>(reference);
+            const auto before = rows<uint_t>(borrow(reference));
             apply_batch(lhs, lhs_added, lhs_removed);
             apply_batch(rhs, rhs_added, rhs_removed);
-            evaluator.update(std::tie(lhs_added, lhs_removed), std::tie(rhs_added, rhs_removed), workspace);
-            database::join(lhs, rhs, plan, reference, workspace);
+            evaluator.update(std::pair { borrow(lhs_added), borrow(lhs_removed) }, std::pair { borrow(rhs_added), borrow(rhs_removed) }, workspace);
+            database::join(borrow(lhs), borrow(rhs), plan, reference, workspace);
             expect_update(evaluator, before, reference);
         };
         update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed);
-        database::incremental::Delta lhs_remove(lhs.columns());
-        database::incremental::Delta rhs_remove(rhs.columns());
-        lhs_remove.removed.insert(lhs.row(0));
-        rhs_remove.removed.insert(rhs.row(0));
+        database::incremental::Delta lhs_remove(layer(), lhs.columns());
+        database::incremental::Delta rhs_remove(layer(), rhs.columns());
+        lhs_remove.removed.insert(borrow(lhs).row(0));
+        rhs_remove.removed.insert(borrow(rhs).row(0));
         update(lhs_remove.added, lhs_remove.removed, rhs_remove.added, rhs_remove.removed);
         update(lhs_remove.removed, lhs_remove.added, rhs_remove.removed, rhs_remove.added);
         update(lhs_delta.removed, lhs_delta.added, rhs_delta.removed, rhs_delta.added);
@@ -618,31 +616,24 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinValidatesAllInputsBeforeMutation)
 {
-    urd::builder<database::Relation> input({ ColumnIndex(1) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ ColumnIndex(1) }) };
     input.insert(cells(1));
-    urd::builder<database::Relation> empty(input.columns());
-    urd::builder<database::Relation> addition(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> empty(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> addition(input.columns());
     addition.insert(cells(2));
-    urd::builder<database::Relation> wrong({ ColumnIndex(2) });
-    database::incremental::JoinEvaluator evaluator(database::JoinPlan(input.columns(), input.columns()));
+    database::incremental::JoinEvaluator evaluator(layer(), database::JoinPlan(input.columns(), input.columns()));
     database::Workspace workspace;
-    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace), std::logic_error);
-    evaluator.initialize(input, input, workspace);
-    evaluator.update(std::tie(addition, empty), std::tie(addition, empty), workspace);
+    EXPECT_THROW(evaluator.update(std::pair { borrow(empty), borrow(empty) }, std::pair { borrow(empty), borrow(empty) }, workspace), std::logic_error);
+    evaluator.initialize(borrow(input), borrow(input), workspace);
+    evaluator.update(std::pair { borrow(addition), borrow(empty) }, std::pair { borrow(addition), borrow(empty) }, workspace);
     EXPECT_TRUE(evaluator.get_delta().added.contains(cells(2)));
     const auto before = rows<uint_t>(evaluator.get_result());
-    const auto added_before = rows<uint_t>(evaluator.get_delta().added);
-    EXPECT_THROW(evaluator.initialize(wrong, input, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.initialize(input, wrong, workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(wrong, empty), std::tie(empty, empty), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(empty, wrong), std::tie(empty, empty), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(wrong, empty), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, wrong), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(addition, addition), std::tie(empty, empty), workspace), std::invalid_argument);
-    EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(addition, addition), workspace), std::invalid_argument);
+    const auto added_before = rows<uint_t>(evaluator.get_delta().change().first);
+    EXPECT_THROW(evaluator.update(std::pair { borrow(addition), borrow(addition) }, std::pair { borrow(empty), borrow(empty) }, workspace), std::invalid_argument);
+    EXPECT_THROW(evaluator.update(std::pair { borrow(empty), borrow(empty) }, std::pair { borrow(addition), borrow(addition) }, workspace), std::invalid_argument);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
-    EXPECT_EQ(rows<uint_t>(evaluator.get_delta().added), added_before);
-    evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace);
+    EXPECT_EQ(rows<uint_t>(evaluator.get_delta().change().first), added_before);
+    evaluator.update(std::pair { borrow(empty), borrow(empty) }, std::pair { borrow(empty), borrow(empty) }, workspace);
     EXPECT_EQ(rows<uint_t>(evaluator.get_result()), before);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
@@ -650,33 +641,33 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinValidatesAllInputsBeforeMutation)
 
 TEST(YggdrasilTests, DatabaseIncrementalJoinRequiresReinitializationAfterMutationFailure)
 {
-    urd::builder<database::Relation> input({ ColumnIndex(1) });
+    urd::builder<ygg::Relation<ygg::Schema>> input { ygg::tests::ops::cols({ ColumnIndex(1) }) };
     input.insert(cells(1));
-    urd::builder<database::Relation> empty(input.columns());
-    urd::builder<database::Relation> addition(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> empty(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> addition(input.columns());
     addition.insert(cells(2));
-    urd::builder<database::Relation> absent(input.columns());
+    urd::builder<ygg::Relation<ygg::Schema>> absent(input.columns());
     absent.insert(cells(99));
-    database::incremental::JoinEvaluator evaluator(database::JoinPlan(input.columns(), input.columns()));
+    database::incremental::JoinEvaluator evaluator(layer(), database::JoinPlan(input.columns(), input.columns()));
     database::Workspace workspace;
     for (const bool invalid_removal : { true, false })
     {
-        evaluator.initialize(input, input, workspace);
+        evaluator.initialize(borrow(input), borrow(input), workspace);
         // Mutate the left input successfully before the right input fails.
         if (invalid_removal)
-            EXPECT_THROW(evaluator.update(std::tie(empty, input), std::tie(empty, absent), workspace), std::invalid_argument);
+            EXPECT_THROW(evaluator.update(std::pair { borrow(empty), borrow(input) }, std::pair { borrow(empty), borrow(absent) }, workspace), std::invalid_argument);
         else
-            EXPECT_THROW(evaluator.update(std::tie(addition, empty), std::tie(input, empty), workspace), std::invalid_argument);
-        EXPECT_THROW(evaluator.update(std::tie(empty, empty), std::tie(empty, empty), workspace), std::logic_error);
-        evaluator.initialize(input, input, workspace);
-        EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(input));
+            EXPECT_THROW(evaluator.update(std::pair { borrow(addition), borrow(empty) }, std::pair { borrow(input), borrow(empty) }, workspace), std::invalid_argument);
+        EXPECT_THROW(evaluator.update(std::pair { borrow(empty), borrow(empty) }, std::pair { borrow(empty), borrow(empty) }, workspace), std::logic_error);
+        evaluator.initialize(borrow(input), borrow(input), workspace);
+        EXPECT_EQ(rows<uint_t>(evaluator.get_result()), rows<uint_t>(borrow(input)));
         EXPECT_TRUE(evaluator.get_delta().added.empty());
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
-        evaluator.update(std::tie(addition, empty), std::tie(addition, empty), workspace);
+        evaluator.update(std::pair { borrow(addition), borrow(empty) }, std::pair { borrow(addition), borrow(empty) }, workspace);
         EXPECT_EQ(evaluator.get_result().size(), 2);
         EXPECT_TRUE(evaluator.get_result().contains(cells(1)));
         EXPECT_TRUE(evaluator.get_result().contains(cells(2)));
-        EXPECT_EQ(rows<uint_t>(evaluator.get_delta().added), rows<uint_t>(addition));
+        EXPECT_EQ(rows<uint_t>(evaluator.get_delta().change().first), rows<uint_t>(borrow(addition)));
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
     }
 }
@@ -684,26 +675,26 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinRequiresReinitializationAfterMutatio
 TEST(YggdrasilTests, DatabaseIncrementalEvaluatorsShareAccessAndAliasingContracts)
 {
     // Equal schemas make the evaluators' own (empty) deltas valid changes, so only aliasing is rejected.
-    urd::builder<database::Relation> lhs({ ColumnIndex(0), ColumnIndex(1) });
-    urd::builder<database::Relation> rhs({ ColumnIndex(0), ColumnIndex(1) });
-    const urd::builder<database::Relation> none({ ColumnIndex(0), ColumnIndex(1) });
+    urd::builder<ygg::Relation<ygg::Schema>> lhs { ygg::tests::ops::cols({ ColumnIndex(0), ColumnIndex(1) }) };
+    urd::builder<ygg::Relation<ygg::Schema>> rhs { ygg::tests::ops::cols({ ColumnIndex(0), ColumnIndex(1) }) };
+    const urd::builder<ygg::Relation<ygg::Schema>> none { ygg::tests::ops::cols({ ColumnIndex(0), ColumnIndex(1) }) };
     lhs.insert(cells(1, 2));
     rhs.insert(cells(1, 2));
     database::Workspace workspace;
 
-    database::incremental::JoinEvaluator join_evaluator(database::JoinPlan(lhs.columns(), rhs.columns()));
+    database::incremental::JoinEvaluator join_evaluator(layer(), database::JoinPlan(lhs.columns(), rhs.columns()));
     EXPECT_THROW(static_cast<void>(join_evaluator.get_result()), std::logic_error);
     EXPECT_THROW(static_cast<void>(join_evaluator.get_delta()), std::logic_error);
-    join_evaluator.initialize(lhs, rhs, workspace);
-    EXPECT_THROW(join_evaluator.update(std::tie(join_evaluator.get_delta().added, none), std::tie(none, none), workspace), std::invalid_argument);
-    join_evaluator.update(std::tie(none, none), std::tie(none, none), workspace);
+    join_evaluator.initialize(borrow(lhs), borrow(rhs), workspace);
+    EXPECT_THROW(join_evaluator.update(std::pair { borrow(join_evaluator.get_delta().added), borrow(none) }, std::pair { borrow(none), borrow(none) }, workspace), std::invalid_argument);
+    join_evaluator.update(std::pair { borrow(none), borrow(none) }, std::pair { borrow(none), borrow(none) }, workspace);
     EXPECT_EQ(rows<uint_t>(join_evaluator.get_result()), (std::set<urd::Store<urd::sequence<uint_t>>> { { 1, 2 } }));
 
-    database::incremental::ProjectionEvaluator projection(database::ProjectionPlan(lhs.columns(), { ColumnIndex(0), ColumnIndex(1) }));
+    database::incremental::ProjectionEvaluator projection(layer(), database::ProjectionPlan(lhs.columns(), std::array { ColumnIndex(0), ColumnIndex(1) }));
     EXPECT_THROW(static_cast<void>(projection.get_result()), std::logic_error);
-    projection.initialize(lhs, workspace);
-    EXPECT_THROW(projection.update(std::tie(projection.get_delta().added, none), workspace), std::invalid_argument);
-    projection.update(std::tie(none, none), workspace);
+    projection.initialize(borrow(lhs), workspace);
+    EXPECT_THROW(projection.update(std::pair { borrow(projection.get_delta().added), borrow(none) }, workspace), std::invalid_argument);
+    projection.update(std::pair { borrow(none), borrow(none) }, workspace);
     EXPECT_EQ(rows<uint_t>(projection.get_result()), (std::set<urd::Store<urd::sequence<uint_t>>> { { 1, 2 } }));
 }
 

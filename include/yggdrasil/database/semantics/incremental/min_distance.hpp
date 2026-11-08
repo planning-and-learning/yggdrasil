@@ -15,6 +15,7 @@
 #include "yggdrasil/database/semantics/search/backward_frontier.hpp"
 #include "yggdrasil/database/semantics/search/concepts.hpp"
 
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <span>
@@ -54,20 +55,20 @@ class MinDistance
 {
 public:
     /// Edges given by a query over inputs. `edges` has the plan's edge columns; `static_slots` marks its inputs that
-    /// never change after the first bind().
-    MinDistance(QueryView<> edges, const DistancePlan& plan, const std::vector<bool>& static_slots = {}) :
-        MinDistance(incremental::bound::QueryEvaluator(database::detail::checked_edges(edges, plan), static_slots), plan)
+    /// never change after the first bind(). Its builders are read through `layer`, which must outlive it.
+    MinDistance(const Repository& layer, QueryView<> edges, const DistancePlan& plan, const std::vector<bool>& static_slots = {}) :
+        MinDistance(incremental::bound::QueryEvaluator(layer, database::detail::checked_edges(edges, plan), static_slots), plan)
     {
     }
 
     /// Edges given as a relation with the plan's edge columns, input 0 of bind().
-    explicit MinDistance(const DistancePlan& plan, bool static_edges = false) :
-        MinDistance(database::detail::relation_edges<incremental::bound::QueryEvaluator>(plan, static_edges), plan)
+    MinDistance(const Repository& layer, const DistancePlan& plan, bool static_edges = false) :
+        MinDistance(database::detail::relation_edges<incremental::bound::QueryEvaluator>(layer, plan, static_edges), plan)
     {
     }
 
     [[nodiscard]] size_t input_count() const noexcept { return m_edges.evaluator().input_count(); }
-    [[nodiscard]] const urd::builder<Relation>& input(size_t slot) const { return m_edges.evaluator().input(slot); }
+    [[nodiscard]] BuilderRelationView input(size_t slot) const { return m_edges.evaluator().input(slot); }
 
     /// Binds every input as a new baseline: input(slot) returns slot's relation view (see
     /// incremental::bound::QueryEvaluator::initialize). The stored search is discarded.
@@ -91,7 +92,10 @@ public:
                 // Seeds run in the new state of every input, so an edge built from several changed rows is found
                 // from any.
                 for (const auto slot : evaluator.bind(input, maybe_changed))
-                    seed(slot, evaluator.change(slot).added, evaluator.change(slot).removed);
+                {
+                    const auto [added, removed] = evaluator.change(slot);
+                    seed(slot, added, removed);
+                }
             });
     }
 
@@ -120,7 +124,7 @@ public:
     template<RelationViewConcept T>
     void set_targets(const T& targets)
     {
-        database::detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
+        assert(std::ranges::equal(targets.columns(), m_plan.target_columns()));
         if (m_targets_set && m_targets.same(targets))
             return;
         m_targets.assign(targets);
@@ -135,7 +139,7 @@ public:
     {
         if (!m_edges.evaluator().bound() || !m_targets_set)
             throw std::invalid_argument("Min distance: inputs or targets are not set.");
-        database::detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
+        assert(std::ranges::equal(sources.columns(), m_plan.source_columns()));
         auto edges = m_edges.with_key({});
         if (m_reset_pending)
             reset(heuristic);
@@ -170,7 +174,7 @@ private:
 
     MinDistance(incremental::bound::QueryEvaluator edges, const DistancePlan& plan) :
         m_plan(plan),
-        m_edges(std::move(edges), plan.edge_columns().span(), 0, plan.arity()),
+        m_edges(std::move(edges), plan.edge_columns(), 0, plan.arity()),
         m_tree(),
         m_targets(),
         m_added(),
@@ -211,7 +215,7 @@ private:
             m_added.clear();
     }
 
-    void record_added(std::span<const std::byte> edge)
+    void record_added(std::span<const Value> edge)
     {
         const auto from = edge.first(m_edges.target_offset());
         const auto to = edge.subspan(m_edges.target_offset());
@@ -228,7 +232,7 @@ private:
     template<RelationViewConcept A, RelationViewConcept R>
     void seed(size_t slot, const A& added, const R& removed)
     {
-        if (!m_reset_pending && !m_edges.evaluator().seed(slot, added, removed, [&](std::span<const std::byte> edge) { record_added(edge); }))
+        if (!m_reset_pending && !m_edges.evaluator().seed(slot, added, removed, [&](std::span<const Value> edge) { record_added(edge); }))
             m_reset_pending = true;
     }
 

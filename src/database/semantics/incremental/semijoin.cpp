@@ -7,14 +7,15 @@
 
 namespace ygg::database::incremental
 {
-bool SemijoinEvaluator::matched(std::span<const std::byte> lhs_row) const
+bool SemijoinEvaluator::matched(const RowPool::row_type& lhs_row) const
 {
     const auto lhs_keys = m_plan.lhs_keys();
     const auto rhs_keys = m_plan.rhs_keys();
     if (lhs_keys.empty())
         return !m_rhs.empty();
+    const auto current = m_layer->view(m_rhs);
     for (const auto position : m_rhs_index.values(database::detail::join_key_hash(lhs_row, lhs_keys)))
-        if (database::detail::join_keys_equal(m_rhs.row(position), rhs_keys, lhs_row, lhs_keys))
+        if (database::detail::join_keys_equal(current.row(position), rhs_keys, lhs_row, lhs_keys))
             return true;
     return false;
 }

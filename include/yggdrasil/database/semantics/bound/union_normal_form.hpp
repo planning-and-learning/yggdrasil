@@ -42,14 +42,13 @@ struct ConjunctiveBranch
 {
     urd::Store<urd::sequence<ConjunctiveAtom>> atoms;
     urd::Store<urd::sequence<std::pair<uint32_t, uint32_t>>> equal;
-    urd::Store<urd::sequence<std::pair<uint32_t, urd::Store<urd::sequence<std::byte>>>>> value;
+    urd::Store<urd::sequence<std::pair<uint32_t, Value>>> value;
     urd::Store<urd::sequence<ConjunctiveNegation>> negations;
 };
 
 struct QueryVariable
 {
-    size_t offset = 0;
-    size_t size = 0;
+    TypeId type;  ///< set where it is made
 };
 
 /// A query as a union of conjunctive queries with nested negation (UCQ¬; Abiteboul, Hull & Vianu, "Foundations of
@@ -58,8 +57,7 @@ struct QueryVariable
 /// only filters rows once its outer variables are bound (relational algebra is safe-range).
 struct UnionNormalForm
 {
-    urd::Store<urd::sequence<QueryVariable>> variables;  ///< Byte ranges of the variables in a frame of `frame_size`.
-    size_t frame_size = 0;
+    urd::Store<urd::sequence<QueryVariable>> variables;  ///< The variables, one value each in a frame.
     urd::Store<urd::sequence<urd::Store<urd::sequence<ColumnLayout>>>> input_columns;  ///< The schema of each input slot.
     urd::Store<urd::sequence<uint32_t>> output;                          ///< The variable of each of the query's columns.
     std::vector<ConjunctiveBranch> branches;  // std::vector: of an incomplete type (a Store resolves its element type at once)
@@ -71,7 +69,7 @@ namespace detail
 /// Flattens a query node into branches; `fresh` allocates the variables of projected-away columns.
 class UnionNormalFormBuilder
 {
-    UnionNormalForm m_result;  ///< Variables, frame size and input schemas so far.
+    UnionNormalForm m_result;  ///< Variables and input schemas so far.
 
     static std::vector<ConjunctiveBranch> product(const std::vector<ConjunctiveBranch>& lhs, const std::vector<ConjunctiveBranch>& rhs);  // std::vector: of an incomplete type (a Store resolves its element type at once)
 
@@ -99,8 +97,7 @@ public:
 
     uint32_t fresh(const ColumnLayout& column)
     {
-        m_result.variables.push_back(QueryVariable { m_result.frame_size, column.size });
-        m_result.frame_size += column.size;
+        m_result.variables.push_back(QueryVariable { column.type });
         return static_cast<uint32_t>(m_result.variables.size() - 1);
     }
 

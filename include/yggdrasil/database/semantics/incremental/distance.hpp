@@ -57,6 +57,7 @@ class DistanceEvaluator
         urd::Store<urd::sequence<size_t, VertexSet::handle_type>> supports;
     };
 
+    const Repository* m_layer;
     DistancePlan m_plan;
     database::detail::DistanceGraph m_graph;
     urd::Store<urd::map<VertexSet::handle_type, VertexSet::handle_type>, urd::multi, urd::retains> m_reverse;
@@ -65,7 +66,7 @@ class DistanceEvaluator
     urd::Store<urd::sequence<size_t, VertexSet::handle_type>> m_source_slots;
     urd::Store<urd::sequence<VertexSet::handle_type>> m_targets;
     urd::Store<urd::sequence<Flag, VertexSet::handle_type>> m_target_flags;
-    urd::builder<Relation> m_result;
+    urd::builder<Relation<Schema>> m_result;
     Delta m_delta;
     bool m_initialized = false;
 
@@ -74,7 +75,8 @@ class DistanceEvaluator
     std::unique_ptr<detail::DistanceRepairWorkspace> m_repair = std::make_unique<detail::DistanceRepairWorkspace>();
     urd::Store<urd::sequence<std::pair<VertexSet::handle_type, uint_t>>> m_changed;  ///< Vertex, distance before.
     urd::Store<urd::sequence<Flag, VertexSet::handle_type>> m_changed_flags;
-    urd::Store<urd::sequence<std::byte>> m_row;
+    urd::Store<urd::sequence<Value>> m_row;
+    mutable urd::Store<urd::sequence<Value>> m_values;  ///< An input row's values, as read.
 
     urd::Store<urd::sequence<VertexSet::handle_type>> m_sources_added;
     urd::Store<urd::sequence<VertexSet::handle_type>> m_sources_removed;
@@ -83,7 +85,7 @@ class DistanceEvaluator
     urd::Store<urd::sequence<std::pair<VertexSet::handle_type, VertexSet::handle_type>>> m_edges_added;
     urd::Store<urd::sequence<std::pair<VertexSet::handle_type, VertexSet::handle_type>>> m_edges_removed;
 
-    [[nodiscard]] VertexSet::handle_type require_vertex(std::span<const std::byte> row) const;
+    [[nodiscard]] VertexSet::handle_type require_vertex(std::span<const Value> row) const;
     [[nodiscard]] bool is_source(VertexSet::handle_type vertex) const noexcept;
     [[nodiscard]] bool is_target(VertexSet::handle_type vertex) const noexcept;
     void resize_vertices();
@@ -107,7 +109,8 @@ class DistanceEvaluator
     friend struct detail::NodeRules<QueryDistanceTag>;
 
 public:
-    explicit DistanceEvaluator(DistancePlan plan);
+    /// Its builders are read through `layer`, which must outlive it.
+    DistanceEvaluator(const Repository& layer, DistancePlan plan);
 
     /// Replace all inputs, retaining buffers, and clear the last output delta.
     template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
@@ -117,8 +120,8 @@ public:
     template<RelationChange S, RelationChange E, RelationChange T>
     void update(const S& sources, const E& edges, const T& targets);
 
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&;
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] BuilderRelationView get_result() const&;
+    [[nodiscard]] BuilderRelationView get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&;
     [[nodiscard]] const Delta& get_delta() const&& = delete;
     /// Retained storage, including inactive reusable source arrays; excludes the plan.
@@ -145,9 +148,9 @@ inline auto DistanceEvaluator::add_source(VertexSet::handle_type root) -> Source
 template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
 void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& targets)
 {
-    database::detail::require_plan_columns(sources.columns().span(), m_plan.source_columns().span());
-    database::detail::require_plan_columns(edges.columns().span(), m_plan.edge_columns().span());
-    database::detail::require_plan_columns(targets.columns().span(), m_plan.target_columns().span());
+    assert(std::ranges::equal(sources.columns(), m_plan.source_columns()));
+    assert(std::ranges::equal(edges.columns(), m_plan.edge_columns()));
+    assert(std::ranges::equal(targets.columns(), m_plan.target_columns()));
     detail::require_unaliased(sources, m_result, m_delta);
     detail::require_unaliased(edges, m_result, m_delta);
     detail::require_unaliased(targets, m_result, m_delta);
@@ -182,12 +185,12 @@ void DistanceEvaluator::initialize(const S& sources, const E& edges, const T& ta
         m_target_flags[target] = Flag::SET;
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto source = m_graph.vertices.find(sources.row(i));
+        const auto source = m_graph.find_vertex(sources.row(i));
         URD_ASSUME(!source.is_none());  // every source was inserted above
         const auto& state = add_source(source);
         for (const auto target : m_targets)
             if (state.distances[target] != infinity)
-                m_result.insert(database::detail::make_distance_row(m_graph, state.root, target, state.distances[target], m_plan, m_row));
+                m_result.insert(database::detail::make_distance_row(m_graph, state.root, target, state.distances[target], m_row));
     }
     m_initialized = true;
 }
@@ -196,9 +199,9 @@ template<RelationChange S, RelationChange E, RelationChange T>
 void DistanceEvaluator::update(const S& sources, const E& edges, const T& targets)
 {
     detail::require_initialized(m_initialized);
-    detail::require_change(sources, m_plan.source_columns().span(), m_result, m_delta);
-    detail::require_change(edges, m_plan.edge_columns().span(), m_result, m_delta);
-    detail::require_change(targets, m_plan.target_columns().span(), m_result, m_delta);
+    detail::require_change(sources, m_plan.source_columns(), m_result, m_delta);
+    detail::require_change(edges, m_plan.edge_columns(), m_result, m_delta);
+    detail::require_change(targets, m_plan.target_columns(), m_result, m_delta);
     require_actual(sources, edges, targets);
     apply(sources, edges, targets);
 }
@@ -209,17 +212,18 @@ void DistanceEvaluator::require_actual(const S& sources, const E& edges, const T
     const auto& [sources_added, sources_removed] = sources;
     const auto& [edges_added, edges_removed] = edges;
     const auto& [targets_added, targets_removed] = targets;
-    const auto contains_edge = [&](std::span<const std::byte> row)
+    const auto contains_edge = [&](const RowPool::row_type& row)
     {
-        const auto from = m_graph.vertices.find(row.first(m_plan.tuple_size()));
-        const auto to = m_graph.vertices.find(row.subspan(m_plan.tuple_size()));
+        const auto values = vertex_values(row, m_values);
+        const auto from = m_graph.vertices.find(values.first(m_plan.tuple_size()));
+        const auto to = m_graph.vertices.find(values.subspan(m_plan.tuple_size()));
         return !from.is_none() && !to.is_none() && m_graph.contains_edge(from, to);
     };
     const auto require_members = [&](const auto& rows, auto is_member, bool removing)
     {
         for (size_t i = 0; i < rows.size(); ++i)
         {
-            const auto vertex = m_graph.vertices.find(rows.row(i));
+            const auto vertex = m_graph.vertices.find(vertex_values(rows.row(i), m_values));
             if ((!vertex.is_none() && (this->*is_member)(vertex)) != removing)
                 throw std::invalid_argument(removing ? "Incremental distance: removed vertex is absent." :
                                                        "Incremental distance: added vertex is already present.");
@@ -249,19 +253,19 @@ void DistanceEvaluator::apply(const S& sources, const E& edges, const T& targets
 
     for (size_t i = 0; i < sources_removed.size(); ++i)
     {
-        const auto id = require_vertex(sources_removed.row(i));
+        const auto id = require_vertex(vertex_values(sources_removed.row(i), m_values));
         assert(is_source(id));
         m_sources_removed.push_back(id);
     }
     for (size_t i = 0; i < targets_removed.size(); ++i)
     {
-        const auto id = require_vertex(targets_removed.row(i));
+        const auto id = require_vertex(vertex_values(targets_removed.row(i), m_values));
         assert(is_target(id));
         m_targets_removed.push_back(id);
     }
     for (size_t i = 0; i < edges_removed.size(); ++i)
     {
-        const auto row = edges_removed.row(i);
+        const auto row = vertex_values(edges_removed.row(i), m_values);
         const auto from = require_vertex(row.first(m_plan.tuple_size()));
         const auto to = require_vertex(row.subspan(m_plan.tuple_size()));
         assert(m_graph.contains_edge(from, to));
@@ -352,10 +356,11 @@ class SourceMinDistance
     DistanceEvaluator m_evaluator;
     urd::Store<urd::sequence<size_t>> m_counts;
 
-    void count(const urd::builder<Relation>& rows, bool add);
+    void count(BuilderRelationView rows, bool add);
 
 public:
-    explicit SourceMinDistance(DistancePlan plan) : m_position(plan.output_columns().size() - 1), m_evaluator(std::move(plan)) {}
+    /// Its builders are read through `layer`, which must outlive it.
+    SourceMinDistance(const Repository& layer, DistancePlan plan) : m_position(plan.output_columns().size() - 1), m_evaluator(layer, std::move(plan)) {}
 
     /// Replace all inputs, retaining buffers.
     template<RelationViewConcept S, RelationViewConcept E, RelationViewConcept T>
@@ -371,9 +376,9 @@ public:
     void update(const S& sources, const E& edges, const T& targets)
     {
         m_evaluator.update(sources, edges, targets);
-        const auto& delta = m_evaluator.get_delta();
-        count(delta.removed, false);
-        count(delta.added, true);
+        const auto [added, removed] = m_evaluator.get_delta().change();
+        count(removed, false);
+        count(added, true);
     }
 
     /// uint_t's maximum if no target is reachable.

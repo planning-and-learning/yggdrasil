@@ -32,8 +32,8 @@ GenericJoinPlan::GenericJoinPlan(std::span<const urd::Store<urd::sequence<Column
         {
             const auto found = std::ranges::find(combined, column.label, &ColumnLayout::label);
             if (found == combined.end())
-                detail::append_column(combined, column);
-            else if (found->type != column.type || found->size != column.size)
+                combined.push_back(column);
+            else if (found->type != column.type)
                 throw std::invalid_argument("Generic join: common columns must have the same type.");
         }
     }
@@ -50,18 +50,18 @@ GenericJoinPlan::GenericJoinPlan(std::span<const urd::Store<urd::sequence<Column
     require_order(output_order);
     urd::Store<urd::sequence<ColumnLayout>> output;
     for (const auto label : output_order)
-        detail::append_column(output, combined[database::column_index(combined, label)]);
-    m_output.assign(output);
+        output.push_back(*std::ranges::find(combined, label, &ColumnLayout::label));
+    m_output.set(output.begin(), output.end());
     for (size_t depth = 0; depth < variable_order.size(); ++depth)
     {
         const auto label = variable_order[depth];
-        m_output_positions.push_back(detail::column_slice(output[database::column_index(output, label)]));
+        m_output_positions.push_back(ColumnSlice { static_cast<size_t>(std::ranges::find(output, label, &ColumnLayout::label) - output.begin()) });
         for (size_t input = 0; input < inputs.size(); ++input)
         {
             const auto found = std::ranges::find(inputs[input], label, &ColumnLayout::label);
             if (found != inputs[input].end())
             {
-                m_keys[input].push_back(detail::column_slice(*found));
+                m_keys[input].push_back(ColumnSlice { static_cast<size_t>(found - inputs[input].begin()) });
                 m_occurrences[depth].push_back(input);
             }
         }
@@ -69,7 +69,7 @@ GenericJoinPlan::GenericJoinPlan(std::span<const urd::Store<urd::sequence<Column
 }
 
 bool GenericJoinPlan::matches(const GenericJoinPlan& other) const
-{ return m_inputs == other.m_inputs && m_order == other.m_order && std::ranges::equal(m_output.span(), other.m_output.span()); }
+{ return m_inputs == other.m_inputs && m_order == other.m_order && m_output == other.m_output; }
 
 namespace detail
 {
@@ -84,12 +84,12 @@ void count_generic_join_work([[maybe_unused]] size_t GenericJoinWork::* member) 
 
 namespace ygg::database::detail
 {
-bool GenericJoinTrie::contains(std::span<const std::byte> row, std::span<const ColumnSlice> keys) const
+bool GenericJoinTrie::contains(const RowPool::row_type& row, std::span<const ColumnSlice> keys) const
 {
     const auto* node = this;
     for (const auto key : keys)
     {
-        node = node->find(row.subspan(key.offset, key.size));
+        node = node->find(row.get(key.position));
         if (!node)
             return false;
     }
@@ -99,7 +99,7 @@ bool GenericJoinTrie::contains(std::span<const std::byte> row, std::span<const C
 
 namespace ygg::database::detail
 {
-bool GenericJoinTrie::insert(std::span<const std::byte> row, std::span<const ColumnSlice> keys)
+bool GenericJoinTrie::insert(const RowPool::row_type& row, std::span<const ColumnSlice> keys)
 {
     if (keys.empty())
     {
@@ -107,10 +107,10 @@ bool GenericJoinTrie::insert(std::span<const std::byte> row, std::span<const Col
         rows = 1;
         return inserted;
     }
-    const auto value = row.subspan(keys.front().offset, keys.front().size);
-    auto found = children.find(std::make_tuple(value));
+    const auto value = row.get(keys.front().position);
+    auto found = children.find(value);
     if (found == children.end())
-        found = children.emplace(GenericJoinKey { { value.begin(), value.end() } }, std::make_unique<GenericJoinTrie>()).first;
+        found = children.emplace(value, std::make_unique<GenericJoinTrie>()).first;
     if (!found->second->insert(row, keys.subspan(1)))
         return false;
     ++rows;
@@ -120,7 +120,7 @@ bool GenericJoinTrie::insert(std::span<const std::byte> row, std::span<const Col
 
 namespace ygg::database::detail
 {
-bool GenericJoinTrie::erase(std::span<const std::byte> row, std::span<const ColumnSlice> keys)
+bool GenericJoinTrie::erase(const RowPool::row_type& row, std::span<const ColumnSlice> keys)
 {
     if (keys.empty())
     {
@@ -128,8 +128,8 @@ bool GenericJoinTrie::erase(std::span<const std::byte> row, std::span<const Colu
         rows = 0;
         return erased;
     }
-    const auto value = row.subspan(keys.front().offset, keys.front().size);
-    const auto found = children.find(std::make_tuple(value));
+    const auto value = row.get(keys.front().position);
+    const auto found = children.find(value);
     if (found == children.end() || !found->second->erase(row, keys.subspan(1)))
         return false;
     --rows;
@@ -141,12 +141,12 @@ bool GenericJoinTrie::erase(std::span<const std::byte> row, std::span<const Colu
 
 namespace ygg::database
 {
-void GenericJoinWorkspace::enumerate(size_t depth, urd::builder<Relation>& out)
+void GenericJoinWorkspace::enumerate(size_t depth, urd::builder<Relation<Schema>>& out)
 {
     detail::count_generic_join_work(&detail::GenericJoinWork::prefixes);
     if (depth == m_plan.variable_order().size())
     {
-        out.insert(Row(m_row, m_plan.output_columns().span()));
+        out.insert(m_row.row());
         return;
     }
     const auto count = m_plan.input_count();
@@ -164,7 +164,7 @@ void GenericJoinWorkspace::enumerate(size_t depth, urd::builder<Relation>& out)
         {
             if (input != source)
                 detail::count_generic_join_work(&detail::GenericJoinWork::probes);
-            next[input] = input == source ? child.get() : current[input]->find(key.bytes);
+            next[input] = input == source ? child.get() : current[input]->find(key);
             if (!next[input])
             {
                 present = false;
@@ -174,7 +174,7 @@ void GenericJoinWorkspace::enumerate(size_t depth, urd::builder<Relation>& out)
         if (present)
         {
             const auto output = m_plan.output_position(depth);
-            std::ranges::copy(key.bytes, std::span(m_row).subspan(output.offset).begin());
+            m_row.set(output.position, key);
             enumerate(depth + 1, out);
         }
     }

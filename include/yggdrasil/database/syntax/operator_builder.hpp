@@ -67,7 +67,7 @@ public:
     /// Keeps the query's columns with the given labels, in that order.
     QueryView<> project(QueryView<> query, std::span<const urd::index<Column>> labels)
     {
-        if (std::ranges::equal(column_labels(query.columns()), labels))
+        if (std::ranges::equal(query.columns(), labels, {}, &ColumnLayout::label))
             return query;
         return relabel<QueryProjectTag>(query, labels);
     }

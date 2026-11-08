@@ -10,6 +10,7 @@
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/formalism/relation_builder.hpp"
 
 #include <concepts>
 #include <cstddef>
@@ -24,10 +25,10 @@ inline constexpr uint_t infinity = std::numeric_limits<uint_t>::max();
 /// No level (BackwardFrontier).
 inline constexpr uint_t none = std::numeric_limits<uint_t>::max();
 
-/// Vertices of a search as byte rows of one size, interned in a urd pool (rows stored flat, never moved by inserts): a
+/// Vertices of a search as rows of canonical values of one size, interned in a urd pool (rows stored flat, never moved by inserts): a
 /// vertex is its handle (VertexSet::handle_type; none, its default, is no vertex), and what is kept per vertex is a
 /// urd::sequence addressed by it.
-using VertexSet = urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd::frozen>>>;
+using VertexSet = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>>;
 
 /// An estimate of a vertex's distance to the targets; infinity means no target is reachable.
 ///
@@ -36,36 +37,48 @@ using VertexSet = urd::Store<urd::pool<urd::Store<urd::sequence<std::byte>, urd:
 /// static inputs only. Learned distances are repaired against it after edge additions, which is only sound if it does
 /// not drop with them; Generalized Adaptive A* assumes the same of its user heuristic (Sun, Koenig & Yeoh 2008).
 template<typename H>
-concept DistanceHeuristic = requires(const H& h, std::span<const std::byte> vertex) {
+concept DistanceHeuristic = requires(const H& h, std::span<const Value> vertex) {
     { h.estimate(vertex) } -> std::same_as<uint_t>;
 };
 
 /// The zero estimate: breadth-first order.
 struct BlindDistanceHeuristic
 {
-    [[nodiscard]] uint_t estimate(std::span<const std::byte>) const noexcept { return 0; }
+    [[nodiscard]] uint_t estimate(std::span<const Value>) const noexcept { return 0; }
 };
 
-/// A random-access sequence of vertices: size() of them, row(i) the bytes of the i-th (e.g. a relation view).
+/// A vertex as its values: a row of values as it is, a stored row's values read into `buffer`, which the result
+/// borrows.
+inline std::span<const Value> vertex_values(std::span<const Value> vertex, urd::Store<urd::sequence<Value>>& /*buffer*/) noexcept { return vertex; }
+inline std::span<const Value> vertex_values(const RowPool::row_type& row, urd::Store<urd::sequence<Value>>& buffer)
+{
+    buffer.clear();
+    for (size_t i = 0; i < row.size(); ++i)
+        buffer.push_back(row.get(i));
+    return buffer;
+}
+
+/// A random-access sequence of vertices: size() of them, row(i) the i-th, its values or a stored row (e.g. a relation
+/// view).
 template<typename R>
-concept VertexRange = requires(const R& range, size_t i) {
+concept VertexRange = requires(const R& range, size_t i, urd::Store<urd::sequence<Value>>& buffer) {
     { range.size() } -> std::convertible_to<size_t>;
-    { range.row(i) } -> std::convertible_to<std::span<const std::byte>>;
+    { vertex_values(range.row(i), buffer) } -> std::same_as<std::span<const Value>>;
 };
 
 /// Calls on_vertex(w) for each edge (v, w); stops when it returns false.
 template<typename O>
 concept SuccessorOracle =
-    requires(O& oracle, std::span<const std::byte> vertex) { oracle.successors(vertex, [](std::span<const std::byte>) { return true; }); };
+    requires(O& oracle, std::span<const Value> vertex) { oracle.successors(vertex, [](std::span<const Value>) { return true; }); };
 
 /// Calls on_vertex(u) for each edge (u, v); stops when it returns false.
 template<typename O>
 concept PredecessorOracle =
-    requires(O& oracle, std::span<const std::byte> vertex) { oracle.predecessors(vertex, [](std::span<const std::byte>) { return true; }); };
+    requires(O& oracle, std::span<const Value> vertex) { oracle.predecessors(vertex, [](std::span<const Value>) { return true; }); };
 
 /// Whether the edge (u, v) exists.
 template<typename O>
-concept EdgeCheck = requires(O& oracle, std::span<const std::byte> from, std::span<const std::byte> to) {
+concept EdgeCheck = requires(O& oracle, std::span<const Value> from, std::span<const Value> to) {
     { oracle.edge_exists(from, to) } -> std::same_as<bool>;
 };
 

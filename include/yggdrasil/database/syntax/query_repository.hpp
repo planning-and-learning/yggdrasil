@@ -5,11 +5,11 @@
 #ifndef YGG_DATABASE_SYNTAX_QUERY_REPOSITORY_HPP_
 #define YGG_DATABASE_SYNTAX_QUERY_REPOSITORY_HPP_
 
-#include "yggdrasil/core/index_sequence.hpp"
 #include "yggdrasil/database/syntax/query_view.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
 
+#include <atomic>
 #include <cassert>
 #include <limits>
 #include <memory>
@@ -20,37 +20,25 @@
 
 namespace ygg::database
 {
-/// Copies share one identity sequence. Repositories whose views are compared
-/// or hashed together must come from the same factory.
-class QueryRepositoryFactory
-{
-    IndexSequence m_indices;
-
-public:
-    [[nodiscard]] QueryRepository create();
-    [[nodiscard]] std::shared_ptr<QueryRepository> create_shared();
-};
-
 /// Interns typed query records. Records are prepared by prepare_for_insert
 /// The erased query record followed by one concrete record per constructor tag.
 using QuerySymbolTypes = boost::mp11::mp_append<boost::mp11::mp_list<Query<>>, boost::mp11::mp_transform<Query, QueryConstructorTags>>;
 
-/// (query_construction.hpp) before insertion; children precede their parents.
+/// (query_construction.hpp) before insertion; children precede their parents. Each repository has its own number.
 class QueryRepository
 {
-    friend class QueryRepositoryFactory;
-
 public:
     using SymbolTypes = QuerySymbolTypes;
 
 private:
+    // ponytail: one process-wide counter, numbers are never reused.
+    inline static std::atomic<std::size_t> s_next_index { 0 };
+
     boost::mp11::mp_apply<formalism::SymbolRepository, QuerySymbolTypes> m_symbols;
-    QueryRepositoryFactory m_factory;
     size_t m_index;
 
-    QueryRepository(size_t index, QueryRepositoryFactory factory);
-
 public:
+    QueryRepository();
     ~QueryRepository();
 
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
@@ -64,7 +52,6 @@ public:
 
     /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return m_index; }
-    [[nodiscard]] auto get_factory() const noexcept { return m_factory; }
     friend const QueryRepository& get_repository(const QueryRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
     /// Number of root queries. Root indices are topological.
     [[nodiscard]] size_t size() const noexcept { return m_symbols.template size<Query<>>(); }

@@ -9,6 +9,7 @@
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 
+#include <cassert>
 #include <algorithm>
 #include <concepts>
 #include <ranges>
@@ -18,14 +19,14 @@ namespace ygg::database
 {
 namespace detail
 {
-bool query_accepts(QueryView<QuerySelectEqualTag> selection, std::span<const std::byte> row);
+bool query_accepts(QueryView<QuerySelectEqualTag> selection, const RowPool::row_type& row);
 
-bool query_accepts(QueryView<QuerySelectValueTag> selection, std::span<const std::byte> row);
+bool query_accepts(QueryView<QuerySelectValueTag> selection, const RowPool::row_type& row);
 
 /// Distances are evaluated only with uint_t columns.
 
 /// Validates each input binding of the plan; inputs must not alias the evaluator's storage.
-template<RelationViewRange R, std::predicate<const void*> IsInternal>
+template<RelationViewRange R, std::predicate<RelationIdentity> IsInternal>
 void validate_bindings(const QueryPlan& plan, const R& bindings, IsInternal is_internal)
 {
     for (size_t i = 0; i < plan.node_count(); ++i)
@@ -36,8 +37,8 @@ void validate_bindings(const QueryPlan& plan, const R& bindings, IsInternal is_i
         const auto slot = as<QueryInputTag>(query).get_input_slot();
         if (slot >= std::ranges::size(bindings))
             throw std::invalid_argument("Query: missing input binding.");
-        require_plan_columns(bindings[slot].columns().span(), query.columns());
-        if (is_internal(bindings[slot].get_storage_address()))
+        assert(std::ranges::equal(bindings[slot].columns(), query.columns()));
+        if (is_internal(bindings[slot].relation_identity()))
             throw std::invalid_argument("Query: input aliases evaluator storage.");
     }
 }
@@ -57,7 +58,7 @@ concept StatelessQueryTag =
 
 /// Evaluates a stateless operator from the bound inputs and the operands' results.
 template<StatelessQueryTag Tag, RelationViewRange R, std::invocable<QueryView<>> GetResult>
-void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult result, urd::builder<Relation>& out)
+void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult result, urd::builder<Relation<Schema>>& out)
 {
     if constexpr (std::same_as<Tag, QueryInputTag>)
         database::assign(out, bindings[operation.get_input_slot()]);
@@ -69,19 +70,19 @@ void evaluate_stateless(QueryView<Tag> operation, const R& bindings, GetResult r
         out.rename(operation.columns());
     }
     else if constexpr (std::same_as<Tag, QuerySelectEqualTag>)
-        database::select_equal_columns(result(operation.get_arg()), operation.get_lhs_column(), operation.get_rhs_column(), out);
+        database::select_equal_columns(result(operation.get_arg()), operation.get_plan(), out);
     else if constexpr (std::same_as<Tag, QuerySelectValueTag>)
-        database::select(result(operation.get_arg()), [&](Row row) { return query_accepts(operation, row.bytes()); }, out);
+        database::select_equal_value(result(operation.get_arg()), operation.get_plan(), out);
     else if constexpr (std::same_as<Tag, QueryUnionTag>)
-        database::union_(result(operation.get_lhs()), result(operation.get_rhs()), out);
+        database::union_(result(operation.get_lhs()), result(operation.get_rhs()), operation.get_plan(), out);
     else
-        database::difference(result(operation.get_lhs()), result(operation.get_rhs()), out);
+        database::difference(result(operation.get_lhs()), result(operation.get_rhs()), operation.get_plan(), out);
 }
 }  // namespace detail
 
 /// Reusable full DAG evaluation. Inputs are borrowed only during evaluate().
-/// Results are owned here and borrowed until the next evaluate() or destruction.
-/// Schema/alias errors preserve results; failures during execution invalidate them.
+/// Results are owned here and borrowed until the next evaluate() or destruction; they are read through the layer, which
+/// must outlive the evaluator. Schema/alias errors preserve results; failures during execution invalidate them.
 class QueryEvaluator
 {
     using NodeId = urd::index<Query<>>;
@@ -89,7 +90,7 @@ class QueryEvaluator
     using State = std::variant<std::monostate, GenericJoinWorkspace, DistanceState>;
     struct Node
     {
-        urd::builder<Relation> result;
+        urd::builder<Relation<Schema>> result;
         State state;
         explicit Node(QueryView<> query) :
             result(query.columns()),
@@ -107,13 +108,14 @@ class QueryEvaluator
         {
         }
     };
+    const Repository* m_layer;
     QueryPlan m_plan;
     urd::Store<urd::sequence<Node, NodeId>> m_nodes;
     Workspace m_workspace;
     bool m_ready = false;
 
 public:
-    explicit QueryEvaluator(QueryPlan plan) : m_plan(std::move(plan))
+    QueryEvaluator(const Repository& layer, QueryPlan plan) : m_layer(&layer), m_plan(std::move(plan))
     {
         m_nodes.reserve(m_plan.node_count());
         for (size_t i = 0; i < m_plan.node_count(); ++i)
@@ -124,15 +126,15 @@ public:
     {
         detail::validate_bindings(m_plan,
                                   bindings,
-                                  [&](const void* address)
-                                  { return std::ranges::any_of(m_nodes, [&](const Node& node) { return node.result.get_storage_address() == address; }); });
+                                  [&](RelationIdentity input)
+                                  { return std::ranges::any_of(m_nodes, [&](const Node& node) { return relation_identity(node.result) == input; }); });
         m_ready = false;
         for (size_t i = 0; i < m_nodes.size(); ++i)
         {
             const auto id = NodeId(to_uint_t(i));
             auto& state = m_nodes[id];
             auto& out = state.result;
-            const auto child = [&](QueryView<> query) -> const auto& { return m_nodes[query.index()].result; };
+            const auto child = [&](QueryView<> query) { return m_layer->view(m_nodes[query.index()].result); };
             std::visit(
                 [&]<typename Tag>(QueryView<Tag> operation)
                 {
@@ -149,7 +151,7 @@ public:
                     else if constexpr (std::same_as<Tag, QueryGenericJoinTag>)
                     {
                         const auto inputs =
-                            operation.get_inputs() | std::views::transform([&](NodeId input) -> const auto& { return m_nodes[input].result; });
+                            operation.get_inputs() | std::views::transform([&](NodeId input) { return m_layer->view(m_nodes[input].result); });
                         generic_join(inputs, operation.get_plan(), out, std::get<GenericJoinWorkspace>(state.state));
                     }
                     else
@@ -167,15 +169,15 @@ public:
         }
         m_ready = true;
     }
-    [[nodiscard]] const urd::builder<Relation>& get_result(size_t root = 0) const&
+    [[nodiscard]] BuilderRelationView get_result(size_t root = 0) const&
     {
         if (!m_ready)
             throw std::logic_error("Query: evaluate before reading results.");
         if (root >= m_plan.root_count())
             throw std::out_of_range("Query: invalid root.");
-        return m_nodes.at(m_plan.roots()[root]).result;
+        return m_layer->view(m_nodes.at(m_plan.roots()[root]).result);
     }
-    [[nodiscard]] const urd::builder<Relation>& get_result(size_t = 0) const&& = delete;
+    [[nodiscard]] BuilderRelationView get_result(size_t = 0) const&& = delete;
     /// Retained runtime storage; excludes the immutable query plan.
     [[nodiscard]] size_t memory_usage() const noexcept;
 };

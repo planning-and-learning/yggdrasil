@@ -41,15 +41,8 @@ namespace yggdrasil
 {
 void bind_database_queries(nb::module_& m)
 {
-    nb::class_<ygg::database::QueryRepositoryFactory>(m, "QueryRepositoryFactory", "Creates query repositories with distinct identities within this factory.")
-        .def(nb::init<>())
-        .def(
-            "create",
-            [](ygg::database::QueryRepositoryFactory& factory) { return new ygg::database::QueryRepository(factory.create()); },
-            nb::rv_policy::take_ownership);
-
     auto repository = database_python::QueryRepositoryBinding(m, "QueryRepository", "Interns validated relational expressions without reading data.");
-    repository.def("__len__", [](const ygg::database::QueryRepository& self) { return self.size(); });
+    repository.def(nb::init<>()).def("__len__", [](const ygg::database::QueryRepository& self) { return self.size(); });
     database_python::bind_query_input(m, repository);
     database_python::bind_query_empty(m, repository);
     database_python::bind_query_join(m, repository);

@@ -13,6 +13,7 @@
 #include <array>
 #include <benchmark/benchmark.h>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -22,16 +23,38 @@ namespace ygg::profiling
 {
 namespace
 {
-using Relation = urd::builder<database::Relation>;
-using Column = urd::index<database::Column>;
+using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
+using Column = urd::index<ygg::Column>;
+
+/// The layer the benchmarks read their builders through.
+const database::Repository& layer()
+{
+    static const database::Repository repository;
+    return repository;
+}
+
+database::BuilderRelationView borrow(const Relation& relation) { return layer().view(relation); }
+
+/// Columns of type uint_t with these labels.
+std::vector<ygg::ColumnLayout> cols(std::initializer_list<Column> labels)
+{
+    std::vector<ygg::ColumnLayout> result;
+    for (const auto label : labels)
+        result.push_back({ label, ygg::type_id<uint_t> });
+    return result;
+}
+
+/// The relations as views.
+std::array<database::BuilderRelationView, 3> borrow_all(const std::array<Relation, 3>& relations)
+{ return { borrow(relations[0]), borrow(relations[1]), borrow(relations[2]) }; }
 
 struct Triangle
 {
-    std::array<Relation, 3> initial { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
-    std::array<Relation, 3> changed { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
-    std::array<Relation, 3> added { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
-    std::array<Relation, 3> removed { Relation { Column(0), Column(1) }, Relation { Column(1), Column(2) }, Relation { Column(2), Column(0) } };
-    database::QueryRepository repository = database::QueryRepositoryFactory {}.create();
+    std::array<Relation, 3> initial { Relation(cols({ Column(0), Column(1) })), Relation(cols({ Column(1), Column(2) })), Relation(cols({ Column(2), Column(0) })) };
+    std::array<Relation, 3> changed { Relation(cols({ Column(0), Column(1) })), Relation(cols({ Column(1), Column(2) })), Relation(cols({ Column(2), Column(0) })) };
+    std::array<Relation, 3> added { Relation(cols({ Column(0), Column(1) })), Relation(cols({ Column(1), Column(2) })), Relation(cols({ Column(2), Column(0) })) };
+    std::array<Relation, 3> removed { Relation(cols({ Column(0), Column(1) })), Relation(cols({ Column(1), Column(2) })), Relation(cols({ Column(2), Column(0) })) };
+    database::QueryRepository repository;
     database::QueryBuilder builder;
     database::QueryView<> root;
 
@@ -42,11 +65,11 @@ struct Triangle
         for (size_t input = 0; input < 3; ++input)
         {
             for (uint_t i = 0; i < count; ++i)
-                initial[input].insert(std::tuple { i, i });
+                initial[input].insert(std::array { ygg::encode_value(i), ygg::encode_value(i) });
             for (uint_t i = 1; i <= count; ++i)
-                changed[input].insert(std::tuple { i, i });
-            added[input].insert(std::tuple { count, count });
-            removed[input].insert(std::tuple { static_cast<uint_t>(0), static_cast<uint_t>(0) });
+                changed[input].insert(std::array { ygg::encode_value(i), ygg::encode_value(i) });
+            added[input].insert(std::array { ygg::encode_value(count), ygg::encode_value(count) });
+            removed[input].insert(std::array { ygg::encode_value(static_cast<uint_t>(0)), ygg::encode_value(static_cast<uint_t>(0)) });
         }
         return join(join(input(0), input(1)), input(2));
     }
@@ -55,7 +78,7 @@ struct Triangle
     {
         auto data = database::checkout<database::Query<database::QueryInputTag>>(builder);
         data->input_slot = slot;
-        const auto columns = initial[slot].columns().span();
+        const auto columns = initial[slot].columns();
         data->columns.set(columns.begin(), columns.end());
         return database::insert_query(repository, builder, *data);
     }
@@ -70,21 +93,21 @@ struct Triangle
 
     auto deltas(bool forward) const
     {
-        using Change = std::pair<const Relation&, const Relation&>;
+        using Change = std::pair<database::BuilderRelationView, database::BuilderRelationView>;
         const auto& a = forward ? added : removed;
         const auto& r = forward ? removed : added;
-        return std::array { Change { a[0], r[0] }, Change { a[1], r[1] }, Change { a[2], r[2] } };
+        return std::array { Change { borrow(a[0]), borrow(r[0]) }, Change { borrow(a[1]), borrow(r[1]) }, Change { borrow(a[2]), borrow(r[2]) } };
     }
 
-    database::Statistics statistics() const { return database::collect_statistics(initial); }
+    database::Statistics statistics() const { return database::collect_statistics(borrow_all(initial)); }
 };
 
-bool equal(const Relation& left, const Relation& right)
+bool equal(database::BuilderRelationView left, database::BuilderRelationView right)
 {
-    if (left.size() != right.size() || !std::ranges::equal(left.columns().span(), right.columns().span()))
+    if (left.size() != right.size() || !std::ranges::equal(left.columns(), right.columns()))
         return false;
-    for (size_t i = 0; i < left.size(); ++i)
-        if (!right.contains(left.row(i)))
+    for (const auto row : left.rows())
+        if (!right.contains(row))
             return false;
     return true;
 }
@@ -92,18 +115,18 @@ bool equal(const Relation& left, const Relation& right)
 bool exact_delta(const database::incremental::Delta& delta, const Relation& before, const Relation& after)
 {
     size_t added = 0, removed = 0;
-    for (size_t i = 0; i < after.size(); ++i)
-        if (!before.contains(after.row(i)))
+    for (const auto row : borrow(after).rows())
+        if (!before.contains(row))
         {
             ++added;
-            if (!delta.added.contains(after.row(i)))
+            if (!delta.added.contains(row))
                 return false;
         }
-    for (size_t i = 0; i < before.size(); ++i)
-        if (!after.contains(before.row(i)))
+    for (const auto row : borrow(before).rows())
+        if (!after.contains(row))
         {
             ++removed;
-            if (!delta.removed.contains(before.row(i)))
+            if (!delta.removed.contains(row))
                 return false;
         }
     return added == delta.added.size() && removed == delta.removed.size();
@@ -145,22 +168,22 @@ void query_updates(benchmark::State& state)
 {
     Triangle trace(static_cast<uint_t>(state.range(0)));
     const auto plan = ::ygg::profiling::plan(trace, Mode, trace.statistics());
-    const auto& initial = trace.initial;
-    const auto& changed = trace.changed;
+    const auto initial = borrow_all(trace.initial);
+    const auto changed = borrow_all(trace.changed);
     const auto forward = trace.deltas(true), backward = trace.deltas(false);
-    database::QueryEvaluator reference(database::compile({ trace.root }));
+    database::QueryEvaluator reference(layer(), database::compile({ trace.root }));
     reference.evaluate(initial);
-    Relation before(reference.get_result().columns().span());
+    Relation before(reference.get_result().columns());
     database::assign(before, reference.get_result());
     reference.evaluate(changed);
-    Relation after(reference.get_result().columns().span());
+    Relation after(reference.get_result().columns());
     database::assign(after, reference.get_result());
     auto evaluator = [&]
     {
         if constexpr (Incremental)
-            return database::incremental::QueryEvaluator(plan);
+            return database::incremental::QueryEvaluator(layer(), plan);
         else
-            return database::QueryEvaluator(plan);
+            return database::QueryEvaluator(layer(), plan);
     }();
     if constexpr (Incremental)
         evaluator.initialize(initial);
@@ -172,7 +195,7 @@ void query_updates(benchmark::State& state)
             evaluator.evaluate(next ? changed : initial);
     };
     update(true);
-    if (!equal(evaluator.get_result(), after))
+    if (!equal(evaluator.get_result(), borrow(after)))
     {
         state.SkipWithError("query forward result mismatch");
         return;
@@ -184,7 +207,7 @@ void query_updates(benchmark::State& state)
             return;
         }
     update(false);
-    if (!equal(evaluator.get_result(), before))
+    if (!equal(evaluator.get_result(), borrow(before)))
     {
         state.SkipWithError("query undo result mismatch");
         return;
@@ -198,10 +221,10 @@ void query_updates(benchmark::State& state)
     for (auto _ : state)
     {
         update(true);
-        benchmark::DoNotOptimize(std::addressof(evaluator.get_result()));
+        benchmark::DoNotOptimize(evaluator.get_result().relation_identity());
         benchmark::ClobberMemory();
         update(false);
-        benchmark::DoNotOptimize(std::addressof(evaluator.get_result()));
+        benchmark::DoNotOptimize(evaluator.get_result().relation_identity());
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations() * 2);
@@ -214,19 +237,19 @@ template<bool Cold>
 void generic_join_full(benchmark::State& state)
 {
     Triangle trace(static_cast<uint_t>(state.range(0)));
-    const auto& input = trace.initial;
-    urd::Store<urd::sequence<urd::Store<urd::sequence<database::ColumnLayout>>>> schemas;
+    const auto input = borrow_all(trace.initial);
+    urd::Store<urd::sequence<urd::Store<urd::sequence<ygg::ColumnLayout>>>> schemas;
     schemas.reserve(trace.initial.size());
     for (const auto& value : trace.initial)
-        schemas.emplace_back(value.columns().span().begin(), value.columns().span().end());
+        schemas.emplace_back(value.columns().begin(), value.columns().end());
     const std::array order { Column(0), Column(1), Column(2) };
     const database::GenericJoinPlan plan(schemas, order, order);
     database::GenericJoinWorkspace workspace(plan);
-    Relation output(plan.output_columns().span());
+    Relation output(plan.output_columns());
     database::generic_join(input, plan, output, workspace);
-    database::QueryEvaluator reference(database::compile({ trace.root }));
+    database::QueryEvaluator reference(layer(), database::compile({ trace.root }));
     reference.evaluate(input);
-    if (!equal(output, reference.get_result()))
+    if (!equal(borrow(output), reference.get_result()))
     {
         state.SkipWithError("generic join disagrees with binary join");
         return;
@@ -236,7 +259,7 @@ void generic_join_full(benchmark::State& state)
         if constexpr (Cold)
         {
             database::GenericJoinWorkspace temporary_workspace(plan);
-            Relation temporary_output(plan.output_columns().span());
+            Relation temporary_output(plan.output_columns());
             database::generic_join(input, plan, temporary_output, temporary_workspace);
             benchmark::DoNotOptimize(std::addressof(temporary_output));
         }

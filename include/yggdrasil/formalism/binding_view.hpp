@@ -30,9 +30,8 @@
 #include <type_traits>
 #include <utility>
 
-/// A binding, published (its handle read through the context: a RelationBindingRow) or borrowed (its record): its
-/// relation and objects, both read through the context. A borrowed binding's record and context must outlive the view
-/// and all object ranges; keep the record unchanged while used.
+/// A borrowed binding (its record {relation, objects}): its relation and objects, read through the context. The record
+/// and context must outlive the view and all object ranges; keep the record unchanged while used.
 template<typename RelationTag, typename ObjectTag, typename V>
 struct urd::view_mixin<ygg::formalism::RelationBinding<RelationTag, ObjectTag>, V>
 {
@@ -45,6 +44,30 @@ public:
     /// The logical binding across repositories: the relation index (a view's identity includes its repository) and
     /// the object row.
     [[nodiscard]] auto get_key() const { return std::make_pair(self().data().relation, std::views::all(self().data().objects)); }
+};
+
+/// A published binding (its key {relation, row}): the same accessors, the objects read from the row the context gives
+/// for the key (context[key], a RelationBindingRow).
+template<typename RelationTag, typename ObjectTag, typename V>
+struct urd::view_mixin<ygg::formalism::RelationBindingIndex<RelationTag, ObjectTag>, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+    [[nodiscard]] auto row() const { return self().context()[self().data()]; }
+
+public:
+    [[nodiscard]] auto get_relation() const { return self().context().view(self().data().relation); }
+    [[nodiscard]] auto get_objects() const { return urd::resolve(row().objects, self().context()); }
+    [[nodiscard]] auto get_key() const { return std::make_pair(self().data().relation, std::views::all(row().objects)); }
+};
+
+/// A binding key held in a record resolves to its view, through the layer that owns the binding (context.view(key)).
+template<typename RelationTag, typename ObjectTag>
+struct urd::resolution<ygg::formalism::RelationBindingIndex<RelationTag, ObjectTag>>
+{
+    template<typename C>
+    static auto of(ygg::formalism::RelationBindingIndex<RelationTag, ObjectTag> key, const C& context)
+    { return context.view(key); }
 };
 
 namespace ygg::formalism

@@ -10,18 +10,19 @@
 
 namespace ygg::database::incremental
 {
-DistanceEvaluator::DistanceEvaluator(DistancePlan plan) :
+DistanceEvaluator::DistanceEvaluator(const Repository& layer, DistancePlan plan) :
+    m_layer(&layer),
     m_plan(std::move(plan)),
     m_graph(m_plan.tuple_size()),
-    m_result(m_plan.output_columns().span()),
-    m_delta(m_plan.output_columns().span())
+    m_result(m_plan.output_columns()),
+    m_delta(layer, m_plan.output_columns())
 {
 }
 }
 
 namespace ygg::database::incremental
 {
-VertexSet::handle_type DistanceEvaluator::require_vertex(std::span<const std::byte> row) const
+VertexSet::handle_type DistanceEvaluator::require_vertex(std::span<const Value> row) const
 {
     const auto vertex = m_graph.vertices.find(row);
     if (vertex.is_none())
@@ -81,7 +82,7 @@ void DistanceEvaluator::insert_result(VertexSet::handle_type source, VertexSet::
 {
     if (length == infinity)
         return;
-    const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_plan, m_row);
+    const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_row);
     m_result.insert(row);
     m_delta.added.insert(row);
 }
@@ -93,7 +94,7 @@ void DistanceEvaluator::remove_result(VertexSet::handle_type source, VertexSet::
 {
     if (length == infinity)
         return;
-    const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_plan, m_row);
+    const auto row = database::detail::make_distance_row(m_graph, source, target, length, m_row);
     const auto position = m_result.find(row);
     URD_ASSUME(position.has_value());  // only rows of the result are retracted
     m_delta.removed.insert(row);
@@ -217,10 +218,10 @@ void DistanceEvaluator::clear_changes()
 
 namespace ygg::database::incremental
 {
-const urd::builder<Relation>& DistanceEvaluator::get_result() const&
+BuilderRelationView DistanceEvaluator::get_result() const&
 {
     detail::require_initialized(m_initialized);
-    return m_result;
+    return m_layer->view(m_result);
 }
 }
 
@@ -247,19 +248,18 @@ size_t DistanceEvaluator::memory_usage() const noexcept
              * sizeof(VertexSet::handle_type);
     bytes += m_changed.capacity() * sizeof(std::pair<VertexSet::handle_type, uint_t>)
              + (m_edges_added.capacity() + m_edges_removed.capacity()) * sizeof(std::pair<VertexSet::handle_type, VertexSet::handle_type>);
-    bytes += (m_target_flags.capacity() + m_changed_flags.capacity()) * sizeof(Flag) + m_row.capacity();
+    bytes += (m_target_flags.capacity() + m_changed_flags.capacity()) * sizeof(Flag) + (m_row.capacity() + m_values.capacity()) * sizeof(Value);
     return bytes;
 }
 }
 
 namespace ygg::database::incremental
 {
-void SourceMinDistance::count(const urd::builder<Relation>& rows, bool add)
+void SourceMinDistance::count(BuilderRelationView rows, bool add)
 {
-    const auto columns = rows.columns().span();
     for (size_t i = 0; i < rows.size(); ++i)
     {
-        const auto distance = Row(rows.row(i), columns).template get<uint_t>(m_position);
+        const auto distance = rows.row(i).template get<uint_t>(m_position);
         if (distance >= m_counts.size())
             m_counts.resize(distance + 1, 0);
         assert(add || m_counts[distance] > 0);

@@ -22,7 +22,8 @@ namespace ygg::database::detail
 {
 QueryView<> checked_edges(QueryView<> edges, const DistancePlan& plan)
 {
-    require_plan_columns(edges.columns(), plan.edge_columns().span());
+    if (!std::ranges::equal(edges.columns(), plan.edge_columns()))
+        throw std::invalid_argument("Relational operation: input schema does not match prepared plan.");
     return edges;
 }
 }

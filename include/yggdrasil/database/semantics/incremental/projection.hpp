@@ -11,6 +11,7 @@
 #include <urd/store.hpp>
 #include "yggdrasil/database/semantics/operations.hpp"
 
+#include <cassert>
 #include <algorithm>
 #include <functional>
 #include <limits>
@@ -30,16 +31,17 @@ namespace ygg::database::incremental
 /// until initialize().
 class ProjectionEvaluator
 {
+    const Repository* m_layer;
     ProjectionPlan m_plan;
-    urd::builder<Relation> m_result;
+    urd::builder<Relation<Schema>> m_result;
     urd::Store<urd::sequence<size_t>> m_supports;
     Delta m_delta;
     urd::Store<urd::sequence<uint_t>> m_pending_removals;
     bool m_initialized = false;
 
-    std::span<const std::byte> project_row(std::span<const std::byte> input, Workspace& workspace) const;
-    bool add(std::span<const std::byte> row);
-    void remove(std::span<const std::byte> row);
+    RowPool::row_type project_row(const RowPool::row_type& input, Workspace& workspace) const;
+    bool add(const RowPool::row_type& row);
+    void remove(const RowPool::row_type& row);
     /// Applies a change that is known to be valid.
     template<RelationChange C>
     void apply(const C& change, Workspace& workspace);
@@ -47,7 +49,8 @@ class ProjectionEvaluator
     friend struct detail::NodeRules<QueryProjectTag>;
 
 public:
-    explicit ProjectionEvaluator(ProjectionPlan plan);
+    /// Its builders are read through `layer`, which must outlive it.
+    ProjectionEvaluator(const Repository& layer, ProjectionPlan plan);
 
     /// Replace the baseline, retaining buffers, and clear the last output delta.
     template<RelationViewConcept V>
@@ -58,8 +61,8 @@ public:
     template<RelationChange C>
     void update(const C& change, Workspace& workspace);
 
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&;
-    [[nodiscard]] const urd::builder<Relation>& get_result() const&& = delete;
+    [[nodiscard]] BuilderRelationView get_result() const&;
+    [[nodiscard]] BuilderRelationView get_result() const&& = delete;
     [[nodiscard]] const Delta& get_delta() const&;
     [[nodiscard]] const Delta& get_delta() const&& = delete;
 
@@ -70,7 +73,7 @@ public:
 template<RelationViewConcept V>
 void ProjectionEvaluator::initialize(const V& input, Workspace& workspace)
 {
-    database::detail::require_plan_columns(input.columns().span(), m_plan.input_columns().span());
+    assert(std::ranges::equal(input.columns(), m_plan.input_columns()));
     detail::require_unaliased(input, m_result, m_delta);
     m_initialized = false;
     m_result.clear();
@@ -86,7 +89,7 @@ template<RelationChange C>
 void ProjectionEvaluator::update(const C& change, Workspace& workspace)
 {
     detail::require_initialized(m_initialized);
-    detail::require_change(change, m_plan.input_columns().span(), m_result, m_delta);
+    detail::require_change(change, m_plan.input_columns(), m_result, m_delta);
     apply(change, workspace);
 }
 
@@ -103,7 +106,7 @@ void ProjectionEvaluator::apply(const C& change, Workspace& workspace)
     {
         const auto row = project_row(added.row(i), workspace);
         if (add(row))
-            m_delta.added.insert(Row(row, m_plan.output_columns().span()));
+            m_delta.added.insert(row);
     }
     // Inspect final support counts only (DBSP, Proposition 4.7). A replaced
     // witness revives its existing row without an erase/insert cycle.
@@ -112,7 +115,7 @@ void ProjectionEvaluator::apply(const C& change, Workspace& workspace)
     for (const auto position : m_pending_removals)
         if (m_supports[position] == 0)
         {
-            m_delta.removed.insert(Row(m_result.row(position), m_plan.output_columns().span()));
+            m_delta.removed.insert(m_layer->view(m_result).row(position));
             m_result.erase(position);
             m_supports[position] = m_supports.back();
             m_supports.pop_back();
