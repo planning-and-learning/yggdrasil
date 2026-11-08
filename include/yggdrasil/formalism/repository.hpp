@@ -73,24 +73,24 @@ private:
         return layer;
     }
 
-    /// The layer whose own pool of the relation holds the binding's row: of the layers holding a pool of the relation
-    /// (owner), the nearest whose pool starts at or before the row.
+    /// The layer whose own pool of the relation holds the binding's row: in one walk up the layers, the nearest whose
+    /// own pool starts at or before the row; it holds the row where the row is below its size.
     template<typename T>
         requires SupportsRelation<Repository, T>
     [[nodiscard]] const Repository* find_canonical_context(BindingIndex<T> index) const
     {
-        if (!contains(index))
-            return nullptr;
-        const auto* layer = this;
-        while (true)
+        for (const auto* layer = this; layer != nullptr; layer = layer->m_parent)
         {
-            const auto& owner = layer->m_relation_repository.template get<T>().owner(index.relation);
-            while (&layer->m_relation_repository.template get<T>() != &owner)
-                layer = layer->m_parent;
-            if ((index.row.value) >= owner.at(index.relation).base())
-                return layer;
-            layer = layer->m_parent;
+            // Whether the row is in this layer's own pool, where it starts at or before the row; else none.
+            const auto held = layer->m_relation_repository.template get<T>().read_own(
+                index.relation,
+                [&index](const auto& rows) -> std::optional<bool>
+                { return (index.row.value) >= rows.base() ? std::optional((index.row.value) < rows.size()) : std::nullopt; },
+                std::optional<bool>());
+            if (held)
+                return *held ? layer : nullptr;
         }
+        return nullptr;
     }
 
 public:

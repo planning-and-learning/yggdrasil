@@ -89,6 +89,10 @@ follows.
    `detail/<name>_instantiations.hpp` that only the TUs doing that work
    include, e.g. parsers and translators that intern every type. Including
    such a list everywhere costs every light TU the class instantiations.
+   `yggdrasil/formalism/intern_instantiations.hpp` spells the list of
+   `intern` instantiations from a repository's type list
+   (`YGG_FORMALISM_INTERNS`): the opt-in header declares them `extern`, one
+   library source defines them.
    Keep the list in the main header instead when nearly every includer does
    the work: in tyr, removing it from the repository headers made 60 TUs
    heavier and one lighter. Decide by measuring both, in the full build: a

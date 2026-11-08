@@ -79,7 +79,7 @@ public:
 
     /// One relation's rows.
     using Rows = urd::Store<urd::pool<urd::Store<urd::sequence<urd::index<Object<ObjectTag>>>, urd::frozen>, urd::index<Row>>,
-                            urd::monotone,
+                            urd::monotone_until_clear,
                             typename RelationRepositoryTraits<ObjectTag>::width,
                             urd::layered,
                             Threading>;

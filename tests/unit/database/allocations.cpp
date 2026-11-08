@@ -5,6 +5,7 @@
 
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
+#include <urd/testing/allocations.hpp>
 #include "yggdrasil/database/semantics/distance.hpp"
 #include "yggdrasil/database/semantics/incremental/distance.hpp"
 #include "yggdrasil/database/semantics/incremental/join.hpp"
@@ -26,168 +27,10 @@
 #include <utility>
 #include <vector>
 
-#if defined(_MSC_VER)
-#include <malloc.h>
-#endif
-
-// This executable replaces C++ allocation functions only. That covers the
-// default std/GTL allocators and urd's row sets, including
-// aligned allocations. It does not intercept direct malloc/free calls, including
-// Cista column/plan storage. Tracking is restricted to the evaluating thread and excludes GTest,
-// setup, warmup, and destruction of the retained evaluation objects.
-namespace allocation_tracking
-{
-namespace
-{
-struct Counts
-{
-    size_t allocated = 0;
-    size_t deallocated = 0;
-};
-}  // namespace
-
-static bool& enabled() noexcept
-{
-    thread_local bool value = false;
-    return value;
-}
-static Counts& counts() noexcept
-{
-    thread_local Counts value;
-    return value;
-}
-
-static void* allocate(size_t bytes)
-{
-    auto* result = std::malloc(bytes == 0 ? 1 : bytes);
-    if (!result)
-        throw std::bad_alloc();
-    if (enabled())
-        ++counts().allocated;
-    return result;
-}
-
-static void deallocate(void* pointer) noexcept
-{
-    if (pointer && enabled())
-        ++counts().deallocated;
-    std::free(pointer);
-}
-
-static void* allocate_aligned(size_t bytes, size_t alignment)
-{
-    void* result = nullptr;
-#if defined(_MSC_VER)
-    result = _aligned_malloc(bytes == 0 ? 1 : bytes, alignment);
-#else
-    if (alignment < sizeof(void*))
-        alignment = sizeof(void*);
-    if (posix_memalign(&result, alignment, bytes == 0 ? 1 : bytes) != 0)
-        result = nullptr;
-#endif
-    if (!result)
-        throw std::bad_alloc();
-    if (enabled())
-        ++counts().allocated;
-    return result;
-}
-
-static void deallocate_aligned(void* pointer) noexcept
-{
-    if (pointer && enabled())
-        ++counts().deallocated;
-#if defined(_MSC_VER)
-    _aligned_free(pointer);
-#else
-    std::free(pointer);
-#endif
-}
-
-namespace
-{
-class Scope
-{
-public:
-    Scope()
-    {
-        counts() = {};
-        enabled() = true;
-    }
-    Scope(const Scope&) = delete;
-    Scope& operator=(const Scope&) = delete;
-    Scope(Scope&&) = delete;
-    Scope& operator=(Scope&&) = delete;
-    ~Scope() { enabled() = false; }
-
-    Counts finish() noexcept
-    {
-        enabled() = false;
-        return counts();
-    }
-};
-}  // namespace
-}  // namespace allocation_tracking
-
-void* operator new(size_t bytes) { return allocation_tracking::allocate(bytes); }
-void* operator new[](size_t bytes) { return allocation_tracking::allocate(bytes); }
-void operator delete(void* pointer) noexcept { allocation_tracking::deallocate(pointer); }
-void operator delete[](void* pointer) noexcept { allocation_tracking::deallocate(pointer); }
-void operator delete(void* pointer, size_t) noexcept { allocation_tracking::deallocate(pointer); }
-void operator delete[](void* pointer, size_t) noexcept { allocation_tracking::deallocate(pointer); }
-void* operator new(size_t bytes, std::align_val_t alignment) { return allocation_tracking::allocate_aligned(bytes, static_cast<size_t>(alignment)); }
-void* operator new[](size_t bytes, std::align_val_t alignment) { return allocation_tracking::allocate_aligned(bytes, static_cast<size_t>(alignment)); }
-void operator delete(void* pointer, std::align_val_t) noexcept { allocation_tracking::deallocate_aligned(pointer); }
-void operator delete[](void* pointer, std::align_val_t) noexcept { allocation_tracking::deallocate_aligned(pointer); }
-void operator delete(void* pointer, size_t, std::align_val_t) noexcept { allocation_tracking::deallocate_aligned(pointer); }
-void operator delete[](void* pointer, size_t, std::align_val_t) noexcept { allocation_tracking::deallocate_aligned(pointer); }
-void* operator new(size_t bytes, const std::nothrow_t&) noexcept
-{
-    try
-    {
-        return ::operator new(bytes);
-    }
-    catch (...)
-    {
-        return nullptr;
-    }
-}
-void* operator new[](size_t bytes, const std::nothrow_t&) noexcept
-{
-    try
-    {
-        return ::operator new[](bytes);
-    }
-    catch (...)
-    {
-        return nullptr;
-    }
-}
-void* operator new(size_t bytes, std::align_val_t alignment, const std::nothrow_t&) noexcept
-{
-    try
-    {
-        return ::operator new(bytes, alignment);
-    }
-    catch (...)
-    {
-        return nullptr;
-    }
-}
-void* operator new[](size_t bytes, std::align_val_t alignment, const std::nothrow_t&) noexcept
-{
-    try
-    {
-        return ::operator new[](bytes, alignment);
-    }
-    catch (...)
-    {
-        return nullptr;
-    }
-}
-void operator delete(void* pointer, const std::nothrow_t&) noexcept { allocation_tracking::deallocate(pointer); }
-void operator delete[](void* pointer, const std::nothrow_t&) noexcept { allocation_tracking::deallocate(pointer); }
-void operator delete(void* pointer, std::align_val_t, const std::nothrow_t&) noexcept { allocation_tracking::deallocate_aligned(pointer); }
-void operator delete[](void* pointer, std::align_val_t, const std::nothrow_t&) noexcept { allocation_tracking::deallocate_aligned(pointer); }
+// This executable links urd::count_allocations, which replaces the C++ allocation functions only. That covers the
+// default std/GTL allocators and urd's containers, including aligned allocations. It does not intercept direct
+// malloc/free calls, including Cista column/plan storage. Counting is restricted to the evaluating thread and excludes
+// GTest, setup, warmup, and destruction of the retained evaluation objects.
 
 namespace ygg::tests
 {
@@ -552,22 +395,22 @@ void expect_no_allocations_after_warmup(EvaluationType& evaluation)
         valid &= evaluation.evaluate(left_size, right_size, 1000);
     ASSERT_TRUE(valid);
 
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     uint_t generation = 1;
     for (size_t repeat = 0; repeat < 4; ++repeat)
         for (const auto& [left_size, right_size] : state_sizes)
             valid &= evaluation.evaluate(left_size, right_size, 1000 + 20000 * generation++);
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
 
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 }  // namespace
 
 TEST(YggdrasilTests, DatabaseAllocationTrackingCountsOrdinaryAndAlignedStorage)
 {
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     // Explicit allocation-function calls avoid new-expression allocation elision.
     auto* scalar = ::operator new(32);
     auto* array = ::operator new[](32);
@@ -577,9 +420,9 @@ TEST(YggdrasilTests, DatabaseAllocationTrackingCountsOrdinaryAndAlignedStorage)
     ::operator delete[](array);
     ::operator delete(aligned, std::align_val_t(64));
     ::operator delete[](aligned_array, std::align_val_t(64));
-    const auto counts = measured.finish();
-    EXPECT_EQ(counts.allocated, 4);
-    EXPECT_EQ(counts.deallocated, 4);
+    const auto counts = urd::testing::counts();
+    EXPECT_EQ(counts.allocations, 4);
+    EXPECT_EQ(counts.deallocations, 4);
 }
 
 TEST(YggdrasilTests, UnorderedMultiMapWarmedRebuildsAllocateAndFreeNothing)
@@ -587,7 +430,7 @@ TEST(YggdrasilTests, UnorderedMultiMapWarmedRebuildsAllocateAndFreeNothing)
     urd::Store<urd::map<size_t, size_t>, urd::multi, urd::retains> map;
     map.reserve(1024);
     bool valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t repeat = 0; repeat < 4; ++repeat)
         for (const auto count : { static_cast<size_t>(0), static_cast<size_t>(1), static_cast<size_t>(7), static_cast<size_t>(511), static_cast<size_t>(1024) })
             for (const bool duplicates : { false, true })
@@ -611,10 +454,10 @@ TEST(YggdrasilTests, UnorderedMultiMapWarmedRebuildsAllocateAndFreeNothing)
                 valid &= sum == (count == 0 ? 0 : count * (count - 1) / 2);
             }
     map.clear();
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 
 TEST(YggdrasilTests, UnorderedMultiMapWarmedErasureReusesSlotsAcrossNovelKeys)
@@ -641,13 +484,13 @@ TEST(YggdrasilTests, UnorderedMultiMapWarmedErasureReusesSlotsAcrossNovelKeys)
         advance(generation);
     const auto retained = urd::memory_usage(map);
 
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t generation = 16; generation < 272; ++generation)
         advance(generation);
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
     EXPECT_EQ(urd::memory_usage(map), retained);
 }
 
@@ -685,13 +528,13 @@ TEST(YggdrasilTests, DatabaseWarmedRelationInterningRetainsStorageAcrossReordere
 
     const auto* schema_builder_storage = evaluation.schema_builder.span().data();
 
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (uint_t generation = 8; generation < 108; ++generation)
         valid &= evaluation.evaluate(generation % 2, generation);
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
     EXPECT_EQ(evaluation.schema_builder.span().data(), schema_builder_storage);
 }
 
@@ -705,7 +548,7 @@ TEST(YggdrasilTests, DatabaseWarmedTypedTupleInsertionAllocatesAndFreesNothing)
         ASSERT_EQ(relation.insert(row), 0);
     }
     auto valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t i = 0; i < 1000; ++i)
     {
         relation.clear();
@@ -714,10 +557,10 @@ TEST(YggdrasilTests, DatabaseWarmedTypedTupleInsertionAllocatesAndFreesNothing)
         valid &= relation.contains(row);
         valid &= relation.size() == 1;
     }
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 
 TEST(YggdrasilTests, DatabaseTypedTupleMembershipAcrossViewsAllocatesAndFreesNothing)
@@ -736,16 +579,16 @@ TEST(YggdrasilTests, DatabaseTypedTupleMembershipAcrossViewsAllocatesAndFreesNot
     ASSERT_TRUE(other_indexed.contains(other_values));
     const auto missing = other_values;
     auto valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t i = 0; i < 1000; ++i)
     {
         valid &= relation.contains(row) && builder_view.contains(row) && data_view.contains(row) && indexed.contains(row);
         valid &= !relation.contains(missing) && !builder_view.contains(missing) && !data_view.contains(missing) && !indexed.contains(missing);
     }
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 
 namespace
@@ -830,7 +673,7 @@ TEST(YggdrasilTests, DatabaseWarmedIncrementalForwardUndoAndSiblingUpdatesRetain
     ASSERT_TRUE(valid);
     const auto retained_bytes = evaluation.memory_usage();
 
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     // Novel tuples on every cycle detect storage growing with historical values,
     // even though the live input/result cardinalities remain bounded throughout.
     for (uint_t generation = 16; generation < 272; ++generation)
@@ -838,10 +681,10 @@ TEST(YggdrasilTests, DatabaseWarmedIncrementalForwardUndoAndSiblingUpdatesRetain
         valid &= evaluation.evaluate(generation);
         valid &= evaluation.memory_usage() == retained_bytes;
     }
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
     EXPECT_EQ(evaluation.memory_usage(), retained_bytes);
 }
 
@@ -931,16 +774,16 @@ TEST(YggdrasilTests, DatabaseWarmedChangingJoinReusesStorageAcrossNovelKeysAndCo
     ASSERT_TRUE(valid);
     const auto retained_bytes = evaluation.memory_usage();
 
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (uint_t generation = 16; generation < 272; ++generation)
     {
         valid &= evaluation.evaluate(generation);
         valid &= evaluation.memory_usage() == retained_bytes;
     }
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
     EXPECT_EQ(evaluation.memory_usage(), retained_bytes);
 }
 
@@ -974,13 +817,13 @@ TEST(YggdrasilTests, DatabaseWarmedMixedWidthTuplesAndOperationsRetainStorage)
     for (uint_t generation = 0; generation < 8; ++generation)
         ASSERT_TRUE(cycle(generation));
     bool valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (uint_t generation = 0; generation < 100; ++generation)
         valid &= cycle(generation);
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 
 TEST(YggdrasilTests, DatabaseWarmedDistanceFullEvaluationRetainsStorage)
@@ -1004,13 +847,13 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceFullEvaluationRetainsStorage)
     for (size_t i = 0; i < 32; ++i)
         ASSERT_TRUE(cycle());
     bool valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t i = 0; i < 100; ++i)
         valid &= cycle();
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 
 TEST(YggdrasilTests, DatabaseWarmedDistanceSourceChurnReusesFiniteUniverseStorage)
@@ -1052,13 +895,13 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceSourceChurnReusesFiniteUniverseStorag
         ASSERT_TRUE(cycle());
     const auto retained = evaluator.memory_usage();
     bool valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t i = 0; i < 100; ++i)
         valid &= cycle();
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
     EXPECT_EQ(evaluator.memory_usage(), retained);
 }
 
@@ -1094,13 +937,13 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceEdgeRepairAndUndoRetainStorage)
     for (size_t i = 0; i < 32; ++i)
         ASSERT_TRUE(cycle());
     bool valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t i = 0; i < 100; ++i)
         valid &= cycle();
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
 }
 
 TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
@@ -1148,13 +991,13 @@ TEST(YggdrasilTests, DatabaseWarmedDistanceDenseLocalHeapChurnRetainsStorage)
         ASSERT_TRUE(cycle());
     const auto retained = evaluator.memory_usage();
     bool valid = true;
-    allocation_tracking::Scope measured;
+    const urd::testing::Counted measured;
     for (size_t i = 0; i < 100; ++i)
         valid &= cycle();
-    const auto counts = measured.finish();
+    const auto counts = urd::testing::counts();
     EXPECT_TRUE(valid);
-    EXPECT_EQ(counts.allocated, 0);
-    EXPECT_EQ(counts.deallocated, 0);
+    EXPECT_EQ(counts.allocations, 0);
+    EXPECT_EQ(counts.deallocations, 0);
     EXPECT_EQ(evaluator.memory_usage(), retained);
 }
 

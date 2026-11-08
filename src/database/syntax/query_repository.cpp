@@ -5,6 +5,8 @@
 
 #include "yggdrasil/database/syntax/query_repository.hpp"
 
+#include "yggdrasil/database/detail/repository_instantiations.hpp"
+
 namespace ygg::database
 {
 QueryRepository QueryRepositoryFactory::create() { return QueryRepository(m_indices.next(), *this); }
@@ -22,3 +24,4 @@ QueryRepository::QueryRepository(size_t index, QueryRepositoryFactory factory) :
 QueryRepository::~QueryRepository() = default;
 }
 
+YGG_DATABASE_INTERNS()

@@ -52,7 +52,7 @@ struct BindingKeyEqualTo
     {
         const auto [lhs_relation, lhs_objects] = lhs.get_key();
         const auto [rhs_relation, rhs_objects] = rhs.get_key();
-        return urd::EqualTo<> {}(lhs_relation, rhs_relation) && urd::equal_range(lhs_objects, rhs_objects);
+        return urd::EqualTo<> {}(lhs_relation, rhs_relation) && urd::equal_elements(lhs_objects, rhs_objects);
     }
 };
 

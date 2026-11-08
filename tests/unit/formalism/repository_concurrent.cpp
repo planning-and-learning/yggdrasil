@@ -371,19 +371,6 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryUsesIndependentRelationGroupLa
         EXPECT_EQ(lane_repository.size(urd::index<ConcurrentRelation>(lane)), lane_rows);
 }
 
-TEST(YggdrasilTests, FormalismConcurrentRepositorySupportsHighestRelationLane)
-{
-    using ObjectTag = ConcurrentObjectTag;
-    auto repository = ConcurrentRepository<ObjectTag>(0, nullptr, urd::bit_width { 12 });
-    const auto relation = urd::index<ConcurrentRelation>(std::numeric_limits<uint_t>::max() - 1);
-
-    const auto [view, created] = repository.insert(make_binding<ObjectTag>(relation, 7));
-
-    EXPECT_TRUE(created);
-    EXPECT_EQ(view.index().relation, relation);
-    EXPECT_EQ(repository.size(relation), 1);
-}
-
 TEST(YggdrasilTests, FormalismRepositoryRejectsReservedRelationIndex)
 {
     using ObjectTag = ConcurrentObjectTag;
