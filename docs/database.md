@@ -11,9 +11,13 @@ Nullary relations and runtime arities remain supported.
 
 Columns hold one of a fixed set of value types, the alternatives of `ygg::ColumnValue` (in
 `<yggdrasil/formalism/values.hpp>`): `uint32_t`, `uint64_t`, `int32_t`, `int64_t`, `float`, `double`, `bool` and
-`ygg::ObjectIndex` (object indices, in the bits the layer gives them). A column's `ygg::TypeId` is its type's index in
-that variant (`type_id<T>`), which columns store, so relations, schemas, plans and repositories carry no list of
-value types. A row stores each value as an unsigned `ygg::Value` (`encode_value`, `decode_value`; `encode` and
+`urd::index<formalism::Object<void>>` (object indices, in the bits the layer gives them). A column's `ygg::TypeId` is
+its type's index in that variant (`type_id<T>`; an object index of any tag, `urd::index<formalism::Object<Tag>>`,
+has the object alternative's), which columns store, so relations, schemas, plans and repositories carry no list of
+value types. A relation's column types live where its rows are stored: the layer's pool of its key keeps them
+(`relations().types(key)`, written when the pool is made in any layer and checked on every later use). Its `Columns`
+record is interned by the layer only, from the caller's labels and the pool's types (insert, copy and rename check
+the caller's types against the pool's once, `std::invalid_argument` otherwise). A row stores each value as an unsigned `ygg::Value` (`encode_value`, `decode_value`; `encode` and
 `decode(bits, type)` for a `ColumnValue`).
 Indices are stored as `uint_t` (`index.value`); the code that owns a relation
 knows which tag a column holds and converts back with `Index<Tag>(value)`.
@@ -73,7 +77,9 @@ key is given where it is interned: `insert(builder)` for `Schema` (its column ty
 families. Like tyr's state builders it is read through a layer, `repository.view(builder)` or
 `urd::resolve(builder, repository)`, a `BuilderRelationView`
 (`urd::borrowed_view<Relation<Schema>, Repository, builder<Relation<Schema>>>`), and operations take only
-views. A builder holds `urd::data<Columns>` and its rows, nothing else: no index and no content identity.
+views. A builder holds `urd::data<Columns>` and its rows, nothing else: no index and no content identity. It draws its
+number (`layer()`, the context number of its rows' views and its `relation_identity()`) at construction from the
+process-wide counter repository layers draw theirs from.
 
 A view (interned `urd::index_view<Relation<F>, Context>` or `BuilderRelationView`) gives
 `columns()` (a span of `ColumnLayout`), `size()`, `row(i)`, `rows()`, `contains(row)` and `relation_identity()`. An
@@ -81,10 +87,11 @@ interned view reads its row set over its pool through `urd::subset_view`; a buil
 builder's pool by position. Every row is a `Row<F>` view, the same for every family (tyr's bindings and fact rows
 too): `urd::owning_view<Row<F>, C, RowIndex<F>>` holds its key `{relation, row}` (row an `index<Row<F>>`) and reads
 through its context, the layer (`layer.view(key)`, `layer[key]` the stored row) or the builder (rows by position).
-`value(i)` gives the i-th canonical value, `type(i)` its column's type (a free relation's from its Schema, an object
-family's an object), `column_value(i)` the decoded `ColumnValue` and `column_value<T>(i)` a `T` (it throws
-`std::invalid_argument` for another type; urd views own `get<>()`, hence the name); `get_objects()` throws unless every
-column is an object column; `get_values()` the stored row;
+`value(i)` gives the i-th canonical value, `type(i)` its column's type (its pool's stored types; a builder's columns),
+`get(i)` the decoded `ColumnValue`, `get<T>(i)` a `T`, and `get<T>(first, last)` / `get<T>()` ranges of `T`, each
+checked against the column types (`std::invalid_argument` for another type; `T` an alternative or an object index of
+any tag, resolved through the context with `urd::resolve`; urd views name their member accessor `member<&T::m>()`);
+`get_values()` the stored row; a borrowed row of a pool no layer made yet has no types (`std::out_of_range`);
 the columns give labels and types. A borrowed row is `urd::borrowed_view<Row<F>, C, data<Row<F>>>`
 (`data<Row<F>> {relation, values}`). Inserting, finding and testing membership take a row view, a stored row of equal
 widths or a span of values (`encode_value` each), handed to the pool: inserting checks count (`std::invalid_argument`) and fit

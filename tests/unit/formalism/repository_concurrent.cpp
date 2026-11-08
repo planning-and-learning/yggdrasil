@@ -122,9 +122,9 @@ urd::data<Binding<ObjectTag>> make_binding(urd::index<ConcurrentRelation<ObjectT
 {
     using Object = formalism::Object<ObjectTag>;
 
-    auto objects = urd::flat_vector<urd::index<Object>> {};
+    auto objects = urd::flat_vector<ygg::Value> {};
     for (uint_t i = 0; i < 4; ++i)
-        objects.push_back(urd::index<Object>((key + i * 997U) & 4095U));
+        objects.push_back((key + i * 997U) & 4095U);
     return urd::data<Binding<ObjectTag>>(relation, std::move(objects));
 }
 
@@ -288,11 +288,11 @@ void expect_unique_same_relation_insertions()
 urd::data<Binding<ConcurrentPackedObjectTag>> make_packed_binding(urd::index<ConcurrentRelation<ConcurrentPackedObjectTag>> relation, uint_t key, bool valid)
 {
     using Object = formalism::Object<ConcurrentPackedObjectTag>;
-    auto objects = urd::flat_vector<urd::index<Object>> {};
+    auto objects = urd::flat_vector<ygg::Value> {};
     for (uint_t i = 0; i < 4; ++i)
-        objects.push_back(urd::index<Object>((key >> (i * 3U)) & 7U));
+        objects.push_back((key >> (i * 3U)) & 7U);
     if (!valid)
-        objects.back() = urd::index<Object>(8);
+        objects.back() = 8;
     return urd::data<Binding<ConcurrentPackedObjectTag>>(relation, std::move(objects));
 }
 
@@ -395,10 +395,10 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     const auto [view, created] = repository.insert(make_binding<ObjectTag>(relation, 7));
     ASSERT_TRUE(created);
 
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
-    objects.push_back(urd::index<Object>(1));
-    objects.push_back(urd::index<Object>(2));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(0);
+    objects.push_back(1);
+    objects.push_back(2);
     const auto wrong = urd::data<Binding<ObjectTag>>(relation, std::move(objects));
     EXPECT_FALSE(repository.find(wrong));
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
@@ -532,29 +532,29 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     auto repository = ConcurrentRepository<ObjectTag>(8, nullptr);
     const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
 
-    auto invalid_objects = urd::flat_vector<urd::index<Object>> {};
-    invalid_objects.push_back(urd::index<Object>(0));
-    invalid_objects.push_back(urd::index<Object>(1));
-    invalid_objects.push_back(urd::index<Object>(2));
-    invalid_objects.push_back(urd::index<Object>(8));
+    auto invalid_objects = urd::flat_vector<ygg::Value> {};
+    invalid_objects.push_back(0);
+    invalid_objects.push_back(1);
+    invalid_objects.push_back(2);
+    invalid_objects.push_back(8);
     auto invalid = urd::data<Binding<ObjectTag>>(relation, std::move(invalid_objects));
     EXPECT_THROW(repository.insert(invalid), std::out_of_range);
     EXPECT_EQ(repository.relations().size(relation), 0);
     repository.relations().clear();
     repository.relations().clear();
 
-    auto valid_objects = urd::flat_vector<urd::index<Object>> {};
+    auto valid_objects = urd::flat_vector<ygg::Value> {};
     for (uint_t value = 0; value < 4; ++value)
-        valid_objects.push_back(urd::index<Object>(value));
+        valid_objects.push_back(value);
     const auto [view, created] = repository.insert(urd::data<Binding<ObjectTag>>(relation, std::move(valid_objects)));
     EXPECT_TRUE(created);
     EXPECT_EQ(view.data().row, urd::index<Row<ConcurrentRelation<ObjectTag>>>(0));
 
     repository.relations().clear();
     EXPECT_EQ(repository.relations().size(relation), 0);
-    auto reused_objects = urd::flat_vector<urd::index<Object>> {};
+    auto reused_objects = urd::flat_vector<ygg::Value> {};
     for (uint_t value = 4; value < 8; ++value)
-        reused_objects.push_back(urd::index<Object>(value));
+        reused_objects.push_back(value);
     const auto [reused, reused_created] = repository.insert(urd::data<Binding<ObjectTag>>(relation, std::move(reused_objects)));
     EXPECT_TRUE(reused_created);
     EXPECT_EQ(reused.data().row, urd::index<Row<ConcurrentRelation<ObjectTag>>>(0));

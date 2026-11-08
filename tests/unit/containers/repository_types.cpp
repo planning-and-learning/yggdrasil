@@ -320,23 +320,24 @@ static void expect_row_access_for_each_relation_type()
     Repository repository;
     urd::data<Row<RepositoryTypesRelation>> first_data;
     first_data.relation = urd::index<RepositoryTypesRelation>(0);
-    first_data.values.push_back(ObjectIndex(3));
+    first_data.values.push_back(ygg::encode_value(ObjectIndex(3)));
     urd::data<Row<RepositoryTypesElement>> second_data;
     second_data.relation = urd::index<RepositoryTypesElement>(0);
-    second_data.values.push_back(ObjectIndex(7));
-    second_data.values.push_back(ObjectIndex(9));
+    second_data.values.push_back(ygg::encode_value(ObjectIndex(7)));
+    second_data.values.push_back(ygg::encode_value(ObjectIndex(9)));
     const auto first = repository.insert(first_data).first;
     const auto second = repository.insert(second_data).first;
     EXPECT_EQ(first.size(), 1);
-    EXPECT_EQ(first.get_key().second[0], ObjectIndex(3));
+    EXPECT_EQ(first.get_key().second[0], 3U);
     EXPECT_EQ(second.size(), 2);
-    EXPECT_EQ(second.get_key().second[0], ObjectIndex(7));
-    EXPECT_EQ(second.get_key().second[1], ObjectIndex(9));
+    EXPECT_EQ(second.get_key().second[0], 7U);
+    EXPECT_EQ(second.get_key().second[1], 9U);
     EXPECT_EQ(second.value(1), 9);
-    EXPECT_EQ(second.type(1), ygg::type_id<ygg::ObjectIndex>);
-    EXPECT_EQ(std::get<ygg::ObjectIndex>(second.column_value(1)).value, 9U);
-    EXPECT_EQ(second.template column_value<ygg::ObjectIndex>(1).value, 9U);
-    EXPECT_THROW((void) second.template column_value<double>(1), std::invalid_argument);
+    EXPECT_EQ(second.type(1), ygg::type_id<ObjectIndex>);
+    EXPECT_EQ(std::get<urd::index<formalism::Object<void>>>(second.get(1)).value, 9U);
+    EXPECT_EQ(second.template get<ObjectIndex>(1), ObjectIndex(9));
+    EXPECT_EQ(second.template get<ObjectIndex>()[0], ObjectIndex(7));
+    EXPECT_THROW((void) second.template get<double>(1), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
@@ -432,15 +433,15 @@ TEST(YggdrasilTests, CommonInterningAcceptsRowsWithoutSymbolIdentity)
 {
     auto repository = ContractRepository();
     using Object = formalism::Object<RepositoryTypesObjectTag>;
-    auto objects = urd::flat_vector<urd::index<Object>>();
-    objects.push_back(urd::index<Object>(3));
+    auto objects = urd::flat_vector<ygg::Value>();
+    objects.push_back(ygg::encode_value(urd::index<Object>(3)));
     auto data = urd::data<ContractBinding>(urd::index<RepositoryTypesRelation>(0), std::move(objects));
     const auto [first, created] = formalism::insert(repository, data);
     EXPECT_TRUE(created);
     const auto [duplicate, duplicate_created] = formalism::insert(repository, data);
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(duplicate.data(), first.data());
-    EXPECT_EQ(first.get_key().second.front(), urd::index<Object>(3));
+    EXPECT_EQ(first.template get<urd::index<Object>>(0), urd::index<Object>(3));
 }
 
 TEST(YggdrasilTests, CommonRepositoryLayersHaveDistinctNumbersAndParents)
@@ -473,8 +474,8 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
     auto second_repository = Repository();
     auto independent_repository = Repository();
 
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     const auto data = urd::data<Binding>(urd::index<RepositoryTypesRelation>(0), objects);
 
     const auto [first, first_created] = first_repository.insert(data);
@@ -498,7 +499,7 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
     EXPECT_FALSE(urd::Less<> {}(first.get_key(), second.get_key()));
     EXPECT_FALSE(urd::Less<> {}(second.get_key(), first.get_key()));
 
-    objects[0] = urd::index<Object>(1);
+    objects[0] = ygg::encode_value(urd::index<Object>(1));
     const auto [larger, larger_created] = second_repository.insert(urd::data<Binding>(urd::index<RepositoryTypesRelation>(0), objects));
     ASSERT_TRUE(larger_created);
     EXPECT_TRUE(urd::Less<> {}(first.get_key(), larger.get_key()));
@@ -547,14 +548,14 @@ TEST(YggdrasilTests, CommonBorrowedRowViewReadsWithoutPublishingAndMaterializesC
     }
     auto data = urd::data<ContractBinding>();
     data.relation = relation;
-    data.values.push_back(urd::index<Object>(2));
-    data.values.push_back(urd::index<Object>(5));
+    data.values.push_back(ygg::encode_value(urd::index<Object>(2)));
+    data.values.push_back(ygg::encode_value(urd::index<Object>(5)));
     const auto borrowed = urd::resolve(data, repository);
-    EXPECT_EQ(&borrowed.data(), &data);
     EXPECT_EQ(&borrowed.data(), &data);
     EXPECT_EQ(&borrowed.context(), &repository);
     EXPECT_EQ(borrowed.get_relation().index(), relation);
-    EXPECT_EQ(borrowed.get_objects()[1].index(), urd::index<Object>(5));
+    EXPECT_THROW((void) borrowed.type(0), std::out_of_range);  // no pool yet: no column types
+    EXPECT_EQ(borrowed.value(1), 5U);
     EXPECT_EQ(borrowed.get_key().first, relation);
     EXPECT_EQ(borrowed.get_key().second.data(), data.values.data());
     EXPECT_FALSE(repository.find(data));
@@ -567,11 +568,12 @@ TEST(YggdrasilTests, CommonBorrowedRowViewReadsWithoutPublishingAndMaterializesC
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(duplicate.data(), published.data());
 
-    // A returned object span borrows Data directly, independently of the wrapper.
-    const auto objects = urd::resolve(data, repository).get_objects();
-    data.values[0] = urd::index<Object>(7);
+    // A returned object range borrows Data directly, independently of the wrapper; its objects resolve.
+    EXPECT_EQ(borrowed.template get<urd::index<Object>>()[1], urd::index<Object>(5));
+    const auto objects = urd::resolve(urd::resolve(data, repository).template get<urd::index<Object>>(), repository);
+    data.values[0] = ygg::encode_value(urd::index<Object>(7));
     EXPECT_EQ(objects[0].index(), urd::index<Object>(7));
-    EXPECT_EQ(published.get_objects()[0].index(), urd::index<Object>(2));
+    EXPECT_EQ(urd::resolve(published.template get<urd::index<Object>>(), repository)[0].index(), urd::index<Object>(2));
 }
 
 TEST(YggdrasilTests, CommonCompositeRepositorySynchronizesLocalAndInheritedScratchIdentity)
@@ -615,15 +617,15 @@ TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 
     auto repository = ContractRepository();
     const auto relation = urd::index<RepositoryTypesRelation>(0);
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
-    objects.push_back(urd::index<Object>(1));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(ygg::encode_value(urd::index<Object>(0)));
+    objects.push_back(ygg::encode_value(urd::index<Object>(1)));
     const auto data = urd::data<Binding>(relation, std::move(objects));
     const auto [view, created] = repository.insert(data);
     ASSERT_TRUE(created);
 
-    auto wrong_objects = urd::flat_vector<urd::index<Object>> {};
-    wrong_objects.push_back(urd::index<Object>(0));
+    auto wrong_objects = urd::flat_vector<ygg::Value> {};
+    wrong_objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     const auto wrong = urd::data<Binding>(relation, std::move(wrong_objects));
     EXPECT_FALSE(repository.find(wrong));
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
@@ -647,9 +649,9 @@ TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
     element.value = 7;
     repository.insert(element);
 
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
-    objects.push_back(urd::index<Object>(1));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(ygg::encode_value(urd::index<Object>(0)));
+    objects.push_back(ygg::encode_value(urd::index<Object>(1)));
     const auto data = urd::data<Binding>(urd::index<RepositoryTypesRelation>(0), objects);
     repository.insert(data);
 
@@ -683,9 +685,9 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 
     auto root = Repository(4, nullptr);
     const auto relation = urd::index<RepositoryTypesPackedRelation>(0);
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
-    objects.push_back(urd::index<Object>(3));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(ygg::encode_value(urd::index<Object>(0)));
+    objects.push_back(ygg::encode_value(urd::index<Object>(3)));
     const auto data = urd::data<Binding>(relation, objects);
 
     EXPECT_EQ(root.relations().memory_usage<RepositoryTypesPackedRelation>(), 0);
@@ -697,11 +699,11 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     EXPECT_FALSE(duplicate_created);
     EXPECT_GT(root.relations().memory_usage<RepositoryTypesPackedRelation>(), 0);
     EXPECT_EQ(duplicate_view.data().row, root_view.data().row);
-    EXPECT_EQ(root_view.get_key().second[0], urd::index<Object>(0));
-    EXPECT_EQ(root_view.get_key().second[1], urd::index<Object>(3));
+    EXPECT_EQ(root_view.template get<urd::index<Object>>(0), urd::index<Object>(0));
+    EXPECT_EQ(root_view.template get<urd::index<Object>>(1), urd::index<Object>(3));
 
-    objects[0] = urd::index<Object>(4);
-    objects[1] = urd::index<Object>(0);
+    objects[0] = ygg::encode_value(urd::index<Object>(4));
+    objects[1] = ygg::encode_value(urd::index<Object>(0));
     const auto wider_data = urd::data<Binding>(relation, objects);
 
     EXPECT_THROW(root.insert(wider_data), std::out_of_range);
@@ -712,11 +714,11 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     EXPECT_EQ(root_duplicate_after_failure.data().row, root_view.data().row);
 
     auto inherited_width_child = Repository(2, &root);
-    objects[0] = urd::index<Object>(3);
+    objects[0] = ygg::encode_value(urd::index<Object>(3));
     const auto inherited_width_data = urd::data<Binding>(relation, objects);
     const auto [inherited_width_view, inherited_width_created] = inherited_width_child.insert(inherited_width_data);
     EXPECT_TRUE(inherited_width_created);
-    EXPECT_EQ(inherited_width_view.get_key().second[0], urd::index<Object>(3));
+    EXPECT_EQ(inherited_width_view.template get<urd::index<Object>>(0), urd::index<Object>(3));
 
     auto child = std::make_shared<Repository>(5, &root);
     const auto [inherited_view, inherited_created] = child->insert(data);
@@ -727,8 +729,8 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     EXPECT_EQ(&inherited_view.context(), &root);
     EXPECT_TRUE(child_created);
     EXPECT_EQ(child_view.data().row, urd::index<Row<RepositoryTypesPackedRelation>>(1));
-    EXPECT_EQ(child_view.get_key().second[0], urd::index<Object>(4));
-    EXPECT_EQ(child_view.get_key().second[1], urd::index<Object>(0));
+    EXPECT_EQ(child_view.template get<urd::index<Object>>(0), urd::index<Object>(4));
+    EXPECT_EQ(child_view.template get<urd::index<Object>>(1), urd::index<Object>(0));
 }
 
 TEST(YggdrasilTests, CommonRelationRepositoryValidatesObjectIndexWidth)
@@ -798,9 +800,9 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
     const auto bindings = rows_view(relation, rows, repository);
     EXPECT_THROW((void) bindings[0], std::out_of_range);
 
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
-    objects.push_back(urd::index<Object>(1));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(ygg::encode_value(urd::index<Object>(0)));
+    objects.push_back(ygg::encode_value(urd::index<Object>(1)));
     const auto data = urd::data<Binding>(relation, objects);
     const auto [view, created] = repository.insert(data);
 
@@ -885,15 +887,15 @@ static void check_relation_membership()
     using StoredRowView = RowView<RepositoryTypesRelation, Repository>;
     using Object = formalism::Object<RepositoryTypesObjectTag>;
     const auto relation = urd::index<RepositoryTypesRelation>(0);
-    auto objects = urd::flat_vector<urd::index<Object>> {};
-    objects.push_back(urd::index<Object>(0));
+    auto objects = urd::flat_vector<ygg::Value> {};
+    objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     auto root = Repository();
     const auto root_view = root.insert(urd::data<ContractBinding>(relation, objects)).first;
     auto child = Repository(&root);
-    objects[0] = urd::index<Object>(1);
+    objects[0] = ygg::encode_value(urd::index<Object>(1));
     const auto child_view = child.insert(urd::data<ContractBinding>(relation, objects)).first;
     auto grandchild = Repository(&child);
-    objects[0] = urd::index<Object>(2);
+    objects[0] = ygg::encode_value(urd::index<Object>(2));
     const auto local_view = grandchild.insert(urd::data<ContractBinding>(relation, objects)).first;
 
     EXPECT_TRUE(has(grandchild, root_view));
@@ -922,7 +924,7 @@ static void check_relation_membership()
 
     auto unrelated = Repository();
     EXPECT_FALSE(has(grandchild, StoredRowView(root_view.data(), &unrelated)));
-    objects[0] = urd::index<Object>(0);
+    objects[0] = ygg::encode_value(urd::index<Object>(0));
     const auto unrelated_view = unrelated.insert(urd::data<ContractBinding>(relation, objects)).first;
     EXPECT_TRUE(has(grandchild, unrelated_view.data()));
     EXPECT_FALSE(has(grandchild, unrelated_view));

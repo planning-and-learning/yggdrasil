@@ -101,9 +101,6 @@ private:
         return width;
     }
 
-    // ponytail: one counter per repository type, numbers are never reused.
-    inline static std::atomic<std::size_t> s_next_layer { 0 };
-
     const Repository* m_parent;
     SymbolRepo m_symbols;
     RelationRepo m_relations;
@@ -122,22 +119,25 @@ private:
                 return true;
         return false;
     }
-    /// The relation `columns`, `pool` and `row_set` make.
+    /// The relation `pool`, `columns` and `row_set` make. Its Columns record is made here only, of the pool's types: the
+    /// columns' types must be the pool's (std::invalid_argument otherwise).
     template<typename F>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> intern_relation(urd::index<F> pool, std::span<const ColumnLayout> columns, urd::index<RowSet<F>> row_set)
     {
+        if (!std::ranges::equal(m_relations.types(pool), columns, {}, {}, &ColumnLayout::type))
+            throw std::invalid_argument("Repository: the columns' types are not the pool's.");
         m_columns.values.set(columns.begin(), columns.end());
         auto relation = urd::data<Relation<F>> { {}, pool, intern(m_symbols.template get<Columns>(), m_columns).first, row_set };
         const auto [index, created] = intern(m_symbols.template get<Relation<F>>(), relation);
         return { view(index), created };
     }
     /// Interns the relation `source` reads (a builder's view, or a relation view of another layer): its rows into this
-    /// layer's pool of `pool`, their sorted ids as its row set.
+    /// layer's pool of `pool`, whose column types must be the source's, their sorted ids as its row set.
     template<typename F, typename V>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> intern_rows(urd::index<F> pool, const V& source)
     {
         const auto columns = source.columns();
-        auto& rows = m_relations.own_rows(pool, [&] { return m_relations.widths(columns | std::views::transform(&ColumnLayout::type)); });
+        auto& rows = m_relations.own_rows(pool, columns | std::views::transform(&ColumnLayout::type));
         auto& row_set = m_row_sets.template get<F>();
         row_set.rows.clear();
         for (std::size_t i = 0; i < source.size(); ++i)
@@ -153,21 +153,12 @@ private:
             m_schema.types.push_back(column.type);
         return intern(m_symbols.template get<Schema>(), m_schema).first;
     }
-    /// The column types of a row's pool: a free relation's Schema's, an object family's one object column per value.
-    [[nodiscard]] std::span<const TypeId> row_types(const urd::data<Row<Schema>>& row) const
-    {
-        const auto& types = (*this)[row.relation].types;
-        return { types.data(), types.size() };
-    }
-    template<typename F>
-    [[nodiscard]] static auto row_types(const urd::data<Row<F>>& row)
-    { return std::views::iota(std::size_t { 0 }, row.values.size()) | std::views::transform([](std::size_t) { return type_id<ObjectIndex>; }); }
 
     Repository(const Repository* parent, urd::bit_width object_index_width) :
         m_parent(parent),
         m_symbols(parent ? &parent->m_symbols : nullptr),
         m_relations(parent ? &parent->m_relations : nullptr, object_index_width),
-        m_layer(s_next_layer.fetch_add(1, std::memory_order_relaxed))
+        m_layer(next_layer())
     {
     }
 
@@ -303,14 +294,16 @@ public:
         return std::nullopt;
     }
 
-    /// Stores the row in this layer where no layer holds it.
+    /// Stores the row in this layer where no layer holds it. Its pool's columns are objects, one per value (checked
+    /// against the pool's types). A free relation's rows go in through its relation (insert(builder)).
     template<typename F>
-        requires HasRows<Repository, F>
+        requires HasRows<Repository, F> && (!std::same_as<F, Schema>)
     std::pair<RowView<F, Repository>, bool> insert(const urd::data<Row<F>>& row)
     {
         if (auto found = find(row))
             return { *found, false };
-        const auto [id, created] = m_relations.insert(row, row_types(row));
+        const auto types = std::views::iota(std::size_t { 0 }, row.values.size()) | std::views::transform([](std::size_t) { return type_id<urd::index<Object<object_tag>>>; });
+        const auto [id, created] = m_relations.insert(row, types);
         return { RowView<F, Repository>(RowIndex<F> { row.relation, id }, this), created };
     }
 
@@ -379,7 +372,7 @@ public:
             return { view(source.index()), false };
         return intern_rows(pool, source);
     }
-    /// The relation relabeled: the same pool and row set (so the same rows), new columns of the same types and
+    /// The relation relabeled: the same pool and row set (so the same rows), new columns of the pool's types and
     /// distinct labels.
     template<typename F, typename C>
         requires HasRelations<Repository, F>
@@ -387,8 +380,6 @@ public:
     {
         if (!reads(&source.context()))
             throw std::invalid_argument("Repository: rename requires a source in this repository.");
-        if (!std::ranges::equal(source.columns(), columns, {}, &ColumnLayout::type, &ColumnLayout::type))
-            throw std::invalid_argument("Repository: a rename keeps the column types.");
         for (auto it = columns.begin(); it != columns.end(); ++it)
             if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
                 throw std::invalid_argument("Repository: a rename gives distinct labels.");

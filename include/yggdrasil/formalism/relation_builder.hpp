@@ -45,7 +45,8 @@ namespace urd
 /// column's label and type, validated (valid types, distinct labels). It is read through a layer (relation_view.hpp:
 /// urd::resolve(builder, layer) or layer.view(builder)), which interns it (insert, into the pool of a key given there)
 /// and hands out pooled ones (get_relation_builder). It is the context of its rows' views (view(key), with no relation
-/// in the key): context[key] is the stored row. Erase moves the final row into its place; clear retains row storage.
+/// in the key): context[key] is the stored row; it has its own number (layer()), drawn at construction from the counter
+/// layers draw theirs from. Erase moves the final row into its place; clear retains row storage.
 /// A zero-column relation is true exactly when it contains the empty row.
 template<typename F>
 struct builder<ygg::Relation<F>>
@@ -56,13 +57,14 @@ private:
     urd::data<ygg::Columns> m_columns;
     /// The rows, interned by the columns' widths: a handle's value is the row's position.
     Rows m_rows;
+    std::size_t m_layer = ygg::next_layer();
 
     /// The widths of a builder's rows: each column whole (a bool one bit, an object index 32 bits).
     static urd::column_widths widths_of(std::span<const ygg::ColumnLayout> columns)
     {
         auto result = urd::column_widths();
         for (const auto& column : columns)
-            result.push_back(ygg::column_bits(column.type, ygg::whole_bits<ygg::ObjectIndex>));
+            result.push_back(ygg::column_bits(column.type, ygg::whole_bits<urd::index<ygg::formalism::Object<void>>>));
         return result;
     }
     static std::span<const ygg::ColumnLayout> validated(std::span<const ygg::ColumnLayout> columns)
@@ -102,8 +104,9 @@ public:
     { return m_rows.view(typename Rows::handle_type(key.row.value)); }
     /// The view of the row at key.row (a position) through this builder.
     [[nodiscard]] ygg::RowView<F, builder> view(ygg::RowIndex<F> key) const noexcept { return { key, this }; }
-    /// Its number as the context of its rows' views (urd::layer): its address, as its relation_identity.
-    [[nodiscard]] std::size_t layer() const noexcept { return reinterpret_cast<std::uintptr_t>(this); }
+    /// Its number as the context of its rows' views (urd::layer), and its relation_identity: drawn at construction,
+    /// kept across clear and initialize.
+    [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
 
     /// A row of values, one per column (the pool's: a count other than the columns' throws std::invalid_argument, a
     /// value that does not fit its column std::out_of_range, before anything is stored). Returns its position.

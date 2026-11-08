@@ -12,8 +12,11 @@
 
 #include <urd/elements/flat.hpp>
 
+#include <atomic>
 #include <boost/mp11.hpp>
 #include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <ranges>
 #include <tuple>
 #include <type_traits>
@@ -22,8 +25,9 @@
 namespace ygg
 {
 /// The relation model (records in relation_data.hpp): a relation of family F is its pool (an index<F>: the layer's pool
-/// of F's rows that holds its rows), its Columns (labels and types) and its RowSet<F> (the sorted ids of its rows there).
-/// A Schema (the column types) keys the pools of free relations.
+/// of F's rows that holds its rows and their column types), its Columns (its labels with the pool's types, interned by
+/// the layer) and its RowSet<F> (the sorted ids of its rows there). A Schema (the column types) keys the pools of free
+/// relations.
 struct Schema
 {
 };
@@ -87,6 +91,25 @@ template<typename F, std::ranges::forward_range Ids, typename C>
     requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<const Ids>>, urd::index<Row<F>>>
 RowsView<F, Ids, C> rows_view(urd::index<F> relation, const Ids& ids, const C& context)
 { return { ids, { relation, &context } }; }
+
+/// What tells relations apart while their rows stay unchanged: the number of their context (a layer's or a builder's,
+/// one process-wide counter, next_layer) and, for an interned relation, its index (none for a builder).
+struct RelationIdentity
+{
+    std::size_t context;
+    std::uint32_t relation = urd::index<void>::none_value;
+
+    friend bool operator==(const RelationIdentity&, const RelationIdentity&) = default;
+    static constexpr auto identifying_members() noexcept { return urd::Members<&RelationIdentity::context, &RelationIdentity::relation> {}; }
+};
+
+/// The next number of a context of views (a repository layer, a relation builder): drawn once per context, process-wide,
+/// never reused.
+[[nodiscard]] inline std::size_t next_layer() noexcept
+{
+    static constinit std::atomic<std::size_t> next { 0 };
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
 }  // namespace ygg
 
 namespace ygg::formalism

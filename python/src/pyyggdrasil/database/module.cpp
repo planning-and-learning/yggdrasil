@@ -251,7 +251,7 @@ void bind_database_module_definitions(nb::module_& m)
         .value("FLOAT32", ygg::type_id<float>)
         .value("FLOAT64", ygg::type_id<double>)
         .value("BOOL", ygg::type_id<bool>)
-        .value("OBJECT", ygg::type_id<ygg::ObjectIndex>);
+        .value("OBJECT", ygg::type_id<urd::index<ygg::formalism::Object<void>>>);
 
     nb::class_<Row>(m,
                     "RelationRow",

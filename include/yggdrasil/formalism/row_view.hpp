@@ -20,6 +20,7 @@
 
 #include <urd/elements/flat.hpp>
 #include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 
 #include <concepts>
@@ -32,84 +33,72 @@
 #include <utility>
 
 /// A row, borrowed (its record {relation, values}) or stored (its key {relation, row}, read through its context:
-/// context[key] is the stored row): its relation, values and objects. A borrowed record and the context must outlive
-/// the view and all ranges it gives; keep the record unchanged while used.
+/// context[key] is the stored row): its relation, its values and their types. The types are its pool's
+/// (relations().types(relation) of a layer; a builder's own), so every typed read is checked against them. A borrowed
+/// record and the context must outlive the view and all ranges it gives; keep the record unchanged while used.
 template<typename F, typename V>
 struct urd::view_mixin<ygg::Row<F>, V>
 {
 private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
     template<typename C>
-    static std::span<const ygg::row_value_t<F>> values_of(const urd::data<ygg::Row<F>>& record, const C&) noexcept
+    static std::span<const ygg::Value> values_of(const urd::data<ygg::Row<F>>& record, const C&) noexcept
     { return { record.values.data(), record.values.size() }; }
     template<typename C>
     static auto values_of(ygg::RowIndex<F> key, const C& context)
     { return context[key]; }
+    /// The column types of the row's pool: a layer's stored ones, a builder's own (its rows have no relation).
     template<typename C>
-    static std::span<const ygg::row_value_t<F>> typed_values_of(const urd::data<ygg::Row<F>>& record, const C&) noexcept
-    { return { record.values.data(), record.values.size() }; }
-    template<typename C>
-    static auto typed_values_of(ygg::RowIndex<F> key, const C& context)
-    { return context[key].template as<ygg::row_value_t<F>>(); }
-    /// A value as its canonical Value: a Value as it is, an object index its value.
-    static ygg::Value to_value(ygg::Value value) noexcept { return value; }
-    template<typename Tag>
-    static ygg::Value to_value(urd::index<ygg::formalism::Object<Tag>> object) noexcept
-    { return object.value; }
-    /// The type of column i: a free relation's from its builder (its rows have no relation) or its Schema record; an
-    /// object family's an object.
-    template<typename C>
-    static ygg::TypeId type_of(const C& context, urd::index<ygg::Schema> relation, std::size_t i)
-    { return context[relation].types[i]; }
-    static ygg::TypeId type_of(const urd::builder<ygg::Relation<ygg::Schema>>& builder, urd::index<ygg::Schema> /*relation*/, std::size_t i)
-    { return builder.columns()[i].type; }
-    template<typename C, typename G>
-    static ygg::TypeId type_of(const C& /*context*/, urd::index<G> /*relation*/, std::size_t /*i*/)
-    { return ygg::type_id<ygg::ObjectIndex>; }
-    /// The objects of typed values: resolved through the context (object indices), or a free relation's raw ObjectIndex
-    /// values (its layer has no objects).
-    template<typename Values, typename C>
-        requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
-    static auto objects_of(const Values& values, const C& /*context*/)
-    { return urd::transform(values, [](ygg::Value value) { return ygg::ObjectIndex { static_cast<std::uint32_t>(value) }; }); }
-    template<typename Values, typename C>
-        requires(!std::same_as<std::ranges::range_value_t<Values>, ygg::Value>)
-    static auto objects_of(const Values& values, const C& context)
-    { return urd::resolve(values, context); }
+    static std::span<const ygg::TypeId> types_of(const C& context, urd::index<F> relation)
+    { return get_repository(context).relations().types(relation); }
+    static auto types_of(const urd::builder<ygg::Relation<F>>& builder, urd::index<F> /*relation*/) noexcept
+    { return builder.columns() | std::views::transform(&ygg::ColumnLayout::type); }
+    /// A random-access range of them.
+    [[nodiscard]] auto types() const { return types_of(self().context(), self().data().relation); }
+    template<typename T>
+    static void check(ygg::TypeId type)
+    {
+        if (type != ygg::type_id<T>)
+            throw std::invalid_argument("Row: the column's type is not the requested one.");
+    }
 
 public:
     /// The view of its relation (its pool's key) through the context.
     [[nodiscard]] auto get_relation() const { return self().context().view(self().data().relation); }
-    /// Its values as held: a borrowed record's, or the stored row (canonical Values).
+    /// Its canonical Values as held: a borrowed record's, or the stored row.
     [[nodiscard]] auto get_values() const { return values_of(self().data(), self().context()); }
     [[nodiscard]] std::size_t size() const { return std::ranges::size(get_values()); }
     /// The canonical Value of column i.
-    [[nodiscard]] ygg::Value value(std::size_t i) const { return to_value(get_values()[i]); }
-    /// The type of column i: an object family's columns are objects; a free relation's are its Schema's.
-    [[nodiscard]] ygg::TypeId type(std::size_t i) const { return type_of(self().context(), self().data().relation, i); }
-    /// Column i decoded as its type (an object column as its raw ObjectIndex). Named so because urd's views own get<>(),
-    /// which hides a mixin's get.
-    [[nodiscard]] ygg::ColumnValue column_value(std::size_t i) const { return ygg::decode(value(i), type(i)); }
-    /// Column i as T; throws std::invalid_argument where the column's type is not T's.
-    template<ygg::ColumnValueType T>
-    [[nodiscard]] T column_value(std::size_t i) const
+    [[nodiscard]] ygg::Value value(std::size_t i) const { return get_values()[i]; }
+    /// The type of column i, its pool's.
+    [[nodiscard]] ygg::TypeId type(std::size_t i) const { return types()[i]; }
+    /// Column i decoded as its type (an object column as its untagged object index).
+    [[nodiscard]] ygg::ColumnValue get(std::size_t i) const { return ygg::decode(value(i), type(i)); }
+    /// Column i as T; throws std::invalid_argument where the column's type is not T's (ygg::type_id).
+    template<typename T>
+    [[nodiscard]] T get(std::size_t i) const
     {
-        if (type(i) != ygg::type_id<T>)
-            throw std::invalid_argument("Row: the column's type is not the requested one.");
+        check<T>(type(i));
         return ygg::decode_value<T>(value(i));
     }
-    /// Its objects; throws std::invalid_argument unless every column is an object column. An object family's are resolved
-    /// through the context; a free relation's are raw ObjectIndex values.
-    [[nodiscard]] auto get_objects() const
+    /// Columns first to last (exclusive) as T, a borrowed random-access range; throws std::invalid_argument unless each
+    /// column's type is the one T reads (checked once, here).
+    template<typename T>
+    [[nodiscard]] auto get(std::size_t first, std::size_t last) const
     {
-        for (std::size_t i = 0, n = size(); i < n; ++i)
-            if (type(i) != ygg::type_id<ygg::ObjectIndex>)
-                throw std::invalid_argument("Row: get_objects() requires object columns only.");
-        return objects_of(typed_values_of(self().data(), self().context()), self().context());
+        const auto types = this->types();
+        for (std::size_t i = first; i < last; ++i)
+            check<T>(types[i]);
+        const auto values = get_values();
+        return urd::transform(std::ranges::subrange(values.begin() + first, values.begin() + last), &ygg::decode_value<T>);
     }
-    /// The logical row across repositories: the relation index (a view's identity includes its context) and the values,
-    /// typed (row_value_t<F>).
-    [[nodiscard]] auto get_key() const { return std::make_pair(self().data().relation, typed_values_of(self().data(), self().context())); }
+    /// Every column as T (see get<T>(first, last)).
+    template<typename T>
+    [[nodiscard]] auto get() const
+    { return get<T>(0, size()); }
+    /// The logical row across repositories: the relation index (a view's identity includes its context) and the
+    /// canonical values.
+    [[nodiscard]] auto get_key() const { return std::make_pair(self().data().relation, get_values()); }
 };
 
 /// A stored row's view reads as a borrowed one.
@@ -137,10 +126,12 @@ concept RowViewConcept = requires(const std::remove_reference_t<V>& view, std::s
     view.context();
     { view.size() } -> std::same_as<std::size_t>;
     { view.value(i) } -> std::same_as<Value>;
+    { view.type(i) } -> std::same_as<TypeId>;
+    { view.get(i) } -> std::same_as<ColumnValue>;
     requires std::same_as<std::remove_cvref_t<decltype(view.get_key().first)>, urd::index<F>>;
     requires std::ranges::forward_range<const std::remove_reference_t<decltype(view.get_key().second)>>
                  && std::ranges::sized_range<const std::remove_reference_t<decltype(view.get_key().second)>>
-                 && std::same_as<std::ranges::range_value_t<const std::remove_reference_t<decltype(view.get_key().second)>>, row_value_t<F>>;
+                 && std::same_as<std::ranges::range_value_t<const std::remove_reference_t<decltype(view.get_key().second)>>, Value>;
 };
 }  // namespace ygg
 

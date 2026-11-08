@@ -26,37 +26,19 @@
 
 #include <utility>
 
-namespace ygg
-{
-/// The type of family F's values: an object index where F's rows are objects (F::object_tag names them), a Value for
-/// Schema.
-template<typename F>
-struct row_value
-{
-    using type = urd::index<formalism::Object<typename F::object_tag>>;
-};
-template<>
-struct row_value<Schema>
-{
-    using type = Value;
-};
-template<typename F>
-using row_value_t = typename row_value<F>::type;
-
-}  // namespace ygg
-
 namespace urd
 {
 
-/// A row held outside the repository (a builder of one, or a borrowed row): its pool's key and its values.
+/// A row held outside the repository (a builder of one, or a borrowed row): its pool's key and its canonical values, one
+/// per column (an object as its index's value).
 template<typename F>
 struct data<ygg::Row<F>>
 {
     urd::index<F> relation;
-    urd::flat_vector<ygg::row_value_t<F>> values;
+    urd::flat_vector<ygg::Value> values;
 
     data() = default;
-    data(urd::index<F> relation_, urd::flat_vector<ygg::row_value_t<F>> values_) : relation(relation_), values(std::move(values_)) {}
+    data(urd::index<F> relation_, urd::flat_vector<ygg::Value> values_) : relation(relation_), values(std::move(values_)) {}
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;

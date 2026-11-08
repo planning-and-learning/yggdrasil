@@ -12,7 +12,6 @@
 
 #include <cassert>
 #include <cstdint>
-#include <limits>
 #include <ranges>
 #include <span>
 #include <utility>
@@ -25,13 +24,10 @@
 
 namespace ygg
 {
-/// What tells relations apart while their rows stay unchanged: an interned relation's layer number and index, a
-/// builder's address (and no index).
-using RelationIdentity = std::pair<std::uintptr_t, std::uint32_t>;
-
+/// A builder's relation identity: its number, no index.
 template<typename F>
 [[nodiscard]] RelationIdentity relation_identity(const urd::builder<Relation<F>>& builder) noexcept
-{ return { reinterpret_cast<std::uintptr_t>(&builder), std::numeric_limits<std::uint32_t>::max() }; }
+{ return { builder.layer() }; }
 }  // namespace ygg
 
 /// Read access to an interned relation record, shared by its index and data views: its rows lie in the layer's pool
@@ -51,6 +47,7 @@ private:
     [[nodiscard]] auto subset() const { return urd::subset_view(repository().relations().template get<F>().at(record().pool), ids()); }
 
 public:
+    /// Its columns, interned from its labels and its pool's types.
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const noexcept
     {
         const auto& values = repository()[record().columns].values;

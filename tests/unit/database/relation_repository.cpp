@@ -750,15 +750,15 @@ struct UnsupportedColumn
     void* pointer;
 };
 
-static_assert(ygg::ColumnValueType<uint_t> && ygg::ColumnValueType<double> && ygg::ColumnValueType<bool> && ygg::ColumnValueType<ygg::ObjectIndex>);
+static_assert(ygg::ColumnValueType<uint_t> && ygg::ColumnValueType<double> && ygg::ColumnValueType<bool> && ygg::ColumnValueType<urd::index<ygg::formalism::Object<void>>>);
 static_assert(!ygg::ColumnValueType<ColumnsIndex> && !ygg::ColumnValueType<const uint_t> && !ygg::ColumnValueType<UnsupportedColumn>);
-static_assert(ygg::type_id<std::uint32_t> == ygg::TypeId { 0 } && ygg::type_id<bool> == ygg::TypeId { 6 } && ygg::type_id<ygg::ObjectIndex> == ygg::TypeId { 7 });
-static_assert(ygg::column_bits(ygg::type_id<bool>, 5) == 1 && ygg::column_bits(ygg::type_id<double>, 5) == 64 && ygg::column_bits(ygg::type_id<ygg::ObjectIndex>, 5) == 5);
+static_assert(ygg::type_id<std::uint32_t> == ygg::TypeId { 0 } && ygg::type_id<bool> == ygg::TypeId { 6 } && ygg::type_id<urd::index<ygg::formalism::Object<void>>> == ygg::TypeId { 7 });
+static_assert(ygg::column_bits(ygg::type_id<bool>, 5) == 1 && ygg::column_bits(ygg::type_id<double>, 5) == 64 && ygg::column_bits(ygg::type_id<urd::index<ygg::formalism::Object<void>>>, 5) == 5);
 }
 
 TEST(YggdrasilTests, ColumnValuesDecodeFromTheirBits)
 {
-    for (const auto value : { ygg::ColumnValue(std::int32_t { -3 }), ygg::ColumnValue(-0.0f), ygg::ColumnValue(true), ygg::ColumnValue(ygg::ObjectIndex { 9 }) })
+    for (const auto value : { ygg::ColumnValue(std::int32_t { -3 }), ygg::ColumnValue(-0.0f), ygg::ColumnValue(true), ygg::ColumnValue(urd::index<ygg::formalism::Object<void>>(9)) })
         EXPECT_EQ(ygg::decode(ygg::encode(value), static_cast<ygg::TypeId>(value.index())), value);
     EXPECT_EQ(ygg::encode(ygg::ColumnValue(std::int32_t { -1 })), 0xffffffffu);
     EXPECT_THROW((void) ygg::decode(0, static_cast<ygg::TypeId>(std::variant_size_v<ygg::ColumnValue>)), std::invalid_argument);
@@ -791,11 +791,13 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
         EXPECT_EQ(ygg::decode_value<uint_t>(row.value(at(ColumnIndex(4)))), 42);
         EXPECT_DOUBLE_EQ(ygg::decode_value<double>(row.value(at(ColumnIndex(9)))), 1.25);
         EXPECT_EQ(row.type(at(ColumnIndex(9))), ygg::type_id<double>);
-        EXPECT_DOUBLE_EQ(std::get<double>(row.column_value(at(ColumnIndex(9)))), 1.25);
-        EXPECT_EQ(std::get<uint_t>(row.column_value(at(ColumnIndex(7)))), entity.index().value);
-        EXPECT_DOUBLE_EQ(row.template column_value<double>(at(ColumnIndex(9))), 1.25);
-        EXPECT_THROW((void) row.template column_value<float>(at(ColumnIndex(9))), std::invalid_argument);
-        EXPECT_THROW((void) row.get_objects(), std::invalid_argument);  // mixed columns
+        EXPECT_DOUBLE_EQ(std::get<double>(row.get(at(ColumnIndex(9)))), 1.25);
+        EXPECT_EQ(std::get<uint_t>(row.get(at(ColumnIndex(7)))), entity.index().value);
+        EXPECT_DOUBLE_EQ(row.template get<double>(at(ColumnIndex(9))), 1.25);
+        EXPECT_THROW((void) row.template get<float>(at(ColumnIndex(9))), std::invalid_argument);
+        EXPECT_THROW((void) row.template get<urd::index<ygg::formalism::Object<void>>>(), std::invalid_argument);  // mixed columns
+        EXPECT_THROW((void) row.template get<double>(0, 2), std::invalid_argument);
+        EXPECT_DOUBLE_EQ(row.template get<double>(at(ColumnIndex(9)), at(ColumnIndex(9)) + 1)[0], 1.25);
         EXPECT_TRUE(ygg::decode_value<bool>(row.value(at(ColumnIndex(2)))));
         EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(row.value(at(ColumnIndex(7)))), entities), entity);
         EXPECT_EQ(at(ColumnIndex(99)), schema.size());
@@ -897,6 +899,45 @@ TEST(YggdrasilTests, HomogeneousRowsRoundTripThroughReusableBuffers)
     auto relation = urd::builder<ygg::Relation<ygg::Schema>>(columns);
     relation.insert(std::array { ygg::encode_value(std::uint64_t { 4 }), ygg::encode_value(std::uint64_t { 9 }) });
     EXPECT_TRUE(relation.contains(encoded));
+}
+
+TEST(YggdrasilTests, DatabasePoolsKeepTheirColumnTypes)
+{
+    Repository repository;
+    const auto key = urd::index<ygg::Schema>(0);
+    auto values = urd::flat_vector<ygg::Value>();
+    values.push_back(1);
+    values.push_back(2);
+    const auto row = urd::data<ygg::Row<ygg::Schema>>(key, std::move(values));
+    const std::array unsigned_types { ygg::type_id<uint_t>, ygg::type_id<uint_t> };
+    const std::array double_types { ygg::type_id<double>, ygg::type_id<double> };
+    EXPECT_THROW((void) repository.relations().types(key), std::out_of_range);  // no pool yet
+    EXPECT_TRUE(repository.relations().insert(row, unsigned_types).second);
+    EXPECT_TRUE(std::ranges::equal(repository.relations().types(key), unsigned_types));
+    EXPECT_THROW(repository.relations().insert(row, double_types), std::invalid_argument);
+    Repository child(&repository);
+    EXPECT_THROW(child.relations().insert(row, double_types), std::invalid_argument);  // the parent's types
+    EXPECT_TRUE(std::ranges::equal(child.relations().types(key), unsigned_types));
+    repository.clear();
+    EXPECT_THROW((void) repository.relations().types(key), std::out_of_range);
+}
+
+TEST(YggdrasilTests, DatabaseBuildersAreNumberedLikeLayers)
+{
+    RelationBuilder first(ygg::tests::ops::cols({ ColumnIndex(1) }));
+    RelationBuilder second;
+    const Repository layer;
+    EXPECT_NE(first.layer(), second.layer());
+    EXPECT_NE(first.layer(), layer.layer());
+    const auto number = first.layer();
+    first.insert(cells(1));
+    first.clear();
+    first.initialize(ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) }));
+    EXPECT_EQ(first.layer(), number);
+    EXPECT_EQ(ygg::relation_identity(first).context, number);
+    EXPECT_EQ(ygg::relation_identity(first).relation, urd::index<void>::none_value);
+    first.insert(cells(3, 4));
+    EXPECT_EQ(layer.view(first).row(0).context().layer(), number);
 }
 
 }  // namespace ygg::tests
