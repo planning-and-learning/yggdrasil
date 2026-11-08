@@ -15,7 +15,7 @@ bool SemijoinEvaluator::matched(const RowPool::row_type& lhs_row) const
         return !m_rhs.empty();
     const auto current = m_layer->view(m_rhs);
     for (const auto position : m_rhs_index.values(database::detail::join_key_hash(lhs_row, lhs_keys)))
-        if (database::detail::join_keys_equal(current.row(position), rhs_keys, lhs_row, lhs_keys))
+        if (database::detail::join_keys_equal(current.row(position).get_values(), rhs_keys, lhs_row, lhs_keys))
             return true;
     return false;
 }

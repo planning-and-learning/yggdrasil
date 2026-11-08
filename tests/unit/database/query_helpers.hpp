@@ -253,12 +253,13 @@ inline urd::Store<urd::sequence<uint_t>> decode(std::span<const ygg::Value> row)
         values.push_back(ygg::decode_value<uint_t>(value));
     return values;
 }
-inline urd::Store<urd::sequence<uint_t>> decode(const database::RowPool::row_type& row)
+template<ygg::RowViewConcept<ygg::Schema> R>
+urd::Store<urd::sequence<uint_t>> decode(const R& row)
 {
     urd::Store<urd::sequence<uint_t>> values;
     values.reserve(row.size());
     for (size_t c = 0; c < row.size(); ++c)
-        values.push_back(ygg::decode_value<uint_t>(row.get(c)));
+        values.push_back(ygg::decode_value<uint_t>(row.value(c)));
     return values;
 }
 

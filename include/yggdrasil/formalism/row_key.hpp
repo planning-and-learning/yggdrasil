@@ -15,8 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef YGG_FORMALISM_BINDING_KEY_HPP_
-#define YGG_FORMALISM_BINDING_KEY_HPP_
+#ifndef YGG_FORMALISM_ROW_KEY_HPP_
+#define YGG_FORMALISM_ROW_KEY_HPP_
 
 
 #include "yggdrasil/core/config.hpp"
@@ -24,35 +24,35 @@
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
 
-namespace ygg::formalism
+namespace ygg
 {
 
-/// Hashes a binding by its logical key, the relation and the object row of get_key(), rather than by its row identity.
-/// Transparent, so a map keyed by bindings of one repository can be queried with any type whose get_key() spells the
-/// same binding, e.g. a prefix of a row in another repository, without publishing it first.
-struct BindingKeyHash
+/// Hashes a row by its logical key, the relation and the values of get_key(), rather than by its identity.
+/// Transparent, so a map keyed by rows of one repository can be queried with any type whose get_key() spells the
+/// same row, e.g. a prefix of a row in another repository, without storing it first.
+struct RowKeyHash
 {
     using is_transparent = void;
 
     template<typename Key>
     hash_t operator()(const Key& key) const
     {
-        const auto [relation, objects] = key.get_key();
-        return urd::hash_combine(relation, urd::hash_range(objects));
+        const auto [relation, values] = key.get_key();
+        return urd::hash_combine(relation, urd::hash_range(values));
     }
 };
 
-/// Compares bindings by their logical key, see BindingKeyHash.
-struct BindingKeyEqualTo
+/// Compares rows by their logical key, see RowKeyHash.
+struct RowKeyEqualTo
 {
     using is_transparent = void;
 
     template<typename Lhs, typename Rhs>
     bool operator()(const Lhs& lhs, const Rhs& rhs) const
     {
-        const auto [lhs_relation, lhs_objects] = lhs.get_key();
-        const auto [rhs_relation, rhs_objects] = rhs.get_key();
-        return urd::EqualTo<> {}(lhs_relation, rhs_relation) && urd::equal_elements(lhs_objects, rhs_objects);
+        const auto [lhs_relation, lhs_values] = lhs.get_key();
+        const auto [rhs_relation, rhs_values] = rhs.get_key();
+        return urd::EqualTo<> {}(lhs_relation, rhs_relation) && urd::equal_elements(lhs_values, rhs_values);
     }
 };
 

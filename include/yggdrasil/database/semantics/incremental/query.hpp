@@ -98,7 +98,7 @@ struct NodeRules
                 {
                     const auto row = rows.row(i);
                     const bool present = std::same_as<Tag, QueryUnionTag> ? lhs.contains(row) || rhs.contains(row) : lhs.contains(row) && !rhs.contains(row);
-                    state.set(row, present);
+                    state.set(row.get_values(), present);
                 }
             };
             for_each_child(operation,
@@ -115,7 +115,7 @@ struct NodeRules
             {
                 for (size_t i = 0; i < rows.size(); ++i)
                 {
-                    const auto row = rows.row(i);
+                    const auto row = rows.row(i).get_values();
                     if constexpr (std::same_as<Tag, QuerySelectEqualTag> || std::same_as<Tag, QuerySelectValueTag>)
                         if (!database::detail::query_accepts(operation, row))
                             continue;

@@ -1,4 +1,4 @@
-#include "yggdrasil/formalism/binding_key.hpp"
+#include "yggdrasil/formalism/row_key.hpp"
 
 
 #include <cstddef>
@@ -18,7 +18,7 @@ namespace ygg::tests
 namespace
 {
 
-struct StoredBinding
+struct StoredRow
 {
     int relation;
     urd::Store<urd::sequence<int>> objects;
@@ -26,8 +26,8 @@ struct StoredBinding
     [[nodiscard]] auto get_key() const noexcept { return std::make_pair(relation, std::span<const int>(objects)); }
 };
 
-/// A row whose first arity objects spell a stored binding, like a rule binding that extends an action binding.
-struct PrefixBinding
+/// A row whose first arity values spell a stored row, like a rule row that extends an action row.
+struct PrefixRow
 {
     int relation;
     urd::Store<urd::sequence<int>> row;
@@ -39,18 +39,18 @@ struct PrefixBinding
 
 }
 
-TEST(YggdrasilTests, BindingKeyLooksUpStoredBindingsByAnyKeyOfTheSameBinding)
+TEST(YggdrasilTests, RowKeyLooksUpStoredRowsByAnyKeyOfTheSameRow)
 {
-    auto costs = gtl::flat_hash_map<StoredBinding, int, formalism::BindingKeyHash, formalism::BindingKeyEqualTo> {};
-    costs.emplace(StoredBinding { 1, { 4, 5 } }, 7);
+    auto costs = gtl::flat_hash_map<StoredRow, int, RowKeyHash, RowKeyEqualTo> {};
+    costs.emplace(StoredRow { 1, { 4, 5 } }, 7);
 
-    const auto it = costs.find(PrefixBinding { 1, { 4, 5, 9 }, 2 });
+    const auto it = costs.find(PrefixRow { 1, { 4, 5, 9 }, 2 });
     ASSERT_NE(it, costs.end());
     EXPECT_EQ(it->second, 7);
 
-    EXPECT_EQ(costs.find(PrefixBinding { 1, { 4, 6, 9 }, 2 }), costs.end());
-    EXPECT_EQ(costs.find(PrefixBinding { 2, { 4, 5, 9 }, 2 }), costs.end());
-    EXPECT_EQ(costs.find(PrefixBinding { 1, { 4, 5, 9 }, 3 }), costs.end());
+    EXPECT_EQ(costs.find(PrefixRow { 1, { 4, 6, 9 }, 2 }), costs.end());
+    EXPECT_EQ(costs.find(PrefixRow { 2, { 4, 5, 9 }, 2 }), costs.end());
+    EXPECT_EQ(costs.find(PrefixRow { 1, { 4, 5, 9 }, 3 }), costs.end());
 }
 
 }  // namespace ygg::tests

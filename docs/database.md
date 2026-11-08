@@ -28,14 +28,14 @@ const std::array<ColumnLayout, 3> columns { ColumnLayout { source, type_id<std::
                                             ColumnLayout { target, type_id<std::uint32_t> },
                                             ColumnLayout { distance, type_id<double> } };
 Repository repository;
-const auto paths = repository.get_relation_builder(repository.schema(columns), columns);
+const auto paths = repository.get_relation_builder<Schema>(columns);
 const std::array<ygg::Value, 3> first { ygg::encode_value(3u), ygg::encode_value(8u), ygg::encode_value(2.5) };
 const std::array<ygg::Value, 3> second { ygg::encode_value(3u), ygg::encode_value(9u), ygg::encode_value(4.0) };
 paths->insert(first);
 paths->insert(second);
 
 const auto view = repository.view(*paths);  // a BuilderRelationView
-const auto length = ygg::decode_value<double>(view.row(0).get(2));
+const auto length = ygg::decode_value<double>(view.row(0).value(2));
 const std::array labels { source, target };
 const ProjectionPlan plan(view.columns(), labels);
 urd::builder<Relation<Schema>> reachable(plan.output_columns());
@@ -65,22 +65,29 @@ The relation code is data (`formalism/relation_data.hpp`), builders
 (`formalism/relation_builder.hpp`: `builder<Relation<F>>` and its `RowPool`),
 views (`formalism/relation_view.hpp`) and the value encoding (`formalism/values.hpp`).
 A relation belongs to a family `F` of the layer's relation types, whose pools (one per key `index<F>`) hold its rows;
-free relations are the `Schema` family, keyed by their column types (`Repository::schema(columns)`). The database's
-`Repository` has `Relation<Schema>` among its symbols, so only free relations (`builder<Relation<Schema>>`,
-`index_view<Relation<Schema>, Repository>`). `urd::builder<Relation<F>>` owns its pool key (none for one made
-without a layer), its columns and a pool of its rows (`RowPool`, rows by the columns' widths). Like tyr's state builders it only holds data: it is read through a layer,
-`repository.view(builder)` or `urd::resolve(builder, repository)`, a `BuilderRelationView`
+free relations are the `Schema` family, keyed by their column types (interned when a builder is inserted). The
+database's `Repository` has `Relation<Schema>` among its symbols (`HasRelations`; `HasRows` says a family has pools),
+so only free relations (`builder<Relation<Schema>>`, `index_view<Relation<Schema>, Repository>`).
+`urd::builder<Relation<F>>` owns its columns and a pool of its rows (`RowPool`, rows by the columns' widths); the pool
+key is given where it is interned: `insert(builder)` for `Schema` (its column types), `insert(pool, builder)` for other
+families. Like tyr's state builders it is read through a layer, `repository.view(builder)` or
+`urd::resolve(builder, repository)`, a `BuilderRelationView`
 (`urd::borrowed_view<Relation<Schema>, Repository, builder<Relation<Schema>>>`), and operations take only
-views. A builder holds its pool key, `urd::data<Columns>` and its rows, nothing else: no index and no content identity.
+views. A builder holds `urd::data<Columns>` and its rows, nothing else: no index and no content identity.
 
 A view (interned `urd::index_view<Relation<F>, Context>` or `BuilderRelationView`) gives
 `columns()` (a span of `ColumnLayout`), `size()`, `row(i)`, `rows()`, `contains(row)` and `relation_identity()`. An
 interned view reads its row set over its pool through `urd::subset_view`; a builder's view reads the
-builder's pool by position. A row is the
-pool's stored row (`RowPool::row_type`): `get(i)` gives the i-th value, which
-`decode_value<T>` reads as the column's type; the columns give labels and types.
-Inserting, finding and testing membership take a stored row of equal widths or a span
-of values (`encode_value` each), handed to the pool: inserting checks count (`std::invalid_argument`) and fit
+builder's pool by position. Every row is a `Row<F>` view, the same for every family (tyr's bindings and fact rows
+too): `urd::owning_view<Row<F>, C, RowIndex<F>>` holds its key `{relation, row}` (row an `index<Row<F>>`) and reads
+through its context, the layer (`layer.view(key)`, `layer[key]` the stored row) or the builder (rows by position).
+`value(i)` gives the i-th canonical value, `type(i)` its column's type (a free relation's from its Schema, an object
+family's an object), `column_value(i)` the decoded `ColumnValue` and `column_value<T>(i)` a `T` (it throws
+`std::invalid_argument` for another type; urd views own `get<>()`, hence the name); `get_objects()` throws unless every
+column is an object column; `get_values()` the stored row;
+the columns give labels and types. A borrowed row is `urd::borrowed_view<Row<F>, C, data<Row<F>>>`
+(`data<Row<F>> {relation, values}`). Inserting, finding and testing membership take a row view, a stored row of equal
+widths or a span of values (`encode_value` each), handed to the pool: inserting checks count (`std::invalid_argument`) and fit
 (`std::out_of_range`) before mutation; values that do not fit are in no row.
 Typed indices resolve through `urd::resolve` and the context's repository.
 This keeps object-view construction at the external access boundary. Row and
@@ -140,13 +147,13 @@ while it is unchanged) and the ordered key positions.
 ## Reuse and interning
 
 Keep a `Workspace` and output builders across evaluations. Scratch rows, row
-containers, and hash tables retain capacity. `Repository::get_relation_builder(pool, columns)`
+containers, and hash tables retain capacity. `Repository::get_relation_builder<F>(columns)`
 hands out builders as tyr's `get_state_builder` does: a `std::shared_ptr` from the layer's
 urd slots Store of the family keyed by column widths (`urd::Store<urd::slots<builder<Relation<F>>>, urd::keyed<urd::column_widths>>`),
 whose control blocks come from the Store's pool; the slot goes back with its last owner under its widths and keeps its
 row storage, so it is reused only for columns of equal widths.
 `insert(builder)` interns one, as `register_state` does (a free relation's key is its column types, interned
-there, so key-less builders, e.g. those of evaluators holding a const layer, intern alike). The layer must outlive its
+there, so builders of any layer, e.g. those of evaluators holding a const layer, intern alike). The layer must outlive its
 builders. Prepare a schema once and pass its layout span to avoid rebuilding it in the
 update loop. Larger workloads may still grow storage. Each evaluator/thread needs its own
 mutable workspace; evaluators take the layer (`const Repository&`) their builders are read
@@ -154,8 +161,8 @@ through, and return their results as `BuilderRelationView`s.
 
 `ygg::database::Repository` is a yggdrasil formalism repository layer
 (`formalism::Repository`) whose symbols are the relation model: `Schema` (the column
-types), `Columns` (labels and types), `RowSet` (sorted row ids) and `Relation`
-(`{schema, columns, row_set}`). Rows are interned per schema, in one pool of the
+types), `Columns` (labels and types), `RowSet<Schema>` (sorted row ids) and `Relation<Schema>`
+(`{pool, columns, row_set}`). Rows are interned per schema, in one pool of the
 layer each (row IDs are per pool). Relations with identical columns and row sets
 share identity regardless of insertion order. Relations of the same column types
 share rows; renaming keeps the schema and the row set. Iteration follows sorted

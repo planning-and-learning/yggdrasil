@@ -81,7 +81,7 @@ void ProjectionEvaluator::initialize(const V& input, Workspace& workspace)
     m_delta.clear();
     m_pending_removals.clear();
     for (size_t i = 0; i < input.size(); ++i)
-        add(project_row(input.row(i), workspace));
+        add(project_row(input.row(i).get_values(), workspace));
     m_initialized = true;
 }
 
@@ -101,10 +101,10 @@ void ProjectionEvaluator::apply(const C& change, Workspace& workspace)
     m_delta.clear();
     m_pending_removals.clear();
     for (size_t i = 0; i < removed.size(); ++i)
-        remove(project_row(removed.row(i), workspace));
+        remove(project_row(removed.row(i).get_values(), workspace));
     for (size_t i = 0; i < added.size(); ++i)
     {
-        const auto row = project_row(added.row(i), workspace);
+        const auto row = project_row(added.row(i).get_values(), workspace);
         if (add(row))
             m_delta.added.insert(row);
     }
@@ -115,7 +115,7 @@ void ProjectionEvaluator::apply(const C& change, Workspace& workspace)
     for (const auto position : m_pending_removals)
         if (m_supports[position] == 0)
         {
-            m_delta.removed.insert(m_layer->view(m_result).row(position));
+            m_delta.removed.insert(m_layer->view(m_result).row(position).get_values());
             m_result.erase(position);
             m_supports[position] = m_supports.back();
             m_supports.pop_back();

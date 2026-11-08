@@ -61,7 +61,7 @@ std::set<urd::Store<urd::sequence<T>>> rows(const V& relation)
         urd::Store<urd::sequence<T>> values;
         values.reserve(row.size());
         for (size_t column = 0; column < row.size(); ++column)
-            values.push_back(row.template get<T>(column));
+            values.push_back(row.get_values().template get<T>(column));
         result.insert(std::move(values));
     }
     return result;
@@ -90,9 +90,9 @@ void expect_update(const Evaluator& evaluator, const std::set<urd::Store<urd::se
 void apply_batch(urd::builder<ygg::Relation<ygg::Schema>>& input, const urd::builder<ygg::Relation<ygg::Schema>>& added, const urd::builder<ygg::Relation<ygg::Schema>>& removed)
 {
     for (const auto row : borrow(removed).rows())
-        input.erase(input.find(row).value());
+        input.erase(input.find(row.get_values()).value());
     for (const auto row : borrow(added).rows())
-        input.insert(row);
+        input.insert(row.get_values());
 }
 }  // namespace
 
@@ -161,14 +161,14 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionTracksSupportAcrossCompactionA
     // move the last output into its slot as a temporary consequence.
     EXPECT_EQ(evaluator.get_result().data().find(cells(7, 1)).value(), replaced_index);
     EXPECT_EQ(evaluator.get_result().data().find(cells(9, 3)).value(), untouched_index);
-    const auto same_storage = [](const ygg::database::RowPool::row_type& lhs, const ygg::database::RowPool::row_type& rhs)
-    { return lhs.data() == rhs.data() && lhs.first_bit() == rhs.first_bit(); };
+    const auto same_storage = [](const auto& lhs, const auto& rhs)
+    { return lhs.get_values().data() == rhs.get_values().data() && lhs.get_values().first_bit() == rhs.get_values().first_bit(); };
     EXPECT_TRUE(same_storage(evaluator.get_result().row(replaced_index), replaced_row));
     EXPECT_TRUE(same_storage(evaluator.get_result().row(untouched_index), untouched_row));
-    EXPECT_EQ(ygg::decode_value<uint_t>(replaced_row.get(size_t { 0 })), 7);
-    EXPECT_EQ(ygg::decode_value<uint_t>(replaced_row.get(size_t { 1 })), 1);
-    EXPECT_EQ(ygg::decode_value<uint_t>(untouched_row.get(size_t { 0 })), 9);
-    EXPECT_EQ(ygg::decode_value<uint_t>(untouched_row.get(size_t { 1 })), 3);
+    EXPECT_EQ(ygg::decode_value<uint_t>(replaced_row.value(0)), 7);
+    EXPECT_EQ(ygg::decode_value<uint_t>(replaced_row.value(1)), 1);
+    EXPECT_EQ(ygg::decode_value<uint_t>(untouched_row.value(0)), 9);
+    EXPECT_EQ(ygg::decode_value<uint_t>(untouched_row.value(1)), 3);
     EXPECT_TRUE(evaluator.get_delta().added.empty());
     EXPECT_TRUE(evaluator.get_delta().removed.empty());
     update(erase_first.added, erase_first.removed);
@@ -233,7 +233,7 @@ TEST(YggdrasilTests, DatabaseIncrementalProjectionConsolidatesMixedChangesAndUnd
     urd::builder<ygg::Relation<ygg::Schema>> empty(input.columns());
     urd::builder<ygg::Relation<ygg::Schema>> all(input.columns());
     for (size_t i = 0; i < input.size(); ++i)
-        all.insert(borrow(input).row(i));
+        all.insert(borrow(input).row(i).get_values());
     update(empty, all);
     EXPECT_TRUE(evaluator.get_result().empty());
     update(all, empty);
@@ -342,7 +342,7 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinUpdatesEitherSideIndependently)
         EXPECT_TRUE(evaluator.get_delta().added.empty());
         EXPECT_TRUE(evaluator.get_delta().removed.empty());
         database::incremental::Delta delta(layer(), dynamic.columns());
-        delta.removed.insert(borrow(dynamic).row(0));
+        delta.removed.insert(borrow(dynamic).row(0).get_values());
         if (!change_left)
             delta.added.insert(cells(3, 30, 2));
         else
@@ -532,12 +532,12 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinMaintainsWideIndexesAcrossRowCompact
         rhs_delta.clear();
         if (generation % 3 != 1)
         {
-            lhs_delta.removed.insert(borrow(lhs).row(generation % lhs.size()));
+            lhs_delta.removed.insert(borrow(lhs).row(generation % lhs.size()).get_values());
             lhs_delta.added.insert(std::array { ygg::encode_value(Value { 100 + generation }), ygg::encode_value(Value { generation % 3 }) });
         }
         if (generation % 3 != 2)
         {
-            rhs_delta.removed.insert(borrow(rhs).row((generation + 1) % rhs.size()));
+            rhs_delta.removed.insert(borrow(rhs).row((generation + 1) % rhs.size()).get_values());
             rhs_delta.added.insert(std::array { ygg::encode_value(Value { generation % 3 }), ygg::encode_value(Value { 100 + generation }) });
         }
         const auto before = rows<Value>(borrow(reference));
@@ -557,9 +557,9 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
         urd::builder<ygg::Relation<ygg::Schema>> lhs;
         urd::builder<ygg::Relation<ygg::Schema>> rhs;
         if (!(nullary_sides & 1))
-            lhs.initialize({}, ygg::tests::ops::cols({ ColumnIndex(1) }));
+            lhs.initialize(ygg::tests::ops::cols({ ColumnIndex(1) }));
         if (!(nullary_sides & 2))
-            rhs.initialize({}, ygg::tests::ops::cols({ ColumnIndex(2) }));
+            rhs.initialize(ygg::tests::ops::cols({ ColumnIndex(2) }));
         const database::JoinPlan plan(lhs.columns(), rhs.columns());
         database::incremental::JoinEvaluator evaluator(layer(), plan);
         urd::builder<ygg::Relation<ygg::Schema>> reference(plan.output_columns());
@@ -593,8 +593,8 @@ TEST(YggdrasilTests, DatabaseIncrementalJoinHandlesCartesianAndNullaryChangesOnB
         update(lhs_delta.added, lhs_delta.removed, rhs_delta.added, rhs_delta.removed);
         database::incremental::Delta lhs_remove(layer(), lhs.columns());
         database::incremental::Delta rhs_remove(layer(), rhs.columns());
-        lhs_remove.removed.insert(borrow(lhs).row(0));
-        rhs_remove.removed.insert(borrow(rhs).row(0));
+        lhs_remove.removed.insert(borrow(lhs).row(0).get_values());
+        rhs_remove.removed.insert(borrow(rhs).row(0).get_values());
         update(lhs_remove.added, lhs_remove.removed, rhs_remove.added, rhs_remove.removed);
         update(lhs_remove.removed, lhs_remove.added, rhs_remove.removed, rhs_remove.added);
         update(lhs_delta.removed, lhs_delta.added, rhs_delta.removed, rhs_delta.added);

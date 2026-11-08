@@ -11,7 +11,7 @@
 
 #include <urd/elements/flat.hpp>
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/binding_data.hpp"
+#include "yggdrasil/formalism/row_data.hpp"
 
 #include <benchmark/benchmark.h>
 #include <cstdint>
@@ -90,8 +90,8 @@ using SequentialBlockRepository = formalism::Repository<SequentialSymbols, Seque
 using ConcurrentBlockRepository = formalism::Repository<ConcurrentSymbols, ConcurrentBlockRelations>;
 using SequentialPackedRepository = formalism::Repository<SequentialSymbols, SequentialPackedRelations>;
 using ConcurrentPackedRepository = formalism::Repository<ConcurrentSymbols, ConcurrentPackedRelations>;
-using BlockBinding = formalism::RelationBinding<Relation, BlockObjectTag>;
-using PackedBinding = formalism::RelationBinding<Relation, PackedObjectTag>;
+using BlockBinding = Row<Relation>;
+using PackedBinding = Row<Relation>;
 
 template<typename Repository>
 std::unique_ptr<Repository>& repository()
@@ -113,7 +113,7 @@ void set_key(urd::data<SerializedSymbol>& data, std::uint64_t key)
 template<typename Binding>
 urd::data<Binding> make_binding(urd::index<Relation> relation = urd::index<Relation>(0))
 {
-    using Object = formalism::Object<typename Binding::object_tag>;
+    using Object = formalism::Object<typename Relation::object_tag>;
     auto objects = urd::flat_vector<urd::index<Object>> {};
     objects.resize(4);
     return urd::data<Binding>(relation, std::move(objects));
@@ -122,8 +122,8 @@ urd::data<Binding> make_binding(urd::index<Relation> relation = urd::index<Relat
 template<typename Binding>
 void set_key(urd::data<Binding>& data, std::uint64_t key) noexcept
 {
-    for (std::size_t i = 0; i < data.objects.size(); ++i)
-        data.objects[i] = urd::index<formalism::Object<typename Binding::object_tag>>(static_cast<uint_t>((key >> (i * 12U)) & 0xFFFU));
+    for (std::size_t i = 0; i < data.values.size(); ++i)
+        data.values[i] = urd::index<formalism::Object<typename Relation::object_tag>>(static_cast<uint_t>((key >> (i * 12U)) & 0xFFFU));
 }
 
 template<typename Repository>
@@ -268,7 +268,7 @@ void benchmark_relation_find(benchmark::State& state)
         const auto found = repository<Repository>()->find(data);
         if (!found)
         {
-            state.SkipWithError("prefilled relation binding not found");
+            state.SkipWithError("prefilled row not found");
             break;
         }
         checksum += found->index().row.value;

@@ -42,13 +42,13 @@ class GenericJoinEvaluator
             auto& current = m_workspace.trie(input);
             m_changed.clear();
             for (size_t row = 0; row < changed.size(); ++row)
-                m_changed.insert(changed.row(row), keys);
+                m_changed.insert(changed.row(row).get_values(), keys);
             m_workspace.append(removing ? m_delta.removed : m_delta.added, input, m_changed);
             for (size_t row = 0; row < changed.size(); ++row)
                 if (removing)
-                    current.erase(changed.row(row), keys);
+                    current.erase(changed.row(row).get_values(), keys);
                 else
-                    current.insert(changed.row(row), keys);
+                    current.insert(changed.row(row).get_values(), keys);
         };
         for (size_t input = 0; input < m_plan.input_count(); ++input)
             apply_input(input, std::get<1>(changes[input]), true);
@@ -106,7 +106,7 @@ public:
             const auto require_actual = [&](const auto& changed, bool removing)
             {
                 for (size_t row = 0; row < changed.size(); ++row)
-                    if (current.contains(changed.row(row), keys) != removing)
+                    if (current.contains(changed.row(row).get_values(), keys) != removing)
                         throw std::invalid_argument("Incremental generic join: change does not describe an actual input set change.");
             };
             require_actual(removed, true);

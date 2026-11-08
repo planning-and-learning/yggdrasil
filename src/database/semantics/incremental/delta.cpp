@@ -24,11 +24,11 @@ void apply_delta(const Delta& delta, urd::builder<Relation<Schema>>& result)
     const auto [added, removed] = delta.change();
     for (size_t i = 0; i < removed.size(); ++i)
     {
-        const auto position = result.find(removed.row(i));
+        const auto position = result.find(removed.row(i).get_values());
         URD_ASSUME(position.has_value());  // a removed row is in the result
         result.erase(*position);
     }
     for (size_t i = 0; i < added.size(); ++i)
-        result.insert(added.row(i));
+        result.insert(added.row(i).get_values());
 }
 }

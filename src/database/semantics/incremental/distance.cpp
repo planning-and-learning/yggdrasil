@@ -259,7 +259,7 @@ void SourceMinDistance::count(BuilderRelationView rows, bool add)
 {
     for (size_t i = 0; i < rows.size(); ++i)
     {
-        const auto distance = rows.row(i).template get<uint_t>(m_position);
+        const auto distance = static_cast<uint_t>(rows.row(i).value(m_position));
         if (distance >= m_counts.size())
             m_counts.resize(distance + 1, 0);
         assert(add || m_counts[distance] > 0);

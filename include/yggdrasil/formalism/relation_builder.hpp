@@ -9,6 +9,7 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
+#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/values.hpp"
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -40,18 +42,17 @@ void validate_columns(std::span<const ColumnLayout> columns);
 namespace urd
 {
 /// A set of rows of family F, stored by the widths of its columns (urd::by_column_widths); its columns give each
-/// column's label and type, validated (valid types, distinct labels), and its pool the key of the layer's pool that
-/// interns its rows (none where it was made without a layer). It only holds data: it is read through a layer
-/// (relation_view.hpp: urd::resolve(builder, layer) or layer.view(builder)), which interns it (insert) and hands out
-/// pooled ones (get_relation_builder). Erase moves the final row into its place; clear retains row storage. A
-/// zero-column relation is true exactly when it contains the empty row.
+/// column's label and type, validated (valid types, distinct labels). It is read through a layer (relation_view.hpp:
+/// urd::resolve(builder, layer) or layer.view(builder)), which interns it (insert, into the pool of a key given there)
+/// and hands out pooled ones (get_relation_builder). It is the context of its rows' views (view(key), with no relation
+/// in the key): context[key] is the stored row. Erase moves the final row into its place; clear retains row storage.
+/// A zero-column relation is true exactly when it contains the empty row.
 template<typename F>
 struct builder<ygg::Relation<F>>
 {
 private:
     using Rows = ygg::database::RowPool;
 
-    urd::index<F> m_pool;
     urd::data<ygg::Columns> m_columns;
     /// The rows, interned by the columns' widths: a handle's value is the row's position.
     Rows m_rows;
@@ -73,11 +74,10 @@ private:
 public:
     /// The nullary relation, false.
     builder() : builder(std::span<const ygg::ColumnLayout>()) {}
-    explicit builder(std::span<const ygg::ColumnLayout> columns) : builder(widths_of(validated(columns)), urd::index<F>(), columns) {}
-    /// A builder of `pool` with these columns, whose rows are stored in `widths` (the columns' widths in the layer: a
-    /// slot's key, see Repository::get_relation_builder).
-    builder(const urd::column_widths& widths, urd::index<F> pool, std::span<const ygg::ColumnLayout> columns) :
-        m_pool(pool),
+    explicit builder(std::span<const ygg::ColumnLayout> columns) : builder(widths_of(validated(columns)), columns) {}
+    /// A builder with these columns, whose rows are stored in `widths` (the columns' widths in the layer: a slot's key,
+    /// see Repository::get_relation_builder).
+    builder(const urd::column_widths& widths, std::span<const ygg::ColumnLayout> columns) :
         m_columns(validated(columns)),
         m_rows(widths)
     {
@@ -88,8 +88,6 @@ public:
     builder& operator=(builder&&) noexcept = default;
     ~builder() = default;
 
-    /// The key of the layer's pool its rows are interned into; none where it was made without a layer.
-    [[nodiscard]] urd::index<F> pool() const noexcept { return m_pool; }
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const noexcept { return { m_columns.values.data(), m_columns.values.size() }; }
     /// The widths its rows are stored in.
     [[nodiscard]] const urd::column_widths& widths() const noexcept { return m_rows.column_widths(); }
@@ -99,6 +97,13 @@ public:
     { return m_columns.values.allocated_size_ * sizeof(ygg::ColumnLayout) + urd::memory_usage(m_rows); }
     /// Its rows, by position (a handle's value).
     [[nodiscard]] const Rows& storage() const noexcept { return m_rows; }
+    /// The stored row at key.row (a position), as the views of its rows read it.
+    [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept
+    { return m_rows.view(typename Rows::handle_type(key.row.value)); }
+    /// The view of the row at key.row (a position) through this builder.
+    [[nodiscard]] ygg::RowView<F, builder> view(ygg::RowIndex<F> key) const noexcept { return { key, this }; }
+    /// Its number as the context of its rows' views (urd::layer): its address, as its relation_identity.
+    [[nodiscard]] std::size_t layer() const noexcept { return reinterpret_cast<std::uintptr_t>(this); }
 
     /// A row of values, one per column (the pool's: a count other than the columns' throws std::invalid_argument, a
     /// value that does not fit its column std::out_of_range, before anything is stored). Returns its position.
@@ -110,6 +115,16 @@ public:
     [[nodiscard]] std::optional<ygg::uint_t> find(const Rows::row_type& row) const { return position(m_rows.find(row)); }
     [[nodiscard]] bool contains(std::span<const ygg::Value> values) const { return !m_rows.find(values).is_none(); }
     [[nodiscard]] bool contains(const Rows::row_type& row) const { return !m_rows.find(row).is_none(); }
+    /// A row view (its values; a stored row of equal widths).
+    template<ygg::RowViewConcept<F> R>
+    ygg::uint_t insert(const R& row)
+    { return insert(row.get_values()); }
+    template<ygg::RowViewConcept<F> R>
+    [[nodiscard]] std::optional<ygg::uint_t> find(const R& row) const
+    { return find(row.get_values()); }
+    template<ygg::RowViewConcept<F> R>
+    [[nodiscard]] bool contains(const R& row) const
+    { return contains(row.get_values()); }
 
     /// Invalidates the erased and moved rows' positions and borrowed rows.
     void erase(size_t index)
@@ -127,11 +142,10 @@ public:
         ygg::validate_columns(columns);
         std::ranges::copy(columns, m_columns.values.begin());  // the same widths: the rows stay
     }
-    /// Clears the rows and replaces the pool and the columns (validated); equal widths retain row storage.
-    void initialize(urd::index<F> pool, std::span<const ygg::ColumnLayout> columns)
+    /// Clears the rows and replaces the columns (validated); equal widths retain row storage.
+    void initialize(std::span<const ygg::ColumnLayout> columns)
     {
         ygg::validate_columns(columns);
-        m_pool = pool;
         if (auto widths = widths_of(columns); widths == m_rows.column_widths())
             m_rows.clear();
         else

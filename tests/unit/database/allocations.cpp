@@ -139,7 +139,7 @@ struct Evaluation
         fill(left, left_size, offset);
         fill(right, right_size, offset + 10000);
         database::join(borrow(left), borrow(right), joining, joined, workspace);
-        database::select(borrow(joined), [](ygg::database::RowPool::row_type row) { return ygg::decode_value<uint_t>(row.get(size_t { 0 })) < key_count / 2; }, selected);
+        database::select(borrow(joined), [](const auto& row) { return ygg::decode_value<uint_t>(row.value(0)) < key_count / 2; }, selected);
         database::project(borrow(joined), projecting, projected, workspace);
         // Relabel and restore the reusable builder within the measured path.
         const auto* schema_storage = joined.columns().data();
@@ -175,7 +175,7 @@ struct Evaluation
 struct CachedJoinEvaluation
 {
     database::Repository builders;
-    std::shared_ptr<urd::builder<ygg::Relation<ygg::Schema>>> build = builders.get_relation_builder(urd::index<ygg::Schema>(), cols({ ColumnIndex(1), ColumnIndex(2) }));
+    std::shared_ptr<urd::builder<ygg::Relation<ygg::Schema>>> build = builders.get_relation_builder<ygg::Schema>(cols({ ColumnIndex(1), ColumnIndex(2) }));
     urd::builder<ygg::Relation<ygg::Schema>> probe { cols({ ColumnIndex(1), ColumnIndex(3) }) };
     database::JoinPlan forward { build->columns(), probe.columns() };
     database::JoinPlan reverse { probe.columns(), build->columns() };
@@ -224,11 +224,11 @@ struct PooledEvaluation
     {
         fill(left, left_size, offset);
         fill(right, right_size, offset + 10000);
-        auto joined = builders.get_relation_builder(urd::index<ygg::Schema>(), joining.output_columns());
-        auto left_keys = builders.get_relation_builder(urd::index<ygg::Schema>(), key_columns);
-        auto right_keys = builders.get_relation_builder(urd::index<ygg::Schema>(), key_columns);
-        auto either = builders.get_relation_builder(urd::index<ygg::Schema>(), key_columns);
-        auto exists = builders.get_relation_builder(urd::index<ygg::Schema>(), {});
+        auto joined = builders.get_relation_builder<ygg::Schema>(joining.output_columns());
+        auto left_keys = builders.get_relation_builder<ygg::Schema>(key_columns);
+        auto right_keys = builders.get_relation_builder<ygg::Schema>(key_columns);
+        auto either = builders.get_relation_builder<ygg::Schema>(key_columns);
+        auto exists = builders.get_relation_builder<ygg::Schema>({});
         database::join(borrow(left), borrow(right), joining, *joined, workspace);
         database::project(borrow(left), projecting_left_keys, *left_keys, workspace);
         database::project(borrow(right), projecting_right_keys, *right_keys, workspace);
@@ -283,21 +283,21 @@ struct PreparedPooledEvaluation
             // Relabel the same pooled relation before each prepared checkout.
             // Schema changes and read-only access stay in the measurement.
             {
-                auto relabeled = builders.get_relation_builder(urd::index<ygg::Schema>(), alternate_join_columns);
+                auto relabeled = builders.get_relation_builder<ygg::Schema>(alternate_join_columns);
                 valid &= relabeled->empty();
                 relabeled->insert(cells(offset, offset + 1, offset + 2));
                 const auto borrowed = borrow(*relabeled);
                 valid &= borrowed.size() == 1;
                 valid &= std::ranges::equal(borrowed.columns(), alternate_join_columns);
             }
-            auto joined = builders.get_relation_builder(urd::index<ygg::Schema>(), joining.output_columns());
+            auto joined = builders.get_relation_builder<ygg::Schema>(joining.output_columns());
             valid &= joined->empty();
             valid &= std::ranges::equal(joined->columns(), joining.output_columns());
-            auto projected = builders.get_relation_builder(urd::index<ygg::Schema>(), projecting.output_columns());
-            auto left_keys = builders.get_relation_builder(urd::index<ygg::Schema>(), projecting_left_keys.output_columns());
-            auto right_keys = builders.get_relation_builder(urd::index<ygg::Schema>(), projecting_right_keys.output_columns());
-            auto either = builders.get_relation_builder(urd::index<ygg::Schema>(), projecting_left_keys.output_columns());
-            auto exists = builders.get_relation_builder(urd::index<ygg::Schema>(), testing_existence.output_columns());
+            auto projected = builders.get_relation_builder<ygg::Schema>(projecting.output_columns());
+            auto left_keys = builders.get_relation_builder<ygg::Schema>(projecting_left_keys.output_columns());
+            auto right_keys = builders.get_relation_builder<ygg::Schema>(projecting_right_keys.output_columns());
+            auto either = builders.get_relation_builder<ygg::Schema>(projecting_left_keys.output_columns());
+            auto exists = builders.get_relation_builder<ygg::Schema>(testing_existence.output_columns());
             database::join(borrow(left), borrow(right), joining, *joined, workspace);
             database::project(borrow(*joined), projecting, *projected, workspace);
             database::project(borrow(left), projecting_left_keys, *left_keys, workspace);
@@ -352,7 +352,7 @@ struct InterningEvaluation
             const auto [duplicate_schema, schema_created] = repository.insert(schema_data);
             valid &= !schema_created && interned_schema.index() == duplicate_schema.index();
             valid &= std::ranges::equal(interned_schema.data().values, schema);
-            auto builder = builders.get_relation_builder(urd::index<ygg::Schema>(), schema);
+            auto builder = builders.get_relation_builder<ygg::Schema>(schema);
             const auto seed = generation * 8192 + static_cast<uint_t>(logical_index) * 4;
             const std::array<uint_t, 3> first_row { seed, seed + 1, seed + 2 };
             const std::array<uint_t, 3> second_row { seed + 1, seed + 2, seed + 3 };
@@ -362,7 +362,7 @@ struct InterningEvaluation
             const auto [copied, copied_created] = copied_repository.copy(original);
             valid &= copied_created;
             valid &= !copied_repository.copy(original).second;
-            auto extracted = builders.get_relation_builder(urd::index<ygg::Schema>(), renamed_schema);
+            auto extracted = builders.get_relation_builder<ygg::Schema>(renamed_schema);
             const auto identity = ygg::relation_identity(*extracted);
             const auto* schema_storage = extracted->columns().data();
             database::assign(*extracted, copied);
@@ -381,11 +381,11 @@ struct InterningEvaluation
             valid &= original.index() == duplicate.index();
             valid &= original.index() != renamed.index();
             valid &= original.data().row_set == renamed.data().row_set;
-            valid &= original.row(0).data() == renamed.row(0).data() && original.row(0).first_bit() == renamed.row(0).first_bit();
+            valid &= original.row(0).get_values().data() == renamed.row(0).get_values().data() && original.row(0).get_values().first_bit() == renamed.row(0).get_values().first_bit();
             valid &= original.size() == 2 && renamed.columns().size() == arity;
             valid &= renamed.contains(std::span<const ygg::Value>(packed(first_row)).first(arity));
         }
-        auto nullary = builders.get_relation_builder(urd::index<ygg::Schema>(), {});
+        auto nullary = builders.get_relation_builder<ygg::Schema>({});
         const auto false_view = repository.insert(*nullary).first;
         nullary->insert(cells());
         const auto true_view = repository.insert(*nullary).first;

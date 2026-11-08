@@ -48,7 +48,7 @@ Results rows(const V& input)
     for (size_t i = 0; i < input.size(); ++i)
     {
         const auto row = input.row(i);
-        result.insert({ ygg::decode_value<uint_t>(row.get(static_cast<size_t>(0))), ygg::decode_value<uint_t>(row.get(static_cast<size_t>(1))), ygg::decode_value<uint_t>(row.get(static_cast<size_t>(2))) });
+        result.insert({ ygg::decode_value<uint_t>(row.value(static_cast<size_t>(0))), ygg::decode_value<uint_t>(row.value(static_cast<size_t>(1))), ygg::decode_value<uint_t>(row.value(static_cast<size_t>(2))) });
     }
     return result;
 }
@@ -401,7 +401,7 @@ TEST(YggdrasilTests, DatabaseDistanceMixedTupleTypesShareCanonicalVertices)
     database::incremental::DistanceEvaluator evaluator(layer(), plan);
     evaluator.initialize(layer().view(sources), layer().view(edges), layer().view(targets));
     database::incremental::Delta ds(layer(), sources.columns()), de(layer(), edges.columns()), dt(layer(), targets.columns());
-    de.removed.insert(layer().view(edges).row(0));
+    de.removed.insert(layer().view(edges).row(0).get_values());
     evaluator.update(ds.change(), de.change(), dt.change());
     EXPECT_EQ(evaluator.get_result().size(), 1);
     EXPECT_TRUE(evaluator.get_delta().added.empty());

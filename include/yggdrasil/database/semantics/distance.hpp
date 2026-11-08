@@ -120,18 +120,18 @@ void DistanceWorkspace::append_distances(const S& sources, const E& edges, const
     m_graph.outgoing.reserve(edges.size());
     for (size_t i = 0; i < edges.size(); ++i)
     {
-        const auto [from, to] = m_graph.insert_endpoints(edges.row(i));
+        const auto [from, to] = m_graph.insert_endpoints(edges.row(i).get_values());
         m_graph.outgoing.insert({ from, to });
     }
     for (size_t i = 0; i < sources.size(); ++i)
-        m_graph.insert_vertex(sources.row(i));
+        m_graph.insert_vertex(sources.row(i).get_values());
     m_targets.reserve(targets.size());
     for (size_t i = 0; i < targets.size(); ++i)
-        m_targets.push_back(m_graph.insert_vertex(targets.row(i)));
+        m_targets.push_back(m_graph.insert_vertex(targets.row(i).get_values()));
 
     for (size_t i = 0; i < sources.size(); ++i)
     {
-        const auto from = m_graph.find_vertex(sources.row(i));
+        const auto from = m_graph.find_vertex(sources.row(i).get_values());
         URD_ASSUME(!from.is_none());  // every source was inserted above
         detail::breadth_first_search(m_graph, from, m_distances, m_queue);
         for (const auto to : m_targets)

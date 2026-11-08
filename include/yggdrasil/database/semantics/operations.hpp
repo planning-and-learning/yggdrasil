@@ -71,10 +71,11 @@ void project(const V& input, const ProjectionPlan& plan, urd::builder<Relation<S
 template<RelationViewConcept V>
 urd::builder<Relation<Schema>>& assign(urd::builder<Relation<Schema>>& destination, const V& source);
 
-/// The input rows the predicate accepts, into an output of the input's columns. The predicate receives a stored row
-/// borrowing the input; it must not mutate inputs or output. A throwing predicate can leave a partial output result.
+/// The input rows the predicate accepts, into an output of the input's columns. The predicate receives a row view
+/// (Row<Schema>) of the input; it must not mutate inputs or output. A throwing predicate can leave a partial output
+/// result.
 template<RelationViewConcept V, typename Predicate>
-    requires std::predicate<Predicate&, RowPool::row_type>
+    requires std::predicate<Predicate&, decltype(std::declval<const V&>().row(0))>
 void select(const V& input, Predicate predicate, urd::builder<Relation<Schema>>& out);
 
 /// The rows whose two planned columns hold equal values.
@@ -154,7 +155,7 @@ void project(const V& input, const ProjectionPlan& plan, urd::builder<Relation<S
     row.reset(out.widths());
     for (size_t i = 0; i < input.size(); ++i)
     {
-        detail::copy_fields(row, 0, input.row(i), positions);
+        detail::copy_fields(row, 0, input.row(i).get_values(), positions);
         out.insert(row.row());
     }
 }
@@ -164,35 +165,35 @@ urd::builder<Relation<Schema>>& assign(urd::builder<Relation<Schema>>& destinati
 {
     if (source.relation_identity() == relation_identity(destination))
         return destination;
-    destination.initialize({}, source.columns());  // a copy has no pool key
+    destination.initialize(source.columns());
     for (size_t i = 0; i < source.size(); ++i)
-        destination.insert(source.row(i));
+        destination.insert(source.row(i).get_values());
     return destination;
 }
 
 template<RelationViewConcept V, typename Predicate>
-    requires std::predicate<Predicate&, RowPool::row_type>
+    requires std::predicate<Predicate&, decltype(std::declval<const V&>().row(0))>
 void select(const V& input, Predicate predicate, urd::builder<Relation<Schema>>& out)
 {
     assert(std::ranges::equal(input.columns(), out.columns()));
     detail::prepare_output(out, input);
     for (size_t i = 0; i < input.size(); ++i)
         if (const auto row = input.row(i); std::invoke(predicate, row))
-            out.insert(row);
+            out.insert(row.get_values());
 }
 
 template<RelationViewConcept V>
 void select_equal_columns(const V& input, const SelectEqualPlan& plan, urd::builder<Relation<Schema>>& out)
 {
     assert(std::ranges::equal(input.columns(), plan.output_columns()));
-    select(input, [lhs = plan.lhs_position(), rhs = plan.rhs_position()](const RowPool::row_type& row) { return row.get(lhs) == row.get(rhs); }, out);
+    select(input, [lhs = plan.lhs_position(), rhs = plan.rhs_position()](const auto& row) { return row.value(lhs) == row.value(rhs); }, out);
 }
 
 template<RelationViewConcept V>
 void select_equal_value(const V& input, const SelectValuePlan& plan, urd::builder<Relation<Schema>>& out)
 {
     assert(std::ranges::equal(input.columns(), plan.output_columns()));
-    select(input, [position = plan.position(), value = plan.value()](const RowPool::row_type& row) { return row.get(position) == value; }, out);
+    select(input, [position = plan.position(), value = plan.value()](const auto& row) { return row.value(position) == value; }, out);
 }
 
 namespace detail
@@ -225,7 +226,7 @@ void join_rows(const L& lhs,
     {
         for (size_t i = 0; i < lhs.size(); ++i)
             for (size_t j = 0; j < rhs.size(); ++j)
-                emit(lhs.row(i), rhs.row(j));
+                emit(lhs.row(i).get_values(), rhs.row(j).get_values());
         return;
     }
 
@@ -236,10 +237,10 @@ void join_rows(const L& lhs,
     {
         for (size_t i = 0; i < probe.size(); ++i)
         {
-            const auto probe_row = probe.row(i);
+            const auto probe_row = probe.row(i).get_values();
             for (const auto match : index.values(join_key_hash(probe_row, probe_keys)))
             {
-                const auto build_row = build.row(match);
+                const auto build_row = build.row(match).get_values();
                 if (!join_keys_equal(build_row, build_keys, probe_row, probe_keys))
                     continue;
                 const auto left = build_left ? build_row : probe_row;
@@ -303,9 +304,9 @@ void union_(const L& lhs, const R& rhs, [[maybe_unused]] const SetPlan& plan, ur
     assert(std::ranges::equal(lhs.columns(), plan.output_columns()) && std::ranges::equal(rhs.columns(), plan.output_columns()));
     detail::prepare_output(out, lhs, rhs);
     for (size_t i = 0; i < lhs.size(); ++i)
-        out.insert(lhs.row(i));
+        out.insert(lhs.row(i).get_values());
     for (size_t i = 0; i < rhs.size(); ++i)
-        out.insert(rhs.row(i));
+        out.insert(rhs.row(i).get_values());
 }
 
 template<RelationViewConcept L, RelationViewConcept R>
@@ -315,7 +316,7 @@ void difference(const L& lhs, const R& rhs, [[maybe_unused]] const SetPlan& plan
     detail::prepare_output(out, lhs, rhs);
     for (size_t i = 0; i < lhs.size(); ++i)
         if (const auto row = lhs.row(i); !rhs.contains(row))
-            out.insert(row);
+            out.insert(row.get_values());
 }
 
 namespace detail
@@ -336,12 +337,12 @@ void filter_matches(const L& lhs, const R& rhs, const JoinPlan& plan, bool match
         if (rhs.empty() || lhs_keys.empty())
             return !rhs.empty();
         for (const auto match : workspace.join_index.values(join_key_hash(row, lhs_keys)))
-            if (join_keys_equal(rhs.row(match), rhs_keys, row, lhs_keys))
+            if (join_keys_equal(rhs.row(match).get_values(), rhs_keys, row, lhs_keys))
                 return true;
         return false;
     };
     for (size_t i = 0; i < lhs.size(); ++i)
-        if (const auto row = lhs.row(i); matched(row) == matching)
+        if (const auto row = lhs.row(i).get_values(); matched(row) == matching)
             out.insert(row);
 }
 }  // namespace detail

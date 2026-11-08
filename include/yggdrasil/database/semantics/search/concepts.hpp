@@ -57,6 +57,10 @@ inline std::span<const Value> vertex_values(const RowPool::row_type& row, urd::S
         buffer.push_back(row.get(i));
     return buffer;
 }
+/// A row view's values (its stored row's).
+template<RowViewConcept<Schema> R>
+std::span<const Value> vertex_values(const R& row, urd::Store<urd::sequence<Value>>& buffer)
+{ return vertex_values(row.get_values(), buffer); }
 
 /// A random-access sequence of vertices: size() of them, row(i) the i-th, its values or a stored row (e.g. a relation
 /// view).

@@ -41,7 +41,8 @@ size_t sequence_index(std::ptrdiff_t index, size_t size)
     return static_cast<size_t>(index);
 }
 
-/// A row as Python reads it: the stored row with its relation's columns, which give its values' types.
+/// A row as Python reads it: its stored row (a Row<Schema> view's get_values()) with its relation's columns, which give
+/// its values' types.
 struct Row
 {
     ygg::database::RowPool::row_type row;
@@ -50,7 +51,7 @@ struct Row
 
 template<typename R>
 Row row_at(const R& relation, std::ptrdiff_t index)
-{ return { relation.row(sequence_index(index, relation.size())), relation.columns() }; }
+{ return { relation.row(sequence_index(index, relation.size())).get_values(), relation.columns() }; }
 
 /// Lazy iteration over a sequence binding: map(self.__getitem__, range(len(self))), so every element keeps the
 /// lifetime rules of __getitem__.
@@ -84,7 +85,7 @@ void bind_relation_reads(nb::class_<R>& cls)
             {
                 if (index >= relation.size())
                     throw nb::index_error();
-                return Row { relation.row(index), relation.columns() };
+                return Row { relation.row(index).get_values(), relation.columns() };
             },
             nb::arg("index"),
             nb::keep_alive<0, 1>());
@@ -349,18 +350,15 @@ void bind_database_module_definitions(nb::module_& m)
             "The relation builder read through this repository.")
         .def(
             "get_relation_builder",
-            [](RelationRepository& repository, ColumnIndices columns) { return repository.get_relation_builder(repository.schema(columns), columns); },
+            [](const RelationRepository& repository, ColumnIndices columns) { return repository.get_relation_builder<ygg::Schema>(columns); },
             nb::arg("columns"),
             nb::keep_alive<0, 1>(),
             "A relation builder from this repository's slots, keyed by its column widths (a builder handed back under equal "
             "widths is reused, its row storage kept); it goes back with its last owner.")
         .def(
             "get_relation_builder",
-            [](RelationRepository& repository, const Layouts& columns)
-            {
-                const auto span = std::span<const ygg::ColumnLayout>(columns);
-                return repository.get_relation_builder(repository.schema(span), span);
-            },
+            [](const RelationRepository& repository, const Layouts& columns)
+            { return repository.get_relation_builder<ygg::Schema>(std::span<const ygg::ColumnLayout>(columns)); },
             nb::arg("columns"),
             nb::keep_alive<0, 1>())
         .def(

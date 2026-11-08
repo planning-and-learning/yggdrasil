@@ -28,7 +28,7 @@ void insert_rows(const V& input, urd::builder<Relation<Schema>>& rows, std::span
         index.reserve(rows.size() + input.size());
     for (size_t i = 0; i < input.size(); ++i)
     {
-        const auto row = input.row(i);
+        const auto row = input.row(i).get_values();
         const auto previous_size = rows.size();
         const auto position = rows.insert(row);
         if (position != previous_size)
@@ -49,7 +49,7 @@ void erase_rows(const Repository& layer,
     const auto stored = layer.view(rows);
     for (size_t i = 0; i < input.size(); ++i)
     {
-        const auto position = rows.find(input.row(i));
+        const auto position = rows.find(input.row(i).get_values());
         if (!position)
             throw std::invalid_argument("Incremental evaluation: removed row is absent from the input.");
         const auto last = ygg::to_uint_t(rows.size() - 1);
@@ -58,7 +58,7 @@ void erase_rows(const Repository& layer,
             rows.erase(*position);
             continue;
         }
-        const auto removed_key = database::detail::join_key_hash(stored.row(*position), keys);
+        const auto removed_key = database::detail::join_key_hash(stored.row(*position).get_values(), keys);
         rows.erase(*position);
         const auto erase = [&](hash_t key, uint_t value)
         {
@@ -71,7 +71,7 @@ void erase_rows(const Repository& layer,
         if (*position != last)
         {
             // The last row moved into the erased one's position.
-            const auto moved_key = database::detail::join_key_hash(stored.row(*position), keys);
+            const auto moved_key = database::detail::join_key_hash(stored.row(*position).get_values(), keys);
             erase(moved_key, last);
             index.insert({ moved_key, *position });
         }

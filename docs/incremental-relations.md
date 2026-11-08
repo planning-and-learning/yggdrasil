@@ -14,7 +14,7 @@ using namespace ygg::database;
 
 Repository repository;
 const std::array columns { ColumnLayout { urd::index<Column>(0), type_id<uint_t> }, ColumnLayout { urd::index<Column>(1), type_id<uint_t> } };
-const auto input = repository.get_relation_builder(repository.schema(columns), columns);
+const auto input = repository.get_relation_builder<Schema>(columns);
 input->insert(std::array { encode_value(uint_t(7)), encode_value(uint_t(10)) });
 input->insert(std::array { encode_value(uint_t(7)), encode_value(uint_t(11)) });
 

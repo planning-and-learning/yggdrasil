@@ -64,15 +64,15 @@ class SemijoinEvaluator
         if (lhs_keys.empty())
         {
             for (size_t i = 0; i < current.size(); ++i)
-                reconcile(current.row(i));
+                reconcile(current.row(i).get_values());
             return;
         }
         for (size_t i = 0; i < rhs_rows.size(); ++i)
         {
-            const auto rhs_row = rhs_rows.row(i);
+            const auto rhs_row = rhs_rows.row(i).get_values();
             for (const auto position : m_lhs_index.values(database::detail::join_key_hash(rhs_row, rhs_keys)))
-                if (database::detail::join_keys_equal(current.row(position), lhs_keys, rhs_row, rhs_keys))
-                    reconcile(current.row(position));
+                if (database::detail::join_keys_equal(current.row(position).get_values(), lhs_keys, rhs_row, rhs_keys))
+                    reconcile(current.row(position).get_values());
         }
     }
 
@@ -84,14 +84,14 @@ class SemijoinEvaluator
         m_initialized = false;
         m_delta.clear();
         for (size_t i = 0; i < lhs_removed.size(); ++i)
-            if (const auto row = lhs_removed.row(i); m_result.contains(row))
+            if (const auto row = lhs_removed.row(i).get_values(); m_result.contains(row))
                 m_delta.removed.insert(row);
         detail::erase_rows(*m_layer, lhs_removed, m_lhs, m_plan.lhs_keys(), m_lhs_index);
         detail::erase_rows(*m_layer, rhs_removed, m_rhs, m_plan.rhs_keys(), m_rhs_index);
         detail::insert_rows(rhs_added, m_rhs, m_plan.rhs_keys(), m_rhs_index);
         detail::insert_rows(lhs_added, m_lhs, m_plan.lhs_keys(), m_lhs_index);
         for (size_t i = 0; i < lhs_added.size(); ++i)
-            reconcile(lhs_added.row(i));
+            reconcile(lhs_added.row(i).get_values());
         if (m_plan.lhs_keys().empty())
             reconcile_matches(rhs_added.empty() ? rhs_removed : rhs_added);
         else
@@ -138,8 +138,8 @@ public:
         detail::insert_rows(rhs, m_rhs, m_plan.rhs_keys(), m_rhs_index);
         const auto current = m_layer->view(m_lhs);
         for (size_t i = 0; i < current.size(); ++i)
-            if (kept(current.row(i)))
-                m_result.insert(current.row(i));
+            if (kept(current.row(i).get_values()))
+                m_result.insert(current.row(i).get_values());
         m_initialized = true;
     }
 

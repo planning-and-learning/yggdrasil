@@ -24,8 +24,8 @@
 #include <urd/elements/flat.hpp>
 #include <boost/mp11.hpp>
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/binding_data.hpp"
-#include "yggdrasil/formalism/binding_view.hpp"
+#include "yggdrasil/formalism/row_data.hpp"
+#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
@@ -58,27 +58,24 @@ namespace ygg::tests
 template<typename H, typename C>
 concept Viewable = requires(const C& context, H handle) { context.view(handle); };
 
-struct RepositoryTypesElement;
-struct RepositoryTypesSerializedElement;
-struct RepositoryTypesRelation;
 struct RepositoryTypesObjectTag;
 struct RepositoryTypesPackedObjectTag;
+struct RepositoryTypesElement
+{
+    using object_tag = RepositoryTypesObjectTag;
+};
+struct RepositoryTypesSerializedElement;
+struct RepositoryTypesRelation
+{
+    using object_tag = RepositoryTypesObjectTag;
+};
+/// A family whose rows are objects of the packed tag.
+struct RepositoryTypesPackedRelation
+{
+    using object_tag = RepositoryTypesPackedObjectTag;
+};
 struct RepositoryTypesBuilderOther;
 struct RepositoryTypesCheckout;
-
-namespace
-{
-struct RepositoryTypesContext
-{
-    using Binding = formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>;
-
-    [[nodiscard]] const RepositoryTypesContext& get_canonical_context(const RepositoryTypesElement&) const noexcept;
-    [[nodiscard]] std::size_t layer() const noexcept { return 0; }
-    urd::Store<urd::sequence<urd::index<formalism::Object<RepositoryTypesObjectTag>>>> operator[](Binding) const { return {}; }
-    [[nodiscard]] formalism::RelationBindingView<Binding, RepositoryTypesContext> view(Binding index) const { return { index, this }; }
-    [[nodiscard]] urd::index_view<RepositoryTypesRelation, RepositoryTypesContext> view(urd::index<RepositoryTypesRelation> index) const { return { index, this }; }
-};
-}  // namespace
 
 }  // namespace ygg::tests
 
@@ -164,25 +161,6 @@ struct RelationRepositoryTraits<tests::RepositoryTypesPackedObjectTag>
 namespace ygg::tests
 {
 
-namespace
-{
-struct RepositoryTypesRepository
-{
-    using object_tag = RepositoryTypesObjectTag;
-    using RelationTypes = boost::mp11::mp_list<RepositoryTypesRelation>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
-    using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
-
-    urd::Store<urd::sequence<urd::index<Object>>> operator[](ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>) const { return {}; }
-    [[nodiscard]] std::size_t layer() const noexcept { return 0; }
-};
-
-inline const RepositoryTypesRepository& get_repository(const RepositoryTypesContext&) noexcept
-{
-    static const auto repository = RepositoryTypesRepository();
-    return repository;
-}
-}  // namespace
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles)
 {
@@ -270,7 +248,7 @@ concept CanUseAnyLocalSymbolOperation =
 using ContractSymbols = formalism::SymbolRepository<RepositoryTypesElement>;
 using ContractConcurrentSymbols = formalism::ConcurrentSymbolRepository<RepositoryTypesElement>;
 using ContractRepository = formalism::Repository<ContractSymbols, formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>>;
-using ContractBinding = formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+using ContractBinding = Row<RepositoryTypesRelation>;
 static_assert(std::same_as<ContractSymbols::SymbolTypes, boost::mp11::mp_list<RepositoryTypesElement>>);
 static_assert(std::same_as<ContractConcurrentSymbols::SymbolTypes, ContractSymbols::SymbolTypes>);
 static_assert(std::same_as<ContractRepository::SymbolTypes, ContractSymbols::SymbolTypes>);
@@ -294,14 +272,11 @@ using ContractConcurrentRelations = formalism::ConcurrentRelationRepository<Repo
 static_assert(std::same_as<ContractRelations::RelationTypes, boost::mp11::mp_list<RepositoryTypesRelation>>);
 static_assert(std::same_as<ContractConcurrentRelations::RelationTypes, ContractRelations::RelationTypes>);
 static_assert(std::same_as<ContractRepository::RelationTypes, ContractRelations::RelationTypes>);
-static_assert(formalism::SupportsRelation<ContractRelations, RepositoryTypesRelation>);
-static_assert(formalism::SupportsRelation<ContractRepository, RepositoryTypesRelation>);
-static_assert(formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(formalism::RelationContextFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationRepositoryFor<ContractRepository, RepositoryTypesElement, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationContextFor<ContractRepository, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
-static_assert(!formalism::SupportsRelation<ContractRelations, RepositoryTypesElement>);
-static_assert(!formalism::SupportsRelation<int, RepositoryTypesRelation>);
+static_assert(formalism::HasRows<ContractRelations, RepositoryTypesRelation>);
+static_assert(formalism::HasRows<ContractRepository, RepositoryTypesRelation>);
+static_assert(!formalism::HasRelations<ContractRepository, RepositoryTypesRelation>);
+static_assert(!formalism::HasRows<ContractRelations, RepositoryTypesElement>);
+static_assert(!formalism::HasRows<int, RepositoryTypesRelation>);
 static_assert(!formalism::SymbolContextFor<ContractSymbols, RepositoryTypesElement>);
 static_assert(formalism::SymbolContextFor<ContractRepository, RepositoryTypesElement>);
 static_assert(!formalism::SymbolContextFor<ContractSymbols, RepositoryTypesSerializedElement>);
@@ -310,15 +285,15 @@ static_assert(std::same_as<formalism::BuilderStorage<RepositoryTypesCheckout>::T
 
 template<typename Repository, typename T>
 concept CanUseUnsupportedRelation =
-    requires(Repository& repository, urd::data<formalism::RelationBinding<T, RepositoryTypesObjectTag>>& data) { repository.insert(data); }
-    || requires(const Repository& repository, urd::data<formalism::RelationBinding<T, RepositoryTypesObjectTag>>& data) { repository.find(data); }
-    || requires(const Repository& repository, ygg::formalism::RelationBindingIndex<T, RepositoryTypesObjectTag> index) { repository[index]; }
-    || requires(const Repository& repository, ygg::formalism::RelationBindingIndex<T, RepositoryTypesObjectTag> index) { repository.owner(index); }
+    requires(Repository& repository, urd::data<Row<T>>& data) { repository.insert(data); }
+    || requires(const Repository& repository, urd::data<Row<T>>& data) { repository.find(data); }
+    || requires(const Repository& repository, RowIndex<T> index) { repository[index]; }
+    || requires(const Repository& repository, RowIndex<T> index) { repository.owner(index); }
     || requires(const Repository& repository, urd::index<T> index) { repository.size(index); } || requires(Repository& repository) { repository.template get<T>(); };
 static_assert(!CanUseUnsupportedRelation<ContractRelations, RepositoryTypesElement>);
 static_assert(!CanUseUnsupportedRelation<ContractConcurrentRelations, RepositoryTypesElement>);
 static_assert(!CanUseUnsupportedRelation<ContractRepository, RepositoryTypesElement>);
-static_assert(!Viewable<ygg::formalism::RelationBindingIndex<RepositoryTypesElement, RepositoryTypesObjectTag>, ContractRepository>);
+static_assert(!Viewable<RowIndex<RepositoryTypesElement>, ContractRepository>);
 
 TEST(YggdrasilTests, CommonIndexedViewPreservesLookupHandleAndOwner)
 {
@@ -333,93 +308,45 @@ TEST(YggdrasilTests, CommonIndexedViewPreservesLookupHandleAndOwner)
     EXPECT_EQ(std::get<1>(urd::detail::identity(view)), repository.layer());
 }
 
-namespace
-{
-struct WrongRelationObjectRows
-{
-    using object_tag = RepositoryTypesObjectTag;
-    using RelationTypes = boost::mp11::mp_list<RepositoryTypesRelation>;
-    urd::Store<urd::sequence<urd::index<formalism::Object<RepositoryTypesPackedObjectTag>>>> operator[](ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>) const;
-};
-}  // namespace
-static_assert(!formalism::RelationRepositoryFor<WrongRelationObjectRows, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-
-namespace
-{
-struct AliasFreeRelationRows
-{
-    using RelationTypes = boost::mp11::mp_list<RepositoryTypesRelation>;
-    template<typename RelationTag>
-    formalism::RelationBindingRow<RelationTag, std::span<const urd::index<formalism::Object<RepositoryTypesObjectTag>>>>
-    operator[](ygg::formalism::RelationBindingIndex<RelationTag, RepositoryTypesObjectTag>) const;
-    friend const AliasFreeRelationRows& get_repository(const AliasFreeRelationRows& repository URD_LIFETIMEBOUND) noexcept { return repository; }
-};
-
-struct MutableRelationRows : AliasFreeRelationRows
-{
-    formalism::RelationBindingRow<RepositoryTypesRelation, std::span<const urd::index<formalism::Object<RepositoryTypesObjectTag>>>>
-    operator[](ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>);
-};
-
-struct MutableRelationContext
-{
-    friend const AliasFreeRelationRows& get_repository(const MutableRelationContext&) = delete;
-};
-}  // namespace
-
-static_assert(formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(formalism::RelationRepositoryFor<const AliasFreeRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(formalism::RelationContextFor<AliasFreeRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
-static_assert(!formalism::RelationRepositoryFor<AliasFreeRelationRows, RepositoryTypesElement, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationRepositoryFor<MutableRelationRows&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationContextFor<MutableRelationContext&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationRepositoryFor<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-
-TEST(YggdrasilTests, CommonRelationRowsAreTheirOwnRepository)
-{
-    const auto rows = AliasFreeRelationRows {};
-    EXPECT_EQ(&get_repository(rows), &rows);
-}
 
 template<typename Relations>
-static void expect_binding_access_for_each_relation_type()
+static void expect_row_access_for_each_relation_type()
 {
-    using ObjectTag = typename Relations::object_tag;
-    using ObjectIndex = urd::index<formalism::Object<ObjectTag>>;
-    using FirstBinding = formalism::RelationBinding<RepositoryTypesRelation, ObjectTag>;
-    using SecondBinding = formalism::RelationBinding<RepositoryTypesElement, ObjectTag>;
+    using ObjectIndex = urd::index<formalism::Object<RepositoryTypesObjectTag>>;
     using Repository = formalism::Repository<ContractConcurrentSymbols, Relations>;
-    static_assert(formalism::RelationContextFor<Repository, RepositoryTypesRelation, ObjectTag>);
-    static_assert(formalism::RelationContextFor<Repository, RepositoryTypesElement, ObjectTag>);
-    static_assert(Viewable<ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, ObjectTag>, Repository>);
-    static_assert(Viewable<ygg::formalism::RelationBindingIndex<RepositoryTypesElement, ObjectTag>, Repository>);
+    static_assert(Viewable<RowIndex<RepositoryTypesRelation>, Repository>);
+    static_assert(Viewable<RowIndex<RepositoryTypesElement>, Repository>);
 
     Repository repository;
-    urd::data<FirstBinding> first_data;
+    urd::data<Row<RepositoryTypesRelation>> first_data;
     first_data.relation = urd::index<RepositoryTypesRelation>(0);
-    first_data.objects.push_back(ObjectIndex(3));
-    urd::data<SecondBinding> second_data;
+    first_data.values.push_back(ObjectIndex(3));
+    urd::data<Row<RepositoryTypesElement>> second_data;
     second_data.relation = urd::index<RepositoryTypesElement>(0);
-    second_data.objects.push_back(ObjectIndex(7));
-    second_data.objects.push_back(ObjectIndex(9));
+    second_data.values.push_back(ObjectIndex(7));
+    second_data.values.push_back(ObjectIndex(9));
     const auto first = repository.insert(first_data).first;
     const auto second = repository.insert(second_data).first;
-    EXPECT_EQ(repository[first.data()].objects.size(), 1);
-    EXPECT_EQ(repository[first.data()].objects[0], ObjectIndex(3));
-    EXPECT_EQ(repository[second.data()].objects.size(), 2);
-    EXPECT_EQ(repository[second.data()].objects[0], ObjectIndex(7));
-    EXPECT_EQ(repository[second.data()].objects[1], ObjectIndex(9));
+    EXPECT_EQ(first.size(), 1);
+    EXPECT_EQ(first.get_key().second[0], ObjectIndex(3));
+    EXPECT_EQ(second.size(), 2);
+    EXPECT_EQ(second.get_key().second[0], ObjectIndex(7));
+    EXPECT_EQ(second.get_key().second[1], ObjectIndex(9));
+    EXPECT_EQ(second.value(1), 9);
+    EXPECT_EQ(second.type(1), ygg::type_id<ygg::ObjectIndex>);
+    EXPECT_EQ(std::get<ygg::ObjectIndex>(second.column_value(1)).value, 9U);
+    EXPECT_EQ(second.template column_value<ygg::ObjectIndex>(1).value, 9U);
+    EXPECT_THROW((void) second.template column_value<double>(1), std::invalid_argument);
 }
 
 TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
 {
-    expect_binding_access_for_each_relation_type<formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
-    expect_binding_access_for_each_relation_type<
+    expect_row_access_for_each_relation_type<formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
+    expect_row_access_for_each_relation_type<
         formalism::ConcurrentRelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
-    expect_binding_access_for_each_relation_type<
+    expect_row_access_for_each_relation_type<
         formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
-    expect_binding_access_for_each_relation_type<
+    expect_row_access_for_each_relation_type<
         formalism::ConcurrentRelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
 }
 
@@ -501,7 +428,7 @@ TEST(YggdrasilTests, CommonInterningPreparesExactlyOnceBeforeRawInterning)
     EXPECT_EQ(repository.raw_count, 2);
 }
 
-TEST(YggdrasilTests, CommonInterningAcceptsRelationBindingsWithoutSymbolIdentity)
+TEST(YggdrasilTests, CommonInterningAcceptsRowsWithoutSymbolIdentity)
 {
     auto repository = ContractRepository();
     using Object = formalism::Object<RepositoryTypesObjectTag>;
@@ -513,7 +440,7 @@ TEST(YggdrasilTests, CommonInterningAcceptsRelationBindingsWithoutSymbolIdentity
     const auto [duplicate, duplicate_created] = formalism::insert(repository, data);
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(duplicate.data(), first.data());
-    EXPECT_EQ(repository[first.data()].objects.front(), urd::index<Object>(3));
+    EXPECT_EQ(first.get_key().second.front(), urd::index<Object>(3));
 }
 
 TEST(YggdrasilTests, CommonRepositoryLayersHaveDistinctNumbersAndParents)
@@ -533,14 +460,14 @@ TEST(YggdrasilTests, CommonRepositoryLayersHaveDistinctNumbersAndParents)
     EXPECT_EQ(shared->parent(), &child);
 }
 
-TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesTheOwningLayer)
+TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using Binding = Row<RepositoryTypesRelation>;
     using SymbolRepo = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
     using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
     using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
-    using BindingView = ::ygg::formalism::RelationBindingView<ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>, Repository>;
+    using StoredRowView = RowView<RepositoryTypesRelation, Repository>;
 
     auto first_repository = Repository();
     auto second_repository = Repository();
@@ -560,10 +487,10 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesTheOwningLayer)
     EXPECT_EQ(first.data(), second.data());
     EXPECT_EQ(first.data(), independent.data());
 
-    EXPECT_FALSE(urd::EqualTo<BindingView> {}(first, second));
-    EXPECT_NE(urd::Hash<BindingView> {}(first), urd::Hash<BindingView> {}(second));
-    EXPECT_FALSE(urd::EqualTo<BindingView> {}(first, independent));
-    EXPECT_TRUE(urd::EqualTo<BindingView> {}(first, BindingView(first.data(), &first_repository)));
+    EXPECT_FALSE(urd::EqualTo<StoredRowView> {}(first, second));
+    EXPECT_NE(urd::Hash<StoredRowView> {}(first), urd::Hash<StoredRowView> {}(second));
+    EXPECT_FALSE(urd::EqualTo<StoredRowView> {}(first, independent));
+    EXPECT_TRUE(urd::EqualTo<StoredRowView> {}(first, StoredRowView(first.data(), &first_repository)));
     EXPECT_TRUE(formalism::contains(first_repository, first));
     EXPECT_FALSE(formalism::contains(first_repository, second));
     EXPECT_FALSE(formalism::contains(first_repository, independent));
@@ -578,39 +505,38 @@ TEST(YggdrasilTests, CommonRelationBindingViewIdentityUsesTheOwningLayer)
 }
 
 template<typename V>
-concept HasPublishedBindingIndex = requires(const V& view) { view.index(); };
+concept HasPublishedRowIndex = requires(const V& view) { view.index(); };
 
-using BindingViewRepository =
+using RowViewRepository =
     formalism::Repository<formalism::SymbolRepository<RepositoryTypesRelation, formalism::Object<RepositoryTypesObjectTag>>, ContractRelations>;
-using BorrowedContractBindingView = urd::borrowed_view<ContractBinding, BindingViewRepository>;
-using PublishedContractBindingView = ::ygg::formalism::RelationBindingView<ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>, BindingViewRepository>;
-static_assert(formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(formalism::RelationBindingViewConcept<PublishedContractBindingView, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(formalism::RelationBindingViewConcept<const PublishedContractBindingView&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(formalism::RelationBindingViewConcept<BorrowedContractBindingView&&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
+using BorrowedContractRowView = urd::borrowed_view<ContractBinding, RowViewRepository>;
+using PublishedContractRowView = RowView<RepositoryTypesRelation, RowViewRepository>;
+static_assert(RowViewConcept<BorrowedContractRowView, RepositoryTypesRelation>);
+static_assert(RowViewConcept<PublishedContractRowView, RepositoryTypesRelation>);
+static_assert(RowViewConcept<const PublishedContractRowView&, RepositoryTypesRelation>);
+static_assert(RowViewConcept<BorrowedContractRowView&&, RepositoryTypesRelation>);
 
 namespace
 {
-struct MutableBindingView : PublishedContractBindingView
+struct MutableRowView : PublishedContractRowView
 {
     std::pair<urd::index<RepositoryTypesRelation>, std::span<const urd::index<formalism::Object<RepositoryTypesObjectTag>>>> get_key();
 };
 }  // namespace
-static_assert(!formalism::RelationBindingViewConcept<MutableBindingView&, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesRelation, RepositoryTypesPackedObjectTag>);
-static_assert(!formalism::RelationBindingViewConcept<BorrowedContractBindingView, RepositoryTypesElement, RepositoryTypesObjectTag>);
-static_assert(!formalism::RelationBindingViewConcept<int, RepositoryTypesRelation, RepositoryTypesObjectTag>);
-static_assert(!HasPublishedBindingIndex<BorrowedContractBindingView>);
-static_assert(!HasPublishedBindingIndex<PublishedContractBindingView>);
-static_assert(std::same_as<decltype(std::declval<const PublishedContractBindingView&>().data()),
-                           const ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>&>);
-static_assert(std::same_as<decltype(std::declval<const BorrowedContractBindingView&>().data()), const urd::data<ContractBinding>&>);
-static_assert(std::same_as<decltype(std::declval<const BorrowedContractBindingView&>().data()), const urd::data<ContractBinding>&>);
+static_assert(!RowViewConcept<MutableRowView&, RepositoryTypesRelation>);
+static_assert(!RowViewConcept<BorrowedContractRowView, RepositoryTypesElement>);
+static_assert(!RowViewConcept<int, RepositoryTypesRelation>);
+static_assert(!HasPublishedRowIndex<BorrowedContractRowView>);
+static_assert(!HasPublishedRowIndex<PublishedContractRowView>);
+static_assert(std::same_as<decltype(std::declval<const PublishedContractRowView&>().data()),
+                           const RowIndex<RepositoryTypesRelation>&>);
+static_assert(std::same_as<decltype(std::declval<const BorrowedContractRowView&>().data()), const urd::data<ContractBinding>&>);
+static_assert(std::same_as<decltype(std::declval<const BorrowedContractRowView&>().data()), const urd::data<ContractBinding>&>);
 
-TEST(YggdrasilTests, CommonBorrowedBindingViewReadsWithoutPublishingAndMaterializesConstData)
+TEST(YggdrasilTests, CommonBorrowedRowViewReadsWithoutPublishingAndMaterializesConstData)
 {
     using Object = formalism::Object<RepositoryTypesObjectTag>;
-    auto repository = BindingViewRepository();
+    auto repository = RowViewRepository();
     auto relation_data = urd::data<RepositoryTypesRelation>();
     const auto relation = repository.insert(relation_data).first.index();
     auto object_data = urd::data<Object>();
@@ -621,8 +547,8 @@ TEST(YggdrasilTests, CommonBorrowedBindingViewReadsWithoutPublishingAndMateriali
     }
     auto data = urd::data<ContractBinding>();
     data.relation = relation;
-    data.objects.push_back(urd::index<Object>(2));
-    data.objects.push_back(urd::index<Object>(5));
+    data.values.push_back(urd::index<Object>(2));
+    data.values.push_back(urd::index<Object>(5));
     const auto borrowed = urd::resolve(data, repository);
     EXPECT_EQ(&borrowed.data(), &data);
     EXPECT_EQ(&borrowed.data(), &data);
@@ -630,7 +556,7 @@ TEST(YggdrasilTests, CommonBorrowedBindingViewReadsWithoutPublishingAndMateriali
     EXPECT_EQ(borrowed.get_relation().index(), relation);
     EXPECT_EQ(borrowed.get_objects()[1].index(), urd::index<Object>(5));
     EXPECT_EQ(borrowed.get_key().first, relation);
-    EXPECT_EQ(borrowed.get_key().second.data(), data.objects.data());
+    EXPECT_EQ(borrowed.get_key().second.data(), data.values.data());
     EXPECT_FALSE(repository.find(data));
 
     const auto [published, created] = repository.insert(borrowed.data());
@@ -643,7 +569,7 @@ TEST(YggdrasilTests, CommonBorrowedBindingViewReadsWithoutPublishingAndMateriali
 
     // A returned object span borrows Data directly, independently of the wrapper.
     const auto objects = urd::resolve(data, repository).get_objects();
-    data.objects[0] = urd::index<Object>(7);
+    data.values[0] = urd::index<Object>(7);
     EXPECT_EQ(objects[0].index(), urd::index<Object>(7));
     EXPECT_EQ(published.get_objects()[0].index(), urd::index<Object>(2));
 }
@@ -685,7 +611,7 @@ TEST(YggdrasilTests, CommonCompositeRepositorySynchronizesLocalAndInheritedScrat
 TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using Binding = Row<RepositoryTypesRelation>;
 
     auto repository = ContractRepository();
     const auto relation = urd::index<RepositoryTypesRelation>(0);
@@ -702,13 +628,13 @@ TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
     EXPECT_FALSE(repository.find(wrong));
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
     EXPECT_EQ(repository.relations().size(relation), 1);
-    EXPECT_EQ(repository[view.data()].objects.size(), 2);
+    EXPECT_EQ(view.get_key().second.size(), 2);
 }
 
 TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
 {
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using Binding = Row<RepositoryTypesRelation>;
     using SymbolRepository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
     using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
     using Repository = ygg::formalism::Repository<SymbolRepository, RelationRepository>;
@@ -746,33 +672,33 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 {
     using DefaultRelationRepository = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
     using Object = ygg::formalism::Object<RepositoryTypesPackedObjectTag>;
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesPackedObjectTag>;
+    using Binding = Row<RepositoryTypesPackedRelation>;
     using SymbolRepository = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
-    using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation>;
+    using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesPackedRelation>;
     using Repository = ygg::formalism::Repository<SymbolRepository, RelationRepository>;
 
     // Both store rows as object columns (urd::column_widths): whole (32 bits) by default, in the layer's object width packed.
-    static_assert(std::constructible_from<typename DefaultRelationRepository::Rows, const urd::column_widths&>);
-    static_assert(std::constructible_from<typename RelationRepository::Rows, const urd::column_widths&>);
+    static_assert(std::constructible_from<typename DefaultRelationRepository::template Rows<RepositoryTypesRelation>, const urd::column_widths&>);
+    static_assert(std::constructible_from<typename RelationRepository::template Rows<RepositoryTypesPackedRelation>, const urd::column_widths&>);
 
     auto root = Repository(4, nullptr);
-    const auto relation = urd::index<RepositoryTypesRelation>(0);
+    const auto relation = urd::index<RepositoryTypesPackedRelation>(0);
     auto objects = urd::flat_vector<urd::index<Object>> {};
     objects.push_back(urd::index<Object>(0));
     objects.push_back(urd::index<Object>(3));
     const auto data = urd::data<Binding>(relation, objects);
 
-    EXPECT_EQ(root.relations().memory_usage<RepositoryTypesRelation>(), 0);
+    EXPECT_EQ(root.relations().memory_usage<RepositoryTypesPackedRelation>(), 0);
 
     const auto [root_view, root_created] = root.insert(data);
     const auto [duplicate_view, duplicate_created] = root.insert(data);
 
     EXPECT_TRUE(root_created);
     EXPECT_FALSE(duplicate_created);
-    EXPECT_GT(root.relations().memory_usage<RepositoryTypesRelation>(), 0);
+    EXPECT_GT(root.relations().memory_usage<RepositoryTypesPackedRelation>(), 0);
     EXPECT_EQ(duplicate_view.data().row, root_view.data().row);
-    EXPECT_EQ(root[root_view.data()].objects[0], urd::index<Object>(0));
-    EXPECT_EQ(root[root_view.data()].objects[1], urd::index<Object>(3));
+    EXPECT_EQ(root_view.get_key().second[0], urd::index<Object>(0));
+    EXPECT_EQ(root_view.get_key().second[1], urd::index<Object>(3));
 
     objects[0] = urd::index<Object>(4);
     objects[1] = urd::index<Object>(0);
@@ -790,7 +716,7 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     const auto inherited_width_data = urd::data<Binding>(relation, objects);
     const auto [inherited_width_view, inherited_width_created] = inherited_width_child.insert(inherited_width_data);
     EXPECT_TRUE(inherited_width_created);
-    EXPECT_EQ(inherited_width_child[inherited_width_view.data()].objects[0], urd::index<Object>(3));
+    EXPECT_EQ(inherited_width_view.get_key().second[0], urd::index<Object>(3));
 
     auto child = std::make_shared<Repository>(5, &root);
     const auto [inherited_view, inherited_created] = child->insert(data);
@@ -800,9 +726,9 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     EXPECT_EQ(inherited_view.data().row, root_view.data().row);
     EXPECT_EQ(&inherited_view.context(), &root);
     EXPECT_TRUE(child_created);
-    EXPECT_EQ(child_view.data().row, urd::index<ygg::formalism::Row>(1));
-    EXPECT_EQ((*child)[child_view.data()].objects[0], urd::index<Object>(4));
-    EXPECT_EQ((*child)[child_view.data()].objects[1], urd::index<Object>(0));
+    EXPECT_EQ(child_view.data().row, urd::index<Row<RepositoryTypesPackedRelation>>(1));
+    EXPECT_EQ(child_view.get_key().second[0], urd::index<Object>(4));
+    EXPECT_EQ(child_view.get_key().second[1], urd::index<Object>(0));
 }
 
 TEST(YggdrasilTests, CommonRelationRepositoryValidatesObjectIndexWidth)
@@ -853,9 +779,9 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
     EXPECT_THROW(repository.view(urd::index<RepositoryTypesElement>(1)), std::out_of_range);
 }
 
-TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
+TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
 {
-    using Binding = ygg::formalism::RelationBinding<RepositoryTypesRelation, RepositoryTypesObjectTag>;
+    using Binding = Row<RepositoryTypesRelation>;
     using Object = ygg::formalism::Object<RepositoryTypesObjectTag>;
     using SymbolRepo = ygg::formalism::SymbolRepository<RepositoryTypesElement>;
     using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>;
@@ -863,13 +789,13 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
 
     auto repository = Repository();
     const auto relation = urd::index<RepositoryTypesRelation>(0);
-    const auto missing = ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag> { relation, urd::index<ygg::formalism::Row>(0) };
+    const auto missing = RowIndex<RepositoryTypesRelation> { relation, urd::index<Row<RepositoryTypesRelation>>(0) };
 
     EXPECT_THROW(repository[missing], std::out_of_range);
     EXPECT_EQ(repository.owner(missing), nullptr);
     EXPECT_THROW(urd::resolve(missing, repository), std::out_of_range);
-    const auto rows = std::array { urd::index<ygg::formalism::Row>(0) };
-    const auto bindings = formalism::bindings_view<RepositoryTypesObjectTag>(relation, rows, repository);
+    const auto rows = std::array { urd::index<Row<RepositoryTypesRelation>>(0) };
+    const auto bindings = rows_view(relation, rows, repository);
     EXPECT_THROW((void) bindings[0], std::out_of_range);
 
     auto objects = urd::flat_vector<urd::index<Object>> {};
@@ -879,11 +805,11 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRelationBindingIndices)
     const auto [view, created] = repository.insert(data);
 
     EXPECT_TRUE(created);
-    EXPECT_EQ(repository[view.data()].objects.size(), 2);
+    EXPECT_EQ(view.get_key().second.size(), 2);
     EXPECT_EQ(repository.owner(view.data()), &repository);
 
-    const auto missing_row = ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag> { relation, urd::index<ygg::formalism::Row>(1) };
-    const auto missing_relation = ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag> { urd::index<RepositoryTypesRelation>(1), urd::index<ygg::formalism::Row>(0) };
+    const auto missing_row = RowIndex<RepositoryTypesRelation> { relation, urd::index<Row<RepositoryTypesRelation>>(1) };
+    const auto missing_relation = RowIndex<RepositoryTypesRelation> { urd::index<RepositoryTypesRelation>(1), urd::index<Row<RepositoryTypesRelation>>(0) };
     EXPECT_THROW(repository[missing_row], std::out_of_range);
     EXPECT_THROW(urd::resolve(missing_row, repository), std::out_of_range);
     EXPECT_THROW(repository[missing_relation], std::out_of_range);
@@ -955,8 +881,8 @@ TEST(YggdrasilTests, CommonSymbolMembershipChecksCanonicalOwnersAcrossLayers)
 template<typename Repository>
 static void check_relation_membership()
 {
-    using Handle = ygg::formalism::RelationBindingIndex<RepositoryTypesRelation, RepositoryTypesObjectTag>;
-    using BindingView = formalism::RelationBindingView<Handle, Repository>;
+    using Handle = RowIndex<RepositoryTypesRelation>;
+    using StoredRowView = RowView<RepositoryTypesRelation, Repository>;
     using Object = formalism::Object<RepositoryTypesObjectTag>;
     const auto relation = urd::index<RepositoryTypesRelation>(0);
     auto objects = urd::flat_vector<urd::index<Object>> {};
@@ -976,26 +902,26 @@ static void check_relation_membership()
     EXPECT_TRUE(has(grandchild, local_view));
     EXPECT_FALSE(has(root, child_view));
     EXPECT_FALSE(has(child, local_view));
-    EXPECT_TRUE(has(root, BindingView(root_view.data(), &grandchild)));
-    EXPECT_FALSE(has(grandchild, BindingView(local_view.data(), &root)));
+    EXPECT_TRUE(has(root, StoredRowView(root_view.data(), &grandchild)));
+    EXPECT_FALSE(has(grandchild, StoredRowView(local_view.data(), &root)));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view, child_view, local_view }, [&](const auto& value) { return has(grandchild, value); }));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view.data(), child_view.data(), local_view.data() }, [&](const auto& value) { return has(grandchild, value); }));
     EXPECT_TRUE(std::ranges::all_of(std::span<const Handle> {}, [&](const auto& value) { return has(root, value); }));
-    EXPECT_TRUE(std::ranges::all_of(std::span<const BindingView> {}, [&](const auto& value) { return has(root, value); }));
+    EXPECT_TRUE(std::ranges::all_of(std::span<const StoredRowView> {}, [&](const auto& value) { return has(root, value); }));
 
-    const auto missing_row = Handle { relation, urd::index<formalism::Row>(3) };
-    const auto missing_relation = Handle { urd::index<RepositoryTypesRelation>(1), urd::index<formalism::Row>(0) };
-    const auto max_row = Handle { relation, urd::index<formalism::Row>() };
-    const auto max_relation = Handle { urd::index<RepositoryTypesRelation>(), urd::index<formalism::Row>(0) };
+    const auto missing_row = Handle { relation, urd::index<Row<RepositoryTypesRelation>>(3) };
+    const auto missing_relation = Handle { urd::index<RepositoryTypesRelation>(1), urd::index<Row<RepositoryTypesRelation>>(0) };
+    const auto max_row = Handle { relation, urd::index<Row<RepositoryTypesRelation>>() };
+    const auto max_relation = Handle { urd::index<RepositoryTypesRelation>(), urd::index<Row<RepositoryTypesRelation>>(0) };
     for (const auto index : { missing_row, missing_relation, max_row, max_relation })
     {
         EXPECT_FALSE(has(grandchild, index));
-        EXPECT_FALSE(has(grandchild, BindingView(index, &grandchild)));
+        EXPECT_FALSE(has(grandchild, StoredRowView(index, &grandchild)));
     }
     EXPECT_FALSE(std::ranges::all_of(std::array { root_view.data(), max_row }, [&](const auto& value) { return has(grandchild, value); }));
 
     auto unrelated = Repository();
-    EXPECT_FALSE(has(grandchild, BindingView(root_view.data(), &unrelated)));
+    EXPECT_FALSE(has(grandchild, StoredRowView(root_view.data(), &unrelated)));
     objects[0] = urd::index<Object>(0);
     const auto unrelated_view = unrelated.insert(urd::data<ContractBinding>(relation, objects)).first;
     EXPECT_TRUE(has(grandchild, unrelated_view.data()));

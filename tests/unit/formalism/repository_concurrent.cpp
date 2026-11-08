@@ -12,8 +12,8 @@
 #include <urd/elements/flat.hpp>
 #include <boost/mp11.hpp>
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/binding_data.hpp"
-#include "yggdrasil/formalism/binding_view.hpp"
+#include "yggdrasil/formalism/row_data.hpp"
+#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 
 #include "gtest/gtest.h"
@@ -37,7 +37,11 @@ namespace ygg::tests
 {
 struct ConcurrentElement;
 struct ConcurrentSerializedElement;
-struct ConcurrentRelation;
+template<typename ObjectTag>
+struct ConcurrentRelation
+{
+    using object_tag = ObjectTag;
+};
 struct ConcurrentObjectTag;
 struct ConcurrentPackedObjectTag;
 }
@@ -111,10 +115,10 @@ void run_threads(std::size_t count, Function function)
 }
 
 template<typename ObjectTag>
-using Binding = formalism::RelationBinding<ConcurrentRelation, ObjectTag>;
+using Binding = Row<ConcurrentRelation<ObjectTag>>;
 
 template<typename ObjectTag>
-urd::data<Binding<ObjectTag>> make_binding(urd::index<ConcurrentRelation> relation, uint_t key)
+urd::data<Binding<ObjectTag>> make_binding(urd::index<ConcurrentRelation<ObjectTag>> relation, uint_t key)
 {
     using Object = formalism::Object<ObjectTag>;
 
@@ -126,12 +130,12 @@ urd::data<Binding<ObjectTag>> make_binding(urd::index<ConcurrentRelation> relati
 
 template<typename ObjectTag>
 using ConcurrentRepository = formalism::Repository<formalism::ConcurrentSymbolRepository<ConcurrentElement, ConcurrentSerializedElement>,
-                                                   formalism::ConcurrentRelationRepository<ObjectTag, ConcurrentRelation>>;
+                                                   formalism::ConcurrentRelationRepository<ObjectTag, ConcurrentRelation<ObjectTag>>>;
 
 using SequentialRepository = formalism::Repository<formalism::SymbolRepository<ConcurrentElement, ConcurrentSerializedElement>,
-                                                   formalism::RelationRepository<ConcurrentObjectTag, ConcurrentRelation>>;
+                                                   formalism::RelationRepository<ConcurrentObjectTag, ConcurrentRelation<ConcurrentObjectTag>>>;
 using MixedRepository = formalism::Repository<formalism::ConcurrentSymbolRepository<ConcurrentElement, ConcurrentSerializedElement>,
-                                              formalism::RelationRepository<ConcurrentObjectTag, ConcurrentRelation>>;
+                                              formalism::RelationRepository<ConcurrentObjectTag, ConcurrentRelation<ConcurrentObjectTag>>>;
 
 /// Whether both halves of a repository layer are thread-safe.
 template<typename Repository>
@@ -152,7 +156,7 @@ public:
 };
 
 static_assert(formalism::SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
-static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation>);
+static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation<ConcurrentObjectTag>>);
 static_assert(!std::is_move_constructible_v<PublishedRepository>);
 static_assert(!std::is_copy_constructible_v<PublishedRepository>);
 static_assert(std::same_as<decltype(get_repository(std::declval<const PublishedRepository&>())), const PublishedRepository&>);
@@ -200,7 +204,7 @@ template<typename ObjectTag>
 void expect_duplicate_same_relation_insertions()
 {
     auto repository = ConcurrentRepository<ObjectTag>(4096, nullptr);
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     constexpr uint_t rows = 512;
     constexpr auto invalid_row = std::numeric_limits<uint_t>::max();
     auto canonical_rows = urd::Store<urd::sequence<std::atomic<uint_t>>>(rows);
@@ -235,7 +239,7 @@ void expect_duplicate_same_relation_insertions()
         const auto found = repository.find(data);
         ASSERT_TRUE(found.has_value());
         EXPECT_EQ(found.value().data().row.value, canonical_rows[key].load(std::memory_order_relaxed));
-        EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.objects));
+        EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.values));
     }
 }
 
@@ -243,7 +247,7 @@ template<typename ObjectTag>
 void expect_unique_same_relation_insertions()
 {
     auto repository = ConcurrentRepository<ObjectTag>(4096, nullptr);
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     constexpr uint_t rows_per_thread = 256;
     constexpr size_t expected_rows = kThreads * rows_per_thread;
     auto created = std::atomic_size_t { 0 };
@@ -258,7 +262,7 @@ void expect_unique_same_relation_insertions()
                         const auto data = make_binding<ObjectTag>(relation, key);
                         const auto [view, was_created] = repository.insert(data);
                         created.fetch_add(was_created, std::memory_order_relaxed);
-                        if (!std::ranges::equal(view.get_key().second, data.objects))
+                        if (!std::ranges::equal(view.get_key().second, data.values))
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -277,11 +281,11 @@ void expect_unique_same_relation_insertions()
         ASSERT_LT(row, expected_rows);
         EXPECT_FALSE(seen[row]);
         seen[row] = true;
-        EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.objects));
+        EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.values));
     }
 }
 
-urd::data<Binding<ConcurrentPackedObjectTag>> make_packed_binding(urd::index<ConcurrentRelation> relation, uint_t key, bool valid)
+urd::data<Binding<ConcurrentPackedObjectTag>> make_packed_binding(urd::index<ConcurrentRelation<ConcurrentPackedObjectTag>> relation, uint_t key, bool valid)
 {
     using Object = formalism::Object<ConcurrentPackedObjectTag>;
     auto objects = urd::flat_vector<urd::index<Object>> {};
@@ -362,19 +366,19 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryUsesIndependentRelationGroupLa
     run_threads(kThreads,
                 [&](std::size_t thread)
                 {
-                    const auto lane = urd::index<ConcurrentRelation>(static_cast<uint_t>(thread));
+                    const auto lane = urd::index<ConcurrentRelation<ObjectTag>>(static_cast<uint_t>(thread));
                     for (uint_t key = 0; key < lane_rows; ++key)
                         lane_repository.insert(make_binding<ObjectTag>(lane, key));
                 });
 
     for (uint_t lane = 0; lane < kThreads; ++lane)
-        EXPECT_EQ(lane_repository.relations().size(urd::index<ConcurrentRelation>(lane)), lane_rows);
+        EXPECT_EQ(lane_repository.relations().size(urd::index<ConcurrentRelation<ObjectTag>>(lane)), lane_rows);
 }
 
 TEST(YggdrasilTests, FormalismRepositoryRejectsReservedRelationIndex)
 {
     using ObjectTag = ConcurrentObjectTag;
-    const auto relation = urd::index<ConcurrentRelation>();
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>();
     auto sequential = SequentialRepository(4096, nullptr);
     auto concurrent = ConcurrentRepository<ObjectTag>(4096, nullptr);
 
@@ -387,7 +391,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     using ObjectTag = ConcurrentPackedObjectTag;
     using Object = formalism::Object<ObjectTag>;
     auto repository = ConcurrentRepository<ObjectTag>(4096, nullptr);
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     const auto [view, created] = repository.insert(make_binding<ObjectTag>(relation, 7));
     ASSERT_TRUE(created);
 
@@ -402,7 +406,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     EXPECT_EQ(view.get_key().second.size(), 4);
 }
 
-TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesRelationBindings)
+TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesRows)
 {
     expect_duplicate_same_relation_insertions<ConcurrentObjectTag>();
     expect_duplicate_same_relation_insertions<ConcurrentPackedObjectTag>();
@@ -418,10 +422,10 @@ TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocks
 {
     using ObjectTag = ConcurrentPackedObjectTag;
     auto repository = ConcurrentRepository<ObjectTag>(4096, nullptr);
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     const auto [first, created] = repository.insert(make_binding<ObjectTag>(relation, 0));
     ASSERT_TRUE(created);
-    const auto first_data = repository[first.data()].objects;
+    const auto first_data = repository[first.data()].as<urd::index<formalism::Object<ObjectTag>>>();
 
     auto stop = std::atomic_bool { false };
     auto errors = std::atomic_size_t { 0 };
@@ -465,7 +469,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
     const auto [parent_serialized_view, parent_serialized_created] = parent.insert(parent_serialized_data);
     ASSERT_TRUE(parent_serialized_created);
 
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     const auto [parent_binding_view, parent_binding_created] = parent.insert(make_binding<ObjectTag>(relation, 7));
     ASSERT_TRUE(parent_binding_created);
 
@@ -518,7 +522,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
     EXPECT_EQ(child.symbols().size<ConcurrentElement>(), 1 + kThreads * rows_per_thread);
     EXPECT_EQ(parent_view.data().value, 7);
     EXPECT_EQ(parent_serialized_view.data().values.front(), parent_view.index());
-    EXPECT_TRUE(std::ranges::equal(parent_binding_view.get_key().second, make_binding<ObjectTag>(relation, 7).objects));
+    EXPECT_TRUE(std::ranges::equal(parent_binding_view.get_key().second, make_binding<ObjectTag>(relation, 7).values));
 }
 
 TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndClearReusesStorage)
@@ -526,7 +530,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     using ObjectTag = ConcurrentPackedObjectTag;
     using Object = formalism::Object<ObjectTag>;
     auto repository = ConcurrentRepository<ObjectTag>(8, nullptr);
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
 
     auto invalid_objects = urd::flat_vector<urd::index<Object>> {};
     invalid_objects.push_back(urd::index<Object>(0));
@@ -544,7 +548,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
         valid_objects.push_back(urd::index<Object>(value));
     const auto [view, created] = repository.insert(urd::data<Binding<ObjectTag>>(relation, std::move(valid_objects)));
     EXPECT_TRUE(created);
-    EXPECT_EQ(view.data().row, urd::index<formalism::Row>(0));
+    EXPECT_EQ(view.data().row, urd::index<Row<ConcurrentRelation<ObjectTag>>>(0));
 
     repository.relations().clear();
     EXPECT_EQ(repository.relations().size(relation), 0);
@@ -553,13 +557,13 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
         reused_objects.push_back(urd::index<Object>(value));
     const auto [reused, reused_created] = repository.insert(urd::data<Binding<ObjectTag>>(relation, std::move(reused_objects)));
     EXPECT_TRUE(reused_created);
-    EXPECT_EQ(reused.data().row, urd::index<formalism::Row>(0));
+    EXPECT_EQ(reused.data().row, urd::index<Row<ConcurrentRelation<ObjectTag>>>(0));
 }
 
 TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailuresDoNotInterfereWithValidWriters)
 {
     auto repository = ConcurrentRepository<ConcurrentPackedObjectTag>(8, nullptr);
-    const auto relation = urd::index<ConcurrentRelation>(0);
+    const auto relation = urd::index<ConcurrentRelation<ConcurrentPackedObjectTag>>(0);
     constexpr uint_t rows_per_thread = 128;
     constexpr size_t num_writers = kThreads / 2;
     auto created = std::atomic_size_t { 0 };
@@ -610,7 +614,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailuresDoNotInterfereWit
         const auto data = make_packed_binding(relation, key, true);
         const auto found = repository.find(data);
         ASSERT_TRUE(found.has_value());
-        EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.objects));
+        EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.values));
     }
 }
 }

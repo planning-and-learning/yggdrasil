@@ -51,10 +51,12 @@ auto packed(std::span<const T> values)
     return result;
 }
 
-/// Whether two rows are the same stored row (the same storage), or have the same values.
-bool same_storage(const ygg::database::RowPool::row_type& lhs, const ygg::database::RowPool::row_type& rhs)
-{ return lhs.data() == rhs.data() && lhs.first_bit() == rhs.first_bit(); }
-bool same_values(const ygg::database::RowPool::row_type& lhs, const ygg::database::RowPool::row_type& rhs) { return lhs.equal(rhs); }
+/// Whether two row views read the same stored row (the same storage), or have the same values.
+template<typename L, typename R>
+bool same_storage(const L& lhs, const R& rhs)
+{ return lhs.get_values().data() == rhs.get_values().data() && lhs.get_values().first_bit() == rhs.get_values().first_bit(); }
+template<typename L, typename R>
+bool same_values(const L& lhs, const R& rhs) { return lhs.get_values().equal(rhs.get_values()); }
 
 using RelationTag = ygg::Relation<ygg::Schema>;
 using RelationBuilder = urd::builder<RelationTag>;
@@ -63,8 +65,10 @@ using BuilderView = database::BuilderRelationView;
 using DataView = urd::borrowed_view<RelationTag, Repository>;
 using IndexView = urd::index_view<RelationTag, Repository>;
 using ColumnsIndex = urd::index<ygg::Columns>;
-using RowIndex = urd::index<formalism::Row>;
-using RowSetIndex = urd::index<ygg::RowSet>;
+using RowIndex = urd::index<ygg::Row<ygg::Schema>>;
+using RowSetIndex = urd::index<ygg::RowSet<ygg::Schema>>;
+using BuilderRowView = ygg::RowView<ygg::Schema, RelationBuilder>;
+using LayerRowView = ygg::RowView<ygg::Schema, Repository>;
 using ColumnsIndexView = urd::index_view<ygg::Columns, Repository>;
 
 struct AliasFreeRelationView
@@ -73,14 +77,14 @@ struct AliasFreeRelationView
     [[nodiscard]] size_t size() const;
     [[nodiscard]] bool empty() const;
     [[nodiscard]] ygg::RelationIdentity relation_identity() const;
-    [[nodiscard]] ygg::database::RowPool::row_type row(size_t) const;
+    [[nodiscard]] BuilderRowView row(size_t) const;
     [[nodiscard]] bool contains(std::span<const ygg::Value>) const;
-    [[nodiscard]] bool contains(ygg::database::RowPool::row_type) const;
+    [[nodiscard]] bool contains(BuilderRowView) const;
 };
 
 struct MutableRelationView : AliasFreeRelationView
 {
-    ygg::database::RowPool::row_type row(size_t);
+    BuilderRowView row(size_t);
 };
 
 static_assert(database::RelationViewConcept<AliasFreeRelationView>);
@@ -98,14 +102,18 @@ static_assert(database::RelationViewConcept<IndexView>);
 static_assert(std::ranges::random_access_range<decltype(std::declval<const IndexView&>().rows())>);
 static_assert(std::ranges::borrowed_range<decltype(std::declval<const BuilderView&>().rows())>);
 static_assert(std::ranges::borrowed_range<decltype(std::declval<const IndexView&>().rows())>);
-static_assert(std::same_as<Repository::SymbolTypes, boost::mp11::mp_list<ygg::Schema, ygg::Columns, ygg::RowSet, RelationTag>>);
+static_assert(std::same_as<Repository::SymbolTypes, boost::mp11::mp_list<ygg::Schema, ygg::Columns, ygg::RowSet<ygg::Schema>, RelationTag>>);
 static_assert(formalism::SupportsSymbol<Repository, ygg::Columns>);
 static_assert(formalism::SupportsSymbol<Repository, RelationTag>);
 static_assert(!formalism::SupportsSymbol<Repository, ygg::Column>);
 
-static_assert(std::same_as<decltype(std::declval<const BuilderView&>().row(0)), ygg::database::RowPool::row_type>);
-static_assert(std::same_as<decltype(std::declval<const DataView&>().row(0)), ygg::database::RowPool::row_type>);
-static_assert(std::same_as<decltype(std::declval<const IndexView&>().row(0)), ygg::database::RowPool::row_type>);
+static_assert(std::same_as<decltype(std::declval<const BuilderView&>().row(0)), BuilderRowView>);
+static_assert(std::same_as<decltype(std::declval<const DataView&>().row(0)), LayerRowView>);
+static_assert(std::same_as<decltype(std::declval<const IndexView&>().row(0)), LayerRowView>);
+static_assert(std::same_as<decltype(std::declval<const IndexView&>().row(0).get_values()), ygg::database::RowPool::row_type>);
+static_assert(ygg::RowViewConcept<BuilderRowView, ygg::Schema> && ygg::RowViewConcept<LayerRowView, ygg::Schema>);
+
+static_assert(formalism::HasRows<Repository, ygg::Schema> && formalism::HasRelations<Repository, ygg::Schema>);
 static_assert(std::same_as<decltype(std::declval<const BuilderView&>().data()), const RelationBuilder&>);
 static_assert(std::same_as<decltype(std::declval<const DataView&>().data()), const urd::data<RelationTag>&>);
 static_assert(std::same_as<decltype(std::declval<const IndexView&>().index()), urd::index<RelationTag>>);
@@ -206,11 +214,11 @@ TEST(YggdrasilTests, DatabaseColumnsInternOrderedSchemasThroughDataAndIndexViews
     const auto relation = repository.insert(rows).first;
     const database::JoinPlan joining(relation.columns(), relation.columns());
     const database::ProjectionPlan projecting(relation.columns(), std::array { ColumnIndex(3), ColumnIndex(8) });
-    auto output = repository.get_relation_builder(repository.schema(relation.columns()), relation.columns());
+    auto output = repository.get_relation_builder<ygg::Schema>(relation.columns());
     database::Workspace workspace;
     database::join(relation, relation, joining, *output, workspace);
     expect_rows(*output, { { 10, 20 } });
-    output->initialize({}, reversed);
+    output->initialize(reversed);
     database::project(relation, projecting, *output, workspace);
     expect_rows(*output, { { 20, 10 } });
     const auto projected = ygg::tests::ops::projected(relation, { ColumnIndex(8), ColumnIndex(3) });
@@ -244,7 +252,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryInternsRowSetsWithOrderedSchemas)
     EXPECT_EQ(first.columns()[1].label, ColumnIndex(8));
 
     const auto original_columns = ygg::tests::ops::cols({ ColumnIndex(3), ColumnIndex(8) });
-    builder.initialize({}, original_columns);
+    builder.initialize(original_columns);
     builder.insert(cells(20, 21));
     builder.insert(cells(10, 11));
     const auto [other_order, order_created] = repository.insert(builder);
@@ -301,7 +309,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositorySharesRowsAcrossOverlappingRelati
     EXPECT_NE(first.index(), second.index());
     EXPECT_EQ(repository.relations().get<ygg::Schema>().size(), 1);
     EXPECT_EQ(repository.relations().get<ygg::Schema>().at(first.data().pool).size(), 3);
-    EXPECT_EQ(repository.symbols().size<ygg::RowSet>(), 2);
+    EXPECT_EQ(repository.symbols().size<ygg::RowSet<ygg::Schema>>(), 2);
     EXPECT_TRUE(first.contains(cells(20, 21)));
     EXPECT_TRUE(second.contains(cells(20, 21)));
     EXPECT_TRUE(same_storage(first.row(1), second.row(0)));
@@ -353,7 +361,7 @@ TEST(YggdrasilTests, DatabaseRelationViewsMixBuildersDataAndInternedIndicesInOpe
     database::project(right_data_view, database::ProjectionPlan(right.columns(), std::array { ColumnIndex(3) }), projected, workspace);
     expect_rows(projected, { { 400 }, { 600 } });
     RelationBuilder selected { ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(3) }) };
-    database::select(right_index_view, [](ygg::database::RowPool::row_type row) { return ygg::decode_value<uint_t>(row.get(size_t { 0 })) == 4; }, selected);
+    database::select(right_index_view, [](const auto& row) { return ygg::decode_value<uint_t>(row.value(0)) == 4; }, selected);
     expect_rows(selected, { { 4, 400 } });
     const database::SetPlan sets(right.columns(), right.columns());
     database::union_(right_data_view, right_index_view, sets, selected);
@@ -382,14 +390,13 @@ TEST(YggdrasilTests, DatabaseInternedRowsOutliveBuilderReuseAndRenamesShareStora
 {
     Repository repository;
     const auto pair = ygg::tests::ops::cols({ ColumnIndex(1), ColumnIndex(2) });
-    auto builder = repository.get_relation_builder(repository.schema(pair), pair);
-    EXPECT_EQ(builder->pool(), repository.schema(pair));
+    auto builder = repository.get_relation_builder<ygg::Schema>(pair);
     builder->insert(cells(7, 70));
     builder->insert(cells(8, 80));
     const auto original = repository.insert(*builder).first;
     const auto* builder_address = &*builder;
     builder = {};
-    builder = repository.get_relation_builder(urd::index<ygg::Schema>(), ygg::tests::ops::cols({ ColumnIndex(4), ColumnIndex(5) }));
+    builder = repository.get_relation_builder<ygg::Schema>(ygg::tests::ops::cols({ ColumnIndex(4), ColumnIndex(5) }));
     EXPECT_EQ(&*builder, builder_address);
     builder->insert(cells(99, 100));
     expect_rows(original, { { 7, 70 }, { 8, 80 } });
@@ -463,7 +470,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryInternsCanonicalEncodings)
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(original.index(), duplicate.index());
     EXPECT_TRUE(same_storage(original.row(0), duplicate.row(0)));
-    EXPECT_FALSE(std::signbit(ygg::decode_value<double>(original.row(0).get(size_t { 0 }))));
+    EXPECT_FALSE(std::signbit(ygg::decode_value<double>(original.row(0).value(0))));
     EXPECT_EQ(relation_count(repository), 1);
 }
 
@@ -477,7 +484,7 @@ TEST(YggdrasilTests, DatabaseRelationRepositoryRejectsInvalidRelabelingAndForeig
     const auto original = repository.insert(builder).first;
     const std::array duplicate_schema { ygg::ColumnLayout { ColumnIndex(1), ygg::type_id<std::uint32_t> }, ygg::ColumnLayout { ColumnIndex(1), ygg::type_id<std::uint32_t> } };
     EXPECT_THROW(builder.rename(duplicate_schema), std::invalid_argument);
-    EXPECT_THROW(builder.initialize({}, duplicate_schema), std::invalid_argument);
+    EXPECT_THROW(builder.initialize(duplicate_schema), std::invalid_argument);
     EXPECT_TRUE(std::ranges::equal(builder.columns(), original.columns()));
     expect_rows(builder, { { 10, 20 }, { 30, 40 } });
 
@@ -524,7 +531,7 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
 
     const auto pending = source.data();
 
-    auto output_handle = source_repository.get_relation_builder(urd::index<ygg::Schema>(), ygg::tests::ops::cols({ ColumnIndex(3), ColumnIndex(7) }));
+    auto output_handle = source_repository.get_relation_builder<ygg::Schema>(ygg::tests::ops::cols({ ColumnIndex(3), ColumnIndex(7) }));
     auto& output = *output_handle;
     const auto identity = ygg::relation_identity(output);
     output.insert(cells(99, 88));
@@ -540,13 +547,13 @@ TEST(YggdrasilTests, DatabaseConversionsRemapStoredIdentityAndReuseMutableStorag
     EXPECT_EQ(ygg::relation_identity(output), identity);
     expect_rows(output, { { 4, 5 }, { 1, 2 } });
 
-    const auto* first_row = source_repository.view(output).row(0).data();
+    const auto* first_row = source_repository.view(output).row(0).get_values().data();
     (void) source_repository.insert(output);
     EXPECT_EQ(&database::assign(output, borrow(output)), &output);
-    EXPECT_EQ(source_repository.view(output).row(0).data(), first_row);
+    EXPECT_EQ(source_repository.view(output).row(0).get_values().data(), first_row);
     (void) source_repository.insert(output);
     EXPECT_EQ(&database::assign(output, urd::resolve(output, source_repository)), &output);
-    EXPECT_EQ(source_repository.view(output).row(0).data(), first_row);
+    EXPECT_EQ(source_repository.view(output).row(0).get_values().data(), first_row);
     EXPECT_EQ(output.columns().data(), columns_storage);
     EXPECT_EQ(output.memory_usage(), capacity);
     EXPECT_EQ(ygg::relation_identity(output), identity);
@@ -678,20 +685,20 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
     // Even in the repository that owns the values, a row leaves them raw.
     const auto builder_view = urd::resolve(builder, entities);
     static_assert(database::RelationViewConcept<decltype(index_view)>);
-    static_assert(std::same_as<decltype(index_view.row(0).get(size_t { 0 })), ygg::Value>);
-    static_assert(std::same_as<decltype(builder_view.row(0).get(size_t { 0 })), ygg::Value>);
+    static_assert(std::same_as<decltype(index_view.row(0).value(0)), ygg::Value>);
+    static_assert(std::same_as<decltype(builder_view.row(0).value(0)), ygg::Value>);
     const auto check = [&](const auto& view)
     {
         ASSERT_EQ(view.size(), 1);
-        EXPECT_EQ(ygg::decode_value<uint_t>(view.row(0).get(size_t { 0 })), first_value);
+        EXPECT_EQ(ygg::decode_value<uint_t>(view.row(0).value(0)), first_value);
         // Rows of interned relations name values owned elsewhere; callers resolve them explicitly.
-        EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(view.row(0).get(size_t { 0 })), entities), first);
-        EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(view.row(0).get(size_t { 1 })), entities), second);
+        EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(view.row(0).value(0)), entities), first);
+        EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(view.row(0).value(1)), entities), second);
         size_t count = 0;
         for (auto objects : view.rows())
         {
-            EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(objects.get(size_t { 0 })), entities), first);
-            EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(objects.get(size_t { 1 })), entities), second);
+            EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(objects.value(0)), entities), first);
+            EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(objects.value(1)), entities), second);
             ++count;
         }
         EXPECT_EQ(count, 1);
@@ -700,14 +707,14 @@ TEST(YggdrasilTests, TypedRelationRowsLeaveIndicesOfOtherRepositoriesRaw)
     check(data_view);
     check(builder_view);
     const auto iterator = index_view.rows().begin();
-    EXPECT_EQ(ygg::decode_value<uint_t>((*iterator).get(size_t { 1 })), second_value);
+    EXPECT_EQ(ygg::decode_value<uint_t>((*iterator).value(1)), second_value);
 
     const auto labels = relabeled(index_view.columns(), { ColumnIndex(3), ColumnIndex(4) });
     const auto renamed = rows.rename(index_view, labels);
     static_assert(std::same_as<decltype(renamed), decltype(index_view)>);
     EXPECT_EQ(&renamed.context(), &rows);
     EXPECT_EQ(renamed.data().row_set, index_view.data().row_set);
-    EXPECT_EQ(ygg::decode_value<uint_t>(renamed.row(0).get(size_t { 0 })), first_value);
+    EXPECT_EQ(ygg::decode_value<uint_t>(renamed.row(0).value(0)), first_value);
     Repository other_rows;
     EXPECT_THROW(other_rows.rename(index_view, labels), std::invalid_argument);
 
@@ -781,16 +788,22 @@ TEST(YggdrasilTests, DatabaseMixedWidthRowsPreserveTypedValuesAndResolveIndices)
         const auto row = view.row(0);
         const auto schema = view.columns();
         const auto at = [&](ColumnIndex label) { return static_cast<size_t>(std::ranges::find(schema, label, &ygg::ColumnLayout::label) - schema.begin()); };
-        EXPECT_EQ(ygg::decode_value<uint_t>(row.get(at(ColumnIndex(4)))), 42);
-        EXPECT_DOUBLE_EQ(ygg::decode_value<double>(row.get(at(ColumnIndex(9)))), 1.25);
-        EXPECT_TRUE(ygg::decode_value<bool>(row.get(at(ColumnIndex(2)))));
-        EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(row.get(at(ColumnIndex(7)))), entities), entity);
+        EXPECT_EQ(ygg::decode_value<uint_t>(row.value(at(ColumnIndex(4)))), 42);
+        EXPECT_DOUBLE_EQ(ygg::decode_value<double>(row.value(at(ColumnIndex(9)))), 1.25);
+        EXPECT_EQ(row.type(at(ColumnIndex(9))), ygg::type_id<double>);
+        EXPECT_DOUBLE_EQ(std::get<double>(row.column_value(at(ColumnIndex(9)))), 1.25);
+        EXPECT_EQ(std::get<uint_t>(row.column_value(at(ColumnIndex(7)))), entity.index().value);
+        EXPECT_DOUBLE_EQ(row.template column_value<double>(at(ColumnIndex(9))), 1.25);
+        EXPECT_THROW((void) row.template column_value<float>(at(ColumnIndex(9))), std::invalid_argument);
+        EXPECT_THROW((void) row.get_objects(), std::invalid_argument);  // mixed columns
+        EXPECT_TRUE(ygg::decode_value<bool>(row.value(at(ColumnIndex(2)))));
+        EXPECT_EQ(resolve_in(ygg::decode_value<uint_t>(row.value(at(ColumnIndex(7)))), entities), entity);
         EXPECT_EQ(at(ColumnIndex(99)), schema.size());
     };
     verify(urd::resolve(builder, entities));
     verify(urd::resolve(stored.data(), rows));
     verify(rows.view(stored.index()));
-    EXPECT_EQ(ColumnsIndex(ygg::decode_value<uint_t>(borrow(builder).row(0).get(size_t { 3 }))), entity.index());
+    EXPECT_EQ(ColumnsIndex(ygg::decode_value<uint_t>(borrow(builder).row(0).value(3))), entity.index());
     EXPECT_TRUE(stored.contains(tuple));
 
     urd::data<ygg::Columns> data;
@@ -811,8 +824,8 @@ TEST(YggdrasilTests, DatabaseFloatingPointRowsInternCanonicalNaNsAndSignedZero)
     EXPECT_EQ(builder.insert(std::array { ygg::encode_value(first_nan), ygg::encode_value(true) }), 1);
     EXPECT_EQ(builder.insert(std::array { ygg::encode_value(second_nan), ygg::encode_value(true) }), 1);
     EXPECT_EQ(builder.size(), 2);
-    EXPECT_FALSE(std::signbit(ygg::decode_value<double>(borrow(builder).row(0).get(size_t { 0 }))));
-    EXPECT_TRUE(std::isnan(ygg::decode_value<double>(borrow(builder).row(1).get(size_t { 0 }))));
+    EXPECT_FALSE(std::signbit(ygg::decode_value<double>(borrow(builder).row(0).value(0))));
+    EXPECT_TRUE(std::isnan(ygg::decode_value<double>(borrow(builder).row(1).value(0))));
 
     Repository repository;
     const auto first = repository.insert(builder).first;
@@ -838,10 +851,10 @@ TEST(YggdrasilTests, DatabaseTypedSchemaRejectsMalformedMetadataBeforeMutation)
     relation.insert(std::array { ygg::encode_value(uint_t { 7 }), ygg::encode_value(3.25) });
     auto invalid = urd::Store<urd::sequence<ygg::ColumnLayout>>(columns.begin(), columns.end());
     invalid[1].label = invalid[0].label;
-    EXPECT_THROW(relation.initialize({}, std::span(invalid)), std::invalid_argument);
+    EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
     invalid.assign(columns.begin(), columns.end());
     invalid[1].type = ygg::TypeId { 99 };
-    EXPECT_THROW(relation.initialize({}, std::span(invalid)), std::invalid_argument);
+    EXPECT_THROW(relation.initialize(std::span(invalid)), std::invalid_argument);
     EXPECT_THROW(relation.insert(std::array { ygg::encode_value(3.25), ygg::encode_value(uint_t { 7 }) }), std::out_of_range);  // too wide
     ASSERT_EQ(relation.size(), 1);
     EXPECT_TRUE(relation.contains(std::array { ygg::encode_value(uint_t { 7 }), ygg::encode_value(3.25) }));
@@ -855,14 +868,14 @@ TEST(YggdrasilTests, DatabaseBuiltinCodecsPreserveSignedAndWideValues)
     relation.insert(values);
     const auto row = borrow(relation).row(0);
     EXPECT_EQ(relation.widths().bits(), 32U + 32 + 64 + 64 + 32 + 64 + 1);
-    EXPECT_EQ(row.get(size_t { 0 }), std::get<0>(values));
-    EXPECT_EQ(row.get(size_t { 1 }), std::get<1>(values));
-    EXPECT_EQ(row.get(size_t { 2 }), std::get<2>(values));
-    EXPECT_EQ(row.get(size_t { 3 }), std::get<3>(values));
-    EXPECT_FLOAT_EQ(ygg::decode_value<float>(row.get(size_t { 4 })), 1.25F);
-    EXPECT_EQ(ygg::decode_value<double>(row.get(size_t { 5 })), std::numeric_limits<double>::infinity());
-    EXPECT_TRUE(ygg::decode_value<bool>(row.get(size_t { 6 })));
-    EXPECT_EQ(relation.insert(row), 0);
+    EXPECT_EQ(row.value(0), std::get<0>(values));
+    EXPECT_EQ(row.value(1), std::get<1>(values));
+    EXPECT_EQ(row.value(2), std::get<2>(values));
+    EXPECT_EQ(row.value(3), std::get<3>(values));
+    EXPECT_FLOAT_EQ(ygg::decode_value<float>(row.value(4)), 1.25F);
+    EXPECT_EQ(ygg::decode_value<double>(row.value(5)), std::numeric_limits<double>::infinity());
+    EXPECT_TRUE(ygg::decode_value<bool>(row.value(6)));
+    EXPECT_EQ(relation.insert(row.get_values()), 0);
     EXPECT_TRUE(relation.contains(values));
 }
 
@@ -879,7 +892,7 @@ TEST(YggdrasilTests, HomogeneousRowsRoundTripThroughReusableBuffers)
     stored.insert(encoded);
     const auto row = borrow(stored).row(0);
     for (size_t c = 0; c < values.size(); ++c)
-        EXPECT_EQ(ygg::decode_value<std::uint64_t>(row.get(c)), values[c]);
+        EXPECT_EQ(ygg::decode_value<std::uint64_t>(row.value(c)), values[c]);
 
     auto relation = urd::builder<ygg::Relation<ygg::Schema>>(columns);
     relation.insert(std::array { ygg::encode_value(std::uint64_t { 4 }), ygg::encode_value(std::uint64_t { 9 }) });

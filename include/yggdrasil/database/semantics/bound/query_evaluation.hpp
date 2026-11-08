@@ -58,7 +58,7 @@ public:
         for (size_t slot = 0; slot < std::min(static_slots.size(), m_static.size()); ++slot)
             m_static[slot] = static_slots[slot];
         for (const auto& columns : m_query.input_columns)
-            m_inputs.push_back(layer.get_relation_builder(urd::index<Schema>(), std::span<const ColumnLayout>(columns)));  // never interned: no key
+            m_inputs.push_back(layer.get_relation_builder<Schema>(std::span<const ColumnLayout>(columns)));
         m_bound.assign(input_count(), false);
     }
     // Its snapshots are its own: shared with no copy.
@@ -96,7 +96,7 @@ public:
         auto& snapshot = *m_inputs[slot];
         snapshot.clear();
         for (size_t r = 0; r < rows.size(); ++r)
-            snapshot.insert(rows.row(r));
+            snapshot.insert(rows.row(r).get_values());
         m_bound[slot] = true;
         invalidate(slot);
     }
@@ -113,14 +113,14 @@ public:
         const auto stored = m_layer->view(snapshot);
         const auto columns = std::span<const ColumnLayout>(m_query.input_columns[slot]);
         for (size_t r = 0; r < removed.size(); ++r)
-            if (!snapshot.contains(removed.row(r)))
+            if (!snapshot.contains(removed.row(r).get_values()))
                 throw std::invalid_argument("bound::QueryEvaluator: removed row is absent from the input.");
         for (size_t r = 0; r < added.size(); ++r)
-            if (snapshot.contains(added.row(r)))
+            if (snapshot.contains(added.row(r).get_values()))
                 throw std::invalid_argument("bound::QueryEvaluator: added row is already present in the input.");
         for (size_t r = 0; r < removed.size(); ++r)
         {
-            const auto found = snapshot.find(removed.row(r));
+            const auto found = snapshot.find(removed.row(r).get_values());
             URD_ASSUME(found.has_value());  // every removed row was checked present above
             const auto position = *found;
             const auto last = to_uint_t(snapshot.size() - 1);
@@ -131,22 +131,22 @@ public:
                 URD_ASSUME(found != matches.second);  // every indexed row is in its key's entries
                 rows.erase(found);
             };
-            for_each_index(slot, [&](KeyIndex& entry) { erase(entry.rows, database::detail::join_key_hash(stored.row(position), entry.keys), position); });
+            for_each_index(slot, [&](KeyIndex& entry) { erase(entry.rows, database::detail::join_key_hash(stored.row(position).get_values(), entry.keys), position); });
             snapshot.erase(position);
             if (position != last)
                 for_each_index(slot,
                                [&](KeyIndex& entry)
                                {
                                    // The last row moved into the erased one's position.
-                                   const auto key = database::detail::join_key_hash(stored.row(position), entry.keys);
+                                   const auto key = database::detail::join_key_hash(stored.row(position).get_values(), entry.keys);
                                    erase(entry.rows, key, last);
                                    entry.rows.insert({ key, position });
                                });
         }
         for (size_t r = 0; r < added.size(); ++r)
         {
-            const auto position = snapshot.insert(added.row(r));
-            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert({ database::detail::join_key_hash(added.row(r), entry.keys), position }); });
+            const auto position = snapshot.insert(added.row(r).get_values());
+            for_each_index(slot, [&](KeyIndex& entry) { entry.rows.insert({ database::detail::join_key_hash(added.row(r).get_values(), entry.keys), position }); });
         }
         ++m_version;
     }
@@ -290,7 +290,7 @@ private:
         auto proceed = true;  // False once emit asked to stop.
         const auto visit = [&](size_t r)
         {
-            const auto row = rows.row(r);
+            const auto row = rows.row(r).get_values();
             for (const auto& [c, var] : step.assign)
                 m_frame[var] = row.get(c);
             for (const auto& [c, var] : step.compare)
@@ -315,13 +315,13 @@ private:
             entry.rows.clear();
             entry.rows.reserve(rows.size());
             for (size_t r = 0; r < rows.size(); ++r)
-                entry.rows.insert({ database::detail::join_key_hash(rows.row(r), entry.keys), to_uint_t(r) });
+                entry.rows.insert({ database::detail::join_key_hash(rows.row(r).get_values(), entry.keys), to_uint_t(r) });
             entry.built = true;
         }
         // The key's variables stay bound while this step iterates, so the frame is the probe.
         const auto probe = std::span<const Value>(m_frame);
         for (const auto r : entry.rows.values(database::detail::join_key_hash(probe, lookup.probe)))
-            if (database::detail::join_keys_equal(rows.row(r), entry.keys, probe, lookup.probe) && !visit(r))
+            if (database::detail::join_keys_equal(rows.row(r).get_values(), entry.keys, probe, lookup.probe) && !visit(r))
                 return proceed;
         return true;
     }

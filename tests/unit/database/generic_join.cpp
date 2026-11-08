@@ -44,7 +44,7 @@ struct ThrowingRelation : database::BuilderRelationView
 
     ThrowingRelation(const RelationBuilder& input, size_t fail_on) : database::BuilderRelationView(borrow(input)), fail_on_row(fail_on) {}
 
-    ygg::database::RowPool::row_type row(size_t position) const
+    auto row(size_t position) const
     {
         if (++row_calls == fail_on_row)
             throw std::runtime_error("Injected relation read failure.");
@@ -91,12 +91,12 @@ void apply(RelationBuilder& input, const Change& change, bool undo = false)
     const auto& added = undo ? change_removed : change_added;
     for (size_t i = 0; i < removed.size(); ++i)
     {
-        const auto position = input.find(removed.row(i));
+        const auto position = input.find(removed.row(i).get_values());
         ASSERT_TRUE(position);
         input.erase(position.value());
     }
     for (size_t i = 0; i < added.size(); ++i)
-        input.insert(added.row(i));
+        input.insert(added.row(i).get_values());
 }
 
 void expect_update(const database::incremental::GenericJoinEvaluator& evaluator, const RelationBuilder& before, const RelationBuilder& after)
@@ -295,9 +295,9 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalConsolidatesMixedAliasChanges
     change.added.insert(std::array { ygg::encode_value(static_cast<uint_t>(2)), ygg::encode_value(static_cast<uint_t>(4)) });
     Change renamed_change(layer(), second.columns());
     for (size_t i = 0; i < change.added.size(); ++i)
-        renamed_change.added.insert(borrow(change.added).row(i));
+        renamed_change.added.insert(borrow(change.added).row(i).get_values());
     for (size_t i = 0; i < change.removed.size(); ++i)
-        renamed_change.removed.insert(borrow(change.removed).row(i));
+        renamed_change.removed.insert(borrow(change.removed).row(i).get_values());
     const std::array changes { std::pair { borrow(change.added), borrow(change.removed) },
                                std::pair { borrow(renamed_change.added), borrow(renamed_change.removed) },
                                std::pair { borrow(change.added), borrow(change.removed) } };
@@ -305,7 +305,7 @@ TEST(YggdrasilTests, DatabaseGenericJoinIncrementalConsolidatesMixedAliasChanges
     apply(edge, change);
     RelationBuilder renamed(second.columns());
     for (size_t i = 0; i < edge.size(); ++i)
-        renamed.insert(borrow(edge).row(i));
+        renamed.insert(borrow(edge).row(i).get_values());
     const std::array updated_inputs { borrow(edge), borrow(renamed), borrow(edge) };
     const auto after = binary_reference(updated_inputs, plan);
     expect_update(evaluator, before, after);

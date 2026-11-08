@@ -19,7 +19,7 @@
 #define YGG_FORMALISM_RELATION_REPOSITORY_HPP_
 
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/binding_data.hpp"
+#include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
@@ -48,7 +48,7 @@ namespace ygg::formalism
 /// The width of a whole object index, the widest a relation repository stores.
 inline constexpr auto default_object_index_width = urd::bit_width { static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits) };
 
-/// How a relation repository stores its bindings' objects, per object tag: rows of one unsigned column per argument
+/// How a relation repository stores its rows' objects, per object tag: rows of one unsigned column per argument
 /// (urd::by_column_widths), each column 32 bits (urd::word), or the object_index_width bits the largest index needs
 /// (urd::bit).
 template<typename ObjectTag>
@@ -65,84 +65,84 @@ class ConcurrentRelationRepository;
 
 namespace detail
 {
-/// The rows of a repository, per relation family in a urd family: per pool key, a pool of its rows (each row once, its
-/// index the row's id), in a dense map by key. A family of objects (a predicate's bindings) has rows of objects; the
-/// Schema family keys free relations' pools by their column types (ygg::Schema). Every pool is built with the widths
-/// widths() gives its column types. Over a parent, both levels layer: a relation this layer never touched reads the
-/// parent's pool; one it touched has a pool of its own over the parent's, its rows numbered after the parent's.
+/// The rows of a repository, per relation family F in a urd family: per pool key (an index<F>), a pool of its rows
+/// (each row once, its index the row's id, an index<Row<F>>), in a dense map by key. A family of objects (a
+/// predicate's rows) has rows of objects; the Schema family keys free relations' pools by their column types. Every
+/// pool is built with the widths widths() gives its column types. Over a parent, both levels layer: a pool this layer
+/// never touched reads the parent's; one it touched has a pool of its own over the parent's, its rows numbered after
+/// the parent's.
 template<typename ObjectTag, bool ThreadSafe, typename... Ts>
 class RelationRepositoryBase
 {
     using Threading = std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>;
-    using Objects = urd::flat_vector<urd::index<Object<ObjectTag>>>;
 
 public:
     using object_tag = ObjectTag;
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     static constexpr bool thread_safe = ThreadSafe;
 
-    /// One pool's rows: a value per column (objects read as as<index<Object>>), an object relation's `arity` object
-    /// columns (see RelationRepositoryTraits).
-    using Rows = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>, urd::index<Row>>,
+    /// One pool's rows: a Value per column, read as row_value_t<F> (see RelationRepositoryTraits for object columns).
+    template<typename F>
+    using Rows = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>, urd::index<Row<F>>>,
                             urd::monotone_until_clear,
                             urd::by_column_widths,
                             urd::layered,
                             Threading>;
-    /// The rows of each relation of type T. Clear keeps each slot's pool (constant_clear: a generation map), which a
-    /// relation made again with the same widths reuses, storage and all.
-    template<typename T>
-    using Relations = urd::Store<urd::map<urd::index<T>, Rows>, urd::dense, urd::layered, urd::constant_clear, Threading>;
+    /// The pools of family F, by key. Clear keeps each slot's pool (constant_clear: a generation map), which a pool
+    /// made again with the same widths reuses, storage and all.
+    template<typename F>
+    using Relations = urd::Store<urd::map<urd::index<F>, Rows<F>>, urd::dense, urd::layered, urd::constant_clear, Threading>;
 
 private:
     urd::utils::Family<Relations, Ts...> m_relations;
     std::uint8_t m_object_index_width;
 
-    template<typename T>
-    static urd::prehashed<Objects> key(const urd::data<RelationBinding<T, ObjectTag>>& builder)
-    { return { builder.objects, urd::hash_columns(builder.objects) }; }
+    template<typename F>
+    static urd::prehashed<urd::flat_vector<row_value_t<F>>> key(const urd::data<Row<F>>& row)
+    { return { row.values, urd::hash_columns(row.values) }; }
 
 public:
-    /// The relations of type T, as this layer reads them.
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] const Relations<T>& get() const
-    { return m_relations.template get<T>(); }
+    /// The pools of family F, as this layer reads them.
+    template<typename F>
+        requires HasRows<RelationRepositoryBase, F>
+    [[nodiscard]] const Relations<F>& get() const
+    { return m_relations.template get<F>(); }
 
+    /// The row's id, in whichever layer holds it, or none.
+    template<typename F>
+        requires HasRows<RelationRepositoryBase, F>
+    [[nodiscard]] urd::index<Row<F>> find(const urd::data<Row<F>>& row) const
+    { return get<F>().read(row.relation, [&row](const Rows<F>& rows) { return rows.find(key(row)); }, urd::index<Row<F>>()); }
 
-    /// The binding's row, in whichever layer holds it, or none.
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] urd::index<Row> find(const urd::data<RelationBinding<T, ObjectTag>>& builder) const
-    { return get<T>().read(builder.relation, [&builder](const Rows& rows) { return rows.find(key(builder)); }, urd::index<Row>()); }
+    /// The number of rows of the pool `relation`, along the layers.
+    template<typename F>
+        requires HasRows<RelationRepositoryBase, F>
+    [[nodiscard]] size_t size(urd::index<F> relation) const
+    { return get<F>().read(relation, [](const Rows<F>& rows) { return size_t(rows.size()); }, size_t { 0 }); }
 
-    /// The number of rows of `relation`, along the layers.
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    [[nodiscard]] size_t size(urd::index<T> relation) const
-    { return get<T>().read(relation, [](const Rows& rows) { return size_t(rows.size()); }, size_t { 0 }); }
-
-    /// The binding's row, stored in this layer's own pool of its relation where no layer holds it, and whether it was
-    /// stored now. Every row of a relation has one object per argument (checked against its pool's columns).
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    std::pair<urd::index<Row>, bool> insert(const urd::data<RelationBinding<T, ObjectTag>>& builder)
+    /// The row's id, stored in this layer's own pool of its relation where no layer holds it, and whether it was stored
+    /// now. The pool, made where missing, has the widths of `types`, the pool's column types; every row of a pool has one
+    /// value per column (checked against the pool's columns).
+    template<typename F, std::ranges::input_range Types>
+        requires HasRows<RelationRepositoryBase, F>
+    std::pair<urd::index<Row<F>>, bool> insert(const urd::data<Row<F>>& row, Types&& types)
     {
-        if (builder.relation.is_none())
+        if (row.relation.is_none())
             throw std::invalid_argument("RelationRepository: the maximum relation index is reserved.");
-        auto& rows = own_rows(builder.relation, [&] { return urd::column_widths(builder.objects.size(), object_bits()); });
-        if (rows.column_widths().size() != builder.objects.size())
-            throw std::invalid_argument("RelationRepository: wrong number of objects for the relation.");
-        return rows.insert(key(builder));
+        auto& rows = own_rows(row.relation, [&] { return widths(types); });
+        if (rows.column_widths().size() != row.values.size())
+            throw std::invalid_argument("RelationRepository: wrong number of values for the relation.");
+        return rows.insert(key(row));
     }
 
     /// This layer's own pool of `relation`, made where it has none with the widths `widths()` gives (over the parent's
     /// pool, if any).
-    template<typename T, std::invocable Widths>
-        requires SupportsRelation<RelationRepositoryBase, T>
-    Rows& own_rows(urd::index<T> relation, Widths widths)
+    template<typename F, std::invocable Widths>
+        requires HasRows<RelationRepositoryBase, F>
+    Rows<F>& own_rows(urd::index<F> relation, Widths widths)
     {
-        auto& relations = m_relations.template get<T>();
-        if (!relations.read_own(relation, [](const Rows&) { return true; }, false))
+        auto& relations = m_relations.template get<F>();
+        if (!relations.read_own(relation, [](const Rows<F>&) { return true; }, false))
             relations.try_emplace(relation, widths());
         return relations.at(relation);
     }
@@ -183,13 +183,13 @@ public:
 
     [[nodiscard]] std::uint8_t get_object_index_width() const noexcept { return m_object_index_width; }
 
-    /// This layer's own storage of T's bindings.
-    template<typename T>
-        requires SupportsRelation<RelationRepositoryBase, T>
+    /// This layer's own storage of F's rows.
+    template<typename F>
+        requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] size_t memory_usage() const
-    { return urd::memory_usage(get<T>()); }
+    { return urd::memory_usage(get<F>()); }
 
-    /// Forgets this layer's own bindings; the parent's stay.
+    /// Forgets this layer's own rows; the parent's stay.
     void clear() { m_relations.clear(); }
 };
 }  // namespace detail

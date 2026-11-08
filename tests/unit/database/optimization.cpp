@@ -45,7 +45,7 @@ auto rows(const auto& relation)
     {
         auto& values = result.emplace_back();
         for (size_t c = 0; c < row.size(); ++c)
-            values.push_back(row.get(c));
+            values.push_back(row.value(c));
     }
     std::ranges::sort(result);
     return result;

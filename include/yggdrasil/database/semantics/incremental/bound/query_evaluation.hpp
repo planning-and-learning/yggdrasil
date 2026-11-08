@@ -223,7 +223,7 @@ private:
                 return false;
             const auto& plan = seed_plan(b, atom);
             for (size_t r = 0; r < rows.size(); ++r)
-                if (m_base.bind_atom(atom, rows.row(r)))
+                if (m_base.bind_atom(atom, rows.row(r).get_values()))
                     m_base.run_plan(plan, on_row);
             return true;
         };

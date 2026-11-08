@@ -55,7 +55,7 @@ Pairs must_pass(const Relation& edges, const Relation& sources, const Relation& 
     computation.must_pass([&](size_t) { return view; }, borrow(layer, sources), borrow(layer, targets), borrow(layer, probes), out);
     auto result = Pairs();
     for (const auto row : layer.view(out).rows())
-        result.emplace(ygg::decode_value<uint_t>(row.get(0)), ygg::decode_value<uint_t>(row.get(1)));
+        result.emplace(ygg::decode_value<uint_t>(row.value(0)), ygg::decode_value<uint_t>(row.value(1)));
     EXPECT_EQ(result.size(), out.size()) << "every must-pass object is reported once";
     return result;
 }

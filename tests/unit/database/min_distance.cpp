@@ -49,7 +49,7 @@ void check_sequence(ygg::database::QueryView<> edges,
     evaluator.evaluate(borrow_all(layer, maximal));
     auto supergraph = Relation(evaluator.get_result().columns());
     for (size_t i = 0; i < evaluator.get_result().size(); ++i)
-        supergraph.insert(evaluator.get_result().row(i));
+        supergraph.insert(evaluator.get_result().row(i).get_values());
     auto heuristic = HalfDistance {};
     heuristic.columns = sources.columns();
     auto workspace = ygg::database::DistanceWorkspace(plan);
@@ -63,7 +63,7 @@ void check_sequence(ygg::database::QueryView<> edges,
         const auto materialized = evaluator.get_result();
         auto edge_relation = Relation(materialized.columns());
         for (size_t i = 0; i < materialized.size(); ++i)
-            edge_relation.insert(materialized.row(i));
+            edge_relation.insert(materialized.row(i).get_values());
         const auto expected =
             ygg::database::min_distance(borrow(layer, sources), borrow(layer, edge_relation), borrow(layer, targets), plan, result, workspace);
         const auto input = [&](size_t slot) { return views[slot]; };

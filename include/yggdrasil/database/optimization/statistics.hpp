@@ -46,7 +46,7 @@ RelationStatistics measure_relation(const Relation& relation)
     {
         seen.clear();
         for (size_t i = 0; i < relation.size(); ++i)
-            seen.insert(relation.row(i).get(c));
+            seen.insert(relation.row(i).value(c));
         stats.distinct[columns[c].label] = static_cast<double>(seen.size());
     }
     return stats;

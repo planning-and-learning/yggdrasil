@@ -26,16 +26,18 @@
 namespace ygg::database
 {
 /// Read access shared by the relation views (formalism/relation_view.hpp): interned (index) views and builder views.
-/// A row is a stored row: its values by position; its columns give their labels and types.
+/// A row is a Row<Schema> view: its values by position (value(i); get_values() the stored row); its columns give their
+/// labels and types.
 template<typename V>
-concept RelationViewConcept = requires(const std::remove_reference_t<V>& view, size_t i, std::span<const Value> values, RowPool::row_type row) {
+concept RelationViewConcept = requires(const std::remove_reference_t<V>& view, size_t i, std::span<const Value> values) {
     { view.columns() } -> std::same_as<std::span<const ColumnLayout>>;
     { view.size() } -> std::same_as<size_t>;
     { view.empty() } -> std::same_as<bool>;
     { view.relation_identity() } -> std::same_as<RelationIdentity>;
-    { view.row(i) } -> std::same_as<RowPool::row_type>;
+    { view.row(i) } -> RowViewConcept<Schema>;
+    { view.row(i).get_values() } -> std::same_as<RowPool::row_type>;
     { view.contains(values) } -> std::same_as<bool>;
-    { view.contains(row) } -> std::same_as<bool>;
+    { view.contains(view.row(i)) } -> std::same_as<bool>;
 };
 
 /// Sized random-access inputs whose elements, possibly references, are relation views.

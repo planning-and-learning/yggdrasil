@@ -103,7 +103,7 @@ void build_join_index(const V& build, std::span<const ColumnSlice> keys, urd::St
     index.clear();
     index.reserve(build.size());
     for (size_t i = 0; i < build.size(); ++i)
-        index.insert({ join_key_hash(build.row(i), keys), i });
+        index.insert({ join_key_hash(build.row(i).get_values(), keys), i });
 }
 }  // namespace detail
 
