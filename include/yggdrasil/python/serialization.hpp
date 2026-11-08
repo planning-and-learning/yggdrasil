@@ -292,6 +292,21 @@ template<typename... Registered>
 void bind_registration_overloads(nanobind::module_& module, TypeList<Registered...>)
 { (bind_registration<Registered>(module), ...); }
 
+/// Keeps a serialized value alive as long as the dictionaries: their tables hold copies of its views, which
+/// point into the repository the value keeps alive. Appending to a list is O(1); nb::keep_alive scans all
+/// earlier patients for a duplicate on every call, so serializing n values took O(n^2) time.
+inline void retain(nanobind::handle dictionaries, nanobind::handle value)
+{
+    namespace nb = nanobind;
+    nb::object retained = nb::getattr(dictionaries, "_ygg_retained", nb::none());
+    if (retained.is_none())
+    {
+        retained = nb::list();
+        nb::setattr(dictionaries, "_ygg_retained", retained);
+    }
+    nb::borrow<nb::list>(retained).append(value);
+}
+
 template<typename T>
 void bind_serialize(nanobind::module_& module)
 {
@@ -301,10 +316,14 @@ void bind_serialize(nanobind::module_& module)
 
     module.def(
         "serialize",
-        [](Dictionaries& dictionaries, const T& value) { return to_python(dictionaries.serialize(value)); },
+        [](nb::handle_t<Dictionaries> self, nb::handle_t<T> value)
+        {
+            auto result = to_python(nb::cast<Dictionaries&>(self).serialize(nb::cast<const T&>(value)));
+            retain(self, value);
+            return result;
+        },
         "dictionaries"_a,
-        "value"_a.noconvert(),
-        nb::keep_alive<1, 2>());
+        "value"_a.noconvert());
 }
 
 template<typename... Serialized>
