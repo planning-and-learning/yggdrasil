@@ -118,6 +118,17 @@ struct data<ygg::tests::RepositoryTypesRelation>
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::value> {}; }
 };
 
+/// A key of row pools gives its rows' column types (here: `value` object columns).
+template<typename V>
+struct view_mixin<ygg::tests::RepositoryTypesRelation, V>
+{
+    [[nodiscard]] auto get_column_types() const
+    {
+        return std::views::iota(ygg::uint_t { 0 }, static_cast<const V&>(*this).data().value)
+               | std::views::transform([](ygg::uint_t) { return ygg::type_id<urd::index<ygg::formalism::Object<ygg::tests::RepositoryTypesObjectTag>>>; });
+    }
+};
+
 template<>
 struct data<ygg::formalism::Object<ygg::tests::RepositoryTypesObjectTag>>
 {
@@ -160,6 +171,9 @@ struct RelationRepositoryTraits<tests::RepositoryTypesPackedObjectTag>
 
 namespace ygg::tests
 {
+/// An object column's type, as declared pools of raw keys (no symbols) take it.
+constexpr auto object_column = ygg::type_id<urd::index<formalism::Object<RepositoryTypesObjectTag>>>;
+
 
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles)
@@ -318,6 +332,8 @@ static void expect_row_access_for_each_relation_type()
     static_assert(Viewable<RowIndex<RepositoryTypesElement>, Repository>);
 
     Repository repository;
+    repository.declare(urd::index<RepositoryTypesRelation>(0), std::array { object_column });  // raw keys, no symbols: declared here
+    repository.declare(urd::index<RepositoryTypesElement>(0), std::array { object_column, object_column });
     urd::data<Row<RepositoryTypesRelation>> first_data;
     first_data.relation = urd::index<RepositoryTypesRelation>(0);
     first_data.values.push_back(ygg::encode_value(ObjectIndex(3)));
@@ -432,6 +448,7 @@ TEST(YggdrasilTests, CommonInterningPreparesExactlyOnceBeforeRawInterning)
 TEST(YggdrasilTests, CommonInterningAcceptsRowsWithoutSymbolIdentity)
 {
     auto repository = ContractRepository();
+    repository.declare(urd::index<RepositoryTypesRelation>(0), std::array { object_column });
     using Object = formalism::Object<RepositoryTypesObjectTag>;
     auto objects = urd::flat_vector<ygg::Value>();
     objects.push_back(ygg::encode_value(urd::index<Object>(3)));
@@ -477,6 +494,8 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
     auto objects = urd::flat_vector<ygg::Value> {};
     objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     const auto data = urd::data<Binding>(urd::index<RepositoryTypesRelation>(0), objects);
+    for (auto* each : { &first_repository, &second_repository, &independent_repository })
+        each->declare(data.relation, std::array { object_column });
 
     const auto [first, first_created] = first_repository.insert(data);
     const auto [second, second_created] = second_repository.insert(data);
@@ -539,6 +558,7 @@ TEST(YggdrasilTests, CommonBorrowedRowViewReadsWithoutPublishingAndMaterializesC
     using Object = formalism::Object<RepositoryTypesObjectTag>;
     auto repository = RowViewRepository();
     auto relation_data = urd::data<RepositoryTypesRelation>();
+    relation_data.value = 2;  // its rows' arity: interning it declares its pool
     const auto relation = repository.insert(relation_data).first.index();
     auto object_data = urd::data<Object>();
     for (uint_t i = 0; i < 8; ++i)
@@ -554,7 +574,7 @@ TEST(YggdrasilTests, CommonBorrowedRowViewReadsWithoutPublishingAndMaterializesC
     EXPECT_EQ(&borrowed.data(), &data);
     EXPECT_EQ(&borrowed.context(), &repository);
     EXPECT_EQ(borrowed.get_relation().index(), relation);
-    EXPECT_THROW((void) borrowed.type(0), std::out_of_range);  // no pool yet: no column types
+    EXPECT_EQ(borrowed.type(0), ygg::type_id<urd::index<Object>>);  // declared with its key, before any row
     EXPECT_EQ(borrowed.value(1), 5U);
     EXPECT_EQ(borrowed.get_key().first, relation);
     EXPECT_EQ(borrowed.get_key().second.data(), data.values.data());
@@ -617,6 +637,7 @@ TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 
     auto repository = ContractRepository();
     const auto relation = urd::index<RepositoryTypesRelation>(0);
+    repository.declare(relation, std::array { object_column, object_column });
     auto objects = urd::flat_vector<ygg::Value> {};
     objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     objects.push_back(ygg::encode_value(urd::index<Object>(1)));
@@ -653,6 +674,7 @@ TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
     objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     objects.push_back(ygg::encode_value(urd::index<Object>(1)));
     const auto data = urd::data<Binding>(urd::index<RepositoryTypesRelation>(0), objects);
+    repository.declare(data.relation, std::array { object_column, object_column });
     repository.insert(data);
 
     const auto symbol_memory_usage = repository.symbols().memory_usage<RepositoryTypesElement>();
@@ -685,6 +707,7 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
 
     auto root = Repository(4, nullptr);
     const auto relation = urd::index<RepositoryTypesPackedRelation>(0);
+    root.declare(relation, std::array { object_column, object_column });
     auto objects = urd::flat_vector<ygg::Value> {};
     objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     objects.push_back(ygg::encode_value(urd::index<Object>(3)));
@@ -791,6 +814,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
 
     auto repository = Repository();
     const auto relation = urd::index<RepositoryTypesRelation>(0);
+    repository.declare(relation, std::array { object_column, object_column });
     const auto missing = RowIndex<RepositoryTypesRelation> { relation, urd::index<Row<RepositoryTypesRelation>>(0) };
 
     EXPECT_THROW(repository[missing], std::out_of_range);
@@ -890,6 +914,7 @@ static void check_relation_membership()
     auto objects = urd::flat_vector<ygg::Value> {};
     objects.push_back(ygg::encode_value(urd::index<Object>(0)));
     auto root = Repository();
+    root.declare(relation, std::array { object_column });
     const auto root_view = root.insert(urd::data<ContractBinding>(relation, objects)).first;
     auto child = Repository(&root);
     objects[0] = ygg::encode_value(urd::index<Object>(1));
@@ -923,6 +948,7 @@ static void check_relation_membership()
     EXPECT_FALSE(std::ranges::all_of(std::array { root_view.data(), max_row }, [&](const auto& value) { return has(grandchild, value); }));
 
     auto unrelated = Repository();
+    unrelated.declare(relation, std::array { object_column });
     EXPECT_FALSE(has(grandchild, StoredRowView(root_view.data(), &unrelated)));
     objects[0] = ygg::encode_value(urd::index<Object>(0));
     const auto unrelated_view = unrelated.insert(urd::data<ContractBinding>(relation, objects)).first;

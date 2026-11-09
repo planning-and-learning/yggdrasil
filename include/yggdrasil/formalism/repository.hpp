@@ -121,11 +121,11 @@ private:
         return false;
     }
     /// The relation `pool`, `columns` and `row_set` make. Its Columns record is made here only: the columns' types must
-    /// be the pool's where a layer has the pool (std::invalid_argument otherwise).
+    /// be the pool's (std::invalid_argument otherwise).
     template<typename F>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> intern_relation(urd::index<F> pool, std::span<const ColumnLayout> columns, urd::index<RowSet<F>> row_set)
     {
-        if (const auto stored = m_relations.schema(pool); !stored.is_none() && !std::ranges::equal(m_relations.types(stored), columns, {}, {}, &ColumnLayout::type))
+        if (!std::ranges::equal(m_relations.types(pool), columns, {}, {}, &ColumnLayout::type))
             throw std::invalid_argument("Repository: the columns' types are not the pool's.");
         m_columns.values.set(columns.begin(), columns.end());
         auto relation = urd::data<Relation<F>> { {}, pool, intern(m_symbols.template get<Columns>(), m_columns).first, row_set };
@@ -138,23 +138,28 @@ private:
     std::pair<urd::index_view<Relation<F>, Repository>, bool> intern_rows(urd::index<F> pool, const V& source)
     {
         const auto columns = source.columns();
-        const auto schema = this->schema(columns);
+        declare(pool, columns | std::views::transform(&ColumnLayout::type));
         auto& row_set = m_row_sets.template get<F>();
         row_set.rows.clear();
         for (std::size_t i = 0; i < source.size(); ++i)
-            row_set.rows.push_back(m_relations.insert(pool, source.row(i).get_values(), schema).first);
+            row_set.rows.push_back(m_relations.insert(pool, source.row(i).get_values()).first);
         std::ranges::sort(row_set.rows);
         return intern_relation(pool, columns, intern(m_symbols.template get<RowSet<F>>(), row_set).first);
     }
     /// The key of free relations of these columns' types: their Schema, interned here.
     urd::index<Schema> schema(std::span<const ColumnLayout> columns)
+    { return schema(columns | std::views::transform(&ColumnLayout::type)); }
+    /// The Schema of these column types, interned here (built in a reused record).
+    template<std::ranges::input_range Types>
+    urd::index<Schema> schema(const Types& types)
     {
         auto record = m_schema_builders.acquire_unique();
         urd::clear_members(*record);
-        for (const auto& column : columns)
-            record->types.push_back(column.type);
+        for (const TypeId type : types)
+            record->types.push_back(type);
         return m_relations.schema(*record);
     }
+
 
     Repository(const Repository* parent, urd::bit_width object_index_width) :
         m_parent(parent),
@@ -186,7 +191,7 @@ public:
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
 
     /// Forgets this layer's own records and rows; the parent's stay. Views of the forgotten records
-    /// dangle. Its pool keys (e.g. schemas) stay, and so their pools, emptied: a refill in any order finds each pool
+    /// dangle. Its pool keys (e.g. predicates) stay, with their pools' declarations (Schemas), and so their pools, emptied: a refill in any order finds each pool
     /// built alike and allocates nothing.
     void clear()
     {
@@ -256,6 +261,25 @@ public:
         const auto [index, created] = intern(m_symbols.template get<T>(), builder);
         return { view(index), created };
     }
+    /// A key of row pools (a predicate, an action, ...) interned as any record, and its pool declared with the column
+    /// types its view gives (a key family's view has get_column_types(): its rows' column types). Declared on every
+    /// insert, so a row may follow whichever thread interned it.
+    template<typename T>
+        requires SupportsSymbol<Repository, T> && HasRows<Repository, T>
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
+    {
+        const auto [index, created] = intern(m_symbols.template get<T>(), builder);
+        const auto key = view(index);
+        declare(index, key.get_column_types());
+        return { key, created };
+    }
+
+    /// Declares the pool `key` of family F with these column types (std::invalid_argument where it was declared with
+    /// others). Interning a key (insert(data<T>)) declares its pool itself.
+    template<typename F, std::ranges::input_range Types>
+        requires HasRows<Repository, F>
+    void declare(urd::index<F> key, const Types& types)
+    { m_relations.declare(key, schema(types)); }
 
     template<typename T>
         requires SupportsSymbol<Repository, T>
@@ -302,17 +326,13 @@ public:
         return std::nullopt;
     }
 
-    /// Stores the row in this layer where no layer holds it. Its pool's columns are objects, one per value (its Schema,
-    /// checked against the pool's). A free relation's rows go in through its relation (insert(builder)).
+    /// Stores the row in this layer where no layer holds it, checked against its pool's Schema (declared with its key). A
+    /// free relation's rows go in through its relation (insert(builder)).
     template<typename F>
         requires HasRows<Repository, F> && (!std::same_as<F, Schema>)
     std::pair<RowView<F, Repository>, bool> insert(const urd::data<Row<F>>& row)
     {
-        auto schema = m_schema_builders.acquire_unique();
-        urd::clear_members(*schema);
-        for (std::size_t i = 0; i < row.values.size(); ++i)
-            schema->types.push_back(type_id<urd::index<Object<object_tag>>>);
-        const auto [id, created] = m_relations.insert(row.relation, row.values, m_relations.schema(*schema));
+        const auto [id, created] = m_relations.insert(row.relation, row.values);
         const auto key = RowIndex<F> { row.relation, id };
         return { created ? RowView<F, Repository>(key, this) : view(key), created };
     }

@@ -916,17 +916,25 @@ TEST(YggdrasilTests, DatabasePoolsKeepTheirSchema)
     auto values = urd::flat_vector<ygg::Value>();
     values.push_back(1);
     values.push_back(2);
-    EXPECT_TRUE(repository.relations().schema(key).is_none());  // no pool yet
-    EXPECT_TRUE(repository.relations().insert(key, values, key).second);
+    EXPECT_TRUE(repository.relations().schema(key).is_none());  // not declared yet
+    EXPECT_THROW((void) repository.relations().insert(key, values), std::out_of_range);  // rows need a declared pool
+    repository.relations().declare(key, key);
+    repository.relations().declare(key, key);  // again with the same Schema: nothing changes
+    EXPECT_THROW(repository.relations().declare(key, other), std::invalid_argument);
     EXPECT_EQ(repository.relations().schema(key), key);
+    EXPECT_TRUE(repository.relations().insert(key, values).second);
     EXPECT_TRUE(std::ranges::equal(repository.relations().types(key), unsigned_types.types));
-    EXPECT_THROW(repository.relations().insert(key, values, other), std::invalid_argument);
+    values.push_back(3);
+    EXPECT_THROW((void) repository.relations().insert(key, values), std::invalid_argument);  // checked against the Schema
+    values.pop_back();
     Repository child(&repository);
-    EXPECT_THROW(child.relations().insert(key, values, other), std::invalid_argument);  // the parent's Schema
+    EXPECT_THROW(child.relations().declare(key, other), std::invalid_argument);  // the parent's declaration
     EXPECT_EQ(child.relations().schema(key), key);
     repository.clear();
-    EXPECT_TRUE(repository.relations().schema(key).is_none());  // the pool went, its Schema stays
+    EXPECT_EQ(repository.relations().schema(key), key);  // the declaration and its Schema stay, the rows go
     EXPECT_TRUE(std::ranges::equal(repository.relations().types(key), unsigned_types.types));
+    EXPECT_EQ(repository.relations().size(key), 0U);
+    EXPECT_TRUE(repository.relations().insert(key, values).second);
 }
 
 TEST(YggdrasilTests, DatabaseBuildersAreNumberedLikeLayers)

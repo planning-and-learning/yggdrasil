@@ -76,9 +76,11 @@ namespace detail
 ///   - free relations of two uint columns (key: their Schema S, index<Schema> 1): pool of rows (1, 2), (3, 4), ...,
 ///     Schema S = (uint, uint).
 ///
-/// A relation (a symbol record: pool key, columns, row set) is a set of row ids in one pool; many relations share a
-/// pool. Every Schema is interned once in the layer's Schema pool, the one source of column types (types(key)), and a
-/// pool's column widths come from it (widths()). Over a parent, everything layers: a pool this layer never wrote reads
+/// A pool is declared with its Schema before its first row (declare): a key symbol (e.g. a predicate) when it is
+/// interned, with the column types its view gives; free relations with their columns' types. Rows are then checked
+/// against it. A relation (a symbol record: pool key, columns, row set) is a set of row ids in one pool; many relations
+/// share a pool. Every Schema is interned once in the layer's Schema pool, the one source of column types
+/// (types(key)), and a pool's column widths come from it (widths()). Over a parent, everything layers: a pool this layer never wrote reads
 /// the parent's; one it wrote to has a pool of its own over the parent's, its row ids continuing after the parent's.
 template<typename ObjectTag, bool ThreadSafe, typename... Ts>
 class RelationRepositoryBase
@@ -105,9 +107,10 @@ public:
     /// Every Schema, each once, as a flat record: e.g. (object, object) -> index<Schema> 0, (uint, uint) -> 1. Kept
     /// across clear, so the keys of free relations' pools stay valid.
     using Schemas = urd::Store<urd::pool<urd::data<Schema>, urd::index<Schema>>, urd::flat, urd::stable_refs, urd::monotone_until_clear, urd::layered, Threading>;
-    /// Family F's pools' Schemas, by key: e.g. predicate 3 -> (object, object). Layered and cleared as the pools are.
+    /// Family F's pools' Schemas, by key, as declared: e.g. predicate 3 -> (object, object). Kept across clear, as the
+    /// pool keys and the Schemas are.
     template<typename F>
-    using PoolSchemas = urd::Store<urd::map<urd::index<F>, urd::index<Schema>>, urd::dense, urd::layered, urd::constant_clear, Threading>;
+    using PoolSchemas = urd::Store<urd::map<urd::index<F>, urd::index<Schema>>, urd::dense, urd::layered, Threading>;
 
 private:
     urd::utils::Family<Relations, Ts...> m_relations;
@@ -143,44 +146,57 @@ public:
         const auto& record = m_schemas[schema];
         return { record.types.data(), record.types.size() };
     }
-    /// The Schema of the pool `relation`, or none where no layer has the pool.
+    /// The Schema of the pool `relation`, or none where no layer declared it.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] urd::index<Schema> schema(urd::index<F> relation) const
     { return m_pool_schemas.template get<F>().read(relation, [](urd::index<Schema> held) { return held; }, urd::index<Schema>()); }
-    /// The column types of the pool `relation` (its Schema's); std::out_of_range where no layer has the pool.
+    /// The column types of the pool `relation` (its Schema's); std::out_of_range where no layer declared it.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] auto types(urd::index<F> relation) const
     {
         const auto held = schema(relation);
         if (held.is_none())
-            throw std::out_of_range("RelationRepository: no layer has the pool.");
+            throw std::out_of_range("RelationRepository: no layer declared the pool.");
         return types(held);
     }
 
-    /// The id of the row of these values in the pool `relation`, stored in this layer's own pool where no layer holds it,
-    /// and whether it was stored now. `schema` must be the pool's, as stored with this layer's pool or else a parent's
-    /// (std::invalid_argument otherwise); a layer makes its own pool, with its types' widths, only for a row no layer
-    /// holds. The values must be one per column (std::invalid_argument otherwise). The pool encodes and hashes them once
-    /// for its whole chain.
-    template<typename F, std::ranges::input_range Values>
+    /// Declares the pool `relation` with the Schema `schema`, once (again with the same Schema changes nothing; another
+    /// one, here or in a parent, is std::invalid_argument). Makes no pool: its first row does.
+    template<typename F>
         requires HasRows<RelationRepositoryBase, F>
-    std::pair<urd::index<Row<F>>, bool> insert(urd::index<F> relation, const Values& values, urd::index<Schema> schema)
+    void declare(urd::index<F> relation, urd::index<Schema> schema)
     {
         if (relation.is_none())
             throw std::invalid_argument("RelationRepository: the maximum relation index is reserved.");
+        if (const auto declared = this->schema(relation); !declared.is_none())
+        {
+            if (declared != schema)
+                throw std::invalid_argument("RelationRepository: the pool was declared with other column types.");
+            return;
+        }
+        m_pool_schemas.template get<F>().try_emplace(relation, schema);
+    }
+
+    /// The id of the row of these values in the declared pool `relation`, stored in this layer's own pool where no layer
+    /// holds it, and whether it was stored now. The values are checked against the pool's Schema: one per column
+    /// (std::invalid_argument otherwise), each fitting its column (std::out_of_range otherwise). A layer makes its own
+    /// pool, with the Schema's widths, for the first row no layer holds; a pool never declared is std::out_of_range.
+    template<typename F, std::ranges::input_range Values>
+        requires HasRows<RelationRepositoryBase, F>
+    std::pair<urd::index<Row<F>>, bool> insert(urd::index<F> relation, const Values& values)
+    {
         auto& relations = m_relations.template get<F>();
-        const auto stored = this->schema(relation);
-        if (!stored.is_none() && stored != schema)
-            throw std::invalid_argument("RelationRepository: the pool's column types are other ones.");
         auto* rows = relations.own_value(relation);
         if (rows == nullptr)
         {
             if (const auto found = find(relation, values); !found.is_none())
                 return { found, false };
-            m_pool_schemas.template get<F>().try_emplace(relation, schema);
-            relations.try_emplace(relation, widths(types(schema)));
+            const auto declared = schema(relation);
+            if (declared.is_none())
+                throw std::out_of_range("RelationRepository: no layer declared the pool.");
+            relations.try_emplace(relation, widths(types(declared)));
             rows = relations.own_value(relation);
         }
         return rows->insert(values);
@@ -232,12 +248,9 @@ public:
     [[nodiscard]] size_t memory_usage() const
     { return urd::memory_usage(get<F>()); }
 
-    /// Forgets this layer's own rows; the parent's stay, and so do the Schemas (pool keys, as the Repository's).
-    void clear()
-    {
-        m_relations.clear();
-        m_pool_schemas.clear();
-    }
+    /// Forgets this layer's own rows; the parent's stay, and so do the Schemas and the pools' declarations (as the
+    /// Repository keeps the pool keys).
+    void clear() { m_relations.clear(); }
 };
 }  // namespace detail
 
