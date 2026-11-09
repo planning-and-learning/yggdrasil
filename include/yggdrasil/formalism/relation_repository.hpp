@@ -78,7 +78,7 @@ namespace detail
 ///
 /// A pool is declared with its Schema before its first row (declare): a key symbol (e.g. a predicate) when it is
 /// interned, with the column types its view gives; free relations with their columns' types. Rows are then checked
-/// against it. A relation (a symbol record: pool key, columns, row set) is a set of row ids in one pool; many relations
+/// against it. A relation (a symbol record: pool key, columns, row ids) is a set of row ids in one pool; many relations
 /// share a pool. Every Schema is interned once in the layer's Schema pool, the one source of column types
 /// (types(key)), and a pool's column widths come from it (widths()). Over a parent, everything layers: a pool this layer never wrote reads
 /// the parent's; one it wrote to has a pool of its own over the parent's, its row ids continuing after the parent's.

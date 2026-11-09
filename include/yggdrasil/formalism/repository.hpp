@@ -57,9 +57,9 @@ namespace ygg::formalism
 /// views of one record are equal wherever they were made. Each layer has its own number.
 ///
 /// Every relation family F (HasRows: predicates, actions, ..., Schema) has rows Row<F>, keyed {pool, row}. A family F
-/// with relations (HasRelations: Relation<F> among the layer's symbols, with Columns and RowSet<F>) also has relations:
-/// a relation's rows go into the layer's pool of its key (an index<F>), and the relation is {pool, columns, row set}.
-/// Rename keeps the pool and the row set. Free relations are the Schema family: their key is their column types,
+/// with relations (HasRelations: Relation<F> among the layer's symbols, with Columns) also has relations: a
+/// relation's rows go into the layer's pool of its key (an index<F>), and the relation is {pool, columns, row ids}.
+/// Rename keeps the pool and the rows. Free relations are the Schema family: their key is their column types,
 /// interned at insert.
 ///
 /// Concurrent repository aliases support overlapping find, insert and lookups. Builders remain thread-confined; clear,
@@ -82,10 +82,6 @@ private:
     using RelationFamily = boost::mp11::mp_contains<SymbolTypes, Relation<F>>;
     template<typename... Fs>
     using BuilderFamily = urd::utils::Family<BuilderSlots, Fs...>;
-    template<typename F>
-    using RowSetRecord = urd::data<RowSet<F>>;
-    template<typename... Fs>
-    using RowSetFamily = urd::utils::Family<RowSetRecord, Fs...>;
     using RelationFamilies = boost::mp11::mp_copy_if<RelationTypes, RelationFamily>;
     /// A pool key's records stay across clear(), and so do their pools.
     template<typename T>
@@ -105,53 +101,13 @@ private:
     SymbolRepo m_symbols;
     RelationRepo m_relations;
     std::size_t m_layer;
-    /// Scratch records of insert.
-    urd::data<Columns> m_columns;
     /// Schema records to build in (reused: interning one allocates nothing once warm); threads take their own.
     urd::Store<urd::slots<urd::data<Schema>>, std::conditional_t<RelationRepo::thread_safe, urd::concurrent, urd::single_threaded>> m_schema_builders;
-    boost::mp11::mp_apply<RowSetFamily, RelationFamilies> m_row_sets;
     /// The builder slots of each family with relations (none where the layer has no relations).
     mutable boost::mp11::mp_apply<BuilderFamily, RelationFamilies> m_relation_builders;
-    /// Whether `context` is this layer or one of its parents.
-    [[nodiscard]] bool reads(const void* context) const noexcept
-    {
-        for (const auto* layer = this; layer != nullptr; layer = layer->m_parent)
-            if (layer == context)
-                return true;
-        return false;
-    }
-    /// The relation `pool`, `columns` and `row_set` make. Its Columns record is made here only: the columns' types must
-    /// be the pool's (std::invalid_argument otherwise).
-    template<typename F>
-    std::pair<urd::index_view<Relation<F>, Repository>, bool> intern_relation(urd::index<F> pool, std::span<const ColumnLayout> columns, urd::index<RowSet<F>> row_set)
-    {
-        if (!std::ranges::equal(m_relations.types(pool), columns, {}, {}, &ColumnLayout::type))
-            throw std::invalid_argument("Repository: the columns' types are not the pool's.");
-        m_columns.values.set(columns.begin(), columns.end());
-        auto relation = urd::data<Relation<F>> { {}, pool, intern(m_symbols.template get<Columns>(), m_columns).first, row_set };
-        const auto [index, created] = intern(m_symbols.template get<Relation<F>>(), relation);
-        return { view(index), created };
-    }
-    /// Interns the relation `source` reads (a builder's view, or a relation view of another layer): its rows into this
-    /// layer's pool of `pool`, whose column types must be the source's, their sorted ids as its row set.
-    template<typename F, typename V>
-    std::pair<urd::index_view<Relation<F>, Repository>, bool> intern_rows(urd::index<F> pool, const V& source)
-    {
-        const auto columns = source.columns();
-        declare(pool, columns | std::views::transform(&ColumnLayout::type));
-        auto& row_set = m_row_sets.template get<F>();
-        row_set.rows.clear();
-        for (std::size_t i = 0; i < source.size(); ++i)
-            row_set.rows.push_back(m_relations.insert(pool, source.row(i).get_values()).first);
-        std::ranges::sort(row_set.rows);
-        return intern_relation(pool, columns, intern(m_symbols.template get<RowSet<F>>(), row_set).first);
-    }
-    /// The key of free relations of these columns' types: their Schema, interned here.
-    urd::index<Schema> schema(std::span<const ColumnLayout> columns)
-    { return schema(columns | std::views::transform(&ColumnLayout::type)); }
     /// The Schema of these column types, interned here (built in a reused record).
     template<std::ranges::input_range Types>
-    urd::index<Schema> schema(const Types& types)
+    urd::index<Schema> intern_schema(const Types& types)
     {
         auto record = m_schema_builders.acquire_unique();
         urd::clear_members(*record);
@@ -279,7 +235,7 @@ public:
     template<typename F, std::ranges::input_range Types>
         requires HasRows<Repository, F>
     void declare(urd::index<F> key, const Types& types)
-    { m_relations.declare(key, schema(types)); }
+    { m_relations.declare(key, intern_schema(types)); }
 
     template<typename T>
         requires SupportsSymbol<Repository, T>
@@ -326,10 +282,10 @@ public:
         return std::nullopt;
     }
 
-    /// Stores the row in this layer where no layer holds it, checked against its pool's Schema (declared with its key). A
-    /// free relation's rows go in through its relation (insert(builder)).
+    /// Stores the row in this layer where no layer holds it, checked against its pool's Schema (declared with its key;
+    /// a free relation's pool by schema()).
     template<typename F>
-        requires HasRows<Repository, F> && (!std::same_as<F, Schema>)
+        requires HasRows<Repository, F>
     std::pair<RowView<F, Repository>, bool> insert(const urd::data<Row<F>>& row)
     {
         const auto [id, created] = m_relations.insert(row.relation, row.values);
@@ -359,21 +315,40 @@ public:
     }
 
     /**
-     * Relations of each family F with relations: interned as {pool, columns, row set}.
+     * Relations of each family F with relations: records {pool, columns, row ids}, built by their users (rows interned
+     * with insert(data<Row<F>>), columns with insert(data<Columns>)) and interned as any record.
      */
 
-    /// Interns a free relation's builder: its key is its column types (their Schema, interned here).
-    std::pair<urd::index_view<Relation<Schema>, Repository>, bool> insert(const urd::builder<Relation<Schema>>& builder)
-        requires HasRelations<Repository, Schema>
-    { return intern_rows(schema(builder.columns()), view(builder)); }
-    /// Interns the builder's relation: its rows into this layer's pool of `pool`, their sorted ids as its row set.
+    /// The pool of free relations of these column types: their Schema, interned here, its pool declared.
+    template<std::ranges::input_range Types>
+        requires HasRows<Repository, Schema>
+    urd::index<Schema> schema(const Types& types)
+    {
+        const auto key = intern_schema(types);
+        m_relations.declare(key, key);
+        return key;
+    }
+    /// Interns the relation where no layer holds it: its rows sorted and made unique first. Its pool must be declared
+    /// (std::out_of_range otherwise), its columns' types the pool's and their labels distinct (std::invalid_argument).
     template<typename F>
         requires HasRelations<Repository, F>
-    std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::index<F> pool, const urd::builder<Relation<F>>& builder)
-    { return intern_rows(pool, view(builder)); }
+    std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::data<Relation<F>>& relation)
+    {
+        const auto& columns = (*this)[relation.columns].values;
+        if (!std::ranges::equal(m_relations.template types<F>(relation.pool), columns, {}, {}, &ColumnLayout::type))
+            throw std::invalid_argument("Repository: the columns' types are not the pool's.");
+        for (auto it = columns.begin(); it != columns.end(); ++it)
+            if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
+                throw std::invalid_argument("Repository: a relation's column labels are distinct.");
+        std::ranges::sort(relation.rows);
+        relation.rows.erase(std::ranges::unique(relation.rows).begin(), relation.rows.end());
+        const auto [index, created] = intern(m_symbols.template get<Relation<F>>(), relation);
+        return { view(index), created };
+    }
+
     /// A builder of family F with these columns (validated), shared as tyr's state builders are: it comes from this
     /// layer's slots, keyed by its column widths, where it goes back with its last owner, keeping its row storage.
-    /// insert() interns it. The layer must outlive its builders.
+    /// The layer must outlive its builders.
     template<typename F>
         requires HasRelations<Repository, F>
     [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> get_relation_builder(std::span<const ColumnLayout> columns) const
@@ -381,40 +356,6 @@ public:
         auto builder = m_relation_builders.template get<F>().acquire_shared(m_relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
         builder->initialize(columns);  // a builder handed back holds its last columns and rows
         return builder;
-    }
-    /// A free relation of another layer or repository interned here (its key its column types); one this layer reads is
-    /// itself.
-    template<typename C>
-        requires HasRelations<Repository, Schema>
-    std::pair<urd::index_view<Relation<Schema>, Repository>, bool> copy(urd::index_view<Relation<Schema>, C> source)
-    {
-        if (reads(&source.context()))
-            return { view(source.index()), false };
-        return intern_rows(schema(source.columns()), source);
-    }
-    /// A relation of another layer or repository interned here, into the pool of `pool`; one this layer reads is
-    /// itself.
-    template<typename F, typename C>
-        requires HasRelations<Repository, F>
-    std::pair<urd::index_view<Relation<F>, Repository>, bool> copy(urd::index<F> pool, urd::index_view<Relation<F>, C> source)
-    {
-        if (reads(&source.context()))
-            return { view(source.index()), false };
-        return intern_rows(pool, source);
-    }
-    /// The relation relabeled: the same pool and row set (so the same rows), new columns of the pool's types and
-    /// distinct labels.
-    template<typename F, typename C>
-        requires HasRelations<Repository, F>
-    urd::index_view<Relation<F>, Repository> rename(urd::index_view<Relation<F>, C> source, std::span<const ColumnLayout> columns)
-    {
-        if (!reads(&source.context()))
-            throw std::invalid_argument("Repository: rename requires a source in this repository.");
-        for (auto it = columns.begin(); it != columns.end(); ++it)
-            if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
-                throw std::invalid_argument("Repository: a rename gives distinct labels.");
-        const auto& record = source.data();
-        return intern_relation(record.pool, columns, record.row_set).first;
     }
 };
 

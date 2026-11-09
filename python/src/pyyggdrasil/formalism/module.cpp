@@ -18,6 +18,7 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/operators.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/vector.h>
 #include <initializer_list>
 #include <stdexcept>
@@ -93,6 +94,12 @@ void bind_relation_reads(nb::class_<R>& cls)
             nb::keep_alive<0, 1>());
 }
 using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
+/// A row record as Python builds it: its pool and its values, encoded with the pool's types when inserted.
+struct RowData
+{
+    urd::index<ygg::Schema> pool;
+    nb::list values;
+};
 using ColumnIndices = std::span<const ygg::ColumnLayout>;
 using Layouts = urd::Store<urd::sequence<ygg::ColumnLayout>>;
 
@@ -198,12 +205,48 @@ void bind_formalism_module_definitions(nb::module_& m)
     bind_relation_reads(borrowed);
 
     urd::python::bind_index<urd::index<RelationTag>>(m, "RelationIndex");
+    urd::python::bind_index<urd::index<ygg::Schema>>(m, "SchemaIndex");
+    urd::python::bind_index<urd::index<ygg::Columns>>(m, "ColumnsIndex");
+    urd::python::bind_index<urd::index<ygg::Row<ygg::Schema>>>(m, "RowIndex");
+
+    nb::class_<RowData>(m, "RowData", "A row record: its pool (a SchemaIndex) and its values. RelationRepository.insert gives its id.")
+        .def(nb::init<urd::index<ygg::Schema>, nb::list>(), nb::arg("pool"), nb::arg("values"))
+        .def_rw("pool", &RowData::pool)
+        .def_rw("values", &RowData::values);
+    nb::class_<urd::data<ygg::Columns>>(m, "ColumnsData", "A columns record: labels with their types.")
+        .def(
+            "__init__",
+            [](urd::data<ygg::Columns>* self, const Layouts& columns) { new (self) urd::data<ygg::Columns>(std::span<const ygg::ColumnLayout>(columns)); },
+            nb::arg("columns"));
+    nb::class_<urd::data<RelationTag>>(m,
+                                        "RelationData",
+                                        "A relation record: its pool, its columns and the ids of its rows in that pool. "
+                                        "RelationRepository.insert sorts its rows and interns it.")
+        .def(
+            "__init__",
+            [](urd::data<RelationTag>* self, urd::index<ygg::Schema> pool, urd::index<ygg::Columns> columns, const std::vector<urd::index<ygg::Row<ygg::Schema>>>& rows)
+            {
+                new (self) urd::data<RelationTag>();
+                self->pool = pool;
+                self->columns = columns;
+                self->rows.set(rows.begin(), rows.end());
+            },
+            nb::arg("pool"),
+            nb::arg("columns"),
+            nb::arg("rows"))
+        .def_rw("pool", &urd::data<RelationTag>::pool)
+        .def_rw("columns", &urd::data<RelationTag>::columns)
+        .def_prop_rw(
+            "rows",
+            [](const urd::data<RelationTag>& self) { return std::vector<urd::index<ygg::Row<ygg::Schema>>>(self.rows.begin(), self.rows.end()); },
+            [](urd::data<RelationTag>& self, const std::vector<urd::index<ygg::Row<ygg::Schema>>>& rows) { self.rows.set(rows.begin(), rows.end()); });
 
     auto interned = nb::class_<RelationView>(m,
                                              "RelationView",
                                              "Read-only canonical relation. Keeps its repository alive; clearing the "
                                              "repository invalidates the view, its rows, and its column labels.")
-                        .def("index", &RelationView::index);
+                        .def("index", &RelationView::index)
+                        .def("data", [](const RelationView& relation) { return relation.data(); }, "A copy of its record.");
     bind_relation_reads(interned);
     urd::python::add_comparison(interned);
     urd::python::add_hash(interned);
@@ -212,7 +255,35 @@ void bind_formalism_module_definitions(nb::module_& m)
         .def(nb::init<>())
         .def("__len__", [](const RelationRepository& repository) { return repository.symbols().template size<RelationTag>(); })
         .def("clear", &RelationRepository::clear)
-        .def("insert", [](RelationRepository& repository, const Relation& relation) { return repository.insert(relation); }, nb::arg("relation"))
+        .def(
+            "schema",
+            [](RelationRepository& repository, const std::vector<ygg::TypeId>& types) { return repository.schema(types); },
+            nb::arg("types"),
+            "The pool of free relations of these column types (declared here).")
+        .def(
+            "insert",
+            [](RelationRepository& repository, const RowData& row)
+            {
+                const auto types = repository.relations().types(row.pool);
+                if (nb::len(row.values) != types.size())
+                    throw std::invalid_argument("Relation: row arity does not match schema.");
+                auto record = urd::data<ygg::Row<ygg::Schema>>();
+                record.relation = row.pool;
+                for (size_t i = 0; i < types.size(); ++i)
+                    record.values.push_back(ygg::encode(ygg::cast_value(row.values[i], types[i])));
+                const auto [view, created] = repository.insert(record);
+                return std::pair { view.data().row, created };
+            },
+            nb::arg("row"))
+        .def(
+            "insert",
+            [](RelationRepository& repository, urd::data<ygg::Columns>& columns)
+            {
+                const auto [view, created] = repository.insert(columns);
+                return std::pair { view.index(), created };
+            },
+            nb::arg("columns"))
+        .def("insert", [](RelationRepository& repository, urd::data<RelationTag>& relation) { return repository.insert(relation); }, nb::arg("relation"))
         .def(
             "view",
             [](const RelationRepository& repository, const Relation& relation) { return repository.view(relation); },
@@ -231,24 +302,6 @@ void bind_formalism_module_definitions(nb::module_& m)
             "get_relation_builder",
             [](const RelationRepository& repository, const Layouts& columns)
             { return repository.get_relation_builder<ygg::Schema>(std::span<const ygg::ColumnLayout>(columns)); },
-            nb::arg("columns"),
-            nb::keep_alive<0, 1>())
-        .def(
-            "copy",
-            [](RelationRepository& repository, RelationView source) { return repository.copy(source); },
-            nb::arg("source"))
-        .def(
-            "rename",
-            [](RelationRepository& repository, RelationView relation, const urd::Store<urd::sequence<Column>>& labels)
-            {
-                auto columns = Layouts(relation.columns().begin(), relation.columns().end());
-                if (labels.size() != columns.size())
-                    throw std::invalid_argument("Columns: renaming must preserve arity.");
-                for (size_t i = 0; i < columns.size(); ++i)
-                    columns[i].label = labels[i];
-                return repository.rename(relation, std::span<const ygg::ColumnLayout>(columns));
-            },
-            nb::arg("relation"),
             nb::arg("columns"),
             nb::keep_alive<0, 1>());
 

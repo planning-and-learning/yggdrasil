@@ -30,7 +30,7 @@ template<typename F>
 }  // namespace ygg
 
 /// Read access to an interned relation record, shared by its index and data views: its rows lie in the layer's pool
-/// its record names, its row set over that pool; each row is read as the layer's view of its key.
+/// its record names, its row ids in that pool; each row is read as the layer's view of its key.
 template<typename F, typename V>
 struct urd::view_mixin<ygg::Relation<F>, V>
 {
@@ -40,7 +40,7 @@ private:
     [[nodiscard]] const auto& repository() const noexcept { return get_repository(self().context()); }
     [[nodiscard]] std::span<const urd::index<ygg::Row<F>>> ids() const
     {
-        const auto& rows = repository()[record().row_set].rows;
+        const auto& rows = record().rows;
         return { rows.data(), rows.size() };
     }
 
@@ -58,7 +58,7 @@ public:
     /// The rows by position: a borrowed range over the layer's storage.
     [[nodiscard]] auto rows() const { return ygg::rows_view(record().pool, ids(), repository()); }
     /// Values that do not fit their columns, or not one per column, are in no row: a find in the pool and a binary
-    /// search in the row set.
+    /// search in its row ids.
     template<std::ranges::input_range Values>
         requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
     [[nodiscard]] bool contains(const Values& values) const

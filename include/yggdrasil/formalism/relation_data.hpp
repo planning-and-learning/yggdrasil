@@ -56,29 +56,18 @@ struct data<ygg::Columns>
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::values> {}; }
 };
 
-/// The rows of a relation of family F: their ids in its pool, sorted and unique.
-template<typename F>
-struct data<ygg::RowSet<F>>
-{
-    urd::index<ygg::RowSet<F>> index;
-    urd::flat_vector<urd::index<ygg::Row<F>>> rows;
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::rows> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::rows> {}; }
-};
-
-/// A relation of family F: its pool (the key of the layer's pool of its rows), its columns and its row set over that
-/// pool. Renaming keeps the pool and the row set.
+/// A relation of family F: its pool (the key of the layer's pool of its rows), its columns and the ids of its rows in
+/// that pool, sorted and unique. Renaming keeps the pool and the rows.
 template<typename F>
 struct data<ygg::Relation<F>>
 {
     urd::index<ygg::Relation<F>> index;
     urd::index<F> pool;
     urd::index<ygg::Columns> columns;
-    urd::index<ygg::RowSet<F>> row_set;
+    urd::flat_vector<urd::index<ygg::Row<F>>> rows;
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::pool, &data::columns, &data::row_set> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::pool, &data::columns, &data::row_set> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::pool, &data::columns, &data::rows> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&data::pool, &data::columns, &data::rows> {}; }
 };
 }  // namespace urd
 
