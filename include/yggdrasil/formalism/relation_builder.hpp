@@ -25,18 +25,25 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <variant>
 
-namespace ygg::database
+namespace ygg
 {
 /// Rows of one set of column widths, each stored once (urd::by_column_widths): a handle's value is a row's ID. Built
 /// with the widths of the columns; rows go in as a stored row of equal widths or as their values.
 using RowPool = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>, urd::by_column_widths>;
-}  // namespace ygg::database
 
-namespace ygg
-{
 /// Throws std::invalid_argument where a column's type is invalid or two columns share a label.
-void validate_columns(std::span<const ColumnLayout> columns);
+inline void validate_columns(std::span<const ColumnLayout> columns)
+{
+    for (auto it = columns.begin(); it != columns.end(); ++it)
+    {
+        if (static_cast<std::size_t>(it->type) >= std::variant_size_v<ColumnValue>)
+            throw std::invalid_argument("Columns: invalid column type.");
+        if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
+            throw std::invalid_argument("Columns: duplicate column label.");
+    }
+}
 }  // namespace ygg
 
 namespace urd
@@ -52,7 +59,7 @@ template<typename F>
 struct builder<ygg::Relation<F>>
 {
 private:
-    using Rows = ygg::database::RowPool;
+    using Rows = ygg::RowPool;
 
     urd::data<ygg::Columns> m_columns;
     /// The rows, interned by the columns' widths: a handle's value is the row's position.

@@ -8,9 +8,9 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from pyyggdrasil import (
-    database as database,
     diagnostics as diagnostics,
     execution as execution,
+    formalism as formalism,
     serialization as serialization,
 )
 
@@ -94,9 +94,9 @@ __all__ = [
     "cmake_dir",
     "cmake_dirs",
     "cmake_prefix",
-    "database",
     "diagnostics",
     "execution",
+    "formalism",
     "include_dir",
     "library_dirs",
     "native_prefix",

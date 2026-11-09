@@ -1,6 +1,6 @@
 #include "module.hpp"
 
-#include "pyyggdrasil/database/module.hpp"
+#include "pyyggdrasil/formalism/module.hpp"
 #include "pyyggdrasil/diagnostics/module.hpp"
 #include "pyyggdrasil/execution/module.hpp"
 #include "pyyggdrasil/serialization/module.hpp"
@@ -12,8 +12,8 @@ void bind_module_definitions(nb::module_& m)
 {
     m.doc() = "Python bindings for Yggdrasil native utilities.";
 
-    auto database = m.def_submodule("database", "Pooled relational data.");
-    bind_database_module_definitions(database);
+    auto formalism = m.def_submodule("formalism", "Free relations: columns, rows, relations and their repository.");
+    bind_formalism_module_definitions(formalism);
 
     auto diagnostics = m.def_submodule("diagnostics", "Structured source diagnostics.");
     bind_diagnostics_module_definitions(diagnostics);

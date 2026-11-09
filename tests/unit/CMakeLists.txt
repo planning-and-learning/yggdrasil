@@ -37,40 +37,10 @@ add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
 add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
-add_yggdrasil_gtest(database_operations "database/operations.cpp")
-add_yggdrasil_gtest(database_typed_operations "database/typed_operations.cpp")
-add_yggdrasil_gtest(database_distance "database/distance.cpp")
-add_yggdrasil_gtest(database_min_distance "database/min_distance.cpp")
-add_yggdrasil_gtest(database_must_pass "database/must_pass.cpp")
-add_yggdrasil_gtest(database_relaxation "database/relaxation.cpp")
-add_yggdrasil_gtest(database_incremental_min_distance "database/incremental_min_distance.cpp")
-add_yggdrasil_gtest(database_incremental "database/incremental.cpp")
-add_yggdrasil_gtest(database_allocations "database/allocations.cpp")
-target_link_libraries(database_allocations PRIVATE urd::count_allocations)
-add_yggdrasil_gtest(database_relation_repository "database/relation_repository.cpp")
-add_yggdrasil_gtest(database_query "database/query.cpp")
-add_yggdrasil_gtest(database_generic_join "database/generic_join.cpp")
-add_yggdrasil_gtest(database_dpccp "database/dpccp.cpp")
-add_yggdrasil_gtest(database_optimization "database/optimization.cpp")
-add_yggdrasil_gtest(database_optimization_estimates "database/optimization_estimates.cpp")
-
-foreach(
-    database_test
-    IN ITEMS
-        database_operations database_typed_operations database_min_distance database_must_pass
-        database_relaxation database_incremental_min_distance database_incremental database_allocations
-        database_relation_repository database_query database_dpccp database_optimization database_optimization_estimates
-)
-    target_link_libraries(${database_test} PRIVATE yggdrasil::database)
-endforeach()
-target_link_libraries(database_distance PRIVATE database_instrumented)
-target_link_libraries(database_generic_join PRIVATE database_instrumented)
-
 add_yggdrasil_gtest(diagnostics_diagnostic "diagnostics/diagnostic.cpp")
 add_yggdrasil_gtest(diagnostics_x3 "diagnostics/x3.cpp")
 
 add_yggdrasil_gtest(formatting_formatter "formatting/formatter.cpp")
-target_link_libraries(formatting_formatter PRIVATE yggdrasil::database)
 
 add_yggdrasil_gtest(io_iostream "io/iostream.cpp")
 add_yggdrasil_gtest(io_project_path "io/project_path.cpp")

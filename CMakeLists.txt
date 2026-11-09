@@ -99,8 +99,7 @@ else()
         AND APPLE
         AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     )
-        # ld64's LTO drops weak explicit instantiations that nothing inside a dylib calls. libyggdrasil_database
-        # instantiates the query and relation symbol storage that only its includers call (template rule 9).
+        # ld64's LTO drops weak explicit instantiations that nothing inside a dylib calls (template rule 9).
         message(STATUS "Skipping LTO on Apple: ld64 does not export unused explicit instantiations under LTO")
     elseif(
         YGGDRASIL_ENABLE_LTO
@@ -139,7 +138,6 @@ find_package(urd CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
 # Targets
 
-add_subdirectory(src/database)
 add_subdirectory(python)
 
 if(YGGDRASIL_BUILD_TESTS)

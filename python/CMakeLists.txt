@@ -22,26 +22,9 @@ file(GLOB_RECURSE YGGDRASIL_PUBLIC_HEADERS CONFIGURE_DEPENDS
 nanobind_add_module(_pyyggdrasil NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
-    src/pyyggdrasil/database/module.cpp
-    src/pyyggdrasil/database/distance.cpp
-    src/pyyggdrasil/database/evaluation.cpp
-    src/pyyggdrasil/database/optimization.cpp
-    src/pyyggdrasil/database/query/query.cpp
-    src/pyyggdrasil/database/query/input.cpp
-    src/pyyggdrasil/database/query/empty.cpp
-    src/pyyggdrasil/database/query/join.cpp
-    src/pyyggdrasil/database/query/project.cpp
-    src/pyyggdrasil/database/query/rename.cpp
-    src/pyyggdrasil/database/query/select_equal.cpp
-    src/pyyggdrasil/database/query/select_value.cpp
-    src/pyyggdrasil/database/query/union.cpp
-    src/pyyggdrasil/database/query/difference.cpp
-    src/pyyggdrasil/database/query/distance.cpp
-    src/pyyggdrasil/database/query/generic_join.cpp
-    src/pyyggdrasil/database/query/semijoin.cpp
-    src/pyyggdrasil/database/query/antijoin.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
+    src/pyyggdrasil/formalism/module.cpp
     src/pyyggdrasil/serialization/module.cpp
     ${YGGDRASIL_PUBLIC_HEADERS}
 )
@@ -52,8 +35,9 @@ target_include_directories(_pyyggdrasil PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${PROJECT_SOURCE_DIR}/include"
 )
+target_include_directories(_pyyggdrasil SYSTEM PRIVATE "${URD_NATIVE_PREFIX}/include")
 
-target_link_libraries(_pyyggdrasil PRIVATE yggdrasil::database TBB::tbb Boost::json fmt::fmt cista::cista)
+target_link_libraries(_pyyggdrasil PRIVATE TBB::tbb Boost::json fmt::fmt cista::cista)
 
 if(APPLE)
     set_target_properties(_pyyggdrasil PROPERTIES
@@ -76,7 +60,7 @@ set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/serialization/table.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
-    pyyggdrasil/database/__init__.py
+    pyyggdrasil/formalism/__init__.py
     pyyggdrasil/diagnostics/__init__.py
     pyyggdrasil/execution/__init__.py
 )
@@ -91,22 +75,6 @@ endforeach()
 
 install(TARGETS _pyyggdrasil
     DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-    COMPONENT pyyggdrasil
-)
-
-install(
-    TARGETS database
-    EXPORT yggdrasilDatabaseTargets
-    LIBRARY DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}" COMPONENT pyyggdrasil
-    ARCHIVE DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}" COMPONENT pyyggdrasil
-    RUNTIME DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_BINDIR}" COMPONENT pyyggdrasil
-)
-
-install(
-    EXPORT yggdrasilDatabaseTargets
-    NAMESPACE yggdrasil::
-    FILE "yggdrasilDatabaseTargets.cmake"
-    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
     COMPONENT pyyggdrasil
 )
 

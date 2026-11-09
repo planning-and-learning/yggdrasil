@@ -17,8 +17,6 @@
 
 #include "yggdrasil/formatting/formatter.hpp"
 
-#include "../database/query_helpers.hpp"
-#include "yggdrasil/database/syntax/formatter.hpp"
 #include "yggdrasil/formatting/cista_formatters.hpp"
 #include "yggdrasil/formatting/dynamic_bitset_formatters.hpp"
 
@@ -43,35 +41,6 @@ namespace ygg::tests
 {
 
 TEST(YggdrasilTests, CommonToStringUsesFmtFormatting) { EXPECT_EQ(ygg::to_string(42), "42"); }
-
-TEST(YggdrasilTests, DatabaseQueryPlanFormatterPreservesExplanation)
-{
-    using Column = urd::index<ygg::Column>;
-    auto repository = qb::repository();
-    const std::array<ygg::ColumnLayout, 2> columns { ygg::ColumnLayout { Column(3), ygg::type_id<double> },
-                                                          ygg::ColumnLayout { Column(8), ygg::type_id<std::int32_t> } };
-    const auto input = qb::input(repository, 7, columns);
-    const auto nullary = qb::input(repository, 2, std::initializer_list<Column> {});
-    const auto join = qb::generic_join(repository, { input, nullary }, { Column(3), Column(8) }, { Column(8), Column(3) });
-    const auto plan = ygg::database::compile({ join, input });
-    const std::string expected = "0: input() columns=[3:5,8:2] slot=7\n"
-                                 "1: input() columns=[] slot=2\n"
-                                 "2: generic_join(0,1) columns=[8:2,3:5] variables=[3,8]\n"
-                                 "roots=[2,0]\n";
-    EXPECT_EQ(fmt::format("{}", plan), expected);
-    EXPECT_EQ(ygg::to_string(plan), expected);
-    EXPECT_EQ(database::explain(plan), expected);
-    std::string appended;
-    fmt::format_to(std::back_inserter(appended), "before{}after", plan);
-    EXPECT_EQ(appended, "before" + expected + "after");
-}
-
-TEST(YggdrasilTests, DatabaseQueryPlanFormatterHandlesEmptyPlans)
-{
-    const database::QueryPlan plan;
-    EXPECT_EQ(fmt::format("{}", plan), "roots=[]\n");
-    EXPECT_EQ(database::explain(plan), "roots=[]\n");
-}
 
 TEST(YggdrasilTests, CommonToStringsFormatsRangeElements)
 {
