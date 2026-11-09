@@ -105,7 +105,7 @@ template<typename Tag = void>
 using QueryView = urd::index_view<Query<Tag>, QueryRepository>;
 
 /// The relations of the database: free relations of the formalism's relation model, their rows in pools by Schema.
-using Repository = formalism::Repository<formalism::SymbolRepository<Schema, Columns, RowSet<Schema>, Relation<Schema>>, formalism::RelationRepository<void, Schema>>;
+using Repository = formalism::Repository<formalism::SymbolRepository<Columns, RowSet<Schema>, Relation<Schema>>, formalism::RelationRepository<void, Schema>>;
 using RelationView = urd::index_view<Relation<Schema>, Repository>;
 /// A relation builder held elsewhere, read through a layer (urd::resolve(builder, layer) or layer.view(builder)), as
 /// tyr's BuilderStateView reads a state builder through its repository.

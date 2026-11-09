@@ -102,7 +102,7 @@ static_assert(database::RelationViewConcept<IndexView>);
 static_assert(std::ranges::random_access_range<decltype(std::declval<const IndexView&>().rows())>);
 static_assert(std::ranges::borrowed_range<decltype(std::declval<const BuilderView&>().rows())>);
 static_assert(std::ranges::borrowed_range<decltype(std::declval<const IndexView&>().rows())>);
-static_assert(std::same_as<Repository::SymbolTypes, boost::mp11::mp_list<ygg::Schema, ygg::Columns, ygg::RowSet<ygg::Schema>, RelationTag>>);
+static_assert(std::same_as<Repository::SymbolTypes, boost::mp11::mp_list<ygg::Columns, ygg::RowSet<ygg::Schema>, RelationTag>>);
 static_assert(formalism::SupportsSymbol<Repository, ygg::Columns>);
 static_assert(formalism::SupportsSymbol<Repository, RelationTag>);
 static_assert(!formalism::SupportsSymbol<Repository, ygg::Column>);
@@ -901,25 +901,32 @@ TEST(YggdrasilTests, HomogeneousRowsRoundTripThroughReusableBuffers)
     EXPECT_TRUE(relation.contains(encoded));
 }
 
-TEST(YggdrasilTests, DatabasePoolsKeepTheirColumnTypes)
+TEST(YggdrasilTests, DatabasePoolsKeepTheirSchema)
 {
     Repository repository;
-    const auto key = urd::index<ygg::Schema>(0);
+    auto unsigned_types = urd::data<ygg::Schema>();
+    unsigned_types.types.push_back(ygg::type_id<uint_t>);
+    unsigned_types.types.push_back(ygg::type_id<uint_t>);
+    auto double_types = urd::data<ygg::Schema>();
+    double_types.types.push_back(ygg::type_id<double>);
+    double_types.types.push_back(ygg::type_id<double>);
+    const auto key = repository.relations().schema(unsigned_types);  // a free relation's pool is keyed by its Schema
+    const auto other = repository.relations().schema(double_types);
+    EXPECT_EQ(repository.relations().schema(unsigned_types), key);  // interned once
     auto values = urd::flat_vector<ygg::Value>();
     values.push_back(1);
     values.push_back(2);
-    const auto row = urd::data<ygg::Row<ygg::Schema>>(key, std::move(values));
-    const std::array unsigned_types { ygg::type_id<uint_t>, ygg::type_id<uint_t> };
-    const std::array double_types { ygg::type_id<double>, ygg::type_id<double> };
-    EXPECT_THROW((void) repository.relations().types(key), std::out_of_range);  // no pool yet
-    EXPECT_TRUE(repository.relations().insert(row, unsigned_types).second);
-    EXPECT_TRUE(std::ranges::equal(repository.relations().types(key), unsigned_types));
-    EXPECT_THROW(repository.relations().insert(row, double_types), std::invalid_argument);
+    EXPECT_TRUE(repository.relations().schema(key).is_none());  // no pool yet
+    EXPECT_TRUE(repository.relations().insert(key, values, key).second);
+    EXPECT_EQ(repository.relations().schema(key), key);
+    EXPECT_TRUE(std::ranges::equal(repository.relations().types(key), unsigned_types.types));
+    EXPECT_THROW(repository.relations().insert(key, values, other), std::invalid_argument);
     Repository child(&repository);
-    EXPECT_THROW(child.relations().insert(row, double_types), std::invalid_argument);  // the parent's types
-    EXPECT_TRUE(std::ranges::equal(child.relations().types(key), unsigned_types));
+    EXPECT_THROW(child.relations().insert(key, values, other), std::invalid_argument);  // the parent's Schema
+    EXPECT_EQ(child.relations().schema(key), key);
     repository.clear();
-    EXPECT_THROW((void) repository.relations().types(key), std::out_of_range);
+    EXPECT_TRUE(repository.relations().schema(key).is_none());  // the pool went, its Schema stays
+    EXPECT_TRUE(std::ranges::equal(repository.relations().types(key), unsigned_types.types));
 }
 
 TEST(YggdrasilTests, DatabaseBuildersAreNumberedLikeLayers)

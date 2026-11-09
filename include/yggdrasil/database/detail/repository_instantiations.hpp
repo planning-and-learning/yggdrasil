@@ -16,7 +16,7 @@
 
 /// The instantiations (PREFIX extern: declarations).
 #define YGG_DATABASE_INTERNS(PREFIX) \
-    YGG_FORMALISM_INTERNS(PREFIX, 18, false, boost::mp11::mp_append<ygg::database::QuerySymbolTypes, ygg::database::Repository::SymbolTypes>)
+    YGG_FORMALISM_INTERNS(PREFIX, 17, false, boost::mp11::mp_append<ygg::database::QuerySymbolTypes, ygg::database::Repository::SymbolTypes>)
 
 YGG_DATABASE_INTERNS(extern)
 

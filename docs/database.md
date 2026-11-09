@@ -145,7 +145,7 @@ project(view, plan, output, workspace);
 ```
 
 Full and incremental operations share key hashing, equality, and field copying.
-Join keys stream their fields' canonical values into XXHash (`urd::hash_columns`);
+Join keys mix their fields' canonical values into a hash (`urd::hash_columns`);
 collisions compare the values. A join indexes the smaller input with
 `UnorderedMultiMap`. `JoinIndexCache` may retain indexes for immutable inputs. Its
 key is the input's `relation_identity()` (an interned relation's layer number and index, a builder's address, valid

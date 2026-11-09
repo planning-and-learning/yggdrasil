@@ -7,7 +7,6 @@
 #define YGG_FORMALISM_RELATION_VIEW_HPP_
 
 #include "yggdrasil/formalism/relation_builder.hpp"
-#include <urd/elements/subset_view.hpp>
 #include <urd/elements/view.hpp>
 
 #include <cassert>
@@ -44,7 +43,6 @@ private:
         const auto& rows = repository()[record().row_set].rows;
         return { rows.data(), rows.size() };
     }
-    [[nodiscard]] auto subset() const { return urd::subset_view(repository().relations().template get<F>().at(record().pool), ids()); }
 
 public:
     /// Its columns, interned from its labels and its pool's types.
@@ -61,10 +59,16 @@ public:
     [[nodiscard]] auto rows() const { return ygg::rows_view(record().pool, ids(), repository()); }
     /// Values that do not fit their columns, or not one per column, are in no row: a find in the pool and a binary
     /// search in the row set.
-    [[nodiscard]] bool contains(std::span<const ygg::Value> values) const { return subset().contains(values); }
+    template<std::ranges::input_range Values>
+        requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
+    [[nodiscard]] bool contains(const Values& values) const
+    {
+        const auto id = repository().relations().find(record().pool, values);
+        return !id.is_none() && std::ranges::binary_search(ids(), id);
+    }
     template<ygg::RowViewConcept<F> R>
     [[nodiscard]] bool contains(const R& row) const
-    { return subset().contains(row.get_values()); }
+    { return contains(row.get_values()); }
 };
 
 /// A builder's view reads the builder's rows, by position, each through the builder (its rows' context); its context

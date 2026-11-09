@@ -31,7 +31,7 @@ struct ColumnLayout
 
 namespace urd
 {
-/// The column types of a free relation: the key of the layer's pool that holds its rows (labels belong to its Columns).
+/// Column types: a pool's (every pool has one), and the key of free relations' pools (labels belong to their Columns).
 template<>
 struct data<ygg::Schema>
 {
