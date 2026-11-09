@@ -30,7 +30,7 @@
 #include <urd/repr/records/records.hpp>
 #include <urd/repr/wrappers/layered_pool.hpp>
 #include <urd/store.hpp>
-#include <urd/utils/family.hpp>
+#include "yggdrasil/core/family.hpp"
 #include <utility>
 
 namespace ygg::formalism
@@ -79,7 +79,7 @@ class SymbolRepositoryBase<Repository, boost::mp11::mp_list<Ts...>, ThreadSafe>
     template<typename T>
     using Store = SymbolStore<T, ThreadSafe>;
 
-    urd::utils::Family<Store, Ts...> m_symbols;
+    Family<Store, Ts...> m_symbols;
 
     [[nodiscard]] const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 

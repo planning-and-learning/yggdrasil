@@ -26,8 +26,10 @@ namespace ygg
 {
 /// The relation model (records in relation_data.hpp): a relation of family F is its pool (an index<F>: the layer's pool
 /// of F's rows that holds its rows), its Columns (its labels with the pool's types, interned by the layer) and its
-/// rows (their sorted ids there). A Schema is a list of column types, interned once in the layer's
-/// relation repository: every pool has one (its column types), and a Schema keys the pools of free relations.
+/// rows (their sorted ids there). A Schema is a list of column types, e.g. (object, object), interned once in the
+/// layer's relation repository. It has two roles: every pool is declared with one (its rows' column types: the pool of
+/// predicate `at` with (object, object)), and for free relations, which no symbol names, a Schema is the pool's key itself
+/// (all free relations of types (object, object) share the pool keyed by that Schema).
 struct Schema
 {
 };

@@ -45,7 +45,7 @@
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
-#include <urd/utils/family.hpp>
+#include "yggdrasil/core/family.hpp"
 #include <utility>
 #include <vector>
 
@@ -81,7 +81,7 @@ private:
     template<typename F>
     using RelationFamily = boost::mp11::mp_contains<SymbolTypes, Relation<F>>;
     template<typename... Fs>
-    using BuilderFamily = urd::utils::Family<BuilderSlots, Fs...>;
+    using BuilderFamily = Family<BuilderSlots, Fs...>;
     using RelationFamilies = boost::mp11::mp_copy_if<RelationTypes, RelationFamily>;
     /// A pool key's records stay across clear(), and so do their pools.
     template<typename T>
@@ -105,6 +105,13 @@ private:
     urd::Store<urd::slots<urd::data<Schema>>, std::conditional_t<RelationRepo::thread_safe, urd::concurrent, urd::single_threaded>> m_schema_builders;
     /// The builder slots of each family with relations (none where the layer has no relations).
     mutable boost::mp11::mp_apply<BuilderFamily, RelationFamilies> m_relation_builders;
+    /// Whether some layer holds the row `key`.
+    template<typename F>
+    [[nodiscard]] bool holds_row(RowIndex<F> key) const
+    {
+        const auto& pools = m_relations.template get<F>();
+        return pools.contains(key.relation) && key.row.value < pools.at(key.relation).size();
+    }
     /// The Schema of these column types, interned here (built in a reused record).
     template<std::ranges::input_range Types>
     urd::index<Schema> intern_schema(const Types& types)
@@ -340,6 +347,10 @@ public:
         for (auto it = columns.begin(); it != columns.end(); ++it)
             if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
                 throw std::invalid_argument("Repository: a relation's column labels are distinct.");
+        // ponytail: an assert, not a throw: O(rows) per insert (user). Catches ids beyond the pool (e.g. of another
+        // repository), not an id that happens to exist in both.
+        assert(std::ranges::all_of(relation.rows, [&](urd::index<Row<F>> id) { return holds_row(RowIndex<F> { relation.pool, id }); })
+               && "Repository: a relation's row ids must be rows of its pool here.");
         std::ranges::sort(relation.rows);
         relation.rows.erase(std::ranges::unique(relation.rows).begin(), relation.rows.end());
         const auto [index, created] = intern(m_symbols.template get<Relation<F>>(), relation);

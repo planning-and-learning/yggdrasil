@@ -35,6 +35,7 @@ target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
 add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
+add_yggdrasil_gtest(core_family "core/family.cpp")
 add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
 add_yggdrasil_gtest(diagnostics_diagnostic "diagnostics/diagnostic.cpp")

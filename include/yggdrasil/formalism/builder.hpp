@@ -10,6 +10,8 @@
 #ifndef YGG_FORMALISM_BUILDER_HPP_
 #define YGG_FORMALISM_BUILDER_HPP_
 
+#include "yggdrasil/core/family.hpp"
+
 #include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
 #include <boost/mp11.hpp>
@@ -20,26 +22,15 @@ namespace ygg::formalism
 namespace detail
 {
 template<typename T>
-struct BuilderSlot
-{
-    urd::Store<urd::slots<urd::data<T>>> pool;
-};
+using BuilderSlot = urd::Store<urd::slots<urd::data<T>>>;
+}
 
-template<typename List>
-struct BuilderSlots;
-
+/// One pool of reusable records per type (a Family of urd slots).
 template<typename... Ts>
-struct BuilderSlots<boost::mp11::mp_list<Ts...>> : BuilderSlot<Ts>...
+class BuilderStorage
 {
-};
-}  // namespace detail
+    Family<detail::BuilderSlot, Ts...> m_slots;
 
-/// One pool per type, held in flat bases: a std::tuple over many types instantiates a recursive
-/// _Tuple_impl chain and its constructor constraints. The bases are listed in reverse, so pools are
-/// destroyed in type order as in std::tuple: pooled objects may own handles into pools of later types.
-template<typename... Ts>
-class BuilderStorage : private detail::BuilderSlots<boost::mp11::mp_reverse<boost::mp11::mp_list<Ts...>>>
-{
 public:
     using Types = boost::mp11::mp_list<Ts...>;
 
@@ -54,7 +45,7 @@ public:
     template<typename T>
         requires(boost::mp11::mp_contains<Types, T>::value)
     [[nodiscard]] auto get_builder()
-    { return static_cast<detail::BuilderSlot<T>&>(*this).pool.acquire_unique(); }
+    { return m_slots.template get<T>().acquire_unique(); }
 
     /// Clear pooled data once, member by member, retaining its reusable buffers.
     template<typename T>

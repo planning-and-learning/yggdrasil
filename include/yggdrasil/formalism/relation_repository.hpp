@@ -40,7 +40,7 @@
 #include <urd/repr/wrappers/layer.hpp>
 #include <urd/repr/wrappers/layered_pool.hpp>
 #include <urd/store.hpp>
-#include <urd/utils/family.hpp>
+#include "yggdrasil/core/family.hpp"
 #include <utility>
 
 namespace ygg::formalism
@@ -100,10 +100,11 @@ public:
                             urd::by_column_widths,
                             urd::layered,
                             Threading>;
-    /// Family F's pools, by key: e.g. predicate 3 -> the pool of `at` rows. Clear keeps each pool's storage
-    /// (constant_clear), which the pool made again for that key reuses.
+    /// Family F's pools of rows, by key: e.g. predicate 3 (`at`) -> the pool of its rows (truck1, loc2), (truck2, loc1);
+    /// for free relations, Schema (object, object) -> the pool of every free relation's rows of those types. Clear keeps
+    /// each pool's storage (constant_clear), which the pool made again for that key reuses.
     template<typename F>
-    using Relations = urd::Store<urd::map<urd::index<F>, Rows<F>>, urd::dense, urd::layered, urd::constant_clear, Threading>;
+    using Pools = urd::Store<urd::map<urd::index<F>, Rows<F>>, urd::dense, urd::layered, urd::constant_clear, Threading>;
     /// Every Schema, each once, as a flat record: e.g. (object, object) -> index<Schema> 0, (uint, uint) -> 1. Kept
     /// across clear, so the keys of free relations' pools stay valid.
     using Schemas = urd::Store<urd::pool<urd::data<Schema>, urd::index<Schema>>, urd::flat, urd::stable_refs, urd::monotone_until_clear, urd::layered, Threading>;
@@ -113,8 +114,8 @@ public:
     using PoolSchemas = urd::Store<urd::map<urd::index<F>, urd::index<Schema>>, urd::dense, urd::layered, Threading>;
 
 private:
-    urd::utils::Family<Relations, Ts...> m_relations;
-    urd::utils::Family<PoolSchemas, Ts...> m_pool_schemas;
+    Family<Pools, Ts...> m_relations;
+    Family<PoolSchemas, Ts...> m_pool_schemas;
     Schemas m_schemas;
     std::uint8_t m_object_index_width;
 
@@ -122,7 +123,7 @@ public:
     /// The pools of family F, as this layer reads them.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
-    [[nodiscard]] const Relations<F>& get() const
+    [[nodiscard]] const Pools<F>& get() const
     { return m_relations.template get<F>(); }
 
     /// The id of the row of these values in the pool `relation`, in whichever layer holds it, or none.
