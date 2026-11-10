@@ -45,7 +45,7 @@ public:
     template<typename T>
         requires(boost::mp11::mp_contains<Types, T>::value)
     [[nodiscard]] auto get_builder()
-    { return m_slots.template get<T>().acquire_unique(); }
+    { return m_slots.template get<T>().make_unique(); }
 
     /// Clear pooled data once, member by member, retaining its reusable buffers.
     template<typename T>

@@ -108,7 +108,7 @@ public:
     [[nodiscard]] const Rows& storage() const noexcept { return m_rows; }
     /// The stored row at key.row (a position), as the views of its rows read it.
     [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept
-    { return m_rows.view(typename Rows::handle_type(key.row.value)); }
+    { return m_rows.at(typename Rows::handle_type(key.row.value)); }
     /// The view of the row at key.row (a position) through this builder.
     [[nodiscard]] ygg::RowView<F, builder> view(ygg::RowIndex<F> key) const noexcept { return { key, this }; }
     /// Its number as the context of its rows' views (urd::layer), and its relation_identity: drawn at construction,

@@ -116,7 +116,7 @@ private:
     template<std::ranges::input_range Types>
     urd::index<Schema> intern_schema(const Types& types)
     {
-        auto record = m_schema_builders.acquire_unique();
+        auto record = m_schema_builders.make_unique();
         urd::clear_members(*record);
         for (const TypeId type : types)
             record->types.push_back(type);
@@ -308,7 +308,7 @@ public:
         const auto& rows = m_relations.template get<F>().at(key.relation);
         if ((key.row.value) >= rows.size())
             throw std::out_of_range("Row index not found in any repository layer.");
-        return rows.view(key.row);
+        return rows.at(key.row);
     }
 
     /// A row key as its view, through the layer that owns the row.
@@ -364,7 +364,7 @@ public:
         requires HasRelations<Repository, F>
     [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> get_relation_builder(std::span<const ColumnLayout> columns) const
     {
-        auto builder = m_relation_builders.template get<F>().acquire_shared(m_relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
+        auto builder = m_relation_builders.template get<F>().make_shared(m_relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
         builder->initialize(columns);  // a builder handed back holds its last columns and rows
         return builder;
     }

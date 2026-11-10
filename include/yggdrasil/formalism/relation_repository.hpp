@@ -130,13 +130,16 @@ public:
     template<typename F, std::ranges::input_range Values>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] urd::index<Row<F>> find(urd::index<F> relation, const Values& values) const
-    { return get<F>().read(relation, [&values](const Rows<F>& rows) { return rows.find(values); }, urd::index<Row<F>>()); }
+    {
+        const auto key = urd::prehashed<Values> { values, urd::hash_range(values) };  // hashed once for every layer
+        return get<F>().visit(relation, [&key](const Rows<F>& rows) { return rows.find(key); }, urd::index<Row<F>>());
+    }
 
     /// The number of rows of the pool `relation`, along the layers.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] size_t size(urd::index<F> relation) const
-    { return get<F>().read(relation, [](const Rows<F>& rows) { return size_t(rows.size()); }, size_t { 0 }); }
+    { return get<F>().visit(relation, [](const Rows<F>& rows) { return size_t(rows.size()); }, size_t { 0 }); }
 
     /// The Schema `record`, interned here where no layer holds it (record.index set to it).
     urd::index<Schema> schema(urd::data<Schema>& record)
@@ -151,7 +154,7 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] urd::index<Schema> schema(urd::index<F> relation) const
-    { return m_pool_schemas.template get<F>().read(relation, [](urd::index<Schema> held) { return held; }, urd::index<Schema>()); }
+    { return m_pool_schemas.template get<F>().visit(relation, [](urd::index<Schema> held) { return held; }, urd::index<Schema>()); }
     /// The column types of the pool `relation` (its Schema's); std::out_of_range where no layer declared it.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
@@ -200,7 +203,7 @@ public:
             relations.try_emplace(relation, widths(types(declared)));
             rows = relations.own_value(relation);
         }
-        return rows->insert(values);
+        return rows->insert(urd::prehashed<Values> { values, urd::hash_range(values) });  // hashed once for every layer
     }
 
     /// The bits of an object column: the layer's object index width (urd::bit), else 32 (urd::word).
