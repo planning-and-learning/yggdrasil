@@ -1,6 +1,8 @@
 # Copyright (C) 2026 Dominik Drexler
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import gc
+import weakref
 from copy import deepcopy
 from types import MappingProxyType
 
@@ -113,3 +115,21 @@ def test_empty_rows_keep_their_references(aligned: bool) -> None:
 @pytest.mark.parametrize("aligned", [False, True])
 def test_render_empty_table(prefix: str | None, aligned: bool) -> None:
     assert render_table(iter(()), prefix=prefix, aligned=aligned) == ""
+
+
+def test_dictionaries_hold_attributes_and_are_collected() -> None:
+    # Downstream `serialize` bindings keep each serialized value alive in an attribute of the dictionaries (O(1)
+    # per call, where nb::keep_alive scanned every earlier value); the attribute goes with the dictionaries.
+    class Value:
+        pass
+
+    dictionaries = serialization.Dictionaries()
+    value = Value()
+    alive = weakref.ref(value)
+    dictionaries.retained = [value]  # pyright: ignore[reportAttributeAccessIssue]
+    del value
+    gc.collect()
+    assert alive() is not None
+    del dictionaries
+    gc.collect()
+    assert alive() is None

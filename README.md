@@ -46,7 +46,7 @@ Python packages that consume this native prefix should depend on:
 
 ```toml
 dependencies = [
-    "pyyggdrasil>=0.6.0,<0.7",
+    "pyyggdrasil>=0.6.1,<0.7",
 ]
 ```
 
