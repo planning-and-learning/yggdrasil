@@ -35,7 +35,6 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
-#include <urd/repr/core/dependent_false.hpp>
 
 namespace ygg
 {
@@ -54,7 +53,7 @@ inline uint_t to_uint_t(size_t value)
 template<typename T>
 struct FloatTolerance
 {
-    static_assert(urd::repr::dependent_false<T>::value, "FloatTolerance<T> is not defined for this type.");
+    static_assert(false, "FloatTolerance<T> is not defined for this type.");
 };
 
 template<>

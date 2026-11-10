@@ -8,6 +8,7 @@
  */
 
 #include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/values/dense_set.hpp>
 #include <urd/store.hpp>
 #include <urd/elements/flat.hpp>
 #include <boost/mp11.hpp>
@@ -15,6 +16,7 @@
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/repository.hpp"
+#include "symbol_concepts.hpp"
 
 #include "gtest/gtest.h"
 #include <algorithm>
@@ -30,7 +32,6 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <vector>
 #include <urd/config.hpp>
 
 namespace ygg::tests
@@ -159,7 +160,7 @@ public:
     friend const PublishedRepository& get_repository(const PublishedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
-static_assert(formalism::SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
+static_assert(SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
 static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation<ConcurrentObjectTag>>);
 static_assert(!std::is_move_constructible_v<PublishedRepository>);
 static_assert(!std::is_copy_constructible_v<PublishedRepository>);
@@ -277,7 +278,7 @@ void expect_unique_same_relation_insertions()
     EXPECT_EQ(created.load(), expected_rows);
     EXPECT_EQ(repository.relations().size(relation), expected_rows);
 
-    auto seen = std::vector<bool>(expected_rows, false);
+    auto seen = urd::Store<urd::set<uint_t>, urd::dense> {};
     for (uint_t key = 0; key < expected_rows; ++key)
     {
         const auto data = make_binding<ObjectTag>(relation, key);
@@ -285,8 +286,7 @@ void expect_unique_same_relation_insertions()
         ASSERT_TRUE(found.has_value());
         const auto row = found.value().data().row.value;
         ASSERT_LT(row, expected_rows);
-        EXPECT_FALSE(seen[row]);
-        seen[row] = true;
+        EXPECT_TRUE(seen.insert(row).second);
         EXPECT_TRUE(std::ranges::equal(found.value().get_key().second, data.values));
     }
 }
@@ -328,7 +328,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
     EXPECT_EQ(trivial_created.load(), num_trivial);
     EXPECT_EQ(repository.symbols().size<ConcurrentElement>(), num_trivial);
 
-    auto seen = std::vector<bool>(num_trivial, false);
+    auto seen = urd::Store<urd::set<uint_t>, urd::dense> {};
     for (uint_t key = 0; key < num_trivial; ++key)
     {
         auto data = urd::data<ConcurrentElement> {};
@@ -337,8 +337,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
         ASSERT_TRUE(found.has_value());
         const auto index = found.value().index().value;
         ASSERT_LT(index, num_trivial);
-        EXPECT_FALSE(seen[index]);
-        seen[index] = true;
+        EXPECT_TRUE(seen.insert(index).second);
     }
 
     auto serialized_created = std::atomic_size_t { 0 };

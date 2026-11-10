@@ -2,6 +2,7 @@
 #define YGG_SERIALIZATION_DICTIONARIES_HPP_
 
 #include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/records/records.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include "yggdrasil/serialization/conversion.hpp"
@@ -27,8 +28,9 @@ namespace ygg::serialization
 
 namespace detail
 {
+/// The values of one table, each once: a value's index is its row's.
 template<typename T>
-using Index = urd::Store<urd::map<T, size_t>, urd::stable_refs>;
+using Index = urd::Store<urd::pool<T>>;
 }
 
 /// Types with a describe_fields overload, serialized as dictionary rows.
@@ -60,7 +62,7 @@ private:
         std::string name;
         std::string prefix;
         boost::json::array rows;
-        std::function<std::pair<size_t, bool>(const void*, size_t)> index;
+        std::function<std::pair<size_t, bool>(const void*)> index;
         std::optional<urd::Store<urd::sequence<std::string>>> fields;
         std::function<void(Archive&, const void*)> project;
     };
@@ -125,7 +127,7 @@ private:
             if (const auto found = m_types.find(typeid(T).name()); found != m_types.end())
             {
                 auto& table = m_tables[found->second];
-                const auto [id, inserted] = table.index(std::addressof(value), table.rows.size());
+                const auto [id, inserted] = table.index(std::addressof(value));
                 const auto reference = table.prefix + std::to_string(id);
                 if (inserted)
                 {
@@ -219,10 +221,11 @@ public:
             if (table.name == name || table.prefix == prefix)
                 throw std::invalid_argument("Table names and prefixes must be unique");
         const auto position = m_tables.size();
-        auto index = [entries = detail::Index<T> {}](const void* value, size_t next) mutable
+        // Numbered as every pool is; no view is made of its indices.
+        auto index = [entries = detail::Index<T>(urd::layer { 0 })](const void* value) mutable
         {
-            const auto [entry, inserted] = entries.try_emplace(*static_cast<const T*>(value), next);
-            return std::make_pair(entry->second, inserted);
+            const auto [id, inserted] = entries.insert(*static_cast<const T*>(value));
+            return std::pair<size_t, bool>(id.value, inserted);
         };
         std::function<void(Archive&, const void*)> projection;
         if (project)

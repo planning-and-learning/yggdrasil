@@ -132,18 +132,6 @@ concept HasRows = boost::mp11::mp_contains<typename std::remove_cvref_t<Reposito
 template<typename Repository, typename F>
 concept HasRelations = SupportsSymbol<Repository, Relation<F>>;
 
-/// Read access to one supported symbol representation.
-template<typename Repository, typename T>
-concept SymbolRepositoryFor = SupportsSymbol<Repository, T> && requires(const std::remove_reference_t<Repository>& repository, urd::index<T> index) {
-    { repository[index] } -> std::same_as<const urd::data<T>&>;
-};
-
-template<typename C, typename T>
-concept SymbolContextFor = requires(const C& context) {
-    { get_repository(context) } -> SymbolRepositoryFor<T>;
-    get_repository(context).layer();
-};
-
 template<typename Tag>
 struct Object
 {

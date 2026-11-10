@@ -11,7 +11,6 @@
 
 #include <compare>
 #include <span>
-#include <tuple>
 #include <urd/elements/flat.hpp>
 
 namespace ygg
@@ -24,8 +23,8 @@ struct ColumnLayout
 
     static constexpr auto cista_members() noexcept { return urd::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
     static constexpr auto identifying_members() noexcept { return urd::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
-    friend bool operator==(const ColumnLayout& lhs, const ColumnLayout& rhs) { return lhs.label == rhs.label && lhs.type == rhs.type; }
-    friend auto operator<=>(const ColumnLayout& lhs, const ColumnLayout& rhs) { return std::tie(lhs.label, lhs.type) <=> std::tie(rhs.label, rhs.type); }
+    friend bool operator==(const ColumnLayout&, const ColumnLayout&) = default;
+    friend auto operator<=>(const ColumnLayout&, const ColumnLayout&) = default;
 };
 }  // namespace ygg
 

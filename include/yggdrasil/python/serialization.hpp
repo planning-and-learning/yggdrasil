@@ -104,7 +104,7 @@ void bind_native_serializer()
 }
 
 inline std::optional<boost::json::value>
-from_python_native(serialization::Dictionaries& dictionaries, nanobind::handle value, std::vector<nanobind::object>& owners)
+from_python_native(serialization::Dictionaries& dictionaries, nanobind::handle value, urd::Store<urd::sequence<nanobind::object>>& owners)
 {
     const auto hook = nanobind::getattr(value.type(), "_ygg_serialize", nanobind::none());
     if (hook.is_none())
@@ -117,7 +117,7 @@ from_python_native(serialization::Dictionaries& dictionaries, nanobind::handle v
     return (*serializer)(dictionaries, value);
 }
 
-inline boost::json::value from_python(serialization::Dictionaries& dictionaries, nanobind::handle value, std::vector<nanobind::object>& owners)
+inline boost::json::value from_python(serialization::Dictionaries& dictionaries, nanobind::handle value, urd::Store<urd::sequence<nanobind::object>>& owners)
 {
     if (value.is_none())
         return nullptr;
@@ -190,8 +190,8 @@ void register_table(serialization::Dictionaries& dictionaries,
         std::function<void(serialization::Dictionaries::Archive&, const T&)> projection;
         if (!project.is_none())
         {
-            projection =
-                [project, &dictionaries, owners = std::vector<nanobind::object> {}](serialization::Dictionaries::Archive& archive, const T& value) mutable
+            projection = [project, &dictionaries, owners = urd::Store<urd::sequence<nanobind::object>> {}](serialization::Dictionaries::Archive& archive,
+                                                                                                           const T& value) mutable
             {
                 nanobind::gil_scoped_acquire guard;
                 const auto row = project(nanobind::cast(value, nanobind::rv_policy::copy));

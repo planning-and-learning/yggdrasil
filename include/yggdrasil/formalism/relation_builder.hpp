@@ -33,6 +33,10 @@ namespace ygg
 /// with the widths of the columns; rows go in as a stored row of equal widths or as their values.
 using RowPool = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>, urd::by_column_widths>;
 
+/// Whether a column before `column` has its label.
+[[nodiscard]] inline bool repeats_label(std::span<const ColumnLayout> columns, std::span<const ColumnLayout>::iterator column)
+{ return std::ranges::find(columns.begin(), column, column->label, &ColumnLayout::label) != column; }
+
 /// Throws std::invalid_argument where a column's type is invalid or two columns share a label.
 inline void validate_columns(std::span<const ColumnLayout> columns)
 {
@@ -40,7 +44,7 @@ inline void validate_columns(std::span<const ColumnLayout> columns)
     {
         if (static_cast<std::size_t>(it->type) >= std::variant_size_v<ColumnValue>)
             throw std::invalid_argument("Columns: invalid column type.");
-        if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
+        if (repeats_label(columns, it))
             throw std::invalid_argument("Columns: duplicate column label.");
     }
 }
@@ -102,8 +106,9 @@ public:
     [[nodiscard]] const urd::column_widths& widths() const noexcept { return m_rows.column_widths(); }
     [[nodiscard]] size_t size() const noexcept { return m_rows.size(); }
     [[nodiscard]] bool empty() const noexcept { return m_rows.empty(); }
-    [[nodiscard]] size_t memory_usage() const noexcept
-    { return m_columns.values.allocated_size_ * sizeof(ygg::ColumnLayout) + urd::memory_usage(m_rows); }
+    [[nodiscard]] size_t memory_usage() const noexcept { return urd::memory_usage(*this); }
+    /// The members it owns memory through (urd::memory_of).
+    static constexpr auto memory_members() noexcept { return urd::Members<&builder::m_columns, &builder::m_rows> {}; }
     /// Its rows, by position (a handle's value).
     [[nodiscard]] const Rows& storage() const noexcept { return m_rows; }
     /// The stored row at key.row (a position), as the views of its rows read it.

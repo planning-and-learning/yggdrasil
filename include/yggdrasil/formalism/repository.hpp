@@ -25,6 +25,7 @@
 #include "yggdrasil/formalism/relation_view.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
+#include "yggdrasil/semantics/canonicalization.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -341,18 +342,18 @@ public:
         requires HasRelations<Repository, F>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::data<Relation<F>>& relation)
     {
-        const auto& columns = (*this)[relation.columns].values;
+        const auto& values = (*this)[relation.columns].values;
+        const auto columns = std::span<const ColumnLayout>(values.data(), values.size());
         if (!std::ranges::equal(m_relations.template types<F>(relation.pool), columns, {}, {}, &ColumnLayout::type))
             throw std::invalid_argument("Repository: the columns' types are not the pool's.");
         for (auto it = columns.begin(); it != columns.end(); ++it)
-            if (std::ranges::find(columns.begin(), it, it->label, &ColumnLayout::label) != it)
+            if (repeats_label(columns, it))
                 throw std::invalid_argument("Repository: a relation's column labels are distinct.");
         // ponytail: an assert, not a throw: O(rows) per insert (user). Catches ids beyond the pool (e.g. of another
         // repository), not an id that happens to exist in both.
         assert(std::ranges::all_of(relation.rows, [&](urd::index<Row<F>> id) { return holds_row(RowIndex<F> { relation.pool, id }); })
                && "Repository: a relation's row ids must be rows of its pool here.");
-        std::ranges::sort(relation.rows);
-        relation.rows.erase(std::ranges::unique(relation.rows).begin(), relation.rows.end());
+        ygg::canonicalize(relation.rows);
         const auto [index, created] = intern(m_symbols.template get<Relation<F>>(), relation);
         return { view(index), created };
     }

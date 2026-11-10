@@ -18,7 +18,7 @@
 #include "yggdrasil/formatting/formatter.hpp"
 
 #include "yggdrasil/formatting/cista_formatters.hpp"
-#include "yggdrasil/formatting/dynamic_bitset_formatters.hpp"
+#include <urd/format.hpp>
 
 #include <array>
 #include <cstdint>
@@ -31,7 +31,7 @@
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
 #include <urd/elements/less.hpp>
-#include <urd/repr/containers/bitset_span.hpp>
+#include <urd/bits.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include <variant>
@@ -95,26 +95,14 @@ TEST(YggdrasilTests, CommonCistaFormatterFormatsOptionalVectorAndVariant)
     EXPECT_EQ(fmt::format("{}", Variant {}), "<invalid>");
 }
 
-TEST(YggdrasilTests, CommonDynamicBitsetFormatterFormatsBoostDynamicBitset)
-{
-    auto empty = boost::dynamic_bitset<>(8);
-    EXPECT_EQ(fmt::format("{}", empty), "{}");
-
-    auto value = boost::dynamic_bitset<>(8);
-    value.set(1);
-    value.set(3);
-
-    EXPECT_EQ(fmt::format("{}", value), "{1, 3}");
-}
-
-TEST(YggdrasilTests, CommonDynamicBitsetFormatterFormatsBitsetSpan)
+TEST(YggdrasilTests, UrdFormatsBitsetSpan)
 {
     const auto empty_blocks = urd::Store<urd::sequence<std::uint64_t>, urd::contiguous> { 0 };
-    const auto empty = urd::repr::BitsetSpan<const std::uint64_t>(empty_blocks.data(), 4);
+    const auto empty = urd::bitset_span<const std::uint64_t>(empty_blocks.data(), 4);
     EXPECT_EQ(fmt::format("{}", empty), "{}");
 
     const auto blocks = urd::Store<urd::sequence<std::uint64_t>, urd::contiguous> { 0b1010 };
-    const auto value = urd::repr::BitsetSpan<const std::uint64_t>(blocks.data(), 4);
+    const auto value = urd::bitset_span<const std::uint64_t>(blocks.data(), 4);
 
     EXPECT_EQ(fmt::format("{}", value), "{1, 3}");
 }

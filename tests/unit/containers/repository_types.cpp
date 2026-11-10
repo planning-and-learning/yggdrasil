@@ -32,6 +32,7 @@
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
+#include "../formalism/symbol_concepts.hpp"
 
 #include "gtest/gtest.h"
 #include <array>
@@ -291,10 +292,10 @@ static_assert(formalism::HasRows<ContractRepository, RepositoryTypesRelation>);
 static_assert(!formalism::HasRelations<ContractRepository, RepositoryTypesRelation>);
 static_assert(!formalism::HasRows<ContractRelations, RepositoryTypesElement>);
 static_assert(!formalism::HasRows<int, RepositoryTypesRelation>);
-static_assert(!formalism::SymbolContextFor<ContractSymbols, RepositoryTypesElement>);
-static_assert(formalism::SymbolContextFor<ContractRepository, RepositoryTypesElement>);
-static_assert(!formalism::SymbolContextFor<ContractSymbols, RepositoryTypesSerializedElement>);
-static_assert(!formalism::SymbolRepositoryFor<ContractRepository, ContractBinding>);
+static_assert(!SymbolContextFor<ContractSymbols, RepositoryTypesElement>);
+static_assert(SymbolContextFor<ContractRepository, RepositoryTypesElement>);
+static_assert(!SymbolContextFor<ContractSymbols, RepositoryTypesSerializedElement>);
+static_assert(!SymbolRepositoryFor<ContractRepository, ContractBinding>);
 static_assert(std::same_as<formalism::BuilderStorage<RepositoryTypesCheckout>::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
 
 template<typename Repository, typename T>

@@ -27,7 +27,6 @@
 #include <optional>
 #include <ranges>
 #include <string>
-#include <urd/elements/index.hpp>
 #include <variant>
 #include <vector>
 
@@ -41,18 +40,10 @@ std::string to_string(const T& element)
 }  // namespace ygg
 
 #if YGG_ENABLE_FMT_FORMATTERS
+#include <urd/format.hpp>  // urd's own types: an index, a bitset span
+
 namespace fmt
 {
-
-template<typename T>
-struct formatter<urd::index<T>, char>
-{
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const urd::index<T>& value, FormatContext& ctx) const
-    { return fmt::format_to(ctx.out(), "{}", value.value); }
-};
 
 template<typename T>
 struct formatter<std::optional<T>, char>

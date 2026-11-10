@@ -35,45 +35,12 @@
 #include <urd/python/values/unordered_flat_set.hpp>
 #include <yggdrasil/python/type_casters/closed_interval.hpp>
 
-#include <cista/containers/array.h>
-#include <urd/elements/flat.hpp>
 #include <nanobind/nanobind.h>
-#include <ranges>
 #include <span>
 
 void bind_type_casters_test(nanobind::module_& m)
 {
     using Interval = ygg::ClosedInterval<ygg::float_t>;
-
-    m.def("array_view",
-          []
-          {
-              using Array = ::cista::array<int, 3>;
-              static constexpr auto data = Array { 1, 2, 3 };
-              return std::views::all(data);
-          });
-
-    m.def("pair_view",
-          []
-          {
-              using Pair = urd::flat_pair<int, int>;
-              static constexpr auto data = Pair { 4, 5 };
-              return data;
-          });
-
-    m.def("nested_view",
-          []
-          {
-              using Pair = urd::flat_pair<int, int>;
-              using Array = ::cista::array<Pair, 2>;
-              static constexpr auto data = Array { Pair { 6, 7 }, Pair { 8, 9 } };
-              return std::views::all(data);
-          });
-
-    m.def("roundtrip_pair", [](urd::flat_pair<int, int> value) { return value; });
-    m.def("roundtrip_optional_pairs", [](urd::flat_vector<urd::flat_optional<urd::flat_pair<int, int>>> values) { return values; });
-
-    m.def("roundtrip_variant", [](urd::flat_variant<int, double> value) { return value; });
 
     m.def("empty_interval", [] { return Interval {}; });
     m.def("singleton_interval", [] { return Interval { 2.5, 2.5 }; });
