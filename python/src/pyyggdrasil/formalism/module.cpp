@@ -166,24 +166,24 @@ void bind_formalism_module_definitions(nb::module_& m)
         .def_rw("type", &ygg::ColumnLayout::type)
         .def(nb::self == nb::self);  // NOLINT(misc-redundant-expression)
 
-    auto relation = nb::class_<Relation>(m,
-                                         "Relation",
-                                         "Mutable builder of fixed-arity tuples with unique column labels. Its rows are read "
-                                         "through a repository: RelationRepository.view(relation).")
-                        .def(nb::init<>())
-                        .def(nb::init<ColumnIndices>(), nb::arg("columns"))
-                        .def(
-                            "__init__",
-                            [](Relation* self, const Layouts& columns) { new (self) Relation(std::span<const ygg::ColumnLayout>(columns)); },
-                            nb::arg("columns"))
-                        .def(
-                            "__init__",
-                            [](Relation* self, const urd::Store<urd::sequence<Column>>& labels)
-                            { new (self) Relation(std::span<const ygg::ColumnLayout>(untyped(labels))); },
-                            nb::arg("labels"),
-                            "Columns of these labels, each of type UINT32.");
-    bind_relation_shape(relation);
-    relation.def("clear", &Relation::clear)
+    auto relation_class = nb::class_<Relation>(m,
+                                               "Relation",
+                                               "Mutable builder of fixed-arity tuples with unique column labels. Its rows are read "
+                                               "through a repository: RelationRepository.view(relation).")
+                              .def(nb::init<>())
+                              .def(nb::init<ColumnIndices>(), nb::arg("columns"))
+                              .def(
+                                  "__init__",
+                                  [](Relation* self, const Layouts& columns) { new (self) Relation(std::span<const ygg::ColumnLayout>(columns)); },
+                                  nb::arg("columns"))
+                              .def(
+                                  "__init__",
+                                  [](Relation* self, const urd::Store<urd::sequence<Column>>& labels)
+                                  { new (self) Relation(std::span<const ygg::ColumnLayout>(untyped(labels))); },
+                                  nb::arg("labels"),
+                                  "Columns of these labels, each of type UINT32.");
+    bind_relation_shape(relation_class);
+    relation_class.def("clear", &Relation::clear)
         .def(
             "insert",
             [](Relation& relation, const nb::typed<nb::sequence, nb::object>& row)

@@ -375,7 +375,8 @@ struct PreparedRepository
         return { urd::index_view<RepositoryTypesElement, PreparedRepository>(index, this), created };
     }
     const auto& operator[](urd::index<RepositoryTypesElement> index) const { return symbols[index]; }
-    friend const PreparedRepository& get_repository(const PreparedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
+    // What a context of views offers; nothing here evaluates it.
+    [[maybe_unused]] friend const PreparedRepository& get_repository(const PreparedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 void prepare_for_insert(PreparedRepository& repository, urd::data<RepositoryTypesElement>& data)
@@ -783,7 +784,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
 
     EXPECT_THROW(repository[urd::index<RepositoryTypesElement>(0)], std::out_of_range);
     EXPECT_EQ(repository.owner(urd::index<RepositoryTypesElement>(0)), nullptr);
-    EXPECT_THROW(repository.view(urd::index<RepositoryTypesElement>(0)), std::out_of_range);
+    EXPECT_THROW(static_cast<void>(repository.view(urd::index<RepositoryTypesElement>(0))), std::out_of_range);
 
     auto data = urd::data<RepositoryTypesElement> {};
     data.value = 7;
@@ -793,7 +794,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
     EXPECT_EQ(repository[view.index()].value, 7);
     EXPECT_EQ(repository.owner(view.index()), &repository);
     EXPECT_THROW(repository[urd::index<RepositoryTypesElement>(1)], std::out_of_range);
-    EXPECT_THROW(repository.view(urd::index<RepositoryTypesElement>(1)), std::out_of_range);
+    EXPECT_THROW(static_cast<void>(repository.view(urd::index<RepositoryTypesElement>(1))), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
@@ -811,7 +812,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
 
     EXPECT_THROW(repository[missing], std::out_of_range);
     EXPECT_EQ(repository.owner(missing), nullptr);
-    EXPECT_THROW(urd::resolve(missing, repository), std::out_of_range);
+    EXPECT_THROW(static_cast<void>(urd::resolve(missing, repository)), std::out_of_range);
     const auto rows = std::array { urd::index<Row<RepositoryTypesRelation>>(0) };
     const auto bindings = rows_view(relation, rows, repository);
     EXPECT_THROW((void) bindings[0], std::out_of_range);
@@ -829,9 +830,9 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
     const auto missing_row = RowIndex<RepositoryTypesRelation> { relation, urd::index<Row<RepositoryTypesRelation>>(1) };
     const auto missing_relation = RowIndex<RepositoryTypesRelation> { urd::index<RepositoryTypesRelation>(1), urd::index<Row<RepositoryTypesRelation>>(0) };
     EXPECT_THROW(repository[missing_row], std::out_of_range);
-    EXPECT_THROW(urd::resolve(missing_row, repository), std::out_of_range);
+    EXPECT_THROW(static_cast<void>(urd::resolve(missing_row, repository)), std::out_of_range);
     EXPECT_THROW(repository[missing_relation], std::out_of_range);
-    EXPECT_THROW(urd::resolve(missing_relation, repository), std::out_of_range);
+    EXPECT_THROW(static_cast<void>(urd::resolve(missing_relation, repository)), std::out_of_range);
 }
 
 /// Whether the repository holds an index or binding key (some layer owns it), or the record a view denotes.

@@ -40,7 +40,8 @@ struct FamilyMembers;
 template<template<typename> class F, typename... Ts>
 struct FamilyMembers<F, boost::mp11::mp_list<Ts...>> : FamilyMember<Ts, F<Ts>>...
 {
-    explicit FamilyMembers(std::size_t number) : FamilyMember<Ts, F<Ts>>(number)... {}
+    // An empty family has no member to pass the number to.
+    explicit FamilyMembers([[maybe_unused]] std::size_t number) : FamilyMember<Ts, F<Ts>>(number)... {}
 };
 }  // namespace detail
 

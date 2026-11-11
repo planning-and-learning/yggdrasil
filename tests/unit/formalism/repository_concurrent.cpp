@@ -130,8 +130,6 @@ constexpr auto object_columns = std::array { ygg::type_id<urd::index<formalism::
 template<typename ObjectTag>
 urd::data<Binding<ObjectTag>> make_binding(urd::index<ConcurrentRelation<ObjectTag>> relation, uint_t key)
 {
-    using Object = formalism::Object<ObjectTag>;
-
     auto objects = urd::flat_vector<ygg::Value> {};
     for (uint_t i = 0; i < 4; ++i)
         objects.push_back((key + i * 997U) & 4095U);
@@ -162,7 +160,8 @@ class PublishedRepository : public formalism::SymbolRepositoryBase<PublishedRepo
 public:
     /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }
-    friend const PublishedRepository& get_repository(const PublishedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
+    // Named only in the static_assert below, which evaluates nothing.
+    [[maybe_unused]] friend const PublishedRepository& get_repository(const PublishedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 static_assert(SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
@@ -298,7 +297,6 @@ void expect_unique_same_relation_insertions()
 
 urd::data<Binding<ConcurrentPackedObjectTag>> make_packed_binding(urd::index<ConcurrentRelation<ConcurrentPackedObjectTag>> relation, uint_t key, bool valid)
 {
-    using Object = formalism::Object<ConcurrentPackedObjectTag>;
     auto objects = urd::flat_vector<ygg::Value> {};
     for (uint_t i = 0; i < 4; ++i)
         objects.push_back((key >> (i * 3U)) & 7U);
@@ -403,7 +401,6 @@ TEST(YggdrasilTests, FormalismRepositoryRejectsReservedRelationIndex)
 TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithoutMutation)
 {
     using ObjectTag = ConcurrentPackedObjectTag;
-    using Object = formalism::Object<ObjectTag>;
     auto repository = ConcurrentRepository<ObjectTag>(4096, nullptr);
     const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     repository.declare(relation, object_columns);  // a raw key: its pool declared here
@@ -544,7 +541,6 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
 TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndClearReusesStorage)
 {
     using ObjectTag = ConcurrentPackedObjectTag;
-    using Object = formalism::Object<ObjectTag>;
     auto repository = ConcurrentRepository<ObjectTag>(8, nullptr);
     const auto relation = urd::index<ConcurrentRelation<ObjectTag>>(0);
     repository.declare(relation, object_columns);  // a raw key: its pool declared here
