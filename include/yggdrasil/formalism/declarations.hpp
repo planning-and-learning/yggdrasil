@@ -10,8 +10,6 @@
 #ifndef YGG_FORMALISM_DECLARATIONS_HPP_
 #define YGG_FORMALISM_DECLARATIONS_HPP_
 
-#include <urd/elements/flat.hpp>
-
 #include <atomic>
 #include <boost/mp11.hpp>
 #include <concepts>
@@ -21,6 +19,7 @@
 #include <tuple>
 #include <type_traits>
 #include <urd/elements/concepts.hpp>
+#include <urd/elements/flat.hpp>
 
 namespace ygg
 {

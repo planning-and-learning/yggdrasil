@@ -127,14 +127,18 @@ endif()
 
 # Dependencies
 
-# urd and the native libraries come from pyurd: its prefix (the build backend sets URD_NATIVE_PREFIX; a CMake build asks
-# the Python that has pyurd installed).
-brokkr_find_python_native_prefix(pyurd URD_NATIVE_PREFIX)
-if(NOT URD_NATIVE_PREFIX OR NOT EXISTS "${URD_NATIVE_PREFIX}")
-    message(FATAL_ERROR "pyurd's native prefix not found: install pyurd, or set URD_NATIVE_PREFIX")
+# urd comes from pyurd and the native libraries from pyurd-native: their prefixes (the build backend sets URD_PREFIX
+# and URD_NATIVE_PREFIX; a CMake build asks the Python that has them installed).
+brokkr_find_python_native_prefix(pyurd URD_PREFIX)
+if(NOT URD_PREFIX OR NOT EXISTS "${URD_PREFIX}")
+    message(FATAL_ERROR "pyurd's prefix not found: install pyurd, or set URD_PREFIX")
 endif()
-list(PREPEND CMAKE_PREFIX_PATH "${URD_NATIVE_PREFIX}")
-find_package(urd CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+brokkr_find_python_native_prefix(pyurd_native URD_NATIVE_PREFIX)
+if(NOT URD_NATIVE_PREFIX OR NOT EXISTS "${URD_NATIVE_PREFIX}")
+    message(FATAL_ERROR "pyurd-native's prefix not found: install pyurd, or set URD_NATIVE_PREFIX")
+endif()
+list(PREPEND CMAKE_PREFIX_PATH "${URD_PREFIX}" "${URD_NATIVE_PREFIX}")
+find_package(urd CONFIG REQUIRED PATHS "${URD_PREFIX}" NO_DEFAULT_PATH)
 
 # Targets
 

@@ -18,7 +18,6 @@
 #ifndef YGG_FORMALISM_ROW_VIEW_HPP_
 #define YGG_FORMALISM_ROW_VIEW_HPP_
 
-#include <urd/elements/flat.hpp>
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
@@ -30,6 +29,7 @@
 #include <span>
 #include <stdexcept>
 #include <type_traits>
+#include <urd/elements/flat.hpp>
 #include <utility>
 
 /// A row, borrowed (its record {relation, values}) or stored (its key {relation, row}, read through its context:

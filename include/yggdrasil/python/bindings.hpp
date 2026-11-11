@@ -50,8 +50,7 @@ void bind_unsigned_integer(nb::module_& m, const std::string& name)
         .def("__index__", [](const T& i) { return i.value; })
         .def_ro("value", &T::value);
     urd::python::add_comparison(cls);
-    cls.def("__hash__", [](const T& i) { return i.value; })
-        .def("__repr__", [name](const T& i) { return name + "(" + std::to_string(i.value) + ")"; });
+    cls.def("__hash__", [](const T& i) { return i.value; }).def("__repr__", [name](const T& i) { return name + "(" + std::to_string(i.value) + ")"; });
 }
 
 /// Binds repository.insert(data) -> (view, created); the view keeps the repository alive. Takes data by reference, as

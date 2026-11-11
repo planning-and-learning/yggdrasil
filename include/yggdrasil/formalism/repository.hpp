@@ -18,6 +18,7 @@
 #ifndef YGG_FORMALISM_REPOSITORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_HPP_
 
+#include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
@@ -46,7 +47,6 @@
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
-#include "yggdrasil/core/family.hpp"
 #include <utility>
 #include <vector>
 
@@ -124,7 +124,6 @@ private:
         return m_relations.schema(*record);
     }
 
-
     Repository(const Repository* parent, urd::bit_width object_index_width) :
         m_parent(parent),
         m_symbols(parent ? &parent->m_symbols : nullptr),
@@ -155,8 +154,8 @@ public:
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
 
     /// Forgets this layer's own records and rows; the parent's stay. Views of the forgotten records
-    /// dangle. Its pool keys (e.g. predicates) stay, with their pools' declarations (Schemas), and so their pools, emptied: a refill in any order finds each pool
-    /// built alike and allocates nothing.
+    /// dangle. Its pool keys (e.g. predicates) stay, with their pools' declarations (Schemas), and so their pools, emptied: a refill in any order finds each
+    /// pool built alike and allocates nothing.
     void clear()
     {
         boost::mp11::mp_for_each<boost::mp11::mp_transform<std::type_identity, boost::mp11::mp_remove_if<SymbolTypes, KeysPools>>>(

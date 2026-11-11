@@ -19,7 +19,15 @@ from pyyggdrasil.diagnostics import (
 def test_diagnostics_submodule_is_public() -> None:
     assert diagnostics is pyyggdrasil.diagnostics
     exported: list[str] = vars(diagnostics)["__all__"]  # the generated type hints do not list __all__
-    assert exported == ["Diagnostic", "DiagnosticNote", "ParseError", "SemanticError", "Source", "SourceSpan", "format_diagnostic"]
+    assert exported == [
+        "Diagnostic",
+        "DiagnosticNote",
+        "ParseError",
+        "SemanticError",
+        "Source",
+        "SourceSpan",
+        "format_diagnostic",
+    ]
     for name in exported:
         assert hasattr(diagnostics, name)
 

@@ -1,8 +1,8 @@
 #include "module.hpp"
 
-#include "pyyggdrasil/formalism/module.hpp"
 #include "pyyggdrasil/diagnostics/module.hpp"
 #include "pyyggdrasil/execution/module.hpp"
+#include "pyyggdrasil/formalism/module.hpp"
 #include "pyyggdrasil/serialization/module.hpp"
 
 namespace yggdrasil

@@ -15,9 +15,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <urd/elements/index.hpp>
 #include <stdexcept>
 #include <type_traits>
+#include <urd/elements/index.hpp>
 #include <utility>
 #include <variant>
 
@@ -113,7 +113,9 @@ template<typename T>
 { return urd::index_of<T>::from_index(static_cast<std::size_t>(bits)); }
 
 [[nodiscard]] inline Value encode(const ColumnValue& value) noexcept
-{ return std::visit([](auto alternative) { return encode_value(alternative); }, value); }
+{
+    return std::visit([](auto alternative) { return encode_value(alternative); }, value);
+}
 
 /// The value of a column of `type` whose bits these are; std::invalid_argument where `type` names no type.
 [[nodiscard]] inline ColumnValue decode(Value bits, TypeId type)
@@ -129,7 +131,8 @@ template<typename T>
 /// `type` names no type.
 constexpr std::uint8_t column_bits(TypeId type, std::uint8_t object_bits)
 {
-    constexpr auto widths = []<typename... Ts>(std::type_identity<std::variant<Ts...>>) { return std::array { whole_bits<Ts>... }; }(std::type_identity<ColumnValue> {});
+    constexpr auto widths = []<typename... Ts>(std::type_identity<std::variant<Ts...>>)
+    { return std::array { whole_bits<Ts>... }; }(std::type_identity<ColumnValue> {});
     return type == type_id<urd::index<formalism::Object<void>>> ? object_bits : widths.at(static_cast<std::size_t>(type));
 }
 

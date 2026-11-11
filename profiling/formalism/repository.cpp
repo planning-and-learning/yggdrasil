@@ -9,7 +9,6 @@
 
 #include "yggdrasil/formalism/repository.hpp"
 
-#include <urd/elements/flat.hpp>
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 
@@ -19,6 +18,7 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <urd/elements/flat.hpp>
 #include <utility>
 
 namespace ygg::profiling

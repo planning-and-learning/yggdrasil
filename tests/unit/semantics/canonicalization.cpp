@@ -18,9 +18,9 @@
 #include "yggdrasil/semantics/canonicalization.hpp"
 
 #include "yggdrasil/core/config.hpp"
-#include <urd/elements/flat.hpp>
 
 #include <gtest/gtest.h>
+#include <urd/elements/flat.hpp>
 #include <vector>
 
 namespace ygg::tests

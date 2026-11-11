@@ -19,10 +19,11 @@
 #define YGG_FORMALISM_RELATION_REPOSITORY_HPP_
 
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/row_data.hpp"
-#include "yggdrasil/formalism/relation_data.hpp"
-#include "yggdrasil/formalism/symbol_repository.hpp"
+#include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/relation_data.hpp"
+#include "yggdrasil/formalism/row_data.hpp"
+#include "yggdrasil/formalism/symbol_repository.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
 #include <boost/mp11.hpp>
@@ -40,7 +41,6 @@
 #include <urd/repr/wrappers/layer.hpp>
 #include <urd/repr/wrappers/layered_pool.hpp>
 #include <urd/store.hpp>
-#include "yggdrasil/core/family.hpp"
 #include <utility>
 
 namespace ygg::formalism
@@ -107,7 +107,8 @@ public:
     using Pools = urd::Store<urd::map<urd::index<F>, Rows<F>>, urd::dense, urd::layered, urd::constant_clear, Threading>;
     /// Every Schema, each once, as a flat record: e.g. (object, object) -> index<Schema> 0, (uint, uint) -> 1. Kept
     /// across clear, so the keys of free relations' pools stay valid.
-    using Schemas = urd::Store<urd::pool<urd::data<Schema>, urd::index<Schema>>, urd::flat, urd::stable_refs, urd::monotone_until_clear, urd::layered, Threading>;
+    using Schemas =
+        urd::Store<urd::pool<urd::data<Schema>, urd::index<Schema>>, urd::flat, urd::stable_refs, urd::monotone_until_clear, urd::layered, Threading>;
     /// Family F's pools' Schemas, by key, as declared: e.g. predicate 3 -> (object, object). Kept across clear, as the
     /// pool keys and the Schemas are.
     template<typename F>
@@ -139,11 +140,12 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] size_t size(urd::index<F> relation) const
-    { return get<F>().visit(relation, [](const Rows<F>& rows) { return size_t(rows.size()); }, size_t { 0 }); }
+    {
+        return get<F>().visit(relation, [](const Rows<F>& rows) { return size_t(rows.size()); }, size_t { 0 });
+    }
 
     /// The Schema `record`, interned here where no layer holds it (record.index set to it).
-    urd::index<Schema> schema(urd::data<Schema>& record)
-    { return intern(m_schemas, record).first; }
+    urd::index<Schema> schema(urd::data<Schema>& record) { return intern(m_schemas, record).first; }
     /// The column types of a Schema.
     [[nodiscard]] std::span<const TypeId> types(urd::index<Schema> schema) const
     {
@@ -154,7 +156,9 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] urd::index<Schema> schema(urd::index<F> relation) const
-    { return m_pool_schemas.template get<F>().visit(relation, [](urd::index<Schema> held) { return held; }, urd::index<Schema>()); }
+    {
+        return m_pool_schemas.template get<F>().visit(relation, [](urd::index<Schema> held) { return held; }, urd::index<Schema>());
+    }
     /// The column types of the pool `relation` (its Schema's); std::out_of_range where no layer declared it.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>

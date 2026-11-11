@@ -15,27 +15,22 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/semantics/canonicalization.hpp"
-
-#include <algorithm>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
-
-#include <urd/elements/flat.hpp>
-#include <boost/mp11.hpp>
+#include "../formalism/symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/row_data.hpp"
-#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/formalism/row_data.hpp"
+#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
-#include "../formalism/symbol_concepts.hpp"
+#include "yggdrasil/semantics/canonicalization.hpp"
 
 #include "gtest/gtest.h"
+#include <algorithm>
 #include <array>
+#include <boost/mp11.hpp>
 #include <concepts>
 #include <cstdint>
 #include <forward_list>
@@ -47,10 +42,13 @@
 #include <span>
 #include <stdexcept>
 #include <tuple>
-#include <urd/elements/equal_to.hpp>
-#include <urd/elements/hash.hpp>
-#include <vector>
 #include <urd/config.hpp>
+#include <urd/elements/equal_to.hpp>
+#include <urd/elements/flat.hpp>
+#include <urd/elements/hash.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
+#include <vector>
 
 namespace ygg::tests
 {
@@ -175,13 +173,7 @@ namespace ygg::tests
 /// An object column's type, as declared pools of raw keys (no symbols) take it.
 constexpr auto object_column = ygg::type_id<urd::index<formalism::Object<RepositoryTypesObjectTag>>>;
 
-
-
-TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles)
-{
-
-    SUCCEED();
-}
+TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles) { SUCCEED(); }
 
 TEST(YggdrasilTests, CommonBuilderStorageReusesReleasedBuildersByType)
 {
@@ -247,14 +239,13 @@ TEST(YggdrasilTests, CommonBuilderCheckoutClearsOnceAndRetainsCapacity)
 }
 
 template<typename Repository, typename T>
-concept CanUseAnySymbolOperation =
-    requires(Repository& repository, urd::data<T>& data) { repository.insert(data); }
-    || requires(const Repository& repository, const urd::data<T>& data) { repository.find(data); }
-    || requires(const Repository& repository, urd::index<T> index) { repository[index]; }
-    || requires(const Repository& repository, urd::index<T> index) { repository.owner(index); }
-    || requires(const Repository& repository, urd::index<T> index) { repository.contains(index); }
-    || requires(const Repository& repository) { repository.template size<T>(); }
-    || requires(const Repository& repository) { repository.template memory_usage<T>(); };
+concept CanUseAnySymbolOperation = requires(Repository& repository, urd::data<T>& data) { repository.insert(data); }
+                                   || requires(const Repository& repository, const urd::data<T>& data) { repository.find(data); }
+                                   || requires(const Repository& repository, urd::index<T> index) { repository[index]; }
+                                   || requires(const Repository& repository, urd::index<T> index) { repository.owner(index); }
+                                   || requires(const Repository& repository, urd::index<T> index) { repository.contains(index); }
+                                   || requires(const Repository& repository) { repository.template size<T>(); }
+                                   || requires(const Repository& repository) { repository.template memory_usage<T>(); };
 
 template<typename Repository, typename T>
 concept CanUseAnyLocalSymbolOperation =
@@ -299,12 +290,12 @@ static_assert(!SymbolRepositoryFor<ContractRepository, ContractBinding>);
 static_assert(std::same_as<formalism::BuilderStorage<RepositoryTypesCheckout>::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
 
 template<typename Repository, typename T>
-concept CanUseUnsupportedRelation =
-    requires(Repository& repository, urd::data<Row<T>>& data) { repository.insert(data); }
-    || requires(const Repository& repository, urd::data<Row<T>>& data) { repository.find(data); }
-    || requires(const Repository& repository, RowIndex<T> index) { repository[index]; }
-    || requires(const Repository& repository, RowIndex<T> index) { repository.owner(index); }
-    || requires(const Repository& repository, urd::index<T> index) { repository.size(index); } || requires(Repository& repository) { repository.template get<T>(); };
+concept CanUseUnsupportedRelation = requires(Repository& repository, urd::data<Row<T>>& data) { repository.insert(data); }
+                                    || requires(const Repository& repository, urd::data<Row<T>>& data) { repository.find(data); }
+                                    || requires(const Repository& repository, RowIndex<T> index) { repository[index]; }
+                                    || requires(const Repository& repository, RowIndex<T> index) { repository.owner(index); }
+                                    || requires(const Repository& repository, urd::index<T> index) { repository.size(index); }
+                                    || requires(Repository& repository) { repository.template get<T>(); };
 static_assert(!CanUseUnsupportedRelation<ContractRelations, RepositoryTypesElement>);
 static_assert(!CanUseUnsupportedRelation<ContractConcurrentRelations, RepositoryTypesElement>);
 static_assert(!CanUseUnsupportedRelation<ContractRepository, RepositoryTypesElement>);
@@ -322,7 +313,6 @@ TEST(YggdrasilTests, CommonIndexedViewPreservesLookupHandleAndOwner)
     EXPECT_EQ(&view.data(), &published.data());
     EXPECT_EQ(std::get<1>(urd::detail::identity(view)), repository.layer());
 }
-
 
 template<typename Relations>
 static void expect_row_access_for_each_relation_type()
@@ -362,8 +352,7 @@ TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
     expect_row_access_for_each_relation_type<formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
     expect_row_access_for_each_relation_type<
         formalism::ConcurrentRelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
-    expect_row_access_for_each_relation_type<
-        formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
+    expect_row_access_for_each_relation_type<formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
     expect_row_access_for_each_relation_type<
         formalism::ConcurrentRelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
 }
@@ -549,8 +538,7 @@ static_assert(!RowViewConcept<BorrowedContractRowView, RepositoryTypesElement>);
 static_assert(!RowViewConcept<int, RepositoryTypesRelation>);
 static_assert(!HasPublishedRowIndex<BorrowedContractRowView>);
 static_assert(!HasPublishedRowIndex<PublishedContractRowView>);
-static_assert(std::same_as<decltype(std::declval<const PublishedContractRowView&>().data()),
-                           const RowIndex<RepositoryTypesRelation>&>);
+static_assert(std::same_as<decltype(std::declval<const PublishedContractRowView&>().data()), const RowIndex<RepositoryTypesRelation>&>);
 static_assert(std::same_as<decltype(std::declval<const BorrowedContractRowView&>().data()), const urd::data<ContractBinding>&>);
 static_assert(std::same_as<decltype(std::declval<const BorrowedContractRowView&>().data()), const urd::data<ContractBinding>&>);
 
@@ -933,7 +921,8 @@ static void check_relation_membership()
     EXPECT_TRUE(has(root, StoredRowView(root_view.data(), &grandchild)));
     EXPECT_FALSE(has(grandchild, StoredRowView(local_view.data(), &root)));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view, child_view, local_view }, [&](const auto& value) { return has(grandchild, value); }));
-    EXPECT_TRUE(std::ranges::all_of(std::array { root_view.data(), child_view.data(), local_view.data() }, [&](const auto& value) { return has(grandchild, value); }));
+    EXPECT_TRUE(
+        std::ranges::all_of(std::array { root_view.data(), child_view.data(), local_view.data() }, [&](const auto& value) { return has(grandchild, value); }));
     EXPECT_TRUE(std::ranges::all_of(std::span<const Handle> {}, [&](const auto& value) { return has(root, value); }));
     EXPECT_TRUE(std::ranges::all_of(std::span<const StoredRowView> {}, [&](const auto& value) { return has(root, value); }));
 

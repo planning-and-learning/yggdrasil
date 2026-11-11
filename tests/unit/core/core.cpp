@@ -17,10 +17,9 @@
 
 #include "yggdrasil/core/chrono.hpp"
 #include "yggdrasil/core/closed_interval.hpp"
+#include "yggdrasil/core/config.hpp"
 #include "yggdrasil/core/memory.hpp"
 #include "yggdrasil/io/project_path.hpp"
-
-#include "yggdrasil/core/config.hpp"
 
 #include <chrono>
 #include <gtest/gtest.h>

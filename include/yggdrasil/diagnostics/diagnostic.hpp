@@ -11,14 +11,14 @@
 #define YGG_DIAGNOSTICS_DIAGNOSTIC_HPP_
 
 #include <algorithm>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 

@@ -1,30 +1,30 @@
 #include "module.hpp"
-#include "yggdrasil/formalism/free_relations.hpp"
-#include "yggdrasil/formalism/repository.hpp"
-#include "yggdrasil/formalism/relation_builder.hpp"
-#include "yggdrasil/python/relations.hpp"
-#include "pyyggdrasil/module.hpp"
-#include <urd/python/sequences/sequence.hpp>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 
+#include "pyyggdrasil/module.hpp"
+#include "yggdrasil/formalism/free_relations.hpp"
+#include "yggdrasil/formalism/relation_builder.hpp"
 #include "yggdrasil/formalism/relation_view.hpp"
+#include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/python/bindings.hpp"
-#include <urd/python/owner.hpp>
+#include "yggdrasil/python/relations.hpp"
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <nanobind/stl/optional.h>
-#include <nanobind/stl/shared_ptr.h>
-#include <nanobind/operators.h>
-#include <nanobind/stl/pair.h>
-#include <nanobind/stl/vector.h>
 #include <initializer_list>
-#include <stdexcept>
-#include <type_traits>
+#include <memory>
+#include <nanobind/operators.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/pair.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/vector.h>
 #include <optional>
 #include <span>
+#include <stdexcept>
+#include <type_traits>
+#include <urd/python/owner.hpp>
+#include <urd/python/sequences/sequence.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <vector>
 
 namespace yggdrasil
@@ -178,7 +178,8 @@ void bind_formalism_module_definitions(nb::module_& m)
                             nb::arg("columns"))
                         .def(
                             "__init__",
-                            [](Relation* self, const urd::Store<urd::sequence<Column>>& labels) { new (self) Relation(std::span<const ygg::ColumnLayout>(untyped(labels))); },
+                            [](Relation* self, const urd::Store<urd::sequence<Column>>& labels)
+                            { new (self) Relation(std::span<const ygg::ColumnLayout>(untyped(labels))); },
                             nb::arg("labels"),
                             "Columns of these labels, each of type UINT32.");
     bind_relation_shape(relation);
@@ -219,12 +220,15 @@ void bind_formalism_module_definitions(nb::module_& m)
             [](urd::data<ygg::Columns>* self, const Layouts& columns) { new (self) urd::data<ygg::Columns>(std::span<const ygg::ColumnLayout>(columns)); },
             nb::arg("columns"));
     nb::class_<urd::data<RelationTag>>(m,
-                                        "RelationData",
-                                        "A relation record: its pool, its columns and the ids of its rows in that pool. "
-                                        "RelationRepository.insert sorts its rows and interns it.")
+                                       "RelationData",
+                                       "A relation record: its pool, its columns and the ids of its rows in that pool. "
+                                       "RelationRepository.insert sorts its rows and interns it.")
         .def(
             "__init__",
-            [](urd::data<RelationTag>* self, urd::index<ygg::Schema> pool, urd::index<ygg::Columns> columns, const std::vector<urd::index<ygg::Row<ygg::Schema>>>& rows)
+            [](urd::data<RelationTag>* self,
+               urd::index<ygg::Schema> pool,
+               urd::index<ygg::Columns> columns,
+               const std::vector<urd::index<ygg::Row<ygg::Schema>>>& rows)
             {
                 new (self) urd::data<RelationTag>();
                 self->pool = pool;
@@ -283,7 +287,10 @@ void bind_formalism_module_definitions(nb::module_& m)
                 return std::pair { view.index(), created };
             },
             nb::arg("columns"))
-        .def("insert", [](RelationRepository& repository, urd::data<RelationTag>& relation) { return repository.insert(relation); }, nb::arg("relation"))
+        .def(
+            "insert",
+            [](RelationRepository& repository, urd::data<RelationTag>& relation) { return repository.insert(relation); },
+            nb::arg("relation"))
         .def(
             "view",
             [](const RelationRepository& repository, const Relation& relation) { return repository.view(relation); },
@@ -304,7 +311,6 @@ void bind_formalism_module_definitions(nb::module_& m)
             { return repository.get_relation_builder<ygg::Schema>(std::span<const ygg::ColumnLayout>(columns)); },
             nb::arg("columns"),
             nb::keep_alive<0, 1>());
-
 }
 
 }  // namespace yggdrasil

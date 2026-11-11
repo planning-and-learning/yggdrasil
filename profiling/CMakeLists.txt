@@ -12,7 +12,7 @@ target_include_directories(
 target_include_directories(
     tree_vector_set
     SYSTEM PRIVATE
-        "${URD_NATIVE_PREFIX}/include"
+        "${URD_PREFIX}/include" "${URD_NATIVE_PREFIX}/include"
 )
 target_link_libraries(tree_vector_set PRIVATE benchmark::benchmark_main Threads::Threads)
 
@@ -26,6 +26,6 @@ target_include_directories(
 target_include_directories(
     formalism_repository
     SYSTEM PRIVATE
-        "${URD_NATIVE_PREFIX}/include"
+        "${URD_PREFIX}/include" "${URD_NATIVE_PREFIX}/include"
 )
 target_link_libraries(formalism_repository PRIVATE benchmark::benchmark_main TBB::tbb Threads::Threads)

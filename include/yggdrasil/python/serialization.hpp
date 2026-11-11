@@ -1,12 +1,10 @@
 #ifndef YGG_PYTHON_SERIALIZATION_HPP_
 #define YGG_PYTHON_SERIALIZATION_HPP_
 
-#include <boost/mp11.hpp>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 #include "yggdrasil/serialization/dictionaries.hpp"
 
 #include <boost/json.hpp>
+#include <boost/mp11.hpp>
 #include <cstdint>
 #include <fmt/format.h>
 #include <functional>
@@ -18,6 +16,8 @@
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 

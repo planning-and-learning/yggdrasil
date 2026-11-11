@@ -1,10 +1,6 @@
 #ifndef YGG_SERIALIZATION_DICTIONARIES_HPP_
 #define YGG_SERIALIZATION_DICTIONARIES_HPP_
 
-#include <urd/repr/maps/std_map.hpp>
-#include <urd/repr/records/records.hpp>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 #include "yggdrasil/serialization/conversion.hpp"
 #include "yggdrasil/serialization/fields.hpp"
 
@@ -20,6 +16,10 @@
 #include <typeinfo>
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/records/records.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -115,7 +115,9 @@ public:
         /// A variant read through its context (a std::variant of views): the alternative it holds.
         template<typename Variant>
         void variant(const Variant& value)
-        { std::visit([&](const auto& alternative) { field(detail::variant_field, alternative); }, value); }
+        {
+            std::visit([&](const auto& alternative) { field(detail::variant_field, alternative); }, value);
+        }
     };
 
 private:

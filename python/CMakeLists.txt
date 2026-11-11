@@ -35,19 +35,19 @@ target_include_directories(_pyyggdrasil PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${PROJECT_SOURCE_DIR}/include"
 )
-target_include_directories(_pyyggdrasil SYSTEM PRIVATE "${URD_NATIVE_PREFIX}/include")
+target_include_directories(_pyyggdrasil SYSTEM PRIVATE "${URD_PREFIX}/include" "${URD_NATIVE_PREFIX}/include")
 
 target_link_libraries(_pyyggdrasil PRIVATE TBB::tbb Boost::json fmt::fmt cista::cista)
 
 if(APPLE)
     set_target_properties(_pyyggdrasil PROPERTIES
         BUILD_RPATH "${URD_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-        INSTALL_RPATH "@loader_path/${CMAKE_INSTALL_LIBDIR};@loader_path/../pyurd/${CMAKE_INSTALL_LIBDIR}"
+        INSTALL_RPATH "@loader_path/${CMAKE_INSTALL_LIBDIR};@loader_path/../pyurd_native/${CMAKE_INSTALL_LIBDIR}"
     )
 elseif(UNIX)
     set_target_properties(_pyyggdrasil PROPERTIES
         BUILD_RPATH "${URD_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-        INSTALL_RPATH "$ORIGIN/${CMAKE_INSTALL_LIBDIR};$ORIGIN/../pyurd/${CMAKE_INSTALL_LIBDIR}"
+        INSTALL_RPATH "$ORIGIN/${CMAKE_INSTALL_LIBDIR};$ORIGIN/../pyurd_native/${CMAKE_INSTALL_LIBDIR}"
     )
 endif()
 
@@ -107,13 +107,13 @@ install(FILES
     COMPONENT pyyggdrasil
 )
 
-# The native dependencies are pyurd's: the wheel ships yggdrasil's own files only.
+# The native dependencies are pyurd-native's: the wheel ships yggdrasil's own files only.
 
 install(CODE
     "include(\"${brokkr_DIR}/brokkrFixRuntimePaths.cmake\")
          brokkr_fix_runtime_paths(LIB_DIR_GLOB \"pyyggdrasil/lib*\"
-             RPATH \"\$ORIGIN:\$ORIGIN/../../pyurd/${CMAKE_INSTALL_LIBDIR}\"
-             RPATHS \"@loader_path;@loader_path/../../pyurd/${CMAKE_INSTALL_LIBDIR}\")"
+             RPATH \"\$ORIGIN:\$ORIGIN/../../pyurd_native/${CMAKE_INSTALL_LIBDIR}\"
+             RPATHS \"@loader_path;@loader_path/../../pyurd_native/${CMAKE_INSTALL_LIBDIR}\")"
     COMPONENT pyyggdrasil
 )
 

@@ -1,6 +1,6 @@
 #include "module.hpp"
-#include "pyyggdrasil/module.hpp"
 
+#include "pyyggdrasil/module.hpp"
 #include "yggdrasil/diagnostics/diagnostic.hpp"
 #include "yggdrasil/diagnostics/errors.hpp"
 #include "yggdrasil/python/diagnostics.hpp"

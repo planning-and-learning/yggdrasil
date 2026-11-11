@@ -18,12 +18,12 @@
 #ifndef YGG_FORMALISM_ROW_DATA_HPP_
 #define YGG_FORMALISM_ROW_DATA_HPP_
 
-#include <urd/elements/flat.hpp>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
+#include <urd/elements/flat.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 
 namespace urd

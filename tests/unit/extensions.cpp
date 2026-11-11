@@ -15,14 +15,14 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "yggdrasil/core/config.hpp"
+#include "yggdrasil/execution/onetbb.hpp"
+
 #include <array>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <type_traits>
-#include "yggdrasil/core/config.hpp"
-#include "yggdrasil/execution/onetbb.hpp"
-
 #include <urd/elements/index.hpp>
 
 namespace ygg::tests

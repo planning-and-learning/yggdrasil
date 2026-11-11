@@ -7,22 +7,18 @@
  * (at your option) any later version.
  */
 
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/repr/values/dense_set.hpp>
-#include <urd/store.hpp>
-#include <urd/elements/flat.hpp>
-#include <boost/mp11.hpp>
+#include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
-#include "yggdrasil/formalism/repository.hpp"
-#include "symbol_concepts.hpp"
 
 #include "gtest/gtest.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <barrier>
+#include <boost/mp11.hpp>
 #include <concepts>
 #include <cstdint>
 #include <limits>
@@ -31,8 +27,12 @@
 #include <thread>
 #include <tuple>
 #include <type_traits>
-#include <utility>
 #include <urd/config.hpp>
+#include <urd/elements/flat.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/values/dense_set.hpp>
+#include <urd/store.hpp>
+#include <utility>
 
 namespace ygg::tests
 {
@@ -119,8 +119,10 @@ template<typename ObjectTag>
 using Binding = Row<ConcurrentRelation<ObjectTag>>;
 
 /// Four object columns: the type of make_binding's rows, as declared pools of raw keys take them.
-constexpr auto object_columns = std::array { ygg::type_id<urd::index<formalism::Object<void>>>, ygg::type_id<urd::index<formalism::Object<void>>>,
-                                             ygg::type_id<urd::index<formalism::Object<void>>>, ygg::type_id<urd::index<formalism::Object<void>>> };
+constexpr auto object_columns = std::array { ygg::type_id<urd::index<formalism::Object<void>>>,
+                                             ygg::type_id<urd::index<formalism::Object<void>>>,
+                                             ygg::type_id<urd::index<formalism::Object<void>>>,
+                                             ygg::type_id<urd::index<formalism::Object<void>>> };
 
 template<typename ObjectTag>
 urd::data<Binding<ObjectTag>> make_binding(urd::index<ConcurrentRelation<ObjectTag>> relation, uint_t key)
@@ -448,8 +450,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocks
             {
                 while (!stop.load(std::memory_order_acquire))
                 {
-                    if (first_data[0].value != 0 || first_data[1].value != 997 || first_data[2].value != 1994
-                        || first_data[3].value != 2991)
+                    if (first_data[0].value != 0 || first_data[1].value != 997 || first_data[2].value != 1994 || first_data[3].value != 2991)
                         errors.fetch_add(1, std::memory_order_relaxed);
                 }
             });

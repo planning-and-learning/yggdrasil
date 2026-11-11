@@ -10,7 +10,6 @@
 #ifndef YGG_FORMALISM_MEMBERSHIP_HPP_
 #define YGG_FORMALISM_MEMBERSHIP_HPP_
 
-
 #include <urd/elements/view.hpp>
 
 namespace ygg::formalism

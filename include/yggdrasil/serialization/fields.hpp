@@ -2,11 +2,11 @@
 #define YGG_SERIALIZATION_FIELDS_HPP_
 
 #include <functional>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 

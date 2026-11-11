@@ -43,9 +43,9 @@ jobs:
         env:
           PIP_NO_CACHE_DIR: 1
 
-      # pyurd (urd and the native dependencies) comes from the index, as a build requirement.
+      # pyurd (urd, and with it pyurd-native, the native dependencies) comes from the index, as a build requirement.
       - name: Install build requirements
-        run: python -m pip install --no-cache-dir "nanobind-backend>=1.0" "pybrokkr>=0.1,<0.2" "pyurd>=0.1,<0.2"
+        run: python -m pip install --no-cache-dir "nanobind-backend>=1.0" "pybrokkr>=0.1.1,<0.2" "pyurd>=0.1.0,<0.2"
 
       - name: Build and install
         run: python -m pip install --no-cache-dir --verbose .[test]

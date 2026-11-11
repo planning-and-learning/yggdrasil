@@ -2,15 +2,15 @@
 requires = [
     "scikit-build-core>=1.0.3,<2",
     "nanobind-backend>=1.0",
-    "pybrokkr>=0.1,<0.2",
-    "pyurd>=0.1,<0.2",
+    "pybrokkr>=0.1.1,<0.2",
+    "pyurd>=0.1.0,<0.2",
 ]
 build-backend = "pyyggdrasil_build_backend"
 backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.6.1"
+version = "0.7.0"
 description = "yggdrasil: data structures and a database engine for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -21,7 +21,7 @@ authors = [
 ]
 dependencies = [
     "nanobind-backend>=1.0",
-    "pyurd>=0.1,<0.2",
+    "pyurd>=0.1.0,<0.2",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +29,7 @@ test = [
     "pytest",
     # The build backend wraps pybrokkr; installed here so type checkers
     # resolve it (it is otherwise only a build-system requirement).
-    "pybrokkr>=0.1,<0.2",
+    "pybrokkr>=0.1.1,<0.2",
 ]
 
 [tool.pytest.ini_options]
@@ -77,7 +77,7 @@ test-requires = ["cmake>=3.21"]
 test-command = "python {project}/python/tests/test_import.py"
 
 [tool.cibuildwheel.linux]
-repair-wheel-command = "python -m pyurd.repair --providers pyurd --dest-dir {dest_dir} {wheel}"
+repair-wheel-command = "python -m pyurd.repair --providers pyurd_native --dest-dir {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
-repair-wheel-command = "python -m pyurd.repair --providers pyurd --require-archs {delocate_archs} --dest-dir {dest_dir} {wheel}"
+repair-wheel-command = "python -m pyurd.repair --providers pyurd_native --require-archs {delocate_archs} --dest-dir {dest_dir} {wheel}"

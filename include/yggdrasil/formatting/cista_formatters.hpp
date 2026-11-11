@@ -21,11 +21,11 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
 
-#include <urd/elements/flat.hpp>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <string_view>
 #include <type_traits>
+#include <urd/elements/flat.hpp>
 #include <variant>
 
 #if YGG_ENABLE_FMT_FORMATTERS
@@ -88,7 +88,9 @@ struct formatter<std::variant<Ts...>, char>
 
     template<typename FormatContext>
     auto format(const std::variant<Ts...>& value, FormatContext& ctx) const
-    { return std::visit([&](const auto& arg) { return fmt::format_to(ctx.out(), "{}", arg); }, value); }
+    {
+        return std::visit([&](const auto& arg) { return fmt::format_to(ctx.out(), "{}", arg); }, value);
+    }
 };
 
 }  // namespace fmt

@@ -19,8 +19,8 @@
 #define YGG_SEMANTICS_CANONICALIZATION_HPP_
 
 #include <algorithm>
-#include <urd/elements/flat.hpp>
 #include <ranges>
+#include <urd/elements/flat.hpp>
 
 namespace ygg
 {

@@ -12,10 +12,10 @@
 
 #include "yggdrasil/core/family.hpp"
 
-#include <urd/repr/slots/slots.hpp>
-#include <urd/store.hpp>
 #include <boost/mp11.hpp>
 #include <urd/elements/flat.hpp>
+#include <urd/repr/slots/slots.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::formalism
 {

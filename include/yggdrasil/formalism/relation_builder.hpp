@@ -11,12 +11,6 @@
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/values.hpp"
-#include <urd/elements/flat.hpp>
-#include <urd/elements/view.hpp>
-#include <urd/repr/containers/schema_rows.hpp>
-#include <urd/repr/pools/pools.hpp>
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -25,6 +19,12 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <urd/elements/flat.hpp>
+#include <urd/elements/view.hpp>
+#include <urd/repr/containers/schema_rows.hpp>
+#include <urd/repr/pools/pools.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <variant>
 
 namespace ygg
@@ -90,11 +90,7 @@ public:
     explicit builder(std::span<const ygg::ColumnLayout> columns) : builder(widths_of(validated(columns)), columns) {}
     /// A builder with these columns, whose rows are stored in `widths` (the columns' widths in the layer: a slot's key,
     /// see Repository::get_relation_builder).
-    builder(const urd::column_widths& widths, std::span<const ygg::ColumnLayout> columns) :
-        m_columns(validated(columns)),
-        m_rows(widths)
-    {
-    }
+    builder(const urd::column_widths& widths, std::span<const ygg::ColumnLayout> columns) : m_columns(validated(columns)), m_rows(widths) {}
     builder(const builder&) = delete;
     builder& operator=(const builder&) = delete;
     builder(builder&&) noexcept = default;
@@ -112,8 +108,7 @@ public:
     /// Its rows, by position (a handle's value).
     [[nodiscard]] const Rows& storage() const noexcept { return m_rows; }
     /// The stored row at key.row (a position), as the views of its rows read it.
-    [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept
-    { return m_rows.at(typename Rows::handle_type(key.row.value)); }
+    [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept { return m_rows.at(typename Rows::handle_type(key.row.value)); }
     /// The view of the row at key.row (a position) through this builder.
     [[nodiscard]] ygg::RowView<F, builder> view(ygg::RowIndex<F> key) const noexcept { return { key, this }; }
     /// Its number as the context of its rows' views (urd::layer), and its relation_identity: drawn at construction,

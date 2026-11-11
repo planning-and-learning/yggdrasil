@@ -7,12 +7,12 @@
 #define YGG_FORMALISM_RELATION_VIEW_HPP_
 
 #include "yggdrasil/formalism/relation_builder.hpp"
-#include <urd/elements/view.hpp>
 
 #include <cassert>
 #include <cstdint>
 #include <ranges>
 #include <span>
+#include <urd/elements/view.hpp>
 #include <utility>
 
 /**

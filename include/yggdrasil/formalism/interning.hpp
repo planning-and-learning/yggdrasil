@@ -6,9 +6,8 @@
 #ifndef YGG_FORMALISM_INTERNING_HPP_
 #define YGG_FORMALISM_INTERNING_HPP_
 
-#include <urd/elements/flat.hpp>
-
 #include <concepts>
+#include <urd/elements/flat.hpp>
 #include <utility>
 
 namespace ygg::formalism

@@ -19,14 +19,14 @@
 #define YGG_FORMATTING_FORMATTER_HPP_
 
 #include "yggdrasil/core/config.hpp"
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 
 #include <fmt/format.h>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <string>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <variant>
 #include <vector>
 

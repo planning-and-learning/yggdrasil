@@ -1,14 +1,13 @@
 #include "yggdrasil/formalism/row_key.hpp"
 
-
 #include <cstddef>
 #include <gtest/gtest.h>
 #include <gtl/phmap.hpp>
 #include <ranges>
 #include <span>
 #include <urd/repr/maps/unordered_flat_map.hpp>
-#include <urd/repr/values/unordered_flat_set.hpp>
 #include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/values/unordered_flat_set.hpp>
 #include <urd/store.hpp>
 #include <utility>
 #include <vector>

@@ -18,6 +18,7 @@
 #ifndef YGG_FORMALISM_SYMBOL_REPOSITORY_HPP_
 #define YGG_FORMALISM_SYMBOL_REPOSITORY_HPP_
 
+#include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 
 #include <boost/mp11.hpp>
@@ -30,7 +31,6 @@
 #include <urd/repr/records/records.hpp>
 #include <urd/repr/wrappers/layered_pool.hpp>
 #include <urd/store.hpp>
-#include "yggdrasil/core/family.hpp"
 #include <utility>
 
 namespace ygg::formalism
@@ -181,8 +181,7 @@ public:
     ConcurrentSymbolRepository() : Base(nullptr) {}
     explicit ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent) : Base(parent) {}
 
-    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository URD_LIFETIMEBOUND) noexcept
-    { return repository; }
+    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 }  // namespace ygg::formalism

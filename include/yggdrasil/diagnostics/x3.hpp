@@ -11,8 +11,6 @@
 #define YGG_DIAGNOSTICS_X3_HPP_
 
 #include "yggdrasil/diagnostics/diagnostic.hpp"
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/utility/error_reporting.hpp>
@@ -21,6 +19,8 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 
 namespace ygg::diagnostics
 {
@@ -182,8 +182,8 @@ constexpr auto keyword(const char* text)
 
 /// The x3 context of rules parsed with comment_skipper() that report errors through Handler.
 template<typename Handler>
-using ParserContext =
-    boost::spirit::x3::context<boost::spirit::x3::error_handler_tag, std::reference_wrapper<Handler>, boost::spirit::x3::phrase_parse_context<decltype(comment_skipper())>::type>;
+using ParserContext = boost::spirit::x3::
+    context<boost::spirit::x3::error_handler_tag, std::reference_wrapper<Handler>, boost::spirit::x3::phrase_parse_context<decltype(comment_skipper())>::type>;
 
 /// Parses all of [first, last) with comment_skipper(); a recorded error or trailing input fails the parse.
 template<typename It, typename Parser, typename Ast>

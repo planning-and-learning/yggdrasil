@@ -18,6 +18,9 @@
 #include "type_casters.hpp"
 
 #include "yggdrasil/core/config.hpp"
+
+#include <nanobind/nanobind.h>
+#include <span>
 #include <urd/python/flat.hpp>
 #include <urd/python/maps/flat_map.hpp>
 #include <urd/python/maps/index_map.hpp>
@@ -34,9 +37,6 @@
 #include <urd/python/values/sparse_set.hpp>
 #include <urd/python/values/unordered_flat_set.hpp>
 #include <yggdrasil/python/type_casters/closed_interval.hpp>
-
-#include <nanobind/nanobind.h>
-#include <span>
 
 void bind_type_casters_test(nanobind::module_& m)
 {

@@ -18,7 +18,6 @@
 #ifndef YGG_CORE_CLOSED_INTERVAL_HPP_
 #define YGG_CORE_CLOSED_INTERVAL_HPP_
 
-
 #include <boost/numeric/interval.hpp>
 #include <ostream>
 #include <tuple>

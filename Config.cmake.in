@@ -3,10 +3,11 @@
 # Package configuration for the yggdrasil library bundled in the pyyggdrasil
 # wheel. Installed to <pyyggdrasil>/lib/cmake/yggdrasil/.
 #
-# Its dependencies come from pyurd: urd and the native libraries pyurd ships.
+# Its dependencies come from pyurd (urd) and pyurd-native (the native libraries).
 # pyurd's prefix must be on CMAKE_PREFIX_PATH (a consumer's build backend lists
 # pyurd among its providers; a CMake build calls
-# brokkr_find_python_native_prefix(pyurd URD_NATIVE_PREFIX)).
+# brokkr_find_python_native_prefix(pyurd URD_PREFIX)); urd's package then names
+# pyurd-native's prefix, URD_NATIVE_PREFIX.
 
 set_and_check(_yggdrasil_prefix "@PACKAGE_YGGDRASIL_PACKAGE_ROOT@")
 
@@ -18,14 +19,13 @@ endif()
 
 include(CMakeFindDependencyMacro)
 
-# urd, with cista, gtl, fmt and Boost's containers. pyurd builds cista without
-# CISTA_FMT, so its target defines only CISTA_FNV1A, cista's default hash.
+# urd, with cista, gtl, fmt and Boost's containers. pyurd-native builds cista
+# without CISTA_FMT, so its target defines only CISTA_FNV1A, cista's default hash.
 find_dependency(urd CONFIG)
-# urd_DIR is <pyurd>/lib/cmake/urd: the other dependencies are pyurd's too, and
-# ABI-matched to its shared libraries, so they are resolved from there only.
-cmake_path(GET urd_DIR PARENT_PATH _yggdrasil_urd_prefix)
-cmake_path(GET _yggdrasil_urd_prefix PARENT_PATH _yggdrasil_urd_prefix)
-cmake_path(GET _yggdrasil_urd_prefix PARENT_PATH _yggdrasil_urd_prefix)
+# urd's package sets URD_NATIVE_PREFIX, the prefix of its dependencies: the other
+# dependencies are there too, and ABI-matched to its shared libraries, so they are
+# resolved from there only.
+set(_yggdrasil_urd_prefix "${URD_NATIVE_PREFIX}")
 
 # boost_locale-config.cmake resolves ICU through FindICU, a find-module: it never
 # sees the PATHS/NO_DEFAULT_PATH below and would search default paths, silently
@@ -54,7 +54,6 @@ endif()
 
 
 set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")
-set(URD_NATIVE_PREFIX "${_yggdrasil_urd_prefix}")
 
 unset(_yggdrasil_prefix)
 unset(_yggdrasil_urd_prefix)

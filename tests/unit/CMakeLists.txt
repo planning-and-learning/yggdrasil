@@ -15,7 +15,7 @@ function(add_yggdrasil_gtest test_name source_file)
         "${PROJECT_SOURCE_DIR}/include"
     )
     target_include_directories(${test_name} SYSTEM PRIVATE
-        "${URD_NATIVE_PREFIX}/include"
+        "${URD_PREFIX}/include" "${URD_NATIVE_PREFIX}/include"
     )
     target_compile_definitions(${test_name} PRIVATE ROOT_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${test_name} PRIVATE GTest::gtest Boost::json fmt::fmt TBB::tbb)
@@ -59,7 +59,7 @@ target_include_directories(serialization_dictionaries_library PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
 target_include_directories(serialization_dictionaries_library SYSTEM PRIVATE
-    "${URD_NATIVE_PREFIX}/include"
+    "${URD_PREFIX}/include" "${URD_NATIVE_PREFIX}/include"
 )
 target_link_libraries(serialization_dictionaries_library PRIVATE Boost::json fmt::fmt)
 include(GenerateExportHeader)

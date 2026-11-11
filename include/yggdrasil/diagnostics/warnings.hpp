@@ -6,10 +6,10 @@
 #define YGG_DIAGNOSTICS_WARNINGS_HPP_
 
 #include "yggdrasil/diagnostics/diagnostic.hpp"
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 
 #include <span>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 

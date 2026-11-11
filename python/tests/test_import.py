@@ -9,8 +9,9 @@ from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-
 import pyurd
+import pyurd_native
+
 import pyyggdrasil
 from pyyggdrasil import execution
 
@@ -33,8 +34,8 @@ def test_native_prefix_layout() -> None:
     assert pyyggdrasil.cmake_dir().name == "yggdrasil"
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfig.cmake").is_file()
     assert (pyyggdrasil.cmake_dir() / "yggdrasilConfigVersion.cmake").is_file()
-    # The native dependencies are pyurd's.
-    urd_prefix = pyurd.native_prefix()
+    # The native dependencies are pyurd-native's.
+    urd_prefix = pyurd_native.native_prefix()
     assert not (native_prefix / "include" / "boost").exists()
     assert (urd_prefix / "include" / "boost" / "hash2" / "sha2.hpp").is_file()
     assert (urd_prefix / "include" / "toml++" / "toml.hpp").is_file()
@@ -200,6 +201,7 @@ def test_downstream_consumer_can_compile_ygg_common(tmp_path: Path) -> None:
             "-std=c++20",
             f"-I{pyyggdrasil.include_dir()}",
             f"-I{pyurd.include_dir()}",
+            f"-I{pyurd_native.include_dir()}",
             "-fsyntax-only",
             str(source),
         ],
@@ -240,7 +242,7 @@ def test_downstream_cmake_packages_configure(tmp_path: Path) -> None:
             str(source_dir),
             "-B",
             str(tmp_path / "build"),
-            f"-DCMAKE_PREFIX_PATH={pyyggdrasil.cmake_prefix()};{pyurd.cmake_prefix()}",
+            f"-DCMAKE_PREFIX_PATH={pyyggdrasil.cmake_prefix()};{pyurd.cmake_prefix()};{pyurd_native.cmake_prefix()}",
             f"-DYGGDRASIL_REQUIRED_VERSION={version('pyyggdrasil')}",
         ],
         check=True,

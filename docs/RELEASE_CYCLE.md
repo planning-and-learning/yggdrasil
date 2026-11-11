@@ -1,13 +1,22 @@
 # Release cycle
 
-The four libraries are released to PyPI as one chain, upstream first:
+The libraries are released to PyPI as one chain, upstream first:
 
 | Order | Repository | PyPI package | Depends on |
 | --- | --- | --- | --- |
-| 1 | yggdrasil | `pyyggdrasil` | |
-| 2 | loki | `pypddl` | `pyyggdrasil` |
-| 3 | tyr | `pytyr` | `pyyggdrasil`, `pypddl` |
-| 4 | runir | `pyrunir` | `pyyggdrasil`, `pypddl`, `pytyr` |
+| 1 | brokkr | `pybrokkr` | |
+| 2 | urd | `pyurd-native` | `pybrokkr` (to build) |
+| 3 | urd | `pyurd` | `pyurd-native` (exactly), `pybrokkr` (to build) |
+| 4 | yggdrasil | `pyyggdrasil` | `pyurd` |
+| 5 | loki | `pypddl` | `pyurd`, `pyyggdrasil` |
+| 6 | tyr | `pytyr` | `pyurd`, `pyyggdrasil`, `pypddl` |
+| 7 | runir | `pyrunir` | `pyurd`, `pyyggdrasil`, `pypddl`, `pytyr` |
+
+`pybrokkr` is the build tooling the others share, pure Python. urd releases two packages from one repository:
+`pyurd-native`, the native dependencies of all the libraries as platform wheels (tag `native-v<version>`, workflow
+`release-native`, version in `python/native/pyproject.toml`), released only when a pinned dependency or its build
+changes; and `pyurd`, urd's headers and CMake package as one wheel for every platform (tag `v<version>`), which pins
+`pyurd-native` exactly, so the libraries below pin `pyurd` only.
 
 Downstream wheels compile against the headers and link against the shared libraries of
 the upstream wheels they were built with. A release must therefore keep the API and ABI

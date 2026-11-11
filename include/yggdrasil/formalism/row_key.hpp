@@ -18,7 +18,6 @@
 #ifndef YGG_FORMALISM_ROW_KEY_HPP_
 #define YGG_FORMALISM_ROW_KEY_HPP_
 
-
 #include "yggdrasil/core/config.hpp"
 
 #include <urd/elements/equal_to.hpp>

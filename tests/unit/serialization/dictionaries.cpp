@@ -1,10 +1,10 @@
 #include "dictionaries_library.hpp"
-#include <urd/repr/sequences/sequence.hpp>
-#include <urd/store.hpp>
 
 #include <gtest/gtest.h>
 #include <optional>
 #include <tuple>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <vector>
 
 namespace ygg::tests

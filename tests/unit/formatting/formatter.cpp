@@ -18,7 +18,6 @@
 #include "yggdrasil/formatting/formatter.hpp"
 
 #include "yggdrasil/formatting/cista_formatters.hpp"
-#include <urd/format.hpp>
 
 #include <array>
 #include <cstdint>
@@ -28,10 +27,11 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <urd/bits.hpp>
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
 #include <urd/elements/less.hpp>
-#include <urd/bits.hpp>
+#include <urd/format.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include <variant>
