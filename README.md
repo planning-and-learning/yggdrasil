@@ -16,7 +16,8 @@ Each binary release has a matching complete corresponding-source archive on the
 containing Yggdrasil and its exact native dependency sources.
 
 The formalism includes free relations (arbitrary-arity tuple sets keyed by their column types); the relational
-operations and queries over them live in tyr (`tyr/datalog/lifted/database`, see tyr's `docs/database.md`).
+operations and queries over them live in tyr (`tyr/datalog/lifted/database`, see
+[tyr's documentation](https://planning-and-learning.github.io/tyr/database.html)).
 
 ## Python Integration
 
