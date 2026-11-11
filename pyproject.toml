@@ -3,14 +3,14 @@ requires = [
     "scikit-build-core>=1.0.3,<2",
     "nanobind-backend>=1.0",
     "pybrokkr>=0.1.2,<0.2",
-    "pyurd>=0.1.0,<0.2",
+    "pyurd>=0.1.1,<0.2",
 ]
 build-backend = "pyyggdrasil_build_backend"
 backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.7.1"
+version = "0.7.2"
 description = "yggdrasil: data structures and a database engine for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -21,7 +21,7 @@ authors = [
 ]
 dependencies = [
     "nanobind-backend>=1.0",
-    "pyurd>=0.1.0,<0.2",
+    "pyurd>=0.1.1,<0.2",
 ]
 
 [project.optional-dependencies]
@@ -77,7 +77,7 @@ test-requires = ["pytest", "cmake>=3.21"]
 test-command = "python -m pytest {project}/python/tests/test_import.py"
 # pyurd in the build environment: the repair command below is its (pyurd.repair). The index may still be publishing a
 # new pyurd, so the install is retried.
-before-build = "n=0; until python -m pip install --no-cache-dir 'pyurd>=0.1.0,<0.2'; do n=$((n+1)); [ $n -ge 30 ] && exit 1; echo 'pyurd not on the index yet; retrying in 60s'; sleep 60; done"
+before-build = "n=0; until python -m pip install --no-cache-dir 'pyurd>=0.1.1,<0.2'; do n=$((n+1)); [ $n -ge 30 ] && exit 1; echo 'pyurd not on the index yet; retrying in 60s'; sleep 60; done"
 
 [tool.cibuildwheel.linux]
 repair-wheel-command = "python -m pyurd.repair --providers pyurd_native --dest-dir {dest_dir} {wheel}"
