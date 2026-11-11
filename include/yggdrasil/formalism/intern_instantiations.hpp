@@ -18,11 +18,12 @@
 #ifndef YGG_FORMALISM_INTERN_INSTANTIATIONS_HPP_
 #define YGG_FORMALISM_INTERN_INSTANTIATIONS_HPP_
 
-// Explicit instantiations of intern for every symbol type of a symbol repository, from its type list (docs/
-// TEMPLATE_RULES.md, rules 7 and 9): a library instantiates them (YGG_FORMALISM_INTERNS(, Count, ThreadSafe, Types)),
-// and the TUs that intern every type declare them (YGG_FORMALISM_INTERNS(extern, ...)) through the library's opt-in
-// detail/<name>_instantiations.hpp, so they do not instantiate the interning chain themselves. Only the list and its
-// types' declarations are needed: no repository or store class is instantiated.
+// Explicit instantiations of intern for every symbol type of a symbol repository, from its type list (rules 7 and 9
+// of the template rules, https://planning-and-learning.github.io/brokkr/template_rules.html): a library instantiates
+// them (YGG_FORMALISM_INTERNS(, Count, ThreadSafe, Types)), and the TUs that intern every type declare them
+// (YGG_FORMALISM_INTERNS(extern, ...)) through the library's opt-in detail/<name>_instantiations.hpp, so they do not
+// instantiate the interning chain themselves. Only the list and its types' declarations are needed: no repository or
+// store class is instantiated.
 
 #include "yggdrasil/formalism/symbol_repository.hpp"
 
