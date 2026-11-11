@@ -40,11 +40,11 @@ jobs:
           path: dist/*.tar.gz
 
   build_wheels_linux:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        architecture: ["x86_64"]
+        architecture: ["x86_64", "aarch64"]
         python-version: ["cp311"]
 
     steps:
@@ -78,10 +78,11 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_macos:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.architecture == 'x86_64' && 'macos-15-intel' || 'macos-latest' }}
     strategy:
       fail-fast: false
       matrix:
+        architecture: ["arm64", "x86_64"]
         python-version: ["cp311"]
 
     steps:
@@ -101,16 +102,16 @@ jobs:
       - name: Build macOS wheels
         run: cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2"
+          CIBW_ENVIRONMENT: "YGGDRASIL_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2 MACOSX_DEPLOYMENT_TARGET=11.0"
           CIBW_PLATFORM: macos
           CIBW_BUILD: "${{ matrix.python-version }}-*"
-          CIBW_ARCHS: arm64
+          CIBW_ARCHS: "${{ matrix.architecture }}"
           CIBW_BUILD_VERBOSITY: "1"
 
       - name: Upload macOS wheels artifact
         uses: actions/upload-artifact@v5
         with:
-          name: wheels-macos-${{ matrix.python-version }}-arm64
+          name: wheels-macos-${{ matrix.python-version }}-${{ matrix.architecture }}
           path: wheelhouse/*.whl
 
   validate_release:
@@ -137,4 +138,4 @@ jobs:
       - name: Validate release assets
         run: |
           test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
-          test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 2
+          test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 4

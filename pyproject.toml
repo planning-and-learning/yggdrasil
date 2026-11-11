@@ -10,7 +10,7 @@ backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.7.0"
+version = "0.7.1"
 description = "yggdrasil: data structures and a database engine for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
