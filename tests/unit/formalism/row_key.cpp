@@ -28,9 +28,9 @@ struct StoredRow
 /// A row whose first arity values spell a stored row, like a rule row that extends an action row.
 struct PrefixRow
 {
-    int relation;
+    int relation = 0;
     urd::Store<urd::sequence<int>> row;
-    size_t arity;
+    size_t arity = 0;
 
     [[nodiscard]] auto get_key() const noexcept
     { return std::make_pair(relation, std::views::take(row, static_cast<std::ranges::range_difference_t<decltype(row)>>(arity))); }

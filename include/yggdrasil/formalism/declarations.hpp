@@ -93,7 +93,7 @@ RowsView<F, Ids, C> rows_view(urd::index<F> relation, const Ids& ids, const C& c
 /// one process-wide counter, next_layer) and, for an interned relation, its index (none for a builder).
 struct RelationIdentity
 {
-    std::size_t context;
+    std::size_t context = 0;
     std::uint32_t relation = urd::index<void>::none_value;
 
     friend bool operator==(const RelationIdentity&, const RelationIdentity&) = default;

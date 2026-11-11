@@ -100,7 +100,9 @@ public:
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const noexcept { return { m_columns.values.data(), m_columns.values.size() }; }
     /// The widths its rows are stored in.
     [[nodiscard]] const urd::column_widths& widths() const noexcept { return m_rows.column_widths(); }
+    // NOLINTNEXTLINE(bugprone-exception-escape): reads the pool's count; the empty storage an unwritten pool reads has no columns, so nothing is allocated
     [[nodiscard]] size_t size() const noexcept { return m_rows.size(); }
+    // NOLINTNEXTLINE(bugprone-exception-escape): as size()
     [[nodiscard]] bool empty() const noexcept { return m_rows.empty(); }
     [[nodiscard]] size_t memory_usage() const noexcept { return urd::memory_usage(*this); }
     /// The members it owns memory through (urd::memory_of).
@@ -108,6 +110,7 @@ public:
     /// Its rows, by position (a handle's value).
     [[nodiscard]] const Rows& storage() const noexcept { return m_rows; }
     /// The stored row at key.row (a position), as the views of its rows read it.
+    // NOLINTNEXTLINE(bugprone-exception-escape): reads a stored row in place (key.row below size()); nothing is allocated or checked by throwing
     [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept { return m_rows.at(typename Rows::handle_type(key.row.value)); }
     /// The view of the row at key.row (a position) through this builder.
     [[nodiscard]] ygg::RowView<F, builder> view(ygg::RowIndex<F> key) const noexcept { return { key, this }; }
@@ -143,6 +146,7 @@ public:
             throw std::out_of_range("Relation: row index out of range.");
         m_rows.erase(typename Rows::handle_type(static_cast<ygg::uint_t>(index)));
     }
+    // NOLINTNEXTLINE(bugprone-exception-escape): clearing allocates nothing: an empty pool is left as it is, one with rows has the storage it clears
     void clear() noexcept { m_rows.clear(); }
     /// Relabeled columns of the same types (validated).
     void rename(std::span<const ygg::ColumnLayout> columns)

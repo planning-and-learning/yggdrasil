@@ -154,7 +154,7 @@ void benchmark_read(benchmark::State& state)
     for (auto _ : state)
     {
         const auto offset = static_cast<size_t>((operation++ * 11400714819323198485ULL) & (kReadCorpusPerThread - 1));
-        tree_set<Set>()->read(handles<Set>()[first + offset], output);
+        tree_set<Set>()->copy(handles<Set>()[first + offset], output);
         benchmark::DoNotOptimize(output);
         benchmark::ClobberMemory();
     }
@@ -179,7 +179,7 @@ void benchmark_mixed(benchmark::State& state)
         else
         {
             const auto offset = (operation * 11400714819323198485ULL + static_cast<size_t>(state.thread_index())) & (kMixedPrefill - 1);
-            tree_set<Set>()->read(handles<Set>()[offset], output);
+            tree_set<Set>()->copy(handles<Set>()[offset], output);
             benchmark::DoNotOptimize(output);
             benchmark::ClobberMemory();
         }

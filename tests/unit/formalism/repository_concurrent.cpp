@@ -38,13 +38,16 @@ namespace ygg::tests
 {
 struct ConcurrentElement;
 struct ConcurrentSerializedElement;
+struct ConcurrentObjectTag;
+struct ConcurrentPackedObjectTag;
+namespace
+{
 template<typename ObjectTag>
 struct ConcurrentRelation
 {
     using object_tag = ObjectTag;
 };
-struct ConcurrentObjectTag;
-struct ConcurrentPackedObjectTag;
+}
 }
 
 namespace urd

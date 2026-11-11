@@ -186,7 +186,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     relation.def("clear", &Relation::clear)
         .def(
             "insert",
-            [](Relation& relation, nb::typed<nb::sequence, nb::object> row)
+            [](Relation& relation, const nb::typed<nb::sequence, nb::object>& row)
             {
                 if (nb::len(row) != relation.columns().size())
                     throw std::invalid_argument("Relation: row arity does not match schema.");

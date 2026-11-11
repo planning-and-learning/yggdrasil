@@ -44,18 +44,21 @@ using InternStore = SymbolStore<InternType<Types, I>, ThreadSafe>;
 }  // namespace ygg::formalism::detail
 
 /// The list of YGG_FORMALISM_INTERN_AT's arguments (PREFIX, ThreadSafe, (Types)).
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): it expands to a list of types inside a declaration, which no function gives
 #define YGG_FORMALISM_INTERN_TYPES(ARGS) BOOST_PP_REMOVE_PARENS(BOOST_PP_TUPLE_ELEM(3, 2, ARGS))
 /// The explicit instantiation (PREFIX extern: its declaration) of intern for the I-th type of the list.
-#define YGG_FORMALISM_INTERN_AT(z, I, ARGS)                                                                                                 \
-    BOOST_PP_TUPLE_ELEM(3, 0, ARGS)                                                                                                         \
-    template std::pair<urd::index<::ygg::formalism::detail::InternType<YGG_FORMALISM_INTERN_TYPES(ARGS), I>>, bool> ygg::formalism::intern( \
-        ::ygg::formalism::detail::InternStore<YGG_FORMALISM_INTERN_TYPES(ARGS), BOOST_PP_TUPLE_ELEM(3, 1, ARGS), I>&,                       \
-        urd::data<::ygg::formalism::detail::InternType<YGG_FORMALISM_INTERN_TYPES(ARGS), I>>&);
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): it expands to an explicit instantiation, a declaration, which no function gives
+#define YGG_FORMALISM_INTERN_AT(z, I, ARGS)                                                                                                   \
+    BOOST_PP_TUPLE_ELEM(3, 0, ARGS)                                                                                                           \
+    template std::pair<urd::index<::ygg::formalism::detail::InternType<YGG_FORMALISM_INTERN_TYPES(ARGS), (I)>>, bool> ygg::formalism::intern( \
+        ::ygg::formalism::detail::InternStore<YGG_FORMALISM_INTERN_TYPES(ARGS), BOOST_PP_TUPLE_ELEM(3, 1, ARGS), (I)>&,                       \
+        urd::data<::ygg::formalism::detail::InternType<YGG_FORMALISM_INTERN_TYPES(ARGS), (I)>>&);
 
 /// Explicit instantiations (PREFIX extern: declarations) of intern for each of the Count symbol types of the list given
 /// last (a repository's SymbolTypes, or several lists' boost::mp11::mp_unique<boost::mp11::mp_append<...>>: a
 /// specialization is explicitly instantiated once), interned in stores ThreadSafe or not (the symbol repository's
 /// thread_safe). Count is checked against the list.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): it expands to explicit instantiations, declarations, which no function gives
 #define YGG_FORMALISM_INTERNS(PREFIX, Count, ThreadSafe, ...)                                                                                         \
     static_assert(boost::mp11::mp_size<__VA_ARGS__>::value == (Count), "YGG_FORMALISM_INTERNS: Count must be the number of the list's symbol types"); \
     BOOST_PP_REPEAT(Count, YGG_FORMALISM_INTERN_AT, (PREFIX, ThreadSafe, (__VA_ARGS__)))

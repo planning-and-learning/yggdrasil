@@ -222,7 +222,7 @@ public:
     [[nodiscard]] urd::column_widths widths(Types&& types) const
     {
         auto result = urd::column_widths();
-        for (const TypeId type : types)
+        for (const TypeId type : std::forward<Types>(types))
             result.push_back(column_bits(type, object_bits()));
         return result;
     }

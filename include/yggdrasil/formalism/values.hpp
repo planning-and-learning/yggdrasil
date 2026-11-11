@@ -10,6 +10,7 @@
 #include <bit>
 #include <boost/integer.hpp>
 #include <boost/mp11.hpp>
+#include <climits>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
@@ -63,7 +64,7 @@ inline constexpr TypeId type_id = static_cast<TypeId>(boost::mp11::mp_find<Colum
 
 /// A value's whole width: a bool's one bit, other types all their bits.
 template<ColumnValueType T>
-inline constexpr std::uint8_t whole_bits = std::same_as<T, bool> ? 1 : sizeof(T) * 8;
+inline constexpr std::uint8_t whole_bits = std::same_as<T, bool> ? 1 : sizeof(T) * CHAR_BIT;
 
 /// A column's value as the unsigned bits its row stores (urd rows know no types): an unsigned integer, a bool or an
 /// object index as is, a signed integer as its two's complement in its own width, a float as its bits (NaN and -0.0
@@ -76,13 +77,13 @@ using Value = std::uint64_t;
 template<std::floating_point T>
 [[nodiscard]] Value encode_value(T value) noexcept
 {
-    using Bits = typename boost::uint_t<sizeof(T) * 8>::exact;
+    using Bits = typename boost::uint_t<sizeof(T) * CHAR_BIT>::exact;
     const auto normal = std::isnan(value) ? std::numeric_limits<T>::quiet_NaN() : (value == T { 0 } ? T { 0 } : value);
     return std::bit_cast<Bits>(normal);
 }
 template<std::floating_point T>
 [[nodiscard]] T decode_value(Value bits) noexcept
-{ return std::bit_cast<T>(static_cast<typename boost::uint_t<sizeof(T) * 8>::exact>(bits)); }
+{ return std::bit_cast<T>(static_cast<typename boost::uint_t<sizeof(T) * CHAR_BIT>::exact>(bits)); }
 
 /// An integer through its unsigned type (a signed one as its two's complement in its own width).
 template<std::integral T>
@@ -112,6 +113,7 @@ template<typename T>
 [[nodiscard]] T decode_value(Value bits) noexcept
 { return urd::index_of<T>::from_index(static_cast<std::size_t>(bits)); }
 
+// NOLINTNEXTLINE(bugprone-exception-escape): std::visit throws only for a valueless variant, which ColumnValue's alternatives (scalars, an index) never leave
 [[nodiscard]] inline Value encode(const ColumnValue& value) noexcept
 {
     return std::visit([](auto alternative) { return encode_value(alternative); }, value);

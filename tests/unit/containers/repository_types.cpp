@@ -59,11 +59,14 @@ concept Viewable = requires(const C& context, H handle) { context.view(handle); 
 
 struct RepositoryTypesObjectTag;
 struct RepositoryTypesPackedObjectTag;
+struct RepositoryTypesSerializedElement;
+struct RepositoryTypesBuilderOther;
+namespace
+{
 struct RepositoryTypesElement
 {
     using object_tag = RepositoryTypesObjectTag;
 };
-struct RepositoryTypesSerializedElement;
 struct RepositoryTypesRelation
 {
     using object_tag = RepositoryTypesObjectTag;
@@ -73,7 +76,7 @@ struct RepositoryTypesPackedRelation
 {
     using object_tag = RepositoryTypesPackedObjectTag;
 };
-struct RepositoryTypesBuilderOther;
+}
 struct RepositoryTypesCheckout;
 
 }  // namespace ygg::tests

@@ -43,6 +43,7 @@ struct data<ygg::Row<F>>
     data& operator=(const data& other) = delete;
     data(data&& other) = default;
     data& operator=(data&& other) = default;
+    ~data() = default;
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::relation, &data::values> {}; }
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::relation, &data::values> {}; }

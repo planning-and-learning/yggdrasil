@@ -37,7 +37,7 @@ jobs:
         run: |
           python -m pip install --no-cache-dir --upgrade pip uv
           uv pip install --system --no-cache -r pyproject.toml --extra test
-          uv pip install --system --no-cache "nanobind-backend>=1.0" "pybrokkr>=0.1.1,<0.2"
+          uv pip install --system --no-cache "nanobind-backend>=1.0" "pybrokkr>=0.1.2,<0.2"
 
       - name: Install CMake on Linux
         if: runner.os == 'Linux'
