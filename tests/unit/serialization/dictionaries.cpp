@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 #include <optional>
 #include <tuple>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <vector>
 
 namespace ygg::tests
@@ -45,12 +47,12 @@ struct NestedEntity
 {
     int id;
     DictionaryEntity child;
-    std::vector<DictionaryEntity> children;
+    urd::Store<urd::sequence<DictionaryEntity>> children;
     std::optional<DictionaryEntity> present;
     std::optional<DictionaryEntity> absent;
-    std::vector<int> numbers;
+    urd::Store<urd::sequence<int>> numbers;
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&NestedEntity::id> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&NestedEntity::id> {}; }
 };
 
 template<typename Archive>
@@ -72,7 +74,7 @@ TEST(YggdrasilTests, DictionariesSerializeNestedRangesAndOptionals)
 
     const auto entity = NestedEntity { 0, { 1 }, { { 2 }, { 1 } }, DictionaryEntity { 3 }, std::nullopt, { 4, 5 } };
     EXPECT_EQ(dictionaries.serialize(entity), "n0");
-    EXPECT_EQ(dictionaries.serialize(std::vector<NestedEntity> { entity }), boost::json::parse(R"(["n0"])"));
+    EXPECT_EQ(dictionaries.serialize(urd::Store<urd::sequence<NestedEntity>> { entity }), boost::json::parse(R"(["n0"])"));
     EXPECT_EQ(dictionaries.table<NestedEntity>(),
               boost::json::parse(R"([{"child":"e0","children":["e1","e0"],"present":"e2","absent":null,"numbers":[4,5]}])").as_array());
     EXPECT_EQ(dictionaries.table<DictionaryEntity>(), boost::json::parse(R"([{"value":1},{"value":2},{"value":3}])").as_array());
@@ -99,8 +101,8 @@ TEST(YggdrasilTests, DictionariesSerializeTypesAsTheirReplacement)
     dictionaries.register_table<DictionaryEntity>("entities", "e");
 
     EXPECT_EQ(dictionaries.serialize(EntityWrapper { { 6 } }), "e0");
-    EXPECT_EQ(dictionaries.serialize(std::vector<EntityWrapper> { { { 6 } }, { { 7 } } }), boost::json::parse(R"(["e0","e1"])"));
-    EXPECT_EQ(serialization::fields<EntityWrapper>(), std::vector<std::string> { "value" });
+    EXPECT_EQ(dictionaries.serialize(urd::Store<urd::sequence<EntityWrapper>> { { { 6 } }, { { 7 } } }), boost::json::parse(R"(["e0","e1"])"));
+    EXPECT_EQ(serialization::fields<EntityWrapper>(), urd::Store<urd::sequence<std::string>> { "value" });
     EXPECT_EQ(dictionaries.table<DictionaryEntity>(), boost::json::parse(R"([{"value":6},{"value":7}])").as_array());
 }
 

@@ -17,6 +17,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -96,7 +98,7 @@ struct Diagnostic
 {
     std::string message;
     std::optional<SourceSpan> location = std::nullopt;
-    std::vector<DiagnosticNote> notes = {};
+    urd::Store<urd::sequence<DiagnosticNote>> notes = {};
 };
 
 namespace detail

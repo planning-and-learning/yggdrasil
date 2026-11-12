@@ -1,12 +1,13 @@
 @PACKAGE_INIT@
 
-# Package configuration for the yggdrasil header-only library bundled in the
-# pyyggdrasil wheel. Installed to <pyyggdrasil>/lib/cmake/yggdrasil/.
-
-# Generic helpers for consuming pip-installed provider packages; functions are
-# global, so defining them on the first find_package call is sufficient.
-include("${CMAKE_CURRENT_LIST_DIR}/yggdrasilPythonHelpers.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/yggdrasilPythonPackaging.cmake")
+# Package configuration for the yggdrasil library bundled in the pyyggdrasil
+# wheel. Installed to <pyyggdrasil>/lib/cmake/yggdrasil/.
+#
+# Its dependencies come from pyurd (urd) and pyurd-native (the native libraries).
+# pyurd's prefix must be on CMAKE_PREFIX_PATH (a consumer's build backend lists
+# pyurd among its providers; a CMake build calls
+# brokkr_find_python_native_prefix(pyurd URD_PREFIX)); urd's package then names
+# pyurd-native's prefix, URD_NATIVE_PREFIX.
 
 set_and_check(_yggdrasil_prefix "@PACKAGE_YGGDRASIL_PACKAGE_ROOT@")
 
@@ -18,45 +19,41 @@ endif()
 
 include(CMakeFindDependencyMacro)
 
-# The bundled dependencies are ABI-matched to the bundled shared libraries, so
-# resolve them from this prefix only. cista is deliberately consumed through
-# the include directory rather than the cista::cista target: that target
-# exports CISTA_FMT/CISTA_FNV1A compile definitions, which change cista's fmt
-# integration and hash function relative to how the planning projects compile
-# these headers.
+# urd, with cista, gtl, fmt and Boost's containers. pyurd-native builds cista
+# without CISTA_FMT, so its target defines only CISTA_FNV1A, cista's default hash.
+find_dependency(urd CONFIG)
+# urd's package sets URD_NATIVE_PREFIX, the prefix of its dependencies: the other
+# dependencies are there too, and ABI-matched to its shared libraries, so they are
+# resolved from there only.
+set(_yggdrasil_urd_prefix "${URD_NATIVE_PREFIX}")
 
 # boost_locale-config.cmake resolves ICU through FindICU, a find-module: it never
 # sees the PATHS/NO_DEFAULT_PATH below and would search default paths, silently
 # picking a system ICU on Linux and finding none at all on macOS. These are the
 # cache entries it looks for, so filling them in leaves it nothing to search.
-find_path(ICU_INCLUDE_DIR NAMES unicode/utypes.h PATHS "${_yggdrasil_prefix}/include" NO_DEFAULT_PATH REQUIRED)
-find_library(ICU_UC_LIBRARY_RELEASE NAMES icuuc PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
-find_library(ICU_I18N_LIBRARY_RELEASE NAMES icui18n PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
-find_library(ICU_DATA_LIBRARY_RELEASE NAMES icudata PATHS "${_yggdrasil_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
+find_path(ICU_INCLUDE_DIR NAMES unicode/utypes.h PATHS "${_yggdrasil_urd_prefix}/include" NO_DEFAULT_PATH REQUIRED)
+find_library(ICU_UC_LIBRARY_RELEASE NAMES icuuc PATHS "${_yggdrasil_urd_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
+find_library(ICU_I18N_LIBRARY_RELEASE NAMES icui18n PATHS "${_yggdrasil_urd_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
+find_library(ICU_DATA_LIBRARY_RELEASE NAMES icudata PATHS "${_yggdrasil_urd_prefix}/lib" NO_DEFAULT_PATH REQUIRED)
 
-# Resolve Heap directly: BoostConfig does not propagate NO_DEFAULT_PATH to components.
-find_dependency(boost_heap @YGGDRASIL_BOOST_VERSION@ EXACT CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
-find_dependency(Boost CONFIG COMPONENTS headers json locale PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
-find_dependency(fmt CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
-find_dependency(gtl CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
-find_dependency(TBB CONFIG PATHS "${_yggdrasil_prefix}" NO_DEFAULT_PATH)
+find_dependency(Boost CONFIG COMPONENTS headers json locale PATHS "${_yggdrasil_urd_prefix}" NO_DEFAULT_PATH)
+find_dependency(fmt CONFIG PATHS "${_yggdrasil_urd_prefix}" NO_DEFAULT_PATH)
+find_dependency(gtl CONFIG PATHS "${_yggdrasil_urd_prefix}" NO_DEFAULT_PATH)
+find_dependency(TBB CONFIG PATHS "${_yggdrasil_urd_prefix}" NO_DEFAULT_PATH)
 
 # The dependency lookups above always run (consumers rely on this config to
-# provide Boost/fmt/gtl/TBB for their exported targets); only the target
+# provide urd/Boost/fmt/gtl/TBB for their exported targets); only the target
 # definition is guarded against repeated find_package calls.
 if(NOT TARGET yggdrasil::yggdrasil)
     add_library(yggdrasil::yggdrasil INTERFACE IMPORTED)
     set_target_properties(yggdrasil::yggdrasil PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${_yggdrasil_prefix}/include"
         INTERFACE_COMPILE_FEATURES "cxx_std_20"
-        INTERFACE_LINK_LIBRARIES "Boost::headers;Boost::heap;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
+        INTERFACE_LINK_LIBRARIES "urd::urd;Boost::headers;Boost::json;fmt::fmt;gtl::gtl;TBB::tbb")
 endif()
 
-# The compiled database engine, yggdrasil::database.
-if(NOT TARGET yggdrasil::database)
-    include("${CMAKE_CURRENT_LIST_DIR}/yggdrasilDatabaseTargets.cmake")
-endif()
 
 set(YGGDRASIL_NATIVE_PREFIX "${_yggdrasil_prefix}")
 
 unset(_yggdrasil_prefix)
+unset(_yggdrasil_urd_prefix)

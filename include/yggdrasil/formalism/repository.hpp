@@ -18,30 +18,54 @@
 #ifndef YGG_FORMALISM_REPOSITORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_HPP_
 
-#include "yggdrasil/buffer/declarations.hpp"
-#include "yggdrasil/buffer/segmented_buffer.hpp"
-#include "yggdrasil/containers/tuple.hpp"
+#include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/membership.hpp"
+#include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
+#include "yggdrasil/formalism/relation_view.hpp"
+#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/semantics/hash.hpp"
+#include "yggdrasil/semantics/canonicalization.hpp"
 
+#include <algorithm>
+#include <atomic>
+#include <boost/mp11.hpp>
 #include <cassert>
+#include <cstdint>
+#include <initializer_list>
+#include <limits>
+#include <memory>
 #include <optional>
+#include <ranges>
+#include <span>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
+#include <urd/config.hpp>
+#include <urd/repr/containers/schema_rows.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/slots/slots.hpp>
+#include <urd/store.hpp>
 #include <utility>
+#include <vector>
 
 namespace ygg::formalism
 {
 
-/// Concurrent repository aliases support overlapping find, insert,
-/// published-index lookup, and size calls. Builders remain thread-confined;
-/// clear, memory accounting, and destruction require quiescence. Parent layers
-/// must remain frozen and outlive their descendants.
+/// A repository layer, the context of its views: symbols and rows, over the layers of a parent, whose records it finds
+/// too. A view's context is the layer that owns its record (its canonical context, found through urd's owner), so that
+/// views of one record are equal wherever they were made. Each layer has its own number.
+///
+/// Every relation family F (HasRows: predicates, actions, ..., Schema) has rows Row<F>, keyed {pool, row}. A family F
+/// with relations (HasRelations: Relation<F> among the layer's symbols, with Columns) also has relations: a
+/// relation's rows go into the layer's pool of its key (an index<F>), and the relation is {pool, columns, row ids}.
+/// Rename keeps the pool and the rows. Free relations are the Schema family: their key is their column types,
+/// interned at insert.
+///
+/// Concurrent repository aliases support overlapping find, insert and lookups. Builders remain thread-confined; clear,
+/// memory accounting, and destruction require quiescence. Parent layers must remain frozen and outlive their
+/// descendants.
 template<typename SymbolRepo, typename RelationRepo>
 class Repository
 {
@@ -51,310 +75,298 @@ public:
     using object_tag = typename RelationRepo::object_tag;
 
 private:
+    /// The builders get_relation_builder hands out for family F, by their column widths: a builder handed back is
+    /// reused only for equal widths, so its row storage stays.
+    template<typename F>
+    using BuilderSlots = urd::Store<urd::slots<urd::builder<Relation<F>>>, urd::keyed<urd::column_widths>>;
+    template<typename F>
+    using RelationFamily = boost::mp11::mp_contains<SymbolTypes, Relation<F>>;
+    template<typename... Fs>
+    using BuilderFamily = Family<BuilderSlots, Fs...>;
+    using RelationFamilies = boost::mp11::mp_copy_if<RelationTypes, RelationFamily>;
+    /// A pool key's records stay across clear(), and so do their pools.
+    template<typename T>
+    using KeysPools = boost::mp11::mp_contains<RelationTypes, T>;
+
+    static urd::bit_width object_index_width(std::size_t num_objects, const Repository* parent)
+    {
+        if (num_objects > std::numeric_limits<ygg::uint_t>::max())
+            throw std::invalid_argument("Repository: number of objects exceeds the object index domain.");
+        auto width = urd::bit_width::for_bound(num_objects);
+        if (parent)
+            width.bits = std::max(width.bits, parent->relations().get_object_index_width());
+        return width;
+    }
+
     const Repository* m_parent;
-    const Repository* m_root;
-    SymbolRepo m_symbol_repository;
-    RelationRepo m_relation_repository;
-    size_t m_index;
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] const Repository* find_canonical_context(Index<T> index) const noexcept
+    SymbolRepo m_symbols;
+    RelationRepo m_relations;
+    std::size_t m_layer;
+    /// Schema records to build in (reused: interning one allocates nothing once warm); threads take their own.
+    urd::Store<urd::slots<urd::data<Schema>>, std::conditional_t<RelationRepo::thread_safe, urd::concurrent, urd::single_threaded>> m_schema_builders;
+    /// The builder slots of each family with relations (none where the layer has no relations).
+    mutable boost::mp11::mp_apply<BuilderFamily, RelationFamilies> m_relation_builders;
+    /// Whether some layer holds the row `key`.
+    template<typename F>
+    [[nodiscard]] bool holds_row(RowIndex<F> key) const
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->m_symbol_repository.is_local(index))
-                return current;
-            current = current->m_parent;
-        }
-        return nullptr;
+        const auto& pools = m_relations.template get<F>();
+        return pools.contains(key.relation) && key.row.value < pools.at(key.relation).size();
+    }
+    /// The Schema of these column types, interned here (built in a reused record).
+    template<std::ranges::input_range Types>
+    urd::index<Schema> intern_schema(const Types& types)
+    {
+        auto record = m_schema_builders.make_unique();
+        urd::clear_members(*record);
+        for (const TypeId type : types)
+            record->types.push_back(type);
+        return m_relations.schema(*record);
     }
 
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] const Repository* find_canonical_context(Index<RelationBinding<T, object_tag>> index) const noexcept
+    Repository(const Repository* parent, urd::bit_width object_index_width) :
+        m_parent(parent),
+        m_symbols(parent ? &parent->m_symbols : nullptr),
+        m_relations(parent ? &parent->m_relations : nullptr, object_index_width),
+        m_layer(next_layer())
     {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->m_relation_repository.is_local(index))
-                return current;
-            current = current->m_parent;
-        }
-        return nullptr;
-    }
-
-    /**
-     * Global methods traverse the current repository layer and its parent
-     * hierarchy. Handle-producing methods return views that retain the discovered
-     * canonical context.
-     *
-     * Symbol operations.
-     */
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] std::optional<View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
-    {
-        if (auto index_or_nullopt = m_symbol_repository.find_local_with_hash(builder, h))
-            return View<Index<T>, Repository>(*index_or_nullopt, *this);
-
-        const Repository* current = m_parent;
-        while (current != nullptr)
-        {
-            if (auto index_or_nullopt = current->m_symbol_repository.find_local_unsafe_with_hash(builder, h))
-                return View<Index<T>, Repository>(*index_or_nullopt, *current);
-
-            current = current->m_parent;
-        }
-
-        return std::nullopt;
-    }
-
-    /// Cold half of insert_with_hash, see YGG_NOINLINE. Rechecks the local
-    /// layer before publishing.
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    YGG_NOINLINE std::pair<View<Index<T>, Repository>, bool> create_local_with_hash(Data<T>& builder, size_t h)
-    {
-        assert(!m_symbol_repository.template exists_parent_mutation<T>()
-               && "Integrity error: Parent SymbolRepository modified after child "
-                  "branching!");
-
-        const auto [index, created] = m_symbol_repository.create_local_with_hash(builder, h);
-        return { View<Index<T>, Repository>(index, *this), created };
-    }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    std::pair<View<Index<T>, Repository>, bool> insert_with_hash(Data<T>& builder, size_t h)
-    {
-        if (auto found = find_with_hash(builder, h))
-        {
-            builder.index = found->get_index();
-            return { *found, false };
-        }
-
-        return create_local_with_hash(builder, h);
-    }
-
-    /**
-     * Global methods traverse the current repository layer and its parent
-     * hierarchy. Handle-producing methods return views that retain the discovered
-     * canonical context.
-     *
-     * Relation operations.
-     */
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] std::optional<View<Index<RelationBinding<T, object_tag>>, Repository>> find_with_hash(const Data<RelationBinding<T, object_tag>>& builder,
-                                                                                                        size_t h) const
-    {
-        const auto g = builder.relation;
-
-        if (auto row_or_nullopt = m_relation_repository.find_local_with_hash(builder, h))
-            return View<Index<RelationBinding<T, object_tag>>, Repository>(Index<RelationBinding<T, object_tag>> { g, *row_or_nullopt }, *this);
-
-        const Repository* current = m_parent;
-        while (current != nullptr)
-        {
-            if (auto row_or_nullopt = current->m_relation_repository.find_local_unsafe_with_hash(builder, h))
-                return View<Index<RelationBinding<T, object_tag>>, Repository>(Index<RelationBinding<T, object_tag>> { g, *row_or_nullopt }, *current);
-
-            current = current->m_parent;
-        }
-
-        return std::nullopt;
-    }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool> insert_with_hash(const Data<RelationBinding<T, object_tag>>& builder, size_t h)
-    {
-        if (auto found = find_with_hash(builder, h))
-            return { *found, false };
-
-        return create_local_with_hash(builder, h);
-    }
-
-    /// Cold half of insert_with_hash, see YGG_NOINLINE. Rechecks the local
-    /// lane before publishing.
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    YGG_NOINLINE std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool>
-    create_local_with_hash(const Data<RelationBinding<T, object_tag>>& builder, size_t h)
-    {
-        const auto g = builder.relation;
-
-        assert(!m_relation_repository.exists_parent_mutation(g)
-               && "Integrity error: Parent RelationRepository modified after child "
-                  "branching!");
-
-        const auto [row, created] = m_relation_repository.create_local_with_hash(builder, h);
-        return { View<Index<RelationBinding<T, object_tag>>, Repository>(Index<RelationBinding<T, object_tag>> { g, row }, *this), created };
     }
 
 public:
-    static constexpr bool thread_safe = SymbolRepo::thread_safe && RelationRepo::thread_safe;
+    friend const Repository& get_repository(const Repository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 
-    friend const Repository& get_repository(const Repository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
-
-    /**
-     * Global methods traverse the current repository layer and its parent
-     * hierarchy. Handle-producing methods return views that retain the discovered
-     * canonical context.
-     *
-     * Symbol operations.
-     */
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] std::optional<View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
-    { return find_with_hash(builder, SymbolRepo::hash(builder)); }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    std::pair<View<Index<T>, Repository>, bool> insert(Data<T>& builder)
-    { return insert_with_hash(builder, SymbolRepo::hash(builder)); }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    const Data<T>& operator[](Index<T> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return owner->m_symbol_repository.at_local(index);
-        throw std::out_of_range("Symbol index not found in any repository layer.");
-    }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] const Data<T>& front() const
-    { return (*this)[Index<T>(0)]; }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] size_t size() const noexcept
-    { return m_symbol_repository.template size<T>(); }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] size_t memory_usage() const noexcept
-    { return m_symbol_repository.template memory_usage<T>(); }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] bool contains(Index<T> index) const noexcept
-    { return find_canonical_context(index) != nullptr; }
-
-    template<typename T>
-        requires NonRelationBindingConcept<T> && SupportsSymbol<Repository, T>
-    [[nodiscard]] const Repository& get_canonical_context(Index<T> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return *owner;
-        throw std::out_of_range("Symbol index not found in any repository layer.");
-    }
-
-    /**
-     * Global methods traverse the current repository layer and its parent
-     * hierarchy. Handle-producing methods return views that retain the discovered
-     * canonical context.
-     *
-     * Relation operations.
-     */
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] std::optional<View<Index<RelationBinding<T, object_tag>>, Repository>> find(const Data<RelationBinding<T, object_tag>>& builder) const
-    { return find_with_hash(builder, RelationRepo::hash(builder)); }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    std::pair<View<Index<RelationBinding<T, object_tag>>, Repository>, bool> insert(const Data<RelationBinding<T, object_tag>>& builder)
-    { return insert_with_hash(builder, RelationRepo::hash(builder)); }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    auto operator[](Index<RelationBinding<T, object_tag>> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return owner->m_relation_repository.at_local(index);
-        throw std::out_of_range("Relation binding index not found in any repository layer.");
-    }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] auto front(Index<T> g) const
-    { return (*this)[Index<RelationBinding<T, object_tag>> { g, Index<Row>(0) }]; }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] size_t size(Index<T> g) const noexcept
-    { return m_relation_repository.size(g); }
-
-    template<RelationBindingConcept T>
-        requires SupportsRelation<Repository, typename T::relation_tag> && std::same_as<typename T::object_tag, object_tag>
-    [[nodiscard]] size_t memory_usage() const noexcept
-    {
-        using Binding = std::remove_cvref_t<T>;
-        return m_relation_repository.template memory_usage<typename Binding::relation_tag>();
-    }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] bool contains(Index<RelationBinding<T, object_tag>> index) const noexcept
-    { return find_canonical_context(index) != nullptr; }
-
-    template<typename T>
-        requires SupportsRelation<Repository, T>
-    [[nodiscard]] const Repository& get_canonical_context(Index<RelationBinding<T, object_tag>> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return *owner;
-        throw std::out_of_range("Relation binding index not found in any repository layer.");
-    }
-
-    template<typename T, typename C>
-        requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
-    [[nodiscard]] bool contains(const ::ygg::View<Index<T>, C>& view) const
-    { return ::ygg::formalism::contains(*this, view); }
-
-    /**
-     * Common methods do not depend on lookup scope.
-     */
-
-    /// Parent layers must remain frozen and outlive this repository.
-    explicit Repository(size_t index, const Repository* parent = nullptr) :
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this),
-        m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
-        m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr),
-        m_index(index)
-    { clear(); }
-
-    Repository(size_t index, const Repository* parent, RelationRepositoryConfig config) :
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this),
-        m_symbol_repository(m_parent ? &m_parent->m_symbol_repository : nullptr),
-        m_relation_repository(index, m_parent ? &m_parent->m_relation_repository : nullptr, config),
-        m_index(index)
-    { clear(); }
-    ~Repository() = default;
+    /// A layer whose rows store whole object indices. Parent layers must remain frozen and outlive this one.
+    explicit Repository(const Repository* parent = nullptr) : Repository(parent, default_object_index_width) {}
+    /// A layer whose rows store object indices below `num_objects` (at least as wide as the parent's).
+    explicit Repository(std::size_t num_objects, const Repository* parent = nullptr) : Repository(parent, object_index_width(num_objects, parent)) {}
     Repository(const Repository& other) = delete;
     Repository& operator=(const Repository& other) = delete;
     Repository(Repository&& other) = delete;
     Repository& operator=(Repository&& other) = delete;
+    ~Repository() = default;
 
-    [[nodiscard]] const auto& get_index() const noexcept { return m_index; }
-    [[nodiscard]] const auto& get_root() const noexcept { return *m_root; }
-    [[nodiscard]] std::uint8_t get_object_index_width() const noexcept { return m_relation_repository.get_object_index_width(); }
+    [[nodiscard]] const SymbolRepo& symbols() const noexcept { return m_symbols; }
+    [[nodiscard]] SymbolRepo& symbols() noexcept { return m_symbols; }
+    [[nodiscard]] const RelationRepo& relations() const noexcept { return m_relations; }
+    [[nodiscard]] RelationRepo& relations() noexcept { return m_relations; }
+    [[nodiscard]] const Repository* parent() const noexcept { return m_parent; }
+    /// The layer's number, as urd's views ask of a context.
+    [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
 
-    void clear() noexcept
+    /// Forgets this layer's own records and rows; the parent's stay. Views of the forgotten records
+    /// dangle. Its pool keys (e.g. predicates) stay, with their pools' declarations (Schemas), and so their pools, emptied: a refill in any order finds each
+    /// pool built alike and allocates nothing.
+    void clear()
     {
-        m_symbol_repository.clear();
-        m_relation_repository.clear();
+        boost::mp11::mp_for_each<boost::mp11::mp_transform<std::type_identity, boost::mp11::mp_remove_if<SymbolTypes, KeysPools>>>(
+            [this]<typename T>(std::type_identity<T>) { m_symbols.template get<T>().clear(); });
+        m_relations.clear();
+    }
+
+    /**
+     * Owners: the layer whose own records hold an index or a row key, or nullptr where no layer does.
+     */
+
+    template<typename T>
+        requires SupportsSymbol<Repository, T>
+    [[nodiscard]] const Repository* owner(urd::index<T> index) const
+    {
+        if (!m_symbols.contains(index))
+            return nullptr;
+        const auto* store = &m_symbols.template get<T>().owner(index);
+        const auto* layer = this;
+        while (&layer->m_symbols.template get<T>() != store)
+            layer = layer->m_parent;
+        return layer;
+    }
+
+    template<typename F>
+        requires HasRows<Repository, F>
+    [[nodiscard]] const Repository* owner(RowIndex<F> key) const
+    {
+        if (key.relation.is_none())
+            return nullptr;
+        // One walk up the layers: the nearest own pool bounds the rows; the first whose own rows start at or below the row
+        // holds it (a pool layers over the nearest ancestor's).
+        auto bounded = false;
+        for (const auto* layer = this; layer != nullptr; layer = layer->m_parent)
+        {
+            const auto* rows = layer->m_relations.template get<F>().own_value(key.relation);
+            if (rows == nullptr)
+                continue;
+            if (!bounded && (key.row.value) >= rows->size())
+                return nullptr;
+            bounded = true;
+            if ((key.row.value) >= rows->base())
+                return layer;
+        }
+        return nullptr;
+    }
+
+    /**
+     * Symbols: found in this layer and its parents.
+     */
+
+    template<typename T>
+        requires SupportsSymbol<Repository, T>
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const
+    {
+        if (const auto index = m_symbols.template get<T>().find(builder); !index.is_none())
+            return view(index);
+        return std::nullopt;
+    }
+
+    /// Interns the record where no layer holds it; builder.index is set to its index.
+    template<typename T>
+        requires SupportsSymbol<Repository, T>
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
+    {
+        const auto [index, created] = intern(m_symbols.template get<T>(), builder);
+        return { view(index), created };
+    }
+    /// A key of row pools (a predicate, an action, ...) interned as any record, and its pool declared with the column
+    /// types its view gives (a key family's view has get_column_types(): its rows' column types). Declared on every
+    /// insert, so a row may follow whichever thread interned it.
+    template<typename T>
+        requires SupportsSymbol<Repository, T> && HasRows<Repository, T>
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
+    {
+        const auto [index, created] = intern(m_symbols.template get<T>(), builder);
+        const auto key = view(index);
+        declare(index, key.get_column_types());
+        return { key, created };
+    }
+
+    /// Declares the pool `key` of family F with these column types (std::invalid_argument where it was declared with
+    /// others). Interning a key (insert(data<T>)) declares its pool itself.
+    template<typename F, std::ranges::input_range Types>
+        requires HasRows<Repository, F>
+    void declare(urd::index<F> key, const Types& types)
+    { m_relations.declare(key, intern_schema(types)); }
+
+    template<typename T>
+        requires SupportsSymbol<Repository, T>
+    const urd::data<T>& operator[](urd::index<T> index) const
+    {
+        if (!m_symbols.contains(index))
+            throw std::out_of_range("Symbol index not found in any repository layer.");
+        return m_symbols[index];
+    }
+
+    /// An index as its view, through the layer that owns it (urd's resolves contract).
+    template<typename T>
+        requires SupportsSymbol<Repository, T>
+    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const
+    {
+        if (const auto* layer = owner(index))
+            return { index, layer };
+        throw std::out_of_range("Symbol index not found in any repository layer.");
+    }
+    /// A record held outside the repository as its view here, which points at it (the record must outlive the view;
+    /// never a temporary).
+    template<typename T>
+    [[nodiscard]] urd::borrowed_view<T, Repository> view(const urd::data<T>& record URD_LIFETIMEBOUND) const
+    { return { &record, this }; }
+    template<typename T>
+    void view(const urd::data<T>&& record) const = delete;
+    /// A builder as its view here, which points at it (the builder must outlive the view; never a temporary).
+    template<typename T>
+    [[nodiscard]] urd::borrowed_view<T, Repository, urd::builder<T>> view(const urd::builder<T>& builder URD_LIFETIMEBOUND) const
+    { return { &builder, this }; }
+    template<typename T>
+    void view(const urd::builder<T>&& builder) const = delete;
+
+    /**
+     * Rows of each family F with rows: found in this layer and its parents.
+     */
+
+    template<typename F>
+        requires HasRows<Repository, F>
+    [[nodiscard]] std::optional<RowView<F, Repository>> find(const urd::data<Row<F>>& row) const
+    {
+        if (const auto id = m_relations.find(row.relation, row.values); !id.is_none())
+            return view(RowIndex<F> { row.relation, id });
+        return std::nullopt;
+    }
+
+    /// Stores the row in this layer where no layer holds it, checked against its pool's Schema (declared with its key;
+    /// a free relation's pool by schema()).
+    template<typename F>
+        requires HasRows<Repository, F>
+    std::pair<RowView<F, Repository>, bool> insert(const urd::data<Row<F>>& row)
+    {
+        const auto [id, created] = m_relations.insert(row.relation, row.values);
+        const auto key = RowIndex<F> { row.relation, id };
+        return { created ? RowView<F, Repository>(key, this) : view(key), created };
+    }
+
+    /// The stored row of a key, as its views read it.
+    template<typename F>
+        requires HasRows<Repository, F>
+    auto operator[](RowIndex<F> key) const
+    {
+        const auto& rows = m_relations.template get<F>().at(key.relation);
+        if ((key.row.value) >= rows.size())
+            throw std::out_of_range("Row index not found in any repository layer.");
+        return rows.at(key.row);
+    }
+
+    /// A row key as its view, through the layer that owns the row.
+    template<typename F>
+        requires HasRows<Repository, F>
+    [[nodiscard]] RowView<F, Repository> view(RowIndex<F> key) const
+    {
+        if (const auto* layer = owner(key))
+            return { key, layer };
+        throw std::out_of_range("Row index not found in any repository layer.");
+    }
+
+    /**
+     * Relations of each family F with relations: records {pool, columns, row ids}, built by their users (rows interned
+     * with insert(data<Row<F>>), columns with insert(data<Columns>)) and interned as any record.
+     */
+
+    /// The pool of free relations of these column types: their Schema, interned here, its pool declared.
+    template<std::ranges::input_range Types>
+        requires HasRows<Repository, Schema>
+    urd::index<Schema> schema(const Types& types)
+    {
+        const auto key = intern_schema(types);
+        m_relations.declare(key, key);
+        return key;
+    }
+    /// Interns the relation where no layer holds it: its rows sorted and made unique first. Its pool must be declared
+    /// (std::out_of_range otherwise), its columns' types the pool's and their labels distinct (std::invalid_argument).
+    template<typename F>
+        requires HasRelations<Repository, F>
+    std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::data<Relation<F>>& relation)
+    {
+        const auto& values = (*this)[relation.columns].values;
+        const auto columns = std::span<const ColumnLayout>(values.data(), values.size());
+        if (!std::ranges::equal(m_relations.template types<F>(relation.pool), columns, {}, {}, &ColumnLayout::type))
+            throw std::invalid_argument("Repository: the columns' types are not the pool's.");
+        for (auto it = columns.begin(); it != columns.end(); ++it)
+            if (repeats_label(columns, it))
+                throw std::invalid_argument("Repository: a relation's column labels are distinct.");
+        // ponytail: an assert, not a throw: O(rows) per insert (user). Catches ids beyond the pool (e.g. of another
+        // repository), not an id that happens to exist in both.
+        assert(std::ranges::all_of(relation.rows, [&](urd::index<Row<F>> id) { return holds_row(RowIndex<F> { relation.pool, id }); })
+               && "Repository: a relation's row ids must be rows of its pool here.");
+        ygg::canonicalize(relation.rows);
+        const auto [index, created] = intern(m_symbols.template get<Relation<F>>(), relation);
+        return { view(index), created };
+    }
+
+    /// A builder of family F with these columns (validated), shared as tyr's state builders are: it comes from this
+    /// layer's slots, keyed by its column widths, where it goes back with its last owner, keeping its row storage.
+    /// The layer must outlive its builders.
+    template<typename F>
+        requires HasRelations<Repository, F>
+    [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> get_relation_builder(std::span<const ColumnLayout> columns) const
+    {
+        auto builder = m_relation_builders.template get<F>().make_shared(m_relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
+        builder->initialize(columns);  // a builder handed back holds its last columns and rows
+        return builder;
     }
 };
 

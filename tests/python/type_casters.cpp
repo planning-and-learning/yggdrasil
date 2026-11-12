@@ -17,64 +17,30 @@
 
 #include "type_casters.hpp"
 
-#include "yggdrasil/containers/bit_packed_array_pool.hpp"
-#include "yggdrasil/python/type_casters.hpp"
+#include "yggdrasil/core/config.hpp"
 
-#include <cista/containers/array.h>
-#include <cista/containers/optional.h>
-#include <cista/containers/pair.h>
-#include <cista/containers/variant.h>
-#include <cista/containers/vector.h>
 #include <nanobind/nanobind.h>
+#include <span>
+#include <urd/python/flat.hpp>
+#include <urd/python/maps/flat_map.hpp>
+#include <urd/python/maps/index_map.hpp>
+#include <urd/python/maps/ordered_map.hpp>
+#include <urd/python/maps/parallel_hash_map.hpp>
+#include <urd/python/maps/unordered_flat_map.hpp>
+#include <urd/python/ranges.hpp>
+#include <urd/python/sequences/segmented.hpp>
+#include <urd/python/sequences/sequence.hpp>
+#include <urd/python/values/dense_set.hpp>
+#include <urd/python/values/flat_set.hpp>
+#include <urd/python/values/indexed.hpp>
+#include <urd/python/values/parallel_hash_set.hpp>
+#include <urd/python/values/sparse_set.hpp>
+#include <urd/python/values/unordered_flat_set.hpp>
+#include <yggdrasil/python/type_casters/closed_interval.hpp>
 
 void bind_type_casters_test(nanobind::module_& m)
 {
     using Interval = ygg::ClosedInterval<ygg::float_t>;
-
-    m.def("array_view",
-          []
-          {
-              using Array = ::cista::array<int, 3>;
-              static constexpr auto data = Array { 1, 2, 3 };
-              static constexpr auto context = 0;
-              return ygg::View<Array, int>(data, context);
-          });
-
-    m.def("pair_view",
-          []
-          {
-              using Pair = ::cista::pair<int, int>;
-              static constexpr auto data = Pair { 4, 5 };
-              static constexpr auto context = 0;
-              return ygg::View<Pair, int>(data, context);
-          });
-
-    m.def("nested_view",
-          []
-          {
-              using Pair = ::cista::pair<int, int>;
-              using Array = ::cista::array<Pair, 2>;
-              static constexpr auto data = Array { Pair { 6, 7 }, Pair { 8, 9 } };
-              static constexpr auto context = 0;
-              return ygg::View<Array, int>(data, context);
-          });
-
-    m.def("concurrent_bit_packed_view",
-          []
-          {
-              using Block = unsigned;
-              using Coder = ygg::bit::ForwardingBlockCoder<Block>;
-              using Array = ygg::BasicBitPackedArrayView<const Block, Coder, true>;
-              static auto data = Block { 0b00111001 };
-              static const auto view = Array(&data, 3, 2, 0);
-              static constexpr auto context = 0;
-              return ygg::View<Array, int>(view, context);
-          });
-
-    m.def("roundtrip_pair", [](::cista::pair<int, int> value) { return value; });
-    m.def("roundtrip_optional_pairs", [](::cista::offset::vector<::cista::optional<::cista::pair<int, int>>> values) { return values; });
-
-    m.def("roundtrip_variant", [](::cista::offset::variant<int, double> value) { return value; });
 
     m.def("empty_interval", [] { return Interval {}; });
     m.def("singleton_interval", [] { return Interval { 2.5, 2.5 }; });

@@ -25,17 +25,13 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <variant>
 #include <vector>
 
 namespace ygg
 {
-
-template<typename T>
-struct Index;
-
-template<typename T, typename C>
-struct View;
 
 template<typename T>
 std::string to_string(const T& element)
@@ -44,18 +40,10 @@ std::string to_string(const T& element)
 }  // namespace ygg
 
 #if YGG_ENABLE_FMT_FORMATTERS
+#include <urd/format.hpp>  // urd's own types: an index, a bitset span
+
 namespace fmt
 {
-
-template<typename T>
-struct formatter<ygg::Index<T>, char>
-{
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const ygg::Index<T>& value, FormatContext& ctx) const
-    { return fmt::format_to(ctx.out(), "{}", ygg::uint_t(value)); }
-};
 
 template<typename T>
 struct formatter<std::optional<T>, char>
@@ -116,9 +104,9 @@ namespace ygg
 {
 
 template<std::ranges::input_range Range>
-std::vector<std::string> to_strings(Range&& range)
+urd::Store<urd::sequence<std::string>> to_strings(Range&& range)
 {
-    auto result = std::vector<std::string> {};
+    auto result = urd::Store<urd::sequence<std::string>> {};
     if constexpr (std::ranges::sized_range<Range>)
         result.reserve(std::ranges::size(range));
     for (const auto& element : std::forward<Range>(range))

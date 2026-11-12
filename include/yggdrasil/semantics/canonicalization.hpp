@@ -18,91 +18,16 @@
 #ifndef YGG_SEMANTICS_CANONICALIZATION_HPP_
 #define YGG_SEMANTICS_CANONICALIZATION_HPP_
 
-#include "yggdrasil/core/types.hpp"
-#include "yggdrasil/semantics/comparison.hpp"
-
 #include <algorithm>
-#include <cista/containers/optional.h>
-#include <concepts>
-#include <fmt/format.h>
-#include <string>
-#include <type_traits>
-#include <utility>
-#include <vector>
+#include <ranges>
+#include <urd/elements/flat.hpp>
 
 namespace ygg
 {
 
-namespace detail
-{
-template<typename C, typename Element>
-    requires ViewConcept<Element, C>
-std::string fmt_key(const C& context, const Element& element)
-{ return fmt::format("{}", make_view(element, context)); }
-
-template<bool Deduplicate, typename C, typename List>
-bool is_canonical(const C& context, const List& list)
-{
-    if (list.size() < 2)
-        return true;
-
-    auto previous_key = fmt_key(context, list[0]);
-    for (std::size_t i = 1; i < list.size(); ++i)
-    {
-        auto current_key = fmt_key(context, list[i]);
-        if constexpr (Deduplicate)
-        {
-            if (!(previous_key < current_key))
-                return false;
-        }
-        else if (current_key < previous_key || (current_key == previous_key && list[i] < list[i - 1]))
-            return false;
-        previous_key = std::move(current_key);
-    }
-    return true;
-}
-
-template<bool Deduplicate, typename C, typename List>
-void canonicalize(const C& context, List& list)
-{
-    using Element = typename List::value_type;
-
-    if (list.size() < 2)
-        return;
-
-    auto keyed = std::vector<std::pair<std::string, Element>> {};
-    keyed.reserve(list.size());
-    for (auto& element : list)
-        keyed.emplace_back(fmt_key(context, element), std::move(element));
-
-    if (!std::is_sorted(keyed.begin(), keyed.end()))
-        std::sort(keyed.begin(), keyed.end());
-
-    auto size = std::size_t { 0 };
-    for (std::size_t i = 0; i < keyed.size(); ++i)
-    {
-        if constexpr (Deduplicate)
-            if (i > 0 && keyed[i - 1].first == keyed[i].first)
-                continue;
-        list[size++] = std::move(keyed[i].second);
-    }
-    list.resize(size);
-}
-
-}
-
-template<bool Deduplicate = true, typename T>
-bool is_canonical(const IndexList<T>& list)
-{
-    if (!std::is_sorted(list.begin(), list.end()))
-        return false;
-    if constexpr (Deduplicate)
-        return std::adjacent_find(list.begin(), list.end()) == list.end();
-    return true;
-}
-
-template<bool Deduplicate = true, typename T>
-bool is_canonical(const DataList<T>& list)
+/// A stored list (indices, records, variants of them): sorted, and deduplicated where asked.
+template<bool Deduplicate = true, typename E>
+bool is_canonical(const urd::flat_vector<E>& list)
 {
     if (!std::is_sorted(list.begin(), list.end()))
         return false;
@@ -112,11 +37,13 @@ bool is_canonical(const DataList<T>& list)
 }
 
 template<typename T>
-bool is_canonical(const ::cista::optional<T>&)
+bool is_canonical(const urd::flat_optional<T>&)
 { return true; }
 
-template<bool Deduplicate = true, typename T, typename Allocator>
-void canonicalize(std::vector<T, Allocator>& list)
+/// Any sequence that sorts and erases (std::vector, a sequence Store): sorted, and deduplicated where asked.
+template<bool Deduplicate = true, typename List>
+    requires std::ranges::random_access_range<List> && requires(List& list) { list.erase(list.begin(), list.end()); }
+void canonicalize(List& list)
 {
     if (!std::is_sorted(list.begin(), list.end()))
         std::sort(list.begin(), list.end());
@@ -126,57 +53,19 @@ void canonicalize(std::vector<T, Allocator>& list)
 }
 
 /// The list, canonicalized.
-template<bool Deduplicate = true, typename T, typename Allocator>
-std::vector<T, Allocator> canonicalized(std::vector<T, Allocator> list)
+template<bool Deduplicate = true, typename List>
+    requires std::ranges::random_access_range<List> && requires(List& list) { list.erase(list.begin(), list.end()); }
+List canonicalized(List list)
 {
     canonicalize<Deduplicate>(list);
     return list;
 }
 
-template<bool Deduplicate = true, typename T>
-void canonicalize(IndexList<T>& list)
-{
-    if (!is_canonical<false>(list))
-        std::sort(list.begin(), list.end());
-
-    if constexpr (Deduplicate)
-        list.erase(std::unique(list.begin(), list.end()), list.end());
-}
-
-template<bool Deduplicate = true, typename T>
-void canonicalize(DataList<T>& list)
-{
-    if (!is_canonical<false>(list))
-        std::sort(list.begin(), list.end());
-
-    if constexpr (Deduplicate)
-        list.erase(std::unique(list.begin(), list.end()), list.end());
-}
-
 template<typename T>
-void canonicalize(::cista::optional<T>&)
+void canonicalize(urd::flat_optional<T>&)
 {
 }
 
-template<bool Deduplicate = true, typename C, typename T>
-    requires ViewConcept<Index<T>, C>
-bool is_canonical(const C& context, const IndexList<T>& list)
-{ return detail::is_canonical<Deduplicate>(context, list); }
-
-template<bool Deduplicate = true, typename C, typename T>
-    requires ViewConcept<Data<T>, C>
-bool is_canonical(const C& context, const DataList<T>& list)
-{ return detail::is_canonical<Deduplicate>(context, list); }
-
-template<bool Deduplicate = true, typename C, typename T>
-    requires ViewConcept<Index<T>, C>
-void canonicalize(const C& context, IndexList<T>& list)
-{ detail::canonicalize<Deduplicate>(context, list); }
-
-template<bool Deduplicate = true, typename C, typename T>
-    requires ViewConcept<Data<T>, C>
-void canonicalize(const C& context, DataList<T>& list)
-{ detail::canonicalize<Deduplicate>(context, list); }
-}
+}  // namespace ygg
 
 #endif

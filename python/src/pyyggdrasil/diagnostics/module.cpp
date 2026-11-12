@@ -1,11 +1,15 @@
 #include "module.hpp"
 
+#include "pyyggdrasil/module.hpp"
 #include "yggdrasil/diagnostics/diagnostic.hpp"
+#include "yggdrasil/diagnostics/errors.hpp"
+#include "yggdrasil/python/diagnostics.hpp"
 
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <urd/python/sequences/sequence.hpp>
 
 namespace yggdrasil
 {
@@ -32,16 +36,20 @@ void bind_diagnostics_module_definitions(nb::module_& m)
         .def_ro("location", &ygg::diagnostics::DiagnosticNote::location);
 
     nb::class_<ygg::diagnostics::Diagnostic>(m, "Diagnostic", "A diagnostic message with an optional source location and related notes.")
-        .def(nb::init<std::string, std::optional<ygg::diagnostics::SourceSpan>, std::vector<ygg::diagnostics::DiagnosticNote>>(),
+        .def(nb::init<std::string, std::optional<ygg::diagnostics::SourceSpan>, urd::Store<urd::sequence<ygg::diagnostics::DiagnosticNote>>>(),
              nb::arg("message"),
              nb::arg("location") = nb::none(),
-             nb::arg("notes") = std::vector<ygg::diagnostics::DiagnosticNote> {})
+             nb::arg("notes") = urd::Store<urd::sequence<ygg::diagnostics::DiagnosticNote>> {})
         .def_ro("message", &ygg::diagnostics::Diagnostic::message)
         .def_ro("location", &ygg::diagnostics::Diagnostic::location)
         .def_ro("notes", &ygg::diagnostics::Diagnostic::notes)
         .def("__str__", &ygg::diagnostics::format_diagnostic);
 
     m.def("format_diagnostic", &ygg::diagnostics::format_diagnostic, nb::arg("diagnostic"), "Render a diagnostic and its related notes with source locations.");
+
+    // The errors parsers raise (loki, runir), registered once, here; their subclasses derive from these.
+    const auto semantic_error = ygg::bind_diagnostic_exception<ygg::diagnostics::SemanticError>(m, "SemanticError");
+    ygg::bind_diagnostic_exception<ygg::diagnostics::ParseError>(m, "ParseError", semantic_error);
 }
 
 }  // namespace yggdrasil

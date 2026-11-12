@@ -18,16 +18,13 @@
 #ifndef YGG_PYTHON_BINDINGS_HPP_
 #define YGG_PYTHON_BINDINGS_HPP_
 
-#include "yggdrasil/core/types.hpp"
+#include "yggdrasil/core/unsigned_integer.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formatting/formatter.hpp"
-#include "yggdrasil/python/owner.hpp"
-#include "yggdrasil/semantics/comparison.hpp"
-#include "yggdrasil/semantics/hash.hpp"
 
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/string.h>
-#include <string>
+#include <urd/python/bindings.hpp>
+#include <urd/python/owner.hpp>
 
 namespace ygg
 {
@@ -41,134 +38,27 @@ nb::class_<V>& add_print(nb::class_<V>& cls)
         .def("__repr__", [](const V& self) { return to_string(self); });
 }
 
-template<typename V>
-    requires Identifiable<V>
-nb::class_<V>& add_comparison(nb::class_<V>& cls)
+/// Binds a nonnegative integer of its own type (UnsignedInteger): built from an int (default 0), read by int(),
+/// index() and value, compared and hashed as its value.
+template<typename T>
+void bind_unsigned_integer(nb::module_& m, const std::string& name)
 {
-    // Nanobind adds __eq__ after type creation, so mirror Python's default: unhashable unless add_hash() opts back in.
-    cls.attr("__hash__") = nb::none();
-
-    return cls  //
-        .def(
-            "__eq__",
-            [](const V& lhs, const V& rhs) { return lhs == rhs; },
-            nb::is_operator())
-        .def(
-            "__lt__",
-            [](const V& lhs, const V& rhs) { return lhs < rhs; },
-            nb::is_operator())
-        .def(
-            "__le__",
-            [](const V& lhs, const V& rhs) { return lhs <= rhs; },
-            nb::is_operator())
-        .def(
-            "__gt__",
-            [](const V& lhs, const V& rhs) { return lhs > rhs; },
-            nb::is_operator())
-        .def("__ge__", [](const V& lhs, const V& rhs) { return lhs >= rhs; }, nb::is_operator());
+    auto cls = nb::class_<T>(m, name.c_str());
+    cls.def(nb::init<>())
+        .def(nb::init<typename T::value_type>(), nb::arg("value"))
+        .def("__int__", [](const T& i) { return i.value; })
+        .def("__index__", [](const T& i) { return i.value; })
+        .def_ro("value", &T::value);
+    urd::python::add_comparison(cls);
+    cls.def("__hash__", [](const T& i) { return i.value; }).def("__repr__", [name](const T& i) { return name + "(" + std::to_string(i.value) + ")"; });
 }
 
-template<typename V>
-nb::class_<V>& add_hash(nb::class_<V>& cls)
-{
-    return cls.def("__hash__", [](const V& self) { return Hash<V> {}(self); });
-}
-
-/// Binds a record type; records compare by their identifying members.
-template<typename V>
-nb::class_<V> bind_data(nb::module_& m, const char* name)
-{
-    auto cls = nb::class_<V>(m, name);
-    add_comparison(cls);
-    return cls;
-}
-
-/// Binds repository.insert(data) -> (view, created); the view keeps the repository alive.
+/// Binds repository.insert(data) -> (view, created); the view keeps the repository alive. Takes data by reference, as
+/// C++ insert does: no copy, and the caller's object is canonicalized in place.
 template<typename T, typename Repository>
 void bind_insert(nb::class_<Repository>& repository)
 {
-    const auto retainer = python::make_owner_retainer();
-    repository.def(
-        "insert",
-        [retainer](nb::typed<nb::handle, Repository> owner, Data<T> data) -> nb::typed<nb::tuple, View<Index<T>, Repository>, bool>
-        {
-            return nb::borrow<nb::typed<nb::tuple, View<Index<T>, Repository>, bool>>(
-                python::cast_with_owner(formalism::insert(nb::cast<Repository&>(owner), data), owner, retainer));
-        },
-        nb::arg("data"));
-}
-
-template<typename T>
-void bind_index(nb::module_& m, const std::string& name)
-{
-    auto cls = nb::class_<T>(m, name.c_str());
-    cls.def(nb::init<>())  // default -> MAX sentinel
-        .def(nb::init<uint_t>(), nb::arg("index"))
-        .def("__int__", [](const T& i) { return static_cast<uint_t>(i); })
-        .def("__index__", [](const T& i) { return static_cast<uint_t>(i); })
-
-        .def("value", &T::get_value)
-        .def("is_max", &T::is_max)
-        .def_static("max", &T::max)
-        .def_static("MAX", []() { return T::MAX; });
-
-    add_comparison(cls);
-    cls.def("__hash__", [](const T& i) { return static_cast<uint_t>(i); })
-        .def("__repr__", [name](const T& i) { return name + "(" + std::to_string(static_cast<uint_t>(i)) + ")"; });
-}
-
-template<typename T>
-void bind_fixed_uint(nb::module_& m, const std::string& name)
-{
-    using value_type = typename T::value_type;
-
-    auto cls = nb::class_<T>(m, name.c_str());
-    cls.def(nb::init<>())  // default -> MAX sentinel
-        .def(nb::init<value_type>(), nb::arg("value"))
-
-        .def("__int__", [](const T& x) { return static_cast<value_type>(x); })
-        .def("__index__", [](const T& x) { return static_cast<value_type>(x); })
-
-        .def("value", &T::value)
-        .def("is_max", &T::is_max)
-        .def_static("max", &T::max)
-        .def_static("MAX", []() { return T::MAX; });
-
-    add_comparison(cls);
-    cls.def("__hash__", [](const T& x) { return static_cast<value_type>(x); })
-        .def(
-            "__add__",
-            [](const T& a, value_type b) { return a + b; },
-            nb::is_operator())
-        .def(
-            "__sub__",
-            [](const T& a, value_type b) { return a - b; },
-            nb::is_operator())
-        .def(
-            "__iadd__",
-            [](T& a, value_type b)
-            {
-                a = a + b;
-                return a;
-            },
-            nb::is_operator())
-        .def(
-            "__isub__",
-            [](T& a, value_type b)
-            {
-                a = a - b;
-                return a;
-            },
-            nb::is_operator())
-
-        .def("inc",
-             [](T& a)
-             {
-                 ++a;
-                 return a;
-             })
-
-        .def("__repr__", [name](const T& x) { return name + "(" + std::to_string(static_cast<value_type>(x)) + ")"; });
+    repository.def("insert", [](Repository& self, urd::data<T>& data) { return formalism::insert(self, data); }, nb::arg("data"));
 }
 
 }  // namespace ygg

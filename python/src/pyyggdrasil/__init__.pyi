@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Tuple
 
-from . import database as database
 from . import diagnostics as diagnostics
 from . import execution as execution
+from . import formalism as formalism
 from . import serialization as serialization
 
 __version__: str

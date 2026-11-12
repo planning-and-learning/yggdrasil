@@ -8,6 +8,8 @@
 #include "yggdrasil/diagnostics/diagnostic.hpp"
 
 #include <span>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -23,7 +25,7 @@ public:
     [[nodiscard]] bool empty() const noexcept { return m_warnings.empty(); }
 
 private:
-    std::vector<Diagnostic> m_warnings;
+    urd::Store<urd::sequence<Diagnostic>> m_warnings;
 };
 }  // namespace ygg::diagnostics
 

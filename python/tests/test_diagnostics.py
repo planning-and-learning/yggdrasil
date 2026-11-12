@@ -19,9 +19,24 @@ from pyyggdrasil.diagnostics import (
 def test_diagnostics_submodule_is_public() -> None:
     assert diagnostics is pyyggdrasil.diagnostics
     exported: list[str] = vars(diagnostics)["__all__"]  # the generated type hints do not list __all__
-    assert exported == ["Diagnostic", "DiagnosticNote", "Source", "SourceSpan", "format_diagnostic"]
+    assert exported == [
+        "Diagnostic",
+        "DiagnosticNote",
+        "ParseError",
+        "SemanticError",
+        "Source",
+        "SourceSpan",
+        "format_diagnostic",
+    ]
     for name in exported:
         assert hasattr(diagnostics, name)
+
+
+def test_parse_error_is_a_semantic_error_with_a_diagnostic() -> None:
+    assert issubclass(diagnostics.ParseError, diagnostics.SemanticError)
+    error = diagnostics.ParseError("bad input")
+    assert isinstance(error, diagnostics.SemanticError)
+    assert error.diagnostic.message == "bad input"
 
 
 def test_source_span_exposes_byte_offsets_and_one_based_location() -> None:

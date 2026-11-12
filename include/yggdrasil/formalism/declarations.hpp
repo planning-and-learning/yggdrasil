@@ -10,119 +10,130 @@
 #ifndef YGG_FORMALISM_DECLARATIONS_HPP_
 #define YGG_FORMALISM_DECLARATIONS_HPP_
 
-#include "yggdrasil/core/concepts.hpp"
-#include "yggdrasil/core/types.hpp"
-
+#include <atomic>
+#include <boost/mp11.hpp>
 #include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <ranges>
 #include <tuple>
 #include <type_traits>
+#include <urd/elements/concepts.hpp>
+#include <urd/elements/flat.hpp>
 
-namespace ygg::formalism
+namespace ygg
 {
-
-/// Whether a repository's symbol inventory contains T.
-template<typename Repository, typename T>
-concept SupportsSymbol = std::remove_cvref_t<Repository>::SymbolTypes::template contains<T>;
-
-/// Whether a repository's relation inventory contains a relation tag.
-template<typename Repository, typename T>
-concept SupportsRelation = std::remove_cvref_t<Repository>::RelationTypes::template contains<T>;
-
-/// Read access to one supported symbol representation.
-template<typename Repository, typename T>
-concept SymbolRepositoryFor = SupportsSymbol<Repository, T> && requires(const std::remove_reference_t<Repository>& repository, Index<T> index) {
-    { repository[index] } -> std::same_as<const Data<T>&>;
-};
-
-template<typename C, typename T>
-concept SymbolContextFor = requires(const C& context) {
-    { get_repository(context) } -> SymbolRepositoryFor<T>;
-    get_repository(context).get_index();
-};
-
-template<typename Tag>
-struct Object
+/// The relation model (records in relation_data.hpp): a relation of family F is its pool (an index<F>: the layer's pool
+/// of F's rows that holds its rows), its Columns (its labels with the pool's types, interned by the layer) and its
+/// rows (their sorted ids there). A Schema is a list of column types, e.g. (object, object), interned once in the
+/// layer's relation repository. It has two roles: every pool is declared with one (its rows' column types: the pool of
+/// predicate `at` with (object, object)), and for free relations, which no symbol names, a Schema is the pool's key itself
+/// (all free relations of types (object, object) share the pool keyed by that Schema).
+struct Schema
 {
 };
-
+/// Column labels, distinct from tuple values and positions.
+struct Column
+{
+};
+struct ColumnLayout;
+struct Columns
+{
+};
+template<typename F>
+struct Relation
+{
+};
+/// A row of family F (predicates, actions, ..., Schema): its pool's key (relation) and its values (row_data.hpp). Stored
+/// once per pool, its id there is an index<Row<F>>.
+template<typename F>
 struct Row
 {
 };
 
-template<typename RelationTag_, typename ObjectTag_>
-struct RelationBinding
+/// The key of a stored row: its pool's key and its id there. Its view is the urd::owning_view of the key (RowView),
+/// which reads the row through its context (context[key]).
+template<typename F>
+struct RowIndex
 {
-    using relation_tag = RelationTag_;
-    using object_tag = ObjectTag_;
+    urd::index<F> relation;
+    urd::index<Row<F>> row;
+
+    friend constexpr auto operator<=>(const RowIndex&, const RowIndex&) = default;
+    static constexpr auto identifying_members() noexcept { return urd::Members<&RowIndex::relation, &RowIndex::row> {}; }
 };
 
-template<typename T>
-struct is_relation_binding : std::false_type
+/// The view of a stored row through its context C (a layer, or a relation builder): its key held by value.
+template<typename F, typename C>
+using RowView = urd::owning_view<Row<F>, C, RowIndex<F>>;
+
+/// What the ids of one pool's rows give through their context C: each id as its row's view.
+template<typename F, typename C>
+struct RowOfId
 {
+    urd::index<F> relation;
+    const C* context;
+
+    auto operator()(urd::index<Row<F>> row) const { return context->view(RowIndex<F> { relation, row }); }
 };
 
-template<typename RelationTag, typename ObjectTag>
-struct is_relation_binding<RelationBinding<RelationTag, ObjectTag>> : std::true_type
+/// The rows of one pool, given by their ids, read through their context C: each id transformed into its row's view
+/// (urd::transformed_range: it traverses as the ids do, and is a borrowed range). Ids that are not a borrowed view and
+/// the context must outlive it; its iterators may outlive it.
+template<typename F, typename Ids, typename C>
+using RowsView = urd::transformed_range<Ids, RowOfId<F, C>>;
+
+/// The rows of `relation` whose ids are `ids`, read through `context`.
+template<typename F, std::ranges::forward_range Ids, typename C>
+    requires std::same_as<std::remove_cvref_t<std::ranges::range_reference_t<const Ids>>, urd::index<Row<F>>>
+RowsView<F, Ids, C> rows_view(urd::index<F> relation, const Ids& ids, const C& context)
+{ return { ids, { relation, &context } }; }
+
+/// What tells relations apart while their rows stay unchanged: the number of their context (a layer's or a builder's,
+/// one process-wide counter, next_layer) and, for an interned relation, its index (none for a builder).
+struct RelationIdentity
 {
+    std::size_t context = 0;
+    std::uint32_t relation = urd::index<void>::none_value;
+
+    friend bool operator==(const RelationIdentity&, const RelationIdentity&) = default;
+    static constexpr auto identifying_members() noexcept { return urd::Members<&RelationIdentity::context, &RelationIdentity::relation> {}; }
 };
 
-template<typename T>
-inline constexpr bool is_relation_binding_v = is_relation_binding<std::remove_cvref_t<T>>::value;
-
-template<typename T>
-concept RelationBindingConcept = is_relation_binding_v<T>;
-
-template<typename T>
-concept NonRelationBindingConcept = !RelationBindingConcept<T>;
-
-/// Read access to a supported binding's row representation.
-template<typename Repository, typename RelationTag, typename ObjectTag>
-concept RelationRepositoryFor = SupportsRelation<Repository, RelationTag>
-                                && requires(const std::remove_reference_t<Repository>& repository, Index<RelationBinding<RelationTag, ObjectTag>> index) {
-                                       { repository[index] } -> InputRangeOf<Index<Object<ObjectTag>>>;
-                                   };
-
-template<typename C, typename RelationTag, typename ObjectTag>
-concept RelationContextFor = requires(const std::remove_reference_t<C>& context) {
-    { get_repository(context) } -> RelationRepositoryFor<RelationTag, ObjectTag>;
-};
-
-}  // namespace ygg::formalism
-
-namespace ygg
+/// The next number of a context of views (a repository layer, a relation builder): drawn once per context, process-wide,
+/// never reused.
+[[nodiscard]] inline std::size_t next_layer() noexcept
 {
-
-template<typename RelationTag, typename ObjectTag>
-struct Index<ygg::formalism::RelationBinding<RelationTag, ObjectTag>>
-{
-    Index<RelationTag> relation;
-    Index<ygg::formalism::Row> row;
-
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&Index::relation, &Index::row> {}; }
-};
+    static constinit std::atomic<std::size_t> next { 0 };
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
 }  // namespace ygg
 
 namespace ygg::formalism
 {
 
-template<typename RelationTag, typename ObjectTag, typename BindingRange>
-    requires std::ranges::forward_range<const std::remove_reference_t<BindingRange>> && std::ranges::common_range<const std::remove_reference_t<BindingRange>>
-             && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
-struct RelationBindingsForwardRange
-{
-    const Index<RelationTag>* relation;
-    const std::remove_reference_t<BindingRange>* rows;
-};
+template<typename SymbolRepo, typename RelationRepo>
+class Repository;
+template<typename... Ts>
+class SymbolRepository;
+template<typename ObjectTag, typename... Ts>
+class RelationRepository;
 
-template<typename RelationTag, typename ObjectTag, typename BindingRange>
-    requires std::ranges::random_access_range<const std::remove_reference_t<BindingRange>>
-             && std::ranges::common_range<const std::remove_reference_t<BindingRange>>
-             && SameAsIgnoringCvref<std::ranges::range_reference_t<const std::remove_reference_t<BindingRange>>, Index<ygg::formalism::Row>>
-struct RelationBindingsRandomAccessRange
+/// Whether a repository's symbol inventory contains T.
+template<typename Repository, typename T>
+concept SupportsSymbol = boost::mp11::mp_contains<typename std::remove_cvref_t<Repository>::SymbolTypes, T>::value;
+
+/// Whether a repository has pools of family F's rows.
+template<typename Repository, typename F>
+concept HasRows = boost::mp11::mp_contains<typename std::remove_cvref_t<Repository>::RelationTypes, F>::value;
+
+/// Whether a repository has relations of family F (Relation<F> is among its symbols).
+template<typename Repository, typename F>
+concept HasRelations = SupportsSymbol<Repository, Relation<F>>;
+
+template<typename Tag>
+struct Object
 {
-    const Index<RelationTag>* relation;
-    const std::remove_reference_t<BindingRange>* rows;
 };
 }  // namespace ygg::formalism
 

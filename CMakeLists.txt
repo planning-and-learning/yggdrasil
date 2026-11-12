@@ -1,7 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/read_project_version.cmake")
-yggdrasil_read_project_version(YGGDRASIL_PROJECT_VERSION "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml")
+# brokkr (pybrokkr): build helpers, found through scikit-build-core in wheel builds, else asked of the Python that has it.
+find_package(brokkr QUIET)
+if(NOT brokkr_FOUND)
+    if(Python_EXECUTABLE)
+        set(_brokkr_python "${Python_EXECUTABLE}")
+    else()
+        find_program(_brokkr_python NAMES python3 python REQUIRED)
+    endif()
+    execute_process(COMMAND "${_brokkr_python}" -m pybrokkr --cmake-dir
+                    OUTPUT_VARIABLE _brokkr_dir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    set(brokkr_DIR "${_brokkr_dir}" CACHE PATH "The directory holding brokkrConfig.cmake" FORCE)
+    find_package(brokkr REQUIRED)
+endif()
+brokkr_read_project_version(YGGDRASIL_PROJECT_VERSION "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml")
 
 project(yggdrasil VERSION "${YGGDRASIL_PROJECT_VERSION}")
 
@@ -12,7 +24,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(GNUInstallDirs)
-include("${CMAKE_CURRENT_SOURCE_DIR}/src/source_manifest.cmake")
 
 # Options
 
@@ -88,8 +99,7 @@ else()
         AND APPLE
         AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     )
-        # ld64's LTO drops weak explicit instantiations that nothing inside a dylib calls. libyggdrasil_database
-        # instantiates the query and relation symbol storage that only its includers call (template rule 9).
+        # ld64's LTO drops weak explicit instantiations that nothing inside a dylib calls (template rule 9).
         message(STATUS "Skipping LTO on Apple: ld64 does not export unused explicit instantiations under LTO")
     elseif(
         YGGDRASIL_ENABLE_LTO
@@ -117,20 +127,21 @@ endif()
 
 # Dependencies
 
-set(
-    YGGDRASIL_NATIVE_PREFIX
-    "${CMAKE_CURRENT_SOURCE_DIR}/dependencies-install"
-    CACHE PATH
-    "Native dependency prefix to package."
-)
-
-if(NOT EXISTS "${YGGDRASIL_NATIVE_PREFIX}")
-    message(FATAL_ERROR "Native prefix does not exist: ${YGGDRASIL_NATIVE_PREFIX}")
+# urd comes from pyurd and the native libraries from pyurd-native: their prefixes (the build backend sets URD_PREFIX
+# and URD_NATIVE_PREFIX; a CMake build asks the Python that has them installed).
+brokkr_find_python_native_prefix(pyurd URD_PREFIX)
+if(NOT URD_PREFIX OR NOT EXISTS "${URD_PREFIX}")
+    message(FATAL_ERROR "pyurd's prefix not found: install pyurd, or set URD_PREFIX")
 endif()
+brokkr_find_python_native_prefix(pyurd_native URD_NATIVE_PREFIX)
+if(NOT URD_NATIVE_PREFIX OR NOT EXISTS "${URD_NATIVE_PREFIX}")
+    message(FATAL_ERROR "pyurd-native's prefix not found: install pyurd, or set URD_NATIVE_PREFIX")
+endif()
+list(PREPEND CMAKE_PREFIX_PATH "${URD_PREFIX}" "${URD_NATIVE_PREFIX}")
+find_package(urd CONFIG REQUIRED PATHS "${URD_PREFIX}" NO_DEFAULT_PATH)
 
 # Targets
 
-add_subdirectory(src/database)
 add_subdirectory(python)
 
 if(YGGDRASIL_BUILD_TESTS)

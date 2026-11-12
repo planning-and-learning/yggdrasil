@@ -1,10 +1,6 @@
 #ifndef YGG_SERIALIZATION_DICTIONARIES_HPP_
 #define YGG_SERIALIZATION_DICTIONARIES_HPP_
 
-#include "yggdrasil/containers/variant.hpp"
-#include "yggdrasil/core/concepts.hpp"
-#include "yggdrasil/semantics/equal_to.hpp"
-#include "yggdrasil/semantics/hash.hpp"
 #include "yggdrasil/serialization/conversion.hpp"
 #include "yggdrasil/serialization/fields.hpp"
 
@@ -18,7 +14,12 @@
 #include <string>
 #include <string_view>
 #include <typeinfo>
-#include <unordered_map>
+#include <urd/elements/equal_to.hpp>
+#include <urd/elements/hash.hpp>
+#include <urd/repr/maps/std_map.hpp>
+#include <urd/repr/records/records.hpp>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -27,8 +28,9 @@ namespace ygg::serialization
 
 namespace detail
 {
+/// The values of one table, each once: a value's index is its row's.
 template<typename T>
-using Index = std::unordered_map<T, size_t, Hash<T>, EqualTo<T>>;
+using Index = urd::Store<urd::pool<T>>;
 }
 
 /// Types with a describe_fields overload, serialized as dictionary rows.
@@ -60,15 +62,15 @@ private:
         std::string name;
         std::string prefix;
         boost::json::array rows;
-        std::function<std::pair<size_t, bool>(const void*, size_t)> index;
-        std::optional<std::vector<std::string>> fields;
+        std::function<std::pair<size_t, bool>(const void*)> index;
+        std::optional<urd::Store<urd::sequence<std::string>>> fields;
         std::function<void(Archive&, const void*)> project;
     };
 
-    std::vector<Table> m_tables;
+    urd::Store<urd::sequence<Table>> m_tables;
     // Hidden RTTI can differ across native modules (notably on macOS). Compare type names,
     // as nanobind does; the callbacks keep typed storage in the module that registered it.
-    std::unordered_map<std::string, size_t> m_types;
+    urd::Store<urd::map<std::string, size_t>, urd::stable_refs> m_types;
     bool m_started = false;
     bool m_failed = false;
 
@@ -82,12 +84,12 @@ public:
     class Archive
     {
         Dictionaries* m_dictionaries;
-        const std::optional<std::vector<std::string>>* m_selected_fields;
+        const std::optional<urd::Store<urd::sequence<std::string>>>* m_selected_fields;
 
         boost::json::object m_fields;
 
     public:
-        Archive(Dictionaries& dictionaries, const std::optional<std::vector<std::string>>& selected_fields) :
+        Archive(Dictionaries& dictionaries, const std::optional<urd::Store<urd::sequence<std::string>>>& selected_fields) :
             m_dictionaries(&dictionaries),
             m_selected_fields(&selected_fields)
         {
@@ -110,12 +112,11 @@ public:
                 m_fields[name] = m_dictionaries->convert(value);
         }
 
+        /// A variant read through its context (a std::variant of views): the alternative it holds.
         template<typename Variant>
         void variant(const Variant& value)
         {
-            // Visit the underlying variant directly: ygg::visit is noexcept, while serialization can throw.
-            std::visit([&]<typename Alternative>(const Alternative&) { field(detail::variant_field, value.template get<Alternative>()); },
-                       value.index_variant());
+            std::visit([&](const auto& alternative) { field(detail::variant_field, alternative); }, value);
         }
     };
 
@@ -123,12 +124,12 @@ private:
     template<typename T, typename Body>
     boost::json::value collect(const T& value, Body body)
     {
-        if constexpr (Hashable<T>)
+        if constexpr (urd::Hashable<T>)
         {
             if (const auto found = m_types.find(typeid(T).name()); found != m_types.end())
             {
                 auto& table = m_tables[found->second];
-                const auto [id, inserted] = table.index(std::addressof(value), table.rows.size());
+                const auto [id, inserted] = table.index(std::addressof(value));
                 const auto reference = table.prefix + std::to_string(id);
                 if (inserted)
                 {
@@ -154,6 +155,16 @@ public:
     {
         if constexpr (requires { serialize_as(*this, value); })
             return convert(serialize_as(*this, value));
+        else if constexpr (std::ranges::view<T> && std::ranges::input_range<T> && !std::ranges::input_range<const T>)
+        {
+            // A view iterable only when mutable (std::views::filter caches its begin): read from a copy.
+            auto range = value;
+            auto result = boost::json::value {};
+            auto& array = result.emplace_array();
+            for (auto&& item : range)
+                array.push_back(convert(item));
+            return result;
+        }
         else if constexpr (Described<T>)
         {
             auto result = boost::json::value {};
@@ -195,10 +206,10 @@ public:
                          });
     }
 
-    template<Hashable T>
+    template<urd::Hashable T>
     void register_table(std::string name,
                         std::string prefix,
-                        std::optional<std::vector<std::string>> fields = std::nullopt,
+                        std::optional<urd::Store<urd::sequence<std::string>>> fields = std::nullopt,
                         std::function<void(Archive&, const T&)> project = {})
     {
         check_valid();
@@ -212,10 +223,11 @@ public:
             if (table.name == name || table.prefix == prefix)
                 throw std::invalid_argument("Table names and prefixes must be unique");
         const auto position = m_tables.size();
-        auto index = [entries = detail::Index<T> {}](const void* value, size_t next) mutable
+        // Numbered as every pool is; no view is made of its indices.
+        auto index = [entries = detail::Index<T>(urd::layer { 0 })](const void* value) mutable
         {
-            const auto [entry, inserted] = entries.try_emplace(*static_cast<const T*>(value), next);
-            return std::make_pair(entry->second, inserted);
+            const auto [id, inserted] = entries.insert(*static_cast<const T*>(value));
+            return std::pair<size_t, bool>(id.value, inserted);
         };
         std::function<void(Archive&, const void*)> projection;
         if (project)

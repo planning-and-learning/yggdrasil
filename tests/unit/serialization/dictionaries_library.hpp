@@ -14,7 +14,7 @@ struct DictionaryEntity
 {
     int value;
 
-    static constexpr auto identifying_members() noexcept { return ygg::Members<&DictionaryEntity::value> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::Members<&DictionaryEntity::value> {}; }
 };
 
 template<typename Archive>

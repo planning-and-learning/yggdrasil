@@ -2,14 +2,16 @@
 requires = [
     "scikit-build-core>=1.0.3,<2",
     "nanobind-backend>=1.0",
+    "pybrokkr>=0.1.2,<0.2",
+    "pyurd>=0.1.1,<0.2",
 ]
 build-backend = "pyyggdrasil_build_backend"
 backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.6.0"
-description = "Native dependency provider for Dominik Drexler's planning projects"
+version = "0.7.2"
+description = "yggdrasil: data structures and a database engine for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
@@ -19,14 +21,15 @@ authors = [
 ]
 dependencies = [
     "nanobind-backend>=1.0",
+    "pyurd>=0.1.1,<0.2",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest",
-    # build_support.py wraps scikit-build-core; installed here so type checkers
+    # The build backend wraps pybrokkr; installed here so type checkers
     # resolve it (it is otherwise only a build-system requirement).
-    "scikit-build-core>=1.0.3,<2",
+    "pybrokkr>=0.1.2,<0.2",
 ]
 
 [tool.pytest.ini_options]
@@ -63,7 +66,6 @@ exclude = [
 ]
 
 [tool.scikit-build.cmake.define]
-YGGDRASIL_NATIVE_PREFIX = {env = "YGGDRASIL_NATIVE_PREFIX", default = "dependencies-install"}
 YGGDRASIL_USE_LLD = false
 YGGDRASIL_ENABLE_LTO = {env = "YGGDRASIL_ENABLE_LTO", default = false}
 CMAKE_INSTALL_LIBDIR = "lib"
@@ -71,11 +73,14 @@ CMAKE_INSTALL_LIBDIR = "lib"
 [tool.cibuildwheel]
 build = "cp311-*"
 container-engine = "docker"
-test-requires = ["cmake>=3.21"]
-test-command = "python {project}/python/tests/test_mpi.py"
+test-requires = ["pytest", "cmake>=3.21"]
+test-command = "python -m pytest {project}/python/tests/test_import.py"
+# pyurd in the build environment: the repair command below is its (pyurd.repair). The index may still be publishing a
+# new pyurd, so the install is retried.
+before-build = "n=0; until python -m pip install --no-cache-dir 'pyurd>=0.1.1,<0.2'; do n=$((n+1)); [ $n -ge 30 ] && exit 1; echo 'pyurd not on the index yet; retrying in 60s'; sleep 60; done"
 
 [tool.cibuildwheel.linux]
-repair-wheel-command = "LD_LIBRARY_PATH=$(python -c 'import os, pathlib; prefix = pathlib.Path(\"dependencies-install\"); print(os.pathsep.join(str(path) for path in sorted(prefix.glob(\"lib*\")) if path.is_dir()))') auditwheel repair -w {dest_dir} {wheel}"
+repair-wheel-command = "python -m pyurd.repair --providers pyurd_native --dest-dir {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
-repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
+repair-wheel-command = "python -m pyurd.repair --providers pyurd_native --require-archs {delocate_archs} --dest-dir {dest_dir} {wheel}"

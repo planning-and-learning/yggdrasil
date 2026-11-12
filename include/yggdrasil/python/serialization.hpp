@@ -1,10 +1,10 @@
 #ifndef YGG_PYTHON_SERIALIZATION_HPP_
 #define YGG_PYTHON_SERIALIZATION_HPP_
 
-#include "yggdrasil/core/type_list.hpp"
 #include "yggdrasil/serialization/dictionaries.hpp"
 
 #include <boost/json.hpp>
+#include <boost/mp11.hpp>
 #include <cstdint>
 #include <fmt/format.h>
 #include <functional>
@@ -16,6 +16,8 @@
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <urd/repr/sequences/sequence.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -41,13 +43,13 @@ void bind_fields()
                                                         nanobind::arg("qualname") = nanobind::cast<std::string>(native_type.attr("__qualname__")) + ".Fields");
 }
 
-inline std::optional<std::vector<std::string>> selected_fields(nanobind::handle native_type, nanobind::handle fields)
+inline std::optional<urd::Store<urd::sequence<std::string>>> selected_fields(nanobind::handle native_type, nanobind::handle fields)
 {
     if (fields.is_none())
         return std::nullopt;
     if (nanobind::isinstance<nanobind::str>(fields))
         throw nanobind::type_error("fields must be a sequence, not a string");
-    auto selected = std::vector<std::string> {};
+    auto selected = urd::Store<urd::sequence<std::string>> {};
     for (const auto field : nanobind::iter(fields))
     {
         if (nanobind::isinstance<nanobind::str>(field))
@@ -102,7 +104,7 @@ void bind_native_serializer()
 }
 
 inline std::optional<boost::json::value>
-from_python_native(serialization::Dictionaries& dictionaries, nanobind::handle value, std::vector<nanobind::object>& owners)
+from_python_native(serialization::Dictionaries& dictionaries, nanobind::handle value, urd::Store<urd::sequence<nanobind::object>>& owners)
 {
     const auto hook = nanobind::getattr(value.type(), "_ygg_serialize", nanobind::none());
     if (hook.is_none())
@@ -115,7 +117,7 @@ from_python_native(serialization::Dictionaries& dictionaries, nanobind::handle v
     return (*serializer)(dictionaries, value);
 }
 
-inline boost::json::value from_python(serialization::Dictionaries& dictionaries, nanobind::handle value, std::vector<nanobind::object>& owners)
+inline boost::json::value from_python(serialization::Dictionaries& dictionaries, nanobind::handle value, urd::Store<urd::sequence<nanobind::object>>& owners)
 {
     if (value.is_none())
         return nullptr;
@@ -176,7 +178,7 @@ void register_table(serialization::Dictionaries& dictionaries,
                     const nanobind::type_object& native_type,
                     const std::string& name,
                     const std::string& prefix,
-                    TypeList<Registered...>,
+                    boost::mp11::mp_list<Registered...>,
                     nanobind::object fields = nanobind::none(),
                     nanobind::object project = nanobind::none())
 {
@@ -188,8 +190,8 @@ void register_table(serialization::Dictionaries& dictionaries,
         std::function<void(serialization::Dictionaries::Archive&, const T&)> projection;
         if (!project.is_none())
         {
-            projection =
-                [project, &dictionaries, owners = std::vector<nanobind::object> {}](serialization::Dictionaries::Archive& archive, const T& value) mutable
+            projection = [project, &dictionaries, owners = urd::Store<urd::sequence<nanobind::object>> {}](serialization::Dictionaries::Archive& archive,
+                                                                                                           const T& value) mutable
             {
                 nanobind::gil_scoped_acquire guard;
                 const auto row = project(nanobind::cast(value, nanobind::rv_policy::copy));
@@ -213,7 +215,7 @@ void register_table(serialization::Dictionaries& dictionaries,
 }
 
 template<typename... Ts>
-nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::handle value, TypeList<Ts...>)
+nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::handle value, boost::mp11::mp_list<Ts...>)
 {
     nanobind::object result;
     const auto serialize_as = [&]<typename T>()
@@ -229,7 +231,7 @@ nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::
 }
 
 template<typename... Ts>
-nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, TypeList<Ts...>)
+nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, boost::mp11::mp_list<Ts...>)
 {
     nanobind::object result;
     const auto table_of = [&]<typename T>()
@@ -284,13 +286,28 @@ void bind_registration(nanobind::module_& module)
            const std::string& name,
            const std::string& prefix,
            nb::object fields,
-           nb::object project) { register_table(dictionaries, native_type, name, prefix, TypeList<T> {}, fields, project); },
+           nb::object project) { register_table(dictionaries, native_type, name, prefix, boost::mp11::mp_list<T> {}, fields, project); },
         registration_signature(nb::type<T>()));
 }
 
 template<typename... Registered>
-void bind_registration_overloads(nanobind::module_& module, TypeList<Registered...>)
+void bind_registration_overloads(nanobind::module_& module, boost::mp11::mp_list<Registered...>)
 { (bind_registration<Registered>(module), ...); }
+
+/// Keeps a serialized value alive as long as the dictionaries: their tables hold copies of its views, which
+/// point into the repository the value keeps alive. Appending to a list is O(1); nb::keep_alive scans all
+/// earlier patients for a duplicate on every call, so serializing n values took O(n^2) time.
+inline void retain(nanobind::handle dictionaries, nanobind::handle value)
+{
+    namespace nb = nanobind;
+    nb::object retained = nb::getattr(dictionaries, "_ygg_retained", nb::none());
+    if (retained.is_none())
+    {
+        retained = nb::list();
+        nb::setattr(dictionaries, "_ygg_retained", retained);
+    }
+    nb::borrow<nb::list>(retained).append(value);
+}
 
 template<typename T>
 void bind_serialize(nanobind::module_& module)
@@ -301,14 +318,18 @@ void bind_serialize(nanobind::module_& module)
 
     module.def(
         "serialize",
-        [](Dictionaries& dictionaries, const T& value) { return to_python(dictionaries.serialize(value)); },
+        [](nb::handle_t<Dictionaries> self, nb::handle_t<T> value)
+        {
+            auto result = to_python(nb::cast<Dictionaries&>(self).serialize(nb::cast<const T&>(value)));
+            retain(self, value);
+            return result;
+        },
         "dictionaries"_a,
-        "value"_a.noconvert(),
-        nb::keep_alive<1, 2>());
+        "value"_a.noconvert());
 }
 
 template<typename... Serialized>
-void bind_serialize(nanobind::module_& module, TypeList<Serialized...>)
+void bind_serialize(nanobind::module_& module, boost::mp11::mp_list<Serialized...>)
 { (bind_serialize<Serialized>(module), ...); }
 
 template<typename T>
@@ -320,23 +341,23 @@ void bind_table(nanobind::module_& module)
 
     module.def(
         "table",
-        [](Dictionaries& dictionaries, nb::type_object_t<T> native_type) { return table(dictionaries, native_type, TypeList<T> {}); },
+        [](Dictionaries& dictionaries, nb::type_object_t<T> native_type) { return table(dictionaries, native_type, boost::mp11::mp_list<T> {}); },
         "dictionaries"_a,
         "native_type"_a);
 }
 
 template<typename... Registered>
-void bind_table(nanobind::module_& module, TypeList<Registered...>)
+void bind_table(nanobind::module_& module, boost::mp11::mp_list<Registered...>)
 { (bind_table<Registered>(module), ...); }
 
 template<typename... Registered, typename... Serialized, typename... Projected>
-void bind_serialization(nanobind::module_& module, TypeList<Registered...>, TypeList<Serialized...>, TypeList<Projected...>)
+void bind_serialization(nanobind::module_& module, boost::mp11::mp_list<Registered...>, boost::mp11::mp_list<Serialized...>, boost::mp11::mp_list<Projected...>)
 {
     (bind_fields<Serialized>(), ...);
     (bind_native_serializer<Projected>(), ...);
-    bind_registration_overloads(module, TypeList<Registered...> {});
-    bind_serialize(module, TypeList<Serialized...> {});
-    bind_table(module, TypeList<Registered...> {});
+    bind_registration_overloads(module, boost::mp11::mp_list<Registered...> {});
+    bind_serialize(module, boost::mp11::mp_list<Serialized...> {});
+    bind_table(module, boost::mp11::mp_list<Registered...> {});
 }
 
 }  // namespace ygg::python

@@ -6,9 +6,11 @@
 from pyyggdrasil._pyyggdrasil.diagnostics import (
     Diagnostic as Diagnostic,
     DiagnosticNote as DiagnosticNote,
+    ParseError as ParseError,
+    SemanticError as SemanticError,
     Source as Source,
     SourceSpan as SourceSpan,
     format_diagnostic as format_diagnostic,
 )
 
-__all__ = ["Diagnostic", "DiagnosticNote", "Source", "SourceSpan", "format_diagnostic"]
+__all__ = ["Diagnostic", "DiagnosticNote", "ParseError", "SemanticError", "Source", "SourceSpan", "format_diagnostic"]

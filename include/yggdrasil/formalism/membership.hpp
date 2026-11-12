@@ -10,43 +10,30 @@
 #ifndef YGG_FORMALISM_MEMBERSHIP_HPP_
 #define YGG_FORMALISM_MEMBERSHIP_HPP_
 
-#include "yggdrasil/core/types.hpp"
-
-#include <concepts>
-#include <memory>
-#include <ranges>
+#include <urd/elements/view.hpp>
 
 namespace ygg::formalism
 {
-/// Check whether an indexed view denotes an entry in this repository or its ancestors.
-template<typename Repository, typename T, typename C>
-    requires requires(const Repository& repository, const C& context, Index<T> index) {
-        { repository.contains(index) } -> std::same_as<bool>;
-        { get_repository(context).contains(index) } -> std::same_as<bool>;
-        repository.get_canonical_context(index);
-        get_repository(context).get_canonical_context(index);
-    }
-bool contains(const Repository& repository, const ::ygg::View<Index<T>, C>& view)
+/// Whether `key` names the same record in `repository` (or an ancestor) as in `source`: both find it, in the same layer.
+template<typename Repository, typename Source, typename Key>
+bool same_owner(const Repository& repository, const Source& source, const Key& key)
 {
-    const auto index = view.get_index();
-    const auto& source = get_repository(view.get_context());
-    return repository.contains(index) && source.contains(index)
-           && static_cast<const void*>(std::addressof(repository.get_canonical_context(index)))
-                  == static_cast<const void*>(std::addressof(source.get_canonical_context(index)));
+    const auto* owner = repository.owner(key);
+    return owner != nullptr && static_cast<const void*>(owner) == static_cast<const void*>(source.owner(key));
 }
 
-/// Check presence for indices, and presence plus canonical ownership for indexed views.
-template<typename Repository, std::ranges::input_range Range>
-    requires requires(const Repository& repository, std::ranges::range_reference_t<Range> value) {
-        { repository.contains(value) } -> std::same_as<bool>;
-    }
-bool contains_all(const Repository& repository, const Range& values)
-{
-    for (auto&& value : values)
-        if (!repository.contains(value))
-            return false;
-    return true;
-}
+/// Whether a view of an index denotes an entry in this repository or its ancestors.
+template<typename Repository, typename T, typename C>
+    requires requires(const Repository& repository, urd::index<T> index) { repository.owner(index); }
+bool contains(const Repository& repository, const urd::index_view<T, C>& view)
+{ return same_owner(repository, get_repository(view.context()), view.index()); }
+
+/// Whether a view of a row key denotes a row in this repository or its ancestors.
+template<typename Repository, typename B, typename C, typename Key>
+    requires requires(const Repository& repository, const Key& key) { repository.owner(key); }
+bool contains(const Repository& repository, const urd::owning_view<B, C, Key>& view)
+{ return same_owner(repository, get_repository(view.context()), view.data()); }
+
 }  // namespace ygg::formalism
 
 #endif

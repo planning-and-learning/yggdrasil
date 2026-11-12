@@ -1,5 +1,6 @@
 #include "module.hpp"
 
+#include "pyyggdrasil/module.hpp"
 #include "yggdrasil/python/serialization.hpp"
 
 namespace yggdrasil
@@ -10,7 +11,7 @@ void bind_serialization_module_definitions(nanobind::module_& module)
     namespace nb = nanobind;
     using ygg::serialization::Dictionaries;
 
-    nb::class_<Dictionaries>(module, "Dictionaries")
+    nb::class_<Dictionaries>(module, "Dictionaries", nb::dynamic_attr())
         .def(nb::init<>())
         .def(
             "tables",

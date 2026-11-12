@@ -15,8 +15,8 @@ Each binary release has a matching complete corresponding-source archive on the
 [GitHub releases page](https://github.com/planning-and-learning/yggdrasil/releases),
 containing Yggdrasil and its exact native dependency sources.
 
-The C++ headers also include a small [relational-algebra library](docs/database.md)
-for arbitrary-arity tuple sets and queries.
+The formalism includes free relations (arbitrary-arity tuple sets keyed by their column types); the operations and
+queries over them live in [tyr](https://planning-and-learning.github.io/tyr/database.html).
 
 ## Python Integration
 
@@ -46,7 +46,7 @@ Python packages that consume this native prefix should depend on:
 
 ```toml
 dependencies = [
-    "pyyggdrasil>=0.6.0,<0.7",
+    "pyyggdrasil>=0.7.2,<0.8",
 ]
 ```
 
@@ -129,21 +129,17 @@ YGGDRASIL_STRIP_WHEEL=OFF uv build --wheel
 
 ## C++ contracts
 
-Headers and templates follow the [template and include rules](docs/TEMPLATE_RULES.md), which also apply to the
-downstream libraries.
+Headers and templates follow the [template and include rules](https://planning-and-learning.github.io/brokkr/template_rules.html), which also
+apply to the downstream libraries.
 
 Use `CanonicalizableContext<Context, Handle>`; it replaces the former
 handle-first ordering and the `CanonicalizableContextFor` wrapper.
 `extend` and range `set` require iteration through a const range and append
 its elements through const references.
 
-`RelationBindingsForwardRange` and `RelationBindingsRandomAccessRange` require
-const iteration with the corresponding traversal capability, matching iterator
-and sentinel types, and typed row indices. They borrow the source rows, which
-must outlive the wrapper and its views. Reference-qualified range parameters
-also provide const access. Generic binding-range view accessors propagate
-exceptions from the underlying range and canonical-owner lookup; they are no
-longer unconditionally `noexcept`.
+`RowsView` (`rows_view(relation, ids, context)`) reads row ids (`index<Row<F>>`) as the `Row<F>` views their
+context makes. It borrows the ids, which must outlive it and its views. Its accessors propagate exceptions from the
+underlying range and canonical-owner lookup.
 
 ## Build C++
 

@@ -18,246 +18,136 @@
 #ifndef YGG_FORMALISM_SYMBOL_REPOSITORY_HPP_
 #define YGG_FORMALISM_SYMBOL_REPOSITORY_HPP_
 
-#include "yggdrasil/buffer/declarations.hpp"
-#include "yggdrasil/core/type_list.hpp"
-#include "yggdrasil/core/types.hpp"
-#include "yggdrasil/formalism/basic_symbol_repository.hpp"
+#include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/formalism/membership.hpp"
 
-#include <cassert>
+#include <boost/mp11.hpp>
 #include <optional>
-#include <stdexcept>
 #include <type_traits>
+#include <urd/config.hpp>
+#include <urd/elements/flat.hpp>
+#include <urd/memory.hpp>
+#include <urd/repr/records/arena.hpp>
+#include <urd/repr/records/records.hpp>
+#include <urd/repr/wrappers/layered_pool.hpp>
+#include <urd/store.hpp>
 #include <utility>
 
 namespace ygg::formalism
 {
+
+/// The records of type T in one layer: a urd pool of urd::data<T>, each once, handing out index<T>, stored flat with
+/// references that hold while others are inserted (views borrow them); layered over a parent layer's pool, its indices
+/// continuing after the parent's, its lookups finding the parent's records too.
+template<typename T, bool ThreadSafe = false>
+using SymbolStore = urd::Store<urd::pool<urd::data<T>, urd::index<T>>,
+                               urd::flat,
+                               urd::stable_refs,
+                               urd::layered,
+                               std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
+
+/// Interns `record` in `store` (a pool of urd::data<T> handing out index<T>): its index anywhere along the store's
+/// layers, and whether it was stored now. record.index is set to that index; a new record is stored with it.
+template<typename Store, typename T>
+std::pair<urd::index<T>, bool> intern(Store& store, urd::data<T>& record)
+{
+    const auto [at, created] = store.insert(record,
+                                            [&record](urd::index<T> given) -> const urd::data<T>&
+                                            {
+                                                record.index = given;
+                                                return record;
+                                            });
+    record.index = at;
+    return { at, created };
+}
+
 template<typename... Ts>
 class SymbolRepository;
 
 template<typename... Ts>
 class ConcurrentSymbolRepository;
 
-/// Owns symbol storage and publishes indexed views with the derived repository as context.
+/// The symbols of a repository, one SymbolStore per type in a urd family, read through the derived Repository: views
+/// of its indices have it as context. Over a parent (its stores layered over the parent's), lookups and reads find the
+/// parent's records too.
 template<typename Repository, typename Types, bool ThreadSafe = false>
 class SymbolRepositoryBase;
 
 template<typename Repository, bool ThreadSafe, typename... Ts>
-class SymbolRepositoryBase<Repository, TypeList<Ts...>, ThreadSafe> : private BasicSymbolRepository<Ts, ThreadSafe>...
+class SymbolRepositoryBase<Repository, boost::mp11::mp_list<Ts...>, ThreadSafe>
 {
-private:
-    const SymbolRepositoryBase* m_parent;
-    const SymbolRepositoryBase* m_root;
+    template<typename T>
+    using Store = SymbolStore<T, ThreadSafe>;
+
+    Family<Store, Ts...> m_symbols;
 
     [[nodiscard]] const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
 
-    using SymbolTypes = TypeList<Ts...>;
+    using SymbolTypes = boost::mp11::mp_list<Ts...>;
 
-private:
+    /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const SymbolRepositoryBase* find_canonical_context(Index<T> index) const noexcept
-    {
-        const auto* current = this;
-        while (current != nullptr)
-        {
-            if (current->template get<T>().is_local(index))
-                return current;
-            current = current->m_parent;
-        }
-        return nullptr;
-    }
-
-public:
-    /**
-     * Global methods traverse the current repository layer and its parent
-     * hierarchy. Handle-producing methods return views that retain the discovered
-     * canonical context.
-     */
+    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const noexcept
+    { return { index, &repository() }; }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] std::optional<::ygg::View<Index<T>, Repository>> find_with_hash(const Data<T>& builder, size_t h) const noexcept
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const
     {
-        if (auto index_or_nullopt = this->template get<T>().find_local_with_hash(builder, h))
-            return ::ygg::View<Index<T>, Repository>(*index_or_nullopt, repository());
-
-        const auto* current = m_parent;
-        while (current != nullptr)
-        {
-            if (auto index_or_nullopt = current->template get<T>().find_local_unsafe_with_hash(builder, h))
-                return ::ygg::View<Index<T>, Repository>(*index_or_nullopt, current->repository());
-
-            current = current->m_parent;
-        }
-
+        if (const auto index = get<T>().find(builder); !index.is_none())
+            return repository().view(index);
         return std::nullopt;
     }
 
+    /// Interns the record; builder.index is set to its index.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] std::optional<::ygg::View<Index<T>, Repository>> find(const Data<T>& builder) const noexcept
-    { return find_with_hash(builder, SymbolRepositoryBase::hash(builder)); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::pair<::ygg::View<Index<T>, Repository>, bool> insert(Data<T>& builder)
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
     {
-        const auto h = SymbolRepositoryBase::hash(builder);
-        if (auto view_or_nullopt = find_with_hash(builder, h))
-        {
-            builder.index = view_or_nullopt->get_index();
-            return { *view_or_nullopt, false };
-        }
-
-        assert(!get<T>().exists_parent_mutation()
-               && "Integrity error: Parent SymbolRepository modified after child "
-                  "branching!");
-
-        const auto [index, success] = create_local_with_hash(builder, h);
-        return { ::ygg::View<Index<T>, Repository>(index, repository()), success };
+        const auto [index, created] = intern(get<T>(), builder);
+        return { repository().view(index), created };
     }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    const Data<T>& operator[](Index<T> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return owner->template get<T>().at_local(index);
-        throw std::out_of_range("Symbol index not found in any repository layer.");
-    }
+    [[nodiscard]] const urd::data<T>& operator[](urd::index<T> index) const
+    { return m_symbols[index]; }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const Data<T>& front() const
-    { return (*this)[Index<T>(0)]; }
+    [[nodiscard]] bool contains(urd::index<T> index) const
+    { return m_symbols.contains(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t size() const noexcept
+    [[nodiscard]] size_t size() const
     { return get<T>().size(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const Repository& get_canonical_context(Index<T> index) const
-    {
-        if (const auto* owner = find_canonical_context(index))
-            return owner->repository();
-        throw std::out_of_range("Symbol index not found in any repository layer.");
-    }
+    [[nodiscard]] size_t memory_usage() const
+    { return urd::memory_usage(get<T>()); }
+
+    /// The store of T's records.
+    template<typename T>
+        requires SupportsSymbol<SymbolRepositoryBase, T>
+    [[nodiscard]] Store<T>& get()
+    { return m_symbols.template get<T>(); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] bool contains(Index<T> index) const noexcept
-    { return find_canonical_context(index) != nullptr; }
-
-    template<typename T, typename C>
-        requires requires(const Repository& repository, const ::ygg::View<Index<T>, C>& view) { ::ygg::formalism::contains(repository, view); }
-    [[nodiscard]] bool contains(const ::ygg::View<Index<T>, C>& view) const
-    { return ::ygg::formalism::contains(repository(), view); }
-
-    /**
-     * Local methods access only the current repository layer.
-     * Handle-producing methods return raw handles because the caller already
-     * knows the context.
-     */
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    BasicSymbolRepository<T, ThreadSafe>& get() noexcept
-    { return static_cast<BasicSymbolRepository<T, ThreadSafe>&>(*this); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const BasicSymbolRepository<T, ThreadSafe>& get() const noexcept
-    { return static_cast<const BasicSymbolRepository<T, ThreadSafe>&>(*this); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] auto find_local_with_hash(const Data<T>& builder, size_t h) const noexcept
-    { return get<T>().find_local_with_hash(builder, h); }
-
-    /// Forwards the unsafe local-only lookup without traversing ancestors.
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] auto find_local_unsafe_with_hash(const Data<T>& builder, size_t h) const noexcept
-    { return get<T>().find_local_unsafe_with_hash(builder, h); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] auto find_local(const Data<T>& builder) const noexcept
-    { return get<T>().find_local(builder); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto insert_local_with_hash(Data<T>& builder, size_t h)
-    { return get<T>().insert_local_with_hash(builder, h); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::pair<Index<T>, bool> create_local_with_hash(Data<T>& builder, size_t h)
-    { return get<T>().create_local_with_hash(builder, h); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    auto insert_local(Data<T>& builder)
-    { return get<T>().insert_local(builder); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const Data<T>& local(Index<T> index) const noexcept
-    { return get<T>().local(index); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const Data<T>& at_local(Index<T> index) const
-    { return get<T>().at_local(index); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    const Data<T>& front_local() const
-    { return get<T>().front_local(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t local_size() const noexcept
-    { return get<T>().local_size(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t parent_size() const noexcept
-    { return get<T>().parent_size(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] bool is_local(Index<T> index) const noexcept
-    { return get<T>().is_local(index); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] bool exists_parent_mutation() const noexcept
-    { return get<T>().exists_parent_mutation(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t memory_usage() const noexcept
-    { return get<T>().memory_usage(); }
-
-    /**
-     * Common methods do not depend on lookup scope.
-     */
+    [[nodiscard]] const Store<T>& get() const
+    { return m_symbols.template get<T>(); }
 
     SymbolRepositoryBase() : SymbolRepositoryBase(nullptr) {}
 
     /// Parent layers must remain frozen and outlive this repository.
     explicit SymbolRepositoryBase(const Repository* parent) :
-        BasicSymbolRepository<Ts, ThreadSafe>(parent ? &parent->template get<Ts>() : nullptr)...,
-        m_parent(parent),
-        m_root(m_parent ? m_parent->m_root : this)
+        m_symbols(parent == nullptr ? nullptr : &static_cast<const SymbolRepositoryBase*>(parent)->m_symbols)
     {
     }
 
@@ -267,38 +157,31 @@ public:
     SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;
     SymbolRepositoryBase& operator=(SymbolRepositoryBase&&) = delete;
 
-    [[nodiscard]] const Repository& get_root() const noexcept { return m_root->repository(); }
-
-    void clear() noexcept { (this->template get<Ts>().clear(), ...); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    static size_t hash(const Data<T>& builder) noexcept
-    { return BasicSymbolRepository<T, ThreadSafe>::hash(builder); }
+    void clear() { m_symbols.clear(); }
 };
 
 template<typename... Ts>
-class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, TypeList<Ts...>>
+class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>>
 {
-    using Base = SymbolRepositoryBase<SymbolRepository<Ts...>, TypeList<Ts...>>;
+    using Base = SymbolRepositoryBase<SymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>>;
 
 public:
     SymbolRepository() : Base(nullptr) {}
     explicit SymbolRepository(const SymbolRepository* parent) : Base(parent) {}
 
-    friend const SymbolRepository& get_repository(const SymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
+    friend const SymbolRepository& get_repository(const SymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 template<typename... Ts>
-class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, TypeList<Ts...>, true>
+class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>, true>
 {
-    using Base = SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, TypeList<Ts...>, true>;
+    using Base = SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>, true>;
 
 public:
     ConcurrentSymbolRepository() : Base(nullptr) {}
     explicit ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent) : Base(parent) {}
 
-    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository YGG_LIFETIMEBOUND) noexcept { return repository; }
+    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 }  // namespace ygg::formalism

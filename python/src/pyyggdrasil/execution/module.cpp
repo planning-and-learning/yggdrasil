@@ -1,5 +1,6 @@
 #include "module.hpp"
 
+#include "pyyggdrasil/module.hpp"
 #include "yggdrasil/execution/onetbb.hpp"
 
 #include <nanobind/stl/shared_ptr.h>

@@ -7,14 +7,11 @@ find_package(Python 3.11 REQUIRED
     OPTIONAL_COMPONENTS Development.SABIModule
 )
 
-yggdrasil_source(YGGDRASIL_NANOBIND_VERSION nanobind version)
-find_package(nanobind ${YGGDRASIL_NANOBIND_VERSION} CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(TBB CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(Boost CONFIG REQUIRED COMPONENTS json PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-yggdrasil_source(YGGDRASIL_BOOST_VERSION boost version)
-find_package(boost_heap ${YGGDRASIL_BOOST_VERSION} EXACT CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(fmt CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
-find_package(cista CONFIG REQUIRED PATHS "${YGGDRASIL_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(nanobind CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(TBB CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(Boost CONFIG REQUIRED COMPONENTS json PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(fmt CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(cista CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
 
 # Targets
 
@@ -25,27 +22,9 @@ file(GLOB_RECURSE YGGDRASIL_PUBLIC_HEADERS CONFIGURE_DEPENDS
 nanobind_add_module(_pyyggdrasil NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend
     src/module.cpp
     src/pyyggdrasil/module.cpp
-    src/pyyggdrasil/database/module.cpp
-    src/pyyggdrasil/database/distance.cpp
-    src/pyyggdrasil/database/evaluation.cpp
-    src/pyyggdrasil/database/optimization.cpp
-    src/pyyggdrasil/database/query/query.cpp
-    src/pyyggdrasil/database/query/input.cpp
-    src/pyyggdrasil/database/query/empty.cpp
-    src/pyyggdrasil/database/query/join.cpp
-    src/pyyggdrasil/database/query/project.cpp
-    src/pyyggdrasil/database/query/rename.cpp
-    src/pyyggdrasil/database/query/select_equal.cpp
-    src/pyyggdrasil/database/query/select_value.cpp
-    src/pyyggdrasil/database/query/union.cpp
-    src/pyyggdrasil/database/query/difference.cpp
-    src/pyyggdrasil/database/query/distance.cpp
-    src/pyyggdrasil/database/query/generic_join.cpp
-    src/pyyggdrasil/database/query/semijoin.cpp
-    src/pyyggdrasil/database/query/antijoin.cpp
-    src/pyyggdrasil/database/datalog.cpp
     src/pyyggdrasil/diagnostics/module.cpp
     src/pyyggdrasil/execution/module.cpp
+    src/pyyggdrasil/formalism/module.cpp
     src/pyyggdrasil/serialization/module.cpp
     ${YGGDRASIL_PUBLIC_HEADERS}
 )
@@ -56,18 +35,19 @@ target_include_directories(_pyyggdrasil PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${PROJECT_SOURCE_DIR}/include"
 )
+target_include_directories(_pyyggdrasil SYSTEM PRIVATE "${URD_PREFIX}/include" "${URD_NATIVE_PREFIX}/include")
 
-target_link_libraries(_pyyggdrasil PRIVATE yggdrasil::database TBB::tbb Boost::heap Boost::json fmt::fmt cista::cista)
+target_link_libraries(_pyyggdrasil PRIVATE TBB::tbb Boost::json fmt::fmt cista::cista)
 
 if(APPLE)
     set_target_properties(_pyyggdrasil PROPERTIES
-        BUILD_RPATH "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-        INSTALL_RPATH "@loader_path/${CMAKE_INSTALL_LIBDIR}"
+        BUILD_RPATH "${URD_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
+        INSTALL_RPATH "@loader_path/${CMAKE_INSTALL_LIBDIR};@loader_path/../pyurd_native/${CMAKE_INSTALL_LIBDIR}"
     )
 elseif(UNIX)
     set_target_properties(_pyyggdrasil PROPERTIES
-        BUILD_RPATH "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-        INSTALL_RPATH "$ORIGIN/${CMAKE_INSTALL_LIBDIR}"
+        BUILD_RPATH "${URD_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
+        INSTALL_RPATH "$ORIGIN/${CMAKE_INSTALL_LIBDIR};$ORIGIN/../pyurd_native/${CMAKE_INSTALL_LIBDIR}"
     )
 endif()
 
@@ -76,13 +56,11 @@ endif()
 set(PYYGGDRASIL_PYTHON_FILES
     pyyggdrasil/__init__.py
     pyyggdrasil/__main__.py
-    pyyggdrasil/build_support.py
-    pyyggdrasil/repair.py
     pyyggdrasil/serialization/__init__.py
     pyyggdrasil/serialization/table.py
     pyyggdrasil/py.typed
     pyyggdrasil/__init__.pyi
-    pyyggdrasil/database/__init__.py
+    pyyggdrasil/formalism/__init__.py
     pyyggdrasil/diagnostics/__init__.py
     pyyggdrasil/execution/__init__.py
 )
@@ -95,29 +73,8 @@ foreach(python_file IN LISTS PYYGGDRASIL_PYTHON_FILES)
     )
 endforeach()
 
-install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/nanobind"
-    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-    COMPONENT pyyggdrasil
-)
-
 install(TARGETS _pyyggdrasil
     DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-    COMPONENT pyyggdrasil
-)
-
-install(
-    TARGETS database
-    EXPORT yggdrasilDatabaseTargets
-    LIBRARY DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}" COMPONENT pyyggdrasil
-    ARCHIVE DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}" COMPONENT pyyggdrasil
-    RUNTIME DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_BINDIR}" COMPONENT pyyggdrasil
-)
-
-install(
-    EXPORT yggdrasilDatabaseTargets
-    NAMESPACE yggdrasil::
-    FILE "yggdrasilDatabaseTargets.cmake"
-    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
     COMPONENT pyyggdrasil
 )
 
@@ -146,111 +103,17 @@ configure_package_config_file(
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/yggdrasilConfigVersion.cmake"
-    "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPythonHelpers.cmake"
-    "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPatchPythonStubs.cmake"
-    "${PROJECT_SOURCE_DIR}/cmake/yggdrasilFixRuntimePaths.cmake"
-    "${PROJECT_SOURCE_DIR}/cmake/yggdrasilPythonPackaging.cmake"
     DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}/cmake/yggdrasil"
     COMPONENT pyyggdrasil
 )
 
-# Ship the native dependency prefix inside the package, pruned to what
-# downstream consumers need at build and run time. googletest and benchmark
-# ARE bundled: downstream test/benchmark suites discover them from this prefix
-# via find_package(GTest)/find_package(benchmark) with NO_DEFAULT_PATH, so they
-# are pinned to the same versions as the rest of the toolchain. Still pruned:
-# no static archives other than fmt's installed C target, no libtool files,
-# no command line tools other than the minimal MPI toolchain, and one copy of
-# each built Boost shared library.
-foreach(native_dir IN ITEMS include lib lib64)
-    if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}")
-        install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}"
-            DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-            COMPONENT pyyggdrasil
-            # An installed pyyggdrasil prefix can supply dependencies, but must not overwrite this build's own files.
-            REGEX "/include/yggdrasil$" EXCLUDE
-            REGEX "/cmake/yggdrasil$" EXCLUDE
-            REGEX "/pkgconfig$" EXCLUDE
-            REGEX "\\.(a|la)$" EXCLUDE
-            REGEX "/libboost_[^/]*\\.(so|dylib)[^/]*$" EXCLUDE
-            REGEX "/lib(mpi|mpl|opa)[^/]*\\.(so|dylib)[^/]*$" EXCLUDE
-        )
-        file(GLOB boost_runtime_libraries
-            LIST_DIRECTORIES false
-            "${YGGDRASIL_NATIVE_PREFIX}/${native_dir}/libboost_*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
-        )
-        foreach(boost_runtime_library IN LISTS boost_runtime_libraries)
-            if(NOT IS_SYMLINK "${boost_runtime_library}")
-                install(FILES "${boost_runtime_library}"
-                    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${native_dir}"
-                    COMPONENT pyyggdrasil
-                )
-            endif()
-        endforeach()
-    endif()
-endforeach()
-
-if(EXISTS "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/libfmt-c.a")
-    install(FILES "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/libfmt-c.a"
-        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}"
-        COMPONENT pyyggdrasil
-    )
-endif()
-
-if(UNIX)
-    if(APPLE)
-        set(mpi_runtime_name "libmpi.dylib")
-    else()
-        set(mpi_runtime_name "libmpi.so")
-    endif()
-    file(REAL_PATH
-        "${YGGDRASIL_NATIVE_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${mpi_runtime_name}"
-        mpi_runtime_library
-    )
-    install(FILES "${mpi_runtime_library}"
-        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/${CMAKE_INSTALL_LIBDIR}"
-        RENAME "${mpi_runtime_name}"
-        COMPONENT pyyggdrasil
-    )
-
-    foreach(mpi_tool IN ITEMS mpicc mpicxx hydra_pmi_proxy)
-        install(PROGRAMS "${YGGDRASIL_NATIVE_PREFIX}/bin/${mpi_tool}"
-            DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/bin"
-            COMPONENT pyyggdrasil
-        )
-    endforeach()
-    file(REAL_PATH "${YGGDRASIL_NATIVE_PREFIX}/bin/mpiexec" mpi_launcher)
-    install(PROGRAMS "${mpi_launcher}"
-        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/bin"
-        RENAME mpiexec
-        COMPONENT pyyggdrasil
-    )
-endif()
-
-install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/share/licenses/"
-    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/share/licenses"
-    COMPONENT pyyggdrasil
-)
-
-install(FILES
-    "${PROJECT_SOURCE_DIR}/docs/CORRESPONDING_SOURCE.md"
-    "${PROJECT_SOURCE_DIR}/docs/SOURCES.json"
-    DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}/share"
-    COMPONENT pyyggdrasil
-)
-
-if(WIN32 AND EXISTS "${YGGDRASIL_NATIVE_PREFIX}/bin")
-    # Runtime DLLs live in bin/ on Windows.
-    install(DIRECTORY "${YGGDRASIL_NATIVE_PREFIX}/bin"
-        DESTINATION "${YGGDRASIL_INSTALL_PACKAGEDIR}"
-        COMPONENT pyyggdrasil
-        FILES_MATCHING PATTERN "*.dll"
-    )
-endif()
+# The native dependencies are pyurd-native's: the wheel ships yggdrasil's own files only.
 
 install(CODE
-    "include(\"${PROJECT_SOURCE_DIR}/cmake/yggdrasilFixRuntimePaths.cmake\")
-         yggdrasil_fix_runtime_paths(LIB_DIR_GLOB \"pyyggdrasil/lib*\")"
+    "include(\"${brokkr_DIR}/brokkrFixRuntimePaths.cmake\")
+         brokkr_fix_runtime_paths(LIB_DIR_GLOB \"pyyggdrasil/lib*\"
+             RPATH \"\$ORIGIN:\$ORIGIN/../../pyurd_native/${CMAKE_INSTALL_LIBDIR}\"
+             RPATHS \"@loader_path;@loader_path/../../pyurd_native/${CMAKE_INSTALL_LIBDIR}\")"
     COMPONENT pyyggdrasil
 )
 
@@ -265,8 +128,8 @@ nanobind_add_stub(
 )
 
 install(CODE
-    "include(\"${PROJECT_SOURCE_DIR}/cmake/yggdrasilPatchPythonStubs.cmake\")
-         yggdrasil_patch_python_stubs(PACKAGE pyyggdrasil PRIVATE_MODULE _pyyggdrasil RENAME_PACKAGES pyyggdrasil)"
+    "include(\"${brokkr_DIR}/brokkrPatchPythonStubs.cmake\")
+         brokkr_patch_python_stubs(PACKAGE pyyggdrasil PRIVATE_MODULE _pyyggdrasil RENAME_PACKAGES pyyggdrasil)"
     COMPONENT pyyggdrasil
 )
 

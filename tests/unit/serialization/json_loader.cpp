@@ -15,7 +15,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "yggdrasil/serialization/json_loader.hpp"
+#include "yggdrasil/serialization/json.hpp"
+#include "yggdrasil/serialization/json_suite.hpp"
 
 #include <cmath>
 #include <filesystem>
