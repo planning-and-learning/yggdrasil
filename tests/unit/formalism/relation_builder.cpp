@@ -41,5 +41,7 @@ TEST(RelationBuilder, IndexesFollowInsertAndErase)
     EXPECT_EQ(positions(rows, by_first, one), std::vector<ygg::uint_t> { 1 });
     EXPECT_EQ(positions(rows, by_first, std::array { encode_value(ygg::uint_t { 2 }) }), std::vector<ygg::uint_t> { 0 });
     EXPECT_EQ(rows.add_index(first), by_first);
+    rows.initialize(columns);  // a builder handed out again keeps no index
+    EXPECT_EQ(rows.storage().index_count(), 0U);
 }
 }  // namespace ygg::tests

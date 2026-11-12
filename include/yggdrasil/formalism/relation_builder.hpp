@@ -142,7 +142,7 @@ public:
     { return contains(row.get_values()); }
 
     /// The number of the index on `columns` (positions, in key order), added where it is new; kept as rows are
-    /// inserted and erased, and across clear; initialize with other widths drops them.
+    /// inserted and erased, and across clear; initialize drops them.
     std::size_t add_index(std::span<const std::size_t> columns) { return m_rows.add_index(columns); }
     /// The index of number `n`: count, contains, find and equal_range by a key (the columns' values, in its order) give
     /// the positions of the rows with that key.
@@ -165,11 +165,13 @@ public:
         ygg::validate_columns(columns);
         std::ranges::copy(columns, m_columns.values.begin());  // the same widths: the rows stay
     }
-    /// Clears the rows and replaces the columns (validated); equal widths retain row storage.
+    /// Clears the rows and indexes and replaces the columns (validated); equal widths retain row storage where it had no
+    /// index.
     void initialize(std::span<const ygg::ColumnLayout> columns)
     {
         ygg::validate_columns(columns);
-        if (auto widths = widths_of(columns); widths == m_rows.column_widths())
+        // A builder handed out again (Repository::get_relation_builder) keeps no index of its last user.
+        if (auto widths = widths_of(columns); widths == m_rows.column_widths() && m_rows.index_count() == 0)
             m_rows.clear();
         else
             m_rows = Rows(widths);
