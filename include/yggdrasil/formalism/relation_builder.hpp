@@ -24,14 +24,16 @@
 #include <urd/repr/containers/schema_rows.hpp>
 #include <urd/repr/pools/pools.hpp>
 #include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/wrappers/multi_index_pool.hpp>
 #include <urd/store.hpp>
 #include <variant>
 
 namespace ygg
 {
 /// Rows of one set of column widths, each stored once (urd::by_column_widths): a handle's value is a row's ID. Built
-/// with the widths of the columns; rows go in as a stored row of equal widths or as their values.
-using RowPool = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>, urd::by_column_widths>;
+/// with the widths of the columns; rows go in as a stored row of equal widths or as their values. Indexes on sets of
+/// columns can be added (urd::multi_indexed); they are kept as rows come and go.
+using RowPool = urd::Store<urd::pool<urd::Store<urd::sequence<Value>, urd::frozen>>, urd::by_column_widths, urd::multi_indexed>;
 
 /// Whether a column before `column` has its label.
 [[nodiscard]] inline bool repeats_label(std::span<const ColumnLayout> columns, std::span<const ColumnLayout>::iterator column)
@@ -138,6 +140,13 @@ public:
     template<ygg::RowViewConcept<F> R>
     [[nodiscard]] bool contains(const R& row) const
     { return contains(row.get_values()); }
+
+    /// The number of the index on `columns` (positions, in key order), added where it is new; kept as rows are
+    /// inserted and erased, and across clear; initialize with other widths drops them.
+    std::size_t add_index(std::span<const std::size_t> columns) { return m_rows.add_index(columns); }
+    /// The index of number `n`: count, contains, find and equal_range by a key (the columns' values, in its order) give
+    /// the positions of the rows with that key.
+    [[nodiscard]] auto index(std::size_t n) const { return m_rows.index(n); }
 
     /// Invalidates the erased and moved rows' positions and borrowed rows.
     void erase(size_t index)

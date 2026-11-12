@@ -30,6 +30,7 @@ add_yggdrasil_gtest(extensions "extensions.cpp")
 add_yggdrasil_gtest(containers_repository_types "containers/repository_types.cpp")
 
 add_yggdrasil_gtest(formalism_row_key "formalism/row_key.cpp")
+add_yggdrasil_gtest(formalism_relation_builder "formalism/relation_builder.cpp")
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
 target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
