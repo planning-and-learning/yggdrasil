@@ -117,6 +117,8 @@ public:
     /// Its number as the context of its rows' views (urd::layer), and its relation_identity: drawn at construction,
     /// kept across clear and initialize.
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
+    /// Its identity as a relation: its number, no index yet (an interned relation's view gives both).
+    [[nodiscard]] ygg::RelationIdentity relation_identity() const noexcept { return { m_layer }; }
 
     /// A row of values, one per column (the pool's: a count other than the columns' throws std::invalid_argument, a
     /// value that does not fit its column std::out_of_range, before anything is stored). Returns its position.

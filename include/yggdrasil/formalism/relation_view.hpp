@@ -21,14 +21,6 @@
  * values by position, ygg::Value; their types are the columns'), membership and their identity.
  */
 
-namespace ygg
-{
-/// A builder's relation identity: its number, no index.
-template<typename F>
-[[nodiscard]] RelationIdentity relation_identity(const urd::builder<Relation<F>>& builder) noexcept
-{ return { builder.layer() }; }
-}  // namespace ygg
-
 /// Read access to an interned relation record, shared by its index and data views: its rows lie in the layer's pool
 /// its record names, its row ids in that pool; each row is read as the layer's view of its key.
 template<typename F, typename V>
@@ -81,7 +73,7 @@ private:
 
 public:
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const noexcept { return self().data().columns(); }
-    [[nodiscard]] ygg::RelationIdentity relation_identity() const noexcept { return ygg::relation_identity(self().data()); }
+    [[nodiscard]] ygg::RelationIdentity relation_identity() const noexcept { return self().data().relation_identity(); }
     [[nodiscard]] size_t size() const noexcept { return self().data().size(); }
     [[nodiscard]] bool empty() const noexcept { return self().data().empty(); }
     [[nodiscard]] auto row(size_t index) const noexcept
@@ -93,7 +85,8 @@ public:
     [[nodiscard]] auto rows() const noexcept
     {
         return urd::transform(std::views::iota(size_t { 0 }, size()),
-                              [builder = &self().data()](size_t index)
+                              &self().data(),
+                              [](const auto* builder, size_t index)
                               { return builder->view(ygg::RowIndex<F> { {}, urd::index<ygg::Row<F>>(static_cast<ygg::uint_t>(index)) }); });
     }
 
