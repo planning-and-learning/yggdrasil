@@ -14,7 +14,12 @@
 #include <cstdint>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
+#include <span>
 #include <variant>
+
+// A relation's columns (ColumnIndices) are a class of their own in Python, their labels and types, not a list as urd's
+// range caster would make them.
+NB_MAKE_OPAQUE(std::span<const ygg::ColumnLayout>)
 
 namespace nanobind::detail
 {
