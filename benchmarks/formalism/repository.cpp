@@ -7,11 +7,10 @@
  * (at your option) any later version.
  */
 
-#include "yggdrasil/formalism/repository_impl.hpp"
-
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
+#include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
 #include "yggdrasil/formalism/values.hpp"

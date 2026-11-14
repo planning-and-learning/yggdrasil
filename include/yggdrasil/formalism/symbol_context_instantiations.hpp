@@ -45,39 +45,43 @@ using ContextSymbol = boost::mp11::mp_at_c<typename SymbolContextOf<Derived>::Sy
 }  // namespace ygg::formalism::detail
 
 /// The members of the I-th symbol type of the repository (ARGS: (PREFIX, Repository)).
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): it expands to explicit instantiations, declarations, which no function gives
-#define YGG_FORMALISM_SYMBOL_CONTEXT_AT(z, I, ARGS)                                                                                            \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS) template std::optional<                                                                                    \
-        urd::index_view<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>>         \
-    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::find(                                                          \
-        const urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&) const;                                  \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS) template std::pair<                                                                                        \
-        urd::index_view<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>,         \
-        bool>                                                                                                                                  \
-    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::insert(                                                        \
-        urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&);                                              \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS) template const urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&     \
-    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::operator[](                                                    \
-        urd::index<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                        \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS) template bool ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::contains(        \
-        urd::index<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                        \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS) template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::size<     \
-        ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;                                                  \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS) template std::size_t                                                                                       \
-    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::memory_usage<                                                  \
+// NOLINTBEGIN(cppcoreguidelines-macro-usage,bugprone-macro-parentheses): the macros expand to explicit instantiations,
+// declarations, which no function gives; their arguments are types and a prefix, which no parentheses may enclose
+#define YGG_FORMALISM_SYMBOL_CONTEXT_AT(z, I, ARGS)                                                                                                         \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template std::optional<urd::index_view<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>>   \
+    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::find(                                                                         \
+        const urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&) const;                                               \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template std::pair<urd::index_view<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>, bool> \
+    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::insert(                                                                       \
+        urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&);                                                           \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template const urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&                                                  \
+        ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::operator[](                                                               \
+            urd::index<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                 \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template bool ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::contains(                                                       \
+        urd::index<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                     \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::size<                                                    \
+        ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;                                                               \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::memory_usage<                                            \
         ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;
 
 /// Explicit instantiations (PREFIX extern: declarations) of the members of repository Repository's SymbolContext base
 /// (Repository a name without commas: an alias) that touch its symbols: construction, destruction, clear, and those
 /// of each of its SymbolCount symbol types. The count is checked against its list.
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): it expands to explicit instantiations, declarations, which no function gives
-#define YGG_FORMALISM_SYMBOL_CONTEXT(PREFIX, Repository, SymbolCount)                                                                         \
-    static_assert(boost::mp11::mp_size<::ygg::formalism::detail::SymbolContextOf<Repository>::SymbolTypes>::value == (SymbolCount),          \
-                  "YGG_FORMALISM_SYMBOL_CONTEXT: SymbolCount");                                                                                \
-    PREFIX template ygg::formalism::detail::SymbolContextOf<Repository>::SymbolContext();                                                    \
-    PREFIX template ygg::formalism::detail::SymbolContextOf<Repository>::SymbolContext(const Repository*);                                   \
-    PREFIX template ygg::formalism::detail::SymbolContextOf<Repository>::~SymbolContext();                                                   \
-    PREFIX template void ygg::formalism::detail::SymbolContextOf<Repository>::clear();                                                       \
+#define YGG_FORMALISM_SYMBOL_CONTEXT(PREFIX, Repository, SymbolCount)                                                               \
+    static_assert(boost::mp11::mp_size<::ygg::formalism::detail::SymbolContextOf<Repository>::SymbolTypes>::value == (SymbolCount), \
+                  "YGG_FORMALISM_SYMBOL_CONTEXT: SymbolCount");                                                                     \
+    PREFIX template ygg::formalism::detail::SymbolContextOf<Repository>::SymbolContext();                                           \
+    PREFIX template ygg::formalism::detail::SymbolContextOf<Repository>::SymbolContext(const Repository*);                          \
+    PREFIX template ygg::formalism::detail::SymbolContextOf<Repository>::~SymbolContext();                                          \
+    PREFIX template void ygg::formalism::detail::SymbolContextOf<Repository>::clear();                                              \
     BOOST_PP_REPEAT(SymbolCount, YGG_FORMALISM_SYMBOL_CONTEXT_AT, (PREFIX, Repository))
+
+// NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 
 #endif

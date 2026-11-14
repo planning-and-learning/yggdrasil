@@ -53,7 +53,8 @@ BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::BasicBuilderStorage() : m_impl
 }
 
 template<typename... Ts>
-BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::~BasicBuilderStorage()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit instantiation of an out-of-line = default
+BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::~BasicBuilderStorage()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit instantiation of an
+                                                                          // out-of-line = default
 {
 }
 

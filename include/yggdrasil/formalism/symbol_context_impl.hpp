@@ -55,7 +55,8 @@ SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::SymbolContext(c
 }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
-SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::~SymbolContext()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit instantiation of an out-of-line = default
+SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::~SymbolContext()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit
+                                                                                   // instantiation of an out-of-line = default
 {
 }
 

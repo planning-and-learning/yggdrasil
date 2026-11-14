@@ -70,7 +70,9 @@ TEST(SymbolContext, InternsFindsAndReadsItsRecords)
     EXPECT_EQ(names[view.index()].value, 7);
     EXPECT_TRUE(names.contains(view.index()));
     EXPECT_EQ(names.size<Name>(), 1);
-    EXPECT_EQ(names.find(record)->index(), view.index());
+    const auto found = names.find(record);
+    ASSERT_TRUE(found.has_value());
+    EXPECT_EQ(found.value().index(), view.index());
     EXPECT_FALSE(names.insert(record).second);  // interned once
 }
 

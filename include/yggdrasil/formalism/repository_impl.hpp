@@ -373,9 +373,8 @@ template<typename F>
     requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
 std::shared_ptr<urd::builder<Relation<F>>> Repository<SymbolRepo, RelationRepo>::get_relation_builder(std::span<const ColumnLayout> columns) const
 {
-    auto builder = m_impl->relation_builders.template get<F>().make_shared(
-        m_impl->relations.widths(columns | std::views::transform(&ColumnLayout::type)),
-        columns);
+    auto builder =
+        m_impl->relation_builders.template get<F>().make_shared(m_impl->relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
     builder->initialize(columns);  // a builder handed back holds its last columns and rows
     return builder;
 }
