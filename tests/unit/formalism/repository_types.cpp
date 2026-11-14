@@ -17,7 +17,7 @@
 
 #include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/builder.hpp"
+#include "yggdrasil/formalism/builder_impl.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
