@@ -32,7 +32,7 @@
 #include <span>
 #include <urd/config.hpp>
 #include <urd/elements/view.hpp>
-#include <urd/repr/containers/schema_rows.hpp>
+#include <urd/elements/packed_row.hpp>
 #include <utility>
 #include <vector>
 
@@ -65,7 +65,7 @@ public:
     using RelationTypes = typename detail::relation_repository_traits<RelationRepo>::RelationTypes;
     using object_tag = typename detail::relation_repository_traits<RelationRepo>::object_tag;
     /// What a stored row reads as (operator[](RowIndex<F>)): its values, decoded from its pool's column widths.
-    using StoredRow = urd::repr::SchemaRow<detail::relation_repository_traits<RelationRepo>::thread_safe>;
+    using StoredRow = urd::packed_row<detail::relation_repository_traits<RelationRepo>::thread_safe>;
     /// Whether finds, inserts and lookups may overlap (its symbols and its relations concurrent).
     static constexpr bool thread_safe =
         detail::symbol_repository_traits<SymbolRepo>::thread_safe && detail::relation_repository_traits<RelationRepo>::thread_safe;
