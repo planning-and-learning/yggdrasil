@@ -6,6 +6,7 @@
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include <vector>
+#include <yggdrasil/serialization/dictionaries.hpp>
 
 namespace ygg::tests
 {

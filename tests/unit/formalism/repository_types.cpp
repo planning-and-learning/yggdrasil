@@ -21,7 +21,7 @@
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
-#include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
@@ -619,8 +619,8 @@ TEST(YggdrasilTests, CommonCompositeRepositorySynchronizesLocalAndInheritedScrat
     EXPECT_EQ(data.index, local.index());
     EXPECT_NE(local.index(), inherited.index());
     EXPECT_EQ(&local.context(), &child);
-    EXPECT_EQ(root.symbols().size<RepositoryTypesElement>(), 1);
-    EXPECT_EQ(child.symbols().size<RepositoryTypesElement>(), 2);
+    EXPECT_EQ(root.size<RepositoryTypesElement>(), 1);
+    EXPECT_EQ(child.size<RepositoryTypesElement>(), 2);
 }
 
 TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
@@ -643,7 +643,7 @@ TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
     const auto wrong = urd::data<Binding>(relation, std::move(wrong_objects));
     EXPECT_FALSE(repository.find(wrong));
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
-    EXPECT_EQ(repository.relations().size(relation), 1);
+    EXPECT_EQ(repository.size(relation), 1);
     EXPECT_EQ(view.get_key().second.size(), 2);
 }
 
@@ -656,8 +656,8 @@ TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
     using Repository = ygg::formalism::Repository<SymbolRepository, RelationRepository>;
 
     auto repository = Repository();
-    EXPECT_EQ(repository.symbols().memory_usage<RepositoryTypesElement>(), 0);
-    EXPECT_EQ(repository.relations().memory_usage<RepositoryTypesRelation>(), 0);
+    EXPECT_EQ(repository.memory_usage<RepositoryTypesElement>(), 0);
+    EXPECT_EQ(repository.row_memory_usage<RepositoryTypesRelation>(), 0);
 
     auto element = urd::data<RepositoryTypesElement> {};
     element.value = 7;
@@ -670,19 +670,18 @@ TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
     repository.declare(data.relation, std::array { object_column, object_column });
     repository.insert(data);
 
-    const auto symbol_memory_usage = repository.symbols().memory_usage<RepositoryTypesElement>();
-    const auto relation_memory_usage = repository.relations().memory_usage<RepositoryTypesRelation>();
+    const auto symbol_memory_usage = repository.memory_usage<RepositoryTypesElement>();
+    const auto relation_memory_usage = repository.row_memory_usage<RepositoryTypesRelation>();
     EXPECT_GT(symbol_memory_usage, 0);
     EXPECT_GT(relation_memory_usage, 0);
 
-    repository.symbols().clear();
-    repository.relations().clear();
-    EXPECT_EQ(repository.symbols().memory_usage<RepositoryTypesElement>(), symbol_memory_usage);
-    EXPECT_LE(repository.relations().memory_usage<RepositoryTypesRelation>(), relation_memory_usage);
+    repository.clear_all();
+    EXPECT_EQ(repository.memory_usage<RepositoryTypesElement>(), symbol_memory_usage);
+    EXPECT_LE(repository.row_memory_usage<RepositoryTypesRelation>(), relation_memory_usage);
 
     auto child = Repository(&repository);
-    EXPECT_EQ(child.symbols().memory_usage<RepositoryTypesElement>(), 0);
-    EXPECT_EQ(child.relations().memory_usage<RepositoryTypesRelation>(), 0);
+    EXPECT_EQ(child.memory_usage<RepositoryTypesElement>(), 0);
+    EXPECT_EQ(child.row_memory_usage<RepositoryTypesRelation>(), 0);
 }
 
 TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
@@ -706,14 +705,14 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     objects.push_back(ygg::encode_value(urd::index<Object>(3)));
     const auto data = urd::data<Binding>(relation, objects);
 
-    EXPECT_EQ(root.relations().memory_usage<RepositoryTypesPackedRelation>(), 0);
+    EXPECT_EQ(root.row_memory_usage<RepositoryTypesPackedRelation>(), 0);
 
     const auto [root_view, root_created] = root.insert(data);
     const auto [duplicate_view, duplicate_created] = root.insert(data);
 
     EXPECT_TRUE(root_created);
     EXPECT_FALSE(duplicate_created);
-    EXPECT_GT(root.relations().memory_usage<RepositoryTypesPackedRelation>(), 0);
+    EXPECT_GT(root.row_memory_usage<RepositoryTypesPackedRelation>(), 0);
     EXPECT_EQ(duplicate_view.data().row, root_view.data().row);
     EXPECT_EQ(root_view.template get<urd::index<Object>>(0), urd::index<Object>(0));
     EXPECT_EQ(root_view.template get<urd::index<Object>>(1), urd::index<Object>(3));
@@ -723,7 +722,7 @@ TEST(YggdrasilTests, CommonRelationRepositorySupportsBitPackedStorageTrait)
     const auto wider_data = urd::data<Binding>(relation, objects);
 
     EXPECT_THROW(root.insert(wider_data), std::out_of_range);
-    EXPECT_EQ(root.relations().size(relation), 1);
+    EXPECT_EQ(root.size(relation), 1);
 
     const auto [root_duplicate_after_failure, created_after_failure] = root.insert(data);
     EXPECT_FALSE(created_after_failure);

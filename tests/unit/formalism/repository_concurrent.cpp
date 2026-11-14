@@ -9,7 +9,7 @@
 
 #include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
-#include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
 
@@ -147,8 +147,7 @@ using MixedRepository = formalism::Repository<formalism::ConcurrentSymbolReposit
 
 /// Whether both halves of a repository layer are thread-safe.
 template<typename Repository>
-constexpr bool thread_safe = std::remove_cvref_t<decltype(std::declval<const Repository&>().symbols())>::thread_safe
-                             && std::remove_cvref_t<decltype(std::declval<const Repository&>().relations())>::thread_safe;
+constexpr bool thread_safe = Repository::thread_safe;
 
 static_assert(thread_safe<ConcurrentRepository<ConcurrentObjectTag>>);
 static_assert(!thread_safe<SequentialRepository>);
@@ -242,7 +241,7 @@ void expect_duplicate_same_relation_insertions()
 
     EXPECT_EQ(errors.load(), 0);
     EXPECT_EQ(created.load(), rows);
-    EXPECT_EQ(repository.relations().size(relation), rows);
+    EXPECT_EQ(repository.size(relation), rows);
     for (uint_t key = 0; key < rows; ++key)
     {
         const auto data = make_binding<ObjectTag>(relation, key);
@@ -280,7 +279,7 @@ void expect_unique_same_relation_insertions()
 
     EXPECT_EQ(errors.load(), 0);
     EXPECT_EQ(created.load(), expected_rows);
-    EXPECT_EQ(repository.relations().size(relation), expected_rows);
+    EXPECT_EQ(repository.size(relation), expected_rows);
 
     auto seen = urd::Store<urd::set<uint_t>, urd::dense> {};
     for (uint_t key = 0; key < expected_rows; ++key)
@@ -329,7 +328,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
 
     EXPECT_EQ(errors.load(), 0);
     EXPECT_EQ(trivial_created.load(), num_trivial);
-    EXPECT_EQ(repository.symbols().size<ConcurrentElement>(), num_trivial);
+    EXPECT_EQ(repository.size<ConcurrentElement>(), num_trivial);
 
     auto seen = urd::Store<urd::set<uint_t>, urd::dense> {};
     for (uint_t key = 0; key < num_trivial; ++key)
@@ -363,7 +362,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
 
     EXPECT_EQ(errors.load(), 0);
     EXPECT_EQ(serialized_created.load(), num_serialized);
-    EXPECT_EQ(repository.symbols().size<ConcurrentSerializedElement>(), num_serialized);
+    EXPECT_EQ(repository.size<ConcurrentSerializedElement>(), num_serialized);
 }
 
 TEST(YggdrasilTests, FormalismConcurrentRepositoryUsesIndependentRelationGroupLanes)
@@ -382,7 +381,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryUsesIndependentRelationGroupLa
                 });
 
     for (uint_t lane = 0; lane < kThreads; ++lane)
-        EXPECT_EQ(lane_repository.relations().size(urd::index<ConcurrentRelation<ObjectTag>>(lane)), lane_rows);
+        EXPECT_EQ(lane_repository.size(urd::index<ConcurrentRelation<ObjectTag>>(lane)), lane_rows);
 }
 
 TEST(YggdrasilTests, FormalismRepositoryRejectsReservedRelationIndex)
@@ -414,7 +413,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     const auto wrong = urd::data<Binding<ObjectTag>>(relation, std::move(objects));
     EXPECT_FALSE(repository.find(wrong));
     EXPECT_THROW(repository.insert(wrong), std::invalid_argument);
-    EXPECT_EQ(repository.relations().size(relation), 1);
+    EXPECT_EQ(repository.size(relation), 1);
     EXPECT_EQ(view.get_key().second.size(), 4);
 }
 
@@ -464,7 +463,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocks
         reader.join();
 
     EXPECT_EQ(errors.load(), 0);
-    EXPECT_EQ(repository.relations().size(relation), 3000);
+    EXPECT_EQ(repository.size(relation), 3000);
 }
 
 TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingChild)
@@ -529,10 +528,10 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                 });
 
     EXPECT_EQ(errors.load(), 0);
-    EXPECT_EQ(parent.symbols().size<ConcurrentElement>(), 1);
-    EXPECT_EQ(parent.symbols().size<ConcurrentSerializedElement>(), 1);
-    EXPECT_EQ(parent.relations().size(relation), 1);
-    EXPECT_EQ(child.symbols().size<ConcurrentElement>(), 1 + kThreads * rows_per_thread);
+    EXPECT_EQ(parent.size<ConcurrentElement>(), 1);
+    EXPECT_EQ(parent.size<ConcurrentSerializedElement>(), 1);
+    EXPECT_EQ(parent.size(relation), 1);
+    EXPECT_EQ(child.size<ConcurrentElement>(), 1 + kThreads * rows_per_thread);
     EXPECT_EQ(parent_view.data().value, 7);
     EXPECT_EQ(parent_serialized_view.data().values.front(), parent_view.index());
     EXPECT_TRUE(std::ranges::equal(parent_binding_view.get_key().second, make_binding<ObjectTag>(relation, 7).values));
@@ -552,9 +551,9 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     invalid_objects.push_back(8);
     auto invalid = urd::data<Binding<ObjectTag>>(relation, std::move(invalid_objects));
     EXPECT_THROW(repository.insert(invalid), std::out_of_range);
-    EXPECT_EQ(repository.relations().size(relation), 0);
-    repository.relations().clear();
-    repository.relations().clear();
+    EXPECT_EQ(repository.size(relation), 0);
+    repository.clear();
+    repository.clear();
 
     auto valid_objects = urd::flat_vector<ygg::Value> {};
     for (uint_t value = 0; value < 4; ++value)
@@ -563,8 +562,8 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailureDoesNotPublishAndC
     EXPECT_TRUE(created);
     EXPECT_EQ(view.data().row, urd::index<Row<ConcurrentRelation<ObjectTag>>>(0));
 
-    repository.relations().clear();
-    EXPECT_EQ(repository.relations().size(relation), 0);
+    repository.clear();
+    EXPECT_EQ(repository.size(relation), 0);
     auto reused_objects = urd::flat_vector<ygg::Value> {};
     for (uint_t value = 4; value < 8; ++value)
         reused_objects.push_back(value);
@@ -621,7 +620,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedInsertionFailuresDoNotInterfereWit
     EXPECT_EQ(errors.load(), 0);
     EXPECT_EQ(created.load(), num_writers * rows_per_thread);
     EXPECT_EQ(rejected.load(), num_writers * rows_per_thread);
-    EXPECT_EQ(repository.relations().size(relation), num_writers * rows_per_thread);
+    EXPECT_EQ(repository.size(relation), num_writers * rows_per_thread);
 
     for (uint_t key = 0; key < num_writers * rows_per_thread; ++key)
     {

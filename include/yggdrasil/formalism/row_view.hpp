@@ -34,7 +34,7 @@
 
 /// A row, borrowed (its record {relation, values}) or stored (its key {relation, row}, read through its context:
 /// context[key] is the stored row): its relation, its values and their types. The types are its pool's
-/// (relations().types(relation) of a layer; a builder's own), so every typed read is checked against them. A borrowed
+/// (types(relation) of a layer; a builder's own), so every typed read is checked against them. A borrowed
 /// record and the context must outlive the view and all ranges it gives; keep the record unchanged while used.
 template<typename F, typename V>
 struct urd::view_mixin<ygg::Row<F>, V>
@@ -50,7 +50,7 @@ private:
     /// The column types of the row's pool: a layer's stored ones, a builder's own (its rows have no relation).
     template<typename C>
     static std::span<const ygg::TypeId> types_of(const C& context, urd::index<F> relation)
-    { return get_repository(context).relations().types(relation); }
+    { return get_repository(context).types(relation); }
     static auto types_of(const urd::builder<ygg::Relation<F>>& builder, urd::index<F> /*relation*/) noexcept
     { return builder.columns() | std::views::transform(&ygg::ColumnLayout::type); }
     /// A random-access range of them.

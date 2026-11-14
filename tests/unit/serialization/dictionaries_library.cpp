@@ -1,5 +1,7 @@
 #include "dictionaries_library.hpp"
 
+#include <yggdrasil/serialization/dictionaries.hpp>
+
 namespace ygg::tests
 {
 

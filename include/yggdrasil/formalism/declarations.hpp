@@ -116,8 +116,92 @@ template<typename SymbolRepo, typename RelationRepo>
 class Repository;
 template<typename... Ts>
 class SymbolRepository;
+template<typename... Ts>
+class ConcurrentSymbolRepository;
 template<typename ObjectTag, typename... Ts>
 class RelationRepository;
+template<typename ObjectTag, typename... Ts>
+class ConcurrentRelationRepository;
+
+/// What a Repository holds, named by what it holds rather than by the stores that hold it: its symbol types
+/// (Symbols<Ts...>; ConcurrentSymbols<Ts...> for concurrent interning) and its relation families with their object tag
+/// (Relations<ObjectTag, Ts...>; ConcurrentRelations<ObjectTag, Ts...>). Empty: a Repository named by them is completed
+/// with nothing else, so that a call with a Repository argument, looked up by argument (ADL, which completes the class
+/// templates among its argument's template arguments), never instantiates its stores. The stores are the symbol and
+/// relation repositories these map to (repository_impl.hpp).
+template<typename... Ts>
+struct Symbols
+{
+};
+template<typename... Ts>
+struct ConcurrentSymbols
+{
+};
+template<typename ObjectTag, typename... Ts>
+struct Relations
+{
+};
+template<typename ObjectTag, typename... Ts>
+struct ConcurrentRelations
+{
+};
+
+namespace detail
+{
+/// What a Repository knows of what it holds from its template arguments alone (Symbols<...>, Relations<...>, or the
+/// symbol and relation repositories themselves), so that naming a Repository instantiates no store (repository.hpp
+/// declares; repository_impl.hpp defines); Store is the repository that holds them.
+template<typename Held>
+struct symbol_repository_traits;
+template<typename... Ts>
+struct symbol_repository_traits<Symbols<Ts...>>
+{
+    using SymbolTypes = boost::mp11::mp_list<Ts...>;
+    static constexpr bool thread_safe = false;
+    using Store = SymbolRepository<Ts...>;
+};
+template<typename... Ts>
+struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
+{
+    using SymbolTypes = boost::mp11::mp_list<Ts...>;
+    static constexpr bool thread_safe = true;
+    using Store = ConcurrentSymbolRepository<Ts...>;
+};
+template<typename... Ts>
+struct symbol_repository_traits<SymbolRepository<Ts...>> : symbol_repository_traits<Symbols<Ts...>>
+{
+};
+template<typename... Ts>
+struct symbol_repository_traits<ConcurrentSymbolRepository<Ts...>> : symbol_repository_traits<ConcurrentSymbols<Ts...>>
+{
+};
+template<typename Held>
+struct relation_repository_traits;
+template<typename ObjectTag, typename... Ts>
+struct relation_repository_traits<Relations<ObjectTag, Ts...>>
+{
+    using object_tag = ObjectTag;
+    using RelationTypes = boost::mp11::mp_list<Ts...>;
+    static constexpr bool thread_safe = false;
+    using Store = RelationRepository<ObjectTag, Ts...>;
+};
+template<typename ObjectTag, typename... Ts>
+struct relation_repository_traits<ConcurrentRelations<ObjectTag, Ts...>>
+{
+    using object_tag = ObjectTag;
+    using RelationTypes = boost::mp11::mp_list<Ts...>;
+    static constexpr bool thread_safe = true;
+    using Store = ConcurrentRelationRepository<ObjectTag, Ts...>;
+};
+template<typename ObjectTag, typename... Ts>
+struct relation_repository_traits<RelationRepository<ObjectTag, Ts...>> : relation_repository_traits<Relations<ObjectTag, Ts...>>
+{
+};
+template<typename ObjectTag, typename... Ts>
+struct relation_repository_traits<ConcurrentRelationRepository<ObjectTag, Ts...>> : relation_repository_traits<ConcurrentRelations<ObjectTag, Ts...>>
+{
+};
+}  // namespace detail
 
 /// Whether a repository's symbol inventory contains T.
 template<typename Repository, typename T>

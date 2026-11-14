@@ -55,7 +55,7 @@ public:
         requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
     [[nodiscard]] bool contains(const Values& values) const
     {
-        const auto id = repository().relations().find(record().pool, values);
+        const auto id = repository().find_row(record().pool, values);
         return !id.is_none() && std::ranges::binary_search(ids(), id);
     }
     template<ygg::RowViewConcept<F> R>

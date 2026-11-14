@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/formalism/repository_impl.hpp"
 
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
@@ -186,8 +186,8 @@ void tear_down(const benchmark::State&)
 template<typename Repository, typename Symbol>
 void report_symbol(benchmark::State& state, std::uint64_t created)
 {
-    const auto entries = repository<Repository>()->symbols().template size<Symbol>();
-    const auto bytes = repository<Repository>()->symbols().template memory_usage<Symbol>();
+    const auto entries = repository<Repository>()->template size<Symbol>();
+    const auto bytes = repository<Repository>()->template memory_usage<Symbol>();
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);
@@ -201,8 +201,8 @@ void report_relation(benchmark::State& state, std::uint64_t created, bool per_th
     std::size_t entries = 0;
     const auto lanes = per_thread_lane ? state.threads() : 1;
     for (int lane = 0; lane < lanes; ++lane)
-        entries += repository<Repository>()->relations().size(urd::index<Relation>(static_cast<uint_t>(lane)));
-    const auto bytes = repository<Repository>()->relations().template memory_usage<Relation>();
+        entries += repository<Repository>()->size(urd::index<Relation>(static_cast<uint_t>(lane)));
+    const auto bytes = repository<Repository>()->template row_memory_usage<Relation>();
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);

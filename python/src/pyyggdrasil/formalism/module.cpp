@@ -4,7 +4,7 @@
 #include "yggdrasil/formalism/free_relations.hpp"
 #include "yggdrasil/formalism/relation_builder.hpp"
 #include "yggdrasil/formalism/relation_view.hpp"
-#include "yggdrasil/formalism/repository.hpp"
+#include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/python/bindings.hpp"
 #include "yggdrasil/python/relations.hpp"
 
@@ -257,7 +257,7 @@ void bind_formalism_module_definitions(nb::module_& m)
 
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")
         .def(nb::init<>())
-        .def("__len__", [](const RelationRepository& repository) { return repository.symbols().template size<RelationTag>(); })
+        .def("__len__", [](const RelationRepository& repository) { return repository.template size<RelationTag>(); })
         .def("clear", &RelationRepository::clear)
         .def(
             "schema",
@@ -268,7 +268,7 @@ void bind_formalism_module_definitions(nb::module_& m)
             "insert",
             [](RelationRepository& repository, const RowData& row)
             {
-                const auto types = repository.relations().types(row.pool);
+                const auto types = repository.types(row.pool);
                 if (nb::len(row.values) != types.size())
                     throw std::invalid_argument("Relation: row arity does not match schema.");
                 auto record = urd::data<ygg::Row<ygg::Schema>>();

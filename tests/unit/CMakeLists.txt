@@ -9,7 +9,7 @@ find_package(Threads REQUIRED)
 # Test helper
 
 function(add_yggdrasil_gtest test_name source_file)
-    add_executable(${test_name} ${source_file} main.cpp)
+    add_executable(${test_name} ${source_file} "${PROJECT_SOURCE_DIR}/tests/support/main.cpp")
     target_compile_features(${test_name} PRIVATE cxx_std_20)
     target_include_directories(${test_name} PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
@@ -30,12 +30,14 @@ add_yggdrasil_gtest(extensions "extensions.cpp")
 add_yggdrasil_gtest(formalism_repository_types "formalism/repository_types.cpp")
 
 add_yggdrasil_gtest(formalism_row_key "formalism/row_key.cpp")
+add_yggdrasil_gtest(formalism_intern_instantiations "formalism/intern_instantiations.cpp")
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
 target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)
 
 add_yggdrasil_gtest(core_closed_interval "core/closed_interval.cpp")
 add_yggdrasil_gtest(core_core "core/core.cpp")
 add_yggdrasil_gtest(core_family "core/family.cpp")
+add_yggdrasil_gtest(core_index_sequence "core/index_sequence.cpp")
 add_yggdrasil_gtest(core_portable_shuffle "core/portable_shuffle.cpp")
 
 add_yggdrasil_gtest(diagnostics_diagnostic "diagnostics/diagnostic.cpp")
