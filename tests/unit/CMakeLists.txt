@@ -27,7 +27,7 @@ endfunction()
 
 add_yggdrasil_gtest(extensions "extensions.cpp")
 
-add_yggdrasil_gtest(containers_repository_types "containers/repository_types.cpp")
+add_yggdrasil_gtest(formalism_repository_types "formalism/repository_types.cpp")
 
 add_yggdrasil_gtest(formalism_row_key "formalism/row_key.cpp")
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")

@@ -31,7 +31,7 @@
 # Not portability-template-virtual-member-function: it warns that other compilers (MSVC)
 # instantiate unused virtual members of class templates; the libraries build only with GCC and
 # Clang (Linux and macOS), which instantiate only what is used, so no build can check a fix.
-# tests/, profiling/ and python/src/ turn off more in their own files, each with its reason.
+# tests/, benchmarks/ and python/src/ turn off more in their own files, each with its reason.
 Checks: >
   -*,
   bugprone-*,
@@ -83,7 +83,7 @@ Checks: >
   -cppcoreguidelines-avoid-c-arrays,
   -cppcoreguidelines-pro-type-const-cast,
   -bugprone-crtp-constructor-accessibility
-HeaderFilterRegex: '.*/(include/yggdrasil|tests|profiling|python/src)/.*'
+HeaderFilterRegex: '.*/(include/yggdrasil|tests|benchmarks|python/src)/.*'
 ExcludeHeaderFilterRegex: '.*/(dependencies-install|dependencies-build|build|site-packages|_deps)/.*'
 CheckOptions:
   # Member initializers are written `= value`, as elsewhere in the code.

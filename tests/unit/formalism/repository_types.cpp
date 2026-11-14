@@ -15,7 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../formalism/symbol_concepts.hpp"
+#include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/interning.hpp"

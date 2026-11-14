@@ -33,9 +33,9 @@ TEST(YggdrasilTests, CommonProjectPathRootDerivedPaths)
 
     EXPECT_EQ(common::root_path(), root);
     EXPECT_EQ(common::data_path("domain/file.pddl"), root / "data" / "domain/file.pddl");
-    EXPECT_EQ(common::profiling_path("case.json"), root / "profiling" / "case.json");
+    EXPECT_EQ(common::benchmarks_path("case.json"), root / "benchmarks" / "case.json");
     EXPECT_EQ(common::data_path("/absolute/file.pddl"), std::filesystem::path("/absolute/file.pddl"));
-    EXPECT_EQ(common::profiling_path("/absolute/case.json"), std::filesystem::path("/absolute/case.json"));
+    EXPECT_EQ(common::benchmarks_path("/absolute/case.json"), std::filesystem::path("/absolute/case.json"));
 #else
     GTEST_SKIP() << "ROOT_DIR is not configured.";
 #endif

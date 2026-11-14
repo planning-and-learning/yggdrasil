@@ -37,10 +37,10 @@ combine-as-imports = true
 # Tests: pytest asserts with `assert`, literal values are the test data, test names
 # document the behavior, pytest passes parametrized values by name, every assertion
 # counts as a branch, and the test folders are not packages.
-"{python/tests,tests/python}/**" = ["S101", "PLR2004", "D1", "FBT001", "C901", "PLR0912", "PLR0915", "INP001"]
+"{python/tests,tests/integration/python}/**" = ["S101", "PLR2004", "D1", "FBT001", "C901", "PLR0912", "PLR0915", "INP001"]
 # Scripts that CTest runs without pytest: pytest's style rules do not apply, and their
 # imports follow putting the freshly built package on sys.path.
-"tests/python/**" = ["PT", "PLC0415"]
+"tests/integration/python/**" = ["PT", "PLC0415"]
 # Command-line entry points print their output.
 "python/src/pyyggdrasil/{__main__,repair}.py" = ["T201"]
 # Re-exports the library's compile() under its C++ name (ygg::database::compile).

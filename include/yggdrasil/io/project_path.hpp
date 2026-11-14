@@ -48,7 +48,7 @@ inline std::filesystem::path root_path() { return std::filesystem::path(std::str
 
 inline std::filesystem::path data_path(std::string_view path) { return resolve_path(root_path() / "data", path); }
 
-inline std::filesystem::path profiling_path(std::string_view path) { return resolve_path(root_path() / "profiling", path); }
+inline std::filesystem::path benchmarks_path(std::string_view path) { return resolve_path(root_path() / "benchmarks", path); }
 #endif
 
 }  // namespace ygg::common

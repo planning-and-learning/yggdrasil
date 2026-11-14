@@ -7,3 +7,4 @@
 /python/*.egg-info/
 __pycache__/
 *.py[cod]
+/.vscode/

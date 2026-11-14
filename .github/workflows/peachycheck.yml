@@ -24,7 +24,7 @@ jobs:
           prepare: |
             "$PYTHON" -m pip install "nanobind-backend>=1.0" "pybrokkr>=0.1.2,<0.2" "pyurd>=0.1.1,<0.2"
             cmake -S . -B build/peachycheck -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                  -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_PROFILING=ON -DYGGDRASIL_UNITY_BUILD=OFF \
+                  -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_BENCHMARKS=ON -DYGGDRASIL_UNITY_BUILD=OFF \
                   -DCMAKE_INSTALL_LIBDIR=lib \
                   -DPython_EXECUTABLE="$PYTHON"
             "$PYTHON" -m venv .venv

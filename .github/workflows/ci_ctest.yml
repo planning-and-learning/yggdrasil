@@ -51,7 +51,7 @@ jobs:
           cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
                 -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
                 -DYGGDRASIL_BUILD_TESTS=ON \
-                -DYGGDRASIL_BUILD_PROFILING=ON \
+                -DYGGDRASIL_BUILD_BENCHMARKS=ON \
                 -DCMAKE_INSTALL_LIBDIR=lib \
                 -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
                 -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \

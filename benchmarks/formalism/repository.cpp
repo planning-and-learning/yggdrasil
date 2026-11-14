@@ -28,7 +28,7 @@
 #include <urd/tags.hpp>
 #include <utility>
 
-namespace ygg::profiling
+namespace ygg::benchmarks
 {
 struct TrivialSymbol;
 struct SerializedSymbol;
@@ -41,9 +41,9 @@ namespace urd
 {
 
 template<>
-struct data<ygg::profiling::TrivialSymbol>
+struct data<ygg::benchmarks::TrivialSymbol>
 {
-    urd::index<ygg::profiling::TrivialSymbol> index;
+    urd::index<ygg::benchmarks::TrivialSymbol> index;
     std::uint64_t value = 0;
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
@@ -51,10 +51,10 @@ struct data<ygg::profiling::TrivialSymbol>
 };
 
 template<>
-struct data<ygg::profiling::SerializedSymbol>
+struct data<ygg::benchmarks::SerializedSymbol>
 {
-    urd::index<ygg::profiling::SerializedSymbol> index;
-    urd::flat_vector<urd::index<ygg::profiling::TrivialSymbol>> values;
+    urd::index<ygg::benchmarks::SerializedSymbol> index;
+    urd::flat_vector<urd::index<ygg::benchmarks::TrivialSymbol>> values;
 
     data() = default;
     data(const data&) = delete;
@@ -72,13 +72,13 @@ struct data<ygg::profiling::SerializedSymbol>
 namespace ygg::formalism
 {
 template<>
-struct RelationRepositoryTraits<profiling::PackedObjectTag>
+struct RelationRepositoryTraits<benchmarks::PackedObjectTag>
 {
     using width = urd::bit;
 };
 }
 
-namespace ygg::profiling
+namespace ygg::benchmarks
 {
 namespace
 {
@@ -410,4 +410,4 @@ void register_relation_benchmarks(const char* prefix, bool concurrent)
     return true;
 }();
 }
-}  // namespace ygg::profiling
+}  // namespace ygg::benchmarks
