@@ -17,7 +17,7 @@ using FreeRelationRepository = formalism::Repository<formalism::Symbols<Columns,
 /// A free relation interned in a repository layer.
 using FreeRelationView = urd::index_view<Relation<Schema>, FreeRelationRepository>;
 /// A free relation builder held elsewhere, read through a layer (urd::resolve(builder, layer) or layer.view(builder)).
-using FreeBuilderRelationView = urd::borrowed_view<Relation<Schema>, FreeRelationRepository, urd::builder<Relation<Schema>>>;
+using FreeRelationBuilderView = RelationBuilderView<Schema, FreeRelationRepository>;
 }  // namespace ygg
 
 #endif

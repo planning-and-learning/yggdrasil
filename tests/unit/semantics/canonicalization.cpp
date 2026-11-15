@@ -20,7 +20,9 @@
 #include "yggdrasil/core/config.hpp"
 
 #include <gtest/gtest.h>
+#include <type_traits>
 #include <urd/elements/flat.hpp>
+#include <urd/elements/view.hpp>
 #include <vector>
 
 namespace ygg::tests
@@ -35,10 +37,25 @@ struct urd::data<ygg::tests::CanonicalizationTestTag>
     ygg::uint_t value {};
 
     data() = default;
-    explicit data(ygg::uint_t value_) noexcept : value(value_) {}
+    explicit data(ygg::uint_t value_) : value(value_) {}
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
 
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::value> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::value> {}; }
+};
+template<typename V>
+struct urd::view_mixin<ygg::tests::CanonicalizationTestTag, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
 namespace ygg::tests

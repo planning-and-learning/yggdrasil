@@ -22,7 +22,9 @@
 
 #include <boost/mp11.hpp>
 #include <gtest/gtest.h>
+#include <type_traits>
 #include <urd/elements/flat.hpp>
+#include <urd/elements/view.hpp>
 
 namespace
 {
@@ -37,8 +39,26 @@ struct urd::data<Name>
     urd::index<Name> index;
     int value = 0;
 
+    data() = default;
+    explicit data(int value_) : index(), value(value_) {}
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::value> {}; }
+};
+template<typename V>
+struct urd::view_mixin<Name, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
 namespace

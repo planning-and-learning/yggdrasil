@@ -114,9 +114,6 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
     template ::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>                    \
         BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_view(::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;        \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
-    template void BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_declare(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,       \
-                                                              std::span<const ::ygg::TypeId>);                                                                \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
     template std::span<const ::ygg::TypeId> BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_types(                                                                        \
         urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;
 

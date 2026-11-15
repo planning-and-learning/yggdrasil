@@ -71,23 +71,25 @@ private:
     std::size_t m_layer = ygg::next_layer();
 
     /// The widths of a builder's rows: each column whole (a bool one bit, an object index 32 bits).
+    /// Validates the columns first.
     static urd::column_widths widths_of(std::span<const ygg::ColumnLayout> columns)
     {
+        ygg::validate_columns(columns);
         auto result = urd::column_widths();
         for (const auto& column : columns)
             result.push_back(ygg::column_bits(column.type, ygg::whole_bits<urd::index<ygg::formalism::Object<void>>>));
         return result;
     }
-    static std::span<const ygg::ColumnLayout> validated(std::span<const ygg::ColumnLayout> columns)
+    static urd::flat_vector<ygg::ColumnLayout> validated(std::span<const ygg::ColumnLayout> columns)
     {
         ygg::validate_columns(columns);
-        return columns;
+        return urd::flat_vector<ygg::ColumnLayout>(columns.begin(), columns.end());
     }
 
 public:
     /// The nullary relation, false.
     builder() : builder(std::span<const ygg::ColumnLayout>()) {}
-    explicit builder(std::span<const ygg::ColumnLayout> columns) : builder(widths_of(validated(columns)), columns) {}
+    explicit builder(std::span<const ygg::ColumnLayout> columns) : builder(widths_of(columns), columns) {}
     /// A builder with these columns, whose rows are stored in `widths` (the columns' widths in the layer: a slot's key,
     /// see Repository::get_relation_builder).
     builder(const urd::column_widths& widths, std::span<const ygg::ColumnLayout> columns) : m_columns(validated(columns)), m_rows(widths) {}
@@ -98,6 +100,8 @@ public:
     ~builder() = default;
 
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const noexcept { return { m_columns.values.data(), m_columns.values.size() }; }
+    /// Its number of columns.
+    [[nodiscard]] std::size_t arity() const noexcept { return columns().size(); }
     /// The widths its rows are stored in.
     [[nodiscard]] const urd::column_widths& widths() const noexcept { return m_rows.column_widths(); }
     // NOLINTNEXTLINE(bugprone-exception-escape): reads the pool's count; the empty storage an unwritten pool reads has no columns, so nothing is allocated
@@ -112,8 +116,11 @@ public:
     /// The stored row at key.row (a position), as the views of its rows read it.
     // NOLINTNEXTLINE(bugprone-exception-escape): reads a stored row in place (key.row below size()); nothing is allocated or checked by throwing
     [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept { return m_rows.at(typename Rows::handle_type(key.row.value)); }
+    /// The values of the row at key.row (a position): what its view's get_values() gives.
+    // NOLINTNEXTLINE(bugprone-exception-escape): as operator[]
+    [[nodiscard]] Rows::row_type values(ygg::RowIndex<F> key) const noexcept { return (*this)[key]; }
     /// The view of the row at key.row (a position) through this builder.
-    [[nodiscard]] ygg::RowView<F, builder> view(ygg::RowIndex<F> key) const noexcept { return { key, this }; }
+    [[nodiscard]] ygg::RowBuilderView<F> view(ygg::RowIndex<F> key) const noexcept { return { this, key }; }
     /// Its number as the context of its rows' views (urd::layer), and its relation_identity: drawn at construction,
     /// kept across clear and initialize.
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
@@ -161,7 +168,6 @@ public:
     /// Clears the rows and replaces the columns (validated); equal widths retain row storage.
     void initialize(std::span<const ygg::ColumnLayout> columns)
     {
-        ygg::validate_columns(columns);
         if (auto widths = widths_of(columns); widths == m_rows.column_widths())
             m_rows.clear();
         else

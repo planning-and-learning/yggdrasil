@@ -92,7 +92,9 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const noexcept
-    { return { index, &repository() }; }
+    {
+        return { index, &repository() };
+    }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
@@ -115,33 +117,45 @@ public:
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] const urd::data<T>& operator[](urd::index<T> index) const
-    { return m_symbols[index]; }
+    {
+        return m_symbols[index];
+    }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] bool contains(urd::index<T> index) const
-    { return m_symbols.contains(index); }
+    {
+        return m_symbols.contains(index);
+    }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] size_t size() const
-    { return get<T>().size(); }
+    {
+        return get<T>().size();
+    }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] size_t memory_usage() const
-    { return urd::memory_usage(get<T>()); }
+    {
+        return urd::memory_usage(get<T>());
+    }
 
     /// The store of T's records.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] Store<T>& get()
-    { return m_symbols.template get<T>(); }
+    {
+        return m_symbols.template get<T>();
+    }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] const Store<T>& get() const
-    { return m_symbols.template get<T>(); }
+    {
+        return m_symbols.template get<T>();
+    }
 
     SymbolRepositoryBase() : SymbolRepositoryBase(nullptr) {}
 

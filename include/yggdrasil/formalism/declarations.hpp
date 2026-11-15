@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <ranges>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <urd/elements/concepts.hpp>
@@ -31,6 +32,7 @@ namespace ygg
 /// (all free relations of types (object, object) share the pool keyed by that Schema).
 struct Schema
 {
+    static constexpr std::string_view name = "Schema";
 };
 /// Column labels, distinct from tuple values and positions.
 struct Column
@@ -39,33 +41,47 @@ struct Column
 struct ColumnLayout;
 struct Columns
 {
+    static constexpr std::string_view name = "Columns";
 };
 template<typename F>
 struct Relation
 {
+    static constexpr std::string_view name = "Relation";
 };
 /// A row of family F (predicates, actions, ..., Schema): its pool's key (relation) and its values (row_data.hpp). Stored
 /// once per pool, its id there is an index<Row<F>>.
 template<typename F>
 struct Row
 {
+    static constexpr std::string_view name = "Row";
 };
 
-/// The key of a stored row: its pool's key and its id there. Its view is the urd::owning_view of the key (RowView),
-/// which reads the row through its context (context[key]).
+/// The index of a stored row: its pool's key and its id there. Its view is the urd::index_view of it (RowView), which
+/// reads the row through its context (context.values(key)).
 template<typename F>
 struct RowIndex
 {
+    static constexpr std::string_view name = "RowIndex";
+
     urd::index<F> relation;
     urd::index<Row<F>> row;
 
     friend constexpr auto operator<=>(const RowIndex&, const RowIndex&) = default;
-    static constexpr auto identifying_members() noexcept { return urd::Members<&RowIndex::relation, &RowIndex::row> {}; }
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &RowIndex::relation>, urd::field<"row", &RowIndex::row>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
-/// The view of a stored row through its context C (a layer, or a relation builder): its key held by value.
+/// The view of a stored row through its context C (a layer, or a relation builder): an indexed record under its
+/// composite index.
 template<typename F, typename C>
-using RowView = urd::owning_view<Row<F>, C, RowIndex<F>>;
+using RowView = urd::index_view<Row<F>, C, RowIndex<F>>;
+
+/// A relation builder of family F read through a layer C (relation_view.hpp).
+template<typename F, typename C>
+class RelationBuilderView;
+/// A row of a relation builder of family F, read through the builder by its position (row_view.hpp).
+template<typename F>
+class RowBuilderView;
 
 /// What the ids of one pool's rows give through their context C: each id as its row's view.
 template<typename F, typename C>

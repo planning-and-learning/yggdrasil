@@ -219,11 +219,6 @@ std::pair<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>, bool> Reposi
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-void Repository<SymbolRepo, RelationRepo>::do_declare(urd::index<F> key, std::span<const TypeId> types)
-{ m_impl->relations.declare(key, m_impl->intern_schema(types)); }
-
-template<typename SymbolRepo, typename RelationRepo>
-template<typename F>
 std::span<const TypeId> Repository<SymbolRepo, RelationRepo>::do_types(urd::index<F> relation) const
 { return m_impl->relations.types(relation); }
 
@@ -243,6 +238,26 @@ urd::index_view<T, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, 
     if (const auto* layer = owner(index))
         return { index, layer };
     throw std::out_of_range("Symbol index not found in any repository layer.");
+}
+
+template<typename SymbolRepo, typename RelationRepo>
+const urd::data<Schema>& Repository<SymbolRepo, RelationRepo>::operator[](urd::index<Schema> index) const
+{
+    if (!m_impl->relations.contains(index))
+        throw std::out_of_range("Schema index not found in any repository layer.");
+    return m_impl->relations[index];
+}
+
+template<typename SymbolRepo, typename RelationRepo>
+urd::index_view<Schema, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, RelationRepo>::view(urd::index<Schema> index) const
+{
+    if (!m_impl->relations.contains(index))
+        throw std::out_of_range("Schema index not found in any repository layer.");
+    const auto* store = &m_impl->relations.schemas().owner(index);
+    const auto* layer = this;
+    while (&layer->m_impl->relations.schemas() != store)
+        layer = layer->m_parent;
+    return { index, layer };
 }
 
 template<typename SymbolRepo, typename RelationRepo>
@@ -338,8 +353,8 @@ Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<Relation<F>>& relation
             throw std::invalid_argument("Repository: a relation's column labels are distinct.");
     // ponytail: an assert, not a throw: O(rows) per insert (user). Catches ids beyond the pool (e.g. of another
     // repository), not an id that happens to exist in both.
-    assert(std::ranges::all_of(relation.rows, [&](urd::index<Row<F>> id) { return m_impl->holds_row(RowIndex<F> { relation.pool, id }); })
-           && "Repository: a relation's row ids must be rows of its pool here.");
+    assert(std::ranges::all_of(relation.rows, [&](RowIndex<F> key) { return key.relation == relation.pool && m_impl->holds_row(key); })
+           && "Repository: a relation's rows must be rows of its pool here.");
     ygg::canonicalize(relation.rows);
     const auto [index, created] = intern(m_impl->symbols.template get<Relation<F>>(), relation);
     return { view(index), created };

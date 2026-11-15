@@ -22,17 +22,11 @@ bool same_owner(const Repository& repository, const Source& source, const Key& k
     return owner != nullptr && static_cast<const void*>(owner) == static_cast<const void*>(source.owner(key));
 }
 
-/// Whether a view of an index denotes an entry in this repository or its ancestors.
-template<typename Repository, typename T, typename C>
-    requires requires(const Repository& repository, urd::index<T> index) { repository.owner(index); }
-bool contains(const Repository& repository, const urd::index_view<T, C>& view)
+/// Whether a view of an index (an index<T>, or a row's RowIndex) denotes an entry in this repository or its ancestors.
+template<typename Repository, typename T, typename C, typename K>
+    requires requires(const Repository& repository, K index) { repository.owner(index); }
+bool contains(const Repository& repository, const urd::index_view<T, C, K>& view)
 { return same_owner(repository, get_repository(view.context()), view.index()); }
-
-/// Whether a view of a row key denotes a row in this repository or its ancestors.
-template<typename Repository, typename B, typename C, typename Key>
-    requires requires(const Repository& repository, const Key& key) { repository.owner(key); }
-bool contains(const Repository& repository, const urd::owning_view<B, C, Key>& view)
-{ return same_owner(repository, get_repository(view.context()), view.data()); }
 
 }  // namespace ygg::formalism
 

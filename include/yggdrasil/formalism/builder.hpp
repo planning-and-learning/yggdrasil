@@ -28,7 +28,9 @@ struct BuilderRelease
 
     template<typename T>
     void operator()(urd::data<T>* record) const noexcept
-    { release(slots, handle, record); }
+    {
+        release(slots, handle, record);
+    }
 };
 
 /// A record of type T to build in, from a BuilderStorage: back to its storage, contents kept, when the handle goes.
@@ -61,13 +63,17 @@ public:
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] BuilderHandle<T> get_builder()
-    { return do_get_builder<T>(); }
+    {
+        return do_get_builder<T>();
+    }
 
     /// Clear pooled data once, member by member, retaining its reusable buffers.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] BuilderHandle<T> checkout()
-    { return do_checkout<T>(); }
+    {
+        return do_checkout<T>();
+    }
 
 private:
     // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
@@ -88,7 +94,9 @@ using BuilderStorage = BasicBuilderStorage<boost::mp11::mp_list<Ts...>>;
 template<typename T, typename... Ts>
     requires requires(BuilderStorage<Ts...>& builder) { builder.template checkout<T>(); }
 [[nodiscard]] BuilderHandle<T> checkout(BuilderStorage<Ts...>& builder)
-{ return builder.template checkout<T>(); }
+{
+    return builder.template checkout<T>();
+}
 
 }  // namespace ygg::formalism
 

@@ -126,12 +126,6 @@ public:
     std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
     { return do_insert<T>(builder); }
 
-    /// Declares the pool `key` of family F with these column types (std::invalid_argument where it was declared with
-    /// others). Interning a key (insert(data<T>)) declares its pool itself.
-    template<typename F>
-        requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    void declare(urd::index<F> key, std::span<const TypeId> types)
-    { return do_declare<F>(key, types); }
     /// The column types of the pool `relation`, as declared (std::out_of_range where no layer declared it).
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
@@ -176,6 +170,12 @@ public:
     { return { &builder, this }; }
     template<typename T>
     void view(const urd::builder<T>&& builder) const = delete;
+    /// A relation builder as its view here, which points at it (the builder must outlive the view; never a temporary).
+    template<typename F>
+    [[nodiscard]] RelationBuilderView<F, Repository> view(const urd::builder<Relation<F>>& builder URD_LIFETIMEBOUND) const
+    { return { &builder, this }; }
+    template<typename F>
+    void view(const urd::builder<Relation<F>>&& builder) const = delete;
 
     /**
      * Rows of each family F with rows: found in this layer and its parents.
@@ -217,10 +217,18 @@ public:
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
     std::pair<urd::index<Row<F>>, bool> insert_row(const urd::data<Row<F>>& row)
     { return do_insert_row<F>(row); }
+    /// A Schema's record and view, through the layer that owns it: a relation's pool of free relations resolves to it.
+    const urd::data<Schema>& operator[](urd::index<Schema> index) const;
+    [[nodiscard]] urd::index_view<Schema, Repository> view(urd::index<Schema> index) const;
     /// The stored row of a key, as its views read it.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
     StoredRow operator[](RowIndex<F> key) const
+    { return do_at<F>(key); }
+    /// The values of the row of a key, decoded from its pool's column widths: what its view's get_values() gives.
+    template<typename F>
+        requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
+    [[nodiscard]] StoredRow values(RowIndex<F> key) const
     { return do_at<F>(key); }
     /// A row key as its view, through the layer that owns the row.
     template<typename F>
@@ -268,8 +276,6 @@ private:
     [[nodiscard]] std::optional<urd::index_view<T, Repository>> do_find(const urd::data<T>& builder) const;
     template<typename T>
     std::pair<urd::index_view<T, Repository>, bool> do_insert(urd::data<T>& builder);
-    template<typename F>
-    void do_declare(urd::index<F> key, std::span<const TypeId> types);
     template<typename F>
     [[nodiscard]] std::span<const TypeId> do_types(urd::index<F> relation) const;
     template<typename T>

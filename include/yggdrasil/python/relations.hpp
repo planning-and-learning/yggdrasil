@@ -9,20 +9,24 @@
 // What the Python bindings of relations share (pyyggdrasil.formalism's relation types, pytyr.database's operations).
 
 #include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/row_view.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
 #include <cstdint>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
-#include <span>
+#include <urd/python/owner.hpp>
 #include <variant>
-
-// A relation's columns (ColumnIndices) are a class of their own in Python, their labels and types, not a list as urd's
-// range caster would make them.
-NB_MAKE_OPAQUE(std::span<const ygg::ColumnLayout>)
 
 namespace nanobind::detail
 {
+/// A row of a relation builder keeps the builder it is read through alive, as urd's views keep their contexts
+/// (urd/python/owner.hpp), also inside a returned list.
+template<typename F>
+struct type_caster<ygg::RowBuilderView<F>> : urd_view_caster<ygg::RowBuilderView<F>>
+{
+};
+
 /// An object column's index (ColumnValue's untagged object index) is a Python int.
 template<>
 struct type_caster<urd::index<ygg::formalism::Object<void>>>

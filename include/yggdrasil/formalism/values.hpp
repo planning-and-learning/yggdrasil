@@ -119,6 +119,50 @@ template<typename T>
     return std::visit([](auto alternative) { return encode_value(alternative); }, value);
 }
 
+/// The bits a column of `type` stores for `value`, the value converted to the column's type first: an integer to an
+/// integer type it fits, an integer or a floating-point number to a floating-point type, a bool to bool, an object's
+/// index to the object type; std::invalid_argument where `type` names no type or the value does not convert to it.
+[[nodiscard]] inline Value encode(const ColumnValue& value, TypeId type)
+{
+    constexpr auto encoders = []<typename... Ts>(std::type_identity<std::variant<Ts...>>)
+    {
+        return std::array { +[](const ColumnValue& given) -> Value
+                            {
+                                return std::visit(
+                                    [](auto held) -> Value
+                                    {
+                                        using From = decltype(held);
+                                        using To = Ts;
+                                        if constexpr (std::same_as<From, To>)
+                                            return encode_value(held);
+                                        else if constexpr (std::integral<From> && std::integral<To> && !std::same_as<From, bool> && !std::same_as<To, bool>)
+                                        {
+                                            if (!std::in_range<To>(held))
+                                                throw std::invalid_argument("encode: the value does not fit the column's type.");
+                                            return encode_value(static_cast<To>(held));
+                                        }
+                                        else if constexpr (std::floating_point<To>
+                                                           && (std::floating_point<From> || (std::integral<From> && !std::same_as<From, bool>) ))
+                                            return encode_value(static_cast<To>(held));
+                                        else
+                                            throw std::invalid_argument("encode: the value does not convert to the column's type.");
+                                    },
+                                    given);
+                            }... };
+    }(std::type_identity<ColumnValue> {});
+    if (static_cast<std::size_t>(type) >= encoders.size())
+        throw std::invalid_argument("encode: invalid type id.");
+    return encoders[static_cast<std::size_t>(type)](value);
+}
+
+/// encode of a value of one alternative: what Python passes (a bool, an integer, a floating-point number, an object's
+/// index) goes to the alternative of its own type, which encode then converts to the column's.
+[[nodiscard]] inline Value encode(bool value, TypeId type) { return encode(ColumnValue(value), type); }
+[[nodiscard]] inline Value encode(std::int64_t value, TypeId type) { return encode(ColumnValue(value), type); }
+[[nodiscard]] inline Value encode(std::uint64_t value, TypeId type) { return encode(ColumnValue(value), type); }
+[[nodiscard]] inline Value encode(double value, TypeId type) { return encode(ColumnValue(value), type); }
+[[nodiscard]] inline Value encode(urd::index<formalism::Object<void>> value, TypeId type) { return encode(ColumnValue(value), type); }
+
 /// The value of a column of `type` whose bits these are; std::invalid_argument where `type` names no type.
 [[nodiscard]] inline ColumnValue decode(Value bits, TypeId type)
 {

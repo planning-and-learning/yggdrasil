@@ -6,27 +6,12 @@
 #ifndef YGG_FORMALISM_RELATION_DATA_HPP_
 #define YGG_FORMALISM_RELATION_DATA_HPP_
 
+#include "yggdrasil/formalism/column_layout.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
-#include <compare>
-#include <span>
 #include <urd/elements/flat.hpp>
-
-namespace ygg
-{
-/// A column: its label and type. Where its values lie in a row, the widths of its relation's pool say.
-struct ColumnLayout
-{
-    urd::index<Column> label;
-    TypeId type;
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
-    friend bool operator==(const ColumnLayout&, const ColumnLayout&) = default;
-    friend auto operator<=>(const ColumnLayout&, const ColumnLayout&) = default;
-};
-}  // namespace ygg
+#include <utility>
 
 namespace urd
 {
@@ -37,8 +22,17 @@ struct data<ygg::Schema>
     urd::index<ygg::Schema> index;
     urd::flat_vector<ygg::TypeId> types;
 
+    data() = default;
+    explicit data(urd::flat_vector<ygg::TypeId> types_) : index(), types(std::move(types_)) {}
+    data(const data& other) = delete;
+    data& operator=(const data& other) = delete;
+    data(data&& other) = default;
+    data& operator=(data&& other) = default;
+    ~data() = default;
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"types", &data::types>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::types> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::types> {}; }
 };
 
 /// The columns of a relation, labeled and typed.
@@ -49,24 +43,46 @@ struct data<ygg::Columns>
     urd::flat_vector<ygg::ColumnLayout> values;
 
     data() = default;
-    explicit data(std::span<const ygg::ColumnLayout> values_) : index() { values.set(values_.begin(), values_.end()); }
+    explicit data(urd::flat_vector<ygg::ColumnLayout> values_) : index(), values(std::move(values_)) {}
+    data(const data& other) = delete;
+    data& operator=(const data& other) = delete;
+    data(data&& other) = default;
+    data& operator=(data&& other) = default;
+    ~data() = default;
 
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &data::values>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::values> {}; }
 };
 
-/// A relation of family F: its pool (the key of the layer's pool of its rows), its columns and the ids of its rows in
-/// that pool, sorted and unique. Renaming keeps the pool and the rows.
+/// A relation of family F: its pool (the key of the layer's pool of its rows), its columns and the keys of its rows, each
+/// in that pool, sorted and unique. Renaming keeps the pool and the rows.
 template<typename F>
 struct data<ygg::Relation<F>>
 {
     urd::index<ygg::Relation<F>> index;
     urd::index<F> pool;
     urd::index<ygg::Columns> columns;
-    urd::flat_vector<urd::index<ygg::Row<F>>> rows;
+    urd::flat_vector<ygg::RowIndex<F>> rows;
 
+    data() = default;
+    data(urd::index<F> pool_, urd::index<ygg::Columns> columns_, urd::flat_vector<ygg::RowIndex<F>> rows_) :
+        index(),
+        pool(pool_),
+        columns(columns_),
+        rows(std::move(rows_))
+    {
+    }
+    data(const data& other) = delete;
+    data& operator=(const data& other) = delete;
+    data(data&& other) = default;
+    data& operator=(data&& other) = default;
+    ~data() = default;
+
+    static constexpr auto fields() noexcept
+    { return urd::Fields<urd::field<"pool", &data::pool>, urd::field<"columns", &data::columns>, urd::field<"rows", &data::rows>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::pool, &data::columns, &data::rows> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::pool, &data::columns, &data::rows> {}; }
 };
 }  // namespace urd
 

@@ -125,7 +125,9 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] const Pools<F>& get() const
-    { return m_relations.template get<F>(); }
+    {
+        return m_relations.template get<F>();
+    }
 
     /// The id of the row of these values in the pool `relation`, in whichever layer holds it, or none.
     template<typename F, std::ranges::input_range Values>
@@ -147,6 +149,10 @@ public:
     /// The Schema `record`, interned here where no layer holds it (record.index set to it).
     urd::index<Schema> schema(urd::data<Schema>& record) { return intern(m_schemas, record).first; }
     /// The column types of a Schema.
+    /// The Schema `schema`, through the layers; whether some layer holds it; the layered Store of the Schemas.
+    [[nodiscard]] const urd::data<Schema>& operator[](urd::index<Schema> schema) const { return m_schemas[schema]; }
+    [[nodiscard]] bool contains(urd::index<Schema> schema) const { return m_schemas.contains(schema); }
+    [[nodiscard]] const Schemas& schemas() const noexcept { return m_schemas; }
     [[nodiscard]] std::span<const TypeId> types(urd::index<Schema> schema) const
     {
         const auto& record = m_schemas[schema];
@@ -254,7 +260,9 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] size_t memory_usage() const
-    { return urd::memory_usage(get<F>()); }
+    {
+        return urd::memory_usage(get<F>());
+    }
 
     /// Forgets this layer's own rows; the parent's stay, and so do the Schemas and the pools' declarations (as the
     /// Repository keeps the pool keys).

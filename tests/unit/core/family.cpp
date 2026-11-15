@@ -4,6 +4,7 @@
 #include "yggdrasil/core/family.hpp"
 
 #include "urd/elements/data.hpp"
+#include "urd/elements/view.hpp"
 #include "urd/repr/records/arena.hpp"
 #include "urd/repr/records/records.hpp"
 #include "urd/repr/wrappers/layered_pool.hpp"
@@ -12,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <type_traits>
 #include <vector>
 
 namespace
@@ -24,15 +26,53 @@ template<>
 struct urd::data<Object>
 {
     std::uint32_t id = 0;
+
+    data() = default;
+    explicit data(std::uint32_t id_) : id(id_) {}
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"id", &data::id>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::id> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::id> {}; }
+};
+template<typename V>
+struct urd::view_mixin<Object, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] auto get_id() const noexcept { return self().template member<&urd::record_of<V>::id>(); }
 };
 template<>
 struct urd::data<Predicate>
 {
     std::uint32_t arity = 0;
+
+    data() = default;
+    explicit data(std::uint32_t arity_) : arity(arity_) {}
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"arity", &data::arity>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::arity> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::arity> {}; }
+};
+template<typename V>
+struct urd::view_mixin<Predicate, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] auto get_arity() const noexcept { return self().template member<&urd::record_of<V>::arity>(); }
 };
 
 namespace

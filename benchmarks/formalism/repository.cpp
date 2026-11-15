@@ -20,10 +20,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <type_traits>
 #include <urd/elements/flat.hpp>
+#include <urd/elements/view.hpp>
 #include <urd/tags.hpp>
 #include <utility>
 
@@ -34,6 +37,12 @@ struct SerializedSymbol;
 struct Relation;
 struct BlockObjectTag;
 struct PackedObjectTag;
+
+/// The column types of the benchmarks' rows: four objects.
+constexpr auto kObjectColumns = std::array { ygg::type_id<urd::index<formalism::Object<void>>>,
+                                             ygg::type_id<urd::index<formalism::Object<void>>>,
+                                             ygg::type_id<urd::index<formalism::Object<void>>>,
+                                             ygg::type_id<urd::index<formalism::Object<void>>> };
 }
 
 namespace urd
@@ -45,8 +54,58 @@ struct data<ygg::benchmarks::TrivialSymbol>
     urd::index<ygg::benchmarks::TrivialSymbol> index;
     std::uint64_t value = 0;
 
+    data() = default;
+    explicit data(std::uint64_t value_) : index(), value(value_) {}
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::value> {}; }
+};
+template<typename V>
+struct view_mixin<ygg::benchmarks::TrivialSymbol, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+};
+
+/// A key of row pools: a lane's relation, told apart by its lane; its pool has the object columns kObjectColumns.
+template<>
+struct data<ygg::benchmarks::Relation>
+{
+    urd::index<ygg::benchmarks::Relation> index;
+    ygg::uint_t lane = 0;
+
+    data() = default;
+    explicit data(ygg::uint_t lane_) : index(), lane(lane_) {}
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane> {}; }
+};
+template<typename V>
+struct view_mixin<ygg::benchmarks::Relation, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_lane() const { return self().template member<&urd::record_of<V>::lane>(); }
+
+    /// A key of row pools gives its rows' column types.
+    [[nodiscard]] std::span<const ygg::TypeId> get_column_types() const noexcept { return ygg::benchmarks::kObjectColumns; }
 };
 
 template<>
@@ -56,14 +115,25 @@ struct data<ygg::benchmarks::SerializedSymbol>
     urd::flat_vector<urd::index<ygg::benchmarks::TrivialSymbol>> values;
 
     data() = default;
-    data(const data&) = delete;
-    data& operator=(const data&) = delete;
-    data(data&&) = default;
-    data& operator=(data&&) = default;
+    explicit data(urd::flat_vector<urd::index<ygg::benchmarks::TrivialSymbol>> values_) : index(), values(std::move(values_)) {}
+    data(const data& other) = delete;
+    data& operator=(const data& other) = delete;
+    data(data&& other) = default;
+    data& operator=(data&& other) = default;
     ~data() = default;
 
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &data::values>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::values> {}; }
+};
+template<typename V>
+struct view_mixin<ygg::benchmarks::SerializedSymbol, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
 };
 
 }
@@ -85,8 +155,8 @@ constexpr std::uint64_t kPrefill = 1U << 16;
 constexpr benchmark::IterationCount kLookupIterations = 1U << 20;
 constexpr benchmark::IterationCount kInsertIterations = 1U << 18;
 
-using SequentialSymbols = formalism::SymbolRepository<TrivialSymbol, SerializedSymbol>;
-using ConcurrentSymbols = formalism::ConcurrentSymbolRepository<TrivialSymbol, SerializedSymbol>;
+using SequentialSymbols = formalism::SymbolRepository<TrivialSymbol, SerializedSymbol, Relation>;
+using ConcurrentSymbols = formalism::ConcurrentSymbolRepository<TrivialSymbol, SerializedSymbol, Relation>;
 using SequentialBlockRelations = formalism::RelationRepository<BlockObjectTag, Relation>;
 using ConcurrentBlockRelations = formalism::ConcurrentRelationRepository<BlockObjectTag, Relation>;
 using SequentialPackedRelations = formalism::RelationRepository<PackedObjectTag, Relation>;
@@ -101,11 +171,6 @@ using Binding = Row<Relation>;
 /// The bits of an object of the benchmarks' rows, and the objects a repository is built for.
 constexpr std::uint64_t kObjectBits = 12;
 constexpr std::size_t kObjects = std::size_t { 1 } << kObjectBits;
-/// The column types of the benchmarks' rows: four objects.
-constexpr auto kObjectColumns = std::array { type_id<urd::index<formalism::Object<void>>>,
-                                             type_id<urd::index<formalism::Object<void>>>,
-                                             type_id<urd::index<formalism::Object<void>>>,
-                                             type_id<urd::index<formalism::Object<void>>> };
 
 template<typename Repository>
 std::unique_ptr<Repository>& repository()
@@ -141,13 +206,18 @@ template<typename Repository>
 void set_up_empty(const benchmark::State&)
 { repository<Repository>() = std::make_unique<Repository>(kObjects); }
 
-/// An empty repository with the pool of each thread's lane declared (a raw key: its pool is declared here).
+/// An empty repository with the pool of each thread's lane declared: each lane's relation interned, in order, so that
+/// lane i is the key urd::index<Relation>(i) by which the benchmarks name it (checked).
 template<typename Repository>
 void set_up_pools(const benchmark::State& state)
 {
     set_up_empty<Repository>(state);
     for (int lane = 0; lane < state.threads(); ++lane)
-        repository<Repository>()->declare(urd::index<Relation>(static_cast<uint_t>(lane)), kObjectColumns);
+    {
+        auto key = urd::data<Relation>(static_cast<uint_t>(lane));
+        if (repository<Repository>()->insert(key).first.index() != urd::index<Relation>(static_cast<uint_t>(lane)))
+            throw std::logic_error("repository benchmark: a lane's relation is not the key of its number.");
+    }
 }
 
 template<typename Repository, typename Symbol>
@@ -291,7 +361,7 @@ void benchmark_relation_find(benchmark::State& state)
             state.SkipWithError("prefilled row not found");
             break;
         }
-        checksum += found->data().row.value;
+        checksum += found->index().row.value;
     }
     benchmark::DoNotOptimize(checksum);
     report_relation<Repository>(state, 0, PerThreadLane);
@@ -313,7 +383,7 @@ void benchmark_relation_mixed(benchmark::State& state)
         set_key(data, key);
         const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.data().row.value;
+        checksum += view.index().row.value;
     }
     if (created != (static_cast<std::uint64_t>(state.iterations()) + 19U) / 20U)
         state.SkipWithError("mixed relation miss was not created");
@@ -336,7 +406,7 @@ void benchmark_relation_insert(benchmark::State& state)
         set_key(data, key);
         const auto [view, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.data().row.value;
+        checksum += view.index().row.value;
     }
     if (created != static_cast<std::uint64_t>(state.iterations()))
         state.SkipWithError("unique relation insertion was not created");

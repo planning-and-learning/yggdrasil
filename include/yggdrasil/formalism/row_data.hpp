@@ -45,8 +45,9 @@ struct data<ygg::Row<F>>
     data& operator=(data&& other) = default;
     ~data() = default;
 
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &data::relation>, urd::field<"values", &data::values>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
     static constexpr auto cista_members() noexcept { return urd::Members<&data::relation, &data::values> {}; }
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::relation, &data::values> {}; }
 };
 
 }  // namespace urd
