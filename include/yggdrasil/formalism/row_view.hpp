@@ -94,8 +94,8 @@ public:
 };
 }  // namespace ygg::detail
 
-/// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, its record packed into its pool, read
-/// through urd::stored_member below) and a row held outside the repository (urd::borrowed_view of its record) alike: its
+/// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, which reads the StoredRowRecord its
+/// context hands out) and a row held outside the repository (urd::borrowed_view of its record) alike: its
 /// relation, its values and their types. The context and the record, where borrowed, must outlive the view and all
 /// ranges it gives.
 template<typename F, typename V>
@@ -106,25 +106,13 @@ private:
 
 public:
     /// The view of its relation (its pool's key) through the context.
-    [[nodiscard]] decltype(auto) get_relation() const { return self().template member<&urd::data<ygg::Row<F>>::relation>(); }
+    [[nodiscard]] decltype(auto) get_relation() const { return self().template member<&urd::record_of<V>::relation>(); }
     /// Its canonical Values.
-    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::data<ygg::Row<F>>::values>(); }
+    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
     /// Its relation's key.
     [[nodiscard]] urd::index<F> relation_key() const { return get_relation().index(); }
     /// Its columns' types: its pool's.
     [[nodiscard]] std::span<const ygg::TypeId> column_types() const { return get_repository(self().context()).types(relation_key()); }
-};
-
-/// A stored row's members, its record packed into its pool: its relation is its key's, its values the context decodes.
-template<typename F>
-struct urd::stored_member<ygg::Row<F>>
-{
-    template<typename V>
-    static auto of(const V& view, urd::member_tag<&urd::data<ygg::Row<F>>::relation> /*relation*/)
-    { return view.context().view(view.index().relation); }
-    template<typename V>
-    static auto of(const V& view, urd::member_tag<&urd::data<ygg::Row<F>>::values> /*values*/)
-    { return view.context().values(view.index()); }
 };
 
 namespace ygg
@@ -160,6 +148,14 @@ struct urd::resolution<ygg::RowIndex<F>>
     template<typename C>
     static auto of(ygg::RowIndex<F> key, const C& context)
     { return context.view(key); }
+    /// Written from the key itself, or from a stored row's view (its index()).
+    template<std::same_as<ygg::RowIndex<F>> R>
+    static ygg::RowIndex<F> stored(const R& readout) noexcept
+    { return readout; }
+    template<typename V>
+        requires std::same_as<std::remove_cvref_t<decltype(std::declval<const V&>().index())>, ygg::RowIndex<F>>
+    static ygg::RowIndex<F> stored(const V& view) noexcept
+    { return view.index(); }
 };
 
 namespace ygg

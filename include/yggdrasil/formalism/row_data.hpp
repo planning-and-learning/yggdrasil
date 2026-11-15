@@ -52,4 +52,20 @@ struct data<ygg::Row<F>>
 
 }  // namespace urd
 
+namespace ygg
+{
+/// A stored row as its context hands it out (context[key]): its relation, which its key names, and its values, decoded
+/// from its pool (Values: the context's packed row). The row itself is stored packed, its relation the pool; this value
+/// has the fields of data<Row<F>>, so that a stored row's view reads it as any record's (urd's member<>).
+template<typename F, typename Values>
+struct StoredRowRecord
+{
+    urd::index<F> relation;
+    Values values;
+
+    static constexpr auto fields() noexcept
+    { return urd::Fields<urd::field<"relation", &StoredRowRecord::relation>, urd::field<"values", &StoredRowRecord::values>> {}; }
+};
+}  // namespace ygg
+
 #endif

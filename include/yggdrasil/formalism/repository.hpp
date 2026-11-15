@@ -220,11 +220,11 @@ public:
     /// A Schema's record and view, through the layer that owns it: a relation's pool of free relations resolves to it.
     const urd::data<Schema>& operator[](urd::index<Schema> index) const;
     [[nodiscard]] urd::index_view<Schema, Repository> view(urd::index<Schema> index) const;
-    /// The stored row of a key, as its views read it.
+    /// The stored row of a key, as its views read it: its relation and its values (StoredRowRecord).
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    StoredRow operator[](RowIndex<F> key) const
-    { return do_at<F>(key); }
+    StoredRowRecord<F, StoredRow> operator[](RowIndex<F> key) const
+    { return { key.relation, do_at<F>(key) }; }
     /// The values of the row of a key, decoded from its pool's column widths: what its view's get_values() gives.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>

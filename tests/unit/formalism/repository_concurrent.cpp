@@ -509,7 +509,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocks
     const auto relation = declared_relation<ObjectTag>(repository, 0);
     const auto [first, created] = repository.insert(make_binding<ObjectTag>(relation, 0));
     ASSERT_TRUE(created);
-    const auto first_data = repository[first.index()].as<urd::index<formalism::Object<ObjectTag>>>();
+    const auto first_data = repository.values(first.index()).as<urd::index<formalism::Object<ObjectTag>>>();
 
     auto stop = std::atomic_bool { false };
     auto errors = std::atomic_size_t { 0 };

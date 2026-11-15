@@ -611,6 +611,7 @@ TEST(YggdrasilTests, CommonInterningAcceptsRowsWithoutSymbolIdentity)
     EXPECT_FALSE(duplicate_created);
     EXPECT_EQ(duplicate.index(), first.index());
     EXPECT_EQ(first.template get<urd::index<Object>>(0), urd::index<Object>(3));
+    EXPECT_EQ(urd::stored<RowIndex<RepositoryTypesRelation>>(first), first.index());  // a row's view written as its key
 }
 
 TEST(YggdrasilTests, CommonRepositoryLayersHaveDistinctNumbersAndParents)
