@@ -2,7 +2,7 @@
 requires = [
     "scikit-build-core>=1.0.3,<2",
     "nanobind-backend>=1.0",
-    "pybrokkr>=0.1.3,<0.2",
+    "pybrokkr>=0.1.4,<0.2",
     "pyurd>=0.2.0,<0.3",
 ]
 build-backend = "pyyggdrasil_build_backend"
@@ -10,7 +10,7 @@ backend-path = ["python"]
 
 [project]
 name = "pyyggdrasil"
-version = "0.8.0"
+version = "0.9.0"
 description = "yggdrasil: data structures and a database engine for Dominik Drexler's planning projects"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -29,7 +29,7 @@ test = [
     "pytest",
     # The build backend wraps pybrokkr; installed here so type checkers
     # resolve it (it is otherwise only a build-system requirement).
-    "pybrokkr>=0.1.3,<0.2",
+    "pybrokkr>=0.1.4,<0.2",
 ]
 
 [tool.pytest.ini_options]

@@ -50,24 +50,24 @@ using ContextSymbol = boost::mp11::mp_at_c<typename SymbolContextOf<Derived>::Sy
 #define YGG_FORMALISM_SYMBOL_CONTEXT_AT(z, I, ARGS)                                                                                                         \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
     template std::optional<urd::index_view<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>>   \
-    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::find(                                                                         \
+    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_find(                                                                      \
         const urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&) const;                                               \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
     template std::pair<urd::index_view<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>, bool> \
-    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::insert(                                                                       \
+    ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_insert(                                                                    \
         urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&);                                                           \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
     template const urd::data<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&                                                  \
-        ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::operator[](                                                               \
+        ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_at(                                                                    \
             urd::index<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                 \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
-    template bool ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::contains(                                                       \
+    template bool ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_contains(                                                    \
         urd::index<::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                     \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
-    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::size<                                                    \
+    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_size<                                                 \
         ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;                                                               \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
-    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::memory_usage<                                            \
+    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_memory_usage<                                         \
         ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;
 
 /// Explicit instantiations (PREFIX extern: declarations) of the members of repository Repository's SymbolContext base

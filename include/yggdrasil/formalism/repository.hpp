@@ -56,7 +56,7 @@ namespace ygg::formalism
 /// This header declares the repository; its stores (the symbol and relation repositories, the builders) are behind a
 /// pointer to its Impl, which repository_impl.hpp defines with every member. A library includes repository_impl.hpp in
 /// one source and instantiates its repositories' members there (repository_instantiations.hpp); its other sources
-/// include this header only, and instantiate none of the stores (brokkr's template rules, rule 6).
+/// include this header only, and instantiate none of the stores.
 template<typename SymbolRepo, typename RelationRepo>
 class Repository
 {
@@ -102,10 +102,12 @@ public:
 
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] const Repository* owner(urd::index<T> index) const;
+    [[nodiscard]] const Repository* owner(urd::index<T> index) const
+    { return do_owner<T>(index); }
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] const Repository* owner(RowIndex<F> key) const;
+    [[nodiscard]] const Repository* owner(RowIndex<F> key) const
+    { return do_owner<F>(key); }
 
     /**
      * Symbols: found in this layer and its parents.
@@ -113,45 +115,54 @@ public:
 
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const;
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const
+    { return do_find<T>(builder); }
     /// Interns the record where no layer holds it; builder.index is set to its index. A key of row pools (a predicate,
     /// an action, ...) has its pool declared too, with the column types its view gives (a key family's view has
     /// get_column_types(): its rows' column types); declared on every insert, so a row may follow whichever thread
     /// interned it.
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder);
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
+    { return do_insert<T>(builder); }
 
     /// Declares the pool `key` of family F with these column types (std::invalid_argument where it was declared with
     /// others). Interning a key (insert(data<T>)) declares its pool itself.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    void declare(urd::index<F> key, std::span<const TypeId> types);
+    void declare(urd::index<F> key, std::span<const TypeId> types)
+    { return do_declare<F>(key, types); }
     /// The column types of the pool `relation`, as declared (std::out_of_range where no layer declared it).
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] std::span<const TypeId> types(urd::index<F> relation) const;
+    [[nodiscard]] std::span<const TypeId> types(urd::index<F> relation) const
+    { return do_types<F>(relation); }
 
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    const urd::data<T>& operator[](urd::index<T> index) const;
+    const urd::data<T>& operator[](urd::index<T> index) const
+    { return do_at<T>(index); }
     /// Whether some layer holds the index.
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] bool contains(urd::index<T> index) const;
+    [[nodiscard]] bool contains(urd::index<T> index) const
+    { return do_contains<T>(index); }
     /// The number of records of type T, along the layers.
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] std::size_t size() const;
+    [[nodiscard]] std::size_t size() const
+    { return do_size<T>(); }
     /// The memory of this layer's records of type T, in bytes.
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] std::size_t memory_usage() const;
+    [[nodiscard]] std::size_t memory_usage() const
+    { return do_memory_usage<T>(); }
 
     /// An index as its view, through the layer that owns it (urd's resolves contract).
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const;
+    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const
+    { return do_view<T>(index); }
     /// A record held outside the repository as its view here, which points at it (the record must outlive the view;
     /// never a temporary).
     template<typename T>
@@ -172,41 +183,50 @@ public:
 
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] std::optional<RowView<F, Repository>> find(const urd::data<Row<F>>& row) const;
+    [[nodiscard]] std::optional<RowView<F, Repository>> find(const urd::data<Row<F>>& row) const
+    { return do_find<F>(row); }
     /// Stores the row in this layer where no layer holds it, checked against its pool's Schema (declared with its key;
     /// a free relation's pool by schema()).
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    std::pair<RowView<F, Repository>, bool> insert(const urd::data<Row<F>>& row);
+    std::pair<RowView<F, Repository>, bool> insert(const urd::data<Row<F>>& row)
+    { return do_insert<F>(row); }
     /// The id of the row of these values in the pool `relation`, in whichever layer holds it, or none; no view is made.
     /// The values as they are held: contiguous, or a stored row's.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] urd::index<Row<F>> find_row(urd::index<F> relation, std::span<const Value> values) const;
+    [[nodiscard]] urd::index<Row<F>> find_row(urd::index<F> relation, std::span<const Value> values) const
+    { return do_find_row<F>(relation, values); }
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] urd::index<Row<F>> find_row(urd::index<F> relation, const StoredRow& values) const;
+    [[nodiscard]] urd::index<Row<F>> find_row(urd::index<F> relation, const StoredRow& values) const
+    { return do_find_row<F>(relation, values); }
     /// The number of rows of the pool `relation`, along the layers.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] std::size_t size(urd::index<F> relation) const;
+    [[nodiscard]] std::size_t size(urd::index<F> relation) const
+    { return do_size<F>(relation); }
     /// The memory of family F's pools of rows in this layer, in bytes.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] std::size_t row_memory_usage() const;
+    [[nodiscard]] std::size_t row_memory_usage() const
+    { return do_row_memory_usage<F>(); }
     /// Stores the row in this layer where no layer holds it: its id in its pool, and whether it was stored here; no view
     /// is made (insert(data<Row<F>>) makes one).
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    std::pair<urd::index<Row<F>>, bool> insert_row(const urd::data<Row<F>>& row);
+    std::pair<urd::index<Row<F>>, bool> insert_row(const urd::data<Row<F>>& row)
+    { return do_insert_row<F>(row); }
     /// The stored row of a key, as its views read it.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    StoredRow operator[](RowIndex<F> key) const;
+    StoredRow operator[](RowIndex<F> key) const
+    { return do_at<F>(key); }
     /// A row key as its view, through the layer that owns the row.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] RowView<F, Repository> view(RowIndex<F> key) const;
+    [[nodiscard]] RowView<F, Repository> view(RowIndex<F> key) const
+    { return do_view<F>(key); }
 
     /**
      * Relations of each family F with relations: records {pool, columns, row ids}, built by their users (rows interned
@@ -215,24 +235,78 @@ public:
 
     /// The pool of free relations of these column types: their Schema, interned here, its pool declared.
     urd::index<Schema> schema(std::span<const TypeId> types)
-        requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>;
+        requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
+    { return do_schema(types); }
     /// The pool of free relations of these columns' types.
     urd::index<Schema> schema(std::span<const ColumnLayout> columns)
-        requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>;
+        requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
+    { return do_schema(columns); }
     /// Interns the relation where no layer holds it: its rows sorted and made unique first. Its pool must be declared
     /// (std::out_of_range otherwise), its columns' types the pool's and their labels distinct (std::invalid_argument).
     template<typename F>
         requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
-    std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::data<Relation<F>>& relation);
+    std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::data<Relation<F>>& relation)
+    { return do_insert<F>(relation); }
 
     /// A builder of family F with these columns (validated), shared as tyr's state builders are: it comes from this
     /// layer's slots, keyed by its column widths, where it goes back with its last owner, keeping its row storage.
     /// The layer must outlive its builders.
     template<typename F>
         requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> get_relation_builder(std::span<const ColumnLayout> columns) const;
+    [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> get_relation_builder(std::span<const ColumnLayout> columns) const
+    { return do_get_relation_builder<F>(columns); }
 
 private:
+    // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
+    // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
+    // built by either.
+    template<typename T>
+    [[nodiscard]] const Repository* do_owner(urd::index<T> index) const;
+    template<typename F>
+    [[nodiscard]] const Repository* do_owner(RowIndex<F> key) const;
+    template<typename T>
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> do_find(const urd::data<T>& builder) const;
+    template<typename T>
+    std::pair<urd::index_view<T, Repository>, bool> do_insert(urd::data<T>& builder);
+    template<typename F>
+    void do_declare(urd::index<F> key, std::span<const TypeId> types);
+    template<typename F>
+    [[nodiscard]] std::span<const TypeId> do_types(urd::index<F> relation) const;
+    template<typename T>
+    const urd::data<T>& do_at(urd::index<T> index) const;
+    template<typename T>
+    [[nodiscard]] bool do_contains(urd::index<T> index) const;
+    template<typename T>
+    [[nodiscard]] std::size_t do_size() const;
+    template<typename T>
+    [[nodiscard]] std::size_t do_memory_usage() const;
+    template<typename T>
+    [[nodiscard]] urd::index_view<T, Repository> do_view(urd::index<T> index) const;
+    template<typename F>
+    [[nodiscard]] std::optional<RowView<F, Repository>> do_find(const urd::data<Row<F>>& row) const;
+    template<typename F>
+    std::pair<RowView<F, Repository>, bool> do_insert(const urd::data<Row<F>>& row);
+    template<typename F>
+    [[nodiscard]] urd::index<Row<F>> do_find_row(urd::index<F> relation, std::span<const Value> values) const;
+    template<typename F>
+    [[nodiscard]] urd::index<Row<F>> do_find_row(urd::index<F> relation, const StoredRow& values) const;
+    template<typename F>
+    [[nodiscard]] std::size_t do_size(urd::index<F> relation) const;
+    template<typename F>
+    [[nodiscard]] std::size_t do_row_memory_usage() const;
+    template<typename F>
+    std::pair<urd::index<Row<F>>, bool> do_insert_row(const urd::data<Row<F>>& row);
+    template<typename F>
+    StoredRow do_at(RowIndex<F> key) const;
+    template<typename F>
+    [[nodiscard]] RowView<F, Repository> do_view(RowIndex<F> key) const;
+    template<typename F>
+    std::pair<urd::index_view<Relation<F>, Repository>, bool> do_insert(urd::data<Relation<F>>& relation);
+    template<typename F>
+    [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> do_get_relation_builder(std::span<const ColumnLayout> columns) const;
+    urd::index<Schema> do_schema(std::span<const TypeId> types);
+    urd::index<Schema> do_schema(std::span<const ColumnLayout> columns);
+
     const Repository* m_parent;
     std::size_t m_layer;
     std::unique_ptr<Impl> m_impl;

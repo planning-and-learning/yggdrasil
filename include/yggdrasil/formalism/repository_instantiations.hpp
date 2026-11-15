@@ -50,68 +50,74 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
 #define YGG_FORMALISM_REPOSITORY_SYMBOL(z, I, ARGS)                                                                                                            \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
     template const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)                                                                                                             \
-        * BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::owner(urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;            \
+        * BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_owner(urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;         \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
     template std::optional<urd::index_view<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>>   \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::find(const urd::data<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&) const;         \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_find(const urd::data<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&) const;      \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
     template std::pair<urd::index_view<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>, bool> \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::insert(urd::data<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&);                   \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_insert(urd::data<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>&);                \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
-    template const urd::data<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>& BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::operator[](     \
+    template const urd::data<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>& BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_at(          \
         urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                     \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
     template urd::index_view<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>                  \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::view(urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;               \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_view(urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;            \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
-    template bool BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::contains(urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const; \
+    template bool BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_contains(urd::index<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>)     \
+        const;                                                                                                                                                 \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
-    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::size<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;        \
+    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_size<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;     \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                            \
-    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::memory_usage<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;
+    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_memory_usage<::ygg::formalism::detail::RepositorySymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>()    \
+        const;
 
 /// The members of the I-th row family F of the repository (ARGS: (PREFIX, Repo)).
-#define YGG_FORMALISM_REPOSITORY_ROWS(z, I, ARGS)                                                                                                            \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)                                                                                                           \
-        * BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::owner(::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;       \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template std::optional<::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>>    \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::find(const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&)    \
-            const;                                                                                                                                           \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template std::pair<::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>, bool>  \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::insert(const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&); \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::find_row( \
-        urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,                                                            \
-        std::span<const ::ygg::Value>) const;                                                                                                                \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::find_row( \
-        urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,                                                            \
-        const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow&) const;                                                                                            \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::size(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>)     \
-        const;                                                                                                                                               \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::row_memory_usage<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>()   \
-        const;                                                                                                                                               \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template std::pair<urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>, bool> BOOST_PP_TUPLE_ELEM(      \
-        2,                                                                                                                                                   \
-        1,                                                                                                                                                   \
-        ARGS)::insert_row(const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&);                       \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::operator[](                                                         \
-        ::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template ::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>                   \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::view(::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;          \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template void BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::declare(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,         \
-                                                           std::span<const ::ygg::TypeId>);                                                                  \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                          \
-    template std::span<const ::ygg::TypeId> BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::types(                                                                          \
+#define YGG_FORMALISM_REPOSITORY_ROWS(z, I, ARGS)                                                                                                             \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)                                                                                                            \
+        * BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_owner(::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;     \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::optional<::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>>     \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_find(const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&)  \
+            const;                                                                                                                                            \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::pair<::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>, bool>   \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_insert(                                                                                                           \
+            const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&);                                      \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM(                        \
+        2,                                                                                                                                                    \
+        1,                                                                                                                                                    \
+        ARGS)::do_find_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, std::span<const ::ygg::Value>) const;    \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM(                        \
+        2,                                                                                                                                                    \
+        1,                                                                                                                                                    \
+        ARGS)::do_find_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,                                          \
+                           const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow&) const;                                                                          \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_size(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>)   \
+        const;                                                                                                                                                \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::size_t BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_row_memory_usage<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() \
+        const;                                                                                                                                                \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::pair<urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>, bool> BOOST_PP_TUPLE_ELEM(       \
+        2,                                                                                                                                                    \
+        1,                                                                                                                                                    \
+        ARGS)::do_insert_row(const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&);                     \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_at(                                                               \
+        ::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                 \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template ::ygg::RowView<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>                    \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_view(::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;        \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template void BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_declare(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,       \
+                                                              std::span<const ::ygg::TypeId>);                                                                \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::span<const ::ygg::TypeId> BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_types(                                                                        \
         urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;
 
 /// The members of the I-th family F with relations of the repository (ARGS: (PREFIX, Repo)); its insert of a relation is
@@ -119,7 +125,7 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
 #define YGG_FORMALISM_REPOSITORY_RELATIONS(z, I, ARGS)                                                                                         \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                            \
     template std::shared_ptr<urd::builder<::ygg::Relation<::ygg::formalism::detail::RepositoryRelations<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>> \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::get_relation_builder(std::span<const ::ygg::ColumnLayout>) const;
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_get_relation_builder(std::span<const ::ygg::ColumnLayout>) const;
 
 /// Explicit instantiations (PREFIX extern: declarations) of the members of repository Repo (a name without commas: an
 /// alias) that touch its stores: construction, destruction and clear, and those of each of its SymbolCount symbol types,
@@ -140,9 +146,9 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
 
 /// The explicit instantiation (PREFIX extern: its declaration) of schema() of repository Repo, which has free relations
 /// (rows of Schema).
-#define YGG_FORMALISM_REPOSITORY_SCHEMA(PREFIX, Repo)                                       \
-    PREFIX template urd::index<::ygg::Schema> Repo::schema(std::span<const ::ygg::TypeId>); \
-    PREFIX template urd::index<::ygg::Schema> Repo::schema(std::span<const ::ygg::ColumnLayout>);
+#define YGG_FORMALISM_REPOSITORY_SCHEMA(PREFIX, Repo)                                          \
+    PREFIX template urd::index<::ygg::Schema> Repo::do_schema(std::span<const ::ygg::TypeId>); \
+    PREFIX template urd::index<::ygg::Schema> Repo::do_schema(std::span<const ::ygg::ColumnLayout>);
 
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 

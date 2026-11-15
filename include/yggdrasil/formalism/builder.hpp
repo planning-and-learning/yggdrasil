@@ -37,7 +37,7 @@ using BuilderHandle = std::unique_ptr<urd::data<T>, BuilderRelease>;
 
 /// One pool of reusable records per type, behind a pointer: builder_impl.hpp defines the pools (a Family of urd slots)
 /// and the members, and a library instantiates its storages in one source (builder_instantiations.hpp), so that its
-/// other sources complete no pool (brokkr's template rules, rule 6). A specialization over its type list, so that clang
+/// other sources complete no pool. A specialization over its type list, so that clang
 /// matches the out-of-line members, whose constraints name the types, to their declarations (as SymbolContext).
 template<typename Types>
 class BasicBuilderStorage;
@@ -60,14 +60,24 @@ public:
     /// Acquire pooled data without resetting its contents.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] BuilderHandle<T> get_builder();
+    [[nodiscard]] BuilderHandle<T> get_builder()
+    { return do_get_builder<T>(); }
 
     /// Clear pooled data once, member by member, retaining its reusable buffers.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] BuilderHandle<T> checkout();
+    [[nodiscard]] BuilderHandle<T> checkout()
+    { return do_checkout<T>(); }
 
 private:
+    // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
+    // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
+    // built by either.
+    template<typename T>
+    [[nodiscard]] BuilderHandle<T> do_get_builder();
+    template<typename T>
+    [[nodiscard]] BuilderHandle<T> do_checkout();
+
     std::unique_ptr<Impl> m_impl;
 };
 

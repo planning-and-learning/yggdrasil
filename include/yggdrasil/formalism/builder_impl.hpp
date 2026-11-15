@@ -60,8 +60,7 @@ BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::~BasicBuilderStorage()  // NOL
 
 template<typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::get_builder()
+BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_get_builder()
 {
     auto record = m_impl->slots.template get<T>().make_unique();
     const auto releaser = record.get_deleter();
@@ -70,8 +69,7 @@ BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::get_builder()
 
 template<typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::checkout()
+BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_checkout()
 {
     auto data = get_builder<T>();
     urd::clear_members(*data);

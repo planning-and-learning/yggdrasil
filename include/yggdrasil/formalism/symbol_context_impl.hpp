@@ -66,8 +66,7 @@ void SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::clear()
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-std::optional<urd::index_view<T, Derived>> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::find(const urd::data<T>& builder) const
+std::optional<urd::index_view<T, Derived>> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_find(const urd::data<T>& builder) const
 {
     if (const auto index = m_impl->symbols.template get<T>().find(builder); !index.is_none())
         return static_cast<const Derived&>(*this).view(index);
@@ -76,8 +75,7 @@ std::optional<urd::index_view<T, Derived>> SymbolContext<Derived, boost::mp11::m
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::insert(urd::data<T>& builder)
+std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_insert(urd::data<T>& builder)
 {
     const auto [index, created] = intern(m_impl->symbols.template get<T>(), builder);
     return { static_cast<const Derived&>(*this).view(index), created };
@@ -85,26 +83,22 @@ std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11:
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-const urd::data<T>& SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::operator[](urd::index<T> index) const
+const urd::data<T>& SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_at(urd::index<T> index) const
 { return m_impl->symbols[index]; }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-bool SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::contains(urd::index<T> index) const
+bool SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_contains(urd::index<T> index) const
 { return m_impl->symbols.contains(index); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::size() const
+std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_size() const
 { return m_impl->symbols.template size<T>(); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-    requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::memory_usage() const
+std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_memory_usage() const
 { return m_impl->symbols.template memory_usage<T>(); }
 
 }  // namespace ygg::formalism

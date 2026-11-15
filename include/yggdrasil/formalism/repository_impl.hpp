@@ -148,26 +148,22 @@ void Repository<SymbolRepo, RelationRepo>::clear_all()
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-bool Repository<SymbolRepo, RelationRepo>::contains(urd::index<T> index) const
+bool Repository<SymbolRepo, RelationRepo>::do_contains(urd::index<T> index) const
 { return m_impl->symbols.contains(index); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-std::size_t Repository<SymbolRepo, RelationRepo>::size() const
+std::size_t Repository<SymbolRepo, RelationRepo>::do_size() const
 { return m_impl->symbols.template size<T>(); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-std::size_t Repository<SymbolRepo, RelationRepo>::memory_usage() const
+std::size_t Repository<SymbolRepo, RelationRepo>::do_memory_usage() const
 { return m_impl->symbols.template memory_usage<T>(); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>::owner(urd::index<T> index) const
+const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>::do_owner(urd::index<T> index) const
 {
     if (!m_impl->symbols.contains(index))
         return nullptr;
@@ -180,8 +176,7 @@ const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>::owner(RowIndex<F> key) const
+const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>::do_owner(RowIndex<F> key) const
 {
     if (key.relation.is_none())
         return nullptr;
@@ -204,8 +199,7 @@ const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-std::optional<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>> Repository<SymbolRepo, RelationRepo>::find(const urd::data<T>& builder) const
+std::optional<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>> Repository<SymbolRepo, RelationRepo>::do_find(const urd::data<T>& builder) const
 {
     if (const auto index = m_impl->symbols.template get<T>().find(builder); !index.is_none())
         return view(index);
@@ -214,8 +208,7 @@ std::optional<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>> Reposito
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-std::pair<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>, bool> Repository<SymbolRepo, RelationRepo>::insert(urd::data<T>& builder)
+std::pair<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<T>& builder)
 {
     const auto [index, created] = intern(m_impl->symbols.template get<T>(), builder);
     const auto key = view(index);
@@ -226,20 +219,17 @@ std::pair<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>, bool> Reposi
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-void Repository<SymbolRepo, RelationRepo>::declare(urd::index<F> key, std::span<const TypeId> types)
+void Repository<SymbolRepo, RelationRepo>::do_declare(urd::index<F> key, std::span<const TypeId> types)
 { m_impl->relations.declare(key, m_impl->intern_schema(types)); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-std::span<const TypeId> Repository<SymbolRepo, RelationRepo>::types(urd::index<F> relation) const
+std::span<const TypeId> Repository<SymbolRepo, RelationRepo>::do_types(urd::index<F> relation) const
 { return m_impl->relations.types(relation); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-const urd::data<T>& Repository<SymbolRepo, RelationRepo>::operator[](urd::index<T> index) const
+const urd::data<T>& Repository<SymbolRepo, RelationRepo>::do_at(urd::index<T> index) const
 {
     if (!m_impl->symbols.contains(index))
         throw std::out_of_range("Symbol index not found in any repository layer.");
@@ -248,8 +238,7 @@ const urd::data<T>& Repository<SymbolRepo, RelationRepo>::operator[](urd::index<
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-    requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-urd::index_view<T, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, RelationRepo>::view(urd::index<T> index) const
+urd::index_view<T, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, RelationRepo>::do_view(urd::index<T> index) const
 {
     if (const auto* layer = owner(index))
         return { index, layer };
@@ -258,8 +247,7 @@ urd::index_view<T, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, 
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-std::optional<RowView<F, Repository<SymbolRepo, RelationRepo>>> Repository<SymbolRepo, RelationRepo>::find(const urd::data<Row<F>>& row) const
+std::optional<RowView<F, Repository<SymbolRepo, RelationRepo>>> Repository<SymbolRepo, RelationRepo>::do_find(const urd::data<Row<F>>& row) const
 {
     if (const auto id = m_impl->relations.find(row.relation, row.values); !id.is_none())
         return view(RowIndex<F> { row.relation, id });
@@ -268,8 +256,7 @@ std::optional<RowView<F, Repository<SymbolRepo, RelationRepo>>> Repository<Symbo
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-std::pair<RowView<F, Repository<SymbolRepo, RelationRepo>>, bool> Repository<SymbolRepo, RelationRepo>::insert(const urd::data<Row<F>>& row)
+std::pair<RowView<F, Repository<SymbolRepo, RelationRepo>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert(const urd::data<Row<F>>& row)
 {
     const auto [id, created] = m_impl->relations.insert(row.relation, row.values);
     const auto key = RowIndex<F> { row.relation, id };
@@ -278,38 +265,32 @@ std::pair<RowView<F, Repository<SymbolRepo, RelationRepo>>, bool> Repository<Sym
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-urd::index<Row<F>> Repository<SymbolRepo, RelationRepo>::find_row(urd::index<F> relation, std::span<const Value> values) const
+urd::index<Row<F>> Repository<SymbolRepo, RelationRepo>::do_find_row(urd::index<F> relation, std::span<const Value> values) const
 { return m_impl->relations.find(relation, values); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-urd::index<Row<F>> Repository<SymbolRepo, RelationRepo>::find_row(urd::index<F> relation, const StoredRow& values) const
+urd::index<Row<F>> Repository<SymbolRepo, RelationRepo>::do_find_row(urd::index<F> relation, const StoredRow& values) const
 { return m_impl->relations.find(relation, values); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-std::size_t Repository<SymbolRepo, RelationRepo>::size(urd::index<F> relation) const
+std::size_t Repository<SymbolRepo, RelationRepo>::do_size(urd::index<F> relation) const
 { return m_impl->relations.size(relation); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-std::size_t Repository<SymbolRepo, RelationRepo>::row_memory_usage() const
+std::size_t Repository<SymbolRepo, RelationRepo>::do_row_memory_usage() const
 { return m_impl->relations.template memory_usage<F>(); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-std::pair<urd::index<Row<F>>, bool> Repository<SymbolRepo, RelationRepo>::insert_row(const urd::data<Row<F>>& row)
+std::pair<urd::index<Row<F>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert_row(const urd::data<Row<F>>& row)
 { return m_impl->relations.insert(row.relation, row.values); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-typename Repository<SymbolRepo, RelationRepo>::StoredRow Repository<SymbolRepo, RelationRepo>::operator[](RowIndex<F> key) const
+typename Repository<SymbolRepo, RelationRepo>::StoredRow Repository<SymbolRepo, RelationRepo>::do_at(RowIndex<F> key) const
 {
     const auto& rows = m_impl->relations.template get<F>().at(key.relation);
     if ((key.row.value) >= rows.size())
@@ -320,8 +301,7 @@ typename Repository<SymbolRepo, RelationRepo>::StoredRow Repository<SymbolRepo, 
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-RowView<F, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, RelationRepo>::view(RowIndex<F> key) const
+RowView<F, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, RelationRepo>::do_view(RowIndex<F> key) const
 {
     if (const auto* layer = owner(key))
         return { key, layer };
@@ -329,8 +309,7 @@ RowView<F, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, Relation
 }
 
 template<typename SymbolRepo, typename RelationRepo>
-urd::index<Schema> Repository<SymbolRepo, RelationRepo>::schema(std::span<const ColumnLayout> columns)
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
+urd::index<Schema> Repository<SymbolRepo, RelationRepo>::do_schema(std::span<const ColumnLayout> columns)
 {
     const auto key = m_impl->intern_schema(columns | std::views::transform(&ColumnLayout::type));
     m_impl->relations.declare(key, key);
@@ -338,8 +317,7 @@ urd::index<Schema> Repository<SymbolRepo, RelationRepo>::schema(std::span<const 
 }
 
 template<typename SymbolRepo, typename RelationRepo>
-urd::index<Schema> Repository<SymbolRepo, RelationRepo>::schema(std::span<const TypeId> types)
-    requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
+urd::index<Schema> Repository<SymbolRepo, RelationRepo>::do_schema(std::span<const TypeId> types)
 {
     const auto key = m_impl->intern_schema(types);
     m_impl->relations.declare(key, key);
@@ -348,9 +326,8 @@ urd::index<Schema> Repository<SymbolRepo, RelationRepo>::schema(std::span<const 
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
 std::pair<urd::index_view<Relation<F>, Repository<SymbolRepo, RelationRepo>>, bool>
-Repository<SymbolRepo, RelationRepo>::insert(urd::data<Relation<F>>& relation)
+Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<Relation<F>>& relation)
 {
     const auto& values = (*this)[relation.columns].values;
     const auto columns = std::span<const ColumnLayout>(values.data(), values.size());
@@ -370,8 +347,7 @@ Repository<SymbolRepo, RelationRepo>::insert(urd::data<Relation<F>>& relation)
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-    requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
-std::shared_ptr<urd::builder<Relation<F>>> Repository<SymbolRepo, RelationRepo>::get_relation_builder(std::span<const ColumnLayout> columns) const
+std::shared_ptr<urd::builder<Relation<F>>> Repository<SymbolRepo, RelationRepo>::do_get_relation_builder(std::span<const ColumnLayout> columns) const
 {
     auto builder =
         m_impl->relation_builders.template get<F>().make_shared(m_impl->relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
