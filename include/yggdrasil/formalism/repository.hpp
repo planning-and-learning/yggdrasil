@@ -273,7 +273,7 @@ private:
     template<typename F>
     [[nodiscard]] std::span<const TypeId> do_types(urd::index<F> relation) const;
     template<typename T>
-    const urd::data<T>& do_at(urd::index<T> index) const;
+    [[nodiscard]] const urd::data<T>& do_at(urd::index<T> index) const;
     template<typename T>
     [[nodiscard]] bool do_contains(urd::index<T> index) const;
     template<typename T>
@@ -297,7 +297,7 @@ private:
     template<typename F>
     std::pair<urd::index<Row<F>>, bool> do_insert_row(const urd::data<Row<F>>& row);
     template<typename F>
-    StoredRow do_at(RowIndex<F> key) const;
+    [[nodiscard]] StoredRow do_at(RowIndex<F> key) const;
     template<typename F>
     [[nodiscard]] RowView<F, Repository> do_view(RowIndex<F> key) const;
     template<typename F>
