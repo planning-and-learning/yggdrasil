@@ -21,6 +21,7 @@
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
+#include <string_view>
 #include <urd/elements/flat.hpp>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
@@ -60,11 +61,14 @@ namespace ygg
 template<typename F, typename Values>
 struct StoredRowRecord
 {
+    static constexpr std::string_view name = "StoredRowRecord";
+
     urd::index<F> relation;
     Values values;
 
     static constexpr auto fields() noexcept
     { return urd::Fields<urd::field<"relation", &StoredRowRecord::relation>, urd::field<"values", &StoredRowRecord::values>> {}; }
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 }  // namespace ygg
 
