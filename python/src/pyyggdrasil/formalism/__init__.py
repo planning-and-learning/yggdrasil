@@ -6,10 +6,10 @@
 from pyyggdrasil._pyyggdrasil.formalism import (
     ColumnIndex,
     ColumnLayout,
-    ColumnType,
     Columns,
     ColumnsData,
     ColumnsIndex,
+    ColumnType,
     RelationBuilder,
     RelationBuilderView,
     RelationRepository,

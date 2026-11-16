@@ -335,6 +335,8 @@ struct RelationRepositoryTraits<tests::RepositoryTypesPackedObjectTag>
 
 namespace ygg::tests
 {
+namespace
+{
 /// The key of a pool of `arity` object columns: family F's record, interned in `repository`, which declares its pool.
 template<typename F, typename Repository>
 urd::index<F> declared(Repository& repository, ygg::uint_t arity)
@@ -342,6 +344,7 @@ urd::index<F> declared(Repository& repository, ygg::uint_t arity)
     auto key = urd::data<F>(arity);
     return repository.insert(key).first.index();
 }
+}  // namespace
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles) { SUCCEED(); }
 

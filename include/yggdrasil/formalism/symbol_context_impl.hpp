@@ -62,9 +62,7 @@ SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::~SymbolContext(
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 void SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::clear()
-{
-    m_impl->symbols.clear();
-}
+{ m_impl->symbols.clear(); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
@@ -86,30 +84,22 @@ std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11:
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
 const urd::data<T>& SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_at(urd::index<T> index) const
-{
-    return m_impl->symbols[index];
-}
+{ return m_impl->symbols[index]; }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
 bool SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_contains(urd::index<T> index) const
-{
-    return m_impl->symbols.contains(index);
-}
+{ return m_impl->symbols.contains(index); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
 std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_size() const
-{
-    return m_impl->symbols.template size<T>();
-}
+{ return m_impl->symbols.template size<T>(); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
 std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_memory_usage() const
-{
-    return m_impl->symbols.template memory_usage<T>();
-}
+{ return m_impl->symbols.template memory_usage<T>(); }
 
 }  // namespace ygg::formalism
 

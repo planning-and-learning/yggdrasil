@@ -85,7 +85,9 @@ public:
         for (std::size_t i = first; i < last; ++i)
             check<T>(types[i]);
         decltype(auto) values = self().get_values();
-        return urd::transform(std::ranges::subrange(values.begin() + first, values.begin() + last), &decode_value<T>);
+        return urd::transform(std::ranges::subrange(std::ranges::next(values.begin(), static_cast<std::ptrdiff_t>(first)),
+                                                    std::ranges::next(values.begin(), static_cast<std::ptrdiff_t>(last))),
+                              &decode_value<T>);
     }
     /// Every column as T (see get<T>(first, last)).
     template<typename T>
@@ -117,7 +119,7 @@ concept RowViewConcept = requires(const std::remove_reference_t<V>& view, std::s
 
 namespace ygg::detail
 {
-/// What a relation's views V derive from its columns, its size and its rows (V's columns(), size() and rows()): its
+/// What a relation's views V derive from its columns, its size and its rows (V's columns(), size() and get_rows()): its
 /// arity, whether it is empty, a row by its position checked against its size, and whether it holds a row's values
 /// (by V's contains(values)).
 template<typename F, typename V>
@@ -135,7 +137,7 @@ public:
     {
         if (index >= self().size())
             throw std::out_of_range("Relation: row index out of range.");
-        return self().rows()[index];
+        return self().get_rows()[index];
     }
     /// Whether it holds a row with the values of `row`, of any relation of F.
     template<RowViewConcept<F> R>

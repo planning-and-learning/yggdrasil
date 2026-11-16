@@ -33,7 +33,6 @@
 #include <urd/elements/flat.hpp>
 #include <utility>
 
-
 /// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, which reads the StoredRowRecord its
 /// context hands out) and a row held outside the repository (urd::borrowed_view of its record) alike: its
 /// relation, its values and their types. The context and the record, where borrowed, must outlive the view and all
@@ -97,6 +96,5 @@ struct urd::resolution<ygg::RowIndex<F>>
     static ygg::RowIndex<F> stored(const V& view) noexcept
     { return view.index(); }
 };
-
 
 #endif

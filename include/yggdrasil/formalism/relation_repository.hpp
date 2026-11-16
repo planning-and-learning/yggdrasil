@@ -125,9 +125,7 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] const Pools<F>& get() const
-    {
-        return m_relations.template get<F>();
-    }
+    { return m_relations.template get<F>(); }
 
     /// The id of the row of these values in the pool `relation`, in whichever layer holds it, or none.
     template<typename F, std::ranges::input_range Values>
@@ -260,9 +258,7 @@ public:
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
     [[nodiscard]] size_t memory_usage() const
-    {
-        return urd::memory_usage(get<F>());
-    }
+    { return urd::memory_usage(get<F>()); }
 
     /// Forgets this layer's own rows; the parent's stay, and so do the Schemas and the pools' declarations (as the
     /// Repository keeps the pool keys).

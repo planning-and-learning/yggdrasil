@@ -170,7 +170,10 @@ const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>
     const auto* store = &m_impl->symbols.template get<T>().owner(index);
     const auto* layer = this;
     while (&layer->m_impl->symbols.template get<T>() != store)
+    {
         layer = layer->m_parent;
+        assert(layer != nullptr && "the layer that holds the index is below this one");
+    }
     return layer;
 }
 

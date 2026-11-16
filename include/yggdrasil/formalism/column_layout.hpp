@@ -22,7 +22,7 @@ struct ColumnLayout : urd::compared_by_identity<ColumnLayout>
     static constexpr std::string_view name = "ColumnLayout";
 
     urd::index<Column> label;
-    TypeId type;
+    TypeId type {};
 
     ColumnLayout() = default;
     ColumnLayout(urd::index<Column> label_, TypeId type_) : label(label_), type(type_) {}

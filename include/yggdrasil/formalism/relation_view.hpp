@@ -47,7 +47,6 @@ public:
     [[nodiscard]] decltype(auto) get_values() const noexcept { return self().template member<&urd::record_of<V>::values>(); }
 };
 
-
 /// An interned relation's view (index_view): its rows lie in the layer's pool its record names, its row indices in that
 /// pool; each row is read as the layer's view of its index.
 template<typename F, typename V>
@@ -66,8 +65,6 @@ public:
     /// Its columns, interned from its labels and its pool's types.
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const { return get_columns().get_values(); }
     [[nodiscard]] std::size_t size() const { return std::ranges::size(get_rows()); }
-    /// The rows by position: a borrowed range over the layer's storage.
-    [[nodiscard]] auto rows() const { return get_rows(); }
     /// Values that do not fit their columns, or not one per column, are in no row: a find in the pool and a binary
     /// search in its row indices.
     template<std::ranges::input_range Values>
@@ -99,7 +96,7 @@ public:
     [[nodiscard]] const urd::builder<Relation<F>>& get_builder() const noexcept { return *m_builder; }
     [[nodiscard]] std::size_t size() const noexcept { return m_builder->size(); }
     /// The rows by position: a borrowed range over the builder's storage.
-    [[nodiscard]] auto rows() const noexcept
+    [[nodiscard]] auto get_rows() const noexcept
     {
         return urd::transform(std::views::iota(std::size_t { 0 }, size()),
                               m_builder,

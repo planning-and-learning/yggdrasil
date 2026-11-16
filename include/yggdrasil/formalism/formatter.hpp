@@ -11,8 +11,8 @@
 #include "yggdrasil/formalism/row_view.hpp"
 
 #if YGG_ENABLE_FMT_FORMATTERS
-#include <fmt/format.h>
 #include <cstddef>
+#include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <iterator>
 #include <string>

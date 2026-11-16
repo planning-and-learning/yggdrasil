@@ -37,8 +37,8 @@ template<typename R>
 void bind_relation_reads(nb::class_<R>& cls)
 {
     bind_relation_shape(cls);
-    // Each row keeps what it is read through alive (urd/python/owner.hpp), also inside the list rows() returns.
-    cls.def("row", &R::row, nb::arg("index")).def("rows", &R::rows);
+    // Each row keeps what it is read through alive (urd/python/owner.hpp), also inside the list get_rows() returns.
+    cls.def("row", &R::row, nb::arg("index"));
 }
 
 /// The reads of every row class: its number of columns, and each column's value, type and decoded value.
@@ -115,6 +115,7 @@ void bind_formalism_module_definitions(nb::module_& m)
                                                         "Read-only view of a relation builder owned elsewhere (e.g. an evaluator result), read "
                                                         "through its repository. Keeps its owner alive; the owner's next mutation invalidates "
                                                         "the view and its rows.");
+    builder_view.def("get_rows", &RelationBuilderView::get_rows);
     bind_relation_reads(builder_view);
     auto row_builder_view = nb::class_<RowBuilderView>(m, "RowBuilderView", "A row of a relation builder, read through it by its position.")
                                 .def("get_values", &RowBuilderView::get_values);
