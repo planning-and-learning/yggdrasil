@@ -105,17 +105,6 @@ template<typename F, std::ranges::forward_range Ids, typename C>
 RowsView<F, Ids, C> rows_view(urd::index<F> relation, const Ids& ids, const C& context)
 { return { ids, { relation, &context } }; }
 
-/// What tells relations apart while their rows stay unchanged: the number of their context (a layer's or a builder's,
-/// one process-wide counter, next_layer) and, for an interned relation, its index (none for a builder).
-struct RelationIdentity
-{
-    std::size_t context = 0;
-    std::uint32_t relation = urd::index<void>::none_value;
-
-    friend bool operator==(const RelationIdentity&, const RelationIdentity&) = default;
-    static constexpr auto identifying_members() noexcept { return urd::Members<&RelationIdentity::context, &RelationIdentity::relation> {}; }
-};
-
 /// The next number of a context of views (a repository layer, a relation builder): drawn once per context, process-wide,
 /// never reused.
 [[nodiscard]] inline std::size_t next_layer() noexcept

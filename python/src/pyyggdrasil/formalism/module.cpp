@@ -45,7 +45,7 @@ void bind_relation_reads(nb::class_<R>& cls)
 template<typename R>
 void bind_row_reads(nb::class_<R>& cls)
 {
-    using Columns = ygg::detail::row_columns<ygg::Schema, R>;
+    using Columns = ygg::detail::row_reads<ygg::Schema, R>;
     cls.def("size", &R::size)
         .def("value", &R::value, nb::arg("index"))
         .def("type", &R::type, nb::arg("index"))

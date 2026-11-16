@@ -18,6 +18,7 @@
 #include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/builder_impl.hpp"
+#include "yggdrasil/formalism/formatter.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
@@ -41,6 +42,7 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <tuple>
 #include <type_traits>
 #include <urd/config.hpp>
@@ -251,6 +253,13 @@ private:
 
 public:
     [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+};
+
+/// The name urd writes the test's objects under.
+template<>
+struct name_of<ygg::formalism::Object<ygg::tests::RepositoryTypesObjectTag>>
+{
+    static std::string named() { return "Object"; }
 };
 
 template<>
@@ -516,6 +525,24 @@ TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
     expect_row_access_for_each_relation_type<formalism::RelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
     expect_row_access_for_each_relation_type<
         formalism::ConcurrentRelationRepository<RepositoryTypesPackedObjectTag, RepositoryTypesRelation, RepositoryTypesElement>>();
+}
+
+TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelation)
+{
+    using Object = formalism::Object<RepositoryTypesObjectTag>;
+    using Repository = formalism::Repository<formalism::SymbolRepository<Object, RepositoryTypesRelation>,
+                                             formalism::RelationRepository<RepositoryTypesObjectTag, RepositoryTypesRelation>>;
+    Repository repository;
+    auto first = urd::data<Object>(5);
+    auto second = urd::data<Object>(8);
+    const auto a = repository.insert(first).first;
+    const auto b = repository.insert(second).first;
+    urd::data<Row<RepositoryTypesRelation>> row;
+    row.relation = declared<RepositoryTypesRelation>(repository, 2);
+    row.values.push_back(ygg::encode_value(b.index()));
+    row.values.push_back(ygg::encode_value(a.index()));
+    const auto stored = repository.insert(row).first;
+    EXPECT_EQ(ygg::values_text(stored), fmt::format("{} {}", b, a));
 }
 
 namespace

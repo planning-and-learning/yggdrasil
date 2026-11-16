@@ -12,10 +12,15 @@
 
 #if YGG_ENABLE_FMT_FORMATTERS
 #include <fmt/format.h>
+#include <cstddef>
 #include <fmt/ranges.h>
+#include <iterator>
+#include <string>
 #include <string_view>
+#include <type_traits>
 #include <urd/elements/view.hpp>
 #include <urd/format.hpp>
+#include <variant>
 
 // What urd/format.hpp does not write of the free relations: a column and a row's key. Their records and views are
 // written as urd writes a record.
@@ -46,6 +51,34 @@ struct formatter<ygg::RowIndex<F>, char>
 };
 
 }  // namespace fmt
+
+namespace ygg
+{
+/// A row's values, separated by spaces: each column as its type writes it, an object column as its object's view (of
+/// the repository's object tag, resolved through the row's context). The relation is not written: who knows its name
+/// (a predicate's, an action's) writes it.
+template<typename V>
+std::string values_text(const V& row)
+{
+    using Tag = typename std::remove_cvref_t<decltype(get_repository(row.context()))>::object_tag;
+    auto result = std::string();
+    for (std::size_t i = 0; i < row.size(); ++i)
+    {
+        if (i != 0)
+            result.push_back(' ');
+        std::visit(
+            [&]<typename T>(T value)
+            {
+                if constexpr (is_object_index<T>)
+                    fmt::format_to(std::back_inserter(result), "{}", urd::resolve(urd::index<formalism::Object<Tag>>(value.value), row.context()));
+                else
+                    fmt::format_to(std::back_inserter(result), "{}", value);
+            },
+            row.get(i));
+    }
+    return result;
+}
+}  // namespace ygg
 #endif
 
 #endif

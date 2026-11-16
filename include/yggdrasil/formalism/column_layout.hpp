@@ -9,6 +9,7 @@
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
+#include <concepts>
 #include <string_view>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/less.hpp>
@@ -31,5 +32,19 @@ struct ColumnLayout : urd::compared_by_identity<ColumnLayout>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 }  // namespace ygg
+
+/// A column label is no element of a context, but a tag: read as itself, written only from itself.
+template<>
+struct urd::resolution<urd::index<ygg::Column>>
+{
+    static constexpr bool identity = true;
+
+    template<typename C>
+    static const urd::index<ygg::Column>& of(const urd::index<ygg::Column>& label, const C& /*context*/) noexcept
+    { return label; }  // NOLINT(bugprone-return-const-ref-from-parameter)
+    template<std::same_as<urd::index<ygg::Column>> R>
+    static urd::index<ygg::Column> stored(const R& label) noexcept
+    { return label; }
+};
 
 #endif
