@@ -50,7 +50,7 @@ struct Columns
 template<typename F>
 struct Relation
 {
-    static constexpr std::string_view name = "Relation";
+    static constexpr std::string_view name = urd::joined_name<"Relation", F::name>;
 };
 
 /// A row of family F (predicates, actions, ..., Schema): its pool's key (relation) and its values (row_data.hpp). Stored
@@ -58,7 +58,7 @@ struct Relation
 template<typename F>
 struct Row
 {
-    static constexpr std::string_view name = "Row";
+    static constexpr std::string_view name = urd::joined_name<"Row", F::name>;
 };
 
 /// The index of a stored row: its pool's key and its id there. Its view is the urd::index_view of it (RowView), which
@@ -66,7 +66,7 @@ struct Row
 template<typename F>
 struct RowIndex
 {
-    static constexpr std::string_view name = "RowIndex";
+    static constexpr std::string_view name = urd::joined_name<"RowIndex", F::name>;
 
     urd::index<F> relation;
     urd::index<Row<F>> row;
