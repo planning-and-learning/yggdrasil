@@ -40,7 +40,7 @@ namespace ygg
 }  // namespace ygg
 
 /// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, whose context reads each field of
-/// data<Row<F>> by its key: urd's record_type) and a row held outside the repository (urd::borrowed_view of its record) alike: its
+/// data<Row<F>> by its key: urd::ReadsFieldsByKey) and a row held outside the repository (urd::borrowed_view of its record) alike: its
 /// relation, its values and their types. The context and the record, where borrowed, must outlive the view and all
 /// ranges it gives.
 template<typename F, typename V>

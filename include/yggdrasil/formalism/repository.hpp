@@ -63,7 +63,7 @@ class Repository
 public:
     using SymbolTypes = typename detail::symbol_repository_traits<SymbolRepo>::SymbolTypes;
     using RelationTypes = typename detail::relation_repository_traits<RelationRepo>::RelationTypes;
-    /// What a stored row's values read as (read): decoded from its pool's column widths.
+    /// What a stored row's values read as (field): decoded from its pool's column widths.
     using StoredRow = urd::packed_row<detail::relation_repository_traits<RelationRepo>::thread_safe>;
     static_assert(RowValues<StoredRow>);
     /// Whether finds, inserts and lookups may overlap (its symbols and its relations concurrent).
@@ -240,14 +240,15 @@ public:
     const urd::data<Schema>& operator[](urd::index<Schema> index) const;
     [[nodiscard]] urd::index_view<Schema, Repository> view(urd::index<Schema> index) const;
 
-    /// A field of the row of a key, as its views read it (urd::record_type): a row is stored packed, so there is no
-    /// data<Row<F>> to hand out; its relation is the key's, its values are decoded from its pool (RowValues).
+    /// A field of the row of a key, as its views read it (urd::ReadsFieldsByKey): a row is stored packed, so there is no
+    /// data<Row<F>> to hand out; its relation is the view of the key's, its values are decoded from its pool
+    /// (RowValues).
     template<auto Field, typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] auto read(RowIndex<F> key) const
+    [[nodiscard]] auto field(RowIndex<F> key) const
     {
         if constexpr (std::same_as<decltype(Field), decltype(&urd::data<Row<F>>::relation)>)
-            return key.relation;
+            return urd::resolve(key.relation, *this);
         else
         {
             static_assert(Field == &urd::data<Row<F>>::values, "a row's fields are its relation and its values");
