@@ -32,6 +32,7 @@ public:
     using result_type = std::uint32_t;
 
     static constexpr result_type min() { return 0; }
+
     static constexpr result_type max() { return 9; }
 
     result_type operator()() { return values[index++]; }

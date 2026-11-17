@@ -61,6 +61,7 @@ inline std::ostream& indent_down(std::ostream& os)
 struct IndentScope
 {
     std::ostream& os;
+
     explicit IndentScope(std::ostream& os_) : os(os_) { indent_up(os_); }
 
     IndentScope(const IndentScope&) = delete;

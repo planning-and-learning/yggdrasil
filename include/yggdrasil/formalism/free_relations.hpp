@@ -13,7 +13,7 @@
 namespace ygg
 {
 /// Free relations: relations with columns only (no symbol names them), their rows in pools keyed by their Schema.
-using FreeRelationRepository = formalism::Repository<formalism::Symbols<Columns, Relation<Schema>>, formalism::Relations<void, Schema>>;
+using FreeRelationRepository = formalism::Repository<formalism::Symbols<Columns, Relation<Schema>>, formalism::Relations<urd::word, Schema>>;
 /// A free relation interned in a repository layer.
 using FreeRelationView = urd::index_view<Relation<Schema>, FreeRelationRepository>;
 /// A free relation builder held elsewhere, read through a layer (urd::resolve(builder, layer) or layer.view(builder)).

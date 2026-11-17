@@ -36,12 +36,15 @@ struct UnsignedInteger
     value_type value = 0;
 
     constexpr UnsignedInteger() = default;
+
     constexpr explicit UnsignedInteger(value_type value_) noexcept : value(value_) {}
 
     constexpr explicit operator value_type() const noexcept { return value; }
 
     friend constexpr auto operator<=>(const UnsignedInteger&, const UnsignedInteger&) = default;
+
     static constexpr auto identifying_members() noexcept { return urd::Members<&UnsignedInteger::value> {}; }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&UnsignedInteger::value> {}; }
 };
 }  // namespace ygg

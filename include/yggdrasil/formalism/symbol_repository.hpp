@@ -167,6 +167,7 @@ class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, bo
 
 public:
     SymbolRepository() : Base(nullptr) {}
+
     explicit SymbolRepository(const SymbolRepository* parent) : Base(parent) {}
 
     friend const SymbolRepository& get_repository(const SymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
@@ -179,6 +180,7 @@ class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolR
 
 public:
     ConcurrentSymbolRepository() : Base(nullptr) {}
+
     explicit ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent) : Base(parent) {}
 
     friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }

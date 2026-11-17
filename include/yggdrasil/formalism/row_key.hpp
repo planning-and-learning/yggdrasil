@@ -19,6 +19,7 @@
 #define YGG_FORMALISM_ROW_KEY_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/formalism/view_reads.hpp"
 
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
@@ -26,9 +27,9 @@
 namespace ygg
 {
 
-/// Hashes a row by its logical key, the relation and the values of get_key(), rather than by its identity.
-/// Transparent, so a map keyed by rows of one repository can be queried with any type whose get_key() spells the
-/// same row, e.g. a prefix of a row in another repository, without storing it first.
+/// Hashes a row by its logical key (key_of: its relation_key() and its get_values()), rather than by its identity.
+/// Transparent, so a map keyed by rows of one repository can be queried with any type whose relation_key() and
+/// get_values() spell the same row, e.g. a prefix of a row in another repository, without storing it first.
 struct RowKeyHash
 {
     using is_transparent = void;
@@ -36,7 +37,7 @@ struct RowKeyHash
     template<typename Key>
     hash_t operator()(const Key& key) const
     {
-        const auto [relation, values] = key.get_key();
+        const auto [relation, values] = ygg::key_of(key);
         return urd::hash_combine(relation, urd::hash_range(values));
     }
 };
@@ -49,8 +50,8 @@ struct RowKeyEqualTo
     template<typename Lhs, typename Rhs>
     bool operator()(const Lhs& lhs, const Rhs& rhs) const
     {
-        const auto [lhs_relation, lhs_values] = lhs.get_key();
-        const auto [rhs_relation, rhs_values] = rhs.get_key();
+        const auto [lhs_relation, lhs_values] = ygg::key_of(lhs);
+        const auto [rhs_relation, rhs_values] = ygg::key_of(rhs);
         return urd::EqualTo<> {}(lhs_relation, rhs_relation) && urd::equal_elements(lhs_values, rhs_values);
     }
 };

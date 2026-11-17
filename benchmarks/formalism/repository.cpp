@@ -35,14 +35,12 @@ namespace ygg::benchmarks
 struct TrivialSymbol;
 struct SerializedSymbol;
 struct Relation;
-struct BlockObjectTag;
-struct PackedObjectTag;
 
 /// The column types of the benchmarks' rows: four objects.
-constexpr auto kObjectColumns = std::array { ygg::type_id<urd::index<formalism::Object<void>>>,
-                                             ygg::type_id<urd::index<formalism::Object<void>>>,
-                                             ygg::type_id<urd::index<formalism::Object<void>>>,
-                                             ygg::type_id<urd::index<formalism::Object<void>>> };
+constexpr auto kObjectColumns = std::array { ygg::type_id<urd::index<formalism::Object>>,
+                                             ygg::type_id<urd::index<formalism::Object>>,
+                                             ygg::type_id<urd::index<formalism::Object>>,
+                                             ygg::type_id<urd::index<formalism::Object>> };
 }
 
 namespace urd
@@ -55,7 +53,9 @@ struct data<ygg::benchmarks::TrivialSymbol>
     std::uint64_t value = 0;
 
     data() = default;
+
     explicit data(std::uint64_t value_) : index(), value(value_) {}
+
     static constexpr bool copyable() noexcept
     {
         static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
@@ -63,9 +63,12 @@ struct data<ygg::benchmarks::TrivialSymbol>
     }
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
 };
+
 template<typename V>
 struct view_mixin<ygg::benchmarks::TrivialSymbol, V>
 {
@@ -84,7 +87,9 @@ struct data<ygg::benchmarks::Relation>
     ygg::uint_t lane = 0;
 
     data() = default;
+
     explicit data(ygg::uint_t lane_) : index(), lane(lane_) {}
+
     static constexpr bool copyable() noexcept
     {
         static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
@@ -92,9 +97,12 @@ struct data<ygg::benchmarks::Relation>
     }
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane> {}; }
 };
+
 template<typename V>
 struct view_mixin<ygg::benchmarks::Relation, V>
 {
@@ -106,6 +114,8 @@ public:
 
     /// A key of row pools gives its rows' column types.
     [[nodiscard]] std::span<const ygg::TypeId> get_column_types() const noexcept { return ygg::benchmarks::kObjectColumns; }
+
+    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
 };
 
 template<>
@@ -115,7 +125,9 @@ struct data<ygg::benchmarks::SerializedSymbol>
     urd::flat_vector<urd::index<ygg::benchmarks::TrivialSymbol>> values;
 
     data() = default;
+
     explicit data(urd::flat_vector<urd::index<ygg::benchmarks::TrivialSymbol>> values_) : index(), values(std::move(values_)) {}
+
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;
@@ -123,9 +135,12 @@ struct data<ygg::benchmarks::SerializedSymbol>
     ~data() = default;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &data::values>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
 };
+
 template<typename V>
 struct view_mixin<ygg::benchmarks::SerializedSymbol, V>
 {
@@ -138,15 +153,6 @@ public:
 
 }
 
-namespace ygg::formalism
-{
-template<>
-struct RelationRepositoryTraits<benchmarks::PackedObjectTag>
-{
-    using width = urd::bit;
-};
-}
-
 namespace ygg::benchmarks
 {
 namespace
@@ -157,10 +163,10 @@ constexpr benchmark::IterationCount kInsertIterations = 1U << 18;
 
 using SequentialSymbols = formalism::SymbolRepository<TrivialSymbol, SerializedSymbol, Relation>;
 using ConcurrentSymbols = formalism::ConcurrentSymbolRepository<TrivialSymbol, SerializedSymbol, Relation>;
-using SequentialBlockRelations = formalism::RelationRepository<BlockObjectTag, Relation>;
-using ConcurrentBlockRelations = formalism::ConcurrentRelationRepository<BlockObjectTag, Relation>;
-using SequentialPackedRelations = formalism::RelationRepository<PackedObjectTag, Relation>;
-using ConcurrentPackedRelations = formalism::ConcurrentRelationRepository<PackedObjectTag, Relation>;
+using SequentialBlockRelations = formalism::RelationRepository<urd::word, Relation>;
+using ConcurrentBlockRelations = formalism::ConcurrentRelationRepository<urd::word, Relation>;
+using SequentialPackedRelations = formalism::RelationRepository<urd::bit, Relation>;
+using ConcurrentPackedRelations = formalism::ConcurrentRelationRepository<urd::bit, Relation>;
 
 using SequentialBlockRepository = formalism::Repository<SequentialSymbols, SequentialBlockRelations>;
 using ConcurrentBlockRepository = formalism::Repository<ConcurrentSymbols, ConcurrentBlockRelations>;

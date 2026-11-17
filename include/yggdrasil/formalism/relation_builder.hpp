@@ -77,9 +77,10 @@ private:
         ygg::validate_columns(columns);
         auto result = urd::column_widths();
         for (const auto& column : columns)
-            result.push_back(ygg::column_bits(column.type, ygg::whole_bits<urd::index<ygg::formalism::Object<void>>>));
+            result.push_back(ygg::column_bits(column.type, ygg::whole_bits<urd::index<ygg::formalism::Object>>));
         return result;
     }
+
     static urd::flat_vector<ygg::ColumnLayout> validated(std::span<const ygg::ColumnLayout> columns)
     {
         ygg::validate_columns(columns);
@@ -89,10 +90,13 @@ private:
 public:
     /// The nullary relation, false.
     builder() : builder(std::span<const ygg::ColumnLayout>()) {}
+
     explicit builder(std::span<const ygg::ColumnLayout> columns) : builder(widths_of(columns), columns) {}
+
     /// A builder with these columns, whose rows are stored in `widths` (the columns' widths in the layer: a slot's key,
     /// see Repository::get_relation_builder).
     builder(const urd::column_widths& widths, std::span<const ygg::ColumnLayout> columns) : m_columns(validated(columns)), m_rows(widths) {}
+
     builder(const builder&) = delete;
     builder& operator=(const builder&) = delete;
     builder(builder&&) noexcept = default;
@@ -100,27 +104,38 @@ public:
     ~builder() = default;
 
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const noexcept { return { m_columns.values.data(), m_columns.values.size() }; }
+
     /// Its number of columns.
     [[nodiscard]] std::size_t arity() const noexcept { return columns().size(); }
+
     /// The widths its rows are stored in.
     [[nodiscard]] const urd::column_widths& widths() const noexcept { return m_rows.column_widths(); }
+
     // NOLINTNEXTLINE(bugprone-exception-escape): reads the pool's count; the empty storage an unwritten pool reads has no columns, so nothing is allocated
     [[nodiscard]] size_t size() const noexcept { return m_rows.size(); }
+
     // NOLINTNEXTLINE(bugprone-exception-escape): as size()
     [[nodiscard]] bool empty() const noexcept { return m_rows.empty(); }
+
     [[nodiscard]] size_t memory_usage() const noexcept { return urd::memory_usage(*this); }
+
     /// The members it owns memory through (urd::memory_of).
     static constexpr auto memory_members() noexcept { return urd::Members<&builder::m_columns, &builder::m_rows> {}; }
+
     /// Its rows, by position (a handle's value).
     [[nodiscard]] const Rows& storage() const noexcept { return m_rows; }
+
     /// The stored row at key.row (a position), as the views of its rows read it.
     // NOLINTNEXTLINE(bugprone-exception-escape): reads a stored row in place (key.row below size()); nothing is allocated or checked by throwing
     [[nodiscard]] Rows::row_type operator[](ygg::RowIndex<F> key) const noexcept { return m_rows.at(typename Rows::handle_type(key.row.value)); }
+
     /// The values of the row at key.row (a position): what its view's get_values() gives.
     // NOLINTNEXTLINE(bugprone-exception-escape): as operator[]
     [[nodiscard]] Rows::row_type values(ygg::RowIndex<F> key) const noexcept { return (*this)[key]; }
+
     /// The view of the row at key.row (a position) through this builder.
     [[nodiscard]] ygg::RowBuilderView<F> view(ygg::RowIndex<F> key) const noexcept { return { this, key }; }
+
     /// Its number as the context of its rows' views (urd::layer): drawn at construction, kept across clear and
     /// initialize.
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
@@ -128,20 +143,28 @@ public:
     /// A row of values, one per column (the pool's: a count other than the columns' throws std::invalid_argument, a
     /// value that does not fit its column std::out_of_range, before anything is stored). Returns its position.
     ygg::uint_t insert(std::span<const ygg::Value> values) { return m_rows.insert(values).first.value; }
+
     /// A stored row of equal widths.
     ygg::uint_t insert(const Rows::row_type& row) { return m_rows.insert(row).first.value; }
+
     /// The position of a row; values that do not fit their columns, or not one per column, are in no row.
     [[nodiscard]] std::optional<ygg::uint_t> find(std::span<const ygg::Value> values) const { return position(m_rows.find(values)); }
+
     [[nodiscard]] std::optional<ygg::uint_t> find(const Rows::row_type& row) const { return position(m_rows.find(row)); }
+
     [[nodiscard]] bool contains(std::span<const ygg::Value> values) const { return !m_rows.find(values).is_none(); }
+
     [[nodiscard]] bool contains(const Rows::row_type& row) const { return !m_rows.find(row).is_none(); }
+
     /// A row view (its values; a stored row of equal widths).
     template<ygg::RowViewConcept<F> R>
     ygg::uint_t insert(const R& row)
     { return insert(row.get_values()); }
+
     template<ygg::RowViewConcept<F> R>
     [[nodiscard]] std::optional<ygg::uint_t> find(const R& row) const
     { return find(row.get_values()); }
+
     template<ygg::RowViewConcept<F> R>
     [[nodiscard]] bool contains(const R& row) const
     { return contains(row.get_values()); }
@@ -153,8 +176,10 @@ public:
             throw std::out_of_range("Relation: row index out of range.");
         m_rows.erase(typename Rows::handle_type(static_cast<ygg::uint_t>(index)));
     }
+
     // NOLINTNEXTLINE(bugprone-exception-escape): clearing allocates nothing: an empty pool is left as it is, one with rows has the storage it clears
     void clear() noexcept { m_rows.clear(); }
+
     /// Relabeled columns of the same types (validated).
     void rename(std::span<const ygg::ColumnLayout> columns)
     {
@@ -163,6 +188,7 @@ public:
         ygg::validate_columns(columns);
         std::ranges::copy(columns, m_columns.values.begin());  // the same widths: the rows stay
     }
+
     /// Clears the rows and replaces the columns (validated); equal widths retain row storage.
     void initialize(std::span<const ygg::ColumnLayout> columns)
     {

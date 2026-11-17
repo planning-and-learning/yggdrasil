@@ -40,7 +40,9 @@ struct urd::data<Name>
     int value = 0;
 
     data() = default;
+
     explicit data(int value_) : index(), value(value_) {}
+
     static constexpr bool copyable() noexcept
     {
         static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
@@ -48,9 +50,12 @@ struct urd::data<Name>
     }
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
 };
+
 template<typename V>
 struct urd::view_mixin<Name, V>
 {
@@ -69,6 +74,7 @@ class Names : public ygg::formalism::SymbolContext<Names, boost::mp11::mp_list<N
 
 public:
     Names() = default;
+
     explicit Names(const Names* parent) : Base(parent) {}
 
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }

@@ -51,8 +51,11 @@ public:
     }
 
     const std::string& file() const noexcept { return m_file; }
+
     int tabs() const noexcept { return m_tabs; }
+
     void clear_error() noexcept { m_error.reset(); }
+
     const std::optional<RecordedError>& last_error() const noexcept { return m_error; }
 
     void record_error(It position, std::string message, urd::Store<urd::sequence<DiagnosticNote>> notes = {})
@@ -95,7 +98,9 @@ public:
     }
 
     void operator()(It position, const std::string& message) const { *m_output << format_diagnostic(make_diagnostic(position, message)); }
+
     void operator()(It first, It last, const std::string& message) const { *m_output << format_diagnostic(make_diagnostic(first, last, message)); }
+
     void operator()(const boost::spirit::x3::position_tagged& node, const std::string& message) const
     { *m_output << format_diagnostic(make_diagnostic(node, message)); }
 
@@ -215,6 +220,7 @@ template<typename Subject>
 struct get_info<guard<Subject, ygg::diagnostics::ContextDirective>>
 {
     using result_type = std::string;
+
     std::string operator()(const guard<Subject, ygg::diagnostics::ContextDirective>& parser) const { return std::string(parser.handler.name); }
 };
 

@@ -68,6 +68,7 @@ class Family : private detail::FamilyMembers<F, boost::mp11::mp_reverse<boost::m
 
 public:
     Family() : Members(0) {}
+
     /// A layer over `parent` (nullptr: a root): each member layered over the parent's member of its type. The parent must
     /// outlive this family and not grow after the branch.
     explicit Family(const Family* parent)
@@ -83,6 +84,7 @@ public:
         requires boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value
     [[nodiscard]] F<T>& get() noexcept
     { return static_cast<detail::FamilyMember<T, F<T>>&>(*this).member; }
+
     template<typename T>
         requires boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value
     [[nodiscard]] const F<T>& get() const noexcept
@@ -92,11 +94,13 @@ public:
     template<typename Function>
     void for_each(Function function)
     { (function(get<Ts>()), ...); }
+
     template<typename Function>
     void for_each(Function function) const
     { (function(get<Ts>()), ...); }
 
     [[nodiscard]] const Family* parent() const noexcept { return m_parent; }
+
     /// This family's number along the chain: 0 for a root.
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
 
@@ -104,10 +108,12 @@ public:
     template<typename T>
     [[nodiscard]] decltype(auto) operator[](urd::index<T> at) const
     { return get<T>()[at]; }
+
     /// Whether the member for T has a record at `at`.
     template<typename T>
     [[nodiscard]] bool contains(urd::index<T> at) const
     { return !at.is_none() && at.value < get<T>().size(); }
+
     /// Clears every member.
     void clear()
         requires(requires(F<Ts>& member) { member.clear(); } && ...)

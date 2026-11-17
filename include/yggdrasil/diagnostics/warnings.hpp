@@ -21,7 +21,9 @@ class Warnings
 {
 public:
     void add(Diagnostic warning) { m_warnings.push_back(std::move(warning)); }
+
     [[nodiscard]] std::span<const Diagnostic> get() const noexcept { return m_warnings; }
+
     [[nodiscard]] bool empty() const noexcept { return m_warnings.empty(); }
 
 private:

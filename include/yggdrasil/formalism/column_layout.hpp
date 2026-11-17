@@ -25,10 +25,13 @@ struct ColumnLayout : urd::compared_by_identity<ColumnLayout>
     TypeId type {};
 
     ColumnLayout() = default;
+
     ColumnLayout(urd::index<Column> label_, TypeId type_) : label(label_), type(type_) {}
 
     static constexpr auto cista_members() noexcept { return urd::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
+
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"label", &ColumnLayout::label>, urd::field<"type", &ColumnLayout::type>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 }  // namespace ygg
@@ -42,6 +45,7 @@ struct urd::resolution<urd::index<ygg::Column>>
     template<typename C>
     static const urd::index<ygg::Column>& of(const urd::index<ygg::Column>& label, const C& /*context*/) noexcept
     { return label; }  // NOLINT(bugprone-return-const-ref-from-parameter)
+
     template<std::same_as<urd::index<ygg::Column>> R>
     static urd::index<ygg::Column> stored(const R& label) noexcept
     { return label; }

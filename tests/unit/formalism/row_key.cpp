@@ -22,7 +22,9 @@ struct StoredRow
     int relation;
     urd::Store<urd::sequence<int>> objects;
 
-    [[nodiscard]] auto get_key() const noexcept { return std::make_pair(relation, std::span<const int>(objects)); }
+    [[nodiscard]] int relation_key() const noexcept { return relation; }
+
+    [[nodiscard]] std::span<const int> get_values() const noexcept { return objects; }
 };
 
 /// A row whose first arity values spell a stored row, like a rule row that extends an action row.
@@ -32,8 +34,9 @@ struct PrefixRow
     urd::Store<urd::sequence<int>> row;
     size_t arity = 0;
 
-    [[nodiscard]] auto get_key() const noexcept
-    { return std::make_pair(relation, std::views::take(row, static_cast<std::ranges::range_difference_t<decltype(row)>>(arity))); }
+    [[nodiscard]] int relation_key() const noexcept { return relation; }
+
+    [[nodiscard]] auto get_values() const noexcept { return std::views::take(row, static_cast<std::ranges::range_difference_t<decltype(row)>>(arity)); }
 };
 
 }

@@ -45,7 +45,9 @@ public:
      */
 
     ClosedInterval() : m_interval(Interval::empty()) {}
+
     ClosedInterval(A lower, A upper) : m_interval(lower, upper) {}
+
     explicit ClosedInterval(const Interval& interval) : m_interval(interval) {}
 
     /**
@@ -100,6 +102,7 @@ public:
     [[nodiscard]] constexpr const Interval& get_interval() const noexcept { return m_interval; }
 
     friend A lower(const ClosedInterval& el) noexcept { return lower(el.get_interval()); }
+
     friend A upper(const ClosedInterval& el) noexcept { return upper(el.get_interval()); }
 
     /// Whether it is empty, and its bounds where it is not: every empty interval alike.
@@ -108,6 +111,7 @@ public:
         const auto is_empty = empty(*this);
         return std::make_tuple(is_empty, is_empty ? A(0) : lower(*this), is_empty ? A(0) : upper(*this));
     }
+
     static constexpr auto identifying_members() noexcept { return urd::Members<&ClosedInterval::normalized> {}; }
 
 private:

@@ -23,7 +23,9 @@ struct data<ygg::Schema>
     urd::flat_vector<ygg::TypeId> types;
 
     data() = default;
+
     explicit data(urd::flat_vector<ygg::TypeId> types_) : index(), types(std::move(types_)) {}
+
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;
@@ -31,7 +33,9 @@ struct data<ygg::Schema>
     ~data() = default;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"types", &data::types>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::types> {}; }
 };
 
@@ -43,7 +47,9 @@ struct data<ygg::Columns>
     urd::flat_vector<ygg::ColumnLayout> values;
 
     data() = default;
+
     explicit data(urd::flat_vector<ygg::ColumnLayout> values_) : index(), values(std::move(values_)) {}
+
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;
@@ -51,7 +57,9 @@ struct data<ygg::Columns>
     ~data() = default;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &data::values>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
 };
 
@@ -66,6 +74,7 @@ struct data<ygg::Relation<F>>
     urd::flat_vector<ygg::RowIndex<F>> rows;
 
     data() = default;
+
     data(urd::index<F> pool_, urd::index<ygg::Columns> columns_, urd::flat_vector<ygg::RowIndex<F>> rows_) :
         index(),
         pool(pool_),
@@ -73,6 +82,7 @@ struct data<ygg::Relation<F>>
         rows(std::move(rows_))
     {
     }
+
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;
@@ -81,7 +91,9 @@ struct data<ygg::Relation<F>>
 
     static constexpr auto fields() noexcept
     { return urd::Fields<urd::field<"pool", &data::pool>, urd::field<"columns", &data::columns>, urd::field<"rows", &data::rows>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::pool, &data::columns, &data::rows> {}; }
 };
 }  // namespace urd

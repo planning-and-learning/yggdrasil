@@ -39,7 +39,9 @@ public:
     }
 
     [[nodiscard]] const std::string& text() const noexcept { return m_text; }
+
     [[nodiscard]] const std::string& filename() const noexcept { return m_filename; }
+
     [[nodiscard]] int tab_width() const noexcept { return m_tab_width; }
 
 private:
@@ -59,7 +61,9 @@ public:
     }
 
     [[nodiscard]] const std::shared_ptr<const Source>& source() const noexcept { return m_source; }
+
     [[nodiscard]] std::size_t begin() const noexcept { return m_begin; }
+
     [[nodiscard]] std::size_t end() const noexcept { return m_end; }
 
     /// One-based line, recognizing LF, CRLF, and CR line endings.

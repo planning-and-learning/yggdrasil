@@ -40,6 +40,7 @@ namespace ygg::formalism
 /// Over a parent (its stores layered over the parent's), lookups and reads find the parent's records too.
 template<typename Derived, typename Types, bool ThreadSafe = false>
 class SymbolContext;
+
 template<typename Derived, bool ThreadSafe, typename... Ts>
 class SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>
 {
@@ -55,34 +56,41 @@ public:
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] urd::index_view<T, Derived> view(urd::index<T> index) const noexcept
     { return { index, &static_cast<const Derived&>(*this) }; }
+
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] std::optional<urd::index_view<T, Derived>> find(const urd::data<T>& builder) const
     { return do_find<T>(builder); }
+
     /// Interns the record; builder.index is set to its index.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     std::pair<urd::index_view<T, Derived>, bool> insert(urd::data<T>& builder)
     { return do_insert<T>(builder); }
+
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] const urd::data<T>& operator[](urd::index<T> index) const
     { return do_at<T>(index); }
+
     /// Whether this layer or a parent holds the index.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] bool contains(urd::index<T> index) const
     { return do_contains<T>(index); }
+
     /// The number of records of type T, along the layers.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] std::size_t size() const
     { return do_size<T>(); }
+
     /// The memory of this layer's records of type T, in bytes.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] std::size_t memory_usage() const
     { return do_memory_usage<T>(); }
+
     /// Forgets this layer's records; the parent's stay.
     void clear();
 

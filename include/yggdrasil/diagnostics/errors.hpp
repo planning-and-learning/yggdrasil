@@ -30,7 +30,9 @@ public:
     explicit SemanticError(std::string message) : std::runtime_error(message), m_diagnostic { std::move(message) }, m_display_message(m_diagnostic.message) {}
 
     [[nodiscard]] const char* what() const noexcept override { return m_display_message.c_str(); }
+
     [[nodiscard]] const std::string& message() const noexcept { return m_diagnostic.message; }
+
     [[nodiscard]] const Diagnostic& diagnostic() const noexcept { return m_diagnostic; }
 
     void set_diagnostic(Diagnostic diagnostic)

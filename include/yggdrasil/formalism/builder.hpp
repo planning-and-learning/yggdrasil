@@ -41,6 +41,7 @@ using BuilderHandle = std::unique_ptr<urd::data<T>, BuilderRelease>;
 /// matches the out-of-line members, whose constraints name the types, to their declarations (as SymbolContext).
 template<typename Types>
 class BasicBuilderStorage;
+
 template<typename... Ts>
 class BasicBuilderStorage<boost::mp11::mp_list<Ts...>>
 {

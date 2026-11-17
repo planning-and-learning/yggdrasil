@@ -45,7 +45,7 @@ void bind_relation_reads(nb::class_<R>& cls)
 template<typename R>
 void bind_row_reads(nb::class_<R>& cls)
 {
-    using Columns = ygg::detail::row_reads<ygg::Schema, R>;
+    using Columns = urd::view_mixin<ygg::Row<ygg::Schema>, R>;
     cls.def("size", &R::size)
         .def("value", &R::value, nb::arg("index"))
         .def("type", &R::type, nb::arg("index"))
@@ -62,7 +62,7 @@ void bind_formalism_module_definitions(nb::module_& m)
         .def("encode", nb::overload_cast<std::int64_t, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"))
         .def("encode", nb::overload_cast<std::uint64_t, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"))
         .def("encode", nb::overload_cast<double, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"))
-        .def("encode", nb::overload_cast<urd::index<ygg::formalism::Object<void>>, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"));
+        .def("encode", nb::overload_cast<urd::index<ygg::formalism::Object>, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"));
     m.def("decode", &ygg::decode, nb::arg("bits"), nb::arg("type"));
 
     using RelationTag = ygg::Relation<ygg::Schema>;
@@ -75,6 +75,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     using RowBuilderView = ygg::RowBuilderView<ygg::Schema>;
 
     urd::python::bind_index<Column>(m, "ColumnIndex");
+    urd::python::bind_index<urd::index<ygg::formalism::Object>>(m, "ObjectIndex");
     nb::enum_<ygg::TypeId>(m, "ColumnType")
         .value("UINT32", ygg::type_id<std::uint32_t>)
         .value("INT32", ygg::type_id<std::int32_t>)
@@ -83,7 +84,7 @@ void bind_formalism_module_definitions(nb::module_& m)
         .value("FLOAT32", ygg::type_id<float>)
         .value("FLOAT64", ygg::type_id<double>)
         .value("BOOL", ygg::type_id<bool>)
-        .value("OBJECT", ygg::type_id<urd::index<ygg::formalism::Object<void>>>);
+        .value("OBJECT", ygg::type_id<urd::index<ygg::formalism::Object>>);
     urd::python::bind_value<ygg::ColumnLayout>(m);
     urd::python::bind_index<urd::index<ygg::Row<ygg::Schema>>>(m, "RowId");
     urd::python::bind_value<ygg::RowIndex<ygg::Schema>>(m);
@@ -94,11 +95,9 @@ void bind_formalism_module_definitions(nb::module_& m)
     urd::python::bind_data<ygg::Columns>(m);
     urd::python::bind_view<ColumnsView>(m);
     urd::python::bind_data<ygg::Row<ygg::Schema>>(m);
-    auto stored_row = urd::python::bind_view<StoredRowView>(m);
-    bind_row_reads(stored_row);
+    urd::python::bind_view<StoredRowView>(m);
     urd::python::bind_data<RelationTag>(m);
-    auto relation = urd::python::bind_view<RelationView>(m);
-    bind_relation_reads(relation);
+    urd::python::bind_view<RelationView>(m);
 
     auto builder = nb::class_<Relation>(m,
                                         "RelationBuilder",

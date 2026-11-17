@@ -27,23 +27,6 @@ struct type_caster<ygg::RowBuilderView<F>> : urd_view_caster<ygg::RowBuilderView
 {
 };
 
-/// An object column's index (ColumnValue's untagged object index) is a Python int.
-template<>
-struct type_caster<urd::index<ygg::formalism::Object<void>>>
-{
-    NB_TYPE_CASTER(urd::index<ygg::formalism::Object<void>>, const_name("int"))
-
-    bool from_python(handle src, uint8_t flags, cleanup_list* cleanup) noexcept
-    {
-        auto index = make_caster<std::uint32_t>();
-        if (!index.from_python(src, flags, cleanup))
-            return false;
-        value = urd::index<ygg::formalism::Object<void>>(index.value);
-        return true;
-    }
-    static handle from_cpp(urd::index<ygg::formalism::Object<void>> index, rv_policy policy, cleanup_list* cleanup) noexcept
-    { return make_caster<std::uint32_t>::from_cpp(index.value, policy, cleanup); }
-};
 }  // namespace nanobind::detail
 
 namespace ygg

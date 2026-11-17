@@ -50,7 +50,7 @@ public:
 /// An interned relation's view (index_view): its rows lie in the layer's pool its record names, its row indices in that
 /// pool; each row is read as the layer's view of its index.
 template<typename F, typename V>
-struct urd::view_mixin<ygg::Relation<F>, V> : ygg::detail::relation_reads<F, V>
+struct urd::view_mixin<ygg::Relation<F>, V>
 {
 private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
@@ -58,13 +58,31 @@ private:
 public:
     /// The view of its pool's key.
     [[nodiscard]] auto get_pool() const { return self().template member<&urd::record_of<V>::pool>(); }
+
     /// The view of its Columns.
     [[nodiscard]] auto get_columns() const { return self().template member<&urd::record_of<V>::columns>(); }
+
     /// Its rows, sorted by their indices: a borrowed range of their views over the layer's storage.
     [[nodiscard]] auto get_rows() const { return self().template member<&urd::record_of<V>::rows>(); }
+
     /// Its columns, interned from its labels and its pool's types.
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const { return get_columns().get_values(); }
-    [[nodiscard]] std::size_t size() const { return std::ranges::size(get_rows()); }
+
+    [[nodiscard]] std::size_t size() const { return std::ranges::size(self().get_rows()); }
+
+    /// The number of its columns.
+    [[nodiscard]] std::size_t arity() const { return std::ranges::size(self().columns()); }
+
+    [[nodiscard]] bool empty() const { return self().size() == 0; }
+
+    /// The row at a position; std::out_of_range past the last.
+    [[nodiscard]] auto row(std::size_t index) const
+    {
+        if (index >= self().size())
+            throw std::out_of_range("Relation: row index out of range.");
+        return self().get_rows()[index];
+    }
+
     /// Values that do not fit their columns, or not one per column, are in no row: a find in the pool and a binary
     /// search in its row indices.
     template<std::ranges::input_range Values>
@@ -75,7 +93,24 @@ public:
         const auto id = get_repository(self().context()).find_row(pool, values);
         return !id.is_none() && std::ranges::binary_search(get_rows(), ygg::RowIndex<F> { pool, id }, {}, [](const auto& row) { return row.index(); });
     }
-    using ygg::detail::relation_reads<F, V>::contains;
+
+    /// Whether it holds a row with the values of `row`, of any relation of F.
+    template<ygg::RowViewConcept<F> R>
+    [[nodiscard]] bool contains(const R& row) const
+    { return self().contains(row.get_values()); }
+
+    /// contains, by its instantiations Python reaches: a sequence of Values, and a stored row of its context's.
+    static constexpr auto functions() noexcept
+    {
+        using Context = std::remove_cvref_t<decltype(std::declval<const V&>().context())>;
+        return urd::Functions<urd::function<"columns", &view_mixin::columns>,
+                              urd::function<"size", &view_mixin::size>,
+                              urd::function<"arity", &view_mixin::arity>,
+                              urd::function<"empty", &view_mixin::empty>,
+                              urd::function<"row", &view_mixin::row>,
+                              urd::function<"contains", &view_mixin::template contains<std::span<const ygg::Value>>>,
+                              urd::function<"contains", &view_mixin::template contains<ygg::RowView<F, Context>>>> {};
+    }
 };
 
 namespace ygg
@@ -84,17 +119,21 @@ namespace ygg
 /// by position, each through the builder (its rows' context), membership and the builder itself. Not a record's view: a
 /// builder is no record. The builder and the layer must outlive it; the builder's next mutation invalidates its rows.
 template<typename F, typename C>
-class RelationBuilderView : public detail::relation_reads<F, RelationBuilderView<F, C>>
+class RelationBuilderView : public urd::view_mixin<Relation<F>, RelationBuilderView<F, C>>
 {
 public:
     RelationBuilderView(const urd::builder<Relation<F>>* builder, const C* context) noexcept : m_builder(builder), m_context(context) {}
 
     /// The layer it is read through.
     [[nodiscard]] const C& context() const noexcept { return *m_context; }
+
     [[nodiscard]] std::span<const ColumnLayout> columns() const noexcept { return m_builder->columns(); }
+
     /// The builder it reads.
     [[nodiscard]] const urd::builder<Relation<F>>& get_builder() const noexcept { return *m_builder; }
+
     [[nodiscard]] std::size_t size() const noexcept { return m_builder->size(); }
+
     /// The rows by position: a borrowed range over the builder's storage.
     [[nodiscard]] auto get_rows() const noexcept
     {
@@ -102,13 +141,15 @@ public:
                               m_builder,
                               [](const auto* builder, std::size_t index) { return builder->view(position(index)); });
     }
+
     /// Whether the builder holds these values (a range of Values the builder takes: a span, a packed row).
     template<std::ranges::input_range Values>
         requires std::same_as<std::ranges::range_value_t<Values>, Value>
                  && requires(const urd::builder<Relation<F>>& builder, const Values& values) { builder.contains(values); }
     [[nodiscard]] bool contains(const Values& values) const
     { return m_builder->contains(values); }
-    using detail::relation_reads<F, RelationBuilderView<F, C>>::contains;
+
+    using urd::view_mixin<Relation<F>, RelationBuilderView<F, C>>::contains;
 
 private:
     /// The index of the row at a position of the builder (no relation: the builder is its rows' context).
@@ -126,6 +167,7 @@ struct urd::resolution<urd::builder<ygg::Relation<F>>>
     template<typename C>
     static ygg::RelationBuilderView<F, C> of(const urd::builder<ygg::Relation<F>>& member, const C& context) noexcept
     { return { &member, &context }; }
+
     template<typename C>
     static void of(const urd::builder<ygg::Relation<F>>&& member, const C& context) = delete;
 };

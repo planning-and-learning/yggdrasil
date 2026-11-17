@@ -34,20 +34,24 @@ struct Schema
 {
     static constexpr std::string_view name = "Schema";
 };
+
 /// Column labels, distinct from tuple values and positions.
 struct Column
 {
 };
 struct ColumnLayout;
+
 struct Columns
 {
     static constexpr std::string_view name = "Columns";
 };
+
 template<typename F>
 struct Relation
 {
     static constexpr std::string_view name = "Relation";
 };
+
 /// A row of family F (predicates, actions, ..., Schema): its pool's key (relation) and its values (row_data.hpp). Stored
 /// once per pool, its id there is an index<Row<F>>.
 template<typename F>
@@ -67,7 +71,9 @@ struct RowIndex
     urd::index<Row<F>> row;
 
     friend constexpr auto operator<=>(const RowIndex&, const RowIndex&) = default;
+
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &RowIndex::relation>, urd::field<"row", &RowIndex::row>> {}; }
+
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
@@ -123,14 +129,15 @@ template<typename... Ts>
 class SymbolRepository;
 template<typename... Ts>
 class ConcurrentSymbolRepository;
-template<typename ObjectTag, typename... Ts>
+template<typename Width, typename... Ts>
 class RelationRepository;
-template<typename ObjectTag, typename... Ts>
+template<typename Width, typename... Ts>
 class ConcurrentRelationRepository;
 
 /// What a Repository holds, named by what it holds rather than by the stores that hold it: its symbol types
-/// (Symbols<Ts...>; ConcurrentSymbols<Ts...> for concurrent interning) and its relation families with their object tag
-/// (Relations<ObjectTag, Ts...>; ConcurrentRelations<ObjectTag, Ts...>). Empty: a Repository named by them is completed
+/// (Symbols<Ts...>; ConcurrentSymbols<Ts...> for concurrent interning) and its relation families with the width an
+/// object column is stored in, urd::word (32 bits) or urd::bit (the bits the largest object index needs)
+/// (Relations<Width, Ts...>; ConcurrentRelations<Width, Ts...>). Empty: a Repository named by them is completed
 /// with nothing else, so that a call with a Repository argument, looked up by argument (ADL, which completes the class
 /// templates among its argument's template arguments), never instantiates its stores. The stores are the symbol and
 /// relation repositories these map to (repository_impl.hpp).
@@ -138,15 +145,18 @@ template<typename... Ts>
 struct Symbols
 {
 };
+
 template<typename... Ts>
 struct ConcurrentSymbols
 {
 };
-template<typename ObjectTag, typename... Ts>
+
+template<typename Width, typename... Ts>
 struct Relations
 {
 };
-template<typename ObjectTag, typename... Ts>
+
+template<typename Width, typename... Ts>
 struct ConcurrentRelations
 {
 };
@@ -158,6 +168,7 @@ namespace detail
 /// declares; repository_impl.hpp defines); Store is the repository that holds them.
 template<typename Held>
 struct symbol_repository_traits;
+
 template<typename... Ts>
 struct symbol_repository_traits<Symbols<Ts...>>
 {
@@ -165,6 +176,7 @@ struct symbol_repository_traits<Symbols<Ts...>>
     static constexpr bool thread_safe = false;
     using Store = SymbolRepository<Ts...>;
 };
+
 template<typename... Ts>
 struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
 {
@@ -172,38 +184,42 @@ struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
     static constexpr bool thread_safe = true;
     using Store = ConcurrentSymbolRepository<Ts...>;
 };
+
 template<typename... Ts>
 struct symbol_repository_traits<SymbolRepository<Ts...>> : symbol_repository_traits<Symbols<Ts...>>
 {
 };
+
 template<typename... Ts>
 struct symbol_repository_traits<ConcurrentSymbolRepository<Ts...>> : symbol_repository_traits<ConcurrentSymbols<Ts...>>
 {
 };
 template<typename Held>
 struct relation_repository_traits;
-template<typename ObjectTag, typename... Ts>
-struct relation_repository_traits<Relations<ObjectTag, Ts...>>
+
+template<typename Width, typename... Ts>
+struct relation_repository_traits<Relations<Width, Ts...>>
 {
-    using object_tag = ObjectTag;
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     static constexpr bool thread_safe = false;
-    using Store = RelationRepository<ObjectTag, Ts...>;
+    using Store = RelationRepository<Width, Ts...>;
 };
-template<typename ObjectTag, typename... Ts>
-struct relation_repository_traits<ConcurrentRelations<ObjectTag, Ts...>>
+
+template<typename Width, typename... Ts>
+struct relation_repository_traits<ConcurrentRelations<Width, Ts...>>
 {
-    using object_tag = ObjectTag;
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     static constexpr bool thread_safe = true;
-    using Store = ConcurrentRelationRepository<ObjectTag, Ts...>;
+    using Store = ConcurrentRelationRepository<Width, Ts...>;
 };
-template<typename ObjectTag, typename... Ts>
-struct relation_repository_traits<RelationRepository<ObjectTag, Ts...>> : relation_repository_traits<Relations<ObjectTag, Ts...>>
+
+template<typename Width, typename... Ts>
+struct relation_repository_traits<RelationRepository<Width, Ts...>> : relation_repository_traits<Relations<Width, Ts...>>
 {
 };
-template<typename ObjectTag, typename... Ts>
-struct relation_repository_traits<ConcurrentRelationRepository<ObjectTag, Ts...>> : relation_repository_traits<ConcurrentRelations<ObjectTag, Ts...>>
+
+template<typename Width, typename... Ts>
+struct relation_repository_traits<ConcurrentRelationRepository<Width, Ts...>> : relation_repository_traits<ConcurrentRelations<Width, Ts...>>
 {
 };
 }  // namespace detail
@@ -220,10 +236,18 @@ concept HasRows = boost::mp11::mp_contains<typename std::remove_cvref_t<Reposito
 template<typename Repository, typename F>
 concept HasRelations = SupportsSymbol<Repository, Relation<F>>;
 
-template<typename Tag>
+/// An object: what the object columns of rows hold (an urd::index<Object>), the same type in every library that stores
+/// objects (tyr's records of objects are urd::data<ygg::formalism::Object>).
 struct Object
 {
+    static constexpr std::string_view name = "Object";
 };
+
+/// Whether the rows of family F hold objects (F::objects): their columns read as Objects (ygg::get_objects).
+template<typename F>
+concept ObjectRows = requires {
+    { F::objects } -> std::convertible_to<bool>;
+} && F::objects;
 }  // namespace ygg::formalism
 
 #endif

@@ -49,19 +49,16 @@ namespace ygg::formalism
 /// The width of a whole object index, the widest a relation repository stores.
 inline constexpr auto default_object_index_width = urd::bit_width { static_cast<std::uint8_t>(std::numeric_limits<ygg::uint_t>::digits) };
 
-/// How a relation repository stores its rows' objects, per object tag: rows of one unsigned column per argument
-/// (urd::by_column_widths), each column 32 bits (urd::word), or the object_index_width bits the largest index needs
-/// (urd::bit).
-template<typename ObjectTag>
-struct RelationRepositoryTraits
-{
-    using width = urd::word;
-};
+/// How a relation repository stores its rows' objects (Width): rows of one unsigned column per argument
+/// (urd::by_column_widths), each object column 32 bits (urd::word), or the object_index_width bits the largest index
+/// needs (urd::bit).
+template<typename Width>
+concept ObjectWidth = std::same_as<Width, urd::word> || std::same_as<Width, urd::bit>;
 
-template<typename ObjectTag, typename... Ts>
+template<typename Width, typename... Ts>
 class RelationRepository;
 
-template<typename ObjectTag, typename... Ts>
+template<typename Width, typename... Ts>
 class ConcurrentRelationRepository;
 
 namespace detail
@@ -82,13 +79,14 @@ namespace detail
 /// share a pool. Every Schema is interned once in the layer's Schema pool, the one source of column types
 /// (types(key)), and a pool's column widths come from it (widths()). Over a parent, everything layers: a pool this layer never wrote reads
 /// the parent's; one it wrote to has a pool of its own over the parent's, its row ids continuing after the parent's.
-template<typename ObjectTag, bool ThreadSafe, typename... Ts>
+template<typename Width, bool ThreadSafe, typename... Ts>
+    requires ObjectWidth<Width>
 class RelationRepositoryBase
 {
     using Threading = std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>;
 
 public:
-    using object_tag = ObjectTag;
+    using width = Width;
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     static constexpr bool thread_safe = ThreadSafe;
 
@@ -146,16 +144,21 @@ public:
 
     /// The Schema `record`, interned here where no layer holds it (record.index set to it).
     urd::index<Schema> schema(urd::data<Schema>& record) { return intern(m_schemas, record).first; }
+
     /// The column types of a Schema.
     /// The Schema `schema`, through the layers; whether some layer holds it; the layered Store of the Schemas.
     [[nodiscard]] const urd::data<Schema>& operator[](urd::index<Schema> schema) const { return m_schemas[schema]; }
+
     [[nodiscard]] bool contains(urd::index<Schema> schema) const { return m_schemas.contains(schema); }
+
     [[nodiscard]] const Schemas& schemas() const noexcept { return m_schemas; }
+
     [[nodiscard]] std::span<const TypeId> types(urd::index<Schema> schema) const
     {
         const auto& record = m_schemas[schema];
         return { record.types.data(), record.types.size() };
     }
+
     /// The Schema of the pool `relation`, or none where no layer declared it.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
@@ -163,6 +166,7 @@ public:
     {
         return m_pool_schemas.template get<F>().visit(relation, [](urd::index<Schema> held) { return held; }, urd::index<Schema>());
     }
+
     /// The column types of the pool `relation` (its Schema's); std::out_of_range where no layer declared it.
     template<typename F>
         requires HasRows<RelationRepositoryBase, F>
@@ -217,9 +221,10 @@ public:
     /// The bits of an object column: the layer's object index width (urd::bit), else 32 (urd::word).
     [[nodiscard]] std::uint8_t object_bits() const noexcept
     {
-        constexpr bool packed = std::same_as<typename RelationRepositoryTraits<ObjectTag>::width, urd::bit>;
+        constexpr bool packed = std::same_as<Width, urd::bit>;
         return packed ? m_object_index_width : default_object_index_width.bits;
     }
+
     /// The widths of this layer's rows of these column types: each whole, an object column object_bits(). The one width
     /// computation of pools and of the layer's builders.
     template<std::ranges::input_range Types>
@@ -266,23 +271,23 @@ public:
 };
 }  // namespace detail
 
-template<typename ObjectTag, typename... Ts>
-class RelationRepository : public detail::RelationRepositoryBase<ObjectTag, false, Ts...>
+template<typename Width, typename... Ts>
+class RelationRepository : public detail::RelationRepositoryBase<Width, false, Ts...>
 {
 public:
     explicit RelationRepository(const RelationRepository* parent = nullptr, urd::bit_width object_index_width = default_object_index_width) :
-        detail::RelationRepositoryBase<ObjectTag, false, Ts...>(parent, object_index_width)
+        detail::RelationRepositoryBase<Width, false, Ts...>(parent, object_index_width)
     {
     }
 };
 
-template<typename ObjectTag, typename... Ts>
-class ConcurrentRelationRepository : public detail::RelationRepositoryBase<ObjectTag, true, Ts...>
+template<typename Width, typename... Ts>
+class ConcurrentRelationRepository : public detail::RelationRepositoryBase<Width, true, Ts...>
 {
 public:
     explicit ConcurrentRelationRepository(const ConcurrentRelationRepository* parent = nullptr,
                                           urd::bit_width object_index_width = default_object_index_width) :
-        detail::RelationRepositoryBase<ObjectTag, true, Ts...>(parent, object_index_width)
+        detail::RelationRepositoryBase<Width, true, Ts...>(parent, object_index_width)
     {
     }
 };

@@ -145,6 +145,7 @@ inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
 
     if (Py_EnterRecursiveCall(" while serializing a projection"))
         throw nanobind::python_error();
+
     struct RecursionGuard
     {
         RecursionGuard() = default;
@@ -152,6 +153,7 @@ inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
         RecursionGuard& operator=(const RecursionGuard&) = delete;
         RecursionGuard(RecursionGuard&&) = delete;
         RecursionGuard& operator=(RecursionGuard&&) = delete;
+
         ~RecursionGuard() { Py_LeaveRecursiveCall(); }
     } guard;
 

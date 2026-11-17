@@ -41,6 +41,7 @@ namespace
 struct NumberRule : diagnostics::ErrorHandlerBase
 {
 };
+
 auto number() { return boost::spirit::x3::rule<NumberRule, Number> { "number" } = ('(' > boost::spirit::x3::int_) > ')'; }
 }  // namespace
 
