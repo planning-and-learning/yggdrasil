@@ -40,7 +40,10 @@ jobs:
           "$RUNNER_TEMP/rules/bin/python" -m pip show libclang pybrokkr | grep -E "Name|Version"
           "$RUNNER_TEMP/rules/bin/python" - <<'PY'
           from pathlib import Path
-          import clang.cindex as ci
+          import clang.cindex as ci, glob, subprocess
+          lib = Path(subprocess.run(["clang++", "-print-resource-dir"], capture_output=True, text=True).stdout.strip()).parents[1]
+          print("LIBS", sorted(glob.glob(str(lib / "libclang*.so*"))))
+          ci.Config.set_library_path(str(lib))
           from pybrokkr.rules.schema.records import database
           db = database(Path("."), Path("build/peachycheck/compile_commands.json"))
           f = Path("python/src/pyyggdrasil/execution/module.cpp").resolve()
