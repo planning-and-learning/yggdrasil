@@ -68,18 +68,15 @@ namespace
 {
 struct RepositoryTypesElement
 {
-    static constexpr bool objects = true;
 };
 
 struct RepositoryTypesRelation
 {
-    static constexpr bool objects = true;
 };
 
-/// A family whose rows are objects of the packed tag.
+/// A family whose rows are stored bit-packed (urd::bit).
 struct RepositoryTypesPackedRelation
 {
-    static constexpr bool objects = true;
 };
 }
 struct RepositoryTypesCheckout;
