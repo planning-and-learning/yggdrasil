@@ -62,22 +62,23 @@ public:
     /// Its columns' types: its pool's.
     [[nodiscard]] std::span<const ygg::TypeId> column_types() const { return get_repository(self().context()).types(relation_key()); }
 
-    /// The canonical Value of column i; std::out_of_range past the last.
-    [[nodiscard]] ygg::Value value(std::size_t i) const { return self().get_values()[ygg::detail::checked_column(i, std::ranges::size(self().get_values()))]; }
+    /// The canonical Value of a column; std::out_of_range past the last.
+    [[nodiscard]] ygg::Value value(std::size_t column) const
+    { return self().get_values()[ygg::detail::checked_column(column, std::ranges::size(self().get_values()))]; }
 
-    /// The type of column i, its pool's; std::out_of_range past the last.
-    [[nodiscard]] ygg::TypeId type(std::size_t i) const
-    { return self().column_types()[ygg::detail::checked_column(i, std::ranges::size(self().get_values()))]; }
+    /// The type of a column, its pool's; std::out_of_range past the last.
+    [[nodiscard]] ygg::TypeId type(std::size_t column) const
+    { return self().column_types()[ygg::detail::checked_column(column, std::ranges::size(self().get_values()))]; }
 
-    /// Column i decoded as its type (an object column as its untagged object index).
-    [[nodiscard]] ygg::ColumnValue get(std::size_t i) const { return ygg::decode(value(i), type(i)); }
+    /// A column decoded as its type (an object column as its untagged object index).
+    [[nodiscard]] ygg::ColumnValue get(std::size_t column) const { return ygg::decode(value(column), type(column)); }
 
-    /// Column i as T; throws std::invalid_argument where the column's type is not T's (ygg::type_id).
+    /// A column as T; throws std::invalid_argument where the column's type is not T's (ygg::type_id).
     template<typename T>
-    [[nodiscard]] T get(std::size_t i) const
+    [[nodiscard]] T get(std::size_t column) const
     {
-        ygg::detail::check_column_type<T>(type(i));
-        return ygg::decode_value<T>(value(i));
+        ygg::detail::check_column_type<T>(type(column));
+        return ygg::decode_value<T>(value(column));
     }
 
     /// Columns first to last (exclusive) as T, a borrowed random-access range; throws std::invalid_argument unless each
@@ -108,11 +109,12 @@ public:
     /// Its reads, and get_objects where its family's rows hold objects (ObjectRows).
     static constexpr auto functions() noexcept
     {
-        constexpr auto reads = urd::Functions<urd::function<"relation_key", &view_mixin::relation_key>,
-                                              urd::function<"column_types", &view_mixin::column_types>,
-                                              urd::function<"value", &view_mixin::value>,
-                                              urd::function<"type", &view_mixin::type>,
-                                              urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get)>> {};
+        constexpr auto reads =
+            urd::Functions<urd::function<"relation_key", &view_mixin::relation_key>,
+                           urd::function<"column_types", &view_mixin::column_types>,
+                           urd::function<"value", &view_mixin::value, urd::arg<"column">>,
+                           urd::function<"type", &view_mixin::type, urd::arg<"column">>,
+                           urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>> {};
         if constexpr (ygg::formalism::ObjectRows<F>)
             return reads + urd::Functions<urd::function<"get_objects", &view_mixin::get_objects>> {};
         else

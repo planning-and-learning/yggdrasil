@@ -101,9 +101,9 @@ public:
         using Context = std::remove_cvref_t<decltype(std::declval<const V&>().context())>;
         return urd::Functions<urd::function<"columns", &view_mixin::columns>,
                               urd::function<"arity", &view_mixin::arity>,
-                              urd::function<"row", &view_mixin::row>,
-                              urd::function<"contains", &view_mixin::template contains<std::span<const ygg::Value>>>,
-                              urd::function<"contains", &view_mixin::template contains<ygg::RowView<F, Context>>>> {};
+                              urd::function<"row", &view_mixin::row, urd::arg<"index">>,
+                              urd::function<"contains", &view_mixin::template contains<std::span<const ygg::Value>>, urd::arg<"values">>,
+                              urd::function<"contains", &view_mixin::template contains<ygg::RowView<F, Context>>, urd::arg<"row">>> {};
     }
 };
 
