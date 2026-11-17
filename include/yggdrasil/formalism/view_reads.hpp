@@ -32,7 +32,7 @@
 /**
  * What the views of rows and of relations share beyond their mixins (urd::view_mixin<Row<F>, V>,
  * urd::view_mixin<Relation<F>, V>), which a builder's views inherit as well (RowBuilderView, RelationBuilderView): the
- * checks of a column read and a row's logical key.
+ * checks of a column read and the concept of a row's view.
  */
 
 namespace ygg::detail
@@ -56,23 +56,17 @@ void check_column_type(TypeId type)
 
 namespace ygg
 {
-/// The logical row of a row view across repositories: its relation's key (a view's identity includes its context)
-/// and its canonical values.
-template<typename R>
-[[nodiscard]] auto key_of(const R& row)
-{ return std::pair<std::remove_cvref_t<decltype(row.relation_key())>, decltype(row.get_values())>(row.relation_key(), row.get_values()); }
-
-/// The shared read interface of borrowed and stored rows of family F. Identity is deliberately absent; a logical key
-/// consists of the relation and the values (key_of).
+/// Whether V is the view of a row of family F (a stored row, one held outside the repository, a builder's): its
+/// relation's key, its values, each column decoded, through its context. Read through const, however V is spelled (a
+/// reference to a mutable view too).
 template<typename V, typename F>
 concept RowViewConcept = requires(const std::remove_reference_t<V>& view, std::size_t i) {
     view.context();
-    { view.size() } -> std::same_as<std::size_t>;
+    { view.relation_key() } -> std::same_as<urd::index<F>>;
+    { view.get_values() } -> RowValues;
     { view.value(i) } -> std::same_as<Value>;
     { view.type(i) } -> std::same_as<TypeId>;
     { view.get(i) } -> std::same_as<ColumnValue>;
-    { view.relation_key() } -> std::same_as<urd::index<F>>;
-    requires RowValues<std::remove_cvref_t<decltype(view.get_values())>>;
 };
 }  // namespace ygg
 

@@ -27,10 +27,10 @@ namespace
 using Column = urd::index<ygg::Column>;
 using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
 
-/// The shape of every relation class: its number of rows, its arity and its columns.
+/// The shape of every relation class: its arity and its columns (its rows, len(get_rows()) of a view).
 template<typename R>
 void bind_relation_shape(nb::class_<R>& cls)
-{ cls.def("size", &R::size).def("empty", &R::empty).def("arity", &R::arity).def("columns", &R::columns); }
+{ cls.def("arity", &R::arity).def("columns", &R::columns); }
 
 /// The reads of every relation view class: its shape and its rows, one by its position or all.
 template<typename R>
@@ -41,13 +41,12 @@ void bind_relation_reads(nb::class_<R>& cls)
     cls.def("row", &R::row, nb::arg("index"));
 }
 
-/// The reads of every row class: its number of columns, and each column's value, type and decoded value.
+/// The reads of every row class: each column's value, type and decoded value (its number, len(get_values())).
 template<typename R>
 void bind_row_reads(nb::class_<R>& cls)
 {
     using Columns = urd::view_mixin<ygg::Row<ygg::Schema>, R>;
-    cls.def("size", &R::size)
-        .def("value", &R::value, nb::arg("index"))
+    cls.def("value", &R::value, nb::arg("index"))
         .def("type", &R::type, nb::arg("index"))
         .def("get", static_cast<ygg::ColumnValue (Columns::*)(std::size_t) const>(&R::get), nb::arg("index"));
 }
@@ -69,7 +68,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     using RelationRepository = ygg::FreeRelationRepository;
     using SchemaView = urd::index_view<ygg::Schema, RelationRepository>;
     using ColumnsView = urd::index_view<ygg::Columns, RelationRepository>;
-    using StoredRowView = ygg::RowView<ygg::Schema, RelationRepository>;
+    using StoredRow = ygg::RowView<ygg::Schema, RelationRepository>;
     using RelationView = ygg::FreeRelationView;
     using RelationBuilderView = ygg::FreeRelationBuilderView;
     using RowBuilderView = ygg::RowBuilderView<ygg::Schema>;
@@ -95,7 +94,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     urd::python::bind_data<ygg::Columns>(m);
     urd::python::bind_view<ColumnsView>(m);
     urd::python::bind_data<ygg::Row<ygg::Schema>>(m);
-    urd::python::bind_view<StoredRowView>(m);
+    urd::python::bind_view<StoredRow>(m);
     urd::python::bind_data<RelationTag>(m);
     urd::python::bind_view<RelationView>(m);
 
@@ -108,6 +107,7 @@ void bind_formalism_module_definitions(nb::module_& m)
                        .def("clear", &Relation::clear)
                        .def("insert", static_cast<ygg::uint_t (Relation::*)(std::span<const ygg::Value>)>(&Relation::insert), nb::arg("values"));
     bind_relation_shape(builder);
+    builder.def("size", &Relation::size).def("empty", &Relation::empty);  // a builder, no view: its own
 
     auto builder_view = nb::class_<RelationBuilderView>(m,
                                                         "RelationBuilderView",
@@ -129,7 +129,7 @@ void bind_formalism_module_definitions(nb::module_& m)
              nb::arg("types"),
              "The pool of free relations of these column types (declared here).")
         .def("insert",
-             static_cast<std::pair<StoredRowView, bool> (RelationRepository::*)(const urd::data<ygg::Row<ygg::Schema>>&)>(&RelationRepository::insert),
+             static_cast<std::pair<StoredRow, bool> (RelationRepository::*)(const urd::data<ygg::Row<ygg::Schema>>&)>(&RelationRepository::insert),
              nb::arg("row"))
         .def("insert",
              static_cast<std::pair<ColumnsView, bool> (RelationRepository::*)(urd::data<ygg::Columns>&)>(&RelationRepository::insert),

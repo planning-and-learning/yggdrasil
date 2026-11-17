@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <urd/elements/concepts.hpp>
 #include <urd/elements/flat.hpp>
+#include <urd/tags.hpp>
 
 namespace ygg
 {

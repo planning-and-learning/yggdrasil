@@ -68,17 +68,13 @@ public:
     /// Its columns, interned from its labels and its pool's types.
     [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const { return get_columns().get_values(); }
 
-    [[nodiscard]] std::size_t size() const { return std::ranges::size(self().get_rows()); }
-
     /// The number of its columns.
     [[nodiscard]] std::size_t arity() const { return std::ranges::size(self().columns()); }
-
-    [[nodiscard]] bool empty() const { return self().size() == 0; }
 
     /// The row at a position; std::out_of_range past the last.
     [[nodiscard]] auto row(std::size_t index) const
     {
-        if (index >= self().size())
+        if (index >= std::ranges::size(self().get_rows()))
             throw std::out_of_range("Relation: row index out of range.");
         return self().get_rows()[index];
     }
@@ -104,9 +100,7 @@ public:
     {
         using Context = std::remove_cvref_t<decltype(std::declval<const V&>().context())>;
         return urd::Functions<urd::function<"columns", &view_mixin::columns>,
-                              urd::function<"size", &view_mixin::size>,
                               urd::function<"arity", &view_mixin::arity>,
-                              urd::function<"empty", &view_mixin::empty>,
                               urd::function<"row", &view_mixin::row>,
                               urd::function<"contains", &view_mixin::template contains<std::span<const ygg::Value>>>,
                               urd::function<"contains", &view_mixin::template contains<ygg::RowView<F, Context>>>> {};

@@ -41,6 +41,7 @@
 #include <urd/repr/wrappers/layer.hpp>
 #include <urd/repr/wrappers/layered_pool.hpp>
 #include <urd/store.hpp>
+#include <urd/tags.hpp>
 #include <utility>
 
 namespace ygg::formalism

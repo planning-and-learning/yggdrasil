@@ -523,9 +523,9 @@ static void expect_row_access_for_each_relation_type()
     second_data.values.push_back(ygg::encode_value(ObjectIndex(9)));
     const auto first = repository.insert(first_data).first;
     const auto second = repository.insert(second_data).first;
-    EXPECT_EQ(first.size(), 1);
+    EXPECT_EQ(first.get_values().size(), 1);
     EXPECT_EQ(first.get_values()[0], 3U);
-    EXPECT_EQ(second.size(), 2);
+    EXPECT_EQ(second.get_values().size(), 2);
     EXPECT_EQ(second.get_values()[0], 7U);
     EXPECT_EQ(second.get_values()[1], 9U);
     EXPECT_EQ(second.value(1), 9);
@@ -559,7 +559,7 @@ TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelat
     row.values.push_back(ygg::encode_value(b.index()));
     row.values.push_back(ygg::encode_value(a.index()));
     const auto stored = repository.insert(row).first;
-    EXPECT_EQ(ygg::values_text(stored), fmt::format("{} {}", b, a));
+    EXPECT_EQ(ygg::values_text<RepositoryTypesRelation>(stored), fmt::format("{} {}", b, a));
 }
 
 namespace
@@ -692,7 +692,7 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
     using SymbolRepo = ygg::formalism::SymbolRepository<RepositoryTypesElement, RepositoryTypesRelation>;
     using RelationRepo = ygg::formalism::RelationRepository<urd::word, RepositoryTypesRelation>;
     using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
-    using StoredRowView = RowView<RepositoryTypesRelation, Repository>;
+    using StoredRow = RowView<RepositoryTypesRelation, Repository>;
 
     auto first_repository = Repository();
     auto second_repository = Repository();
@@ -716,21 +716,23 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
     EXPECT_EQ(first.index(), second.index());
     EXPECT_EQ(first.index(), independent.index());
 
-    EXPECT_FALSE(urd::EqualTo<StoredRowView> {}(first, second));
-    EXPECT_NE(urd::Hash<StoredRowView> {}(first), urd::Hash<StoredRowView> {}(second));
-    EXPECT_FALSE(urd::EqualTo<StoredRowView> {}(first, independent));
-    EXPECT_TRUE(urd::EqualTo<StoredRowView> {}(first, StoredRowView(first.index(), &first_repository)));
+    EXPECT_FALSE(urd::EqualTo<StoredRow> {}(first, second));
+    EXPECT_NE(urd::Hash<StoredRow> {}(first), urd::Hash<StoredRow> {}(second));
+    EXPECT_FALSE(urd::EqualTo<StoredRow> {}(first, independent));
+    EXPECT_TRUE(urd::EqualTo<StoredRow> {}(first, StoredRow(first.index(), &first_repository)));
     EXPECT_TRUE(formalism::contains(first_repository, first));
     EXPECT_FALSE(formalism::contains(first_repository, second));
     EXPECT_FALSE(formalism::contains(first_repository, independent));
     EXPECT_NE(first_repository.owner(independent.index()), nullptr);
-    EXPECT_FALSE(urd::Less<> {}(ygg::key_of(first), ygg::key_of(second)));
-    EXPECT_FALSE(urd::Less<> {}(ygg::key_of(second), ygg::key_of(first)));
+    // Their logical keys (relation, values) are equal: neither is less.
+    const auto key = [](const auto& row) { return std::pair(row.relation_key(), row.get_values()); };
+    EXPECT_FALSE(urd::Less<> {}(key(first), key(second)));
+    EXPECT_FALSE(urd::Less<> {}(key(second), key(first)));
 
     objects[0] = ygg::encode_value(urd::index<Object>(1));
     const auto [larger, larger_created] = second_repository.insert(urd::data<Binding>(relation, objects));
     ASSERT_TRUE(larger_created);
-    EXPECT_TRUE(urd::Less<> {}(ygg::key_of(first), ygg::key_of(larger)));
+    EXPECT_TRUE(urd::Less<> {}(key(first), key(larger)));
 }
 
 template<typename V>
@@ -1110,7 +1112,7 @@ template<typename Repository>
 static void check_relation_membership()
 {
     using Handle = RowIndex<RepositoryTypesRelation>;
-    using StoredRowView = RowView<RepositoryTypesRelation, Repository>;
+    using StoredRow = RowView<RepositoryTypesRelation, Repository>;
     using Object = formalism::Object;
     auto root = Repository();
     const auto relation = declared<RepositoryTypesRelation>(root, 1);
@@ -1130,13 +1132,13 @@ static void check_relation_membership()
     EXPECT_TRUE(has(grandchild, local_view));
     EXPECT_FALSE(has(root, child_view));
     EXPECT_FALSE(has(child, local_view));
-    EXPECT_TRUE(has(root, StoredRowView(root_view.index(), &grandchild)));
-    EXPECT_FALSE(has(grandchild, StoredRowView(local_view.index(), &root)));
+    EXPECT_TRUE(has(root, StoredRow(root_view.index(), &grandchild)));
+    EXPECT_FALSE(has(grandchild, StoredRow(local_view.index(), &root)));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view, child_view, local_view }, [&](const auto& value) { return has(grandchild, value); }));
     EXPECT_TRUE(std::ranges::all_of(std::array { root_view.index(), child_view.index(), local_view.index() },
                                     [&](const auto& value) { return has(grandchild, value); }));
     EXPECT_TRUE(std::ranges::all_of(std::span<const Handle> {}, [&](const auto& value) { return has(root, value); }));
-    EXPECT_TRUE(std::ranges::all_of(std::span<const StoredRowView> {}, [&](const auto& value) { return has(root, value); }));
+    EXPECT_TRUE(std::ranges::all_of(std::span<const StoredRow> {}, [&](const auto& value) { return has(root, value); }));
 
     const auto missing_row = Handle { relation, urd::index<Row<RepositoryTypesRelation>>(3) };
     const auto missing_relation = Handle { urd::index<RepositoryTypesRelation>(1), urd::index<Row<RepositoryTypesRelation>>(0) };
@@ -1145,13 +1147,13 @@ static void check_relation_membership()
     for (const auto index : { missing_row, missing_relation, max_row, max_relation })
     {
         EXPECT_FALSE(has(grandchild, index));
-        EXPECT_FALSE(has(grandchild, StoredRowView(index, &grandchild)));
+        EXPECT_FALSE(has(grandchild, StoredRow(index, &grandchild)));
     }
     EXPECT_FALSE(std::ranges::all_of(std::array { root_view.index(), max_row }, [&](const auto& value) { return has(grandchild, value); }));
 
     auto unrelated = Repository();
     ASSERT_EQ(declared<RepositoryTypesRelation>(unrelated, 1), relation);  // the same key, interned first there too
-    EXPECT_FALSE(has(grandchild, StoredRowView(root_view.index(), &unrelated)));
+    EXPECT_FALSE(has(grandchild, StoredRow(root_view.index(), &unrelated)));
     objects[0] = ygg::encode_value(urd::index<Object>(0));
     const auto unrelated_view = unrelated.insert(urd::data<ContractBinding>(relation, objects)).first;
     EXPECT_TRUE(has(grandchild, unrelated_view.index()));

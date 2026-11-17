@@ -9,6 +9,7 @@
 #include "yggdrasil/formalism/declarations.hpp"
 
 #include <urd/elements/flat.hpp>
+#include <urd/tags.hpp>
 
 namespace ygg
 {

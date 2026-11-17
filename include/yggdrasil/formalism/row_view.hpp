@@ -62,13 +62,12 @@ public:
     /// Its columns' types: its pool's.
     [[nodiscard]] std::span<const ygg::TypeId> column_types() const { return get_repository(self().context()).types(relation_key()); }
 
-    [[nodiscard]] std::size_t size() const { return std::ranges::size(self().get_values()); }
-
     /// The canonical Value of column i; std::out_of_range past the last.
-    [[nodiscard]] ygg::Value value(std::size_t i) const { return self().get_values()[ygg::detail::checked_column(i, size())]; }
+    [[nodiscard]] ygg::Value value(std::size_t i) const { return self().get_values()[ygg::detail::checked_column(i, std::ranges::size(self().get_values()))]; }
 
     /// The type of column i, its pool's; std::out_of_range past the last.
-    [[nodiscard]] ygg::TypeId type(std::size_t i) const { return self().column_types()[ygg::detail::checked_column(i, size())]; }
+    [[nodiscard]] ygg::TypeId type(std::size_t i) const
+    { return self().column_types()[ygg::detail::checked_column(i, std::ranges::size(self().get_values()))]; }
 
     /// Column i decoded as its type (an object column as its untagged object index).
     [[nodiscard]] ygg::ColumnValue get(std::size_t i) const { return ygg::decode(value(i), type(i)); }
@@ -98,7 +97,7 @@ public:
     /// Every column as T (see get<T>(first, last)).
     template<typename T>
     [[nodiscard]] auto get() const
-    { return get<T>(0, size()); }
+    { return get<T>(0, std::ranges::size(self().get_values())); }
 
     /// Its columns as objects, resolved through its context: where its family's rows hold objects (a ground record's
     /// objects are its row's, `atom.get_row().get_objects()`).
@@ -111,7 +110,6 @@ public:
     {
         constexpr auto reads = urd::Functions<urd::function<"relation_key", &view_mixin::relation_key>,
                                               urd::function<"column_types", &view_mixin::column_types>,
-                                              urd::function<"size", &view_mixin::size>,
                                               urd::function<"value", &view_mixin::value>,
                                               urd::function<"type", &view_mixin::type>,
                                               urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get)>> {};
@@ -151,6 +149,15 @@ private:
 };
 }  // namespace ygg
 
+namespace ygg
+{
+/// Whether V is the view of a stored row of family F: its index() is the row's key.
+template<typename V, typename F>
+concept StoredRowView = requires(const V& view) {
+    { view.index() } -> std::same_as<RowIndex<F>>;
+};
+}  // namespace ygg
+
 /// A row key held in a record resolves to its view, through its context (context.view(key)).
 template<typename F>
 struct urd::resolution<ygg::RowIndex<F>>
@@ -164,8 +171,7 @@ struct urd::resolution<ygg::RowIndex<F>>
     static ygg::RowIndex<F> stored(const R& readout) noexcept
     { return readout; }
 
-    template<typename V>
-        requires std::same_as<std::remove_cvref_t<decltype(std::declval<const V&>().index())>, ygg::RowIndex<F>>
+    template<ygg::StoredRowView<F> V>
     static ygg::RowIndex<F> stored(const V& view) noexcept
     { return view.index(); }
 };

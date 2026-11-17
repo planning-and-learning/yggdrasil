@@ -57,11 +57,11 @@ namespace ygg
 /// A row's values, separated by spaces: each column as its type writes it, an object column as its object's view
 /// (resolved through the row's context). The relation is not written: who knows its name
 /// (a predicate's, an action's) writes it.
-template<typename V>
+template<typename F, RowViewConcept<F> V>
 std::string values_text(const V& row)
 {
     auto result = std::string();
-    for (std::size_t i = 0; i < row.size(); ++i)
+    for (std::size_t i = 0; i < row.get_values().size(); ++i)
     {
         if (i != 0)
             result.push_back(' ');
