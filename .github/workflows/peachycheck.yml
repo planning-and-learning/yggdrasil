@@ -35,4 +35,24 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/rules"
           "$RUNNER_TEMP/rules/bin/python" -m pip install --quiet "pybrokkr[fallbacks]>=0.2.1,<0.3"
+          which -a clang++ clang++-18 clang || true; clang++ --version | head -1; clang++ -print-resource-dir
+          echo "CPATH=$CPATH CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH"
+          "$RUNNER_TEMP/rules/bin/python" -m pip show libclang pybrokkr | grep -E "Name|Version"
+          "$RUNNER_TEMP/rules/bin/python" - <<'PY'
+          from pathlib import Path
+          import clang.cindex as ci
+          from pybrokkr.rules.schema.records import database
+          db = database(Path("."), Path("build/peachycheck/compile_commands.json"))
+          f = Path("python/src/pyyggdrasil/execution/module.cpp").resolve()
+          flags = db.binding
+          print("resource", db.resource)
+          print("flags", flags)
+          tu = ci.Index.create().parse(str(f), args=[*flags, "-resource-dir", db.resource, "-x", "c++"])
+          for d in tu.diagnostics:
+              if d.severity >= 3:
+                  print("DIAG", d.location.file, d.location.line, d.spelling)
+          for inc in tu.get_includes():
+              if "intrin" in str(inc.include) or "tbb" in str(inc.include):
+                  print("INC", inc.include)
+          PY
           "$RUNNER_TEMP/rules/bin/python" -m pybrokkr.rules S --compile-commands build/peachycheck/compile_commands.json -j 4
