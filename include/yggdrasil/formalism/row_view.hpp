@@ -143,7 +143,7 @@ public:
     [[nodiscard]] urd::index<F> relation_key() const noexcept { return {}; }
 
     /// Its columns' types: the builder's.
-    [[nodiscard]] auto column_types() const { return m_builder->columns() | std::views::transform(&ColumnLayout::type); }
+    [[nodiscard]] auto column_types() const noexcept { return m_builder->columns() | std::views::transform(&ColumnLayout::type); }
 
 private:
     const urd::builder<Relation<F>>* m_builder;
