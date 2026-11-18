@@ -25,7 +25,7 @@ namespace yggdrasil
 namespace
 {
 using Column = urd::index<ygg::Column>;
-using Relation = urd::builder<ygg::Relation<ygg::Schema>>;
+using Relation = ygg::FreeRelationBuilder;
 
 /// The shape of every relation class: its arity and its columns (its rows, len(get_rows()) of a view).
 template<typename R>
@@ -71,7 +71,6 @@ void bind_formalism_module_definitions(nb::module_& m)
     using StoredRow = ygg::RowView<ygg::Schema, RelationRepository>;
     using RelationView = ygg::FreeRelationView;
     using RelationBuilderView = ygg::FreeRelationBuilderView;
-    using RowBuilderView = ygg::RowBuilderView<ygg::Schema>;
 
     urd::python::bind_index<Column>(m, "ColumnIndex");
     urd::python::bind_index<urd::index<ygg::formalism::Object>>(m, "ObjectIndex");
@@ -98,27 +97,27 @@ void bind_formalism_module_definitions(nb::module_& m)
     urd::python::bind_data<RelationTag>(m);
     urd::python::bind_view<RelationView>(m);
 
-    auto builder = nb::class_<Relation>(m,
-                                        "RelationBuilder",
-                                        "Mutable builder of fixed-arity tuples with unique column labels. Its rows are read through a "
-                                        "repository: RelationRepository.view(relation).")
-                       .def(nb::init<>())
-                       .def(nb::init<std::span<const ygg::ColumnLayout>>(), nb::arg("columns"))
-                       .def("clear", &Relation::clear)
-                       .def("insert", static_cast<ygg::uint_t (Relation::*)(std::span<const ygg::Value>)>(&Relation::insert), nb::arg("values"));
-    bind_relation_shape(builder);
-    builder.def("size", &Relation::size).def("empty", &Relation::empty);  // a builder, no view: its own
-
+    // A relation builder mutates through its repository, which interns its rows and columns; it is read through it
+    // (RelationRepository.view(builder): its view, RelationSchemaBuilder).
+    nb::class_<Relation>(m, "RelationBuilder", "A relation being built: its rows in tuple order, interned in a repository.")
+        .def(nb::init<>())
+        .def("initialize",
+             static_cast<void (Relation::*)(RelationRepository&, std::span<const ygg::ColumnLayout>)>(&Relation::initialize),
+             nb::arg("repository"),
+             nb::arg("columns"))
+        .def("rename", &Relation::rename, nb::arg("repository"), nb::arg("columns"))
+        .def("insert", &Relation::insert, nb::arg("repository"), nb::arg("values"))
+        .def("erase", &Relation::erase, nb::arg("repository"), nb::arg("values"))
+        .def("clear", &Relation::clear);
     auto builder_view = nb::class_<RelationBuilderView>(m,
                                                         "RelationBuilderView",
-                                                        "Read-only view of a relation builder owned elsewhere (e.g. an evaluator result), read "
-                                                        "through its repository. Keeps its owner alive; the owner's next mutation invalidates "
-                                                        "the view and its rows.");
+                                                        "A relation builder read through its repository. Keeps both alive; the builder's next "
+                                                        "mutation invalidates the view and its rows.");
     builder_view.def("get_rows", &RelationBuilderView::get_rows);
+    builder_view.def("size", &RelationBuilderView::size).def("empty", &RelationBuilderView::empty);
+    builder_view.def("contains", &RelationBuilderView::template contains<std::span<const ygg::Value>>, nb::arg("values"))
+        .def("find", &RelationBuilderView::template find<std::span<const ygg::Value>>, nb::arg("values"));
     bind_relation_reads(builder_view);
-    auto row_builder_view = nb::class_<RowBuilderView>(m, "RowBuilderView", "A row of a relation builder, read through it by its position.")
-                                .def("get_values", &RowBuilderView::get_values);
-    bind_row_reads(row_builder_view);
 
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")
         .def(nb::init<>())
@@ -137,18 +136,17 @@ void bind_formalism_module_definitions(nb::module_& m)
         .def("insert",
              static_cast<std::pair<RelationView, bool> (RelationRepository::*)(urd::data<RelationTag>&)>(&RelationRepository::insert),
              nb::arg("relation"))
+        .def(
+            "insert",
+            [](RelationRepository& repository, const Relation& relation) { return ygg::intern(relation, repository); },
+            nb::arg("relation"),
+            "Interns a relation builder: its record, its rows in tuple order.")
         .def("view",
              static_cast<RelationBuilderView (RelationRepository::*)(const Relation&) const>(&RelationRepository::view),
              nb::arg("relation"),
              nb::keep_alive<0, 1>(),
              nb::keep_alive<0, 2>(),
-             "The relation builder read through this repository.")
-        .def("get_relation_builder",
-             &RelationRepository::template get_relation_builder<ygg::Schema>,
-             nb::arg("columns"),
-             nb::keep_alive<0, 1>(),
-             "A relation builder from this repository's slots, keyed by its column widths (a builder handed back under equal "
-             "widths is reused, its row storage kept); it goes back with its last owner.");
+             "The relation builder read through this repository.");
 }
 
 }  // namespace yggdrasil

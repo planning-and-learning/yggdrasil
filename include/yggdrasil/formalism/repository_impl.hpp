@@ -23,6 +23,7 @@
 // repository that is not a library's (yggdrasil's own tests).
 
 #include "yggdrasil/core/family.hpp"
+#include "yggdrasil/formalism/relation_builder.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
@@ -50,15 +51,6 @@ namespace ygg::formalism
 template<typename SymbolRepo, typename RelationRepo>
 struct Repository<SymbolRepo, RelationRepo>::Impl
 {
-    /// The builders get_relation_builder hands out for family F, by their column widths: a builder handed back is
-    /// reused only for equal widths, so its row storage stays.
-    template<typename F>
-    using BuilderSlots = urd::Store<urd::slots<urd::builder<Relation<F>>>, urd::keyed<urd::column_widths>>;
-    template<typename F>
-    using RelationFamily = boost::mp11::mp_contains<SymbolTypes, Relation<F>>;
-    template<typename... Fs>
-    using BuilderFamily = Family<BuilderSlots, Fs...>;
-    using RelationFamilies = boost::mp11::mp_copy_if<RelationTypes, RelationFamily>;
     /// A pool key's records stay across clear(), and so do their pools.
     template<typename T>
     using KeysPools = boost::mp11::mp_contains<RelationTypes, T>;
@@ -71,8 +63,6 @@ struct Repository<SymbolRepo, RelationRepo>::Impl
     RelationStore relations;
     /// Schema records to build in (reused: interning one allocates nothing once warm); threads take their own.
     urd::Store<urd::slots<urd::data<Schema>>, std::conditional_t<RelationStore::thread_safe, urd::concurrent, urd::single_threaded>> schema_builders;
-    /// The builder slots of each family with relations (none where the layer has no relations).
-    mutable boost::mp11::mp_apply<BuilderFamily, RelationFamilies> relation_builders;
 
     Impl(const Repository* parent, urd::bit_width object_index_width) :
         symbols(parent ? &parent->m_impl->symbols : nullptr),
@@ -303,8 +293,8 @@ std::size_t Repository<SymbolRepo, RelationRepo>::do_row_memory_usage() const
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
-std::pair<urd::index<Row<F>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert_row(const urd::data<Row<F>>& row)
-{ return m_impl->relations.insert(row.relation, row.values); }
+std::pair<urd::index<Row<F>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert_row(urd::index<F> relation, std::span<const Value> values)
+{ return m_impl->relations.insert(relation, values); }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
@@ -358,20 +348,13 @@ Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<Relation<F>>& relation
     // repository), not an id that happens to exist in both.
     assert(std::ranges::all_of(relation.rows, [&](RowIndex<F> key) { return key.relation == relation.pool && m_impl->holds_row(key); })
            && "Repository: a relation's rows must be rows of its pool here.");
-    ygg::canonicalize(relation.rows);
+    // Tuple order: rows by their values, as a builder keeps them (relation_builder.hpp); equal values in one pool are one key.
+    std::ranges::sort(relation.rows, RowOrder {}, [this](RowIndex<F> key) { return this->values(key); });
+    relation.rows.erase(std::ranges::unique(relation.rows).begin(), relation.rows.end());
     const auto [index, created] = intern(m_impl->symbols.template get<Relation<F>>(), relation);
     return { view(index), created };
 }
 
-template<typename SymbolRepo, typename RelationRepo>
-template<typename F>
-std::shared_ptr<urd::builder<Relation<F>>> Repository<SymbolRepo, RelationRepo>::do_get_relation_builder(std::span<const ColumnLayout> columns) const
-{
-    auto builder =
-        m_impl->relation_builders.template get<F>().make_shared(m_impl->relations.widths(columns | std::views::transform(&ColumnLayout::type)), columns);
-    builder->initialize(columns);  // a builder handed back holds its last columns and rows
-    return builder;
-}
 
 }  // namespace ygg::formalism
 

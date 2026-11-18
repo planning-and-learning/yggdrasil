@@ -19,6 +19,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <urd/elements/builder.hpp>
 #include <urd/elements/concepts.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/tags.hpp>
@@ -83,12 +84,13 @@ struct RowIndex
 template<typename F, typename C>
 using RowView = urd::index_view<Row<F>, C, RowIndex<F>>;
 
-/// A relation builder of family F read through a layer C (relation_view.hpp).
+/// A relation builder of family F read through a context C: its borrowed view, with the relation mixin
+/// (relation_view.hpp).
 template<typename F, typename C>
-class RelationBuilderView;
-/// A row of a relation builder of family F, read through the builder by its position (row_view.hpp).
-template<typename F>
-class RowBuilderView;
+using RelationBuilderView = urd::borrowed_view<Relation<F>, C, urd::builder<Relation<F>, C>>;
+/// A row builder of family F read through a context C: its borrowed view, with the row mixin (row_view.hpp).
+template<typename F, typename C>
+using RowBuilderView = urd::borrowed_view<Row<F>, C, urd::builder<Row<F>, C>>;
 
 /// What the ids of one pool's rows give through their context C: each id as its row's view.
 template<typename F, typename C>

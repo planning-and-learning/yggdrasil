@@ -23,6 +23,7 @@
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/view_reads.hpp"
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +35,7 @@
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
 #include <utility>
+#include <variant>
 
 namespace ygg
 {
@@ -124,31 +126,38 @@ public:
 
 namespace ygg
 {
-/// A row of a relation builder, read through the builder by its position: its values and its columns' types. It is no
-/// row of a stored relation, so it has no relation (its logical key's is none). The builder must outlive it; the
-/// builder's next mutation invalidates it.
-template<typename F>
-class RowBuilderView : public urd::view_mixin<Row<F>, RowBuilderView<F>>
+/// f of a view as it is read: a view, or a resolved child (urd::child: a variant of the views of its forms) as the view
+/// of the form it holds.
+template<typename R, typename Fn>
+decltype(auto) visit_view(const R& resolved, Fn&& f)
 {
-public:
-    RowBuilderView(const urd::builder<Relation<F>>* builder, RowIndex<F> key) noexcept : m_builder(builder), m_key(key) {}
+    if constexpr (urd::variant_value<R>)
+    {
+        using std::visit;
+        return visit(std::forward<Fn>(f), resolved);
+    }
+    else
+        return std::forward<Fn>(f)(resolved);
+}
 
-    /// The builder it is read through.
-    [[nodiscard]] const urd::builder<Relation<F>>& context() const noexcept { return *m_builder; }
-
-    /// Its canonical Values.
-    [[nodiscard]] auto get_values() const noexcept { return m_builder->values(m_key); }
-
-    /// Its relation's key: none.
-    [[nodiscard]] urd::index<F> relation_key() const noexcept { return {}; }
-
-    /// Its columns' types: the builder's.
-    [[nodiscard]] auto column_types() const noexcept { return m_builder->columns() | std::views::transform(&ColumnLayout::type); }
-
-private:
-    const urd::builder<Relation<F>>* m_builder;
-    RowIndex<F> m_key;
+/// The order of rows: by their values, lexicographically (tuple order), whatever their keys; a relation's rows, interned
+/// or built, are in this order.
+struct RowOrder
+{
+    template<std::ranges::input_range A, std::ranges::input_range B>
+    bool operator()(const A& lhs, const B& rhs) const
+    { return std::ranges::lexicographical_compare(lhs, rhs); }
 };
+
+/// Whether a row, read as it is held (a view, or a resolved child), has these values.
+template<typename R, std::ranges::input_range Values>
+bool has_values(const R& row, const Values& values)
+{ return visit_view(row, [&](const auto& view) { return std::ranges::equal(view.get_values(), values); }); }
+
+/// Whether a row, read as it is held, comes before these values in tuple order.
+template<typename R, std::ranges::input_range Values>
+bool precedes(const R& row, const Values& values)
+{ return visit_view(row, [&](const auto& view) { return RowOrder {}(view.get_values(), values); }); }
 }  // namespace ygg
 
 namespace ygg

@@ -22,7 +22,7 @@
 // the template rules, https://planning-and-learning.github.io/brokkr/template_rules.html): repository.hpp declares
 // them, and the one source of a library that includes repository_impl.hpp instantiates each of its repositories:
 //
-//     YGG_FORMALISM_REPOSITORY(, Repository, SymbolCount, RowCount, RelationCount)
+//     YGG_FORMALISM_REPOSITORY(, Repository, SymbolCount, RowCount)
 //
 // Its other sources include repository.hpp only and link to these.
 
@@ -106,7 +106,7 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
     template std::pair<urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>, bool> BOOST_PP_TUPLE_ELEM(       \
         2,                                                                                                                                                    \
         1,                                                                                                                                                    \
-        ARGS)::do_insert_row(const urd::data<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>&);                     \
+        ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, std::span<const ::ygg::Value>);                     \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
     template BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_at(                                                               \
         ::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                 \
@@ -117,21 +117,13 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
     template std::span<const ::ygg::TypeId> BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_types(                                                                        \
         urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;
 
-/// The members of the I-th family F with relations of the repository (ARGS: (PREFIX, Repo)); its insert of a relation is
-/// the symbol type Relation<F>'s (YGG_FORMALISM_REPOSITORY_SYMBOL).
-#define YGG_FORMALISM_REPOSITORY_RELATIONS(z, I, ARGS)                                                                                         \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                            \
-    template std::shared_ptr<urd::builder<::ygg::Relation<::ygg::formalism::detail::RepositoryRelations<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>> \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_get_relation_builder(std::span<const ::ygg::ColumnLayout>) const;
-
 /// Explicit instantiations (PREFIX extern: declarations) of the members of repository Repo (a name without commas: an
-/// alias) that touch its stores: construction, destruction and clear, and those of each of its SymbolCount symbol types,
-/// RowCount row families and RelationCount families with relations. The counts are checked against its lists. schema() of a repository
+/// alias) that touch its stores: construction, destruction and clear, and those of each of its SymbolCount symbol types
+/// and RowCount row families. The counts are checked against its lists. schema() of a repository
 /// with free relations: YGG_FORMALISM_REPOSITORY_SCHEMA.
-#define YGG_FORMALISM_REPOSITORY(PREFIX, Repo, SymbolCount, RowCount, RelationCount)                                                        \
+#define YGG_FORMALISM_REPOSITORY(PREFIX, Repo, SymbolCount, RowCount)                                                        \
     static_assert(boost::mp11::mp_size<Repo::SymbolTypes>::value == (SymbolCount), "YGG_FORMALISM_REPOSITORY: SymbolCount");                \
     static_assert(boost::mp11::mp_size<Repo::RelationTypes>::value == (RowCount), "YGG_FORMALISM_REPOSITORY: RowCount");                    \
-    static_assert(boost::mp11::mp_size<Repo::Impl::RelationFamilies>::value == (RelationCount), "YGG_FORMALISM_REPOSITORY: RelationCount"); \
     PREFIX template Repo::Repository(const Repo*);                                                                                          \
     PREFIX template Repo::Repository(std::size_t, const Repo*);                                                                             \
     PREFIX template Repo::~Repository();                                                                                                    \
@@ -139,8 +131,7 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
     PREFIX template void Repo::clear_all();                                                                                                 \
     PREFIX template urd::index_view<::ygg::Schema, Repo> Repo::view(urd::index<::ygg::Schema>) const;                                       \
     BOOST_PP_REPEAT(SymbolCount, YGG_FORMALISM_REPOSITORY_SYMBOL, (PREFIX, Repo))                                                           \
-    BOOST_PP_REPEAT(RowCount, YGG_FORMALISM_REPOSITORY_ROWS, (PREFIX, Repo))                                                                \
-    BOOST_PP_REPEAT(RelationCount, YGG_FORMALISM_REPOSITORY_RELATIONS, (PREFIX, Repo))
+    BOOST_PP_REPEAT(RowCount, YGG_FORMALISM_REPOSITORY_ROWS, (PREFIX, Repo))
 
 /// The explicit instantiation (PREFIX extern: its declaration) of schema() of repository Repo, which has free relations
 /// (rows of Schema).

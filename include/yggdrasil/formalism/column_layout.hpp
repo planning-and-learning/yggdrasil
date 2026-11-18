@@ -9,7 +9,11 @@
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/values.hpp"
 
+#include <algorithm>
 #include <concepts>
+#include <span>
+#include <stdexcept>
+#include <variant>
 #include <string_view>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/less.hpp>
@@ -34,6 +38,22 @@ struct ColumnLayout : urd::compared_by_identity<ColumnLayout>
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
+
+/// Whether a column before `column` has its label.
+[[nodiscard]] inline bool repeats_label(std::span<const ColumnLayout> columns, std::span<const ColumnLayout>::iterator column)
+{ return std::ranges::find(columns.begin(), column, column->label, &ColumnLayout::label) != column; }
+
+/// Throws std::invalid_argument where a column's type is invalid or two columns share a label.
+inline void validate_columns(std::span<const ColumnLayout> columns)
+{
+    for (auto it = columns.begin(); it != columns.end(); ++it)
+    {
+        if (static_cast<std::size_t>(it->type) >= std::variant_size_v<ColumnValue>)
+            throw std::invalid_argument("Columns: invalid column type.");
+        if (repeats_label(columns, it))
+            throw std::invalid_argument("Columns: duplicate column label.");
+    }
+}
 }  // namespace ygg
 
 /// A column label is no element of a context, but a tag: read as itself, written only from itself.

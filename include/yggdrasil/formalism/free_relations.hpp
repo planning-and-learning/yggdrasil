@@ -17,7 +17,9 @@ namespace ygg
 using FreeRelationRepository = formalism::Repository<formalism::Symbols<Columns, Relation<Schema>>, formalism::Relations<urd::word, Schema>>;
 /// A free relation interned in a repository layer.
 using FreeRelationView = urd::index_view<Relation<Schema>, FreeRelationRepository>;
-/// A free relation builder held elsewhere, read through a layer (urd::resolve(builder, layer) or layer.view(builder)).
+/// A free relation being built, read through a layer of free relations.
+using FreeRelationBuilder = urd::builder<Relation<Schema>, FreeRelationRepository>;
+/// A free relation builder read through a layer (urd::resolve(builder, layer), layer.view(builder)).
 using FreeRelationBuilderView = RelationBuilderView<Schema, FreeRelationRepository>;
 }  // namespace ygg
 

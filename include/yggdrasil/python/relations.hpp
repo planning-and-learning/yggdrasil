@@ -15,19 +15,7 @@
 #include <cstdint>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
-#include <urd/python/owner.hpp>
 #include <variant>
-
-namespace nanobind::detail
-{
-/// A row of a relation builder keeps the builder it is read through alive, as urd's views keep their contexts
-/// (urd/python/owner.hpp), also inside a returned list.
-template<typename F>
-struct type_caster<ygg::RowBuilderView<F>> : urd_view_caster<ygg::RowBuilderView<F>>
-{
-};
-
-}  // namespace nanobind::detail
 
 namespace ygg
 {

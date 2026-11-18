@@ -17,7 +17,6 @@
 #include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/builder.hpp"
 
-#include <cstdint>
 #include <memory>
 #include <type_traits>
 #include <urd/elements/flat.hpp>
@@ -30,15 +29,6 @@ namespace detail
 {
 template<typename T>
 using BuilderSlot = urd::Store<urd::slots<urd::data<T>>>;
-
-/// Gives the record back to its pool, as urd's releaser of the slot does (BuilderRelease::release).
-template<typename T>
-void release_builder(void* slots, std::uint64_t handle, void* record) noexcept
-{
-    using Slots = BuilderSlot<T>;
-    using Index = typename Slots::handle_type;
-    typename Slots::releaser { static_cast<Slots*>(slots), Index(static_cast<typename Index::value_type>(handle)) }(static_cast<urd::data<T>*>(record));
-}
 }  // namespace detail
 
 template<typename... Ts>
@@ -60,16 +50,14 @@ BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::~BasicBuilderStorage()  // NOL
 
 template<typename... Ts>
 template<typename T>
-BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_get_builder()
+urd::handle<urd::data<T>> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_get_builder()
 {
-    auto record = m_impl->slots.template get<T>().make_unique();
-    const auto releaser = record.get_deleter();
-    return BuilderHandle<T>(record.release(), BuilderRelease { releaser.store, releaser.handle.value, &detail::release_builder<T> });
+    return m_impl->slots.template get<T>().make_handle();
 }
 
 template<typename... Ts>
 template<typename T>
-BuilderHandle<T> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_checkout()
+urd::handle<urd::data<T>> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_checkout()
 {
     auto data = get_builder<T>();
     urd::clear_members(*data);

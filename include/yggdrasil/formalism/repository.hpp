@@ -175,19 +175,11 @@ public:
 
     /// A builder as its view here, which points at it (the builder must outlive the view; never a temporary).
     template<typename T>
-    [[nodiscard]] urd::borrowed_view<T, Repository, urd::builder<T>> view(const urd::builder<T>& builder URD_LIFETIMEBOUND) const
+    [[nodiscard]] urd::borrowed_view<T, Repository, urd::builder<T, Repository>> view(const urd::builder<T, Repository>& builder URD_LIFETIMEBOUND) const
     { return { &builder, this }; }
 
     template<typename T>
-    void view(const urd::builder<T>&& builder) const = delete;
-
-    /// A relation builder as its view here, which points at it (the builder must outlive the view; never a temporary).
-    template<typename F>
-    [[nodiscard]] RelationBuilderView<F, Repository> view(const urd::builder<Relation<F>>& builder URD_LIFETIMEBOUND) const
-    { return { &builder, this }; }
-
-    template<typename F>
-    void view(const urd::builder<Relation<F>>&& builder) const = delete;
+    void view(const urd::builder<T, Repository>&& builder) const = delete;
 
     /**
      * Rows of each family F with rows: found in this layer and its parents.
@@ -234,7 +226,13 @@ public:
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
     std::pair<urd::index<Row<F>>, bool> insert_row(const urd::data<Row<F>>& row)
-    { return do_insert_row<F>(row); }
+    { return do_insert_row<F>(row.relation, std::span<const Value>(row.values.data(), row.values.size())); }
+
+    /// The row of these values in the pool `relation`, stored as insert_row(data<Row<F>>) stores one.
+    template<typename F>
+        requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
+    std::pair<urd::index<Row<F>>, bool> insert_row(urd::index<F> relation, std::span<const Value> values)
+    { return do_insert_row<F>(relation, values); }
 
     /// A Schema's record and view, through the layer that owns it: a relation's pool of free relations resolves to it.
     const urd::data<Schema>& operator[](urd::index<Schema> index) const;
@@ -278,25 +276,23 @@ public:
         requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
     { return do_schema(types); }
 
+    /// A Schema's record as schema(types) interns it: the view of the pool of free relations of its types.
+    urd::index_view<Schema, Repository> insert(const urd::data<Schema>& schema)
+        requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
+    { return view(do_schema(std::span<const TypeId>(schema.types.data(), schema.types.size()))); }
+
     /// The pool of free relations of these columns' types.
     urd::index<Schema> schema(std::span<const ColumnLayout> columns)
         requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
     { return do_schema(columns); }
 
-    /// Interns the relation where no layer holds it: its rows sorted and made unique first. Its pool must be declared
+    /// Interns the relation where no layer holds it: its rows sorted by their values (tuple order, ygg::RowOrder) and made
+    /// unique first. Its pool must be declared
     /// (std::out_of_range otherwise), its columns' types the pool's and their labels distinct (std::invalid_argument).
     template<typename F>
         requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> insert(urd::data<Relation<F>>& relation)
     { return do_insert<F>(relation); }
-
-    /// A builder of family F with these columns (validated), shared as tyr's state builders are: it comes from this
-    /// layer's slots, keyed by its column widths, where it goes back with its last owner, keeping its row storage.
-    /// The layer must outlive its builders.
-    template<typename F>
-        requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>
-    [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> get_relation_builder(std::span<const ColumnLayout> columns) const
-    { return do_get_relation_builder<F>(columns); }
 
 private:
     // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
@@ -335,15 +331,13 @@ private:
     template<typename F>
     [[nodiscard]] std::size_t do_row_memory_usage() const;
     template<typename F>
-    std::pair<urd::index<Row<F>>, bool> do_insert_row(const urd::data<Row<F>>& row);
+    std::pair<urd::index<Row<F>>, bool> do_insert_row(urd::index<F> relation, std::span<const Value> values);
     template<typename F>
     [[nodiscard]] StoredRow do_at(RowIndex<F> key) const;
     template<typename F>
     [[nodiscard]] RowView<F, Repository> do_view(RowIndex<F> key) const;
     template<typename F>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> do_insert(urd::data<Relation<F>>& relation);
-    template<typename F>
-    [[nodiscard]] std::shared_ptr<urd::builder<Relation<F>>> do_get_relation_builder(std::span<const ColumnLayout> columns) const;
     urd::index<Schema> do_schema(std::span<const TypeId> types);
     urd::index<Schema> do_schema(std::span<const ColumnLayout> columns);
 

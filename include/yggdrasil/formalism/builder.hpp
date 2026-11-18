@@ -11,29 +11,12 @@
 #define YGG_FORMALISM_BUILDER_HPP_
 
 #include <boost/mp11.hpp>
-#include <cstdint>
 #include <memory>
+#include <urd/elements/builder.hpp>
 #include <urd/elements/data.hpp>
 
 namespace ygg::formalism
 {
-
-/// What gives a builder back to its storage when its handle goes: the slot it came from, by its storage's pool of its
-/// type and its number there, and the function that gives it back (builder_impl.hpp), so that a handle names no store.
-struct BuilderRelease
-{
-    void* slots = nullptr;
-    std::uint64_t handle = 0;
-    void (*release)(void* slots, std::uint64_t handle, void* record) noexcept = nullptr;
-
-    template<typename T>
-    void operator()(urd::data<T>* record) const noexcept
-    { release(slots, handle, record); }
-};
-
-/// A record of type T to build in, from a BuilderStorage: back to its storage, contents kept, when the handle goes.
-template<typename T>
-using BuilderHandle = std::unique_ptr<urd::data<T>, BuilderRelease>;
 
 /// One pool of reusable records per type, behind a pointer: builder_impl.hpp defines the pools (a Family of urd slots)
 /// and the members, and a library instantiates its storages in one source (builder_instantiations.hpp), so that its
@@ -61,13 +44,13 @@ public:
     /// Acquire pooled data without resetting its contents.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] BuilderHandle<T> get_builder()
+    [[nodiscard]] urd::handle<urd::data<T>> get_builder()
     { return do_get_builder<T>(); }
 
     /// Clear pooled data once, member by member, retaining its reusable buffers.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] BuilderHandle<T> checkout()
+    [[nodiscard]] urd::handle<urd::data<T>> checkout()
     { return do_checkout<T>(); }
 
 private:
@@ -75,9 +58,9 @@ private:
     // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
     // built by either.
     template<typename T>
-    [[nodiscard]] BuilderHandle<T> do_get_builder();
+    [[nodiscard]] urd::handle<urd::data<T>> do_get_builder();
     template<typename T>
-    [[nodiscard]] BuilderHandle<T> do_checkout();
+    [[nodiscard]] urd::handle<urd::data<T>> do_checkout();
 
     std::unique_ptr<Impl> m_impl;
 };
@@ -88,7 +71,7 @@ using BuilderStorage = BasicBuilderStorage<boost::mp11::mp_list<Ts...>>;
 
 template<typename T, typename... Ts>
     requires requires(BuilderStorage<Ts...>& builder) { builder.template checkout<T>(); }
-[[nodiscard]] BuilderHandle<T> checkout(BuilderStorage<Ts...>& builder)
+[[nodiscard]] urd::handle<urd::data<T>> checkout(BuilderStorage<Ts...>& builder)
 { return builder.template checkout<T>(); }
 
 }  // namespace ygg::formalism

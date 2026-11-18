@@ -19,8 +19,10 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/builder_impl.hpp"
 #include "yggdrasil/formalism/formatter.hpp"
+#include "yggdrasil/formalism/free_relations.hpp"
 #include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
+#include "yggdrasil/formalism/relation_builder.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
@@ -360,6 +362,44 @@ urd::index<F> declared(Repository& repository, ygg::uint_t arity)
 }  // namespace
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles) { SUCCEED(); }
+
+/// A relation builder keeps its rows in tuple order and unique, reads as its interned record does, and interns into a
+/// record of the same rows; renaming relabels its columns, keeping its rows.
+TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
+{
+    auto repository = ygg::FreeRelationRepository();
+    const auto columns =
+        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    auto relation = ygg::FreeRelationBuilder();
+    relation.initialize(repository, columns);
+    const auto row = [](ygg::Value a, ygg::Value b) { return std::array { a, b }; };
+    EXPECT_EQ(relation.insert(repository, row(2, 1)), std::pair(std::size_t { 0 }, true));
+    EXPECT_EQ(relation.insert(repository, row(1, 5)), std::pair(std::size_t { 0 }, true));
+    EXPECT_EQ(relation.insert(repository, row(1, 7)), std::pair(std::size_t { 1 }, true));
+    EXPECT_EQ(relation.insert(repository, row(1, 5)), std::pair(std::size_t { 0 }, false));
+
+    const auto built = repository.view(relation);
+    EXPECT_EQ(built.arity(), 2U);
+    EXPECT_EQ(built.size(), 3U);
+    EXPECT_TRUE(built.contains(row(1, 7)));
+    EXPECT_FALSE(built.contains(row(7, 1)));
+    EXPECT_EQ(built.find(row(2, 1)), std::optional<std::size_t>(2));
+
+    const auto renamed =
+        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(2), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(3), ygg::TypeId(0) } };
+    relation.rename(repository, renamed);
+    EXPECT_EQ(repository.view(relation).columns()[1].label, urd::index<ygg::Column>(3));
+
+    const auto [interned, created] = ygg::intern(relation, repository);
+    EXPECT_TRUE(created);
+    EXPECT_EQ(interned.size(), 3U);
+    EXPECT_EQ(interned.find(row(1, 5)), std::optional<std::size_t>(0));
+    EXPECT_EQ(interned.find(row(2, 1)), std::optional<std::size_t>(2));
+
+    EXPECT_TRUE(relation.erase(repository, row(1, 7)));
+    EXPECT_FALSE(relation.erase(repository, row(1, 7)));
+    EXPECT_EQ(repository.view(relation).size(), 2U);
+}
 
 TEST(YggdrasilTests, CommonBuilderStorageReusesReleasedBuildersByType)
 {
