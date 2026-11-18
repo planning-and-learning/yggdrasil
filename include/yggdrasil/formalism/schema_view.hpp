@@ -7,6 +7,7 @@
 #define YGG_FORMALISM_SCHEMA_VIEW_HPP_
 
 #include "yggdrasil/formalism/schema_data.hpp"
+#include "yggdrasil/formalism/schema_view_concepts.hpp"
 
 #include <urd/elements/view.hpp>
 

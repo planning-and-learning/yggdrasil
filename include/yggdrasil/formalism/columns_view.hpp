@@ -7,6 +7,7 @@
 #define YGG_FORMALISM_COLUMNS_VIEW_HPP_
 
 #include "yggdrasil/formalism/columns_data.hpp"
+#include "yggdrasil/formalism/columns_view_concepts.hpp"
 
 #include <urd/elements/view.hpp>
 

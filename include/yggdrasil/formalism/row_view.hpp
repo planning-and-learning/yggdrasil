@@ -21,7 +21,7 @@
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
-#include "yggdrasil/formalism/view_reads.hpp"
+#include "yggdrasil/formalism/row_view_concepts.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -37,6 +37,24 @@
 #include <utility>
 #include <variant>
 
+namespace ygg::detail
+{
+/// Column i of a row of `size` columns, std::out_of_range past the last.
+[[nodiscard]] inline std::size_t checked_column(std::size_t i, std::size_t size)
+{
+    if (i >= size)
+        throw std::out_of_range("Row: column index out of range.");
+    return i;
+}
+
+/// Throws std::invalid_argument where a column of type `type` is not read as T (ygg::type_id).
+template<typename T>
+void check_column_type(TypeId type)
+{
+    if (type != type_id<T>)
+        throw std::invalid_argument("Row: the column's type is not the requested one.");
+}
+}  // namespace ygg::detail
 
 /// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, whose context reads each field of
 /// data<Row<F>> by its key: urd::ReadsFieldsByKey) and a row held outside the repository (urd::borrowed_view of its record) alike: its
@@ -130,15 +148,6 @@ public:
     }
 };
 
-
-namespace ygg
-{
-/// Whether V is the view of a stored row of family F: its index() is the row's key.
-template<typename V, typename F>
-concept StoredRowView = requires(const V& view) {
-    { view.index() } -> std::same_as<RowIndex<F>>;
-};
-}  // namespace ygg
 
 /// A row key held in a record resolves to its view, through its context (context.view(key)).
 template<typename F>

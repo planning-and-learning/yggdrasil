@@ -365,6 +365,21 @@ urd::index<F> declared(Repository& repository, ygg::uint_t arity)
 
 TEST(YggdrasilTests, CommonRepositoryTypesUmbrellaHeaderCompiles) { SUCCEED(); }
 
+using FreeRepository = ygg::FreeRelationRepository;
+static_assert(ygg::SchemaViewConcept<urd::index_view<ygg::Schema, FreeRepository>>);
+static_assert(ygg::SchemaViewConcept<urd::borrowed_view<ygg::Schema, FreeRepository, urd::builder<ygg::Schema, FreeRepository>>>);
+static_assert(ygg::SchemaViewConcept<urd::borrowed_view<ygg::Schema, FreeRepository>>);
+static_assert(!ygg::SchemaViewConcept<urd::index_view<ygg::Columns, FreeRepository>>);
+static_assert(ygg::ColumnsViewConcept<urd::index_view<ygg::Columns, FreeRepository>>);
+static_assert(ygg::ColumnsViewConcept<urd::borrowed_view<ygg::Columns, FreeRepository, urd::builder<ygg::Columns, FreeRepository>>>);
+static_assert(ygg::ColumnsViewConcept<urd::borrowed_view<ygg::Columns, FreeRepository>>);
+static_assert(!ygg::ColumnsViewConcept<urd::index_view<ygg::Schema, FreeRepository>>);
+static_assert(ygg::RelationViewConcept<ygg::FreeRelationView, ygg::Schema>);
+static_assert(ygg::RelationViewConcept<ygg::FreeRelationBuilderView, ygg::Schema>);
+static_assert(ygg::RelationViewConcept<const ygg::FreeRelationBuilderView&, ygg::Schema>);
+static_assert(!ygg::RelationViewConcept<ygg::FreeRelationView, RepositoryTypesRelation>);
+static_assert(!ygg::RelationViewConcept<ygg::RowView<ygg::Schema, ygg::FreeRelationRepository>, ygg::Schema>);
+
 /// A relation builder keeps its rows in tuple order and unique, reads as its interned record does, and interns into a
 /// record of the same rows; renaming relabels its columns, keeping its rows.
 TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
