@@ -50,6 +50,8 @@ struct builder<ygg::Relation<F>, C>
     static constexpr auto fields() noexcept
     { return urd::Fields<urd::field<"pool", &builder::pool>, urd::field<"columns", &builder::columns>, urd::field<"rows", &builder::rows>> {}; }
 
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
     /// Empties it and gives it the pool `pool` and these columns (validated), interned into `repository`.
     void initialize(C& repository, urd::index<F> pool_, std::span<const ygg::ColumnLayout> layouts)
     {
@@ -79,9 +81,8 @@ struct builder<ygg::Relation<F>, C>
     std::pair<std::size_t, bool> insert(C& repository, std::span<const ygg::Value> values)
     {
         const auto key = pool_key(repository);
-        const auto view = repository.view(*this);
-        const auto at = view.lower_bound(values);
-        if (at < view.size() && ygg::has_values(view.row(at), values))
+        const auto [at, held] = repository.view(*this).locate(values);
+        if (held)
             return { at, false };
         rows.emplace(rows.begin() + static_cast<std::ptrdiff_t>(at), repository.view(ygg::RowIndex<F> { key, repository.insert_row(key, values).first }));
         return { at, true };
@@ -90,9 +91,8 @@ struct builder<ygg::Relation<F>, C>
     /// Erases the row of these values; whether it held one. Its row stays in the repository.
     bool erase(const C& repository, std::span<const ygg::Value> values)
     {
-        const auto view = repository.view(*this);
-        const auto at = view.lower_bound(values);
-        if (at == view.size() || !ygg::has_values(view.row(at), values))
+        const auto [at, held] = repository.view(*this).locate(values);
+        if (!held)
             return false;
         rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(at));
         return true;
@@ -113,11 +113,10 @@ private:
     /// The key of its pool, interned into `repository` where it is built or not interned yet: its rows' keys name it.
     urd::index<F> pool_key(C& repository)
     {
-        const auto insert = ygg::Inserter<C> { &repository };
         if (pool.index() == 1)
-            pool = repository.view(urd::inserted_index(insert(std::as_const(std::get<1>(pool).held()))));
+            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, std::as_const(std::get<1>(pool).held()))));
         else if (pool.index() == 2)
-            pool = repository.view(urd::inserted_index(insert(std::get<2>(pool).held())));
+            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, std::get<2>(pool).held())));
         return std::get<0>(pool).index();
     }
 };

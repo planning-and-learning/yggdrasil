@@ -10,7 +10,7 @@
 
 #include <urd/elements/view.hpp>
 
-/// A Schema's view: its column types.
+/// A Schema's view: its column types, as the key of free relations' pools.
 template<typename V>
 struct urd::view_mixin<ygg::Schema, V>
 {
@@ -19,6 +19,9 @@ private:
 
 public:
     [[nodiscard]] decltype(auto) get_types() const noexcept { return self().template member<&urd::record_of<V>::types>(); }
+
+    /// Its rows' column types, as every key of row pools gives them (a free relation's pool is its Schema).
+    [[nodiscard]] decltype(auto) get_column_types() const noexcept { return get_types(); }
 };
 
 #endif

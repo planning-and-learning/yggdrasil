@@ -286,8 +286,8 @@ public:
         requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
     { return do_schema(columns); }
 
-    /// Interns the relation where no layer holds it: its rows sorted by their values (tuple order, ygg::RowOrder) and made
-    /// unique first. Its pool must be declared
+    /// Interns the relation where no layer holds it, as given: its rows canonical (in tuple order: by their values, lexicographically; and
+    /// unique: ygg::canonicalize, which ygg::formalism::insert applies first, and which a builder keeps). Its pool must be declared
     /// (std::out_of_range otherwise), its columns' types the pool's and their labels distinct (std::invalid_argument).
     template<typename F>
         requires HasRelations<Repository<SymbolRepo, RelationRepo>, F>

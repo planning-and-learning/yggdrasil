@@ -23,11 +23,11 @@
 // repository that is not a library's (yggdrasil's own tests).
 
 #include "yggdrasil/core/family.hpp"
+#include "yggdrasil/formalism/canonicalization.hpp"
 #include "yggdrasil/formalism/relation_builder.hpp"
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
-#include "yggdrasil/semantics/canonicalization.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -348,9 +348,9 @@ Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<Relation<F>>& relation
     // repository), not an id that happens to exist in both.
     assert(std::ranges::all_of(relation.rows, [&](RowIndex<F> key) { return key.relation == relation.pool && m_impl->holds_row(key); })
            && "Repository: a relation's rows must be rows of its pool here.");
-    // Tuple order: rows by their values, as a builder keeps them (relation_builder.hpp); equal values in one pool are one key.
-    std::ranges::sort(relation.rows, RowOrder {}, [this](RowIndex<F> key) { return this->values(key); });
-    relation.rows.erase(std::ranges::unique(relation.rows).begin(), relation.rows.end());
+    // ponytail: an assert, O(rows log) per insert, as the one above: a record not canonical would intern beside its
+    // canonical twin. Canonicalize before inserting (ygg::formalism::insert, prepare_for_insert) where it may not be.
+    assert(ygg::is_canonical(relation, *this) && "Repository: a relation's rows must be canonical.");
     const auto [index, created] = intern(m_impl->symbols.template get<Relation<F>>(), relation);
     return { view(index), created };
 }

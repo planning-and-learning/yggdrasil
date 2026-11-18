@@ -18,6 +18,7 @@
 #include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/builder_impl.hpp"
+#include "yggdrasil/formalism/canonicalization.hpp"
 #include "yggdrasil/formalism/formatter.hpp"
 #include "yggdrasil/formalism/free_relations.hpp"
 #include "yggdrasil/formalism/interning.hpp"
@@ -34,6 +35,7 @@
 #include <algorithm>
 #include <array>
 #include <boost/mp11.hpp>
+#include <urd/repr/slots/slots.hpp>
 #include <concepts>
 #include <cstdint>
 #include <forward_list>
@@ -392,6 +394,17 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
 
     const auto [interned, created] = ygg::intern(relation, repository);
     EXPECT_TRUE(created);
+
+    // A record of the same rows, in another order: not canonical, until ygg::formalism::insert makes it so.
+    auto reversed = urd::flat_vector<ygg::RowIndex<ygg::Schema>>();
+    for (std::size_t i = built.size(); i-- > 0;)
+        reversed.push_back(std::get<0>(built.row(i)).index());
+    auto record = urd::data<ygg::Relation<ygg::Schema>>(std::get<0>(relation.pool).index(), std::get<0>(relation.columns).index(), std::move(reversed));
+    EXPECT_FALSE(ygg::is_canonical(record, repository));
+    const auto [same, same_created] = ygg::formalism::insert(repository, record);
+    EXPECT_TRUE(ygg::is_canonical(record, repository));
+    EXPECT_FALSE(same_created);
+    EXPECT_EQ(same, interned);
     EXPECT_EQ(interned.size(), 3U);
     EXPECT_EQ(interned.find(row(1, 5)), std::optional<std::size_t>(0));
     EXPECT_EQ(interned.find(row(2, 1)), std::optional<std::size_t>(2));
@@ -399,6 +412,27 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     EXPECT_TRUE(relation.erase(repository, row(1, 7)));
     EXPECT_FALSE(relation.erase(repository, row(1, 7)));
     EXPECT_EQ(repository.view(relation).size(), 2U);
+}
+
+/// A row reads its column types from its relation in whatever form it holds it: a built Schema as an interned one.
+TEST(YggdrasilTests, RowBuilderReadsItsTypesFromItsRelationInEachForm)
+{
+    auto repository = ygg::FreeRelationRepository();
+    auto schemas = urd::Store<urd::slots<urd::builder<ygg::Schema, ygg::FreeRelationRepository>>>();
+    auto row = urd::builder<ygg::Row<ygg::Schema>, ygg::FreeRelationRepository>();
+    auto& schema = urd::builder_of(row.relation, schemas, repository);
+    schema.types.push_back(ygg::type_id<bool>);
+    schema.types.push_back(ygg::type_id<std::uint32_t>);
+    row.values.push_back(ygg::encode(true, ygg::type_id<bool>));
+    row.values.push_back(ygg::encode(std::uint64_t { 7 }, ygg::type_id<std::uint32_t>));
+
+    const auto built = repository.view(row);
+    EXPECT_EQ(built.type(0), ygg::type_id<bool>);
+    EXPECT_EQ(built.get<std::uint32_t>(1), 7U);
+
+    row.relation = repository.view(repository.schema(std::array { ygg::type_id<bool>, ygg::type_id<std::uint32_t> }));
+    EXPECT_EQ(repository.view(row).type(1), ygg::type_id<std::uint32_t>);
+    EXPECT_THROW(static_cast<void>(repository.view(row).type(2)), std::out_of_range);
 }
 
 TEST(YggdrasilTests, CommonBuilderStorageReusesReleasedBuildersByType)
@@ -634,22 +668,6 @@ struct MissingPreparationRepository
     std::pair<urd::index_view<RepositoryTypesElement, MissingPreparationRepository>, bool> insert(urd::data<RepositoryTypesElement>&);
 };
 
-struct WrongPreparationRepository
-{
-    std::pair<urd::index_view<RepositoryTypesElement, WrongPreparationRepository>, bool> insert(urd::data<RepositoryTypesElement>&);
-};
-
-[[maybe_unused]] int prepare_for_insert(WrongPreparationRepository&, urd::data<RepositoryTypesElement>&) { return 0; }
-}  // namespace
-
-namespace
-{
-struct WrongInterningResultRepository
-{
-    urd::index<RepositoryTypesElement> insert(urd::data<RepositoryTypesElement>&);
-};
-
-[[maybe_unused]] void prepare_for_insert(WrongInterningResultRepository&, urd::data<RepositoryTypesElement>&) {}
 }  // namespace
 
 namespace
@@ -663,8 +681,6 @@ concept CanPrepareAndIntern = requires(Repository& repository, urd::data<T>& dat
 static_assert(CanPrepareAndIntern<PreparedRepository, RepositoryTypesElement>);
 static_assert(CanPrepareAndIntern<ContractRepository, ContractBinding>);
 static_assert(!CanPrepareAndIntern<MissingPreparationRepository, RepositoryTypesElement>);
-static_assert(!CanPrepareAndIntern<WrongPreparationRepository, RepositoryTypesElement>);
-static_assert(!CanPrepareAndIntern<WrongInterningResultRepository, RepositoryTypesElement>);
 
 TEST(YggdrasilTests, CommonInterningPreparesExactlyOnceBeforeRawInterning)
 {
@@ -762,7 +778,7 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
     EXPECT_FALSE(formalism::contains(first_repository, independent));
     EXPECT_NE(first_repository.owner(independent.index()), nullptr);
     // Their logical keys (relation, values) are equal: neither is less.
-    const auto key = [](const auto& row) { return std::pair(row.relation_key(), row.get_values()); };
+    const auto key = [](const auto& row) { return std::pair(row.get_relation().index(), row.get_values()); };
     EXPECT_FALSE(urd::Less<> {}(key(first), key(second)));
     EXPECT_FALSE(urd::Less<> {}(key(second), key(first)));
 
@@ -787,7 +803,7 @@ namespace
 {
 struct MutableRowView : PublishedContractRowView
 {
-    urd::index<RepositoryTypesRelation> relation_key();  // not const: no row view
+    urd::index<RepositoryTypesRelation> get_relation();  // not const: no row view
 };
 }  // namespace
 
@@ -822,7 +838,6 @@ TEST(YggdrasilTests, CommonBorrowedRowViewReadsWithoutPublishingAndMaterializesC
     EXPECT_EQ(borrowed.get_relation().index(), relation);
     EXPECT_EQ(borrowed.type(0), ygg::type_id<urd::index<Object>>);  // declared with its key, before any row
     EXPECT_EQ(borrowed.value(1), 5U);
-    EXPECT_EQ(borrowed.relation_key(), relation);
     EXPECT_EQ(borrowed.get_values().data(), data.values.data());
     EXPECT_FALSE(repository.find(data));
 

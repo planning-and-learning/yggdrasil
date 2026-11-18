@@ -23,6 +23,8 @@ struct builder<ygg::Row<F>, C>
     urd::flat_vector<ygg::Value> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &builder::relation>, urd::field<"values", &builder::values>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 }  // namespace urd
 

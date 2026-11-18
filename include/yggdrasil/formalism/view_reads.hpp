@@ -56,13 +56,13 @@ void check_column_type(TypeId type)
 
 namespace ygg
 {
-/// Whether V is the view of a row of family F (a stored row, one held outside the repository, a builder's): its
-/// relation's key, its values, each column decoded, through its context. Read through const, however V is spelled (a
-/// reference to a mutable view too).
+/// Whether V is the view of a row of family F (a stored row, one held outside the repository, a builder's: its tag is
+/// Row<F>): its relation, its values, each column decoded, through its context. Read through const, however V is spelled
+/// (a reference to a mutable view too).
 template<typename V, typename F>
-concept RowViewConcept = requires(const std::remove_reference_t<V>& view, std::size_t i) {
+concept RowViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_type, Row<F>> && requires(const std::remove_reference_t<V>& view, std::size_t i) {
     view.context();
-    { view.relation_key() } -> std::same_as<urd::index<F>>;
+    view.get_relation();
     { view.get_values() } -> RowValues;
     { view.value(i) } -> std::same_as<Value>;
     { view.type(i) } -> std::same_as<TypeId>;

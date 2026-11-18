@@ -3,6 +3,7 @@
 #include "pyyggdrasil/module.hpp"
 #include "yggdrasil/formalism/formatter.hpp"
 #include "yggdrasil/formalism/free_relations.hpp"
+#include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/relation_builder.hpp"
 #include "yggdrasil/formalism/relation_view.hpp"
 #include "yggdrasil/formalism/repository_impl.hpp"
@@ -26,30 +27,6 @@ namespace
 {
 using Column = urd::index<ygg::Column>;
 using Relation = ygg::FreeRelationBuilder;
-
-/// The shape of every relation class: its arity and its columns (its rows, len(get_rows()) of a view).
-template<typename R>
-void bind_relation_shape(nb::class_<R>& cls)
-{ cls.def("arity", &R::arity).def("columns", &R::columns); }
-
-/// The reads of every relation view class: its shape and its rows, one by its position or all.
-template<typename R>
-void bind_relation_reads(nb::class_<R>& cls)
-{
-    bind_relation_shape(cls);
-    // Each row keeps what it is read through alive (urd/python/owner.hpp), also inside the list get_rows() returns.
-    cls.def("row", &R::row, nb::arg("index"));
-}
-
-/// The reads of every row class: each column's value, type and decoded value (its number, len(get_values())).
-template<typename R>
-void bind_row_reads(nb::class_<R>& cls)
-{
-    using Columns = urd::view_mixin<ygg::Row<ygg::Schema>, R>;
-    cls.def("value", &R::value, nb::arg("index"))
-        .def("type", &R::type, nb::arg("index"))
-        .def("get", static_cast<ygg::ColumnValue (Columns::*)(std::size_t) const>(&R::get), nb::arg("index"));
-}
 
 }  // namespace
 
@@ -109,15 +86,15 @@ void bind_formalism_module_definitions(nb::module_& m)
         .def("insert", &Relation::insert, nb::arg("repository"), nb::arg("values"))
         .def("erase", &Relation::erase, nb::arg("repository"), nb::arg("values"))
         .def("clear", &Relation::clear);
-    auto builder_view = nb::class_<RelationBuilderView>(m,
-                                                        "RelationBuilderView",
-                                                        "A relation builder read through its repository. Keeps both alive; the builder's next "
-                                                        "mutation invalidates the view and its rows.");
-    builder_view.def("get_rows", &RelationBuilderView::get_rows);
-    builder_view.def("size", &RelationBuilderView::size).def("empty", &RelationBuilderView::empty);
-    builder_view.def("contains", &RelationBuilderView::template contains<std::span<const ygg::Value>>, nb::arg("values"))
-        .def("find", &RelationBuilderView::template find<std::span<const ygg::Value>>, nb::arg("values"));
-    bind_relation_reads(builder_view);
+    // The views of a builder's children in each form: built (<Name>Builder), a record not interned yet (<Name>Borrowed).
+    urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository, urd::builder<ygg::Schema, RelationRepository>>>(m);
+    urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository>>(m);
+    urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository, urd::builder<ygg::Columns, RelationRepository>>>(m);
+    urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository>>(m);
+    urd::python::bind_view<ygg::RowBuilderView<ygg::Schema, RelationRepository>>(m);
+    urd::python::bind_view<urd::borrowed_view<ygg::Row<ygg::Schema>, RelationRepository>>(m);
+    // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilder.
+    urd::python::bind_view<RelationBuilderView>(m);
 
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")
         .def(nb::init<>())
@@ -133,9 +110,11 @@ void bind_formalism_module_definitions(nb::module_& m)
         .def("insert",
              static_cast<std::pair<ColumnsView, bool> (RelationRepository::*)(urd::data<ygg::Columns>&)>(&RelationRepository::insert),
              nb::arg("columns"))
-        .def("insert",
-             static_cast<std::pair<RelationView, bool> (RelationRepository::*)(urd::data<RelationTag>&)>(&RelationRepository::insert),
-             nb::arg("relation"))
+        .def(
+            "insert",
+            [](RelationRepository& repository, urd::data<RelationTag>& relation) { return ygg::formalism::insert(repository, relation); },
+            nb::arg("relation"),
+            "Interns a relation record, canonicalized first (its rows in tuple order, unique).")
         .def(
             "insert",
             [](RelationRepository& repository, const Relation& relation) { return ygg::intern(relation, repository); },

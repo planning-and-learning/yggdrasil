@@ -21,6 +21,8 @@ struct builder<ygg::Schema, C>
     urd::flat_vector<ygg::TypeId> types;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"types", &builder::types>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
 }  // namespace urd
