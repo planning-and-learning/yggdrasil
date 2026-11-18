@@ -54,6 +54,10 @@ struct builder<ygg::Relation<F>, C>
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
+    /// The members it owns memory through (urd::memory_of): its rows. Its pool and columns are views; a temporary one's
+    /// record belongs to the pool it was drawn from.
+    static constexpr auto memory_members() noexcept { return urd::Members<&builder::rows> {}; }
+
     /// Empties it and gives it the pool `pool` and these columns (validated), interned into `repository`.
     void initialize(C& repository, urd::index<F> pool_, std::span<const ygg::ColumnLayout> layouts)
     {
@@ -77,19 +81,36 @@ struct builder<ygg::Relation<F>, C>
     }
 
     /// Inserts a row of values (as they are held: contiguous, or a stored row's), one per column, at its place in tuple
-    /// order (O(log n): its rows are a sorted set in blocks), where no row of it has these values: interned into
-    /// `repository` in its pool (a count other than the columns' throws std::invalid_argument, a value
-    /// that does not fit its column std::out_of_range, before anything is stored). Its position, and whether it was
-    /// inserted.
-    template<ygg::RowValues Values>
-    std::pair<std::size_t, bool> insert(C& repository, const Values& values)
+    /// order (O(log n): its rows are a sorted set in blocks), where no row of it has these values: a row record drawn
+    /// from `records` (a Store of slots of data<Row<F>>), held by its handle and read through `repository`; erasing the
+    /// row gives the record back to `records`, buffers and all. A count other than the columns' throws
+    /// std::invalid_argument, a value wider than its column's type std::out_of_range, before anything is stored. Its
+    /// position, and whether it was inserted.
+    template<ygg::RowValues Values, typename Records>
+    std::pair<std::size_t, bool> insert(C& repository, Records& records, const Values& values)
     {
         const auto key = pool_key(repository);
-        const auto [it, inserted] = rows.insert(repository.view(ygg::RowIndex<F> { key, repository.insert_row(key, values).first }));
-        return { rows.position(it), inserted };
+        const auto view = repository.view(*this);
+        if (static_cast<std::size_t>(std::ranges::distance(values)) != view.arity())
+            throw std::invalid_argument("Relation: a row has one value per column.");
+        auto column = view.columns().begin();
+        for (const ygg::Value value : values)
+        {
+            // A column's values are of its type's width: a record is no packed row, so it is checked here.
+            if (const auto bits = ygg::column_bits((column++)->type, ygg::whole_bits<urd::index<ygg::formalism::Object>>); bits < 64 && (value >> bits) != 0)
+                throw std::out_of_range("Relation: a value does not fit its column.");
+        }
+        const auto [at, held] = view.locate(values);
+        if (held)
+            return { at, false };
+        auto record = records.make_handle();
+        record->relation = key;
+        record->values.set(std::ranges::begin(values), std::ranges::end(values));
+        rows.insert(urd::pooled_view<ygg::Row<F>, C, urd::data<ygg::Row<F>>>(std::move(record), &repository));
+        return { at, true };
     }
 
-    /// Erases the row of these values; whether it held one. Its row stays in the repository.
+    /// Erases the row of these values; whether it held one. A row record goes back to its pool.
     template<ygg::RowValues Values>
     bool erase(const C& repository, const Values& values)
     {
@@ -115,11 +136,11 @@ private:
     /// The key of its pool, interned into `repository` where it is built or not interned yet: its rows' keys name it.
     urd::index<F> pool_key(C& repository)
     {
-        if (pool.index() == 1)
-            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, std::as_const(std::get<1>(pool).held()))));
-        else if (pool.index() == 2)
-            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, std::get<2>(pool).held())));
-        return std::get<0>(pool).index();
+        if (const auto* built = std::get_if<urd::built_child<F, C>>(&pool))
+            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, std::as_const(built->held()))));
+        else if (const auto* held = std::get_if<urd::held_child<F, C>>(&pool))
+            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, held->held())));
+        return std::get<urd::interned_child<F, C>>(pool).index();
     }
 };
 

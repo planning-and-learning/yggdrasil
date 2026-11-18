@@ -389,15 +389,16 @@ static_assert(!ygg::RelationViewConcept<ygg::RowView<ygg::Schema, ygg::FreeRelat
 TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
 {
     auto repository = ygg::FreeRelationRepository();
+    auto records = urd::Store<urd::slots<urd::data<ygg::Row<ygg::Schema>>>>();
     const auto columns =
         std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
     auto relation = ygg::FreeRelationBuilder();
     relation.initialize(repository, columns);
     const auto row = [](ygg::Value a, ygg::Value b) { return std::array { a, b }; };
-    EXPECT_EQ(relation.insert(repository, row(2, 1)), std::pair(std::size_t { 0 }, true));
-    EXPECT_EQ(relation.insert(repository, row(1, 5)), std::pair(std::size_t { 0 }, true));
-    EXPECT_EQ(relation.insert(repository, row(1, 7)), std::pair(std::size_t { 1 }, true));
-    EXPECT_EQ(relation.insert(repository, row(1, 5)), std::pair(std::size_t { 0 }, false));
+    EXPECT_EQ(relation.insert(repository, records, row(2, 1)), std::pair(std::size_t { 0 }, true));
+    EXPECT_EQ(relation.insert(repository, records, row(1, 5)), std::pair(std::size_t { 0 }, true));
+    EXPECT_EQ(relation.insert(repository, records, row(1, 7)), std::pair(std::size_t { 1 }, true));
+    EXPECT_EQ(relation.insert(repository, records, row(1, 5)), std::pair(std::size_t { 0 }, false));
 
     const auto built = repository.view(relation);
     EXPECT_EQ(built.arity(), 2U);
@@ -411,13 +412,26 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     relation.rename(repository, renamed);
     EXPECT_EQ(repository.view(relation).columns()[1].label, urd::index<ygg::Column>(3));
 
+    // The rows that start with a prefix, in a builder (its set searches itself) and once interned (searched from outside).
+    const auto starting = [](const auto& view, ygg::Value first)
+    {
+        auto seconds = std::vector<ygg::Value>();
+        for (const auto& held : view.with_prefix(std::array { first }))
+            seconds.push_back(ygg::with_values(held, [](const auto& values) { return std::ranges::begin(values)[1]; }));
+        return seconds;
+    };
+    EXPECT_EQ(starting(built, 1), (std::vector<ygg::Value> { 5, 7 }));
+    EXPECT_EQ(starting(built, 2), (std::vector<ygg::Value> { 1 }));
+    EXPECT_TRUE(starting(built, 3).empty());
+
     const auto [interned, created] = ygg::intern(relation, repository);
     EXPECT_TRUE(created);
+    EXPECT_EQ(starting(interned, 1), (std::vector<ygg::Value> { 5, 7 }));
 
     // A record of the same rows, in another order: not canonical, until ygg::formalism::insert makes it so.
     auto reversed = urd::flat_vector<ygg::RowIndex<ygg::Schema>>();
-    for (std::size_t i = built.size(); i-- > 0;)
-        reversed.push_back(std::get<0>(built.row(i)).index());
+    for (std::size_t i = interned.size(); i-- > 0;)
+        reversed.push_back(interned.row(i).index());
     auto record = urd::data<ygg::Relation<ygg::Schema>>(std::get<0>(relation.pool).index(), std::get<0>(relation.columns).index(), std::move(reversed));
     EXPECT_FALSE(ygg::is_canonical(record, repository));
     const auto [same, same_created] = ygg::formalism::insert(repository, record);
@@ -443,18 +457,20 @@ TEST(YggdrasilTests, ScratchRelationsDrawRelationsWithTheirRows)
     {
         auto relation = scratch.draw(columns);
         first = relation.get();
-        relation->relation.insert(relation->rows, std::array<ygg::Value, 2> { 3, 4 });
-        relation->relation.insert(relation->rows, std::array<ygg::Value, 2> { 1, 2 });
+        relation->insert(std::array<ygg::Value, 2> { 3, 4 });
+        relation->insert(std::array<ygg::Value, 2> { 1, 2 });
         const auto view = relation->view();
         EXPECT_EQ(view.size(), 2U);
         EXPECT_EQ(view.find(std::array<ygg::Value, 2> { 1, 2 }), std::optional<std::size_t>(0));
     }
-    auto again = scratch.draw(std::span(columns).first(1));
-    EXPECT_EQ(again.get(), first);  // its slot, reused
+    auto again = scratch.draw(columns);
+    EXPECT_EQ(again.get(), first);  // its slot, reused for the same arity
     EXPECT_EQ(again->view().size(), 0U);
-    EXPECT_EQ(again->view().arity(), 1U);
-    again->relation.insert(again->rows, std::array<ygg::Value, 1> { 9 });
-    EXPECT_TRUE(again->view().contains(std::array<ygg::Value, 1> { 9 }));
+    auto narrower = scratch.draw(std::span(columns).first(1));
+    EXPECT_NE(narrower.get(), first);  // another arity: a slot of its own
+    EXPECT_EQ(narrower->view().arity(), 1U);
+    narrower->insert(std::array<ygg::Value, 1> { 9 });
+    EXPECT_TRUE(narrower->view().contains(std::array<ygg::Value, 1> { 9 }));
 }
 
 /// A row reads its column types from its relation in whatever form it holds it: a built Schema as an interned one.

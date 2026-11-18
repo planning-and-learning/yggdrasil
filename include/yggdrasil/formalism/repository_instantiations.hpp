@@ -135,6 +135,7 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
     PREFIX template void Repo::clear();                                                                                                     \
     PREFIX template void Repo::clear_all();                                                                                                 \
     PREFIX template urd::index_view<::ygg::Schema, Repo> Repo::view(urd::index<::ygg::Schema>) const;                                       \
+    PREFIX template const urd::data<::ygg::Schema>& Repo::operator[](urd::index<::ygg::Schema>) const;                                    \
     BOOST_PP_REPEAT(SymbolCount, YGG_FORMALISM_REPOSITORY_SYMBOL, (PREFIX, Repo))                                                           \
     BOOST_PP_REPEAT(RowCount, YGG_FORMALISM_REPOSITORY_ROWS, (PREFIX, Repo))
 

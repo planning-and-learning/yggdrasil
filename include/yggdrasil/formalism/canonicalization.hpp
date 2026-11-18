@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <ranges>
+#include <span>
 #include <urd/elements/data.hpp>
 #include <urd/elements/view.hpp>
 #include <utility>
@@ -42,9 +43,17 @@ template<urd::View... Vs, typename F>
 decltype(auto) with_values(const std::variant<Vs...>& row, F&& f)
 { return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); }); }
 
+/// The first values of a row: in tuple order, every row that starts with them is equivalent to it (TupleOrder compares
+/// a row with it over just as many values), so the bounds of a prefix are the rows that start with it.
+struct RowPrefix
+{
+    std::span<const Value> values;
+};
+
 /// The order of rows: by their values, lexicographically (tuple order), whatever their keys or forms, each read through
 /// its own context. A relation's rows are in this order, its builder's set of row children by it. Transparent: it
-/// compares a row with bare values too, so that a set of rows is searched by values.
+/// compares a row with bare values too, so that a set of rows is searched by values, and with a prefix, over its values
+/// only.
 struct TupleOrder
 {
     using is_transparent = void;
@@ -56,6 +65,20 @@ struct TupleOrder
                                 [&rhs](const auto& left)
                                 { return ygg::with_values(rhs, [&left](const auto& right) { return std::ranges::lexicographical_compare(left, right); }); });
     }
+
+    template<typename L>
+    bool operator()(const L& row, const RowPrefix& prefix) const
+    { return ygg::with_values(row, [&prefix](const auto& values) { return std::ranges::lexicographical_compare(first(values, prefix), prefix.values); }); }
+
+    template<typename R>
+    bool operator()(const RowPrefix& prefix, const R& row) const
+    { return ygg::with_values(row, [&prefix](const auto& values) { return std::ranges::lexicographical_compare(prefix.values, first(values, prefix)); }); }
+
+private:
+    /// A row's first values, as many as the prefix has.
+    template<typename Values>
+    static auto first(const Values& values, const RowPrefix& prefix)
+    { return std::ranges::subrange(std::ranges::begin(values), std::ranges::next(std::ranges::begin(values), static_cast<std::ptrdiff_t>(prefix.values.size()))); }
 };
 
 inline void canonicalize(urd::data<Schema>&)

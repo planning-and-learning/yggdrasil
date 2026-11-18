@@ -97,6 +97,23 @@ public:
         return { position, held };
     }
 
+    /// The rows that start with these values (its first columns'), in tuple order: a borrowed range. A builder's set of rows
+    /// searches itself; a record's sorted keys are searched from outside, comparing each row read with the prefix.
+    [[nodiscard]] auto with_prefix(std::span<const ygg::Value> values) const
+    {
+        const auto rows = self().get_rows();
+        const auto prefix = ygg::RowPrefix { values };
+        if constexpr (urd::OrderedLookup<decltype(rows), ygg::RowPrefix>)
+            return std::ranges::subrange(rows.lower_bound(prefix), rows.upper_bound(prefix));
+        else
+        {
+            // The classic algorithm: it compares a row with the prefix only, either way (ranges' equal_range would order two
+            // prefixes too).
+            const auto [first, last] = std::equal_range(rows.begin(), rows.end(), prefix, ygg::TupleOrder {});
+            return std::ranges::subrange(first, last);
+        }
+    }
+
     /// The position of the first row not before these values in tuple order: where they are, or would go.
     template<std::ranges::input_range Values>
         requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
@@ -133,6 +150,7 @@ public:
                               urd::function<"size", &view_mixin::size>,
                               urd::function<"empty", &view_mixin::empty>,
                               urd::function<"row", &view_mixin::row, urd::arg<"index">>,
+                              urd::function<"with_prefix", &view_mixin::with_prefix, urd::arg<"values">>,
                               urd::function<"find", &view_mixin::template find<std::span<const ygg::Value>>, urd::arg<"values">>,
                               urd::function<"contains", &view_mixin::template contains<std::span<const ygg::Value>>, urd::arg<"values">>,
                               urd::function<"contains", &view_mixin::template contains<ygg::RowView<F, Context>>, urd::arg<"row">>> {};
