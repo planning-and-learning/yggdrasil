@@ -108,6 +108,11 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
         1,                                                                                                                                                    \
         ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, std::span<const ::ygg::Value>);                     \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
+    template std::pair<urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>, bool> BOOST_PP_TUPLE_ELEM(       \
+        2,                                                                                                                                                    \
+        1,                                                                                                                                                    \
+        ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow&);                     \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
     template BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_at(                                                               \
         ::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                 \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \

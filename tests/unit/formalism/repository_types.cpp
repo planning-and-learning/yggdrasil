@@ -28,6 +28,7 @@
 #include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
+#include "yggdrasil/formalism/scratch_relation.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
 #include "yggdrasil/semantics/canonicalization.hpp"
 
@@ -374,6 +375,9 @@ static_assert(ygg::ColumnsViewConcept<urd::index_view<ygg::Columns, FreeReposito
 static_assert(ygg::ColumnsViewConcept<urd::borrowed_view<ygg::Columns, FreeRepository, urd::builder<ygg::Columns, FreeRepository>>>);
 static_assert(ygg::ColumnsViewConcept<urd::borrowed_view<ygg::Columns, FreeRepository>>);
 static_assert(!ygg::ColumnsViewConcept<urd::index_view<ygg::Schema, FreeRepository>>);
+// A builder's rows are searched by values in their own order (its set's lower_bound); a record's by position.
+static_assert(urd::OrderedLookup<decltype(std::declval<const ygg::FreeRelationBuilderView&>().get_rows()), std::span<const ygg::Value>>);
+static_assert(!urd::OrderedLookup<decltype(std::declval<const ygg::FreeRelationView&>().get_rows()), std::span<const ygg::Value>>);
 static_assert(ygg::RelationViewConcept<ygg::FreeRelationView, ygg::Schema>);
 static_assert(ygg::RelationViewConcept<ygg::FreeRelationBuilderView, ygg::Schema>);
 static_assert(ygg::RelationViewConcept<const ygg::FreeRelationBuilderView&, ygg::Schema>);
@@ -427,6 +431,30 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     EXPECT_TRUE(relation.erase(repository, row(1, 7)));
     EXPECT_FALSE(relation.erase(repository, row(1, 7)));
     EXPECT_EQ(repository.view(relation).size(), 2U);
+}
+
+/// A scratch relation keeps its rows in its own repository; drawn again, it starts empty, with other columns if asked.
+TEST(YggdrasilTests, ScratchRelationsDrawRelationsWithTheirRows)
+{
+    auto scratch = ygg::FreeScratchRelations();
+    const auto columns =
+        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    const ygg::FreeScratchRelation* first = nullptr;
+    {
+        auto relation = scratch.draw(columns);
+        first = relation.get();
+        relation->relation.insert(relation->rows, std::array<ygg::Value, 2> { 3, 4 });
+        relation->relation.insert(relation->rows, std::array<ygg::Value, 2> { 1, 2 });
+        const auto view = relation->view();
+        EXPECT_EQ(view.size(), 2U);
+        EXPECT_EQ(view.find(std::array<ygg::Value, 2> { 1, 2 }), std::optional<std::size_t>(0));
+    }
+    auto again = scratch.draw(std::span(columns).first(1));
+    EXPECT_EQ(again.get(), first);  // its slot, reused
+    EXPECT_EQ(again->view().size(), 0U);
+    EXPECT_EQ(again->view().arity(), 1U);
+    again->relation.insert(again->rows, std::array<ygg::Value, 1> { 9 });
+    EXPECT_TRUE(again->view().contains(std::array<ygg::Value, 1> { 9 }));
 }
 
 /// A row reads its column types from its relation in whatever form it holds it: a built Schema as an interned one.

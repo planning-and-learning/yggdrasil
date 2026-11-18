@@ -6,6 +6,7 @@
 #ifndef YGG_FORMALISM_RELATION_VIEW_HPP_
 #define YGG_FORMALISM_RELATION_VIEW_HPP_
 
+#include "yggdrasil/formalism/canonicalization.hpp"
 #include "yggdrasil/formalism/columns_view.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/relation_view_concepts.hpp"
@@ -76,17 +77,24 @@ public:
     }
 
     /// Where these values are, or would go, in tuple order (the first row not before them), and whether it holds them
-    /// there: one binary search.
+    /// there: a builder's set of rows searches itself; a record's sorted keys are searched from outside, comparing each
+    /// row read with the values.
     template<std::ranges::input_range Values>
         requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
     [[nodiscard]] std::pair<std::size_t, bool> locate(const Values& values) const
     {
         const auto rows = self().get_rows();
-        const auto before = [&values](const auto& row) { return std::ranges::lexicographical_compare(row.get_values(), values); };
-        const auto after = [&values](const auto& row) { return std::ranges::lexicographical_compare(values, row.get_values()); };
-        const auto at = *std::ranges::partition_point(std::views::iota(std::size_t { 0 }, size()),
-                                                      [&](std::size_t index) { return urd::visit_view(rows[index], before); });
-        return { at, at < size() && !urd::visit_view(rows[at], after) };
+        const auto order = ygg::TupleOrder {};
+        const auto found = [&]
+        {
+            if constexpr (urd::OrderedLookup<decltype(rows), Values>)
+                return rows.lower_bound(values);  // a builder's set searches itself
+            else
+                return std::ranges::lower_bound(rows, values, order);  // a record's sorted keys, from outside
+        }();
+        const auto position = static_cast<std::size_t>(std::ranges::distance(rows.begin(), found));
+        const bool held = found != rows.end() && ygg::with_values(*found, [&values](const auto& row) { return std::ranges::equal(row, values); });
+        return { position, held };
     }
 
     /// The position of the first row not before these values in tuple order: where they are, or would go.

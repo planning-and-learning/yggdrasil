@@ -298,6 +298,11 @@ std::pair<urd::index<Row<F>>, bool> Repository<SymbolRepo, RelationRepo>::do_ins
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename F>
+std::pair<urd::index<Row<F>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert_row(urd::index<F> relation, const StoredRow& values)
+{ return m_impl->relations.insert(relation, values); }
+
+template<typename SymbolRepo, typename RelationRepo>
+template<typename F>
 typename Repository<SymbolRepo, RelationRepo>::StoredRow Repository<SymbolRepo, RelationRepo>::do_at(RowIndex<F> key) const
 {
     const auto& rows = m_impl->relations.template get<F>().at(key.relation);

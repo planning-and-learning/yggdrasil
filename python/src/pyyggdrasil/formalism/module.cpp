@@ -83,8 +83,8 @@ void bind_formalism_module_definitions(nb::module_& m)
              nb::arg("repository"),
              nb::arg("columns"))
         .def("rename", &Relation::rename, nb::arg("repository"), nb::arg("columns"))
-        .def("insert", &Relation::insert, nb::arg("repository"), nb::arg("values"))
-        .def("erase", &Relation::erase, nb::arg("repository"), nb::arg("values"))
+        .def("insert", &Relation::template insert<std::span<const ygg::Value>>, nb::arg("repository"), nb::arg("values"))
+        .def("erase", &Relation::template erase<std::span<const ygg::Value>>, nb::arg("repository"), nb::arg("values"))
         .def("clear", &Relation::clear);
     // The views of a builder's children in each form: built (<Name>Builder), a record not interned yet (<Name>Borrowed).
     urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository, urd::builder<ygg::Schema, RelationRepository>>>(m);

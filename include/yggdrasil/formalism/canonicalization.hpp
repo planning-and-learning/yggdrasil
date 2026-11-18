@@ -10,11 +10,15 @@
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/schema_data.hpp"
+#include "yggdrasil/formalism/values.hpp"
 #include "yggdrasil/semantics/canonicalization.hpp"
 
 #include <algorithm>
 #include <ranges>
 #include <urd/elements/data.hpp>
+#include <urd/elements/view.hpp>
+#include <utility>
+#include <variant>
 
 namespace ygg
 {
@@ -23,6 +27,36 @@ namespace ygg
  * Canonicalization of ygg's records (found by ADL). Every record has a canonicalize overload, a no-op where it is
  * canonical as built, so a record without one is a compile error, and is_canonical, whether it is. A row is its family's (its tag's library's).
  */
+
+/// f of a row's values: a row read as the view it is (a row child resolved, an interned row, a row builder's or record's
+/// view), or bare values.
+template<RowValues R, typename F>
+decltype(auto) with_values(const R& values, F&& f)
+{ return std::forward<F>(f)(values); }
+
+template<urd::View V, typename F>
+decltype(auto) with_values(const V& row, F&& f)
+{ return std::forward<F>(f)(row.get_values()); }
+
+template<urd::View... Vs, typename F>
+decltype(auto) with_values(const std::variant<Vs...>& row, F&& f)
+{ return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); }); }
+
+/// The order of rows: by their values, lexicographically (tuple order), whatever their keys or forms, each read through
+/// its own context. A relation's rows are in this order, its builder's set of row children by it. Transparent: it
+/// compares a row with bare values too, so that a set of rows is searched by values.
+struct TupleOrder
+{
+    using is_transparent = void;
+
+    template<typename L, typename R>
+    bool operator()(const L& lhs, const R& rhs) const
+    {
+        return ygg::with_values(lhs,
+                                [&rhs](const auto& left)
+                                { return ygg::with_values(rhs, [&left](const auto& right) { return std::ranges::lexicographical_compare(left, right); }); });
+    }
+};
 
 inline void canonicalize(urd::data<Schema>&)
 {

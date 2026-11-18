@@ -228,10 +228,16 @@ public:
     std::pair<urd::index<Row<F>>, bool> insert_row(const urd::data<Row<F>>& row)
     { return do_insert_row<F>(row.relation, std::span<const Value>(row.values.data(), row.values.size())); }
 
-    /// The row of these values in the pool `relation`, stored as insert_row(data<Row<F>>) stores one.
+    /// The row of these values in the pool `relation`, stored as insert_row(data<Row<F>>) stores one. The values as they
+    /// are held: contiguous, or a stored row's.
     template<typename F>
         requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
     std::pair<urd::index<Row<F>>, bool> insert_row(urd::index<F> relation, std::span<const Value> values)
+    { return do_insert_row<F>(relation, values); }
+
+    template<typename F>
+        requires HasRows<Repository<SymbolRepo, RelationRepo>, F>
+    std::pair<urd::index<Row<F>>, bool> insert_row(urd::index<F> relation, const StoredRow& values)
     { return do_insert_row<F>(relation, values); }
 
     /// A Schema's record and view, through the layer that owns it: a relation's pool of free relations resolves to it.
@@ -332,6 +338,8 @@ private:
     [[nodiscard]] std::size_t do_row_memory_usage() const;
     template<typename F>
     std::pair<urd::index<Row<F>>, bool> do_insert_row(urd::index<F> relation, std::span<const Value> values);
+    template<typename F>
+    std::pair<urd::index<Row<F>>, bool> do_insert_row(urd::index<F> relation, const StoredRow& values);
     template<typename F>
     [[nodiscard]] StoredRow do_at(RowIndex<F> key) const;
     template<typename F>

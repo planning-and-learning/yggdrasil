@@ -28,6 +28,8 @@
 #include <urd/elements/children.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
+#include <urd/repr/values/sorted_block_set.hpp>
+#include <urd/store.hpp>
 #include <utility>
 #include <vector>
 
@@ -45,7 +47,7 @@ struct builder<ygg::Relation<F>, C>
     urd::index<ygg::Relation<F>> index;
     urd::child<F, C> pool;
     urd::child<ygg::Columns, C> columns;
-    std::vector<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>> rows;
+    urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>>, urd::sorted, urd::unique, urd::order_by<ygg::TupleOrder>> rows;
 
     static constexpr auto fields() noexcept
     { return urd::Fields<urd::field<"pool", &builder::pool>, urd::field<"columns", &builder::columns>, urd::field<"rows", &builder::rows>> {}; }
@@ -74,22 +76,22 @@ struct builder<ygg::Relation<F>, C>
         columns = interned_columns(repository, layouts);
     }
 
-    /// Inserts a row of values, one per column, at its place in tuple order, where no row of it has these values:
-    /// interned into `repository` in its pool (a count other than the columns' throws std::invalid_argument, a value
+    /// Inserts a row of values (as they are held: contiguous, or a stored row's), one per column, at its place in tuple
+    /// order (O(log n): its rows are a sorted set in blocks), where no row of it has these values: interned into
+    /// `repository` in its pool (a count other than the columns' throws std::invalid_argument, a value
     /// that does not fit its column std::out_of_range, before anything is stored). Its position, and whether it was
     /// inserted.
-    std::pair<std::size_t, bool> insert(C& repository, std::span<const ygg::Value> values)
+    template<ygg::RowValues Values>
+    std::pair<std::size_t, bool> insert(C& repository, const Values& values)
     {
         const auto key = pool_key(repository);
-        const auto [at, held] = repository.view(*this).locate(values);
-        if (held)
-            return { at, false };
-        rows.emplace(rows.begin() + static_cast<std::ptrdiff_t>(at), repository.view(ygg::RowIndex<F> { key, repository.insert_row(key, values).first }));
-        return { at, true };
+        const auto [it, inserted] = rows.insert(repository.view(ygg::RowIndex<F> { key, repository.insert_row(key, values).first }));
+        return { rows.position(it), inserted };
     }
 
     /// Erases the row of these values; whether it held one. Its row stays in the repository.
-    bool erase(const C& repository, std::span<const ygg::Value> values)
+    template<ygg::RowValues Values>
+    bool erase(const C& repository, const Values& values)
     {
         const auto [at, held] = repository.view(*this).locate(values);
         if (!held)
