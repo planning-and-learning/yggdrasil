@@ -18,7 +18,9 @@
 #ifndef YGG_FORMALISM_SYMBOL_CONTEXT_HPP_
 #define YGG_FORMALISM_SYMBOL_CONTEXT_HPP_
 
+#include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/interning.hpp"
 
 #include <boost/mp11.hpp>
 #include <cstddef>
@@ -59,14 +61,41 @@ public:
 
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] std::optional<urd::index_view<T, Derived>> find(const urd::data<T>& builder) const
-    { return do_find<T>(builder); }
+    [[nodiscard]] std::optional<urd::index_view<T, Derived>> find(const urd::data<T>& record) const
+    { return do_find<T>(record); }
 
-    /// Interns the record; builder.index is set to its index.
+    /// Interns the record; record.index is set to its index.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    std::pair<urd::index_view<T, Derived>, bool> insert(urd::data<T>& builder)
-    { return do_insert<T>(builder); }
+    std::pair<urd::index_view<T, Derived>, bool> insert(urd::data<T>& record)
+    { return do_insert<T>(record); }
+
+    /// Interns a builder through the scratch records of a builder storage (its scratch<T>(), each worker's own; no
+    /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each prepared, as
+    /// the repository's domain makes it canonical, and inserted), interned children kept as they are, then its record,
+    /// written into a scratch record, prepared and inserted. The view of its record, and whether it was new. A child
+    /// interned in another repository of this kind, or a child of another repository not interned there, throws
+    /// std::invalid_argument.
+    template<typename T, IsBuilderStorage Storage>
+    decltype(auto) insert(const urd::builder<T, Derived>& built, Storage& storage)
+    { return detail::insert_child(static_cast<Derived&>(*this), storage, built); }
+
+    /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
+    /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record.
+    template<typename T, IsBuilderStorage Storage>
+    found_t<Derived, T> find(const urd::builder<T, Derived>& built, Storage& storage)
+    { return detail::find_child(static_cast<Derived&>(*this), storage, built); }
+
+    /// Interns a view of a record of its kinds as it reads it (what a child resolves to): an interned one is checked
+    /// to be its own, a builder's is interned as that builder.
+    template<ViewThrough<Derived> V, IsBuilderStorage Storage>
+    decltype(auto) insert(const V& view, Storage& storage)
+    { return detail::insert_view(static_cast<Derived&>(*this), storage, view); }
+
+    /// Finds the record a view reads, inserting nothing, likewise.
+    template<ViewThrough<Derived> V, IsBuilderStorage Storage>
+    auto find(const V& view, Storage& storage)
+    { return detail::find_view(static_cast<Derived&>(*this), storage, view); }
 
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
@@ -108,9 +137,9 @@ private:
     // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
     // built by either.
     template<typename T>
-    [[nodiscard]] std::optional<urd::index_view<T, Derived>> do_find(const urd::data<T>& builder) const;
+    [[nodiscard]] std::optional<urd::index_view<T, Derived>> do_find(const urd::data<T>& record) const;
     template<typename T>
-    std::pair<urd::index_view<T, Derived>, bool> do_insert(urd::data<T>& builder);
+    std::pair<urd::index_view<T, Derived>, bool> do_insert(urd::data<T>& record);
     template<typename T>
     [[nodiscard]] const urd::data<T>& do_at(urd::index<T> index) const;
     template<typename T>

@@ -11,6 +11,7 @@
 #include "yggdrasil/formalism/values.hpp"
 
 #include <urd/elements/builder.hpp>
+#include <urd/elements/children.hpp>
 #include <urd/elements/flat.hpp>
 
 namespace urd
@@ -19,8 +20,8 @@ namespace urd
 template<typename F, typename C>
 struct builder<ygg::Row<F>, C>
 {
-    urd::child<F, C> relation;
-    urd::flat_vector<ygg::Value> values;
+    urd::built_t<urd::index<F>, C> relation;
+    urd::built_t<urd::flat_vector<ygg::Value>, C> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &builder::relation>, urd::field<"values", &builder::values>> {}; }
 

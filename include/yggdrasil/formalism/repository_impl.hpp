@@ -93,7 +93,7 @@ struct Repository<SymbolRepo, RelationRepo>::Impl
     urd::index<Schema> intern_schema(const Types& types)
     {
         auto record = schema_builders.make_unique();
-        urd::clear_members(*record);
+        urd::clear_fields(*record);
         for (const TypeId type : types)
             record->types.push_back(type);
         return relations.schema(*record);
@@ -192,18 +192,18 @@ const Repository<SymbolRepo, RelationRepo>* Repository<SymbolRepo, RelationRepo>
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-std::optional<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>> Repository<SymbolRepo, RelationRepo>::do_find(const urd::data<T>& builder) const
+std::optional<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>> Repository<SymbolRepo, RelationRepo>::do_find(const urd::data<T>& record) const
 {
-    if (const auto index = m_impl->symbols.template get<T>().find(builder); !index.is_none())
+    if (const auto index = m_impl->symbols.template get<T>().find(record); !index.is_none())
         return view(index);
     return std::nullopt;
 }
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
-std::pair<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<T>& builder)
+std::pair<urd::index_view<T, Repository<SymbolRepo, RelationRepo>>, bool> Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<T>& record)
 {
-    const auto [index, created] = intern(m_impl->symbols.template get<T>(), builder);
+    const auto [index, created] = intern(m_impl->symbols.template get<T>(), record);
     const auto key = view(index);
     if constexpr (HasRows<Repository, T>)
         m_impl->relations.declare(index, m_impl->intern_schema(key.get_column_types()));

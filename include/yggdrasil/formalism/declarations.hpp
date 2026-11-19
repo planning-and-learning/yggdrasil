@@ -84,6 +84,25 @@ struct RowIndex
 template<typename F, typename C>
 using RowView = urd::index_view<Row<F>, C, RowIndex<F>>;
 
+namespace formalism
+{
+/// The key a repository interns a record of T under: its index, urd::index<T>; a row's, its RowIndex.
+template<typename T>
+struct key_of
+{
+    using type = urd::index<T>;
+};
+
+template<typename F>
+struct key_of<Row<F>>
+{
+    using type = RowIndex<F>;
+};
+
+template<typename T>
+using key_t = typename key_of<T>::type;
+}  // namespace formalism
+
 /// A relation builder of family F read through a context C: its borrowed view, with the relation mixin
 /// (relation_view.hpp).
 template<typename F, typename C>

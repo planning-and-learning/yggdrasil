@@ -43,6 +43,11 @@ template<urd::View... Vs, typename F>
 decltype(auto) with_values(const std::variant<Vs...>& row, F&& f)
 { return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); }); }
 
+/// The value of a column of a row in any of those forms (with_values).
+template<typename R>
+Value value_of(const R& row, std::size_t column)
+{ return ygg::with_values(row, [column](const auto& values) -> Value { return std::ranges::begin(values)[static_cast<std::ptrdiff_t>(column)]; }); }
+
 /// The first values of a row: in tuple order, every row that starts with them is equivalent to it (TupleOrder compares
 /// a row with it over just as many values), so the bounds of a prefix are the rows that start with it.
 struct RowPrefix

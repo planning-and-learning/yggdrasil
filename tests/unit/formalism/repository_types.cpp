@@ -68,6 +68,8 @@ concept Viewable = requires(const C& context, H handle) { context.view(handle); 
 
 struct RepositoryTypesSerializedElement;
 struct RepositoryTypesBuilderOther;
+/// The context the storage tests' builders name (nothing reads through it).
+struct BuilderContext;
 
 namespace
 {
@@ -282,6 +284,33 @@ public:
     [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
+/// The builders of the storage tests' records: their records' members (no children).
+template<typename C>
+struct builder<ygg::tests::RepositoryTypesElement, C>
+{
+    urd::index<ygg::tests::RepositoryTypesElement> index;
+    int value = 0;
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
+};
+
+template<typename C>
+struct builder<ygg::tests::RepositoryTypesBuilderOther, C>
+{
+    int value = 0;
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
+};
+
+template<typename C>
+struct builder<ygg::tests::RepositoryTypesCheckout, C>
+{
+    int id = 0;
+    std::vector<int> values;
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"id", &builder::id>, urd::field<"values", &builder::values>> {}; }
+};
+
 template<>
 struct data<ygg::tests::RepositoryTypesBuilderOther>
 {
@@ -424,7 +453,8 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     EXPECT_EQ(starting(built, 2), (std::vector<ygg::Value> { 1 }));
     EXPECT_TRUE(starting(built, 3).empty());
 
-    const auto [interned, created] = ygg::intern(relation, repository);
+    auto storage = ygg::FreeRelationStorage();
+    const auto [interned, created] = repository.insert(relation, storage);
     EXPECT_TRUE(created);
     EXPECT_EQ(starting(interned, 1), (std::vector<ygg::Value> { 5, 7 }));
 
@@ -445,6 +475,31 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     EXPECT_TRUE(relation.erase(repository, row(1, 7)));
     EXPECT_FALSE(relation.erase(repository, row(1, 7)));
     EXPECT_EQ(repository.view(relation).size(), 2U);
+}
+
+/// A repository interns a view of a record of its kinds as a child resolves to it, and finds it likewise: a builder's
+/// view as that builder, an interned view as itself (another repository's: std::invalid_argument).
+TEST(YggdrasilTests, RepositoryInternsAndFindsBuilderAndInternedViews)
+{
+    auto repository = ygg::FreeRelationRepository();
+    auto storage = ygg::FreeRelationStorage();
+    const auto layouts =
+        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    auto columns = storage.checkout<ygg::Columns>();
+    columns->values.assign(layouts.begin(), layouts.end());
+    const auto built = urd::resolve(*columns, repository);
+
+    EXPECT_FALSE(repository.find(built, storage).has_value());
+    const auto [interned, created] = repository.insert(built, storage);
+    EXPECT_TRUE(created);
+    EXPECT_EQ(repository.find(built, storage), std::optional(interned));
+
+
+    EXPECT_EQ(repository.insert(interned, storage), std::pair(interned, false));
+    EXPECT_EQ(repository.find(interned, storage), std::optional(interned));
+    auto other = ygg::FreeRelationRepository();
+    (void) other.insert(built, storage);  // a record at the same key, of another repository
+    EXPECT_THROW((void) other.insert(interned, storage), std::invalid_argument);
 }
 
 /// A scratch relation keeps its rows in its own repository; drawn again, it starts empty, with other columns if asked.
@@ -494,22 +549,27 @@ TEST(YggdrasilTests, RowBuilderReadsItsTypesFromItsRelationInEachForm)
     EXPECT_THROW(static_cast<void>(repository.view(row).type(2)), std::out_of_range);
 }
 
+using CommonBuilderStorage = ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesElement, RepositoryTypesBuilderOther>;
+
 TEST(YggdrasilTests, CommonBuilderStorageReusesReleasedBuildersByType)
 {
-    auto storage = ygg::formalism::BuilderStorage<RepositoryTypesElement, RepositoryTypesBuilderOther>();
+    auto storage = CommonBuilderStorage();
 
-    auto element_builder = storage.get_builder<RepositoryTypesElement>();
+    auto element_builder = storage.checkout<RepositoryTypesElement>();
     element_builder->value = 7;
     const auto* first_element_address = element_builder.get();
     element_builder = {};
 
-    auto reused_element_builder = storage.get_builder<RepositoryTypesElement>();
+    auto reused_element_builder = storage.checkout<RepositoryTypesElement>();
     EXPECT_EQ(reused_element_builder.get(), first_element_address);
-    EXPECT_EQ(reused_element_builder->value, 7);
+    EXPECT_EQ(reused_element_builder->value, 0);  // cleared
 
-    auto other_builder = storage.get_builder<RepositoryTypesBuilderOther>();
+    auto other_builder = storage.checkout<RepositoryTypesBuilderOther>();
     other_builder->value = 3;
     EXPECT_NE(static_cast<const void*>(other_builder.get()), static_cast<const void*>(reused_element_builder.get()));
+
+    auto scratch = storage.scratch<RepositoryTypesElement>();  // a record, from a pool of its own
+    EXPECT_EQ(scratch->value, 0);
 }
 
 template<typename T, typename Storage>
@@ -518,31 +578,26 @@ concept CanCheckout = requires(Storage& storage) {
     ygg::formalism::checkout<T>(storage);
 };
 
-using ContractBuilderStorage = ygg::formalism::BuilderStorage<RepositoryTypesCheckout>;
+using ContractBuilderStorage = ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesCheckout>;
 static_assert(std::is_default_constructible_v<ContractBuilderStorage>);
 static_assert(!std::is_copy_constructible_v<ContractBuilderStorage>);
 static_assert(!std::is_copy_assignable_v<ContractBuilderStorage>);
 static_assert(!std::is_move_constructible_v<ContractBuilderStorage>);
 static_assert(!std::is_move_assignable_v<ContractBuilderStorage>);
 
-static_assert(CanCheckout<RepositoryTypesCheckout, ygg::formalism::BuilderStorage<RepositoryTypesCheckout>>);
-static_assert(!CanCheckout<RepositoryTypesCheckout, ygg::formalism::BuilderStorage<RepositoryTypesElement>>);
+static_assert(CanCheckout<RepositoryTypesCheckout, ContractBuilderStorage>);
+static_assert(!CanCheckout<RepositoryTypesCheckout, ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesElement>>);
 
-TEST(YggdrasilTests, CommonBuilderCheckoutClearsOnceAndRetainsCapacity)
+TEST(YggdrasilTests, CommonBuilderCheckoutClearsAndRetainsCapacity)
 {
-    auto storage = ygg::formalism::BuilderStorage<RepositoryTypesCheckout>();
-    auto data = storage.get_builder<RepositoryTypesCheckout>();
-    data->id = 7;
-    data->values.assign(32, 42);
-    const auto* address = data.get();
-    const auto* buffer = data->values.data();
-    const auto capacity = data->values.capacity();
-    data = {};
-
-    auto raw = storage.get_builder<RepositoryTypesCheckout>();
-    EXPECT_EQ(raw->id, 7);
-    EXPECT_EQ(raw->values.size(), 32);
-    raw = {};
+    auto storage = ContractBuilderStorage();
+    auto built = storage.checkout<RepositoryTypesCheckout>();
+    built->id = 7;
+    built->values.assign(32, 42);
+    const auto* address = built.get();
+    const auto* buffer = built->values.data();
+    const auto capacity = built->values.capacity();
+    built = {};
 
     auto cleared = ygg::formalism::checkout<RepositoryTypesCheckout>(storage);
     EXPECT_EQ(cleared.get(), address);
@@ -550,11 +605,6 @@ TEST(YggdrasilTests, CommonBuilderCheckoutClearsOnceAndRetainsCapacity)
     EXPECT_TRUE(cleared->values.empty());
     EXPECT_EQ(cleared->values.data(), buffer);
     EXPECT_EQ(cleared->values.capacity(), capacity);
-    cleared = {};
-
-    auto again = storage.checkout<RepositoryTypesCheckout>();
-    EXPECT_EQ(again.get(), address);
-    EXPECT_EQ(again->values.capacity(), capacity);
 }
 
 template<typename Repository, typename T>
@@ -606,7 +656,7 @@ static_assert(!SymbolContextFor<ContractSymbols, RepositoryTypesElement>);
 static_assert(SymbolContextFor<ContractRepository, RepositoryTypesElement>);
 static_assert(!SymbolContextFor<ContractSymbols, RepositoryTypesSerializedElement>);
 static_assert(!SymbolRepositoryFor<ContractRepository, ContractBinding>);
-static_assert(std::same_as<formalism::BuilderStorage<RepositoryTypesCheckout>::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
+static_assert(std::same_as<formalism::BuilderStorage<BuilderContext, RepositoryTypesCheckout>::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
 
 template<typename Repository, typename T>
 concept CanUseUnsupportedRelation = requires(Repository& repository, urd::data<Row<T>>& data) { repository.insert(data); }

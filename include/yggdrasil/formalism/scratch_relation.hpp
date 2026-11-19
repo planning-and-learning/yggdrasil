@@ -33,9 +33,10 @@ template<typename F, typename C>
 struct ScratchRelation
 {
     C rows;
-    urd::Store<urd::slots<urd::data<Row<F>>>> records;
+    using Records = urd::Store<urd::slots<urd::data<Row<F>>>>;
+    Records records;
     /// A row's slot in its records (slot()).
-    using Slot = urd::index<urd::data<Row<F>>>;
+    using Slot = typename Records::handle_type;
     urd::builder<Relation<F>, C> relation;
 
     /// An empty one (a repository's default constructor is explicit: so is not an aggregate's).
@@ -76,7 +77,7 @@ struct ScratchRelation
     [[nodiscard]] Slot slot(const Values& values) const
     {
         const auto found = relation.rows.find(values);
-        return found == relation.rows.end() ? Slot() : Slot(static_cast<std::uint32_t>(std::get<urd::held_child<Row<F>, C>>(*found).slot()));  // insert() holds its rows as records
+        return found == relation.rows.end() ? Slot() : std::get<urd::held_child<Row<F>, C>>(*found).slot();  // insert() holds its rows as records
     }
 
     /// The record in a slot of its records (a row's, where it holds that row).

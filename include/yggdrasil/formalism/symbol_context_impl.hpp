@@ -66,18 +66,18 @@ void SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::clear()
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-std::optional<urd::index_view<T, Derived>> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_find(const urd::data<T>& builder) const
+std::optional<urd::index_view<T, Derived>> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_find(const urd::data<T>& record) const
 {
-    if (const auto index = m_impl->symbols.template get<T>().find(builder); !index.is_none())
+    if (const auto index = m_impl->symbols.template get<T>().find(record); !index.is_none())
         return static_cast<const Derived&>(*this).view(index);
     return std::nullopt;
 }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
-std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_insert(urd::data<T>& builder)
+std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_insert(urd::data<T>& record)
 {
-    const auto [index, created] = intern(m_impl->symbols.template get<T>(), builder);
+    const auto [index, created] = intern(m_impl->symbols.template get<T>(), record);
     return { static_cast<const Derived&>(*this).view(index), created };
 }
 

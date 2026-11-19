@@ -1,6 +1,7 @@
 #include "module.hpp"
 
 #include "pyyggdrasil/module.hpp"
+#include "yggdrasil/formalism/builder_instantiations.hpp"
 #include "yggdrasil/formalism/formatter.hpp"
 #include "yggdrasil/formalism/free_relations.hpp"
 #include "yggdrasil/formalism/interning.hpp"
@@ -95,6 +96,11 @@ void bind_formalism_module_definitions(nb::module_& m)
     // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilder.
     urd::python::bind_view<RelationBuilderView>(m);
 
+    nb::class_<ygg::FreeRelationStorage>(m,
+                                         "FreeRelationStorage",
+                                         "The builders and scratch records free relations are interned through; create once, reuse.")
+        .def(nb::init<>());
+
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")
         .def(nb::init<>())
         .def("__len__", &RelationRepository::template size<RelationTag>)
@@ -116,9 +122,11 @@ void bind_formalism_module_definitions(nb::module_& m)
             "Interns a relation record, canonicalized first (its rows in tuple order, unique).")
         .def(
             "insert",
-            [](RelationRepository& repository, const Relation& relation) { return ygg::intern(relation, repository); },
+            [](RelationRepository& repository, const Relation& relation, ygg::FreeRelationStorage& storage) { return repository.insert(relation, storage); },
             nb::arg("relation"),
-            "Interns a relation builder: its record, its rows in tuple order.")
+            nb::arg("storage"),
+            "Interns a relation builder through a builder storage (FreeRelationStorage, reused across calls): its record, its "
+            "rows in tuple order.")
         .def("view",
              static_cast<RelationBuilderView (RelationRepository::*)(const Relation&) const>(&RelationRepository::view),
              nb::arg("relation"),
@@ -128,3 +136,6 @@ void bind_formalism_module_definitions(nb::module_& m)
 }
 
 }  // namespace yggdrasil
+
+// The free relations' builder storage the module hands out (FreeRelationStorage), instantiated here.
+YGG_FORMALISM_BUILDER(, ygg::FreeRelationStorage, 4)

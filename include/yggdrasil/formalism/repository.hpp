@@ -18,7 +18,9 @@
 #ifndef YGG_FORMALISM_REPOSITORY_HPP_
 #define YGG_FORMALISM_REPOSITORY_HPP_
 
+#include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/membership.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/relation_view.hpp"
@@ -117,17 +119,44 @@ public:
 
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const
-    { return do_find<T>(builder); }
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& record) const
+    { return do_find<T>(record); }
 
-    /// Interns the record where no layer holds it; builder.index is set to its index. A key of row pools (a predicate,
+    /// Interns the record where no layer holds it; record.index is set to its index. A key of row pools (a predicate,
     /// an action, ...) has its pool declared too, with the column types its view gives (a key family's view has
     /// get_column_types(): its rows' column types); declared on every insert, so a row may follow whichever thread
     /// interned it.
     template<typename T>
         requires SupportsSymbol<Repository<SymbolRepo, RelationRepo>, T>
-    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
-    { return do_insert<T>(builder); }
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& record)
+    { return do_insert<T>(record); }
+
+    /// Interns a builder through the scratch records of a builder storage (its scratch<T>(), each worker's own; no
+    /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each prepared, as
+    /// the repository's domain makes it canonical, and inserted), interned children kept as they are, then its record,
+    /// written into a scratch record, prepared and inserted. The view of its record, and whether it was new. A child
+    /// interned in another repository of this kind, or a child of another repository not interned there, throws
+    /// std::invalid_argument.
+    template<typename T, IsBuilderStorage Storage>
+    decltype(auto) insert(const urd::builder<T, Repository>& built, Storage& storage)
+    { return detail::insert_child(*this, storage, built); }
+
+    /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
+    /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record.
+    template<typename T, IsBuilderStorage Storage>
+    found_t<Repository, T> find(const urd::builder<T, Repository>& built, Storage& storage)
+    { return detail::find_child(*this, storage, built); }
+
+    /// Interns a view of a record of its kinds as it reads it (what a child resolves to): an interned one is checked
+    /// to be its own, a builder's is interned as that builder.
+    template<ViewThrough<Repository> V, IsBuilderStorage Storage>
+    decltype(auto) insert(const V& view, Storage& storage)
+    { return detail::insert_view(*this, storage, view); }
+
+    /// Finds the record a view reads, inserting nothing, likewise.
+    template<ViewThrough<Repository> V, IsBuilderStorage Storage>
+    auto find(const V& view, Storage& storage)
+    { return detail::find_view(*this, storage, view); }
 
     /// The column types of the pool `relation`, as declared (std::out_of_range where no layer declared it).
     template<typename F>
@@ -309,9 +338,9 @@ private:
     template<typename F>
     [[nodiscard]] const Repository* do_owner(RowIndex<F> key) const;
     template<typename T>
-    [[nodiscard]] std::optional<urd::index_view<T, Repository>> do_find(const urd::data<T>& builder) const;
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> do_find(const urd::data<T>& record) const;
     template<typename T>
-    std::pair<urd::index_view<T, Repository>, bool> do_insert(urd::data<T>& builder);
+    std::pair<urd::index_view<T, Repository>, bool> do_insert(urd::data<T>& record);
     template<typename F>
     [[nodiscard]] std::span<const TypeId> do_types(urd::index<F> relation) const;
     template<typename T>

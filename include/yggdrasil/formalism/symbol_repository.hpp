@@ -96,19 +96,19 @@ public:
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& builder) const
+    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& record) const
     {
-        if (const auto index = get<T>().find(builder); !index.is_none())
+        if (const auto index = get<T>().find(record); !index.is_none())
             return repository().view(index);
         return std::nullopt;
     }
 
-    /// Interns the record; builder.index is set to its index.
+    /// Interns the record; record.index is set to its index.
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& builder)
+    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& record)
     {
-        const auto [index, created] = intern(get<T>(), builder);
+        const auto [index, created] = intern(get<T>(), record);
         return { repository().view(index), created };
     }
 

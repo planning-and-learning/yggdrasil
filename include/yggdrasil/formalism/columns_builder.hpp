@@ -9,6 +9,7 @@
 #include "yggdrasil/formalism/columns_data.hpp"
 
 #include <urd/elements/builder.hpp>
+#include <urd/elements/children.hpp>
 #include <urd/elements/flat.hpp>
 
 namespace urd
@@ -18,7 +19,7 @@ template<typename C>
 struct builder<ygg::Columns, C>
 {
     urd::index<ygg::Columns> index;
-    urd::flat_vector<ygg::ColumnLayout> values;
+    urd::built_t<urd::flat_vector<ygg::ColumnLayout>, C> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &builder::values>> {}; }
 

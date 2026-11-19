@@ -9,6 +9,7 @@
 #include "yggdrasil/formalism/schema_data.hpp"
 
 #include <urd/elements/builder.hpp>
+#include <urd/elements/children.hpp>
 #include <urd/elements/flat.hpp>
 
 namespace urd
@@ -18,7 +19,7 @@ template<typename C>
 struct builder<ygg::Schema, C>
 {
     urd::index<ygg::Schema> index;
-    urd::flat_vector<ygg::TypeId> types;
+    urd::built_t<urd::flat_vector<ygg::TypeId>, C> types;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"types", &builder::types>> {}; }
 

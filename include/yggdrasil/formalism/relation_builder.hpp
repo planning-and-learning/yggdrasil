@@ -9,7 +9,6 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/columns_builder.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/formalism/interning.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/relation_view.hpp"
 #include "yggdrasil/formalism/row_builder.hpp"
@@ -45,8 +44,8 @@ template<typename F, typename C>
 struct builder<ygg::Relation<F>, C>
 {
     urd::index<ygg::Relation<F>> index;
-    urd::child<F, C> pool;
-    urd::child<ygg::Columns, C> columns;
+    urd::built_t<urd::index<F>, C> pool;
+    urd::built_t<urd::index<ygg::Columns>, C> columns;
     urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>>, urd::sorted, urd::unique, urd::order_by<ygg::TupleOrder>> rows;
 
     static constexpr auto fields() noexcept
@@ -89,7 +88,7 @@ struct builder<ygg::Relation<F>, C>
     template<ygg::RowValues Values, typename Records>
     std::pair<std::size_t, bool> insert(C& repository, Records& records, const Values& values)
     {
-        const auto key = pool_key(repository);
+        const auto key = pool_key();
         const auto view = repository.view(*this);
         if (static_cast<std::size_t>(std::ranges::distance(values)) != view.arity())
             throw std::invalid_argument("Relation: a row has one value per column.");
@@ -133,14 +132,14 @@ private:
         return repository.insert(record).first;
     }
 
-    /// The key of its pool, interned into `repository` where it is built or not interned yet: its rows' keys name it.
-    urd::index<F> pool_key(C& repository)
+    /// The key of its pool, which its rows' records name: interned (initialize interns it); a pool built or not
+    /// interned yet is interned first, with the relation (repository.insert(builder, storage)), not row by row
+    /// (std::invalid_argument).
+    urd::index<F> pool_key() const
     {
-        if (const auto* built = std::get_if<urd::built_child<F, C>>(&pool))
-            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, std::as_const(built->held()))));
-        else if (const auto* held = std::get_if<urd::held_child<F, C>>(&pool))
-            pool = repository.view(urd::inserted_index(ygg::insert_child(repository, held->held())));
-        return std::get<urd::interned_child<F, C>>(pool).index();
+        if (const auto* interned = std::get_if<urd::interned_child<F, C>>(&pool))
+            return interned->index();
+        throw std::invalid_argument("Relation: its pool is interned before rows are inserted into it (they are keyed by it).");
     }
 };
 

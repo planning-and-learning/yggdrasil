@@ -34,17 +34,14 @@ using BuilderType = boost::mp11::mp_at_c<typename Builder::Types, I>;
 /// The members of the I-th type of the storage (ARGS: (PREFIX, Builder)).
 // NOLINTBEGIN(cppcoreguidelines-macro-usage,bugprone-macro-parentheses): the macros expand to explicit instantiations,
 // declarations, which no function gives; their arguments are types and a prefix, which no parentheses may enclose
-#define YGG_FORMALISM_BUILDER_AT(z, I, ARGS)                                                                                               \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                        \
-    template urd::handle<urd::data<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM( \
-        2,                                                                                                                                 \
-        1,                                                                                                                                 \
-        ARGS)::do_get_builder<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();                                \
-    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                        \
-    template urd::handle<urd::data<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM( \
-        2,                                                                                                                                 \
-        1,                                                                                                                                 \
-        ARGS)::do_checkout<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();
+#define YGG_FORMALISM_BUILDER_AT(z, I, ARGS)                                                                                    \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                             \
+    template urd::handle<urd::builder<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>,                \
+                                      typename BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::Context>>                                       \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_checkout<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>(); \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                             \
+    template urd::handle<urd::data<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>                  \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_scratch<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();
 
 /// Explicit instantiations (PREFIX extern: declarations) of builder storage Builder (a name without commas: an alias):
 /// construction, destruction, and its members for each of its Count types. The count is checked against its list.

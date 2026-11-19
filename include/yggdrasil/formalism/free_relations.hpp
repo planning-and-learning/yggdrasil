@@ -6,6 +6,7 @@
 #ifndef YGG_FORMALISM_FREE_RELATIONS_HPP_
 #define YGG_FORMALISM_FREE_RELATIONS_HPP_
 
+#include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 
 #include <urd/elements/flat.hpp>
@@ -21,6 +22,9 @@ using FreeRelationView = urd::index_view<Relation<Schema>, FreeRelationRepositor
 using FreeRelationBuilder = urd::builder<Relation<Schema>, FreeRelationRepository>;
 /// A free relation builder read through a layer (urd::resolve(builder, layer), layer.view(builder)).
 using FreeRelationBuilderView = RelationBuilderView<Schema, FreeRelationRepository>;
+/// The builders and scratch records free relations are interned through (layer.insert(builder, storage)): their
+/// Schemas, columns, rows and relations. A library instantiates it in one source (builder_instantiations.hpp).
+using FreeRelationStorage = formalism::BuilderStorage<FreeRelationRepository, Schema, Columns, Row<Schema>, Relation<Schema>>;
 }  // namespace ygg
 
 #endif

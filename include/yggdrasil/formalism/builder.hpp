@@ -17,18 +17,21 @@
 
 namespace ygg::formalism
 {
-
-/// One pool of reusable records per type, behind a pointer: builder_impl.hpp defines the pools (a Family of urd slots)
-/// and the members, and a library instantiates its storages in one source (builder_instantiations.hpp), so that its
-/// other sources complete no pool. A specialization over its type list, so that clang
-/// matches the out-of-line members, whose constraints name the types, to their declarations (as SymbolContext).
-template<typename Types>
+/// One pool of reusable builders and one of reusable records per type, behind a pointer: a writer checks out a builder
+/// of T (checkout<T>()), fills it, and interns it into a repository of its context C (repository.insert(builder,
+/// storage)), which writes it into a scratch record of T (scratch<T>()). builder_impl.hpp defines the pools (Families of
+/// urd slots) and the members, and a library instantiates its storages in one source (builder_instantiations.hpp), so
+/// that its other sources complete no pool. A specialization over its type list, so that clang matches the out-of-line
+/// members, whose constraints name the types, to their declarations (as SymbolContext).
+template<typename C, typename Types>
 class BasicBuilderStorage;
 
-template<typename... Ts>
-class BasicBuilderStorage<boost::mp11::mp_list<Ts...>>
+template<typename C, typename... Ts>
+class BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>
 {
 public:
+    /// The context the builders' children are read through: the repository they are interned into.
+    using Context = C;
     using Types = boost::mp11::mp_list<Ts...>;
 
     /// The pools: defined in builder_impl.hpp.
@@ -41,38 +44,54 @@ public:
     BasicBuilderStorage& operator=(BasicBuilderStorage&&) = delete;
     ~BasicBuilderStorage();
 
-    /// Acquire pooled data without resetting its contents.
+    /// A pooled builder of T, emptied field by field (urd::clear_fields), its buffers kept: what a writer fills.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] urd::handle<urd::data<T>> get_builder()
-    { return do_get_builder<T>(); }
-
-    /// Clear pooled data once, member by member, retaining its reusable buffers.
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] urd::handle<urd::data<T>> checkout()
+    [[nodiscard]] urd::handle<urd::builder<T, C>> checkout()
     { return do_checkout<T>(); }
+
+    /// A pooled record of T, emptied field by field (urd::clear_fields), its buffers kept: what a builder is interned
+    /// through.
+    template<typename T>
+        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
+    [[nodiscard]] urd::handle<urd::data<T>> scratch()
+    { return do_scratch<T>(); }
 
 private:
     // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
     // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
     // built by either.
     template<typename T>
-    [[nodiscard]] urd::handle<urd::data<T>> do_get_builder();
+    [[nodiscard]] urd::handle<urd::builder<T, C>> do_checkout();
+
     template<typename T>
-    [[nodiscard]] urd::handle<urd::data<T>> do_checkout();
+    [[nodiscard]] urd::handle<urd::data<T>> do_scratch();
 
     std::unique_ptr<Impl> m_impl;
 };
 
-/// The builder storage of the types Ts.
-template<typename... Ts>
-using BuilderStorage = BasicBuilderStorage<boost::mp11::mp_list<Ts...>>;
+/// The builder storage of the types Ts, interned into context C.
+template<typename C, typename... Ts>
+using BuilderStorage = BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>;
 
-template<typename T, typename... Ts>
-    requires requires(BuilderStorage<Ts...>& builder) { builder.template checkout<T>(); }
-[[nodiscard]] urd::handle<urd::data<T>> checkout(BuilderStorage<Ts...>& builder)
-{ return builder.template checkout<T>(); }
+/// Whether S is a builder storage (a BasicBuilderStorage, of any repository): what interning takes its scratch
+/// records from (scratch<T>()), for its own records and for those of the repositories nested in it alike.
+template<typename S>
+inline constexpr bool is_builder_storage = false;
+template<typename C, typename Types>
+inline constexpr bool is_builder_storage<BasicBuilderStorage<C, Types>> = true;
+
+template<typename S>
+concept IsBuilderStorage = is_builder_storage<S>;
+
+/// Whether a builder storage pools T.
+template<typename Storage, typename T>
+concept Pools = boost::mp11::mp_contains<typename Storage::Types, T>::value;
+
+template<typename T, typename Storage>
+    requires Pools<Storage, T>
+[[nodiscard]] urd::handle<urd::builder<T, typename Storage::Context>> checkout(Storage& storage)
+{ return storage.template checkout<T>(); }
 
 }  // namespace ygg::formalism
 

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <type_traits>
+#include <urd/elements/concepts.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
@@ -28,40 +29,50 @@ namespace ygg::formalism
 namespace detail
 {
 template<typename T>
-using BuilderSlot = urd::Store<urd::slots<urd::data<T>>>;
+using RecordSlot = urd::Store<urd::slots<urd::data<T>>>;
+
+template<typename C>
+struct BuilderSlotOf
+{
+    template<typename T>
+    using fn = urd::Store<urd::slots<urd::builder<T, C>>>;
+};
 }  // namespace detail
 
-template<typename... Ts>
-struct BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::Impl
+template<typename C, typename... Ts>
+struct BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>::Impl
 {
-    Family<detail::BuilderSlot, Ts...> slots;
+    Family<detail::BuilderSlotOf<C>::template fn, Ts...> builders;
+    Family<detail::RecordSlot, Ts...> records;
 };
 
-template<typename... Ts>
-BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::BasicBuilderStorage() : m_impl(std::make_unique<Impl>())
+template<typename C, typename... Ts>
+BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>::BasicBuilderStorage() : m_impl(std::make_unique<Impl>())
 {
 }
 
-template<typename... Ts>
-BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::~BasicBuilderStorage()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit instantiation of an
-                                                                          // out-of-line = default
+template<typename C, typename... Ts>
+BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>::~BasicBuilderStorage()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit instantiation
+                                                                             // of an out-of-line = default
 {
 }
 
-template<typename... Ts>
+template<typename C, typename... Ts>
 template<typename T>
-urd::handle<urd::data<T>> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_get_builder()
+urd::handle<urd::builder<T, C>> BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>::do_checkout()
 {
-    return m_impl->slots.template get<T>().make_handle();
+    auto built = m_impl->builders.template get<T>().make_handle();
+    urd::clear_fields(*built);
+    return built;
 }
 
-template<typename... Ts>
+template<typename C, typename... Ts>
 template<typename T>
-urd::handle<urd::data<T>> BasicBuilderStorage<boost::mp11::mp_list<Ts...>>::do_checkout()
+urd::handle<urd::data<T>> BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>::do_scratch()
 {
-    auto data = get_builder<T>();
-    urd::clear_members(*data);
-    return data;
+    auto record = m_impl->records.template get<T>().make_handle();
+    urd::clear_fields(*record);
+    return record;
 }
 
 }  // namespace ygg::formalism
