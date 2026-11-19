@@ -26,8 +26,6 @@ namespace yggdrasil
 
 namespace
 {
-using Column = urd::index<ygg::Column>;
-using Relation = ygg::FreeRelationBuilder;
 
 }  // namespace
 
@@ -49,9 +47,10 @@ void bind_formalism_module_definitions(nb::module_& m)
     using StoredRow = ygg::RowView<ygg::Schema, RelationRepository>;
     using RelationView = ygg::FreeRelationView;
     using RelationBuilderView = ygg::FreeRelationBuilderView;
+    using Relation = ygg::FreeRelationBuilder;
 
-    urd::python::bind_index<Column>(m, "ColumnIndex");
-    urd::python::bind_index<urd::index<ygg::formalism::Object>>(m, "ObjectIndex");
+    urd::python::bind_index<ygg::Column>(m);
+    urd::python::bind_index<ygg::formalism::Object>(m);
     nb::enum_<ygg::TypeId>(m, "ColumnType")
         .value("UINT32", ygg::type_id<std::uint32_t>)
         .value("INT32", ygg::type_id<std::int32_t>)
@@ -62,38 +61,37 @@ void bind_formalism_module_definitions(nb::module_& m)
         .value("BOOL", ygg::type_id<bool>)
         .value("OBJECT", ygg::type_id<urd::index<ygg::formalism::Object>>);
     urd::python::bind_value<ygg::ColumnLayout>(m);
-    urd::python::bind_index<urd::index<ygg::Row<ygg::Schema>>>(m, "RowId");
+    urd::python::bind_index<ygg::Row<ygg::Schema>>(m);
     urd::python::bind_value<ygg::RowIndex<ygg::Schema>>(m);
 
-    // The records: <Name>Index, <Name>Data and <Name>, the view.
+    // The records: <Name>Index, <Name>Data, <Name>Builder and <Name>, the view.
+    urd::python::bind_index<ygg::Schema>(m);
     urd::python::bind_data<ygg::Schema>(m);
+    urd::python::bind_builder<ygg::Schema, RelationRepository>(m);
     urd::python::bind_view<SchemaView>(m);
+    urd::python::bind_index<ygg::Columns>(m);
     urd::python::bind_data<ygg::Columns>(m);
+    urd::python::bind_builder<ygg::Columns, RelationRepository>(m);
     urd::python::bind_view<ColumnsView>(m);
     urd::python::bind_data<ygg::Row<ygg::Schema>>(m);
+    urd::python::bind_builder<ygg::Row<ygg::Schema>, RelationRepository>(m);
     urd::python::bind_view<StoredRow>(m);
+    urd::python::bind_index<RelationTag>(m);
     urd::python::bind_data<RelationTag>(m);
+    // A relation builder's rows are drawn from row records (its insert's): RowSchemaRecords, created once, reused.
+    nb::class_<ygg::RowRecords<ygg::Schema>>(m, "RowSchemaRecords", "The row records a relation builder's rows are drawn from.").def(nb::init<>());
+    urd::python::bind_builder<RelationTag, RelationRepository>(m);
     urd::python::bind_view<RelationView>(m);
 
-    // A relation builder mutates through its repository, which interns its rows and columns; it is read through it
-    // (RelationRepository.view(builder): its view, RelationSchemaBuilder).
-    nb::class_<Relation>(m, "RelationBuilder", "A relation being built: its rows in tuple order, interned in a repository.")
-        .def(nb::init<>())
-        .def("initialize",
-             static_cast<void (Relation::*)(RelationRepository&, std::span<const ygg::ColumnLayout>)>(&Relation::initialize),
-             nb::arg("repository"),
-             nb::arg("columns"))
-        .def("rename", &Relation::rename, nb::arg("repository"), nb::arg("columns"))
-        .def("erase", &Relation::template erase<std::span<const ygg::Value>>, nb::arg("repository"), nb::arg("values"))
-        .def("clear", &Relation::clear);
-    // The views of a builder's children in each form: built (<Name>Builder), a record not interned yet (<Name>Borrowed).
+    // The views of a builder's children in each form: built (<Name>BuilderBorrowed), a record not interned yet
+    // (<Name>Borrowed).
     urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository, urd::builder<ygg::Schema, RelationRepository>>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository, urd::builder<ygg::Columns, RelationRepository>>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository>>(m);
     urd::python::bind_view<ygg::RowBuilderView<ygg::Schema, RelationRepository>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Row<ygg::Schema>, RelationRepository>>(m);
-    // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilder.
+    // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilderBorrowed.
     urd::python::bind_view<RelationBuilderView>(m);
 
     nb::class_<ygg::FreeRelationStorage>(m,

@@ -27,11 +27,20 @@
 #include <urd/elements/children.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
+#include <urd/repr/slots/slots.hpp>
 #include <urd/repr/values/sorted_block_set.hpp>
 #include <urd/store.hpp>
 #include <utility>
 #include <variant>
 #include <vector>
+
+namespace ygg
+{
+/// The records a relation builder's inserted rows are drawn from (builder::insert): a Store of slots, a row's slot reused
+/// once it is erased.
+template<typename F>
+using RowRecords = urd::Store<urd::slots<urd::data<Row<F>>>>;
+}  // namespace ygg
 
 namespace urd
 {
@@ -41,6 +50,15 @@ template<typename F, typename C>
 struct built_form<urd::flat_vector<ygg::RowIndex<F>>, C>
 {
     using type = urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>>, urd::sorted, urd::unique, urd::order_by<ygg::TupleOrder>>;
+
+    /// Each row key its interned child.
+    static type from(const urd::flat_vector<ygg::RowIndex<F>>& keys, const C& context)
+    {
+        auto result = type();
+        for (const auto& key : keys)
+            result.insert(urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>(std::in_place_index<0>, urd::interned_child<ygg::Row<F>, C, ygg::RowIndex<F>>(key, &context)));
+        return result;
+    }
 };
 
 /// The builder of a relation of family F: its record's members, each index a child (a view through its own context).
@@ -69,12 +87,6 @@ struct builder<ygg::Relation<F>, C>
         pool = repository.view(pool_);
         rows.clear();
     }
-
-    /// Empties a free relation's builder and gives it these columns (validated), its pool the Schema of their types; both
-    /// interned into `repository`.
-    void initialize(C& repository, std::span<const ygg::ColumnLayout> layouts)
-        requires std::same_as<F, ygg::Schema>
-    { initialize(repository, repository.schema(layouts), layouts); }
 
     /// Relabels its columns (validated), the same types: its pool and its rows stay.
     void rename(C& repository, std::span<const ygg::ColumnLayout> layouts)
@@ -129,6 +141,21 @@ struct builder<ygg::Relation<F>, C>
 
     /// Erases its rows; their rows stay in the repository.
     void clear() noexcept { rows.clear(); }
+
+    /// Its mutators as Python calls them (urd::python::bind_builder): rows inserted from and erased by a list of values,
+    /// a row's record drawn from a Store of row records (RowRecords).
+    static constexpr auto functions() noexcept
+    {
+        return urd::Functions<urd::function<"initialize", &builder::initialize, urd::arg<"repository">, urd::arg<"pool">, urd::arg<"columns">>,
+                              urd::function<"rename", &builder::rename, urd::arg<"repository">, urd::arg<"columns">>,
+                              urd::function<"insert",
+                                            &builder::template insert<std::span<const ygg::Value>, ygg::RowRecords<F>>,
+                                            urd::arg<"repository">,
+                                            urd::arg<"records">,
+                                            urd::arg<"values">>,
+                              urd::function<"erase", &builder::template erase<std::span<const ygg::Value>>, urd::arg<"repository">, urd::arg<"values">>,
+                              urd::function<"clear", &builder::clear>> {};
+    }
 
 private:
     /// Gives it these columns (validated), interned into `repository`.

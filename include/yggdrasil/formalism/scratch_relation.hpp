@@ -33,7 +33,7 @@ template<typename F, typename C>
 struct ScratchRelation
 {
     C rows;
-    using Records = urd::Store<urd::slots<urd::data<Row<F>>>>;
+    using Records = RowRecords<F>;
     Records records;
     /// A row's slot in its records (slot()).
     using Slot = typename Records::handle_type;
@@ -110,7 +110,7 @@ public:
     {
         auto drawn = m_slots.make_handle(columns.size());
         drawn->rows.clear();
-        drawn->relation.initialize(drawn->rows, columns);
+        drawn->relation.initialize(drawn->rows, drawn->rows.schema(columns), columns);
         return drawn;
     }
 

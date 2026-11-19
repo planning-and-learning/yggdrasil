@@ -428,7 +428,7 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     const auto columns =
         std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
     auto relation = ygg::FreeRelationBuilder();
-    relation.initialize(repository, columns);
+    relation.initialize(repository, repository.schema(columns), columns);
     const auto row = [](ygg::Value a, ygg::Value b) { return std::array { a, b }; };
     EXPECT_EQ(relation.insert(repository, records, row(2, 1)), std::pair(std::size_t { 0 }, true));
     EXPECT_EQ(relation.insert(repository, records, row(1, 5)), std::pair(std::size_t { 0 }, true));

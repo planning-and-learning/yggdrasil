@@ -40,6 +40,7 @@ struct Schema
 /// Column labels, distinct from tuple values and positions.
 struct Column
 {
+    static constexpr std::string_view name = "Column";
 };
 struct ColumnLayout;
 
