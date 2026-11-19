@@ -94,13 +94,22 @@ concept FindsNestedBuilder =
 
 namespace detail
 {
+/// Whether a child's form is its key (an interned child: an index, or a key of its own such as a row's), not a record
+/// or a builder.
+template<typename K>
+inline constexpr bool is_record_form = false;
+template<typename T>
+inline constexpr bool is_record_form<urd::data<T>> = true;
+template<typename T, typename C>
+inline constexpr bool is_record_form<urd::builder<T, C>> = true;
+
+template<typename K>
+concept ChildKey = !is_record_form<K>;
+
 /// The forms of a child interning a builder meets, each inserted into `repository`, with scratch records from
 /// `storage`, a builder storage of the repository (scratch<T>()); declared first, as they call one another.
-template<typename C, IsBuilderStorage Storage, typename T, typename K>
-K insert_child(C& repository, Storage& storage, const urd::index_view<T, C, K>& interned);
-template<typename C, IsBuilderStorage Storage, typename T, typename Context, typename K>
-    requires(!std::same_as<Context, C>)
-K insert_child(C& repository, Storage& storage, const urd::index_view<T, Context, K>& interned);
+template<typename C, IsBuilderStorage Storage, ChildKey K>
+K insert_child(C& repository, Storage& storage, const K& interned);
 template<typename C, IsBuilderStorage Storage, typename T>
     requires PreparedInsert<C, T>
 auto insert_child(C& repository, Storage& storage, urd::data<T>& record);
@@ -119,21 +128,11 @@ template<typename C, IsBuilderStorage Storage, typename T, typename Context>
     requires(!std::same_as<Context, C> && !InsertsNestedBuilder<C, Storage, T, Context>)
 [[noreturn]] urd::missing_key insert_child(C& repository, Storage& storage, const urd::builder<T, Context>& built);
 
-/// An interned child of this repository's kind: its key, where the repository holds it (this one or a parent layer);
-/// std::invalid_argument where another repository of the kind holds it (its key names another record here).
-template<typename C, IsBuilderStorage Storage, typename T, typename K>
-K insert_child(C& repository, Storage& /*storage*/, const urd::index_view<T, C, K>& interned)
-{
-    if (repository.view(interned.index()) != interned)
-        throw std::invalid_argument("ygg::formalism: a child interned in another repository");
-    return interned.index();
-}
-
-/// An interned child of another kind of repository (a match-tree node's formalism atom): its key.
-template<typename C, IsBuilderStorage Storage, typename T, typename Context, typename K>
-    requires(!std::same_as<Context, C>)
-K insert_child(C& /*repository*/, Storage& /*storage*/, const urd::index_view<T, Context, K>& interned)
-{ return interned.index(); }
+/// An interned child: its key, as it is (of this repository's kind, or of another's: a match-tree node's formalism atom).
+/// A key names no repository: that it is one of the repository it is interned into is its writer's to keep.
+template<typename C, IsBuilderStorage Storage, ChildKey K>
+K insert_child(C& /*repository*/, Storage& /*storage*/, const K& interned)
+{ return interned; }
 
 /// A record not interned yet: prepared (its domain makes it canonical) and inserted.
 template<typename C, IsBuilderStorage Storage, typename T>
@@ -177,11 +176,8 @@ template<typename C, IsBuilderStorage Storage, typename T, typename Context>
 
 /// The forms of a child finding a builder meets, each looked up in `repository` and nothing inserted: what the lookup
 /// gives (a key, the optional of a view, or missing_key for a child no record here can name); declared first.
-template<typename C, IsBuilderStorage Storage, typename T, typename K>
-K find_child(C& repository, Storage& storage, const urd::index_view<T, C, K>& interned);
-template<typename C, IsBuilderStorage Storage, typename T, typename Context, typename K>
-    requires(!std::same_as<Context, C>)
-K find_child(C& repository, Storage& storage, const urd::index_view<T, Context, K>& interned);
+template<typename C, IsBuilderStorage Storage, ChildKey K>
+K find_child(C& repository, Storage& storage, const K& interned);
 template<typename C, IsBuilderStorage Storage, typename T>
     requires PreparedInsert<C, T>
 found_t<C, T> find_child(C& repository, Storage& storage, urd::data<T>& record);
@@ -201,14 +197,9 @@ template<typename C, IsBuilderStorage Storage, typename T, typename Context>
 urd::missing_key find_child(C& repository, Storage& storage, const urd::builder<T, Context>& built);
 
 /// An interned child: its key, as insert_child gives it.
-template<typename C, IsBuilderStorage Storage, typename T, typename K>
-K find_child(C& repository, Storage& storage, const urd::index_view<T, C, K>& interned)
-{ return detail::insert_child(repository, storage, interned); }
-
-template<typename C, IsBuilderStorage Storage, typename T, typename Context, typename K>
-    requires(!std::same_as<Context, C>)
-K find_child(C& /*repository*/, Storage& /*storage*/, const urd::index_view<T, Context, K>& interned)
-{ return interned.index(); }
+template<typename C, IsBuilderStorage Storage, ChildKey K>
+K find_child(C& /*repository*/, Storage& /*storage*/, const K& interned)
+{ return interned; }
 
 /// A record not interned yet: prepared in place (its canonical form: the same record) and looked up.
 template<typename C, IsBuilderStorage Storage, typename T>
@@ -286,19 +277,33 @@ template<typename C, IsBuilderStorage Storage, typename T>
 found_t<C, T> find_record(C& repository, Storage& storage, const urd::builder<T, C>& built)
 { return detail::find_child(repository, storage, built); }
 
-/// A view of a record of this repository's kind: an interned one (its own, checked as an interned child is), or one
-/// holding a builder (interned as a built child is).
+/// A view of a record of this repository's kind: an interned one (its own: std::invalid_argument where another
+/// repository of the kind holds it, as its key would name another record here), or one holding a builder (interned as
+/// a built child is).
+template<typename C, typename T, typename K>
+void check_own(const C& repository, const urd::index_view<T, C, K>& interned)
+{
+    if (repository.view(interned.index()) != interned)
+        throw std::invalid_argument("ygg::formalism: a view of another repository");
+}
+
 template<typename C, IsBuilderStorage Storage, typename T, typename K>
-std::pair<urd::index_view<T, C, K>, bool> insert_view(C& repository, Storage& storage, const urd::index_view<T, C, K>& interned)
-{ return { repository.view(detail::insert_child(repository, storage, interned)), false }; }
+std::pair<urd::index_view<T, C, K>, bool> insert_view(C& repository, Storage& /*storage*/, const urd::index_view<T, C, K>& interned)
+{
+    detail::check_own(repository, interned);
+    return { interned, false };
+}
 
 template<typename C, IsBuilderStorage Storage, urd::View V>
 decltype(auto) insert_view(C& repository, Storage& storage, const V& view)
 { return detail::insert_record(repository, storage, urd::detail::view_access::record(view)); }
 
 template<typename C, IsBuilderStorage Storage, typename T, typename K>
-std::optional<urd::index_view<T, C, K>> find_view(C& repository, Storage& storage, const urd::index_view<T, C, K>& interned)
-{ return repository.view(detail::find_child(repository, storage, interned)); }
+std::optional<urd::index_view<T, C, K>> find_view(C& repository, Storage& /*storage*/, const urd::index_view<T, C, K>& interned)
+{
+    detail::check_own(repository, interned);
+    return interned;
+}
 
 template<typename C, IsBuilderStorage Storage, urd::View V>
 auto find_view(C& repository, Storage& storage, const V& view)

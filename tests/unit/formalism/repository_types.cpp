@@ -468,7 +468,7 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     auto reversed = urd::flat_vector<ygg::RowIndex<ygg::Schema>>();
     for (std::size_t i = interned.get_rows().size(); i-- > 0;)
         reversed.push_back(interned.row(i).index());
-    auto record = urd::data<ygg::Relation<ygg::Schema>>(std::get<0>(relation.pool).index(), std::get<0>(relation.columns).index(), std::move(reversed));
+    auto record = urd::data<ygg::Relation<ygg::Schema>>(std::get<0>(relation.pool), std::get<0>(relation.columns), std::move(reversed));
     EXPECT_FALSE(ygg::is_canonical(record, repository));
     const auto [same, same_created] = ygg::formalism::insert(repository, record);
     EXPECT_TRUE(ygg::is_canonical(record, repository));
@@ -540,7 +540,7 @@ TEST(YggdrasilTests, RowBuilderReadsItsTypesFromItsRelationInEachForm)
     auto repository = ygg::FreeRelationRepository();
     auto schemas = urd::Store<urd::slots<urd::builder<ygg::Schema, ygg::FreeRelationRepository>>>();
     auto row = urd::builder<ygg::Row<ygg::Schema>, ygg::FreeRelationRepository>();
-    auto& schema = urd::builder_of(row.relation, schemas, repository);
+    auto& schema = urd::builder_of(row.relation, schemas);
     schema.column_types.push_back(ygg::type_id<bool>);
     schema.column_types.push_back(ygg::type_id<std::uint32_t>);
     row.values.push_back(ygg::encode(true, ygg::type_id<bool>));
@@ -550,7 +550,7 @@ TEST(YggdrasilTests, RowBuilderReadsItsTypesFromItsRelationInEachForm)
     EXPECT_EQ(built.type(0), ygg::type_id<bool>);
     EXPECT_EQ(built.get<std::uint32_t>(1), 7U);
 
-    row.relation = repository.view(repository.schema(std::array { ygg::type_id<bool>, ygg::type_id<std::uint32_t> }));
+    row.relation = repository.schema(std::array { ygg::type_id<bool>, ygg::type_id<std::uint32_t> });
     EXPECT_EQ(repository.view(row).type(1), ygg::type_id<std::uint32_t>);
     EXPECT_THROW(static_cast<void>(repository.view(row).type(2)), std::out_of_range);
 }

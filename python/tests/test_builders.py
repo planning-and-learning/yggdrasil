@@ -25,10 +25,10 @@ def test_a_relation_builder_inserts_in_tuple_order_and_reads_through_its_view() 
     assert not hasattr(relation, "get_rows")
 
 
-def test_a_schema_builder_is_set_from_its_records_form() -> None:
+def test_a_schema_builder_is_set_from_its_records_form_without_a_repository() -> None:
     repository = f.RelationRepository()
     schema = f.SchemaBuilder()
-    schema.set_column_types(repository, [f.ColumnType.UINT32, f.ColumnType.BOOL])
+    schema.set_column_types([f.ColumnType.UINT32, f.ColumnType.BOOL])
     view = schema.view(repository)
     assert isinstance(view, f.SchemaBuilderBorrowed)
     assert list(view.get_column_types()) == [f.ColumnType.UINT32, f.ColumnType.BOOL]
@@ -48,3 +48,10 @@ def test_a_relation_builder_keeps_its_repository_and_records_alive() -> None:
     gc.collect()
     del relation
     gc.collect()
+
+
+def test_a_builder_is_made_from_its_fields_by_name() -> None:
+    repository = f.RelationRepository()
+    schema = f.SchemaBuilder(column_types=[f.ColumnType.BOOL])
+    assert list(schema.view(repository).get_column_types()) == [f.ColumnType.BOOL]
+    assert list(f.SchemaBuilder().view(repository).get_column_types()) == []

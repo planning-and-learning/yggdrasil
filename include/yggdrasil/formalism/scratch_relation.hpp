@@ -64,10 +64,10 @@ struct ScratchRelation
     {
         const auto columns = view().columns();
         m_columns.values.set(columns.begin(), columns.end());  // its buffer kept: no allocation once warm
-        const auto pool = std::get<urd::interned_child<F, C>>(relation.pool).index();  // interned by its initialization
+        const auto pool = std::get<urd::interned_child<F, C>>(relation.pool);  // interned by its initialization
         rows.clear();
-        relation.columns = rows.insert(m_columns).first;  // validated when it was initialized
-        relation.pool = rows.view(pool);
+        relation.columns = rows.insert(m_columns).first.index();  // validated when it was initialized
+        relation.pool = pool;
         relation.clear();
     }
 
@@ -77,7 +77,8 @@ struct ScratchRelation
     [[nodiscard]] Slot slot(const Values& values) const
     {
         const auto found = relation.rows.find(values);
-        return found == relation.rows.end() ? Slot() : std::get<urd::held_child<Row<F>, C>>(*found).slot();  // insert() holds its rows as records
+        return found == relation.rows.end() ? Slot()
+                                             : Slot(static_cast<typename Slot::value_type>(std::get<urd::held_child<Row<F>, C>>(*found).get_deleter().slot));  // insert() holds its rows as records
     }
 
     /// The record in a slot of its records (a row's, where it holds that row).
