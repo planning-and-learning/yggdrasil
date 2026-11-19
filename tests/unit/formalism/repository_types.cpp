@@ -284,31 +284,37 @@ public:
     [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
-/// The builders of the storage tests' records: their records' members (no children).
+/// The builders of the storage tests' records: their records' members, each in its built form (no children).
 template<typename C>
 struct builder<ygg::tests::RepositoryTypesElement, C>
 {
     urd::index<ygg::tests::RepositoryTypesElement> index;
-    int value = 0;
+    urd::built_t<int, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
 template<typename C>
 struct builder<ygg::tests::RepositoryTypesBuilderOther, C>
 {
-    int value = 0;
+    urd::built_t<int, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
 template<typename C>
 struct builder<ygg::tests::RepositoryTypesCheckout, C>
 {
-    int id = 0;
-    std::vector<int> values;
+    urd::built_t<int, C> id = 0;
+    urd::built_t<urd::Store<urd::sequence<int>, urd::contiguous>, C> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"id", &builder::id>, urd::field<"values", &builder::values>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
 template<>

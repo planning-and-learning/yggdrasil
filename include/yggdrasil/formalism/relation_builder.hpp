@@ -30,10 +30,19 @@
 #include <urd/repr/values/sorted_block_set.hpp>
 #include <urd/store.hpp>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace urd
 {
+/// A relation's rows as its builder holds them: row children (an interned row, a row builder, or a row record not
+/// interned yet), in tuple order and unique, as its record keeps their keys.
+template<typename F, typename C>
+struct built_form<urd::flat_vector<ygg::RowIndex<F>>, C>
+{
+    using type = urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>>, urd::sorted, urd::unique, urd::order_by<ygg::TupleOrder>>;
+};
+
 /// The builder of a relation of family F: its record's members, each index a child (a view through its own context).
 /// Its rows are row children (an interned row, a row builder, or a row record not interned yet), in tuple order and
 /// unique, as its record's: its members below keep them so, interning rows and columns into the repository they are
@@ -46,21 +55,17 @@ struct builder<ygg::Relation<F>, C>
     urd::index<ygg::Relation<F>> index;
     urd::built_t<urd::index<F>, C> pool;
     urd::built_t<urd::index<ygg::Columns>, C> columns;
-    urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>>, urd::sorted, urd::unique, urd::order_by<ygg::TupleOrder>> rows;
+    urd::built_t<urd::flat_vector<ygg::RowIndex<F>>, C> rows;
 
     static constexpr auto fields() noexcept
     { return urd::Fields<urd::field<"pool", &builder::pool>, urd::field<"columns", &builder::columns>, urd::field<"rows", &builder::rows>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
-    /// The members it owns memory through (urd::memory_of): its rows. Its pool and columns are views; a temporary one's
-    /// record belongs to the pool it was drawn from.
-    static constexpr auto memory_members() noexcept { return urd::Members<&builder::rows> {}; }
-
     /// Empties it and gives it the pool `pool` and these columns (validated), interned into `repository`.
     void initialize(C& repository, urd::index<F> pool_, std::span<const ygg::ColumnLayout> layouts)
     {
-        columns = interned_columns(repository, layouts);
+        assign_columns(repository, layouts);
         pool = repository.view(pool_);
         rows.clear();
     }
@@ -76,7 +81,7 @@ struct builder<ygg::Relation<F>, C>
     {
         if (!std::ranges::equal(repository.view(*this).columns(), layouts, {}, &ygg::ColumnLayout::type, &ygg::ColumnLayout::type))
             throw std::invalid_argument("Columns: relabeling must keep the arity and column types.");
-        columns = interned_columns(repository, layouts);
+        assign_columns(repository, layouts);
     }
 
     /// Inserts a row of values (as they are held: contiguous, or a stored row's), one per column, at its place in tuple
@@ -88,7 +93,9 @@ struct builder<ygg::Relation<F>, C>
     template<ygg::RowValues Values, typename Records>
     std::pair<std::size_t, bool> insert(C& repository, Records& records, const Values& values)
     {
-        const auto key = pool_key();
+        // Its rows' records name its pool by its key: a pool built or not interned yet is interned first, with the
+        // relation (repository.insert(builder, storage)), not row by row (std::bad_variant_access).
+        const auto key = urd::interned_view(pool).index();
         const auto view = repository.view(*this);
         if (static_cast<std::size_t>(std::ranges::distance(values)) != view.arity())
             throw std::invalid_argument("Relation: a row has one value per column.");
@@ -124,22 +131,12 @@ struct builder<ygg::Relation<F>, C>
     void clear() noexcept { rows.clear(); }
 
 private:
-    /// These columns (validated), interned into `repository`.
-    static urd::child<ygg::Columns, C> interned_columns(C& repository, std::span<const ygg::ColumnLayout> layouts)
+    /// Gives it these columns (validated), interned into `repository`.
+    void assign_columns(C& repository, std::span<const ygg::ColumnLayout> layouts)
     {
         ygg::validate_columns(layouts);
         auto record = urd::data<ygg::Columns>(urd::flat_vector<ygg::ColumnLayout>(layouts.begin(), layouts.end()));
-        return repository.insert(record).first;
-    }
-
-    /// The key of its pool, which its rows' records name: interned (initialize interns it); a pool built or not
-    /// interned yet is interned first, with the relation (repository.insert(builder, storage)), not row by row
-    /// (std::invalid_argument).
-    urd::index<F> pool_key() const
-    {
-        if (const auto* interned = std::get_if<urd::interned_child<F, C>>(&pool))
-            return interned->index();
-        throw std::invalid_argument("Relation: its pool is interned before rows are inserted into it (they are keyed by it).");
+        columns = repository.insert(record).first;
     }
 };
 
