@@ -20,7 +20,7 @@ namespace ygg
 template<typename V>
 concept SchemaViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_type, Schema> && requires(const std::remove_reference_t<V>& view) {
     view.context();
-    { view.get_types() } -> std::ranges::random_access_range;
+    { view.get_column_types() } -> std::ranges::random_access_range;
     { view.get_column_types() } -> std::ranges::random_access_range;
     requires std::same_as<std::ranges::range_value_t<decltype(view.get_column_types())>, TypeId>;
 };

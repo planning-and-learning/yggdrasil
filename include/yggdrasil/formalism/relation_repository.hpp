@@ -157,7 +157,7 @@ public:
     [[nodiscard]] std::span<const TypeId> types(urd::index<Schema> schema) const
     {
         const auto& record = m_schemas[schema];
-        return { record.types.data(), record.types.size() };
+        return { record.column_types.data(), record.column_types.size() };
     }
 
     /// The Schema of the pool `relation`, or none where no layer declared it.

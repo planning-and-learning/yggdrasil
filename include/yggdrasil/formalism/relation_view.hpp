@@ -63,15 +63,10 @@ public:
     /// The number of its columns.
     [[nodiscard]] std::size_t arity() const { return self().columns().size(); }
 
-    /// The number of its rows.
-    [[nodiscard]] std::size_t size() const { return std::ranges::size(self().get_rows()); }
-
-    [[nodiscard]] bool empty() const { return size() == 0; }
-
     /// The row at a position; std::out_of_range past the last.
     [[nodiscard]] auto row(std::size_t index) const
     {
-        if (index >= size())
+        if (index >= std::ranges::size(self().get_rows()))
             throw std::out_of_range("Relation: row index out of range.");
         return self().get_rows()[index];
     }
@@ -114,12 +109,6 @@ public:
         }
     }
 
-    /// The position of the first row not before these values in tuple order: where they are, or would go.
-    template<std::ranges::input_range Values>
-        requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
-    [[nodiscard]] std::size_t lower_bound(const Values& values) const
-    { return locate(values).first; }
-
     /// The position of the row of these values, if it holds one.
     template<std::ranges::input_range Values>
         requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
@@ -147,9 +136,8 @@ public:
         using Context = std::remove_cvref_t<decltype(std::declval<const V&>().context())>;
         return urd::Functions<urd::function<"columns", &view_mixin::columns>,
                               urd::function<"arity", &view_mixin::arity>,
-                              urd::function<"size", &view_mixin::size>,
-                              urd::function<"empty", &view_mixin::empty>,
                               urd::function<"row", &view_mixin::row, urd::arg<"index">>,
+                              urd::function<"locate", &view_mixin::template locate<std::span<const ygg::Value>>, urd::arg<"values">>,
                               urd::function<"with_prefix", &view_mixin::with_prefix, urd::arg<"values">>,
                               urd::function<"find", &view_mixin::template find<std::span<const ygg::Value>>, urd::arg<"values">>,
                               urd::function<"contains", &view_mixin::template contains<std::span<const ygg::Value>>, urd::arg<"values">>,

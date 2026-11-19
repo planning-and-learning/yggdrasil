@@ -19,11 +19,11 @@ template<>
 struct data<ygg::Schema>
 {
     urd::index<ygg::Schema> index;
-    urd::flat_vector<ygg::TypeId> types;
+    urd::flat_vector<ygg::TypeId> column_types;
 
     data() = default;
 
-    explicit data(urd::flat_vector<ygg::TypeId> types_) : index(), types(std::move(types_)) {}
+    explicit data(urd::flat_vector<ygg::TypeId> column_types_) : index(), column_types(std::move(column_types_)) {}
 
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
@@ -31,11 +31,11 @@ struct data<ygg::Schema>
     data& operator=(data&& other) = default;
     ~data() = default;
 
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"types", &data::types>> {}; }
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"column_types", &data::column_types>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::types> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::column_types> {}; }
 };
 
 }  // namespace urd

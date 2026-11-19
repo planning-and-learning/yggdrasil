@@ -95,7 +95,7 @@ struct Repository<SymbolRepo, RelationRepo>::Impl
         auto record = schema_builders.make_unique();
         urd::clear_fields(*record);
         for (const TypeId type : types)
-            record->types.push_back(type);
+            record->column_types.push_back(type);
         return relations.schema(*record);
     }
 };

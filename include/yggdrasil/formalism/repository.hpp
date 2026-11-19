@@ -314,7 +314,7 @@ public:
     /// A Schema's record as schema(types) interns it: the view of the pool of free relations of its types.
     urd::index_view<Schema, Repository> insert(const urd::data<Schema>& schema)
         requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
-    { return view(do_schema(std::span<const TypeId>(schema.types.data(), schema.types.size()))); }
+    { return view(do_schema(std::span<const TypeId>(schema.column_types.data(), schema.column_types.size()))); }
 
     /// The pool of free relations of these columns' types.
     urd::index<Schema> schema(std::span<const ColumnLayout> columns)

@@ -19,9 +19,9 @@ template<typename C>
 struct builder<ygg::Schema, C>
 {
     urd::index<ygg::Schema> index;
-    urd::built_t<urd::flat_vector<ygg::TypeId>, C> types;
+    urd::built_t<urd::flat_vector<ygg::TypeId>, C> column_types;
 
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"types", &builder::types>> {}; }
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"column_types", &builder::column_types>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
