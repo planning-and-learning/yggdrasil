@@ -59,6 +59,16 @@ public:
     [[nodiscard]] urd::index_view<T, Derived> view(urd::index<T> index) const noexcept
     { return { index, &static_cast<const Derived&>(*this) }; }
 
+    /// A record of its kinds held in place (a child held by value), as its view here; never a temporary.
+    template<typename T>
+        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
+    [[nodiscard]] urd::borrowed_view<T, Derived> view(const urd::data<T>& record URD_LIFETIMEBOUND) const noexcept
+    { return { &record, &static_cast<const Derived&>(*this) }; }
+
+    template<typename T>
+        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
+    void view(const urd::data<T>&& record) const = delete;
+
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     [[nodiscard]] std::optional<urd::index_view<T, Derived>> find(const urd::data<T>& record) const
@@ -70,18 +80,20 @@ public:
     std::pair<urd::index_view<T, Derived>, bool> insert(urd::data<T>& record)
     { return do_insert<T>(record); }
 
-    /// Interns a builder through the scratch records of a builder storage (its scratch<T>(), each worker's own; no
+    /// Interns a builder through the scratch records of a builder storage that holds them (its scratch<T>(), each worker's own; no
     /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each
     /// prepared, as the repository's domain makes it canonical, and inserted), interned children kept as they are, then its record, written into a scratch
     /// record, prepared and inserted. The view of its record, and whether it was new. A child interned in another repository of this kind, or a child of
     /// another repository not interned there, throws std::invalid_argument.
     template<typename T, IsBuilderStorage Storage>
+        requires requires(Storage& storage) { storage.template scratch<T>(); }
     decltype(auto) insert(const urd::builder<T, Derived>& built, Storage& storage)
     { return detail::insert_child(static_cast<Derived&>(*this), storage, built); }
 
     /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
     /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record.
     template<typename T, IsBuilderStorage Storage>
+        requires requires(Storage& storage) { storage.template scratch<T>(); }
     found_t<Derived, T> find(const urd::builder<T, Derived>& built, Storage& storage)
     { return detail::find_child(static_cast<Derived&>(*this), storage, built); }
 
