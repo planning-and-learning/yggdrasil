@@ -40,12 +40,19 @@
 
 namespace ygg::detail
 {
-/// Column i of a row of `size` columns, std::out_of_range past the last.
-[[nodiscard]] inline std::size_t checked_column(std::size_t i, std::size_t size)
+/// Throws std::out_of_range where column i is past the last of a row of `size` columns.
+inline void check_column(std::size_t i, std::size_t size)
 {
     if (i >= size)
         throw std::out_of_range("Row: column index out of range.");
-    return i;
+}
+
+/// `read` of a row's column types: its relation's (its pool's key's get_column_types(), a range, stored or computed), in
+/// whatever form the row holds the relation (a view, or a variant of views: interned, built, a record not interned yet).
+template<typename Relation, typename Read>
+decltype(auto) with_column_types(const Relation& relation, Read read)
+{
+    return urd::visit_view(relation, [&read](const auto& each) -> decltype(auto) { return read(each.get_column_types()); });
 }
 
 /// Throws std::invalid_argument where a column of type `type` is not read as T (ygg::type_id).
@@ -74,34 +81,34 @@ public:
     /// Its canonical Values.
     [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
 
-    /// Its columns' types: its relation's (its pool's key's get_column_types()), read once, in whatever form the relation
-    /// is held (interned, built, a record not interned yet), by value. A typed read (get<T>) checks the types itself.
+    /// Its columns' types, by value. A typed read (get<T>) checks the types itself.
     [[nodiscard]] std::vector<ygg::TypeId> column_types() const
     {
-        return urd::visit_view(get_relation(),
-                               [](const auto& relation) -> std::vector<ygg::TypeId>
-                               {
-                                   auto types = std::vector<ygg::TypeId> {};
-                                   for (const ygg::TypeId type : relation.get_column_types())
-                                       types.push_back(type);
-                                   return types;
-                               });
+        return ygg::detail::with_column_types(get_relation(),
+                                              [](const auto& types)
+                                              {
+                                                  auto result = std::vector<ygg::TypeId> {};
+                                                  for (const ygg::TypeId type : types)
+                                                      result.push_back(type);
+                                                  return result;
+                                              });
     }
 
     /// The canonical Value of a column; std::out_of_range past the last.
     [[nodiscard]] ygg::Value value(std::size_t column) const
-    { return self().get_values()[ygg::detail::checked_column(column, std::ranges::size(self().get_values()))]; }
+    {
+        decltype(auto) values = self().get_values();
+        ygg::detail::check_column(column, std::ranges::size(values));
+        return values[column];
+    }
 
     /// The type of a column, its relation's; std::out_of_range past the last.
     [[nodiscard]] ygg::TypeId type(std::size_t column) const
     {
-        const auto checked = ygg::detail::checked_column(column, std::ranges::size(self().get_values()));
-        return urd::visit_view(get_relation(),
-                               [checked](const auto& relation) -> ygg::TypeId
-                               {
-                                   const auto& types = relation.get_column_types();
-                                   return std::ranges::begin(types)[static_cast<std::ptrdiff_t>(checked)];
-                               });
+        ygg::detail::check_column(column, std::ranges::size(self().get_values()));
+        return ygg::detail::with_column_types(get_relation(),
+                                              [column](const auto& types) -> ygg::TypeId
+                                              { return *std::ranges::next(std::ranges::begin(types), static_cast<std::ptrdiff_t>(column)); });
     }
 
     /// A column decoded as its type (an object column as its untagged object index).
@@ -122,16 +129,15 @@ public:
     {
         decltype(auto) values = self().get_values();
         if (first < last)
-            static_cast<void>(ygg::detail::checked_column(last - 1, std::ranges::size(values)));  // std::out_of_range past the last
-        // the relation resolved once, its column types read once, for every column checked
-        urd::visit_view(get_relation(),
-                        [first, last](const auto& relation)
-                        {
-                            const auto& types = relation.get_column_types();
-                            const auto begin = std::ranges::begin(types);
-                            for (std::size_t i = first; i < last; ++i)
-                                ygg::detail::check_column_type<T>(begin[static_cast<std::ptrdiff_t>(i)]);
-                        });
+        {
+            ygg::detail::check_column(last - 1, std::ranges::size(values));  // std::out_of_range past the last
+            ygg::detail::with_column_types(get_relation(),
+                                           [first, last](const auto& types)
+                                           {
+                                               for (const ygg::TypeId type : types | std::views::drop(first) | std::views::take(last - first))
+                                                   ygg::detail::check_column_type<T>(type);
+                                           });
+        }
         return urd::transform(std::ranges::subrange(std::ranges::next(values.begin(), static_cast<std::ptrdiff_t>(first)),
                                                     std::ranges::next(values.begin(), static_cast<std::ptrdiff_t>(last))),
                               &ygg::decode_value<T>);
