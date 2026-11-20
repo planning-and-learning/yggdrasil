@@ -19,11 +19,11 @@ template<>
 struct data<ygg::Columns>
 {
     urd::index<ygg::Columns> index;
-    urd::flat_vector<ygg::ColumnLayout> values;
+    urd::flat_vector<urd::data<ygg::ColumnLayout>> values;
 
     data() = default;
 
-    explicit data(urd::flat_vector<ygg::ColumnLayout> values_) : index(), values(std::move(values_)) {}
+    explicit data(urd::flat_vector<urd::data<ygg::ColumnLayout>> values_) : index(), values(std::move(values_)) {}
 
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;

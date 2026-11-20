@@ -4,13 +4,18 @@
 
 import gc
 
+import pytest
+
 from pyyggdrasil import formalism as f
 
 
 def test_a_relation_builder_inserts_in_tuple_order_and_reads_through_its_view() -> None:
     repository = f.RelationRepository()
     records = f.RowSchemaRecords()
-    columns = [f.ColumnLayout(f.ColumnIndex(0), f.ColumnType.UINT32), f.ColumnLayout(f.ColumnIndex(1), f.ColumnType.UINT32)]
+    columns = [
+        f.ColumnLayoutData(f.ColumnIndex(0), f.ColumnType.UINT32),
+        f.ColumnLayoutData(f.ColumnIndex(1), f.ColumnType.UINT32),
+    ]
     relation = f.RelationSchemaBuilder()
     relation.initialize(repository, repository.schema([column.type for column in columns]), columns)
     assert relation.insert(repository, records, [2, 1]) == (0, True)
@@ -25,6 +30,18 @@ def test_a_relation_builder_inserts_in_tuple_order_and_reads_through_its_view() 
     assert not hasattr(relation, "get_rows")
 
 
+def test_a_schema_rows_objects_throw_as_its_context_holds_none() -> None:
+    repository = f.RelationRepository()
+    records = f.RowSchemaRecords()
+    columns = [f.ColumnLayoutData(f.ColumnIndex(0), f.ColumnType.UINT32)]
+    relation = f.RelationSchemaBuilder()
+    relation.initialize(repository, repository.schema([column.type for column in columns]), columns)
+    relation.insert(repository, records, [3])
+    row = relation.view(repository).row(0)
+    with pytest.raises(RuntimeError, match="holds no objects"):
+        row.get_objects()
+
+
 def test_a_schema_builder_is_set_from_its_records_form_without_a_repository() -> None:
     repository = f.RelationRepository()
     schema = f.SchemaBuilder()
@@ -37,7 +54,7 @@ def test_a_schema_builder_is_set_from_its_records_form_without_a_repository() ->
 def test_a_relation_builder_keeps_its_repository_and_records_alive() -> None:
     repository = f.RelationRepository()
     records = f.RowSchemaRecords()
-    columns = [f.ColumnLayout(f.ColumnIndex(0), f.ColumnType.UINT32)]
+    columns = [f.ColumnLayoutData(f.ColumnIndex(0), f.ColumnType.UINT32)]
     relation = f.RelationSchemaBuilder()
     relation.initialize(repository, repository.schema([f.ColumnType.UINT32]), columns)
     relation.insert(repository, records, [3])

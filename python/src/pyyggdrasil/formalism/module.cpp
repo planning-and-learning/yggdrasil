@@ -60,9 +60,9 @@ void bind_formalism_module_definitions(nb::module_& m)
         .value("FLOAT64", ygg::type_id<double>)
         .value("BOOL", ygg::type_id<bool>)
         .value("OBJECT", ygg::type_id<urd::index<ygg::formalism::Object>>);
-    urd::python::bind_value<ygg::ColumnLayout>(m);
+    urd::python::bind_data<ygg::ColumnLayout>(m);
     urd::python::bind_index<ygg::Row<ygg::Schema>>(m);
-    urd::python::bind_value<ygg::RowIndex<ygg::Schema>>(m);
+    urd::python::bind_index<ygg::RowIndex<ygg::Schema>>(m);
 
     // The records: <Name>Index, <Name>Data, <Name>Builder and <Name>, the view.
     urd::python::bind_index<ygg::Schema>(m);
@@ -94,9 +94,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilderBorrowed.
     urd::python::bind_view<RelationBuilderView>(m);
 
-    nb::class_<ygg::FreeRelationStorage>(m,
-                                         "FreeRelationStorage",
-                                         "The builders and scratch records free relations are interned through; create once, reuse.")
+    nb::class_<ygg::FreeRelationStorage>(m, "FreeRelationStorage", "The builders and scratch records free relations are interned through; create once, reuse.")
         .def(nb::init<>());
 
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")

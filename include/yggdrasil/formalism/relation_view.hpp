@@ -11,8 +11,8 @@
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/relation_view_concepts.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
-#include "yggdrasil/formalism/schema_view.hpp"
 #include "yggdrasil/formalism/row_view_concepts.hpp"
+#include "yggdrasil/formalism/schema_view.hpp"
 
 #include <cassert>
 #include <cstddef>
@@ -21,6 +21,7 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <urd/elements/children.hpp>
 #include <urd/elements/view.hpp>
 #include <utility>
 
@@ -50,13 +51,13 @@ public:
     [[nodiscard]] auto get_rows() const { return self().template member<&urd::record_of<V>::rows>(); }
 
     /// Its columns, labeled and typed.
-    [[nodiscard]] std::span<const ygg::ColumnLayout> columns() const
+    [[nodiscard]] std::span<const urd::data<ygg::ColumnLayout>> columns() const
     {
         return urd::visit_view(get_columns(),
                                [](const auto& columns)
                                {
                                    const auto& values = columns.get_values();
-                                   return std::span<const ygg::ColumnLayout>(values.data(), values.size());
+                                   return std::span<const urd::data<ygg::ColumnLayout>>(values.data(), values.size());
                                });
     }
 

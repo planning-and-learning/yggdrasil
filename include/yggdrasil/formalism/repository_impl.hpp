@@ -322,9 +322,9 @@ RowView<F, Repository<SymbolRepo, RelationRepo>> Repository<SymbolRepo, Relation
 }
 
 template<typename SymbolRepo, typename RelationRepo>
-urd::index<Schema> Repository<SymbolRepo, RelationRepo>::do_schema(std::span<const ColumnLayout> columns)
+urd::index<Schema> Repository<SymbolRepo, RelationRepo>::do_schema(std::span<const urd::data<ColumnLayout>> columns)
 {
-    const auto key = m_impl->intern_schema(columns | std::views::transform(&ColumnLayout::type));
+    const auto key = m_impl->intern_schema(columns | std::views::transform(&urd::data<ColumnLayout>::type));
     m_impl->relations.declare(key, key);
     return key;
 }
@@ -343,8 +343,8 @@ std::pair<urd::index_view<Relation<F>, Repository<SymbolRepo, RelationRepo>>, bo
 Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<Relation<F>>& relation)
 {
     const auto& values = (*this)[relation.columns].values;
-    const auto columns = std::span<const ColumnLayout>(values.data(), values.size());
-    if (!std::ranges::equal(m_impl->relations.template types<F>(relation.pool), columns, {}, {}, &ColumnLayout::type))
+    const auto columns = std::span<const urd::data<ColumnLayout>>(values.data(), values.size());
+    if (!std::ranges::equal(m_impl->relations.template types<F>(relation.pool), columns, {}, {}, &urd::data<ColumnLayout>::type))
         throw std::invalid_argument("Repository: the columns' types are not the pool's.");
     for (auto it = columns.begin(); it != columns.end(); ++it)
         if (repeats_label(columns, it))
@@ -359,7 +359,6 @@ Repository<SymbolRepo, RelationRepo>::do_insert(urd::data<Relation<F>>& relation
     const auto [index, created] = intern(m_impl->symbols.template get<Relation<F>>(), relation);
     return { view(index), created };
 }
-
 
 }  // namespace ygg::formalism
 

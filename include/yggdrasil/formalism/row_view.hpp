@@ -122,7 +122,7 @@ public:
     {
         decltype(auto) values = self().get_values();
         if (first < last)
-            ygg::detail::checked_column(last - 1, std::ranges::size(values));  // std::out_of_range past the last
+            static_cast<void>(ygg::detail::checked_column(last - 1, std::ranges::size(values)));  // std::out_of_range past the last
         // the relation resolved once, its column types read once, for every column checked
         urd::visit_view(get_relation(),
                         [first, last](const auto& relation)
@@ -142,27 +142,26 @@ public:
     [[nodiscard]] auto get() const
     { return get<T>(0, std::ranges::size(self().get_values())); }
 
-    /// Its columns as objects, resolved through its context: where its family's rows hold objects (a ground record's
-    /// objects are its row's, `atom.get_row().get_objects()`).
-    [[nodiscard]] auto get_objects() const
-        requires ygg::formalism::ObjectRows<F>
-    { return urd::resolve(get<urd::index<ygg::formalism::Object>>(), self().context()); }
+    /// Its columns as objects, resolved through its context (a ground record's objects are its row's,
+    /// `atom.get_row().get_objects()`). Throws std::invalid_argument where a column is not an object (get<T>), and
+    /// std::logic_error where its context holds no objects (a schema relation's rows: it has no view of an object).
+    auto get_objects() const
+    {
+        if constexpr (requires(const V& view, urd::index<ygg::formalism::Object> object) { view.context().view(object); })
+            return urd::resolve(get<urd::index<ygg::formalism::Object>>(), self().context());
+        else
+            throw std::logic_error("ygg::RowView::get_objects: its context holds no objects");
+    }
 
-    /// Its reads, and get_objects where its family's rows hold objects (ObjectRows).
     static constexpr auto functions() noexcept
     {
-        constexpr auto reads =
-            urd::Functions<urd::function<"column_types", &view_mixin::column_types>,
-                           urd::function<"value", &view_mixin::value, urd::arg<"column">>,
-                           urd::function<"type", &view_mixin::type, urd::arg<"column">>,
-                           urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>> {};
-        if constexpr (ygg::formalism::ObjectRows<F>)
-            return reads + urd::Functions<urd::function<"get_objects", &view_mixin::get_objects>> {};
-        else
-            return reads;
+        return urd::Functions<urd::function<"column_types", &view_mixin::column_types>,
+                              urd::function<"value", &view_mixin::value, urd::arg<"column">>,
+                              urd::function<"type", &view_mixin::type, urd::arg<"column">>,
+                              urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>,
+                              urd::function<"get_objects", &view_mixin::get_objects>> {};
     }
 };
-
 
 /// A row key held in a record resolves to its view, through its context (context.view(key)).
 template<typename F>

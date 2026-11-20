@@ -3,7 +3,7 @@ enable_testing()
 # Dependencies and targets
 
 find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
-find_package(nanobind CONFIG REQUIRED PATHS "${URD_NATIVE_PREFIX}" NO_DEFAULT_PATH)
+find_package(nanobind CONFIG REQUIRED PATHS ${CMAKE_PREFIX_PATH} NO_DEFAULT_PATH)
 add_subdirectory(unit)
 
 nanobind_add_module(yggdrasil_type_casters_test NB_SUPPRESS_WARNINGS BACKEND_MODULE nanobind_backend integration/python/type_casters.cpp integration/python/type_casters_module.cpp)

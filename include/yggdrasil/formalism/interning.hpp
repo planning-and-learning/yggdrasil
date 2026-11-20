@@ -12,12 +12,12 @@
 #include "yggdrasil/formalism/relation_data.hpp"
 
 #include <concepts>
+#include <optional>
 #include <stdexcept>
 #include <urd/elements/builder.hpp>
 #include <urd/elements/children.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
-#include <optional>
 #include <utility>
 
 namespace ygg
@@ -94,17 +94,11 @@ concept FindsNestedBuilder =
 
 namespace detail
 {
-/// Whether a child's form is its key (an interned child: an index, or a key of its own such as a row's), not a record
-/// or a builder.
+/// Whether a child's form is its key (an interned child: an index, or a key of its own such as a row's, a value), not a
+/// builder. A record not interned yet is a key's sibling form too, but it comes writable (data<T>&) and is taken by its
+/// own overloads, which a const key does not reach.
 template<typename K>
-inline constexpr bool is_record_form = false;
-template<typename T>
-inline constexpr bool is_record_form<urd::data<T>> = true;
-template<typename T, typename C>
-inline constexpr bool is_record_form<urd::builder<T, C>> = true;
-
-template<typename K>
-concept ChildKey = !is_record_form<K>;
+concept ChildKey = !urd::is_builder<K>;
 
 /// The forms of a child interning a builder meets, each inserted into `repository`, with scratch records from
 /// `storage`, a builder storage of the repository (scratch<T>()); declared first, as they call one another.

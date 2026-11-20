@@ -30,12 +30,12 @@ namespace fmt
 
 /// A column: label:type.
 template<>
-struct formatter<ygg::ColumnLayout, char>
+struct formatter<urd::data<ygg::ColumnLayout>, char>
 {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ygg::ColumnLayout& value, FormatContext& ctx) const
+    auto format(const urd::data<ygg::ColumnLayout>& value, FormatContext& ctx) const
     { return fmt::format_to(ctx.out(), "{}:{}", value.label, value.type); }
 };
 

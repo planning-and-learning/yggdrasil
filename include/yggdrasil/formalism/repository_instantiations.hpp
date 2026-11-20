@@ -106,12 +106,13 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
     template std::pair<urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>, bool> BOOST_PP_TUPLE_ELEM(       \
         2,                                                                                                                                                    \
         1,                                                                                                                                                    \
-        ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, std::span<const ::ygg::Value>);                     \
+        ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, std::span<const ::ygg::Value>);        \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
     template std::pair<urd::index<::ygg::Row<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>>, bool> BOOST_PP_TUPLE_ELEM(       \
         2,                                                                                                                                                    \
         1,                                                                                                                                                    \
-        ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>, const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow&);                     \
+        ARGS)::do_insert_row(urd::index<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>,                                        \
+                             const BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow&);                                                                              \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                           \
     template BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::StoredRow BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_at(                                                               \
         ::ygg::RowIndex<::ygg::formalism::detail::RepositoryRows<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>) const;                                                 \
@@ -127,23 +128,23 @@ using RepositoryRelations = boost::mp11::mp_at_c<typename Repo::Impl::RelationFa
 /// and RowCount row families. The counts are checked against its lists. schema() of a repository
 /// with free relations: YGG_FORMALISM_REPOSITORY_SCHEMA.
 #define YGG_FORMALISM_REPOSITORY(PREFIX, Repo, SymbolCount, RowCount)                                                        \
-    static_assert(boost::mp11::mp_size<Repo::SymbolTypes>::value == (SymbolCount), "YGG_FORMALISM_REPOSITORY: SymbolCount");                \
-    static_assert(boost::mp11::mp_size<Repo::RelationTypes>::value == (RowCount), "YGG_FORMALISM_REPOSITORY: RowCount");                    \
-    PREFIX template Repo::Repository(const Repo*);                                                                                          \
-    PREFIX template Repo::Repository(std::size_t, const Repo*);                                                                             \
-    PREFIX template Repo::~Repository();                                                                                                    \
-    PREFIX template void Repo::clear();                                                                                                     \
-    PREFIX template void Repo::clear_all();                                                                                                 \
-    PREFIX template urd::index_view<::ygg::Schema, Repo> Repo::view(urd::index<::ygg::Schema>) const;                                       \
-    PREFIX template const urd::data<::ygg::Schema>& Repo::operator[](urd::index<::ygg::Schema>) const;                                    \
-    BOOST_PP_REPEAT(SymbolCount, YGG_FORMALISM_REPOSITORY_SYMBOL, (PREFIX, Repo))                                                           \
+    static_assert(boost::mp11::mp_size<Repo::SymbolTypes>::value == (SymbolCount), "YGG_FORMALISM_REPOSITORY: SymbolCount"); \
+    static_assert(boost::mp11::mp_size<Repo::RelationTypes>::value == (RowCount), "YGG_FORMALISM_REPOSITORY: RowCount");     \
+    PREFIX template Repo::Repository(const Repo*);                                                                           \
+    PREFIX template Repo::Repository(std::size_t, const Repo*);                                                              \
+    PREFIX template Repo::~Repository();                                                                                     \
+    PREFIX template void Repo::clear();                                                                                      \
+    PREFIX template void Repo::clear_all();                                                                                  \
+    PREFIX template urd::index_view<::ygg::Schema, Repo> Repo::view(urd::index<::ygg::Schema>) const;                        \
+    PREFIX template const urd::data<::ygg::Schema>& Repo::operator[](urd::index<::ygg::Schema>) const;                       \
+    BOOST_PP_REPEAT(SymbolCount, YGG_FORMALISM_REPOSITORY_SYMBOL, (PREFIX, Repo))                                            \
     BOOST_PP_REPEAT(RowCount, YGG_FORMALISM_REPOSITORY_ROWS, (PREFIX, Repo))
 
 /// The explicit instantiation (PREFIX extern: its declaration) of schema() of repository Repo, which has free relations
 /// (rows of Schema).
 #define YGG_FORMALISM_REPOSITORY_SCHEMA(PREFIX, Repo)                                          \
     PREFIX template urd::index<::ygg::Schema> Repo::do_schema(std::span<const ::ygg::TypeId>); \
-    PREFIX template urd::index<::ygg::Schema> Repo::do_schema(std::span<const ::ygg::ColumnLayout>);
+    PREFIX template urd::index<::ygg::Schema> Repo::do_schema(std::span<const urd::data<::ygg::ColumnLayout>>);
 
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 

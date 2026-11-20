@@ -21,6 +21,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -62,7 +63,7 @@ private:
 
     /// A row child as the view it resolves to through the context; anything else (values, a prefix, a view) as it is.
     template<typename X>
-    decltype(auto) read(const X& row) const
+    [[nodiscard]] decltype(auto) read(const X& row) const
     {
         if constexpr (std::same_as<X, Child>)
             return urd::resolve(row, *context);
@@ -87,9 +88,9 @@ struct built_form<urd::flat_vector<ygg::RowIndex<F>>, C>
 /// The builder of a relation of family F: its record's members, each index a child (a key, a builder or a record).
 /// Its rows are row children (an interned row's key, a row builder, or a row record not interned yet), in tuple order
 /// and unique, as its record's, ordered through the repository it is initialized into: its members below keep them so,
-/// interning rows and columns into the repository they are given. It is read as any builder, through a view (urd::resolve(builder, repository), repository.view(builder): the
-/// relation mixin of relation_view.hpp), and interned with ygg::intern. A zero-column relation is true exactly when it
-/// contains the empty row.
+/// interning rows and columns into the repository they are given. It is read as any builder, through a view (urd::resolve(builder, repository),
+/// repository.view(builder): the relation mixin of relation_view.hpp), and interned with ygg::intern. A zero-column relation is true exactly when it contains
+/// the empty row.
 template<typename F, typename C>
 struct builder<ygg::Relation<F>, C>
 {
@@ -105,17 +106,21 @@ struct builder<ygg::Relation<F>, C>
 
     /// Empties it and gives it the pool `pool` and these columns (validated), interned into `repository`, through which
     /// its rows are then ordered.
-    void initialize(C& repository, urd::index<F> pool_, std::span<const ygg::ColumnLayout> layouts)
+    void initialize(C& repository, urd::index<F> pool_, std::span<const urd::data<ygg::ColumnLayout>> layouts)
     {
         assign_columns(repository, layouts);
         pool = pool_;
-        rows = urd::built_t<urd::flat_vector<ygg::RowIndex<F>>, C>(ygg::RowOrder<F, C> { &repository });
+        // Its rows ordered through `repository`: a Store of that order where it had another (its buffers kept where not).
+        if (rows.key_comp().context != &repository)
+            rows = urd::built_t<urd::flat_vector<ygg::RowIndex<F>>, C>(ygg::RowOrder<F, C> { &repository });
+        else
+            rows.clear();
     }
 
     /// Relabels its columns (validated), the same types: its pool and its rows stay.
-    void rename(C& repository, std::span<const ygg::ColumnLayout> layouts)
+    void rename(C& repository, std::span<const urd::data<ygg::ColumnLayout>> layouts)
     {
-        if (!std::ranges::equal(repository.view(*this).columns(), layouts, {}, &ygg::ColumnLayout::type, &ygg::ColumnLayout::type))
+        if (!std::ranges::equal(repository.view(*this).columns(), layouts, {}, &urd::data<ygg::ColumnLayout>::type, &urd::data<ygg::ColumnLayout>::type))
             throw std::invalid_argument("Columns: relabeling must keep the arity and column types.");
         assign_columns(repository, layouts);
     }
@@ -139,7 +144,8 @@ struct builder<ygg::Relation<F>, C>
         for (const ygg::Value value : values)
         {
             // A column's values are of its type's width: a record is no packed row, so it is checked here.
-            if (const auto bits = ygg::column_bits((column++)->type, ygg::whole_bits<urd::index<ygg::formalism::Object>>); bits < 64 && (value >> bits) != 0)
+            if (const auto bits = ygg::column_bits((column++)->type, ygg::whole_bits<urd::index<ygg::formalism::Object>>);
+                bits < std::numeric_limits<ygg::Value>::digits && (value >> bits) != 0)
                 throw std::out_of_range("Relation: a value does not fit its column.");
         }
         const auto [at, held] = view.locate(values);
@@ -148,7 +154,7 @@ struct builder<ygg::Relation<F>, C>
         auto record = records.make_handle();
         record->relation = key;
         record->values.set(std::ranges::begin(values), std::ranges::end(values));
-        rows.insert(urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>(std::in_place_index<2>, std::move(record)));
+        rows.emplace(std::in_place_index<2>, std::move(record));
         return { at, true };
     }
 
@@ -183,10 +189,10 @@ struct builder<ygg::Relation<F>, C>
 
 private:
     /// Gives it these columns (validated), interned into `repository`.
-    void assign_columns(C& repository, std::span<const ygg::ColumnLayout> layouts)
+    void assign_columns(C& repository, std::span<const urd::data<ygg::ColumnLayout>> layouts)
     {
         ygg::validate_columns(layouts);
-        auto record = urd::data<ygg::Columns>(urd::flat_vector<ygg::ColumnLayout>(layouts.begin(), layouts.end()));
+        auto record = urd::data<ygg::Columns>(urd::flat_vector<urd::data<ygg::ColumnLayout>>(layouts.begin(), layouts.end()));
         columns = repository.insert(record).first.index();
     }
 };

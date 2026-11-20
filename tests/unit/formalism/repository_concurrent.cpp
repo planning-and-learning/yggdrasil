@@ -45,7 +45,6 @@ namespace
 template<typename Width>
 struct ConcurrentRelation
 {
-    static constexpr bool objects = true;
 };
 
 /// Four object columns: the column types of every ConcurrentRelation's pool, make_binding's rows.

@@ -13,38 +13,55 @@
 #include <concepts>
 #include <span>
 #include <stdexcept>
-#include <variant>
 #include <string_view>
+#include <type_traits>
+#include <urd/elements/data.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/less.hpp>
+#include <variant>
 
 namespace ygg
 {
-/// A column: its label and type. Where its values lie in a row, the widths of its relation's pool say.
-struct ColumnLayout : urd::compared_by_identity<ColumnLayout>
+/// A column: its label and type (urd::data<ColumnLayout>, a value: no Store holds it). Where its values lie in a row,
+/// the widths of its relation's pool say.
+struct ColumnLayout
 {
     static constexpr std::string_view name = "ColumnLayout";
+};
+}  // namespace ygg
 
-    urd::index<Column> label;
-    TypeId type {};
+template<>
+struct urd::data<ygg::ColumnLayout>
+{
+    urd::index<ygg::Column> label;
+    ygg::TypeId type {};
 
-    ColumnLayout() = default;
+    data() = default;
 
-    ColumnLayout(urd::index<Column> label_, TypeId type_) : label(label_), type(type_) {}
+    data(urd::index<ygg::Column> label_, ygg::TypeId type_) : label(label_), type(type_) {}
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&ColumnLayout::label, &ColumnLayout::type> {}; }
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
 
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"label", &ColumnLayout::label>, urd::field<"type", &ColumnLayout::type>> {}; }
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"label", &data::label>, urd::field<"type", &data::type>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::label, &data::type> {}; }
 };
 
+namespace ygg
+{
+
 /// Whether a column before `column` has its label.
-[[nodiscard]] inline bool repeats_label(std::span<const ColumnLayout> columns, std::span<const ColumnLayout>::iterator column)
-{ return std::ranges::find(columns.begin(), column, column->label, &ColumnLayout::label) != column; }
+[[nodiscard]] inline bool repeats_label(std::span<const urd::data<ColumnLayout>> columns, std::span<const urd::data<ColumnLayout>>::iterator column)
+{ return std::ranges::find(columns.begin(), column, column->label, &urd::data<ColumnLayout>::label) != column; }
 
 /// Throws std::invalid_argument where a column's type is invalid or two columns share a label.
-inline void validate_columns(std::span<const ColumnLayout> columns)
+inline void validate_columns(std::span<const urd::data<ColumnLayout>> columns)
 {
     for (auto it = columns.begin(); it != columns.end(); ++it)
     {

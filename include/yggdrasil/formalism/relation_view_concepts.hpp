@@ -27,7 +27,7 @@ template<typename V, typename F>
 concept RelationViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_type, Relation<F>>
                               && requires(const std::remove_reference_t<V>& view, std::size_t i, std::span<const Value> values) {
                                      view.context();
-                                     { view.columns() } -> std::same_as<std::span<const ColumnLayout>>;
+                                     { view.columns() } -> std::same_as<std::span<const urd::data<ColumnLayout>>>;
                                      { view.arity() } -> std::same_as<std::size_t>;
                                      { view.get_rows() } -> std::ranges::sized_range;
                                      { view.get_rows() } -> std::ranges::random_access_range;

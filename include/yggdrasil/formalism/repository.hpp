@@ -132,11 +132,10 @@ public:
     { return do_insert<T>(record); }
 
     /// Interns a builder through the scratch records of a builder storage (its scratch<T>(), each worker's own; no
-    /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each prepared, as
-    /// the repository's domain makes it canonical, and inserted), interned children kept as they are, then its record,
-    /// written into a scratch record, prepared and inserted. The view of its record, and whether it was new. A child
-    /// interned in another repository of this kind, or a child of another repository not interned there, throws
-    /// std::invalid_argument.
+    /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each
+    /// prepared, as the repository's domain makes it canonical, and inserted), interned children kept as they are, then its record, written into a scratch
+    /// record, prepared and inserted. The view of its record, and whether it was new. A child interned in another repository of this kind, or a child of
+    /// another repository not interned there, throws std::invalid_argument.
     template<typename T, IsBuilderStorage Storage>
     decltype(auto) insert(const urd::builder<T, Repository>& built, Storage& storage)
     { return detail::insert_child(*this, storage, built); }
@@ -196,6 +195,7 @@ public:
     /// A record held outside the repository as its view here, which points at it (the record must outlive the view;
     /// never a temporary).
     template<typename T>
+        requires HoldsRecords<Repository<SymbolRepo, RelationRepo>, T>
     [[nodiscard]] urd::borrowed_view<T, Repository> view(const urd::data<T>& record URD_LIFETIMEBOUND) const
     { return { &record, this }; }
 
@@ -317,7 +317,7 @@ public:
     { return view(do_schema(std::span<const TypeId>(schema.column_types.data(), schema.column_types.size()))); }
 
     /// The pool of free relations of these columns' types.
-    urd::index<Schema> schema(std::span<const ColumnLayout> columns)
+    urd::index<Schema> schema(std::span<const urd::data<ColumnLayout>> columns)
         requires HasRows<Repository<SymbolRepo, RelationRepo>, Schema>
     { return do_schema(columns); }
 
@@ -376,7 +376,7 @@ private:
     template<typename F>
     std::pair<urd::index_view<Relation<F>, Repository>, bool> do_insert(urd::data<Relation<F>>& relation);
     urd::index<Schema> do_schema(std::span<const TypeId> types);
-    urd::index<Schema> do_schema(std::span<const ColumnLayout> columns);
+    urd::index<Schema> do_schema(std::span<const urd::data<ColumnLayout>> columns);
 
     const Repository* m_parent;
     std::size_t m_layer;

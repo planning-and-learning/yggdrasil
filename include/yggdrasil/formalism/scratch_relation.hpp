@@ -15,12 +15,12 @@
 #include <concepts>
 #include <cstdint>
 #include <span>
-#include <variant>
-#include <vector>
 #include <urd/elements/handle.hpp>
 #include <urd/repr/containers/schema_rows.hpp>
 #include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
+#include <variant>
+#include <vector>
 
 namespace ygg
 {
@@ -40,7 +40,7 @@ struct ScratchRelation
     urd::builder<Relation<F>, C> relation;
 
     /// An empty one (a repository's default constructor is explicit: so is not an aggregate's).
-    ScratchRelation() : rows(), records(), relation(), m_columns() {}
+    ScratchRelation() : rows(), records(), relation(), columns_kept() {}
 
     /// An empty one for relations of `arity` columns, as ScratchRelations keeps them (its records' buffers fit them).
     explicit ScratchRelation(std::size_t /*arity*/) : ScratchRelation() {}
@@ -63,10 +63,10 @@ struct ScratchRelation
     void clear()
     {
         const auto columns = view().columns();
-        m_columns.values.set(columns.begin(), columns.end());  // its buffer kept: no allocation once warm
+        columns_kept.values.set(columns.begin(), columns.end());               // its buffer kept: no allocation once warm
         const auto pool = std::get<urd::interned_child<F, C>>(relation.pool);  // interned by its initialization
         rows.clear();
-        relation.columns = rows.insert(m_columns).first.index();  // validated when it was initialized
+        relation.columns = rows.insert(columns_kept).first.index();  // validated when it was initialized
         relation.pool = pool;
         relation.clear();
     }
@@ -77,15 +77,16 @@ struct ScratchRelation
     [[nodiscard]] Slot slot(const Values& values) const
     {
         const auto found = relation.rows.find(values);
-        return found == relation.rows.end() ? Slot()
-                                             : Slot(static_cast<typename Slot::value_type>(std::get<urd::held_child<Row<F>, C>>(*found).get_deleter().slot));  // insert() holds its rows as records
+        return found == relation.rows.end() ? Slot() :
+                                              Slot(static_cast<typename Slot::value_type>(
+                                                  std::get<urd::held_child<Row<F>, C>>(*found).get_deleter().slot));  // insert() holds its rows as records
     }
 
     /// The record in a slot of its records (a row's, where it holds that row).
     [[nodiscard]] const urd::data<Row<F>>& at(Slot slot) const { return records[slot]; }
 
-private:
-    urd::data<Columns> m_columns;  ///< Its columns across a clear(), which forgets their record.
+    /// Its columns across a clear(), which forgets their record: clear()'s, kept so that a refill allocates nothing.
+    urd::data<Columns> columns_kept;
 };
 
 /// The scratch relations a computation draws (draw()): each held by its handle and given back with it, its
@@ -97,7 +98,7 @@ class ScratchRelations
 public:
     /// A scratch relation of these columns (validated) in the pool `pool`: its repository cleared, its builder
     /// initialized.
-    [[nodiscard]] urd::handle<ScratchRelation<F, C>> draw(urd::index<F> pool, std::span<const ColumnLayout> columns)
+    [[nodiscard]] urd::handle<ScratchRelation<F, C>> draw(urd::index<F> pool, std::span<const urd::data<ColumnLayout>> columns)
     {
         auto drawn = m_slots.make_handle(columns.size());
         drawn->rows.clear();
@@ -106,7 +107,7 @@ public:
     }
 
     /// A free relation of these columns (validated), its pool the Schema of their types.
-    [[nodiscard]] urd::handle<ScratchRelation<F, C>> draw(std::span<const ColumnLayout> columns)
+    [[nodiscard]] urd::handle<ScratchRelation<F, C>> draw(std::span<const urd::data<ColumnLayout>> columns)
         requires std::same_as<F, Schema>
     {
         auto drawn = m_slots.make_handle(columns.size());

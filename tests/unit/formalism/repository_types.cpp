@@ -36,7 +36,6 @@
 #include <algorithm>
 #include <array>
 #include <boost/mp11.hpp>
-#include <urd/repr/slots/slots.hpp>
 #include <concepts>
 #include <cstdint>
 #include <forward_list>
@@ -56,6 +55,7 @@
 #include <urd/elements/hash.hpp>
 #include <urd/elements/view.hpp>
 #include <urd/repr/sequences/sequence.hpp>
+#include <urd/repr/slots/slots.hpp>
 #include <urd/store.hpp>
 #include <vector>
 
@@ -425,8 +425,8 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
 {
     auto repository = ygg::FreeRelationRepository();
     auto records = urd::Store<urd::slots<urd::data<ygg::Row<ygg::Schema>>>>();
-    const auto columns =
-        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    const auto columns = std::array { urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(0), ygg::TypeId(0) },
+                                      urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
     auto relation = ygg::FreeRelationBuilder();
     relation.initialize(repository, repository.schema(columns), columns);
     const auto row = [](ygg::Value a, ygg::Value b) { return std::array { a, b }; };
@@ -442,8 +442,8 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     EXPECT_FALSE(built.contains(row(7, 1)));
     EXPECT_EQ(built.find(row(2, 1)), std::optional<std::size_t>(2));
 
-    const auto renamed =
-        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(2), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(3), ygg::TypeId(0) } };
+    const auto renamed = std::array { urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(2), ygg::TypeId(0) },
+                                      urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(3), ygg::TypeId(0) } };
     relation.rename(repository, renamed);
     EXPECT_EQ(repository.view(relation).columns()[1].label, urd::index<ygg::Column>(3));
 
@@ -452,7 +452,7 @@ TEST(YggdrasilTests, RelationBuilderKeepsTupleOrderAndInterns)
     {
         auto seconds = std::vector<ygg::Value>();
         for (const auto& held : view.with_prefix(std::array { first }))
-            seconds.push_back(ygg::with_values(held, [](const auto& values) { return std::ranges::begin(values)[1]; }));
+            seconds.push_back(ygg::with_values(held, [](const auto& values) { return *std::ranges::next(std::ranges::begin(values)); }));
         return seconds;
     };
     EXPECT_EQ(starting(built, 1), (std::vector<ygg::Value> { 5, 7 }));
@@ -489,8 +489,8 @@ TEST(YggdrasilTests, RepositoryInternsAndFindsBuilderAndInternedViews)
 {
     auto repository = ygg::FreeRelationRepository();
     auto storage = ygg::FreeRelationStorage();
-    const auto layouts =
-        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    const auto layouts = std::array { urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(0), ygg::TypeId(0) },
+                                      urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
     auto columns = storage.checkout<ygg::Columns>();
     columns->values.assign(layouts.begin(), layouts.end());
     const auto built = urd::resolve(*columns, repository);
@@ -499,7 +499,6 @@ TEST(YggdrasilTests, RepositoryInternsAndFindsBuilderAndInternedViews)
     const auto [interned, created] = repository.insert(built, storage);
     EXPECT_TRUE(created);
     EXPECT_EQ(repository.find(built, storage), std::optional(interned));
-
 
     EXPECT_EQ(repository.insert(interned, storage), std::pair(interned, false));
     EXPECT_EQ(repository.find(interned, storage), std::optional(interned));
@@ -512,8 +511,8 @@ TEST(YggdrasilTests, RepositoryInternsAndFindsBuilderAndInternedViews)
 TEST(YggdrasilTests, ScratchRelationsDrawRelationsWithTheirRows)
 {
     auto scratch = ygg::FreeScratchRelations();
-    const auto columns =
-        std::array { ygg::ColumnLayout { urd::index<ygg::Column>(0), ygg::TypeId(0) }, ygg::ColumnLayout { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    const auto columns = std::array { urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(0), ygg::TypeId(0) },
+                                      urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
     const ygg::FreeScratchRelation* first = nullptr;
     {
         auto relation = scratch.draw(columns);

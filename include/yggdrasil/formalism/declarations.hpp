@@ -22,6 +22,7 @@
 #include <urd/elements/builder.hpp>
 #include <urd/elements/concepts.hpp>
 #include <urd/elements/flat.hpp>
+#include <urd/elements/index.hpp>
 #include <urd/tags.hpp>
 
 namespace ygg
@@ -63,8 +64,8 @@ struct Row
     static constexpr std::string_view name = urd::joined_name<"Row", F::name>;
 };
 
-/// The index of a stored row: its pool's key and its id there. Its view is the urd::index_view of it (RowView), which
-/// reads the row through its context (context.values(key)).
+/// The index of a stored row: its pool's key and its id there. A key, as urd::index is: it reads as the row it names
+/// (its view, RowView, through its context: context.values(key); urd::resolution<RowIndex<F>>), it is no record.
 template<typename F>
 struct RowIndex
 {
@@ -255,6 +256,15 @@ concept SupportsSymbol = boost::mp11::mp_contains<typename std::remove_cvref_t<R
 template<typename Repository, typename F>
 concept HasRows = boost::mp11::mp_contains<typename std::remove_cvref_t<Repository>::RelationTypes, F>::value;
 
+/// Whether a repository holds records of T: T is among its symbols, or T is Row<F> of a family whose rows it pools.
+template<typename Repository, typename T>
+inline constexpr bool holds_records = SupportsSymbol<Repository, T>;
+template<typename Repository, typename F>
+inline constexpr bool holds_records<Repository, Row<F>> = HasRows<Repository, F>;
+
+template<typename Repository, typename T>
+concept HoldsRecords = holds_records<Repository, T>;
+
 /// Whether a repository has relations of family F (Relation<F> is among its symbols).
 template<typename Repository, typename F>
 concept HasRelations = SupportsSymbol<Repository, Relation<F>>;
@@ -266,11 +276,6 @@ struct Object
     static constexpr std::string_view name = "Object";
 };
 
-/// Whether the rows of family F hold objects (F::objects): their columns read as Objects (ygg::get_objects).
-template<typename F>
-concept ObjectRows = requires {
-    { F::objects } -> std::convertible_to<bool>;
-} && F::objects;
 }  // namespace ygg::formalism
 
 #endif
