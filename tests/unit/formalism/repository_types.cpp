@@ -297,6 +297,29 @@ struct builder<ygg::tests::RepositoryTypesElement, C>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
+/// The builders of an object and of a pool key (what urd::copy draws where the target does not see them).
+template<typename C>
+struct builder<ygg::formalism::Object, C>
+{
+    urd::index<ygg::formalism::Object> index;
+    urd::built_t<ygg::uint_t, C> value = 0;
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+};
+
+template<typename C>
+struct builder<ygg::tests::RepositoryTypesRelation, C>
+{
+    urd::index<ygg::tests::RepositoryTypesRelation> index;
+    urd::built_t<ygg::uint_t, C> value = 0;
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+};
+
 template<typename C>
 struct builder<ygg::tests::RepositoryTypesBuilderOther, C>
 {
@@ -806,6 +829,39 @@ using FreeRow = RowView<Schema, ygg::FreeRelationRepository>;
 static_assert(!ResolvesColumn<FreeRow, formalism::Object> && !ResolvesColumnRange<FreeRow, formalism::Object>
               && !ResolvesEveryColumn<FreeRow, formalism::Object>);
 static_assert(!ResolvesColumn<RowBuilderView<Schema, ygg::FreeRelationRepository>, formalism::Object>);
+
+using ObjectRowStorage = formalism::BuilderStorage<ObjectRowRepository, formalism::Object, RepositoryTypesRelation, Row<RepositoryTypesRelation>>;
+
+/// A row copied between sibling layers whose own objects differ names the same objects: each object column's object is
+/// copied as a child (a parent's kept, the source layer's interned in the target by its fields), however the layers
+/// numbered their own.
+TEST(YggdrasilTests, CopyOfARowNamesTheSameObjectsInASiblingLayer)
+{
+    using ObjectIndex = urd::index<formalism::Object>;
+    auto storage = ObjectRowStorage();
+    auto parent = ObjectRowRepository();
+    const auto relation = declared<RepositoryTypesRelation>(parent, 2);
+    auto shared = urd::data<formalism::Object>(1);
+    const auto in_parent = parent.insert(shared).first.index();
+    auto source = ObjectRowRepository(&parent);
+    auto target = ObjectRowRepository(&parent);
+    auto own = urd::data<formalism::Object>(2);
+    const auto in_source = source.insert(own).first.index();
+    auto other = urd::data<formalism::Object>(7);
+    EXPECT_EQ(target.insert(other).first.index(), in_source);  // the target's own object takes the source's own index
+
+    auto row = urd::data<Row<RepositoryTypesRelation>> {};
+    row.relation = relation;
+    row.values.push_back(ygg::encode_value(in_parent));
+    row.values.push_back(ygg::encode_value(in_source));
+    const auto copied = target.view(urd::copy(source.insert(row).first, target, storage));
+    EXPECT_EQ(&copied.context(), &target);
+    EXPECT_EQ(copied.template resolve<formalism::Object>(0).index(), in_parent);
+    EXPECT_EQ(copied.template resolve<formalism::Object>(0).get_value(), 1U);
+    EXPECT_EQ(copied.template resolve<formalism::Object>(1).get_value(), 2U);
+    EXPECT_NE(copied.template get<ObjectIndex>(1), in_source);
+    EXPECT_EQ(urd::copy(copied, target, storage), copied.index());
+}
 
 TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelation)
 {

@@ -23,8 +23,12 @@
 #include "yggdrasil/formalism/relation_data.hpp"
 #include "yggdrasil/formalism/relation_view.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
+#include "yggdrasil/formalism/row_view_concepts.hpp"
 #include "yggdrasil/formalism/schema_view.hpp"
+#include "yggdrasil/formalism/values.hpp"
 
+#include <cstddef>
+#include <ranges>
 #include <span>
 #include <urd/elements/copy.hpp>
 #include <urd/elements/view.hpp>
@@ -48,9 +52,11 @@ struct urd::copying<ygg::Schema>
     }
 };
 
-/// A row: its relation copied (its key as it is where the target sees it), its values as they are (only the relation knows
-/// what they mean: an object column names an object the target must see, as the layers of one task share theirs), stored
-/// in the target's pool of that relation (one insert_row where the relation is seen).
+/// A row: its relation copied (its key as it is where the target sees it), then its values, each as its column's type
+/// reads it: an object column's object copied as a child (urd::copy of the object it names, resolved through the row's
+/// context: its key as it is where the target sees the layer that holds it), any other value as it is. Stored in the
+/// target's pool of that relation (one insert_row where the relation is seen), through a scratch row of `storage`. A row
+/// whose context resolves no objects (a free relation's) has its values kept as they are.
 template<typename F>
 struct urd::copying<ygg::Row<F>>
 {
@@ -60,7 +66,22 @@ struct urd::copying<ygg::Row<F>>
     static key_type into(const V& row, To& to, Storage& storage)
     {
         const auto relation = urd::visit_view(row.get_relation(), [&to, &storage](const auto& view) { return urd::copy(view, to, storage); });
-        return key_type { relation, to.insert_row(relation, row.get_values()).first };
+        if constexpr (ygg::ResolvesObjects<urd::view_context_t<V>>)
+        {
+            auto copied = storage.template scratch<ygg::Row<F>>();
+            copied->relation = relation;
+            for (std::size_t column = 0; column < std::ranges::size(row.get_values()); ++column)
+            {
+                if (row.type(column) == ygg::type_id<urd::index<ygg::formalism::Object>>)
+                    copied->values.push_back(ygg::encode_value(urd::copy(row.template resolve<ygg::formalism::Object>(column), to, storage)));
+                else
+                    copied->values.push_back(row.value(column));
+            }
+            return key_type { relation, to.insert_row(*copied).first };
+        }
+        // A context that resolves no objects (a free relation's) names none: its values mean the same anywhere.
+        else
+            return key_type { relation, to.insert_row(relation, row.get_values()).first };
     }
 };
 
