@@ -127,6 +127,12 @@ public:
     [[nodiscard]] size_t size() const
     { return get<T>().size(); }
 
+    /// The number of records of type T this layer holds itself (its parents' not counted).
+    template<typename T>
+        requires SupportsSymbol<SymbolRepositoryBase, T>
+    [[nodiscard]] size_t own_size() const
+    { return get<T>().size() - get<T>().base(); }
+
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
     [[nodiscard]] size_t memory_usage() const

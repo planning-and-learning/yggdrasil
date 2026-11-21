@@ -863,6 +863,40 @@ TEST(YggdrasilTests, CopyOfARowNamesTheSameObjectsInASiblingLayer)
     EXPECT_EQ(urd::copy(copied, target, storage), copied.index());
 }
 
+static_assert(urd::SeesAll<ObjectRowRepository, formalism::Object>);
+
+/// A layer sees every object a sibling can name where the sibling holds none of its own; a layer it lies over, always.
+/// A row of such a sibling is copied with its values as they are.
+TEST(YggdrasilTests, SeesAllObjectsOfASiblingWithoutItsOwn)
+{
+    auto storage = ObjectRowStorage();
+    auto parent = ObjectRowRepository();
+    const auto relation = declared<RepositoryTypesRelation>(parent, 1);
+    auto shared = urd::data<formalism::Object>(1);
+    const auto in_parent = parent.insert(shared).first.index();
+    auto source = ObjectRowRepository(&parent);
+    auto target = ObjectRowRepository(&parent);
+    EXPECT_TRUE(target.sees_all<formalism::Object>(source));
+
+    auto row = urd::data<Row<RepositoryTypesRelation>> {};
+    row.relation = relation;
+    row.values.push_back(ygg::encode_value(in_parent));
+    const auto copied = target.view(urd::copy(source.insert(row).first, target, storage));
+    EXPECT_EQ(copied.template resolve<formalism::Object>(0).index(), in_parent);
+    EXPECT_EQ(target.own_size<formalism::Object>(), 0U);
+
+    auto own = urd::data<formalism::Object>(2);
+    source.insert(own);
+    EXPECT_EQ(source.own_size<formalism::Object>(), 1U);
+    EXPECT_FALSE(target.sees_all<formalism::Object>(source));
+
+    auto child = ObjectRowRepository(&target);
+    auto other = urd::data<formalism::Object>(7);
+    child.insert(other);
+    EXPECT_TRUE(child.sees_all<formalism::Object>(target));
+    EXPECT_FALSE(target.sees_all<formalism::Object>(child));
+}
+
 TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelation)
 {
     using Object = formalism::Object;

@@ -148,6 +148,11 @@ std::size_t Repository<SymbolRepo, RelationRepo>::do_size() const
 
 template<typename SymbolRepo, typename RelationRepo>
 template<typename T>
+std::size_t Repository<SymbolRepo, RelationRepo>::do_own_size() const
+{ return m_impl->symbols.template own_size<T>(); }
+
+template<typename SymbolRepo, typename RelationRepo>
+template<typename T>
 std::size_t Repository<SymbolRepo, RelationRepo>::do_memory_usage() const
 { return m_impl->symbols.template memory_usage<T>(); }
 

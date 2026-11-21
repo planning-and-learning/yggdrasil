@@ -36,7 +36,6 @@
 #include <urd/elements/view.hpp>
 #include <utility>
 #include <variant>
-#include <vector>
 
 namespace ygg::detail
 {
@@ -104,19 +103,6 @@ public:
 
     /// Its canonical Values.
     [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
-
-    /// Its columns' types, by value. A typed read (get<T>) checks the types itself.
-    [[nodiscard]] std::vector<ygg::TypeId> column_types() const
-    {
-        return ygg::detail::with_column_types(get_relation(),
-                                              [](const auto& types)
-                                              {
-                                                  auto result = std::vector<ygg::TypeId> {};
-                                                  for (const ygg::TypeId type : types)
-                                                      result.push_back(type);
-                                                  return result;
-                                              });
-    }
 
     /// The canonical Value of a column; std::out_of_range past the last.
     [[nodiscard]] ygg::Value value(std::size_t column) const
@@ -198,8 +184,7 @@ public:
     {
         using Object = ygg::formalism::Object;
         constexpr auto reads =
-            urd::Functions<urd::function<"column_types", &view_mixin::column_types>,
-                           urd::function<"value", &view_mixin::value, urd::arg<"column">>,
+            urd::Functions<urd::function<"value", &view_mixin::value, urd::arg<"column">>,
                            urd::function<"type", &view_mixin::type, urd::arg<"column">>,
                            urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>> {};
         if constexpr (ygg::ResolvesObjects<urd::view_context_t<V>>)

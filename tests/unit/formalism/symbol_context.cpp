@@ -135,4 +135,24 @@ TEST(SymbolContext, SeesItselfAndTheLayersItLiesOver)
     EXPECT_FALSE(parent.sees(child));
     EXPECT_FALSE(child.sees(sibling));
 }
+
+static_assert(urd::SeesAll<Names, Name>);
+
+TEST(SymbolContext, SeesAllRecordsOfASiblingWithoutItsOwn)
+{
+    auto parent = Names();
+    auto record = urd::data<Name> {};
+    record.value = 1;
+    parent.insert(record);
+    auto child = Names(&parent);
+    auto sibling = Names(&parent);
+    EXPECT_TRUE(child.sees_all<Name>(sibling));
+    EXPECT_TRUE(child.sees_all<Name>(parent));
+    record.value = 2;
+    sibling.insert(record);
+    EXPECT_EQ(sibling.own_size<Name>(), 1U);
+    EXPECT_FALSE(child.sees_all<Name>(sibling));
+    auto grandchild = Names(&child);
+    EXPECT_TRUE(grandchild.sees_all<Name>(child));
+}
 }  // namespace

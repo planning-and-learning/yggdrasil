@@ -99,6 +99,11 @@ std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
+std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_own_size() const
+{ return m_impl->symbols.template own_size<T>(); }
+
+template<typename Derived, bool ThreadSafe, typename... Ts>
+template<typename T>
 std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_memory_usage() const
 { return m_impl->symbols.template memory_usage<T>(); }
 

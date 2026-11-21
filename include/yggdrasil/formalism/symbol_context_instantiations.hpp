@@ -67,6 +67,9 @@ using ContextSymbol = boost::mp11::mp_at_c<typename SymbolContextOf<Derived>::Sy
     template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_size<                                                 \
         ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;                                                               \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
+    template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_own_size<                                             \
+        ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;                                                               \
+    BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                         \
     template std::size_t ygg::formalism::detail::SymbolContextOf<BOOST_PP_TUPLE_ELEM(2, 1, ARGS)>::do_memory_usage<                                         \
         ::ygg::formalism::detail::ContextSymbol<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>() const;
 

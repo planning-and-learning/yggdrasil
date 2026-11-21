@@ -28,7 +28,6 @@
 #include "yggdrasil/formalism/values.hpp"
 
 #include <cstddef>
-#include <ranges>
 #include <span>
 #include <urd/elements/copy.hpp>
 #include <urd/elements/view.hpp>
@@ -53,10 +52,10 @@ struct urd::copying<ygg::Schema>
 };
 
 /// A row: its relation copied (its key as it is where the target sees it), then its values, each as its column's type
-/// reads it: an object column's object copied as a child (urd::copy of the object it names, resolved through the row's
-/// context: its key as it is where the target sees the layer that holds it), any other value as it is. Stored in the
-/// target's pool of that relation (one insert_row where the relation is seen), through a scratch row of `storage`. A row
-/// whose context resolves no objects (a free relation's) has its values kept as they are.
+/// reads it: an object column's object copied as a child (urd::copy of the object it names, through the row's context:
+/// its key as it is where the target sees the layer that holds it), any other value as it is. Stored in the target's
+/// pool of that relation, through a scratch row of `storage`. Where the target sees every object the row's context can
+/// name (urd::SeesAll), or the context resolves no objects (a free relation's), its values are kept as they are.
 template<typename F>
 struct urd::copying<ygg::Row<F>>
 {
@@ -65,17 +64,27 @@ struct urd::copying<ygg::Row<F>>
     template<typename V, typename To, typename Storage>
     static key_type into(const V& row, To& to, Storage& storage)
     {
+        using Object = ygg::formalism::Object;
         const auto relation = urd::visit_view(row.get_relation(), [&to, &storage](const auto& view) { return urd::copy(view, to, storage); });
         if constexpr (ygg::ResolvesObjects<urd::view_context_t<V>>)
         {
+            // What the loop below yields when the target sees every object: each value as it is.
+            if (to.template sees_all<Object>(row.context()))
+                return key_type { relation, to.insert_row(relation, row.get_values()).first };
             auto copied = storage.template scratch<ygg::Row<F>>();
             copied->relation = relation;
-            for (std::size_t column = 0; column < std::ranges::size(row.get_values()); ++column)
+            const std::span<const ygg::TypeId> types = to.types(relation);  // the declared pool's, as stored: no allocation
+            decltype(auto) values = row.get_values();
+            for (std::size_t column = 0; column < types.size(); ++column)
             {
-                if (row.type(column) == ygg::type_id<urd::index<ygg::formalism::Object>>)
-                    copied->values.push_back(ygg::encode_value(urd::copy(row.template resolve<ygg::formalism::Object>(column), to, storage)));
+                const ygg::Value value = values[column];
+                if (types[column] == ygg::type_id<urd::index<Object>>)
+                {
+                    const auto object = row.context().view(ygg::decode_value<urd::index<Object>>(value));
+                    copied->values.push_back(ygg::encode_value(urd::copy(object, to, storage)));
+                }
                 else
-                    copied->values.push_back(row.value(column));
+                    copied->values.push_back(value);
             }
             return key_type { relation, to.insert_row(*copied).first };
         }

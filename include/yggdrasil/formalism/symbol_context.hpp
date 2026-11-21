@@ -125,6 +125,12 @@ public:
     [[nodiscard]] std::size_t size() const
     { return do_size<T>(); }
 
+    /// The number of records of type T this layer holds itself (its parents' not counted).
+    template<typename T>
+        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
+    [[nodiscard]] std::size_t own_size() const
+    { return do_own_size<T>(); }
+
     /// The memory of this layer's records of type T, in bytes.
     template<typename T>
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
@@ -146,6 +152,20 @@ public:
                 return true;
         }
         return false;
+    }
+
+    /// Whether every record of type T that `source` can name is one this layer sees (urd::SeesAll): no layer of
+    /// `source`'s chain below the first this layer sees holds one of its own (a sibling layer without its own, say).
+    template<typename T>
+        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
+    [[nodiscard]] bool sees_all(const Derived& source) const
+    {
+        for (const Derived* layer = &source; layer != nullptr && !sees(*layer); layer = layer->parent())
+        {
+            if (layer->template own_size<T>() != 0)
+                return false;
+        }
+        return true;
     }
 
     SymbolContext();
@@ -171,6 +191,8 @@ private:
     [[nodiscard]] bool do_contains(urd::index<T> index) const;
     template<typename T>
     [[nodiscard]] std::size_t do_size() const;
+    template<typename T>
+    [[nodiscard]] std::size_t do_own_size() const;
     template<typename T>
     [[nodiscard]] std::size_t do_memory_usage() const;
 
