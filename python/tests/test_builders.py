@@ -4,8 +4,6 @@
 
 import gc
 
-import pytest
-
 from pyyggdrasil import formalism as f
 
 
@@ -30,7 +28,7 @@ def test_a_relation_builder_inserts_in_tuple_order_and_reads_through_its_view() 
     assert not hasattr(relation, "get_rows")
 
 
-def test_a_schema_rows_objects_throw_as_its_context_holds_none() -> None:
+def test_a_free_relations_row_resolves_no_objects() -> None:
     repository = f.RelationRepository()
     records = f.RowSchemaRecords()
     columns = [f.ColumnLayoutData(f.ColumnIndex(0), f.ColumnType.UINT32)]
@@ -38,8 +36,9 @@ def test_a_schema_rows_objects_throw_as_its_context_holds_none() -> None:
     relation.initialize(repository, repository.schema([column.type for column in columns]), columns)
     relation.insert(repository, records, [3])
     row = relation.view(repository).row(0)
-    with pytest.raises(RuntimeError, match="holds no objects"):
-        row.get_objects()
+    assert not hasattr(row, "get_objects")
+    assert not hasattr(row, "resolve_object")
+    assert not hasattr(row, "resolve_objects")
 
 
 def test_a_schema_builder_is_set_from_its_records_form_without_a_repository() -> None:

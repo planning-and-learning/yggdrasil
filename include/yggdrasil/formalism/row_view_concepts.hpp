@@ -12,6 +12,7 @@
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
+#include <urd/elements/view.hpp>
 
 namespace ygg
 {
@@ -27,6 +28,16 @@ concept RowViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_typ
     { view.type(i) } -> std::same_as<TypeId>;
     { view.get(i) } -> std::same_as<ColumnValue>;
 };
+
+/// Whether a row read through view V resolves its columns of record type T (RowView's resolve<T>): V's context resolves
+/// indices of T (urd::resolves), as a formalism repository does its objects; a free relation's repository resolves none.
+template<typename V, typename T>
+concept ResolvesColumns = urd::resolves<urd::view_context_t<V>, T>;
+
+/// Whether a context C resolves objects (urd::resolves): a row read through it gives its object columns as objects
+/// (RowView's resolve<Object>, resolve_object and resolve_objects in Python).
+template<typename C>
+concept ResolvesObjects = urd::resolves<C, formalism::Object>;
 
 /// Whether V is the view of a stored row of family F: its index() is the row's key.
 template<typename V, typename F>

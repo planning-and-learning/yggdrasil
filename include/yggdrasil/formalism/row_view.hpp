@@ -62,7 +62,31 @@ void check_column_type(TypeId type)
     if (type != type_id<T>)
         throw std::invalid_argument("Row: the column's type is not the requested one.");
 }
+
 }  // namespace ygg::detail
+
+namespace ygg
+{
+/// The values a row view V reads (its get_values()): a stored row's decoded from its pool, a held row's or a builder's
+/// own.
+template<typename V>
+using row_values_t = std::remove_cvref_t<decltype(std::declval<const V&>().get_values())>;
+
+/// Columns of a row view V read as T (get<T>(first, last)): a range of its values, each decoded. A class, so that it is
+/// formed only where a member that returns it is used (V is incomplete where its mixin is).
+template<typename V, typename T>
+struct decoded_columns
+{
+    using type = urd::transformed_range<std::ranges::subrange<std::ranges::iterator_t<const row_values_t<V>>>, T (*)(Value) noexcept>;
+};
+
+template<typename V, typename T>
+using decoded_columns_t = typename decoded_columns<V, T>::type;
+
+/// Columns of a row view V read as the records of tag T they name (resolve<T>(first, last)), through its context.
+template<typename V, typename T>
+using resolved_columns_t = urd::resolved_range<decoded_columns_t<V, urd::index<T>>, urd::view_context_t<V>>;
+}  // namespace ygg
 
 /// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, whose context reads each field of
 /// data<Row<F>> by its key: urd::ReadsFieldsByKey) and a row held outside the repository (urd::borrowed_view of its record) alike: its
@@ -125,9 +149,9 @@ public:
     /// Columns first to last (exclusive) as T, a borrowed random-access range; throws std::invalid_argument unless each
     /// column's type is the one T reads (checked once, here).
     template<typename T>
-    [[nodiscard]] auto get(std::size_t first, std::size_t last) const
+    [[nodiscard]] ygg::decoded_columns_t<V, T> get(std::size_t first, std::size_t last) const
     {
-        decltype(auto) values = self().get_values();
+        const auto& values = self().get_values();
         if (first < last)
         {
             ygg::detail::check_column(last - 1, std::ranges::size(values));  // std::out_of_range past the last
@@ -145,27 +169,55 @@ public:
 
     /// Every column as T (see get<T>(first, last)).
     template<typename T>
-    [[nodiscard]] auto get() const
+    [[nodiscard]] ygg::decoded_columns_t<V, T> get() const
     { return get<T>(0, std::ranges::size(self().get_values())); }
 
-    /// Its columns as objects, resolved through its context (a ground record's objects are its row's,
-    /// `atom.get_row().get_objects()`). Throws std::invalid_argument where a column is not an object (get<T>), and
-    /// std::logic_error where its context holds no objects (a schema relation's rows: it has no view of an object).
-    auto get_objects() const
-    {
-        if constexpr (requires(const V& view, urd::index<ygg::formalism::Object> object) { view.context().view(object); })
-            return urd::resolve(get<urd::index<ygg::formalism::Object>>(), self().context());
-        else
-            throw std::logic_error("ygg::RowView::get_objects: its context holds no objects");
-    }
+    /// The record of type T a column names, resolved through its context (a ground record's objects are its row's,
+    /// `atom.get_row().resolve<Object>()`): where its context resolves indices of T (ResolvesColumns). Throws
+    /// std::invalid_argument where the column's type is not urd::index<T> (get<T>).
+    template<typename T>
+        requires ygg::ResolvesColumns<V, T>
+    [[nodiscard]] urd::index_view<T, urd::view_context_t<V>> resolve(std::size_t column) const
+    { return urd::resolve(get<urd::index<T>>(column), self().context()); }
 
+    /// Columns first to last (exclusive) as the records of type T they name (see resolve<T>(column)): a borrowed range.
+    template<typename T>
+        requires ygg::ResolvesColumns<V, T>
+    [[nodiscard]] ygg::resolved_columns_t<V, T> resolve(std::size_t first, std::size_t last) const
+    { return urd::resolve(get<urd::index<T>>(first, last), self().context()); }
+
+    /// Every column as the record of type T it names (see resolve<T>(column)).
+    template<typename T>
+        requires ygg::ResolvesColumns<V, T>
+    [[nodiscard]] ygg::resolved_columns_t<V, T> resolve() const
+    { return urd::resolve(get<urd::index<T>>(), self().context()); }
+
+    /// Its reads, and where its context resolves objects (ResolvesObjects) their resolutions: resolve_object(column),
+    /// resolve_objects(first, last) and resolve_objects().
     static constexpr auto functions() noexcept
     {
-        return urd::Functions<urd::function<"column_types", &view_mixin::column_types>,
-                              urd::function<"value", &view_mixin::value, urd::arg<"column">>,
-                              urd::function<"type", &view_mixin::type, urd::arg<"column">>,
-                              urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>,
-                              urd::function<"get_objects", &view_mixin::get_objects>> {};
+        using Object = ygg::formalism::Object;
+        constexpr auto reads =
+            urd::Functions<urd::function<"column_types", &view_mixin::column_types>,
+                           urd::function<"value", &view_mixin::value, urd::arg<"column">>,
+                           urd::function<"type", &view_mixin::type, urd::arg<"column">>,
+                           urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>> {};
+        if constexpr (ygg::ResolvesObjects<urd::view_context_t<V>>)
+            return reads
+                   + urd::Functions<
+                       urd::function<"resolve_object",
+                                     static_cast<urd::index_view<Object, urd::view_context_t<V>> (view_mixin::*)(std::size_t) const>(
+                                         &view_mixin::template resolve<Object>),
+                                     urd::arg<"column">>,
+                       urd::function<"resolve_objects",
+                                     static_cast<ygg::resolved_columns_t<V, Object> (view_mixin::*)(std::size_t, std::size_t) const>(
+                                         &view_mixin::template resolve<Object>),
+                                     urd::arg<"first">,
+                                     urd::arg<"last">>,
+                       urd::function<"resolve_objects",
+                                     static_cast<ygg::resolved_columns_t<V, Object> (view_mixin::*)() const>(&view_mixin::template resolve<Object>)>> {};
+        else
+            return reads;
     }
 };
 

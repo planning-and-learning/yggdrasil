@@ -729,6 +729,24 @@ TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
     expect_row_access_for_each_relation_type<formalism::ConcurrentRelationRepository<urd::bit, RepositoryTypesRelation, RepositoryTypesElement>>();
 }
 
+/// Whether a row view resolves its columns of T, in each form: one column, a range of columns, every column.
+template<typename V, typename T>
+concept ResolvesColumn = requires(const V& view) { view.template resolve<T>(std::size_t { 0 }); };
+template<typename V, typename T>
+concept ResolvesColumnRange = requires(const V& view) { view.template resolve<T>(std::size_t { 0 }, std::size_t { 1 }); };
+template<typename V, typename T>
+concept ResolvesEveryColumn = requires(const V& view) { view.template resolve<T>(); };
+
+using ObjectRowRepository = formalism::Repository<formalism::SymbolRepository<formalism::Object, RepositoryTypesRelation>,
+                                                  formalism::RelationRepository<urd::word, RepositoryTypesRelation>>;
+using ObjectRow = RowView<RepositoryTypesRelation, ObjectRowRepository>;
+static_assert(ResolvesColumn<ObjectRow, formalism::Object> && ResolvesColumnRange<ObjectRow, formalism::Object>
+              && ResolvesEveryColumn<ObjectRow, formalism::Object>);
+using FreeRow = RowView<Schema, ygg::FreeRelationRepository>;
+static_assert(!ResolvesColumn<FreeRow, formalism::Object> && !ResolvesColumnRange<FreeRow, formalism::Object>
+              && !ResolvesEveryColumn<FreeRow, formalism::Object>);
+static_assert(!ResolvesColumn<RowBuilderView<Schema, ygg::FreeRelationRepository>, formalism::Object>);
+
 TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelation)
 {
     using Object = formalism::Object;
@@ -745,6 +763,9 @@ TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelat
     row.values.push_back(ygg::encode_value(a.index()));
     const auto stored = repository.insert(row).first;
     EXPECT_EQ(ygg::values_text<RepositoryTypesRelation>(stored), fmt::format("{} {}", b, a));
+    EXPECT_EQ(stored.resolve<Object>(1), a);
+    EXPECT_EQ(std::ranges::distance(stored.resolve<Object>(0, 1)), 1);
+    EXPECT_EQ(*stored.resolve<Object>().begin(), b);
 }
 
 namespace
