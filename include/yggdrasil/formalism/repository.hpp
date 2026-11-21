@@ -89,6 +89,17 @@ public:
 
     [[nodiscard]] const Repository* parent() const noexcept { return m_parent; }
 
+    /// Whether a key of `source` names the same record here (urd::Sees): `source` is this layer or one it lies over.
+    [[nodiscard]] bool sees(const Repository& source) const noexcept
+    {
+        for (const Repository* layer = this; layer != nullptr; layer = layer->m_parent)
+        {
+            if (layer == &source)
+                return true;
+        }
+        return false;
+    }
+
     /// The layer's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
 

@@ -50,6 +50,7 @@ SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::SymbolContext()
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::SymbolContext(const Derived* parent) :
+    m_parent(parent),
     m_impl(std::make_unique<Impl>(parent == nullptr ? nullptr : static_cast<const SymbolContext*>(parent)->m_impl.get()))
 {
 }

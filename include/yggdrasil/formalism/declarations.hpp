@@ -265,6 +265,10 @@ inline constexpr bool holds_records<Repository, Row<F>> = HasRows<Repository, F>
 template<typename Repository, typename T>
 concept HoldsRecords = holds_records<Repository, T>;
 
+/// Whether a repository nests others (Nests, nested.hpp): it names its NestedRepositories.
+template<typename R>
+concept NestsRepositories = requires { typename R::NestedRepositories; };
+
 /// Whether a repository has relations of family F (Relation<F> is among its symbols).
 template<typename Repository, typename F>
 concept HasRelations = SupportsSymbol<Repository, Relation<F>>;

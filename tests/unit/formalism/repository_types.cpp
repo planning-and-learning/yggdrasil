@@ -19,6 +19,7 @@
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/builder_impl.hpp"
 #include "yggdrasil/formalism/canonicalization.hpp"
+#include "yggdrasil/formalism/copy.hpp"
 #include "yggdrasil/formalism/formatter.hpp"
 #include "yggdrasil/formalism/free_relations.hpp"
 #include "yggdrasil/formalism/interning.hpp"
@@ -531,6 +532,65 @@ TEST(YggdrasilTests, ScratchRelationsDrawRelationsWithTheirRows)
     EXPECT_EQ(narrower->view().arity(), 1U);
     narrower->insert(std::array<ygg::Value, 1> { 9 });
     EXPECT_TRUE(narrower->view().contains(std::array<ygg::Value, 1> { 9 }));
+}
+
+static_assert(urd::Sees<ygg::FreeRelationRepository>);
+
+/// A layer sees itself and the layers it lies over: their rows are its own (urd::copy gives their keys); a sibling's row is
+/// stored in it, its Schema (the parent's) as it is.
+TEST(YggdrasilTests, CopyKeepsWhatItSeesAndStoresASiblingsRow)
+{
+    auto storage = ygg::FreeRelationStorage();
+    auto parent = ygg::FreeRelationRepository();
+    const auto pool = parent.schema(std::array { ygg::type_id<std::uint32_t> });
+    auto source = ygg::FreeRelationRepository(&parent);
+    auto target = ygg::FreeRelationRepository(&parent);
+    EXPECT_TRUE(source.sees(parent));
+    EXPECT_TRUE(source.sees(source));
+    EXPECT_FALSE(parent.sees(source));
+    EXPECT_FALSE(target.sees(source));
+
+    auto row = urd::data<Row<Schema>> {};
+    row.relation = pool;
+    row.values.push_back(ygg::encode(std::uint64_t { 5 }, ygg::type_id<std::uint32_t>));
+    const auto in_parent = parent.insert(row).first;
+    EXPECT_EQ(urd::copy(in_parent, source, storage), in_parent.index());  // seen: its key, nothing stored
+    EXPECT_EQ(source.size(pool), 1U);
+
+    row.values[0] = ygg::encode(std::uint64_t { 6 }, ygg::type_id<std::uint32_t>);
+    const auto in_source = source.insert(row).first;
+    const auto copied = urd::copy(in_source, target, storage);
+    EXPECT_EQ(copied.relation, pool);
+    EXPECT_EQ(target.view(copied).get<std::uint32_t>(0), 6U);
+    EXPECT_EQ(&target.view(copied).context(), &target);
+    EXPECT_EQ(urd::copy(target.view(copied), target, storage), copied);
+}
+
+/// A relation is copied, a builder's or an interned one, into another repository: its Schema, columns and rows interned
+/// there; copied again from there, it is its own.
+TEST(YggdrasilTests, CopyWritesARelationIntoAnotherRepository)
+{
+    auto storage = ygg::FreeRelationStorage();
+    auto scratch = ygg::FreeScratchRelations();
+    const auto columns = std::array { urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(0), ygg::TypeId(0) },
+                                      urd::data<ygg::ColumnLayout> { urd::index<ygg::Column>(1), ygg::TypeId(0) } };
+    auto relation = scratch.draw(columns);
+    relation->insert(std::array<ygg::Value, 2> { 3, 4 });
+    relation->insert(std::array<ygg::Value, 2> { 1, 2 });
+
+    auto target = ygg::FreeRelationRepository();
+    const auto copied = target.view(urd::copy(relation->view(), target, storage));
+    EXPECT_EQ(copied.get_rows().size(), 2U);
+    EXPECT_TRUE(copied.contains(std::array<ygg::Value, 2> { 1, 2 }));
+    EXPECT_TRUE(copied.contains(std::array<ygg::Value, 2> { 3, 4 }));
+    EXPECT_EQ(copied.columns()[1].label, urd::index<ygg::Column>(1));
+    EXPECT_EQ(urd::copy(copied, target, storage), copied.index());
+
+    auto other = ygg::FreeRelationRepository();
+    const auto again = other.view(urd::copy(copied, other, storage));
+    EXPECT_EQ(again.get_rows().size(), 2U);
+    EXPECT_TRUE(again.contains(std::array<ygg::Value, 2> { 3, 4 }));
+    EXPECT_EQ(&again.context(), &other);
 }
 
 /// A row reads its column types from its relation in whatever form it holds it: a built Schema as an interned one.

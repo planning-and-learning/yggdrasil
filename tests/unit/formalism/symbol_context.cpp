@@ -23,6 +23,7 @@
 #include <boost/mp11.hpp>
 #include <gtest/gtest.h>
 #include <type_traits>
+#include <urd/elements/copy.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
 
@@ -118,5 +119,20 @@ TEST(SymbolContext, LayersOverItsParent)
     child.clear();  // the child's records go, the parent's stay
     EXPECT_EQ(child.size<Name>(), 1);
     EXPECT_GT(parent.memory_usage<Name>(), 0);
+}
+
+static_assert(urd::Sees<Names>);
+
+TEST(SymbolContext, SeesItselfAndTheLayersItLiesOver)
+{
+    auto parent = Names();
+    auto child = Names(&parent);
+    auto sibling = Names(&parent);
+    EXPECT_EQ(child.parent(), &parent);
+    EXPECT_EQ(parent.parent(), nullptr);
+    EXPECT_TRUE(child.sees(child));
+    EXPECT_TRUE(child.sees(parent));
+    EXPECT_FALSE(parent.sees(child));
+    EXPECT_FALSE(child.sees(sibling));
 }
 }  // namespace

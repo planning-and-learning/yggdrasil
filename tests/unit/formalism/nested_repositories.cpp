@@ -14,7 +14,9 @@
 #include <concepts>
 #include <gtest/gtest.h>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
+#include <urd/elements/copy.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
 #include <utility>
@@ -273,5 +275,38 @@ TEST(Nests, ReachesItsNestedRepositoriesByTypeAndByKind)
     EXPECT_EQ(&fixture.items.repository_for<Tag>(), fixture.tags.get());
     EXPECT_EQ(&fixture.items.repository_for<Name>(), fixture.names.get());
     EXPECT_EQ(fixture.items.get_ptr<Tags>(), fixture.tags);
+}
+
+// Seeing is a query of layers alone. A repository may hold copies of another's records only where each repository it
+// nests sees the other's (its records name theirs by plain values too): check_compatible throws otherwise.
+static_assert(urd::ChecksCompatibility<Tags> && !urd::ChecksCompatibility<Names>);
+
+TEST(Nests, ChecksASourceOverRepositoriesItDoesNotSee)
+{
+    const auto names = std::make_shared<Names>();
+    const auto first = Tags(names);
+    const auto second = Tags(names);
+    EXPECT_TRUE(first.sees(first));
+    EXPECT_FALSE(first.sees(second));
+    EXPECT_NO_THROW(first.check_compatible(second));
+    const auto elsewhere = Tags(std::make_shared<Names>());
+    EXPECT_FALSE(first.sees(elsewhere));
+    EXPECT_THROW(first.check_compatible(elsewhere), std::invalid_argument);
+}
+
+// A record of a kind a repository reaches through one it nests is not copied (urd::copy): its key where that one sees
+// the record's repository, else std::invalid_argument.
+TEST(Nests, CopiesNoRecordOfANestedKind)
+{
+    auto fixture = Fixture {};
+    auto name = urd::data<Name>(3);
+    auto tag = urd::data<Tag>(fixture.names->insert(name).first.index());
+    const auto tag_view = fixture.tags->insert(tag).first;
+    auto unused_storage = 0;
+    static_assert(urd::Reaches<Items, Tag, Tags>);
+    EXPECT_EQ(urd::copy(tag_view, fixture.items, unused_storage), tag_view.index());
+    auto elsewhere = Tags(fixture.names);
+    const auto other_view = elsewhere.insert(tag).first;
+    EXPECT_THROW((void) urd::copy(other_view, fixture.items, unused_storage), std::invalid_argument);
 }
 }  // namespace

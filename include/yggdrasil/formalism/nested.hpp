@@ -14,6 +14,7 @@
 #include <concepts>
 #include <cstddef>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <urd/elements/view.hpp>
 #include <utility>
@@ -37,8 +38,7 @@ struct nested_of
     using type = Nested<>;
 };
 
-template<typename R>
-    requires requires { typename R::NestedRepositories; }
+template<NestsRepositories R>
 struct nested_of<R>
 {
     using type = typename R::NestedRepositories;
@@ -228,8 +228,19 @@ public:
     /// Finds a record of a kind held below, there.
     template<typename T>
         requires forwards<T> && requires(NestedFor<T>& nested, const urd::data<T>& record) { nested.find(record); }
-    decltype(auto) find(const urd::data<T>& record) const
+    [[nodiscard]] decltype(auto) find(const urd::data<T>& record) const
     { return member<NestedFor<T>>().find(record); }
+
+    /// Checks that Derived may hold copies of `source`'s records (urd::ChecksCompatibility): each nested repository sees
+    /// the one `source` nests in its place (the same one, or a layer it lies over), else std::invalid_argument. A record
+    /// of `source` names the records further down by plain values too (a row's objects, a denotation's bits), which name
+    /// the same records here only then. urd::copy checks it before it copies.
+    void check_compatible(const Derived& source) const
+    {
+        const auto& nests = static_cast<const Nests&>(source);
+        if (!(member<Rs>().sees(nests.template member<Rs>()) && ...))
+            throw std::invalid_argument("ygg::formalism::Nests: a source over repositories its target does not see");
+    }
 };
 
 }  // namespace ygg::formalism

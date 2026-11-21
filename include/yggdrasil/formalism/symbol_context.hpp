@@ -134,6 +134,20 @@ public:
     /// Forgets this layer's records; the parent's stay.
     void clear();
 
+    /// The layer this one lies over, or nullptr.
+    [[nodiscard]] const Derived* parent() const noexcept { return m_parent; }
+
+    /// Whether a key of `source` names the same record here (urd::Sees): `source` is this layer or one it lies over.
+    [[nodiscard]] bool sees(const Derived& source) const noexcept
+    {
+        for (const Derived* layer = &static_cast<const Derived&>(*this); layer != nullptr; layer = layer->parent())
+        {
+            if (layer == &source)
+                return true;
+        }
+        return false;
+    }
+
     SymbolContext();
     /// Parent layers must remain frozen and outlive this one.
     explicit SymbolContext(const Derived* parent);
@@ -160,6 +174,7 @@ private:
     template<typename T>
     [[nodiscard]] std::size_t do_memory_usage() const;
 
+    const Derived* m_parent = nullptr;
     std::unique_ptr<Impl> m_impl;
 };
 
