@@ -107,16 +107,6 @@ public:
     /// Forgets every record and row of this layer, its pool keys and their pools too; the parent's stay.
     void clear_all();
 
-    // Every key (a symbol's index, a Schema's, a row's key) is checked, owned and viewed by the one contains(key),
-    // owner(key) and view(key) of KeyedRepository: a view's context is the layer that owns its record.
-
-    /**
-     * Symbols: found in this layer and its parents.
-     */
-
-    /// Every record (a symbol, a Schema, a row under its relation) is stored and found by the one insert and find of
-    /// KeyedRepository (of a record, a builder, or a view), through the part that holds its kind; its record's key
-    /// written into it.
 private:
     friend class KeyedRepository<Repository>;
 
