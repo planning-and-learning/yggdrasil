@@ -80,6 +80,13 @@ struct urd::stored_ref_of<ygg::Row<F>>
     using type = ygg::PackedRow<F>;
 };
 
+/// A row is numbered within its relation's pool: its key is its relation's index, then its own there.
+template<typename F>
+struct urd::key_of<ygg::Row<F>>
+{
+    using type = urd::key<F, ygg::Row<F>>;
+};
+
 namespace ygg
 {
 
@@ -90,21 +97,9 @@ using RowView = urd::index_view<Row<F>, C, urd::key<F, Row<F>>>;
 
 namespace formalism
 {
-/// The key a repository interns a record of T under: its index, urd::index<T>; a row's, urd::key<F, Row<F>>.
+/// The key a repository interns a record of T under (urd::key_of): its index, urd::index<T>; a row's, urd::key<F, Row<F>>.
 template<typename T>
-struct key_of
-{
-    using type = urd::index<T>;
-};
-
-template<typename F>
-struct key_of<Row<F>>
-{
-    using type = urd::key<F, Row<F>>;
-};
-
-template<typename T>
-using key_t = typename key_of<T>::type;
+using key_t = urd::key_t<T>;
 }  // namespace formalism
 
 /// A relation builder of family F read through a context C: its borrowed view, with the relation mixin
@@ -151,19 +146,16 @@ namespace ygg::formalism
 
 template<typename SymbolRepo, typename RelationRepo>
 class Repository;
+template<bool ThreadSafe, typename... Ts>
+class SymbolStores;
 template<typename... Ts>
-class SymbolRepository;
-template<typename... Ts>
-class ConcurrentSymbolRepository;
-template<typename Width, typename... Ts>
 class RelationRepository;
-template<typename Width, typename... Ts>
+template<typename... Ts>
 class ConcurrentRelationRepository;
 
 /// What a Repository holds, named by what it holds rather than by the stores that hold it: its symbol types
-/// (Symbols<Ts...>; ConcurrentSymbols<Ts...> for concurrent interning) and its relation families with the width an
-/// object column is stored in, urd::word (32 bits) or urd::bit (the bits the largest object index needs)
-/// (Relations<Width, Ts...>; ConcurrentRelations<Width, Ts...>). Empty: a Repository named by them is completed
+/// (Symbols<Ts...>; ConcurrentSymbols<Ts...> for concurrent interning) and its relation families (Relations<Ts...>;
+/// ConcurrentRelations<Ts...>). Empty: a Repository named by them is completed
 /// with nothing else, so that a call with a Repository argument, looked up by argument (ADL, which completes the class
 /// templates among its argument's template arguments), never instantiates its stores. The stores are the symbol and
 /// relation repositories these map to (repository_impl.hpp).
@@ -177,18 +169,23 @@ struct ConcurrentSymbols
 {
 };
 
-template<typename Width, typename... Ts>
+template<typename... Ts>
 struct Relations
 {
 };
 
-template<typename Width, typename... Ts>
+template<typename... Ts>
 struct ConcurrentRelations
 {
 };
 
 namespace detail
 {
+/// The slot of the rows of relation symbol F in one layer (relation_repository.hpp): what a Repository's relations are
+/// written through.
+template<typename F, typename Rows>
+class RowSlot;
+
 /// What a Repository knows of what it holds from its template arguments alone (Symbols<...>, Relations<...>, or the
 /// symbol and relation repositories themselves), so that naming a Repository instantiates no store (repository.hpp
 /// declares; repository_impl.hpp defines); Store is the repository that holds them.
@@ -202,7 +199,8 @@ struct symbol_repository_traits<Symbols<Ts...>>
     /// The keys it resolves (repository[key]): each symbol's index.
     using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
     static constexpr bool thread_safe = false;
-    using Store = SymbolRepository<Ts...>;
+    /// The store that holds them (symbol_repository.hpp): one layered pool per kind.
+    using Store = SymbolStores<false, Ts...>;
 };
 
 template<typename... Ts>
@@ -211,47 +209,38 @@ struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
     using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
     static constexpr bool thread_safe = true;
-    using Store = ConcurrentSymbolRepository<Ts...>;
+    using Store = SymbolStores<true, Ts...>;
 };
 
-template<typename... Ts>
-struct symbol_repository_traits<SymbolRepository<Ts...>> : symbol_repository_traits<Symbols<Ts...>>
-{
-};
-
-template<typename... Ts>
-struct symbol_repository_traits<ConcurrentSymbolRepository<Ts...>> : symbol_repository_traits<ConcurrentSymbols<Ts...>>
-{
-};
 template<typename Held>
 struct relation_repository_traits;
 
-template<typename Width, typename... Ts>
-struct relation_repository_traits<Relations<Width, Ts...>>
+template<typename... Ts>
+struct relation_repository_traits<Relations<Ts...>>
 {
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     /// The keys it resolves (repository[key]): a Schema's index, and each family's rows' keys.
     using KeyTypes = boost::mp11::mp_list<urd::index<Schema>, urd::key<Ts, Row<Ts>>...>;
     static constexpr bool thread_safe = false;
-    using Store = RelationRepository<Width, Ts...>;
+    using Store = RelationRepository<Ts...>;
 };
 
-template<typename Width, typename... Ts>
-struct relation_repository_traits<ConcurrentRelations<Width, Ts...>>
+template<typename... Ts>
+struct relation_repository_traits<ConcurrentRelations<Ts...>>
 {
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     using KeyTypes = boost::mp11::mp_list<urd::index<Schema>, urd::key<Ts, Row<Ts>>...>;
     static constexpr bool thread_safe = true;
-    using Store = ConcurrentRelationRepository<Width, Ts...>;
+    using Store = ConcurrentRelationRepository<Ts...>;
 };
 
-template<typename Width, typename... Ts>
-struct relation_repository_traits<RelationRepository<Width, Ts...>> : relation_repository_traits<Relations<Width, Ts...>>
+template<typename... Ts>
+struct relation_repository_traits<RelationRepository<Ts...>> : relation_repository_traits<Relations<Ts...>>
 {
 };
 
-template<typename Width, typename... Ts>
-struct relation_repository_traits<ConcurrentRelationRepository<Width, Ts...>> : relation_repository_traits<ConcurrentRelations<Width, Ts...>>
+template<typename... Ts>
+struct relation_repository_traits<ConcurrentRelationRepository<Ts...>> : relation_repository_traits<ConcurrentRelations<Ts...>>
 {
 };
 }  // namespace detail
@@ -264,15 +253,6 @@ concept SupportsSymbol = boost::mp11::mp_contains<typename std::remove_cvref_t<R
 template<typename Repository, typename F>
 concept HasRows = boost::mp11::mp_contains<typename std::remove_cvref_t<Repository>::RelationTypes, F>::value;
 
-/// Whether a repository holds records of T: T is among its symbols, or T is Row<F> of a family whose rows it pools.
-template<typename Repository, typename T>
-inline constexpr bool holds_records = SupportsSymbol<Repository, T>;
-template<typename Repository, typename F>
-inline constexpr bool holds_records<Repository, Row<F>> = HasRows<Repository, F>;
-
-template<typename Repository, typename T>
-concept HoldsRecords = holds_records<Repository, T>;
-
 /// Whether a repository names the keys it resolves (KeyTypes: repository[key] is the record of the key's last tag).
 template<typename R>
 concept DeclaresKeys = requires { typename std::remove_cvref_t<R>::KeyTypes; };
@@ -281,25 +261,40 @@ concept DeclaresKeys = requires { typename std::remove_cvref_t<R>::KeyTypes; };
 template<typename R, typename K>
 concept HoldsKey = DeclaresKeys<R> && boost::mp11::mp_contains<typename std::remove_cvref_t<R>::KeyTypes, K>::value;
 
+/// Whether a repository holds records of T itself: it resolves their key (HoldsKey of key_t<T>), whatever their kind (a
+/// symbol, a Schema, a row).
+template<typename Repository, typename T>
+concept HoldsRecords = HoldsKey<Repository, key_t<T>>;
+
 /// The kind a key names: its last tag (urd::key<..., T>::element_type).
 template<typename K>
 using kind_of_key = typename K::element_type;
 
-/// What a repository's one insert runs on a record first (prepare_for_insert, found by ADL): its domain makes it
-/// canonical and checks it. Nothing, unless a domain says more by an overload of its own for its kind (more specialized,
-/// so it takes precedence).
-template<typename Repository, typename T>
-void prepare_for_insert(Repository& /*repository*/, urd::data<T>& /*record*/) noexcept
+/// A record's canonical form: as built, unless its domain says more by an overload of its own for its kind (found by ADL
+/// through T's namespace; more specialized, so it takes precedence).
+template<typename T>
+void canonicalize(urd::data<T>& /*record*/) noexcept
 {
+}
+
+/// Whether a record is in its canonical form: always, unless its domain says more (as canonicalize).
+template<typename T>
+bool is_canonical(const urd::data<T>& /*record*/) noexcept
+{
+    return true;
+}
+
+/// What a repository's one insert and find run on a record first (prepare_for_insert, found by ADL): its canonical form.
+/// A domain whose preparation does more says so by an overload of its own (more specialized, so it takes precedence).
+template<typename Repository, typename T>
+void prepare_for_insert(const Repository& /*repository*/, urd::data<T>& record)
+{
+    canonicalize(record);
 }
 
 /// Whether a repository nests others (Nests, nested.hpp): it names its NestedRepositories.
 template<typename R>
 concept NestsRepositories = requires { typename R::NestedRepositories; };
-
-/// Whether a repository has relations of family F (Relation<F> is among its symbols).
-template<typename Repository, typename F>
-concept HasRelations = SupportsSymbol<Repository, Relation<F>>;
 
 /// An object: what the object columns of rows hold (an urd::index<Object>), the same type in every library that stores
 /// objects (tyr's records of objects are urd::data<ygg::formalism::Object>).

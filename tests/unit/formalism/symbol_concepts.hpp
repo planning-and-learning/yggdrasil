@@ -33,7 +33,6 @@ concept SymbolContextFor = requires(const C& context) {
 
 }  // namespace ygg::tests
 
-
 namespace ygg::tests
 {
 /// The row part of a stored row view's key: its id in its relation's pool.

@@ -11,9 +11,11 @@
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/free_relations.hpp"
 #include "yggdrasil/formalism/relation_builder.hpp"
+#include "yggdrasil/formalism/schema_data.hpp"
 
 #include <concepts>
 #include <cstdint>
+#include <ranges>
 #include <span>
 #include <urd/elements/handle.hpp>
 #include <urd/repr/containers/schema_rows.hpp>
@@ -40,7 +42,7 @@ struct ScratchRelation
     urd::builder<Relation<F>, C> relation;
 
     /// An empty one (a repository's default constructor is explicit: so is not an aggregate's).
-    ScratchRelation() : rows(), records(), relation(), columns_kept() {}
+    ScratchRelation() : rows(), records(), relation(), columns_kept(), schema_kept() {}
 
     /// An empty one for relations of `arity` columns, as ScratchRelations keeps them (its records' buffers fit them).
     explicit ScratchRelation(std::size_t /*arity*/) : ScratchRelation() {}
@@ -54,6 +56,16 @@ struct ScratchRelation
     template<RowValues Values>
     bool erase(const Values& values)
     { return relation.erase(rows, values); }
+
+    /// Gives its builder these columns (validated) and, as its pool, the Schema of their types, inserted into its
+    /// repository as any record (written in schema_kept: no allocation once warm).
+    void initialize(std::span<const urd::data<ColumnLayout>> columns)
+        requires std::same_as<F, Schema>
+    {
+        const auto types = columns | std::views::transform(&urd::data<ColumnLayout>::type);
+        schema_kept.column_types.set(types.begin(), types.end());
+        relation.initialize(rows, rows.insert(schema_kept).first.index(), columns);
+    }
 
     /// Its builder, read through its repository.
     [[nodiscard]] RelationBuilderView<F, C> view() const { return rows.view(relation); }
@@ -87,6 +99,8 @@ struct ScratchRelation
 
     /// Its columns across a clear(), which forgets their record: clear()'s, kept so that a refill allocates nothing.
     urd::data<Columns> columns_kept;
+    /// The Schema of its free relation's column types, written by initialize(columns): kept so that it allocates nothing.
+    urd::data<Schema> schema_kept;
 };
 
 /// The scratch relations a computation draws (draw()): each held by its handle and given back with it, its
@@ -112,7 +126,7 @@ public:
     {
         auto drawn = m_slots.make_handle(columns.size());
         drawn->rows.clear();
-        drawn->relation.initialize(drawn->rows, drawn->rows.schema(columns), columns);
+        drawn->initialize(columns);
         return drawn;
     }
 

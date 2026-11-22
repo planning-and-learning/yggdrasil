@@ -54,119 +54,22 @@ public:
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
     /// The keys it resolves itself (operator[]): its symbols' indices.
     using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
-    /// Its own part that resolves keys (key_parts): its symbols, behind its Impl.
-    using OwnPart = HeldPart<const Derived, const std::conditional_t<ThreadSafe, ConcurrentSymbolRepository<Ts...>, SymbolRepository<Ts...>>, KeyTypes>;
-    using OwnParts = std::tuple<OwnPart>;
-    /// Its own part written into: its symbols.
-    using OwnWritablePart = HeldPart<Derived, std::conditional_t<ThreadSafe, ConcurrentSymbolRepository<Ts...>, SymbolRepository<Ts...>>, KeyTypes>;
-    using OwnWritableParts = std::tuple<OwnWritablePart>;
+    /// Its own part, as read (Writable false) or written into (key_parts): its symbols, behind its Impl.
+    template<bool Writable>
+    using OwnParts = std::tuple<
+        HeldPart<detail::access_t<Writable, Derived>, detail::access_t<Writable, SymbolStores<ThreadSafe, Ts...>>, KeyTypes>>;
 
     /// The stores: defined in symbol_context_impl.hpp.
     struct Impl;
 
-    /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] urd::index_view<T, Derived> view(urd::index<T> index) const noexcept
-    { return { index, &static_cast<const Derived&>(*this) }; }
-
-    /// A record of its kinds held in place (a child held by value), as its view here; never a temporary.
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] urd::borrowed_view<T, Derived> view(const urd::data<T>& record URD_LIFETIMEBOUND) const noexcept
-    { return { &record, &static_cast<const Derived&>(*this) }; }
-
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    void view(const urd::data<T>&& record) const = delete;
-
-    /// Its records are stored and found by KeyedRepository's one insert(data<T>&) and find(const data<T>&), through its
-    /// symbols (record.index set to its index).
-    using KeyedRepository<Derived>::insert;
-    using KeyedRepository<Derived>::find;
-
-    /// Interns a builder through the scratch records of a builder storage that holds them (its scratch<T>(), each worker's own; no
-    /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each
-    /// prepared, as the repository's domain makes it canonical, and inserted), interned children kept as they are, then its record, written into a scratch
-    /// record, prepared and inserted. The view of its record, and whether it was new. A child interned in another repository of this kind, or a child of
-    /// another repository not interned there, throws std::invalid_argument.
-    template<typename T, IsBuilderStorage Storage>
-        requires requires(Storage& storage) { storage.template scratch<T>(); }
-    decltype(auto) insert(const urd::builder<T, Derived>& built, Storage& storage)
-    { return detail::insert_child(static_cast<Derived&>(*this), storage, built); }
-
-    /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
-    /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record.
-    template<typename T, IsBuilderStorage Storage>
-        requires requires(Storage& storage) { storage.template scratch<T>(); }
-    found_t<Derived, T> find(const urd::builder<T, Derived>& built, Storage& storage)
-    { return detail::find_child(static_cast<Derived&>(*this), storage, built); }
-
-    /// Interns a view of a record of its kinds as it reads it (what a child resolves to): an interned one is checked
-    /// to be its own, a builder's is interned as that builder.
-    template<ViewThrough<Derived> V, IsBuilderStorage Storage>
-    decltype(auto) insert(const V& view, Storage& storage)
-    { return detail::insert_view(static_cast<Derived&>(*this), storage, view); }
-
-    /// Finds the record a view reads, inserting nothing, likewise.
-    template<ViewThrough<Derived> V, IsBuilderStorage Storage>
-    auto find(const V& view, Storage& storage)
-    { return detail::find_view(static_cast<Derived&>(*this), storage, view); }
-
-    /// Whether this layer or a parent holds the index.
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] bool contains(urd::index<T> index) const
-    { return do_contains<T>(index); }
-
-    /// The number of records of type T, along the layers.
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] std::size_t size() const
-    { return do_size<T>(); }
-
-    /// The number of records of type T this layer holds itself (its parents' not counted).
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] std::size_t own_size() const
-    { return do_own_size<T>(); }
-
-    /// The memory of this layer's records of type T, in bytes.
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] std::size_t memory_usage() const
-    { return do_memory_usage<T>(); }
+    // Its records are viewed (view(key), view(record)), stored and found (insert, find: of a record, a builder, a view)
+    // by KeyedRepository's members, through its symbols: a view's context is the layer that owns its record.
 
     /// Forgets this layer's records; the parent's stay.
     void clear();
 
     /// The layer this one lies over, or nullptr.
     [[nodiscard]] const Derived* parent() const noexcept { return m_parent; }
-
-    /// Whether a key of `source` names the same record here (urd::Sees): `source` is this layer or one it lies over.
-    [[nodiscard]] bool sees(const Derived& source) const noexcept
-    {
-        for (const Derived* layer = &static_cast<const Derived&>(*this); layer != nullptr; layer = layer->parent())
-        {
-            if (layer == &source)
-                return true;
-        }
-        return false;
-    }
-
-    /// Whether every record of type T that `source` can name is one this layer sees (urd::SeesAll): no layer of
-    /// `source`'s chain below the first this layer sees holds one of its own (a sibling layer without its own, say).
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] bool sees_all(const Derived& source) const
-    {
-        for (const Derived* layer = &source; layer != nullptr && !sees(*layer); layer = layer->parent())
-        {
-            if (layer->template own_size<T>() != 0)
-                return false;
-        }
-        return true;
-    }
 
     SymbolContext();
     /// Parent layers must remain frozen and outlive this one.
@@ -180,23 +83,11 @@ public:
 private:
     friend class KeyedRepository<Derived>;
 
-    /// Its own parts that resolve keys (OwnParts: its symbols); KeyedRepository adds the repositories Derived nests.
-    [[nodiscard]] OwnParts own_parts() const;
+    /// Its own parts as read (OwnParts<false>: its symbols); KeyedRepository adds the repositories Derived nests.
+    [[nodiscard]] OwnParts<false> own_parts() const;
 
-    /// Its own parts written into (OwnWritableParts): its symbols.
-    [[nodiscard]] OwnWritableParts own_writable_parts();
-
-    // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
-    // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
-    // built by either.
-    template<typename T>
-    [[nodiscard]] bool do_contains(urd::index<T> index) const;
-    template<typename T>
-    [[nodiscard]] std::size_t do_size() const;
-    template<typename T>
-    [[nodiscard]] std::size_t do_own_size() const;
-    template<typename T>
-    [[nodiscard]] std::size_t do_memory_usage() const;
+    /// Its own parts as written into: its symbols.
+    [[nodiscard]] OwnParts<true> own_parts();
 
     const Derived* m_parent = nullptr;
     std::unique_ptr<Impl> m_impl;

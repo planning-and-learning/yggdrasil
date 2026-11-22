@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <urd/elements/index.hpp>
+#include <urd/elements/view.hpp>
 #include <utility>
 #include <variant>
 
@@ -176,14 +177,28 @@ template<typename T>
     return decoders[static_cast<std::size_t>(type)](bits);
 }
 
-/// The bits a row gives a column of the type: its whole width, an object `object_bits`; std::out_of_range where
+/// The bits a row gives a column of the type: its whole width (an object's, its whole index); std::out_of_range where
 /// `type` names no type.
-constexpr std::uint8_t column_bits(TypeId type, std::uint8_t object_bits)
+constexpr std::uint8_t column_bits(TypeId type)
 {
     constexpr auto widths = []<typename... Ts>(std::type_identity<std::variant<Ts...>>)
     { return std::array { whole_bits<Ts>... }; }(std::type_identity<ColumnValue> {});
-    return type == type_id<urd::index<formalism::Object>> ? object_bits : widths.at(static_cast<std::size_t>(type));
+    return widths.at(static_cast<std::size_t>(type));
 }
+
+/// The type of a column of type T, whatever its position: what uniform_column_types maps each position to.
+template<typename T>
+constexpr TypeId column_type_of(std::size_t /*column*/) noexcept
+{ return type_id<T>; }
+
+/// The column types of a key of row pools whose columns all hold one type (count of them, computed, not stored): a
+/// random-access range of TypeId.
+using UniformColumnTypes = urd::transformed_range<std::ranges::iota_view<std::size_t, std::size_t>, TypeId (*)(std::size_t) noexcept>;
+
+/// `count` columns of type T (an object per argument of a predicate, say).
+template<typename T>
+[[nodiscard]] UniformColumnTypes uniform_column_types(std::size_t count)
+{ return urd::transform(std::views::iota(std::size_t { 0 }, count), &column_type_of<T>); }
 
 }  // namespace ygg
 

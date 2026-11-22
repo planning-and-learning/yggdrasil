@@ -27,15 +27,6 @@ concept RowViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_typ
     { view.value(i) } -> std::same_as<Value>;
 };
 
-/// Whether V is the view of a row of family F that reads typed: each column's type and each column decoded, as its
-/// interned relation's record stores the types (a stored row's, an owned row's; not a builder's, whose relation may not
-/// be interned).
-template<typename V, typename F>
-concept TypedRowViewConcept = RowViewConcept<V, F> && requires(const std::remove_reference_t<V>& view, std::size_t i) {
-    { view.type(i) } -> std::same_as<TypeId>;
-    { view.get(i) } -> std::same_as<ColumnValue>;
-};
-
 /// Whether a row read through view V resolves its columns of record type T (RowView's resolve<T>): V's context resolves
 /// indices of T (urd::resolves), as a formalism repository does its objects; a free relation's repository resolves none.
 template<typename V, typename T>

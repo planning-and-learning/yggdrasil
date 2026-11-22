@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <memory>
+#include <ranges>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -31,6 +32,15 @@
 
 namespace
 {
+/// The Schema of these column types, inserted into `repository` as any record.
+template<std::ranges::input_range Types>
+urd::index<ygg::Schema> insert_schema(ygg::FreeRelationRepository& repository, const Types& types)
+{
+    auto schema = urd::data<ygg::Schema>();
+    schema.column_types.set(std::ranges::begin(types), std::ranges::end(types));
+    return repository.insert(schema).first.index();
+}
+
 struct Group
 {
 };
@@ -60,19 +70,19 @@ using ygg::formalism::HoldsKey;
 using Free = ygg::FreeRelationRepository;
 static_assert(HoldsKey<Free, urd::index<ygg::Columns>> && HoldsKey<Free, urd::index<ygg::Schema>>);
 static_assert(!HoldsKey<Free, urd::index<Member>> && !HoldsKey<Free, urd::key<Group, Member>>);
-using FreeParts = ygg::formalism::key_parts<Free>;
+using FreeParts = ygg::formalism::key_parts<Free, false>;
 // Its stores are families: a key first selects the store of its kind (urd::SelectsStoreOf), then the ordinary fold.
 static_assert(urd::SelectsStoreOf<Free::Impl::SymbolStore, ygg::Columns> && urd::SelectsStoreOf<Free::Impl::RelationStore, ygg::Schema>);
-static_assert(ygg::formalism::part_resolving<FreeParts, urd::index<ygg::Columns>>() == 0);  // its symbol repository
-static_assert(ygg::formalism::part_resolving<FreeParts, urd::index<ygg::Schema>>() == 1);   // its relation repository
-static_assert(!ygg::formalism::OnePartResolves<FreeParts, urd::index<Member>>);
+static_assert(ygg::formalism::part_holding<FreeParts, urd::index<ygg::Columns>, false>() == 0);  // its symbol repository
+static_assert(ygg::formalism::part_holding<FreeParts, urd::index<ygg::Schema>, false>() == 1);   // its relation repository
+static_assert(!ygg::formalism::OnePartHolds<FreeParts, urd::index<Member>, false>);
 // One operator[] (and one at()): a symbol's index and a Schema's resolve through the same member, KeyedRepository's.
 static_assert(std::same_as<decltype(&Free::operator[]<ygg::Columns>),
                            urd::stored_ref<ygg::Columns> (ygg::formalism::KeyedRepository<Free>::*)(urd::key<ygg::Columns>) const>);
 static_assert(std::same_as<decltype(&Free::operator[]<ygg::Schema>),
                            urd::stored_ref<ygg::Schema> (ygg::formalism::KeyedRepository<Free>::*)(urd::key<ygg::Schema>) const>);
-static_assert(std::same_as<decltype(&Free::at<ygg::Schema>),
-                           urd::stored_ref<ygg::Schema> (ygg::formalism::KeyedRepository<Free>::*)(urd::key<ygg::Schema>) const>);
+static_assert(
+    std::same_as<decltype(&Free::at<ygg::Schema>), urd::stored_ref<ygg::Schema> (ygg::formalism::KeyedRepository<Free>::*)(urd::key<ygg::Schema>) const>);
 static_assert(std::same_as<decltype(std::declval<const Free&>()[urd::index<ygg::Schema>()]), urd::stored_ref<ygg::Schema>>);
 
 TEST(KeyLookup, AnIndexIsItsSubRepositorysOwnLookup)
@@ -81,10 +91,10 @@ TEST(KeyLookup, AnIndexIsItsSubRepositorysOwnLookup)
     auto columns = urd::data<ygg::Columns>();
     const auto symbol = repository.insert(columns).first.index();  // a symbol: the symbol repository
     const auto types = std::vector<ygg::TypeId> { ygg::type_id<std::uint32_t>, ygg::type_id<bool> };
-    const auto schema = repository.schema(std::span<const ygg::TypeId>(types));  // a Schema: the relation repository
+    const auto schema = insert_schema(repository, types);  // a Schema: the relation repository
 
     EXPECT_EQ(repository[symbol]->index, symbol);
-    EXPECT_EQ(&*repository[symbol], &*repository[symbol]);  // the record in place, not a copy
+    EXPECT_EQ(&*repository[symbol], &*repository[symbol]);     // the record in place, not a copy
     EXPECT_EQ(&*repository.at(symbol), &*repository[symbol]);  // checked and unchecked: the same record
     EXPECT_EQ(repository[schema]->column_types.size(), 2U);
     EXPECT_EQ(repository[schema]->column_types[1], ygg::type_id<bool>);
@@ -114,8 +124,12 @@ class Groups : public ygg::formalism::KeyedRepository<Groups>
 
 public:
     using KeyTypes = boost::mp11::mp_list<urd::key<Group, Member>>;
-    /// Its one part: the members by group, held in place (an ordinary part, as a repository's stores are).
-    using OwnParts = std::tuple<ygg::formalism::HeldPart<const Groups, const ByGroup, KeyTypes>>;
+    /// Its one part: the members by group, held in place (an ordinary part, as a repository's stores are), as read and
+    /// as written into.
+    template<bool Writable>
+    using OwnParts = std::tuple<ygg::formalism::HeldPart<ygg::formalism::detail::access_t<Writable, Groups>,
+                                                         ygg::formalism::detail::access_t<Writable, ByGroup>,
+                                                         KeyTypes>>;
 
     explicit Groups(const Groups* parent = nullptr)
     {
@@ -131,7 +145,9 @@ public:
     }
 
 private:
-    [[nodiscard]] OwnParts own_parts() const { return OwnParts(std::tuple_element_t<0, OwnParts>(*this, m_groups)); }
+    [[nodiscard]] OwnParts<false> own_parts() const { return OwnParts<false>(std::tuple_element_t<0, OwnParts<false>>(*this, m_groups)); }
+
+    [[nodiscard]] OwnParts<true> own_parts() { return OwnParts<true>(std::tuple_element_t<0, OwnParts<true>>(*this, m_groups)); }
 };
 
 static_assert(HoldsKey<Groups, urd::key<Group, Member>> && !HoldsKey<Groups, urd::index<Member>>);
@@ -152,7 +168,7 @@ TEST(KeyLookup, AKeyOfTwoPartsFoldsThroughItsNestedContainers)
     EXPECT_EQ((*groups)[first]->weight, 5);
     EXPECT_EQ((*groups)[second]->weight, 8);
     EXPECT_EQ((*groups)[other]->weight, 13);
-    EXPECT_EQ(&*groups->at(second), &*(*groups)[second]);  // checked and unchecked: the same record
+    EXPECT_EQ(&*groups->at(second), &*(*groups)[second]);                                       // checked and unchecked: the same record
     const auto missing = urd::key<Group, Member>(urd::index<Group>(1), urd::index<Member>(0));  // no group 1
     EXPECT_THROW((void) groups->at(missing), std::out_of_range);
     EXPECT_THROW((void) groups->at(urd::key<Group, Member>(urd::index<Group>(3), urd::index<Member>(2))), std::out_of_range);
@@ -168,23 +184,25 @@ TEST(KeyLookup, AKeyOfTwoPartsFoldsThroughItsNestedContainers)
     EXPECT_EQ(child.at(third)->weight, 21);
     EXPECT_THROW((void) groups->at(third), std::out_of_range);  // the parent knows nothing of it
 }
+
 /// N = 2, a row: a key of its relation and its id in the relation's pool. Read by the same operator[] and at() as any
 /// key (its stored form handed out by value: PackedRow, the row packed in its slot); interned from a builder (its
 /// relation the key's known part, its values the content: insert(known, content), urd::insert_at), found likewise.
 using FreeRowKey = urd::key<ygg::Schema, ygg::Row<ygg::Schema>>;
 using FreeRowBuilder = urd::builder<ygg::Row<ygg::Schema>, Free>;
 static_assert(std::same_as<urd::stored_ref<ygg::Row<ygg::Schema>>, ygg::PackedRow<ygg::Schema>>);
+static_assert(std::ranges::view<ygg::PackedRow<ygg::Schema>> && std::ranges::borrowed_range<ygg::PackedRow<ygg::Schema>>);  // a handle into its slot
 static_assert(std::same_as<decltype(std::declval<const Free&>()[FreeRowKey()]), ygg::PackedRow<ygg::Schema>>);
 static_assert(std::same_as<decltype(&Free::operator[]<ygg::Schema, ygg::Row<ygg::Schema>>),
                            ygg::PackedRow<ygg::Schema> (ygg::formalism::KeyedRepository<Free>::*)(FreeRowKey) const>);
-static_assert(ygg::formalism::part_resolving<FreeParts, FreeRowKey>() == 1);  // its relation repository
+static_assert(ygg::formalism::part_holding<FreeParts, FreeRowKey, false>() == 1);  // its relation repository
 
 TEST(KeyLookup, ARowIsInternedFromItsBuilderAndReadByItsKey)
 {
     auto storage = ygg::FreeRelationStorage();
     auto repository = Free();
     const auto types = std::vector<ygg::TypeId> { ygg::type_id<std::uint32_t>, ygg::type_id<bool> };
-    const auto pool = repository.schema(std::span<const ygg::TypeId>(types));
+    const auto pool = insert_schema(repository, types);
 
     auto built = FreeRowBuilder();
     built.relation = pool;
@@ -193,8 +211,9 @@ TEST(KeyLookup, ARowIsInternedFromItsBuilderAndReadByItsKey)
     const auto [stored, created] = repository.insert(built, storage);
     EXPECT_TRUE(created);
     EXPECT_EQ(repository.insert(built, storage), std::pair(stored, false));  // deduplicated in its slot
-    ASSERT_TRUE(repository.find(built, storage).has_value());
-    EXPECT_EQ(*repository.find(built, storage), stored);
+    const auto found = repository.find(built, storage);
+    ASSERT_TRUE(found.has_value());
+    EXPECT_EQ(found.value(), stored);
 
     // The stored form, by its key: its values packed in its slot.
     const auto row = repository[stored.index()];
@@ -209,7 +228,7 @@ TEST(KeyLookup, ARowIsInternedFromItsBuilderAndReadByItsKey)
     EXPECT_TRUE(stored.get<bool>(1));
     EXPECT_EQ(stored.get_relation().index(), pool);
     EXPECT_EQ(repository.view(built).value(0), row[0]);
-    const auto content = urd::data<ygg::Row<ygg::Schema>>(pool, urd::flat_vector<ygg::Value>(row.begin(), row.end()));
+    auto content = urd::data<ygg::Row<ygg::Schema>>(pool, urd::flat_vector<ygg::Value>(row.begin(), row.end()));
     EXPECT_EQ(urd::resolve(content, repository).value(0), row[0]);
     EXPECT_EQ(urd::resolve(content, repository).get<std::uint32_t>(0), 7U);  // an owned row reads typed through its relation
     EXPECT_EQ(repository.find(content), stored);
@@ -233,7 +252,9 @@ TEST(KeyLookup, ARowIsInternedFromItsBuilderAndReadByItsKey)
 
     // Over a parent: its rows found through the child, the child's own numbered after them in its own slot.
     auto child = Free(&repository);
-    EXPECT_EQ(child.find(content)->index(), stored.index());
+    const auto found_in_child = child.find(content);
+    ASSERT_TRUE(found_in_child.has_value());
+    EXPECT_EQ(found_in_child.value().index(), stored.index());
     EXPECT_EQ(child.insert(built, storage).first.index(), stored.index());
     EXPECT_EQ(&child.insert(built, storage).first.context(), &repository);  // the parent's row, through the layer owning it
     built.values[0] = ygg::encode(std::uint64_t { 8 }, ygg::type_id<std::uint32_t>);
@@ -245,3 +266,31 @@ TEST(KeyLookup, ARowIsInternedFromItsBuilderAndReadByItsKey)
     EXPECT_FALSE(repository.find(built, storage).has_value());  // the parent knows nothing of it
 }
 }  // namespace
+
+/// A layer that has made its own pool of a relation still finds the rows the layer below holds in its pool of it.
+TEST(KeyLookup, ALayersOwnPoolFindsTheRowsOfThePoolBelow)
+{
+    auto parent = ygg::FreeRelationRepository();
+    const auto relation = insert_schema(parent, std::array { ygg::type_id<std::uint32_t> });
+    auto below = urd::data<ygg::Row<ygg::Schema>>(relation, urd::flat_vector<ygg::Value> { 1 });
+    const auto [below_view, below_inserted] = parent.insert(below);
+    ASSERT_TRUE(below_inserted);
+
+    auto child = ygg::FreeRelationRepository(&parent);
+    auto own = urd::data<ygg::Row<ygg::Schema>>(relation, urd::flat_vector<ygg::Value> { 2 });
+    const auto [own_view, own_inserted] = child.insert(own);
+    ASSERT_TRUE(own_inserted);
+
+    auto again = urd::data<ygg::Row<ygg::Schema>>(relation, urd::flat_vector<ygg::Value> { 1 });
+    const auto found_again = child.find(again);
+    ASSERT_TRUE(found_again.has_value());
+    EXPECT_EQ(found_again.value().index(), below_view.index());
+    const auto [reinserted, reinserted_created] = child.insert(again);
+    EXPECT_FALSE(reinserted_created);
+    EXPECT_EQ(reinserted.index(), below_view.index());
+    EXPECT_NE(own_view.index(), below_view.index());
+
+    // A field of a stored row read through its packed form, by value (what Python's get_values reads).
+    static_assert(std::same_as<decltype(below_view.template member<&urd::data<ygg::Row<ygg::Schema>>::values>()), ygg::PackedRow<ygg::Schema>>);
+    EXPECT_EQ(below_view.template member<&urd::data<ygg::Row<ygg::Schema>>::values>()[0], 1U);
+}

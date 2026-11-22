@@ -37,7 +37,7 @@ namespace ygg::formalism
 template<typename Derived, bool ThreadSafe, typename... Ts>
 struct SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::Impl
 {
-    using Symbols = std::conditional_t<ThreadSafe, ConcurrentSymbolRepository<Ts...>, SymbolRepository<Ts...>>;
+    using Symbols = SymbolStores<ThreadSafe, Ts...>;
 
     Symbols symbols;
 
@@ -67,32 +67,14 @@ void SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::clear()
 { m_impl->symbols.clear(); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
-typename SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::OwnParts SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::own_parts() const
-{ return OwnParts(OwnPart(static_cast<const Derived&>(*this), m_impl->symbols)); }
+typename SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::template OwnParts<false>
+SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::own_parts() const
+{ return OwnParts<false>(std::tuple_element_t<0, OwnParts<false>>(static_cast<const Derived&>(*this), m_impl->symbols)); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
-typename SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::OwnWritableParts SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::own_writable_parts()
-{ return OwnWritableParts(OwnWritablePart(static_cast<Derived&>(*this), m_impl->symbols)); }
-
-template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-bool SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_contains(urd::index<T> index) const
-{ return urd::contains_key(m_impl->symbols, index); }
-
-template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_size() const
-{ return m_impl->symbols.template size<T>(); }
-
-template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_own_size() const
-{ return m_impl->symbols.template own_size<T>(); }
-
-template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-std::size_t SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_memory_usage() const
-{ return m_impl->symbols.template memory_usage<T>(); }
+typename SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::template OwnParts<true>
+SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::own_parts()
+{ return OwnParts<true>(std::tuple_element_t<0, OwnParts<true>>(static_cast<Derived&>(*this), m_impl->symbols)); }
 
 }  // namespace ygg::formalism
 

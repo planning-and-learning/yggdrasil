@@ -20,7 +20,7 @@
 
 #include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
-#include "yggdrasil/formalism/keyed_impl.hpp"
+#include "yggdrasil/formalism/keyed_read_impl.hpp"
 
 #include <boost/mp11.hpp>
 #include <optional>
@@ -48,139 +48,26 @@ using SymbolStore = urd::Store<urd::pool<urd::data<T>, urd::index<T>>,
                                urd::layered,
                                std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
 
-/// Interns `record` in `store` (a pool of urd::data<T> handing out index<T>): its index anywhere along the store's
-/// layers, and whether it was stored now. record.index is set to that index; a new record is stored with it.
-template<typename Store, typename T>
-std::pair<urd::index<T>, bool> intern(Store& store, urd::data<T>& record)
+/// The store of T's records in a sequential and in a concurrent repository.
+template<typename T>
+using SequentialSymbolStore = SymbolStore<T, false>;
+template<typename T>
+using ConcurrentSymbolStore = SymbolStore<T, true>;
+
+/// The symbols of a repository layer, a plain store: one SymbolStore per kind (a urd family: get<T>() selects the kind's
+/// store, the first step of urd's key fold), each layered over the parent layer's, so that lookups and reads find the
+/// parent's records too. A repository holds it as its symbol part (HeldPart): keys are resolved, counted, viewed,
+/// stored and found by the repository's one keyed dispatch.
+template<bool ThreadSafe, typename... Ts>
+class SymbolStores : public Family<std::conditional_t<ThreadSafe, boost::mp11::mp_quote<ConcurrentSymbolStore>, boost::mp11::mp_quote<SequentialSymbolStore>>::template fn, Ts...>
 {
-    const auto [at, created] = store.insert(record,
-                                            [&record](urd::index<T> given) -> const urd::data<T>&
-                                            {
-                                                record.index = given;
-                                                return record;
-                                            });
-    record.index = at;
-    return { at, created };
-}
-
-template<typename... Ts>
-class SymbolRepository;
-
-template<typename... Ts>
-class ConcurrentSymbolRepository;
-
-/// The symbols of a repository, one SymbolStore per type in a urd family, read through the derived Repository: views
-/// of its indices have it as context, which reads their records through its one key lookup (KeyedRepository, over its
-/// family as its one part: urd's fold selects the type's store first). Over a parent (its stores layered over the parent's), lookups and reads find the
-/// parent's records too.
-template<typename Repository, typename Types, bool ThreadSafe = false>
-class SymbolRepositoryBase;
-
-template<typename Repository, bool ThreadSafe, typename... Ts>
-class SymbolRepositoryBase<Repository, boost::mp11::mp_list<Ts...>, ThreadSafe> : public KeyedRepository<Repository>
-{
-    template<typename T>
-    using Store = SymbolStore<T, ThreadSafe>;
-
-    Family<Store, Ts...> m_symbols;
-
-    [[nodiscard]] const Repository& repository() const noexcept { return static_cast<const Repository&>(*this); }
+    using Base = Family<std::conditional_t<ThreadSafe, boost::mp11::mp_quote<ConcurrentSymbolStore>, boost::mp11::mp_quote<SequentialSymbolStore>>::template fn, Ts...>;
 
 public:
     static constexpr bool thread_safe = ThreadSafe;
 
-    using SymbolTypes = boost::mp11::mp_list<Ts...>;
-    /// The keys it resolves (operator[], at()): its symbols' indices.
-    using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
-    /// Its one part that resolves keys: its family of stores, held in place; and the same, written into (its records
-    /// stored and found by KeyedRepository's one insert and find).
-    using OwnParts = std::tuple<HeldPart<const Repository, const Family<Store, Ts...>, KeyTypes>>;
-    using OwnWritableParts = std::tuple<HeldPart<Repository, Family<Store, Ts...>, KeyTypes>>;
-
-    /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const noexcept
-    { return { index, &repository() }; }
-
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t size() const
-    { return get<T>().size(); }
-
-    /// The number of records of type T this layer holds itself (its parents' not counted).
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t own_size() const
-    { return get<T>().size() - get<T>().base(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] size_t memory_usage() const
-    { return urd::memory_usage(get<T>()); }
-
-    /// The store of T's records.
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] Store<T>& get()
-    { return m_symbols.template get<T>(); }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const Store<T>& get() const
-    { return m_symbols.template get<T>(); }
-
-private:
-    friend class KeyedRepository<Repository>;
-
-    [[nodiscard]] OwnParts own_parts() const { return OwnParts(std::tuple_element_t<0, OwnParts>(repository(), m_symbols)); }
-
-    [[nodiscard]] OwnWritableParts own_writable_parts()
-    { return OwnWritableParts(std::tuple_element_t<0, OwnWritableParts>(static_cast<Repository&>(*this), m_symbols)); }
-
-public:
-    SymbolRepositoryBase() : SymbolRepositoryBase(nullptr) {}
-
-    /// Parent layers must remain frozen and outlive this repository.
-    explicit SymbolRepositoryBase(const Repository* parent) :
-        m_symbols(parent == nullptr ? nullptr : &static_cast<const SymbolRepositoryBase*>(parent)->m_symbols)
-    {
-    }
-
-    ~SymbolRepositoryBase() = default;
-    SymbolRepositoryBase(const SymbolRepositoryBase&) = delete;
-    SymbolRepositoryBase& operator=(const SymbolRepositoryBase&) = delete;
-    SymbolRepositoryBase(SymbolRepositoryBase&&) = delete;
-    SymbolRepositoryBase& operator=(SymbolRepositoryBase&&) = delete;
-
-    void clear() { m_symbols.clear(); }
-};
-
-template<typename... Ts>
-class SymbolRepository : public SymbolRepositoryBase<SymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>>
-{
-    using Base = SymbolRepositoryBase<SymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>>;
-
-public:
-    SymbolRepository() : Base(nullptr) {}
-
-    explicit SymbolRepository(const SymbolRepository* parent) : Base(parent) {}
-
-    friend const SymbolRepository& get_repository(const SymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
-};
-
-template<typename... Ts>
-class ConcurrentSymbolRepository : public SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>, true>
-{
-    using Base = SymbolRepositoryBase<ConcurrentSymbolRepository<Ts...>, boost::mp11::mp_list<Ts...>, true>;
-
-public:
-    ConcurrentSymbolRepository() : Base(nullptr) {}
-
-    explicit ConcurrentSymbolRepository(const ConcurrentSymbolRepository* parent) : Base(parent) {}
-
-    friend const ConcurrentSymbolRepository& get_repository(const ConcurrentSymbolRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
+    /// Parent layers must remain frozen and outlive this one.
+    explicit SymbolStores(const SymbolStores* parent = nullptr) : Base(parent) {}
 };
 
 }  // namespace ygg::formalism

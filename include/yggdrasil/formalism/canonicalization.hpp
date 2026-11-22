@@ -97,20 +97,6 @@ private:
     }
 };
 
-inline void canonicalize(urd::data<Schema>&)
-{
-    // Canonical as built: the order of the types is the columns'
-}
-
-inline bool is_canonical(const urd::data<Schema>&) { return true; }
-
-inline void canonicalize(urd::data<Columns>&)
-{
-    // Canonical as built: the order of the columns is the rows'
-}
-
-inline bool is_canonical(const urd::data<Columns>&) { return true; }
-
 /// A relation's canonical form: its rows in tuple order (their values, read through `repository`, lexicographically) and
 /// unique (equal values in one pool are one key), as a builder keeps them.
 template<typename F, typename Repository>

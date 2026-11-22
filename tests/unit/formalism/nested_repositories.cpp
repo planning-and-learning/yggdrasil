@@ -12,6 +12,7 @@
 
 #include <boost/mp11.hpp>
 #include <concepts>
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include <memory>
 #include <optional>
@@ -145,6 +146,10 @@ public:
     [[nodiscard]] std::size_t layer() const noexcept { return 1; }
 };
 
+/// The names' domain prepares a name: its value made non-negative (found by ADL from the owning repository's find and
+/// insert).
+void prepare_for_insert(const Names& /*repository*/, urd::data<Name>& data) { data.value = std::abs(data.value); }
+
 /// Tags, over names (read only).
 class Tags : public ygg::formalism::SymbolContext<Tags, boost::mp11::mp_list<Tag>>, public ygg::formalism::Nests<Tags, ygg::formalism::Nested<const Names>>
 {
@@ -159,11 +164,7 @@ public:
     using Base::find;
     using Base::insert;
     using Base::view;
-    using NestsBase::find;
     using NestsBase::get;
-    using NestsBase::insert;
-    using NestsBase::repository_for;
-    using NestsBase::view;
 };
 
 /// Items, over tags (interned into).
@@ -180,11 +181,7 @@ public:
     using Base::find;
     using Base::insert;
     using Base::view;
-    using NestsBase::find;
     using NestsBase::get;
-    using NestsBase::insert;
-    using NestsBase::repository_for;
-    using NestsBase::view;
 };
 
 /// Names reached along two paths: through tags and directly.
@@ -201,7 +198,6 @@ public:
     [[nodiscard]] std::size_t layer() const noexcept { return 4; }
 
     using Base::view;
-    using NestsBase::view;
 };
 }  // namespace
 
@@ -212,9 +208,9 @@ YGG_FORMALISM_SYMBOL_CONTEXT(, Twice, 1)
 
 namespace
 {
-static_assert(ygg::formalism::reaches<Items, Name> && ygg::formalism::reaches<Items, Tag> && ygg::formalism::reaches<Items, Item>);
-static_assert(!ygg::formalism::reaches<Names, Tag>);
-static_assert(ygg::formalism::nests<Items, Names> && !ygg::formalism::nests<Names, Items>);
+static_assert(ygg::formalism::resolves<Items, urd::index<Name>> && ygg::formalism::resolves<Items, urd::index<Tag>>
+              && ygg::formalism::resolves<Items, urd::index<Item>>);
+static_assert(!ygg::formalism::resolves<Names, urd::index<Tag>>);
 
 /// Whether repository R views an index of T, and interns a record of T.
 template<typename R, typename T>
@@ -240,6 +236,14 @@ static_assert(ReadsKey<Twice, urd::index<Tag>>);
 static_assert(std::same_as<decltype(&Items::operator[]<Item>), urd::stored_ref<Item> (ygg::formalism::KeyedRepository<Items>::*)(urd::key<Item>) const>);
 static_assert(std::same_as<decltype(&Items::operator[]<Name>), urd::stored_ref<Name> (ygg::formalism::KeyedRepository<Items>::*)(urd::key<Name>) const>);
 
+/// A repository that names no keys writes no record.
+struct Unkeyed
+{
+};
+
+static_assert(!ygg::formalism::WritesKey<Unkeyed&, urd::index<Item>>);
+static_assert(ygg::formalism::WritesKey<Items&, urd::index<Item>> && ygg::formalism::WritesKey<Items&, urd::index<Tag>>);
+
 // Into a nesting declared read only, nothing is interned.
 static_assert(!InternsRecord<Tags, Name>);
 static_assert(InternsRecord<Items, Tag>);
@@ -248,7 +252,7 @@ static_assert(InternsRecord<Items, Tag>);
 // the repository owning it; a Name, held only by Names (nested const in Tags), has no insert through Items or Tags.
 static_assert(std::same_as<decltype(std::declval<Items&>().insert(std::declval<urd::data<Tag>&>())), std::pair<urd::index_view<Tag, Tags>, bool>>);
 static_assert(!InternsRecord<Items, Name>);
-static_assert(std::same_as<decltype(std::declval<const Items&>().find(std::declval<const urd::data<Name>&>())), std::optional<urd::index_view<Name, Names>>>);
+static_assert(std::same_as<decltype(std::declval<const Items&>().find(std::declval<urd::data<Name>&>())), std::optional<urd::index_view<Name, Names>>>);
 
 struct Fixture
 {
@@ -277,9 +281,10 @@ TEST(Nests, ResolvesEachKindThroughTheRepositoryOwningIt)
 
     // A record of a kind two levels down found through Items (read only there), as its view in the repository owning it.
     auto name_again = urd::data<Name>(7);
-    ASSERT_TRUE(fixture.items.find(name_again).has_value());
-    EXPECT_EQ(fixture.items.find(name_again)->index(), name_index);
-    EXPECT_EQ(&fixture.items.find(name_again)->context(), fixture.names.get());
+    const auto found_name = fixture.items.find(name_again);
+    ASSERT_TRUE(found_name.has_value());
+    EXPECT_EQ(found_name.value().index(), name_index);
+    EXPECT_EQ(&found_name.value().context(), fixture.names.get());
 
     // A key of a kind two levels down, through Items: the record in place in the repository owning it.
     EXPECT_EQ(&*fixture.items[name_index], &*(*fixture.names)[name_index]);
@@ -298,14 +303,29 @@ TEST(Nests, ResolvesEachKindThroughTheRepositoryOwningIt)
     EXPECT_TRUE(fixture.items.find(tag).has_value());
 }
 
+TEST(Nests, FindPreparesARecordInTheRepositoryOwningIt)
+{
+    auto fixture = Fixture {};
+    auto name = urd::data<Name>(-7);
+    const auto inserted = fixture.names->insert(name).first;
+    EXPECT_EQ(inserted.get_value(), 7);
+
+    // Found through Items, two levels down and nested read only: prepared by the names' domain as its insert is.
+    auto unprepared = urd::data<Name>(-7);
+    const auto found = fixture.items.find(unprepared);
+    ASSERT_TRUE(found.has_value());
+    EXPECT_EQ(found.value().index(), inserted.index());
+    EXPECT_EQ(unprepared.value, 7);
+}
+
 TEST(Nests, ReachesItsNestedRepositoriesByTypeAndByKind)
 {
     auto fixture = Fixture {};
     EXPECT_EQ(&fixture.items.get<Tags>(), fixture.tags.get());
     EXPECT_EQ(&fixture.tags->get<Names>(), fixture.names.get());
     static_assert(std::is_const_v<std::remove_reference_t<decltype(fixture.tags->get<Names>())>>);
-    EXPECT_EQ(&fixture.items.repository_for<Tag>(), fixture.tags.get());
-    EXPECT_EQ(&fixture.items.repository_for<Name>(), fixture.names.get());
+    EXPECT_EQ(&fixture.items.resolving<urd::index<Tag>>(), fixture.tags.get());
+    EXPECT_EQ(&fixture.items.resolving<urd::index<Name>>(), fixture.names.get());
     EXPECT_EQ(fixture.items.get_ptr<Tags>(), fixture.tags);
 }
 
@@ -335,7 +355,7 @@ TEST(Nests, CopiesNoRecordOfANestedKind)
     auto tag = urd::data<Tag>(fixture.names->insert(name).first.index());
     const auto tag_view = fixture.tags->insert(tag).first;
     auto unused_storage = 0;
-    static_assert(urd::Reaches<Items, Tag, Tags>);
+    static_assert(urd::ResolvesThrough<Items, urd::index<Tag>, Tags>);
     EXPECT_EQ(urd::copy(tag_view, fixture.items, unused_storage), tag_view.index());
     auto elsewhere = Tags(fixture.names);
     const auto other_view = elsewhere.insert(tag).first;

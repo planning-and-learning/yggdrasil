@@ -5,7 +5,6 @@
 #include "yggdrasil/serialization/fields.hpp"
 
 #include <algorithm>
-#include <boost/core/demangle.hpp>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -16,6 +15,7 @@
 #include <typeinfo>
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
+#include <urd/format.hpp>
 #include <urd/repr/maps/std_map.hpp>
 #include <urd/repr/records/records.hpp>
 #include <urd/repr/sequences/sequence.hpp>
@@ -143,7 +143,7 @@ private:
         }
         // Missing registrations must not silently emit potentially huge native text, including in nested fields.
         // A projection can explicitly convert an entity to a string when that representation is wanted.
-        throw std::invalid_argument("Unregistered serialization type: " + boost::core::demangle(typeid(T).name()));
+        throw std::invalid_argument("Unregistered serialization type: " + urd::spelling<T>());
     }
 
 public:

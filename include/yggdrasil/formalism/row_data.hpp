@@ -22,6 +22,7 @@
 #include "yggdrasil/formalism/values.hpp"
 
 #include <cstddef>
+#include <ranges>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/hash.hpp>
 #include <urd/elements/packed_row.hpp>
@@ -36,9 +37,10 @@ namespace ygg
 /// A row of family F as its pool's slot holds it: its values packed at the slot's column widths, each column read on
 /// demand, atomically (so that one reader serves concurrent and sequential slots alike), and the relation of its slot,
 /// which the slot keeps once and hands to each row it hands out. What a lookup of a row hands out, by value
-/// (urd::stored_ref<Row<F>>); its slot must outlive it. A random-access range of Values.
+/// (urd::stored_ref<Row<F>>); its slot must outlive it. A random-access view of Values: it owns none (what reads a view,
+/// as Python's list conversion does, reads it).
 template<typename F>
-class PackedRow
+class PackedRow : public std::ranges::view_base
 {
     urd::packed_row<true> m_row;
     urd::index<F> m_relation;
@@ -73,9 +75,19 @@ public:
 
     /// The widths its slot packs its columns at.
     [[nodiscard]] const urd::column_widths& column_widths() const noexcept { return m_row.column_widths(); }
+
+    /// Where it lies in its slot: its first word and its first bit there (two rows read the same storage where both
+    /// are equal).
+    [[nodiscard]] const urd::word_t* data() const noexcept { return m_row.data(); }
+
+    [[nodiscard]] std::size_t first_bit() const noexcept { return m_row.first_bit(); }
 };
 
 }  // namespace ygg
+
+/// Its iterators are its packed row's, which read from the slot: they outlive it.
+template<typename F>
+inline constexpr bool std::ranges::enable_borrowed_range<ygg::PackedRow<F>> = true;
 
 namespace urd
 {

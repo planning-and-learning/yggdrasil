@@ -121,8 +121,8 @@ TEST(Family, LayersEachMemberOverItsParents)
     EXPECT_EQ(child.parent(), &root);
     EXPECT_EQ(child.get<Object>().insert(urd::data<Object> { 1 }).first, a);  // found in the parent
     const auto b = child.get<Object>().insert(urd::data<Object> { 3 }).first;
-    EXPECT_EQ(b, urd::index<Object>(1));  // after the parent's
-    EXPECT_EQ(urd::record_at(child, a)->id, 1U);           // the parent's, through the chain
+    EXPECT_EQ(b, urd::index<Object>(1));          // after the parent's
+    EXPECT_EQ(urd::record_at(child, a)->id, 1U);  // the parent's, through the chain
     EXPECT_EQ(urd::record_at(child, b)->id, 3U);
     EXPECT_FALSE(urd::contains_key(root, b));
     EXPECT_TRUE(urd::contains_key(child, b));

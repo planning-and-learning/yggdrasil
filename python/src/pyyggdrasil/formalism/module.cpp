@@ -44,7 +44,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     using RelationRepository = ygg::FreeRelationRepository;
     using SchemaView = urd::index_view<ygg::Schema, RelationRepository>;
     using ColumnsView = urd::index_view<ygg::Columns, RelationRepository>;
-    using StoredRow = ygg::RowView<ygg::Schema, RelationRepository>;
+    using RowView = ygg::RowView<ygg::Schema, RelationRepository>;
     using RelationView = ygg::FreeRelationView;
     using RelationBuilderView = ygg::FreeRelationBuilderView;
     using Relation = ygg::FreeRelationBuilder;
@@ -75,7 +75,7 @@ void bind_formalism_module_definitions(nb::module_& m)
     urd::python::bind_view<ColumnsView>(m);
     urd::python::bind_data<ygg::Row<ygg::Schema>>(m);
     urd::python::bind_builder<ygg::Row<ygg::Schema>, RelationRepository>(m);
-    urd::python::bind_view<StoredRow>(m);
+    urd::python::bind_view<RowView>(m);
     urd::python::bind_index<RelationTag>(m);
     urd::python::bind_data<RelationTag>(m);
     // A relation builder's rows are drawn from row builders (its insert's): RowSchemaRecords, created once, reused.
@@ -100,12 +100,12 @@ void bind_formalism_module_definitions(nb::module_& m)
 
     nb::class_<RelationRepository>(m, "RelationRepository", "Canonical relation storage; clear invalidates all borrowed views.")
         .def(nb::init<>())
-        .def("__len__", &RelationRepository::template size<RelationTag>)
+        .def("__len__", [](const RelationRepository& repository) { return repository.size<RelationTag>(); })
         .def("clear", &RelationRepository::clear)
-        .def("schema",
-             nb::overload_cast<std::span<const ygg::TypeId>>(&RelationRepository::schema),
-             nb::arg("types"),
-             "The pool of free relations of these column types (declared here).")
+        .def("insert",
+             static_cast<std::pair<SchemaView, bool> (RelationRepository::*)(urd::data<ygg::Schema>&)>(&RelationRepository::insert),
+             nb::arg("schema"),
+             "Interns a Schema: the pool of free relations of its column types.")
         .def(
             "insert",
             [](RelationRepository& repository, const urd::builder<ygg::Row<ygg::Schema>, RelationRepository>& row, ygg::FreeRelationStorage& storage)
@@ -113,6 +113,11 @@ void bind_formalism_module_definitions(nb::module_& m)
             nb::arg("row"),
             nb::arg("storage"),
             "Stores a row builder's row in its relation's pool where no layer holds it: its view, and whether it was stored now.")
+        .def(
+            "insert",
+            [](RelationRepository& repository, urd::data<ygg::Row<ygg::Schema>>& row) { return repository.insert(row); },
+            nb::arg("row"),
+            "Stores a row record in its relation's pool where no layer holds it: its view, and whether it was stored now.")
         .def("insert",
              static_cast<std::pair<ColumnsView, bool> (RelationRepository::*)(urd::data<ygg::Columns>&)>(&RelationRepository::insert),
              nb::arg("columns"))

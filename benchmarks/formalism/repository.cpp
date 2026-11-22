@@ -43,14 +43,6 @@ constexpr auto kObjectColumns = std::array { ygg::type_id<urd::index<formalism::
                                              ygg::type_id<urd::index<formalism::Object>> };
 }
 
-namespace ygg::benchmarks
-{
-/// A relation key: four object columns, stored in its record.
-template<typename Repository>
-void prepare_for_insert(Repository& /*repository*/, urd::data<Relation>& record)
-{ record.column_types.set(kObjectColumns.begin(), kObjectColumns.end()); }
-}  // namespace ygg::benchmarks
-
 namespace urd
 {
 
@@ -93,19 +85,16 @@ struct data<ygg::benchmarks::Relation>
 {
     urd::index<ygg::benchmarks::Relation> index;
     ygg::uint_t lane = 0;
-    /// Its rows' column types, as a key of row pools: filled by its preparation (prepare_for_insert), stored here.
-    urd::flat_vector<ygg::TypeId> column_types;
 
     data() = default;
 
     explicit data(ygg::uint_t lane_) : index(), lane(lane_) {}
 
-
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane, &data::column_types> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane>{}; }
 };
 
 template<typename V>
@@ -118,7 +107,7 @@ public:
     [[nodiscard]] decltype(auto) get_lane() const { return self().template member<&urd::record_of<V>::lane>(); }
 
     /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] decltype(auto) get_column_types() const { return self().template member<&urd::record_of<V>::column_types>(); }
+    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(ygg::benchmarks::kObjectColumns.size()); }
 
     static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
 };
@@ -160,23 +149,23 @@ public:
 
 namespace ygg::benchmarks
 {
+}  // namespace ygg::benchmarks
+
+namespace ygg::benchmarks
+{
 namespace
 {
 constexpr std::uint64_t kPrefill = 1U << 16;
 constexpr benchmark::IterationCount kLookupIterations = 1U << 20;
 constexpr benchmark::IterationCount kInsertIterations = 1U << 18;
 
-using SequentialSymbols = formalism::SymbolRepository<TrivialSymbol, SerializedSymbol, Relation>;
-using ConcurrentSymbols = formalism::ConcurrentSymbolRepository<TrivialSymbol, SerializedSymbol, Relation>;
-using SequentialBlockRelations = formalism::RelationRepository<urd::word, Relation>;
-using ConcurrentBlockRelations = formalism::ConcurrentRelationRepository<urd::word, Relation>;
-using SequentialPackedRelations = formalism::RelationRepository<urd::bit, Relation>;
-using ConcurrentPackedRelations = formalism::ConcurrentRelationRepository<urd::bit, Relation>;
+using SequentialSymbols = formalism::Symbols<TrivialSymbol, SerializedSymbol, Relation>;
+using ConcurrentSymbols = formalism::ConcurrentSymbols<TrivialSymbol, SerializedSymbol, Relation>;
+using SequentialBlockRelations = formalism::RelationRepository<Relation>;
+using ConcurrentBlockRelations = formalism::ConcurrentRelationRepository<Relation>;
 
 using SequentialBlockRepository = formalism::Repository<SequentialSymbols, SequentialBlockRelations>;
 using ConcurrentBlockRepository = formalism::Repository<ConcurrentSymbols, ConcurrentBlockRelations>;
-using SequentialPackedRepository = formalism::Repository<SequentialSymbols, SequentialPackedRelations>;
-using ConcurrentPackedRepository = formalism::Repository<ConcurrentSymbols, ConcurrentPackedRelations>;
 using Binding = Row<Relation>;
 
 /// The bits of an object of the benchmarks' rows, and the objects a repository is built for.
@@ -215,7 +204,7 @@ void set_key(urd::data<Binding>& data, std::uint64_t key) noexcept
 
 template<typename Repository>
 void set_up_empty(const benchmark::State&)
-{ repository<Repository>() = std::make_unique<Repository>(kObjects); }
+{ repository<Repository>() = std::make_unique<Repository>(); }
 
 /// An empty repository with the pool of each thread's lane declared: each lane's relation interned, in order, so that
 /// lane i is the key urd::index<Relation>(i) by which the benchmarks name it (checked).
@@ -281,8 +270,8 @@ void report_relation(benchmark::State& state, std::uint64_t created, bool per_th
     std::size_t entries = 0;
     const auto lanes = per_thread_lane ? state.threads() : 1;
     for (int lane = 0; lane < lanes; ++lane)
-        entries += repository<Repository>()->size(urd::index<Relation>(static_cast<uint_t>(lane)));
-    const auto bytes = repository<Repository>()->template row_memory_usage<Relation>();
+        entries += repository<Repository>()->template size<ygg::Row<Relation>>(urd::index<Relation>(static_cast<uint_t>(lane)));
+    const auto bytes = repository<Repository>()->template memory_usage<ygg::Row<Relation>>();
     state.SetItemsProcessed(state.iterations());
     state.counters["created/s"] = benchmark::Counter(static_cast<double>(created), benchmark::Counter::kIsRate);
     state.counters["entries"] = benchmark::Counter(static_cast<double>(entries), benchmark::Counter::kAvgThreads);
@@ -485,8 +474,6 @@ void register_relation_benchmarks(const char* prefix, bool concurrent)
     register_symbol_benchmarks<ConcurrentBlockRepository, SerializedSymbol>("symbol/serialized/concurrent", true);
     register_relation_benchmarks<SequentialBlockRepository>("relation/block/sequential", false);
     register_relation_benchmarks<ConcurrentBlockRepository>("relation/block/concurrent", true);
-    register_relation_benchmarks<SequentialPackedRepository>("relation/packed/sequential", false);
-    register_relation_benchmarks<ConcurrentPackedRepository>("relation/packed/concurrent", true);
     return true;
 }();
 }
