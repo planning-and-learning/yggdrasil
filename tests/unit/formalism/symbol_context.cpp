@@ -94,7 +94,7 @@ TEST(SymbolContext, InternsFindsAndReadsItsRecords)
     const auto [view, created] = names.insert(record);
     EXPECT_TRUE(created);
     EXPECT_EQ(view.index(), record.index);
-    EXPECT_EQ(names[view.index()].value, 7);
+    EXPECT_EQ(names[view.index()]->value, 7);
     EXPECT_TRUE(names.contains(view.index()));
     EXPECT_EQ(names.size<Name>(), 1);
     const auto found = names.find(record);
@@ -115,7 +115,7 @@ TEST(SymbolContext, LayersOverItsParent)
     EXPECT_TRUE(child.insert(record).second);
     EXPECT_EQ(child.size<Name>(), 2);
     EXPECT_EQ(parent.size<Name>(), 1);
-    EXPECT_EQ(child[in_parent].value, 1);
+    EXPECT_EQ(child[in_parent]->value, 1);
     child.clear();  // the child's records go, the parent's stay
     EXPECT_EQ(child.size<Name>(), 1);
     EXPECT_GT(parent.memory_usage<Name>(), 0);

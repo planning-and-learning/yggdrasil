@@ -24,11 +24,11 @@ struct data<ygg::Relation<F>>
     urd::index<ygg::Relation<F>> index;
     urd::index<F> pool;
     urd::index<ygg::Columns> columns;
-    urd::flat_vector<ygg::RowIndex<F>> rows;
+    urd::flat_vector<urd::key<F, ygg::Row<F>>> rows;
 
     data() = default;
 
-    data(urd::index<F> pool_, urd::index<ygg::Columns> columns_, urd::flat_vector<ygg::RowIndex<F>> rows_) :
+    data(urd::index<F> pool_, urd::index<ygg::Columns> columns_, urd::flat_vector<urd::key<F, ygg::Row<F>>> rows_) :
         index(),
         pool(pool_),
         columns(columns_),

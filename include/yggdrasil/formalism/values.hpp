@@ -103,12 +103,12 @@ template<std::same_as<bool> T>
 
 /// An urd index (an object index of any tag) as its value (urd::index_of).
 template<typename T>
-    requires urd::is_index_type<T>
+    requires urd::Key<T>
 [[nodiscard]] Value encode_value(T value) noexcept
 { return urd::index_of<T>::to_index(value); }
 
 template<typename T>
-    requires urd::is_index_type<T>
+    requires urd::Key<T>
 [[nodiscard]] T decode_value(Value bits) noexcept
 { return urd::index_of<T>::from_index(static_cast<std::size_t>(bits)); }
 

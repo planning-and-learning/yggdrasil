@@ -25,15 +25,15 @@
 namespace ygg
 {
 /// A relation being built together with the storage of its rows: its own repository C (no parent: its pool and columns
-/// are interned there), the records of its rows (a slots Store: a row is a record held by its handle, its slot reused
-/// once the row is erased, so its storage is that of the rows it holds) and its builder, read through its repository
-/// (view()). Its rows are records by its own invariant: insert() puts them there. It does not move: its builder's
+/// are interned there), the builders of its rows (a slots Store: a row is a builder, its relation and its values, held by
+/// its handle, its slot reused once the row is erased, so its storage is that of the rows it holds) and its builder,
+/// read through its repository (view()). Its rows are builders by its own invariant: insert() puts them there. It does not move: its builder's
 /// children are views into its repository and handles into its records.
 template<typename F, typename C>
 struct ScratchRelation
 {
     C rows;
-    using Records = RowRecords<F>;
+    using Records = RowRecords<F, C>;
     Records records;
     /// A row's slot in its records (slot()).
     using Slot = typename Records::handle_type;
@@ -45,12 +45,12 @@ struct ScratchRelation
     /// An empty one for relations of `arity` columns, as ScratchRelations keeps them (its records' buffers fit them).
     explicit ScratchRelation(std::size_t /*arity*/) : ScratchRelation() {}
 
-    /// Inserts a row of values at its place in tuple order, as a record of its records (builder's insert).
+    /// Inserts a row of values at its place in tuple order, as a builder of its records (builder's insert).
     template<RowValues Values>
     std::pair<std::size_t, bool> insert(const Values& values)
     { return relation.insert(rows, records, values); }
 
-    /// Erases the row of these values; whether it held one. Its record goes back to its records.
+    /// Erases the row of these values; whether it held one. Its builder goes back to its records.
     template<RowValues Values>
     bool erase(const Values& values)
     { return relation.erase(rows, values); }
@@ -71,7 +71,7 @@ struct ScratchRelation
         relation.clear();
     }
 
-    /// The slot of the record of the row of these values in its records, where it holds one (else none): a row's identity
+    /// The slot of the builder of the row of these values in its records, where it holds one (else none): a row's identity
     /// that stays while it holds the row, unlike its position, and a dense number, unlike its record's address.
     template<RowValues Values>
     [[nodiscard]] Slot slot(const Values& values) const
@@ -79,11 +79,11 @@ struct ScratchRelation
         const auto found = relation.rows.find(values);
         return found == relation.rows.end() ? Slot() :
                                               Slot(static_cast<typename Slot::value_type>(
-                                                  std::get<urd::held_child<Row<F>, C>>(*found).get_deleter().slot));  // insert() holds its rows as records
+                                                  std::get<urd::built_child<Row<F>, C>>(*found).get_deleter().slot));  // insert() holds its rows as records
     }
 
-    /// The record in a slot of its records (a row's, where it holds that row).
-    [[nodiscard]] const urd::data<Row<F>>& at(Slot slot) const { return records[slot]; }
+    /// The row builder in a slot of its records (a row's, where it holds that row).
+    [[nodiscard]] const urd::builder<Row<F>, C>& at(Slot slot) const { return records[slot]; }
 
     /// Its columns across a clear(), which forgets their record: clear()'s, kept so that a refill allocates nothing.
     urd::data<Columns> columns_kept;

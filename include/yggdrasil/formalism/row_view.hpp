@@ -35,7 +35,6 @@
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
 #include <utility>
-#include <variant>
 
 namespace ygg::detail
 {
@@ -45,23 +44,6 @@ inline void check_column(std::size_t i, std::size_t size)
     if (i >= size)
         throw std::out_of_range("Row: column index out of range.");
 }
-
-/// `read` of a row's column types: its relation's (its pool's key's get_column_types(), a range, stored or computed), in
-/// whatever form the row holds the relation (a view, or a variant of views: interned, built, a record not interned yet).
-template<typename Relation, typename Read>
-decltype(auto) with_column_types(const Relation& relation, Read read)
-{
-    return urd::visit_view(relation, [&read](const auto& each) -> decltype(auto) { return read(each.get_column_types()); });
-}
-
-/// Throws std::invalid_argument where a column of type `type` is not read as T (ygg::type_id).
-template<typename T>
-void check_column_type(TypeId type)
-{
-    if (type != type_id<T>)
-        throw std::invalid_argument("Row: the column's type is not the requested one.");
-}
-
 }  // namespace ygg::detail
 
 namespace ygg
@@ -87,23 +69,23 @@ template<typename V, typename T>
 using resolved_columns_t = urd::resolved_range<decoded_columns_t<V, urd::index<T>>, urd::view_context_t<V>>;
 }  // namespace ygg
 
-/// A row's accessors, for a stored row (urd::index_view<Row<F>, C, RowIndex<F>>, whose context reads each field of
-/// data<Row<F>> by its key: urd::ReadsFieldsByKey) and a row held outside the repository (urd::borrowed_view of its record) alike: its
-/// relation, its values and their types. The context and the record, where borrowed, must outlive the view and all
-/// ranges it gives.
+/// A row of family F declares its views' accessors per form, below (a stored row's, an owned row's, a builder's).
 template<typename F, typename V>
 struct urd::view_mixin<ygg::Row<F>, V>
+{
+};
+
+namespace ygg::detail
+{
+/// A row's untyped reads, for every row form (a stored row's, an owned row's, a builder's), which gives its values
+/// (get_values()). The context and the builder, where borrowed, must outlive the view.
+template<typename F, typename V>
+struct row_value_reads
 {
 private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    /// The view of its relation (its pool's key) through the context.
-    [[nodiscard]] decltype(auto) get_relation() const { return self().template member<&urd::record_of<V>::relation>(); }
-
-    /// Its canonical Values.
-    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
-
     /// The canonical Value of a column; std::out_of_range past the last.
     [[nodiscard]] ygg::Value value(std::size_t column) const
     {
@@ -112,24 +94,39 @@ public:
         return values[column];
     }
 
-    /// The type of a column, its relation's; std::out_of_range past the last.
+    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"value", &row_value_reads::value, urd::arg<"column">>> {}; }
+};
+
+/// A row's typed reads, for a row whose relation is interned: a stored row (urd::index_view<Row<F>, C, urd::key<F,
+/// Row<F>>>: view_mixin<PackedRow<F>, V>) and an owned row (view_mixin<data<Row<F>>, V>), not a builder (its relation a
+/// child, of any form). They give its relation (get_relation(): the view of its interned pool key) and its values
+/// (get_values()); the types of its columns are those its relation's record stores (get_column_types()). The context and
+/// the record, where borrowed, must outlive the view and all ranges it gives.
+template<typename F, typename V>
+struct row_reads : row_value_reads<F, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    /// The type of a column, as its relation's record stores it; std::out_of_range past the last.
     [[nodiscard]] ygg::TypeId type(std::size_t column) const
     {
-        ygg::detail::check_column(column, std::ranges::size(self().get_values()));
-        return ygg::detail::with_column_types(get_relation(),
-                                              [column](const auto& types) -> ygg::TypeId
-                                              { return *std::ranges::next(std::ranges::begin(types), static_cast<std::ptrdiff_t>(column)); });
+        const auto& types = self().get_relation().get_column_types();
+        ygg::detail::check_column(column, std::ranges::size(types));
+        return types[column];
     }
 
     /// A column decoded as its type (an object column as its untagged object index).
-    [[nodiscard]] ygg::ColumnValue get(std::size_t column) const { return ygg::decode(value(column), type(column)); }
+    [[nodiscard]] ygg::ColumnValue get(std::size_t column) const { return ygg::decode(self().value(column), type(column)); }
 
     /// A column as T; throws std::invalid_argument where the column's type is not T's (ygg::type_id).
     template<typename T>
     [[nodiscard]] T get(std::size_t column) const
     {
-        ygg::detail::check_column_type<T>(type(column));
-        return ygg::decode_value<T>(value(column));
+        if (type(column) != ygg::type_id<T>)
+            throw std::invalid_argument("Row: the column's type is not the requested one.");
+        return ygg::decode_value<T>(self().value(column));
     }
 
     /// Columns first to last (exclusive) as T, a borrowed random-access range; throws std::invalid_argument unless each
@@ -138,16 +135,12 @@ public:
     [[nodiscard]] ygg::decoded_columns_t<V, T> get(std::size_t first, std::size_t last) const
     {
         const auto& values = self().get_values();
+        const auto& types = self().get_relation().get_column_types();
         if (first < last)
-        {
-            ygg::detail::check_column(last - 1, std::ranges::size(values));  // std::out_of_range past the last
-            ygg::detail::with_column_types(get_relation(),
-                                           [first, last](const auto& types)
-                                           {
-                                               for (const ygg::TypeId type : types | std::views::drop(first) | std::views::take(last - first))
-                                                   ygg::detail::check_column_type<T>(type);
-                                           });
-        }
+            ygg::detail::check_column(last - 1, std::ranges::size(types));  // std::out_of_range past the last
+        for (std::size_t column = first; column < last; ++column)
+            if (types[column] != ygg::type_id<T>)
+                throw std::invalid_argument("Row: the column's type is not the requested one.");
         return urd::transform(std::ranges::subrange(std::ranges::next(values.begin(), static_cast<std::ptrdiff_t>(first)),
                                                     std::ranges::next(values.begin(), static_cast<std::ptrdiff_t>(last))),
                               &ygg::decode_value<T>);
@@ -184,44 +177,76 @@ public:
     {
         using Object = ygg::formalism::Object;
         constexpr auto reads =
-            urd::Functions<urd::function<"value", &view_mixin::value, urd::arg<"column">>,
-                           urd::function<"type", &view_mixin::type, urd::arg<"column">>,
-                           urd::function<"get", static_cast<ygg::ColumnValue (view_mixin::*)(std::size_t) const>(&view_mixin::get), urd::arg<"column">>> {};
+            row_value_reads<F, V>::functions()
+            + urd::Functions<urd::function<"type", &row_reads::type, urd::arg<"column">>,
+                           urd::function<"get", static_cast<ygg::ColumnValue (row_reads::*)(std::size_t) const>(&row_reads::get), urd::arg<"column">>> {};
         if constexpr (ygg::ResolvesObjects<urd::view_context_t<V>>)
             return reads
                    + urd::Functions<
                        urd::function<"resolve_object",
-                                     static_cast<urd::index_view<Object, urd::view_context_t<V>> (view_mixin::*)(std::size_t) const>(
-                                         &view_mixin::template resolve<Object>),
+                                     static_cast<urd::index_view<Object, urd::view_context_t<V>> (row_reads::*)(std::size_t) const>(
+                                         &row_reads::template resolve<Object>),
                                      urd::arg<"column">>,
                        urd::function<"resolve_objects",
-                                     static_cast<ygg::resolved_columns_t<V, Object> (view_mixin::*)(std::size_t, std::size_t) const>(
-                                         &view_mixin::template resolve<Object>),
+                                     static_cast<ygg::resolved_columns_t<V, Object> (row_reads::*)(std::size_t, std::size_t) const>(
+                                         &row_reads::template resolve<Object>),
                                      urd::arg<"first">,
                                      urd::arg<"last">>,
                        urd::function<"resolve_objects",
-                                     static_cast<ygg::resolved_columns_t<V, Object> (view_mixin::*)() const>(&view_mixin::template resolve<Object>)>> {};
+                                     static_cast<ygg::resolved_columns_t<V, Object> (row_reads::*)() const>(&row_reads::template resolve<Object>)>> {};
         else
             return reads;
     }
 };
+}  // namespace ygg::detail
 
-/// A row key held in a record resolves to its view, through its context (context.view(key)).
-template<typename F>
-struct urd::resolution<ygg::RowIndex<F>>
+/// A stored row's view (urd::index_view<Row<F>, C, urd::key<F, Row<F>>>): its relation its key's first part, its values
+/// the packed row its context hands out (PackedRow<F>), with the typed reads of every row form.
+template<typename F, typename V>
+struct urd::view_mixin<ygg::PackedRow<F>, V> : ygg::detail::row_reads<F, V>
 {
-    template<typename C>
-    static auto of(ygg::RowIndex<F> key, const C& context)
-    { return context.view(key); }
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
-    /// Written from the key itself, or from a stored row's view (its index()).
-    template<std::same_as<ygg::RowIndex<F>> R>
-    static ygg::RowIndex<F> stored(const R& readout) noexcept
-    { return readout; }
+public:
+    /// The view of its relation (its pool's key: its key's first part) through the context.
+    [[nodiscard]] decltype(auto) get_relation() const { return urd::resolve(urd::get<F>(self().index()), self().context()); }
 
-    template<ygg::StoredRowView<F> V>
-    static ygg::RowIndex<F> stored(const V& view) noexcept
-    { return view.index(); }
+    /// Its canonical Values, read from its slot as they are needed.
+    [[nodiscard]] ygg::PackedRow<F> get_values() const { return urd::record_at<ygg::Row<F>>(self().context(), self().index()); }
+};
+
+namespace ygg::detail
+{
+/// The members of a row held outside its pool, owned (data<Row<F>>) or built (builder<Row<F>, C>): its relation and its
+/// values.
+template<typename F, typename V>
+struct held_row_members
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    /// The view of its relation (its pool's key) through the context.
+    [[nodiscard]] decltype(auto) get_relation() const { return self().template member<&urd::record_of<V>::relation>(); }
+
+    /// Its canonical Values.
+    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
+};
+}  // namespace ygg::detail
+
+/// A row builder's view: its relation (a child: the view of the form it holds, interned or not) and its values, read
+/// untyped only (value(column)); typed reads need an interned relation: an owned row's or a stored row's.
+template<typename F, typename C, typename V>
+struct urd::view_mixin<urd::builder<ygg::Row<F>, C>, V> : ygg::detail::held_row_members<F, V>, ygg::detail::row_value_reads<F, V>
+{
+};
+
+/// An owned row's view (urd::data<Row<F>>, held outside its pool): its relation (an interned key) and its values, with
+/// the typed reads.
+template<typename F, typename V>
+struct urd::view_mixin<urd::data<ygg::Row<F>>, V> : ygg::detail::held_row_members<F, V>, ygg::detail::row_reads<F, V>
+{
 };
 
 #endif

@@ -14,6 +14,7 @@
 #include <concepts>
 #include <gtest/gtest.h>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <urd/elements/copy.hpp>
@@ -225,9 +226,29 @@ concept InternsRecord = requires(R& repository, urd::data<T>& record) { reposito
 static_assert(!ViewsIndex<Twice, Name>);
 static_assert(ViewsIndex<Twice, Tag>);
 
+/// Whether repository R reads the record of a key K (R[key]): through the one part, its own or a nested repository,
+/// that resolves it.
+template<typename R, typename K>
+concept ReadsKey = requires(const R& repository, K key) { repository[key]; };
+
+static_assert(ReadsKey<Items, urd::index<Item>> && ReadsKey<Items, urd::index<Tag>> && ReadsKey<Items, urd::index<Name>>);
+static_assert(!ReadsKey<Names, urd::index<Tag>>);
+static_assert(!ReadsKey<Twice, urd::index<Name>>);  // resolved along two paths: by neither
+static_assert(ReadsKey<Twice, urd::index<Tag>>);
+
+// One operator[]: an own key and a nested key (two levels down) resolve through the same member, KeyedRepository's.
+static_assert(std::same_as<decltype(&Items::operator[]<Item>), urd::stored_ref<Item> (ygg::formalism::KeyedRepository<Items>::*)(urd::key<Item>) const>);
+static_assert(std::same_as<decltype(&Items::operator[]<Name>), urd::stored_ref<Name> (ygg::formalism::KeyedRepository<Items>::*)(urd::key<Name>) const>);
+
 // Into a nesting declared read only, nothing is interned.
 static_assert(!InternsRecord<Tags, Name>);
 static_assert(InternsRecord<Items, Tag>);
+
+// Writing goes through the same part as reading: a Tag through Items into Tags (nested non-const), its view through Tags,
+// the repository owning it; a Name, held only by Names (nested const in Tags), has no insert through Items or Tags.
+static_assert(std::same_as<decltype(std::declval<Items&>().insert(std::declval<urd::data<Tag>&>())), std::pair<urd::index_view<Tag, Tags>, bool>>);
+static_assert(!InternsRecord<Items, Name>);
+static_assert(std::same_as<decltype(std::declval<const Items&>().find(std::declval<const urd::data<Name>&>())), std::optional<urd::index_view<Name, Names>>>);
 
 struct Fixture
 {
@@ -253,6 +274,17 @@ TEST(Nests, ResolvesEachKindThroughTheRepositoryOwningIt)
     static_assert(std::same_as<std::remove_cvref_t<decltype(name_view.context())>, Names>);
     EXPECT_EQ(&name_view.context(), fixture.names.get());
     EXPECT_EQ(name_view.get_value(), 7);
+
+    // A record of a kind two levels down found through Items (read only there), as its view in the repository owning it.
+    auto name_again = urd::data<Name>(7);
+    ASSERT_TRUE(fixture.items.find(name_again).has_value());
+    EXPECT_EQ(fixture.items.find(name_again)->index(), name_index);
+    EXPECT_EQ(&fixture.items.find(name_again)->context(), fixture.names.get());
+
+    // A key of a kind two levels down, through Items: the record in place in the repository owning it.
+    EXPECT_EQ(&*fixture.items[name_index], &*(*fixture.names)[name_index]);
+    EXPECT_EQ(fixture.items[tag_index]->name, name_index);
+    EXPECT_EQ(fixture.items[item_view.index()]->tag, tag_index);
 
     // An index of a kind two levels down, through Items.
     EXPECT_EQ(fixture.items.view(name_index).get_value(), 7);

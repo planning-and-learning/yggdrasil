@@ -53,8 +53,8 @@ struct FamilyMembers<F, boost::mp11::mp_list<Ts...>> : FamilyMember<Ts, F<Ts>>..
 /// order as in std::tuple: a member may own handles into members of later types.
 ///
 /// Where the members layer, a family layers too: Family(&parent) layers each member over the parent's member of its type
-/// and numbers itself along the chain (urd::layer). Its operator[] reads an element by its member's handle (a pool of
-/// urd::data<T> handing out index<T>), whichever layer holds it.
+/// and numbers itself along the chain (urd::layer). A key of T is read and looked for through urd's fold (urd::record_at,
+/// urd::contains_key), which selects the member for T first (urd::SelectsStoreOf: get<T>()).
 template<template<typename> class F, typename... Ts>
 class Family : private detail::FamilyMembers<F, boost::mp11::mp_reverse<boost::mp11::mp_list<Ts...>>>
 {
@@ -103,16 +103,6 @@ public:
 
     /// This family's number along the chain: 0 for a root.
     [[nodiscard]] std::size_t layer() const noexcept { return m_layer; }
-
-    /// The element of `at`, from the member for T, whichever layer holds it.
-    template<typename T>
-    [[nodiscard]] decltype(auto) operator[](urd::index<T> at) const
-    { return get<T>()[at]; }
-
-    /// Whether the member for T has a record at `at`.
-    template<typename T>
-    [[nodiscard]] bool contains(urd::index<T> at) const
-    { return !at.is_none() && at.value < get<T>().size(); }
 
     /// Clears every member.
     void clear()

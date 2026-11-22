@@ -21,11 +21,14 @@
 #include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/interning.hpp"
+#include "yggdrasil/formalism/keyed.hpp"
 
 #include <boost/mp11.hpp>
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <tuple>
+#include <type_traits>
 #include <urd/elements/view.hpp>
 #include <utility>
 
@@ -44,11 +47,19 @@ template<typename Derived, typename Types, bool ThreadSafe = false>
 class SymbolContext;
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
-class SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>
+class SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe> : public KeyedRepository<Derived>
 {
 public:
     static constexpr bool thread_safe = ThreadSafe;
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
+    /// The keys it resolves itself (operator[]): its symbols' indices.
+    using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
+    /// Its own part that resolves keys (key_parts): its symbols, behind its Impl.
+    using OwnPart = HeldPart<const Derived, const std::conditional_t<ThreadSafe, ConcurrentSymbolRepository<Ts...>, SymbolRepository<Ts...>>, KeyTypes>;
+    using OwnParts = std::tuple<OwnPart>;
+    /// Its own part written into: its symbols.
+    using OwnWritablePart = HeldPart<Derived, std::conditional_t<ThreadSafe, ConcurrentSymbolRepository<Ts...>, SymbolRepository<Ts...>>, KeyTypes>;
+    using OwnWritableParts = std::tuple<OwnWritablePart>;
 
     /// The stores: defined in symbol_context_impl.hpp.
     struct Impl;
@@ -69,16 +80,10 @@ public:
         requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
     void view(const urd::data<T>&& record) const = delete;
 
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] std::optional<urd::index_view<T, Derived>> find(const urd::data<T>& record) const
-    { return do_find<T>(record); }
-
-    /// Interns the record; record.index is set to its index.
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    std::pair<urd::index_view<T, Derived>, bool> insert(urd::data<T>& record)
-    { return do_insert<T>(record); }
+    /// Its records are stored and found by KeyedRepository's one insert(data<T>&) and find(const data<T>&), through its
+    /// symbols (record.index set to its index).
+    using KeyedRepository<Derived>::insert;
+    using KeyedRepository<Derived>::find;
 
     /// Interns a builder through the scratch records of a builder storage that holds them (its scratch<T>(), each worker's own; no
     /// allocation once they have grown; the records of the repositories nested in this one from the same storage): its built children and records first (each
@@ -107,11 +112,6 @@ public:
     template<ViewThrough<Derived> V, IsBuilderStorage Storage>
     auto find(const V& view, Storage& storage)
     { return detail::find_view(static_cast<Derived&>(*this), storage, view); }
-
-    template<typename T>
-        requires(boost::mp11::mp_contains<boost::mp11::mp_list<Ts...>, T>::value)
-    [[nodiscard]] const urd::data<T>& operator[](urd::index<T> index) const
-    { return do_at<T>(index); }
 
     /// Whether this layer or a parent holds the index.
     template<typename T>
@@ -178,15 +178,17 @@ public:
     SymbolContext& operator=(SymbolContext&&) = delete;
 
 private:
+    friend class KeyedRepository<Derived>;
+
+    /// Its own parts that resolve keys (OwnParts: its symbols); KeyedRepository adds the repositories Derived nests.
+    [[nodiscard]] OwnParts own_parts() const;
+
+    /// Its own parts written into (OwnWritableParts): its symbols.
+    [[nodiscard]] OwnWritableParts own_writable_parts();
+
     // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
     // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
     // built by either.
-    template<typename T>
-    [[nodiscard]] std::optional<urd::index_view<T, Derived>> do_find(const urd::data<T>& record) const;
-    template<typename T>
-    std::pair<urd::index_view<T, Derived>, bool> do_insert(urd::data<T>& record);
-    template<typename T>
-    [[nodiscard]] const urd::data<T>& do_at(urd::index<T> index) const;
     template<typename T>
     [[nodiscard]] bool do_contains(urd::index<T> index) const;
     template<typename T>

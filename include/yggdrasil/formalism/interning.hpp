@@ -8,11 +8,16 @@
 
 #include "yggdrasil/formalism/builder.hpp"
 #include "yggdrasil/formalism/canonicalization.hpp"
+#include "yggdrasil/formalism/column_layout.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/formalism/relation_data.hpp"
 
+#include <algorithm>
+#include <boost/mp11.hpp>
+#include <cassert>
 #include <concepts>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <urd/elements/builder.hpp>
 #include <urd/elements/children.hpp>
@@ -22,48 +27,43 @@
 
 namespace ygg
 {
-/// A relation record made canonical before it is inserted (ygg::formalism::insert): its rows in tuple order, unique.
+/// A relation record made canonical and checked before it is inserted (by the repository's one insert): its rows in tuple order,
+/// unique; its columns' types its pool's (its relation symbol's: std::out_of_range where no layer holds it), their
+/// labels distinct (std::invalid_argument otherwise).
 template<typename Repository, typename F>
     requires formalism::SupportsSymbol<Repository, Relation<F>>
 void prepare_for_insert(Repository& repository, urd::data<Relation<F>>& relation)
-{ ygg::canonicalize(relation, repository); }
-
-/// Columns, a Schema and a row are canonical as they are written (their order is their meaning): inserted as they are.
-template<typename Repository>
-void prepare_for_insert(Repository& /*repository*/, urd::data<Columns>& /*columns*/) noexcept
 {
+    ygg::canonicalize(relation, repository);
+    const auto& values = repository[relation.columns]->values;
+    const auto columns = std::span<const urd::data<ColumnLayout>>(values.data(), values.size());
+    if (!std::ranges::equal(repository.template types<F>(relation.pool), columns, {}, {}, &urd::data<ColumnLayout>::type))
+        throw std::invalid_argument("Repository: the columns' types are not the pool's.");
+    for (auto it = columns.begin(); it != columns.end(); ++it)
+        if (repeats_label(columns, it))
+            throw std::invalid_argument("Repository: a relation's column labels are distinct.");
+    // ponytail: an assert, not a throw: O(rows) per insert (user). Catches ids beyond the pool (e.g. of another
+    // repository), not an id that happens to exist in both.
+    assert(std::ranges::all_of(relation.rows,
+                               [&](urd::key<F, Row<F>> key) { return urd::get<F>(key) == relation.pool && repository.owner(key) != nullptr; })
+           && "Repository: a relation's rows must be rows of its pool here.");
 }
 
-template<typename Repository>
-void prepare_for_insert(Repository& /*repository*/, urd::data<Schema>& /*schema*/) noexcept
-{
-}
-
-template<typename Repository, typename F>
-void prepare_for_insert(Repository& /*repository*/, urd::data<Row<F>>& /*row*/) noexcept
-{
-}
+// Columns, a Schema and a row are canonical as they are written (their order is their meaning): inserted as they are,
+// by the no-op default (declarations.hpp).
 }  // namespace ygg
 
 namespace ygg::formalism
 {
 
-/// Whether a repository interns a data<T> once its domain has prepared it (prepare_for_insert, found by ADL): a symbol
-/// or a row.
+/// Whether a repository interns a data<T>: its one insert (KeyedRepository: preparing it first, where its domain does,
+/// prepare_for_insert), of a kind it holds or a repository nested in it holds.
 template<typename Repository, typename T>
-concept PreparedInsert = requires(Repository& repository, urd::data<T>& data) {
-    prepare_for_insert(repository, data);
-    repository.insert(data);
-};
+concept InsertsRecord = requires(Repository& repository, urd::data<T>& data) { repository.insert(data); };
 
-/// Prepares data through its domain's hook (prepare_for_insert: canonicalizes it), then interns it in the repository.
+/// Whether a repository finds a data<T>: its one find, likewise.
 template<typename Repository, typename T>
-    requires PreparedInsert<Repository, T>
-[[nodiscard]] auto insert(Repository& repository, urd::data<T>& data)
-{
-    prepare_for_insert(repository, data);
-    return repository.insert(data);
-}
+concept FindsRecord = requires(const Repository& repository, const urd::data<T>& data) { repository.find(data); };
 
 }  // namespace ygg::formalism
 
@@ -73,21 +73,13 @@ namespace ygg::formalism
 template<typename Repository, typename T>
 using found_t = std::optional<urd::index_view<T, Repository, key_t<T>>>;
 
-/// Whether a repository interns a record of another repository's kind, which it holds nested (its insert(record)
-/// passing it on to that repository: an execution repository's registers, say).
-template<typename C, typename T>
-concept InsertsNestedRecord = !PreparedInsert<C, T> && requires(C& repository, urd::data<T>& record) { repository.insert(record); };
-
 /// Whether a repository interns a builder of another repository's kind, which it holds nested (its insert(builder,
 /// storage) passing it on: an execution repository's planning state, say).
 template<typename C, typename Storage, typename T, typename Context>
 concept InsertsNestedBuilder =
     !std::same_as<Context, C> && requires(C& repository, Storage& storage, const urd::builder<T, Context>& built) { repository.insert(built, storage); };
 
-/// Likewise for finding (find(record), find(builder, storage)).
-template<typename C, typename T>
-concept FindsNestedRecord = !PreparedInsert<C, T> && requires(C& repository, const urd::data<T>& record) { repository.find(record); };
-
+/// Likewise for finding (find(builder, storage)).
 template<typename C, typename Storage, typename T, typename Context>
 concept FindsNestedBuilder =
     !std::same_as<Context, C> && requires(C& repository, Storage& storage, const urd::builder<T, Context>& built) { repository.find(built, storage); };
@@ -105,13 +97,10 @@ concept ChildKey = !urd::is_builder<K>;
 template<typename C, IsBuilderStorage Storage, ChildKey K>
 K insert_child(C& repository, Storage& storage, const K& interned);
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires PreparedInsert<C, T>
+    requires InsertsRecord<C, T>
 auto insert_child(C& repository, Storage& storage, urd::data<T>& record);
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires InsertsNestedRecord<C, T>
-auto insert_child(C& repository, Storage& storage, urd::data<T>& record);
-template<typename C, IsBuilderStorage Storage, typename T>
-    requires(!PreparedInsert<C, T> && !InsertsNestedRecord<C, T>)
+    requires(!InsertsRecord<C, T>)
 [[noreturn]] urd::missing_key insert_child(C& repository, Storage& storage, urd::data<T>& record);
 template<typename C, IsBuilderStorage Storage, typename T>
 decltype(auto) insert_child(C& repository, Storage& storage, const urd::builder<T, C>& built);
@@ -128,26 +117,22 @@ template<typename C, IsBuilderStorage Storage, ChildKey K>
 K insert_child(C& /*repository*/, Storage& /*storage*/, const K& interned)
 { return interned; }
 
-/// A record not interned yet: prepared (its domain makes it canonical) and inserted.
+/// A record not interned yet: inserted by the repository's one insert (prepared there, as its domain makes it
+/// canonical), into the repository that holds its kind, this one or one nested in it.
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires PreparedInsert<C, T>
-auto insert_child(C& repository, Storage& /*storage*/, urd::data<T>& record)
-{ return formalism::insert(repository, record); }
-
-/// A record of a kind a repository nested in this one holds: interned there, through this one.
-template<typename C, IsBuilderStorage Storage, typename T>
-    requires InsertsNestedRecord<C, T>
+    requires InsertsRecord<C, T>
 auto insert_child(C& repository, Storage& /*storage*/, urd::data<T>& record)
 { return repository.insert(record); }
 
 /// A record of a kind no repository reached through this one holds: a child of another repository, which must be
 /// interned there first (std::invalid_argument).
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires(!PreparedInsert<C, T> && !InsertsNestedRecord<C, T>)
+    requires(!InsertsRecord<C, T>)
 [[noreturn]] urd::missing_key insert_child(C& /*repository*/, Storage& /*storage*/, urd::data<T>& /*record*/)
 { throw std::invalid_argument("ygg::formalism: a child of another repository is interned in its own repository first"); }
 
-/// A builder: its children first, then its record, written into a scratch record of `storage`, prepared and inserted.
+/// A builder: its children first, then its record, written into a scratch record of `storage`, prepared and inserted
+/// (as a record not interned yet is: under the parts of its key it holds, where its key has several).
 template<typename C, IsBuilderStorage Storage, typename T>
 decltype(auto) insert_child(C& repository, Storage& storage, const urd::builder<T, C>& built)
 {
@@ -173,13 +158,10 @@ template<typename C, IsBuilderStorage Storage, typename T, typename Context>
 template<typename C, IsBuilderStorage Storage, ChildKey K>
 K find_child(C& repository, Storage& storage, const K& interned);
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires PreparedInsert<C, T>
-found_t<C, T> find_child(C& repository, Storage& storage, urd::data<T>& record);
-template<typename C, IsBuilderStorage Storage, typename T>
-    requires FindsNestedRecord<C, T>
+    requires FindsRecord<C, T>
 auto find_child(C& repository, Storage& storage, urd::data<T>& record);
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires(!PreparedInsert<C, T> && !FindsNestedRecord<C, T>)
+    requires(!FindsRecord<C, T>)
 urd::missing_key find_child(C& repository, Storage& storage, urd::data<T>& record);
 template<typename C, IsBuilderStorage Storage, typename T>
 found_t<C, T> find_child(C& repository, Storage& storage, const urd::builder<T, C>& built);
@@ -195,21 +177,17 @@ template<typename C, IsBuilderStorage Storage, ChildKey K>
 K find_child(C& /*repository*/, Storage& /*storage*/, const K& interned)
 { return interned; }
 
-/// A record not interned yet: prepared in place (its canonical form: the same record) and looked up.
+/// A record not interned yet: prepared in place, where its domain does (its canonical form: the same record), and looked
+/// up by the repository's one find, in the repository that holds its kind, this one or one nested in it.
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires PreparedInsert<C, T>
-found_t<C, T> find_child(C& repository, Storage& /*storage*/, urd::data<T>& record)
+    requires FindsRecord<C, T>
+auto find_child(C& repository, Storage& /*storage*/, urd::data<T>& record)
 {
     prepare_for_insert(repository, record);
     return repository.find(std::as_const(record));
 }
 
-/// A record or a builder of a kind a repository nested in this one holds: looked up there, through this one.
-template<typename C, IsBuilderStorage Storage, typename T>
-    requires FindsNestedRecord<C, T>
-auto find_child(C& repository, Storage& /*storage*/, urd::data<T>& record)
-{ return repository.find(std::as_const(record)); }
-
+/// A builder of a kind a repository nested in this one holds: looked up there, through this one.
 template<typename C, IsBuilderStorage Storage, typename T, typename Context>
     requires FindsNestedBuilder<C, Storage, T, Context>
 auto find_child(C& repository, Storage& storage, const urd::builder<T, Context>& built)
@@ -218,7 +196,7 @@ auto find_child(C& repository, Storage& storage, const urd::builder<T, Context>&
 /// A record or a builder of another repository's kind, which no repository reached through this one holds: not
 /// interned there, so no record here names it.
 template<typename C, IsBuilderStorage Storage, typename T>
-    requires(!PreparedInsert<C, T> && !FindsNestedRecord<C, T>)
+    requires(!FindsRecord<C, T>)
 urd::missing_key find_child(C& /*repository*/, Storage& /*storage*/, urd::data<T>& /*record*/)
 { return {}; }
 
@@ -239,7 +217,7 @@ bool is_missing(const K& /*key*/) noexcept
 { return false; }
 
 /// A builder: its children looked up first (a child not found: its record is not found either), then its record,
-/// written into a scratch record of `storage`, prepared and looked up.
+/// written into a scratch record of `storage`, prepared and looked up (as a record not interned yet is).
 template<typename C, IsBuilderStorage Storage, typename T>
 found_t<C, T> find_child(C& repository, Storage& storage, const urd::builder<T, C>& built)
 {
@@ -256,8 +234,7 @@ found_t<C, T> find_child(C& repository, Storage& storage, const urd::builder<T, 
                       });
     if (!found)
         return found_t<C, T> {};
-    prepare_for_insert(repository, *scratch);
-    return repository.find(std::as_const(*scratch));
+    return detail::find_child(repository, storage, *scratch);
 }
 
 /// The builder a view holds, interned as a built child. (A view of a record of its own is not interned this way: its

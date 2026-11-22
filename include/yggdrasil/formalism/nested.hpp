@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
+#include <tuple>
 #include <type_traits>
 #include <urd/elements/view.hpp>
 #include <utility>
@@ -49,6 +50,9 @@ struct reaches_any;
 
 template<typename C, typename List>
 struct nests_any;
+
+template<typename K, typename List>
+struct resolves_any;
 }  // namespace detail
 
 /// Whether repository R holds records of T itself, or one of its nested repositories reaches them.
@@ -70,7 +74,55 @@ template<typename C, typename... Rs>
 struct nests_any<C, Nested<Rs...>> : std::bool_constant<(nests<std::remove_const_t<Rs>, C> || ...)>
 {
 };
+}  // namespace detail
 
+/// Whether repository R resolves keys K (R[key]): one of its own KeyTypes, or through one of its nested repositories,
+/// at any depth.
+template<typename R, typename K>
+inline constexpr bool resolves = HoldsKey<R, K> || detail::resolves_any<K, typename detail::nested_of<R>::type>::value;
+
+namespace detail
+{
+template<typename K, typename... Rs>
+struct resolves_any<K, Nested<Rs...>> : std::bool_constant<(resolves<std::remove_const_t<Rs>, K> || ...)>
+{
+};
+
+template<typename K>
+struct resolves_q
+{
+    template<typename P>
+    using fn = std::bool_constant<resolves<std::remove_cvref_t<P>, K>>;
+};
+}  // namespace detail
+
+namespace detail
+{
+template<typename R>
+using as_part = const R&;
+}  // namespace detail
+
+/// The parts of repository R that resolve its keys (R[key]), in order, as KeyedRepository builds them: R::OwnParts, a
+/// std::tuple of what holds R's own records (each naming its KeyTypes), then a reference to each repository nested in
+/// R (Nests).
+template<typename R>
+using key_parts = boost::mp11::mp_append<typename R::OwnParts,
+                                         boost::mp11::mp_transform<detail::as_part, boost::mp11::mp_rename<typename detail::nested_of<R>::type, std::tuple>>>;
+
+/// Whether exactly one of Parts resolves keys K: the one a repository resolves a key through.
+template<typename Parts, typename K>
+concept OnePartResolves = boost::mp11::mp_count_if_q<Parts, detail::resolves_q<K>>::value == 1;
+
+/// The position among Parts of the one part that resolves keys K: a compile error where none, or several, do.
+template<typename Parts, typename K>
+consteval std::size_t part_resolving()
+{
+    static_assert(OnePartResolves<Parts, K>, "ygg::formalism: exactly one part of a repository (its own stores, its nested repositories) resolves a key");
+    return boost::mp11::mp_find_if_q<Parts, detail::resolves_q<K>>::value;
+}
+
+namespace detail
+{
 /// The member of Nests holding the nested repository R (`const R` where read only).
 template<typename R>
 struct NestedMember
@@ -211,25 +263,6 @@ public:
         requires forwards_over<C> && requires(NestedOver<C>& nested, const urd::builder<T, C>& built, Storage& storage) { nested.find(built, storage); }
     decltype(auto) find(const urd::builder<T, C>& built, Storage& storage)
     { return member<NestedOver<C>>().find(built, storage); }
-
-    /// Interns a record of a kind held below there, where it is nested to be interned into: prepared by the
-    /// repository holding its kind (prepare_for_insert, as ygg::formalism::insert), else passed on further down.
-    template<typename T>
-        requires forwards<T> && requires(NestedFor<T>& nested, urd::data<T>& record) { nested.insert(record); }
-    decltype(auto) insert(urd::data<T>& record)
-    {
-        auto& nested = member<NestedFor<T>>();
-        if constexpr (PreparedInsert<NestedFor<T>, T>)
-            return ygg::formalism::insert(nested, record);
-        else
-            return nested.insert(record);
-    }
-
-    /// Finds a record of a kind held below, there.
-    template<typename T>
-        requires forwards<T> && requires(NestedFor<T>& nested, const urd::data<T>& record) { nested.find(record); }
-    [[nodiscard]] decltype(auto) find(const urd::data<T>& record) const
-    { return member<NestedFor<T>>().find(record); }
 
     /// Checks that Derived may hold copies of `source`'s records (urd::ChecksCompatibility): each nested repository sees
     /// the one `source` nests in its place (the same one, or a layer it lies over), else std::invalid_argument. A record

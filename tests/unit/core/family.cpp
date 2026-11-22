@@ -4,6 +4,7 @@
 #include "yggdrasil/core/family.hpp"
 
 #include "urd/elements/data.hpp"
+#include "urd/elements/keyed.hpp"
 #include "urd/elements/view.hpp"
 #include "urd/repr/records/arena.hpp"
 #include "urd/repr/records/records.hpp"
@@ -96,15 +97,16 @@ using Repository = ygg::Family<Symbols, Object, Predicate>;
 
 }  // namespace
 
+// Read through urd's fold: a family selects the member for the key's type first.
 TEST(Family, ReadsEachMemberByItsHandle)
 {
     auto root = Repository(nullptr);
     const auto a = root.get<Object>().insert(urd::data<Object> { 1 }).first;
     const auto p = root.get<Predicate>().insert(urd::data<Predicate> { 2 }).first;
-    EXPECT_EQ(root[a].id, 1U);
-    EXPECT_EQ(root[p].arity, 2U);
-    EXPECT_TRUE(root.contains(a) && root.contains(p));
-    EXPECT_FALSE(root.contains(urd::index<Object>(1)));
+    EXPECT_EQ(urd::record_at(root, a)->id, 1U);
+    EXPECT_EQ(urd::record_at(root, p)->arity, 2U);
+    EXPECT_TRUE(urd::contains_key(root, a) && urd::contains_key(root, p));
+    EXPECT_FALSE(urd::contains_key(root, urd::index<Object>(1)));
     auto sizes = std::vector<std::size_t>();
     root.for_each([&](const auto& member) { sizes.push_back(member.size()); });
     EXPECT_EQ(sizes, (std::vector<std::size_t> { 1, 1 }));
@@ -120,11 +122,11 @@ TEST(Family, LayersEachMemberOverItsParents)
     EXPECT_EQ(child.get<Object>().insert(urd::data<Object> { 1 }).first, a);  // found in the parent
     const auto b = child.get<Object>().insert(urd::data<Object> { 3 }).first;
     EXPECT_EQ(b, urd::index<Object>(1));  // after the parent's
-    EXPECT_EQ(child[a].id, 1U);           // the parent's, through the chain
-    EXPECT_EQ(child[b].id, 3U);
-    EXPECT_FALSE(root.contains(b));
-    EXPECT_TRUE(child.contains(b));
+    EXPECT_EQ(urd::record_at(child, a)->id, 1U);           // the parent's, through the chain
+    EXPECT_EQ(urd::record_at(child, b)->id, 3U);
+    EXPECT_FALSE(urd::contains_key(root, b));
+    EXPECT_TRUE(urd::contains_key(child, b));
     child.clear();
-    EXPECT_FALSE(child.contains(b));
-    EXPECT_TRUE(child.contains(a));
+    EXPECT_FALSE(urd::contains_key(child, b));
+    EXPECT_TRUE(urd::contains_key(child, a));
 }

@@ -43,6 +43,14 @@ constexpr auto kObjectColumns = std::array { ygg::type_id<urd::index<formalism::
                                              ygg::type_id<urd::index<formalism::Object>> };
 }
 
+namespace ygg::benchmarks
+{
+/// A relation key: four object columns, stored in its record.
+template<typename Repository>
+void prepare_for_insert(Repository& /*repository*/, urd::data<Relation>& record)
+{ record.column_types.set(kObjectColumns.begin(), kObjectColumns.end()); }
+}  // namespace ygg::benchmarks
+
 namespace urd
 {
 
@@ -85,22 +93,19 @@ struct data<ygg::benchmarks::Relation>
 {
     urd::index<ygg::benchmarks::Relation> index;
     ygg::uint_t lane = 0;
+    /// Its rows' column types, as a key of row pools: filled by its preparation (prepare_for_insert), stored here.
+    urd::flat_vector<ygg::TypeId> column_types;
 
     data() = default;
 
     explicit data(ygg::uint_t lane_) : index(), lane(lane_) {}
 
-    static constexpr bool copyable() noexcept
-    {
-        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
-        return true;
-    }
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane, &data::column_types> {}; }
 };
 
 template<typename V>
@@ -112,8 +117,8 @@ private:
 public:
     [[nodiscard]] decltype(auto) get_lane() const { return self().template member<&urd::record_of<V>::lane>(); }
 
-    /// A key of row pools gives its rows' column types.
-    [[nodiscard]] std::span<const ygg::TypeId> get_column_types() const noexcept { return ygg::benchmarks::kObjectColumns; }
+    /// As a key of row pools, its rows' column types: those its record stores.
+    [[nodiscard]] decltype(auto) get_column_types() const { return self().template member<&urd::record_of<V>::column_types>(); }
 
     static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
 };
@@ -367,7 +372,7 @@ void benchmark_relation_find(benchmark::State& state)
             state.SkipWithError("prefilled row not found");
             break;
         }
-        checksum += found->index().row.value;
+        checksum += found->index().template get<Row<Relation>>().value;
     }
     benchmark::DoNotOptimize(checksum);
     report_relation<Repository>(state, 0, PerThreadLane);
@@ -387,9 +392,9 @@ void benchmark_relation_mixed(benchmark::State& state)
                                 (operation * 11400714819323198485ULL + static_cast<std::uint64_t>(state.thread_index())) & (kPrefill - 1);
         ++operation;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>()->insert(data);
+        const auto [stored, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.index().row.value;
+        checksum += stored.index().template get<Row<Relation>>().value;
     }
     if (created != (static_cast<std::uint64_t>(state.iterations()) + 19U) / 20U)
         state.SkipWithError("mixed relation miss was not created");
@@ -410,9 +415,9 @@ void benchmark_relation_insert(benchmark::State& state)
         const auto key =
             PerThreadLane ? operation++ : static_cast<std::uint64_t>(state.thread_index()) + static_cast<std::uint64_t>(state.threads()) * operation++;
         set_key(data, key);
-        const auto [view, was_created] = repository<Repository>()->insert(data);
+        const auto [stored, was_created] = repository<Repository>()->insert(data);
         created += was_created;
-        checksum += view.index().row.value;
+        checksum += stored.index().template get<Row<Relation>>().value;
     }
     if (created != static_cast<std::uint64_t>(state.iterations()))
         state.SkipWithError("unique relation insertion was not created");

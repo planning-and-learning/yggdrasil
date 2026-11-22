@@ -31,6 +31,7 @@ add_yggdrasil_gtest(formalism_repository_types "formalism/repository_types.cpp")
 
 add_yggdrasil_gtest(formalism_symbol_context "formalism/symbol_context.cpp")
 add_yggdrasil_gtest(formalism_nested_repositories "formalism/nested_repositories.cpp")
+add_yggdrasil_gtest(formalism_key_lookup "formalism/key_lookup.cpp")
 add_yggdrasil_gtest(formalism_intern_instantiations "formalism/intern_instantiations.cpp")
 add_yggdrasil_gtest(formalism_repository_concurrent "formalism/repository_concurrent.cpp")
 target_link_libraries(formalism_repository_concurrent PRIVATE Threads::Threads)

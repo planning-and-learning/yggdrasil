@@ -21,7 +21,7 @@ namespace ygg::tests
 /// Read access to one supported symbol representation.
 template<typename Repository, typename T>
 concept SymbolRepositoryFor = formalism::SupportsSymbol<Repository, T> && requires(const std::remove_reference_t<Repository>& repository, urd::index<T> index) {
-    { repository[index] } -> std::same_as<const urd::data<T>&>;
+    { repository[index] } -> std::same_as<urd::stored_ref<T>>;
 };
 
 /// A context whose repository reads T's records and is numbered (layer()).
@@ -31,6 +31,15 @@ concept SymbolContextFor = requires(const C& context) {
     get_repository(context).layer();
 };
 
+}  // namespace ygg::tests
+
+
+namespace ygg::tests
+{
+/// The row part of a stored row view's key: its id in its relation's pool.
+template<typename V>
+auto row_of(const V& view)
+{ return view.index().template get<typename V::value_type>(); }
 }  // namespace ygg::tests
 
 #endif

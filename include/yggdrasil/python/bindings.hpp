@@ -58,7 +58,7 @@ void bind_unsigned_integer(nb::module_& m, const std::string& name)
 template<typename T, typename Repository>
 void bind_insert(nb::class_<Repository>& repository)
 {
-    repository.def("insert", [](Repository& self, urd::data<T>& data) { return formalism::insert(self, data); }, nb::arg("data"));
+    repository.def("insert", [](Repository& self, urd::data<T>& data) { return self.insert(data); }, nb::arg("data"));
 }
 
 }  // namespace ygg

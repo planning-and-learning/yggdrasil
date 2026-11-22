@@ -39,17 +39,6 @@ struct formatter<urd::data<ygg::ColumnLayout>, char>
     { return fmt::format_to(ctx.out(), "{}:{}", value.label, value.type); }
 };
 
-/// A row's key: <pool,row>.
-template<typename F>
-struct formatter<ygg::RowIndex<F>, char>
-{
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const ygg::RowIndex<F>& value, FormatContext& ctx) const
-    { return fmt::format_to(ctx.out(), "<{},{}>", value.relation, value.row); }
-};
-
 }  // namespace fmt
 
 namespace ygg
@@ -57,7 +46,7 @@ namespace ygg
 /// A row's values, separated by spaces: each column as its type writes it, an object column as its object's view
 /// (resolved through the row's context). The relation is not written: who knows its name
 /// (a predicate's, an action's) writes it.
-template<typename F, RowViewConcept<F> V>
+template<typename F, TypedRowViewConcept<F> V>
 std::string values_text(const V& row)
 {
     auto result = std::string();

@@ -54,43 +54,45 @@ struct urd::copying<ygg::Schema>
 /// A row: its relation copied (its key as it is where the target sees it), then its values, each as its column's type
 /// reads it: an object column's object copied as a child (urd::copy of the object it names, through the row's context:
 /// its key as it is where the target sees the layer that holds it), any other value as it is. Stored in the target's
-/// pool of that relation, through a scratch row of `storage`. Where the target sees every object the row's context can
-/// name (urd::SeesAll), or the context resolves no objects (a free relation's), its values are kept as they are.
+/// pool of that relation (to.insert: under its relation, urd::insert_at), through a scratch row of `storage`.
+/// Where the target sees every object the row's context can name (urd::SeesAll), or the context resolves no objects (a
+/// free relation's), its values are kept as they are.
 template<typename F>
 struct urd::copying<ygg::Row<F>>
 {
-    using key_type = ygg::RowIndex<F>;
+    using key_type = urd::key<F, ygg::Row<F>>;
 
     template<typename V, typename To, typename Storage>
     static key_type into(const V& row, To& to, Storage& storage)
     {
         using Object = ygg::formalism::Object;
-        const auto relation = urd::visit_view(row.get_relation(), [&to, &storage](const auto& view) { return urd::copy(view, to, storage); });
+        const auto relation = urd::key<F>(urd::visit_view(row.get_relation(), [&to, &storage](const auto& view) { return urd::copy(view, to, storage); }));
+        auto copied = storage.template scratch<ygg::Row<F>>();
+        copied->relation = urd::get<F>(relation);
+        decltype(auto) values = row.get_values();
         if constexpr (ygg::ResolvesObjects<urd::view_context_t<V>>)
         {
-            // What the loop below yields when the target sees every object: each value as it is.
-            if (to.template sees_all<Object>(row.context()))
-                return key_type { relation, to.insert_row(relation, row.get_values()).first };
-            auto copied = storage.template scratch<ygg::Row<F>>();
-            copied->relation = relation;
-            const std::span<const ygg::TypeId> types = to.types(relation);  // the declared pool's, as stored: no allocation
-            decltype(auto) values = row.get_values();
-            for (std::size_t column = 0; column < types.size(); ++column)
+            if (!to.template sees_all<Object>(row.context()))
             {
-                const ygg::Value value = values[column];
-                if (types[column] == ygg::type_id<urd::index<Object>>)
+                const std::span<const ygg::TypeId> types = to.types(urd::get<F>(relation));  // the declared pool's, as stored: no allocation
+                for (std::size_t column = 0; column < types.size(); ++column)
                 {
-                    const auto object = row.context().view(ygg::decode_value<urd::index<Object>>(value));
-                    copied->values.push_back(ygg::encode_value(urd::copy(object, to, storage)));
+                    const ygg::Value value = values[column];
+                    if (types[column] == ygg::type_id<urd::index<Object>>)
+                    {
+                        const auto object = row.context().view(ygg::decode_value<urd::index<Object>>(value));
+                        copied->values.push_back(ygg::encode_value(urd::copy(object, to, storage)));
+                    }
+                    else
+                        copied->values.push_back(value);
                 }
-                else
-                    copied->values.push_back(value);
+                return to.insert(*copied).first.index();
             }
-            return key_type { relation, to.insert_row(*copied).first };
         }
-        // A context that resolves no objects (a free relation's) names none: its values mean the same anywhere.
-        else
-            return key_type { relation, to.insert_row(relation, row.get_values()).first };
+        // Where the target sees every object, or a context that resolves no objects (a free relation's) names none: its
+        // values mean the same anywhere.
+        copied->values.set(std::ranges::begin(values), std::ranges::end(values));
+        return to.insert(*copied).first.index();
     }
 };
 
@@ -110,10 +112,10 @@ struct urd::copying<ygg::Relation<F>>
         auto columns = storage.template scratch<ygg::Columns>();  // its labels and types, in whatever form it holds them
         const auto layouts = relation.columns();
         columns->values.set(layouts.begin(), layouts.end());
-        record->columns = ygg::formalism::insert(to, *columns).first.index();
+        record->columns = to.insert(*columns).first.index();
         for (const auto row : relation.get_rows())
             record->rows.push_back(urd::visit_view(row, copied));
-        return ygg::formalism::insert(to, *record).first.index();
+        return to.insert(*record).first.index();
     }
 };
 

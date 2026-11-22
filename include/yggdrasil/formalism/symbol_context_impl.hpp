@@ -22,6 +22,7 @@
 // Included by the source that instantiates a library's repositories (symbol_context_instantiations.hpp), and by code
 // whose repositories are not a library's (yggdrasil's tests).
 
+#include "yggdrasil/formalism/keyed_impl.hpp"
 #include "yggdrasil/formalism/symbol_context.hpp"
 #include "yggdrasil/formalism/symbol_repository.hpp"
 
@@ -66,31 +67,17 @@ void SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::clear()
 { m_impl->symbols.clear(); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-std::optional<urd::index_view<T, Derived>> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_find(const urd::data<T>& record) const
-{
-    if (const auto index = m_impl->symbols.template get<T>().find(record); !index.is_none())
-        return static_cast<const Derived&>(*this).view(index);
-    return std::nullopt;
-}
+typename SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::OwnParts SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::own_parts() const
+{ return OwnParts(OwnPart(static_cast<const Derived&>(*this), m_impl->symbols)); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-std::pair<urd::index_view<T, Derived>, bool> SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_insert(urd::data<T>& record)
-{
-    const auto [index, created] = intern(m_impl->symbols.template get<T>(), record);
-    return { static_cast<const Derived&>(*this).view(index), created };
-}
-
-template<typename Derived, bool ThreadSafe, typename... Ts>
-template<typename T>
-const urd::data<T>& SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_at(urd::index<T> index) const
-{ return m_impl->symbols[index]; }
+typename SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::OwnWritableParts SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::own_writable_parts()
+{ return OwnWritableParts(OwnWritablePart(static_cast<Derived&>(*this), m_impl->symbols)); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>
 bool SymbolContext<Derived, boost::mp11::mp_list<Ts...>, ThreadSafe>::do_contains(urd::index<T> index) const
-{ return m_impl->symbols.contains(index); }
+{ return urd::contains_key(m_impl->symbols, index); }
 
 template<typename Derived, bool ThreadSafe, typename... Ts>
 template<typename T>

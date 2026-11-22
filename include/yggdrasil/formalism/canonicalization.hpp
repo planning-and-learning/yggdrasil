@@ -117,7 +117,7 @@ template<typename F, typename Repository>
     requires formalism::SupportsSymbol<Repository, Relation<F>>
 void canonicalize(urd::data<Relation<F>>& relation, const Repository& repository)
 {
-    std::ranges::sort(relation.rows, std::ranges::lexicographical_compare, [&repository](RowIndex<F> key) { return repository.values(key); });
+    std::ranges::sort(relation.rows, std::ranges::lexicographical_compare, [&repository](urd::key<F, Row<F>> key) { return repository[key]; });
     relation.rows.erase(std::ranges::unique(relation.rows).begin(), relation.rows.end());
 }
 
@@ -126,7 +126,7 @@ template<typename F, typename Repository>
     requires formalism::SupportsSymbol<Repository, Relation<F>>
 bool is_canonical(const urd::data<Relation<F>>& relation, const Repository& repository)
 {
-    return std::ranges::is_sorted(relation.rows, std::ranges::lexicographical_compare, [&repository](RowIndex<F> key) { return repository.values(key); })
+    return std::ranges::is_sorted(relation.rows, std::ranges::lexicographical_compare, [&repository](urd::key<F, Row<F>> key) { return repository[key]; })
            && std::ranges::adjacent_find(relation.rows) == relation.rows.end();
 }
 

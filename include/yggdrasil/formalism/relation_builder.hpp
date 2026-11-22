@@ -38,10 +38,10 @@
 
 namespace ygg
 {
-/// The records a relation builder's inserted rows are drawn from (builder::insert): a Store of slots, a row's slot reused
-/// once it is erased.
-template<typename F>
-using RowRecords = urd::Store<urd::slots<urd::data<Row<F>>>>;
+/// The row builders a relation builder's inserted rows are drawn from (builder::insert): a Store of slots of builders of
+/// rows (relation and values) read through C, a row's slot reused once it is erased.
+template<typename F, typename C>
+using RowRecords = urd::Store<urd::slots<urd::builder<Row<F>, C>>>;
 
 /// The order of a relation builder's rows: tuple order (TupleOrder, by their values), each row child read through the
 /// context it holds, the repository the builder's relation is initialized into (a row's key names its values only
@@ -59,7 +59,7 @@ struct RowOrder
     { return TupleOrder {}(read(lhs), read(rhs)); }
 
 private:
-    using Child = urd::child<Row<F>, C, RowIndex<F>>;
+    using Child = urd::child<Row<F>, C, urd::key<F, Row<F>>>;
 
     /// A row child as the view it resolves to through the context; anything else (values, a prefix, a view) as it is.
     template<typename X>
@@ -80,9 +80,9 @@ namespace urd
 /// initialized into (RowOrder). They are made by the builder's members, which have that context; no `from`: row keys
 /// alone have no order.
 template<typename F, typename C>
-struct built_form<urd::flat_vector<ygg::RowIndex<F>>, C>
+struct built_form<urd::flat_vector<urd::key<F, ygg::Row<F>>>, C>
 {
-    using type = urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, ygg::RowIndex<F>>>, urd::sorted, urd::unique, urd::order_by<ygg::RowOrder<F, C>>>;
+    using type = urd::Store<urd::multiset<urd::child<ygg::Row<F>, C, urd::key<F, ygg::Row<F>>>>, urd::sorted, urd::unique, urd::order_by<ygg::RowOrder<F, C>>>;
 };
 
 /// The builder of a relation of family F: its record's members, each index a child (a key, a builder or a record).
@@ -97,7 +97,7 @@ struct builder<ygg::Relation<F>, C>
     urd::index<ygg::Relation<F>> index;
     urd::built_t<urd::index<F>, C> pool;
     urd::built_t<urd::index<ygg::Columns>, C> columns;
-    urd::built_t<urd::flat_vector<ygg::RowIndex<F>>, C> rows;
+    urd::built_t<urd::flat_vector<urd::key<F, ygg::Row<F>>>, C> rows;
 
     static constexpr auto fields() noexcept
     { return urd::Fields<urd::field<"pool", &builder::pool>, urd::field<"columns", &builder::columns>, urd::field<"rows", &builder::rows>> {}; }
@@ -112,7 +112,7 @@ struct builder<ygg::Relation<F>, C>
         pool = pool_;
         // Its rows ordered through `repository`: a Store of that order where it had another (its buffers kept where not).
         if (rows.key_comp().context != &repository)
-            rows = urd::built_t<urd::flat_vector<ygg::RowIndex<F>>, C>(ygg::RowOrder<F, C> { &repository });
+            rows = urd::built_t<urd::flat_vector<urd::key<F, ygg::Row<F>>>, C>(ygg::RowOrder<F, C> { &repository });
         else
             rows.clear();
     }
@@ -126,9 +126,9 @@ struct builder<ygg::Relation<F>, C>
     }
 
     /// Inserts a row of values (as they are held: contiguous, or a stored row's), one per column, at its place in tuple
-    /// order (O(log n): its rows are a sorted set in blocks), where no row of it has these values: a row record drawn
-    /// from `records` (a Store of slots of data<Row<F>>), held by its handle and read through `repository`; erasing the
-    /// row gives the record back to `records`, buffers and all. A count other than the columns' throws
+    /// order (O(log n): its rows are a sorted set in blocks), where no row of it has these values: a row builder drawn
+    /// from `records` (a Store of slots of builder<Row<F>, C>: its pool and these values), held by its handle and read
+    /// through `repository`; erasing the row gives the builder back to `records`, buffers and all. A count other than the columns' throws
     /// std::invalid_argument, a value wider than its column's type std::out_of_range, before anything is stored. Its
     /// position, and whether it was inserted.
     template<ygg::RowValues Values, typename Records>
@@ -153,12 +153,12 @@ struct builder<ygg::Relation<F>, C>
             return { at, false };
         auto record = records.make_handle();
         record->relation = key;
-        record->values.set(std::ranges::begin(values), std::ranges::end(values));
-        rows.emplace(std::in_place_index<2>, std::move(record));
+        record->values.assign(std::ranges::begin(values), std::ranges::end(values));
+        rows.emplace(std::in_place_index<1>, std::move(record));
         return { at, true };
     }
 
-    /// Erases the row of these values; whether it held one. A row record goes back to its pool.
+    /// Erases the row of these values; whether it held one. A row builder goes back to its records.
     template<ygg::RowValues Values>
     bool erase(const C& repository, const Values& values)
     {
@@ -179,7 +179,7 @@ struct builder<ygg::Relation<F>, C>
         return urd::Functions<urd::function<"initialize", &builder::initialize, urd::arg<"repository">, urd::arg<"pool">, urd::arg<"columns">>,
                               urd::function<"rename", &builder::rename, urd::arg<"repository">, urd::arg<"columns">>,
                               urd::function<"insert",
-                                            &builder::template insert<std::span<const ygg::Value>, ygg::RowRecords<F>>,
+                                            &builder::template insert<std::span<const ygg::Value>, ygg::RowRecords<F, C>>,
                                             urd::arg<"repository">,
                                             urd::arg<"records">,
                                             urd::arg<"values">>,

@@ -20,9 +20,11 @@
 
 #include "yggdrasil/core/family.hpp"
 #include "yggdrasil/formalism/declarations.hpp"
+#include "yggdrasil/formalism/keyed_impl.hpp"
 
 #include <boost/mp11.hpp>
 #include <optional>
+#include <tuple>
 #include <type_traits>
 #include <urd/config.hpp>
 #include <urd/elements/flat.hpp>
@@ -68,13 +70,14 @@ template<typename... Ts>
 class ConcurrentSymbolRepository;
 
 /// The symbols of a repository, one SymbolStore per type in a urd family, read through the derived Repository: views
-/// of its indices have it as context. Over a parent (its stores layered over the parent's), lookups and reads find the
+/// of its indices have it as context, which reads their records through its one key lookup (KeyedRepository, over its
+/// family as its one part: urd's fold selects the type's store first). Over a parent (its stores layered over the parent's), lookups and reads find the
 /// parent's records too.
 template<typename Repository, typename Types, bool ThreadSafe = false>
 class SymbolRepositoryBase;
 
 template<typename Repository, bool ThreadSafe, typename... Ts>
-class SymbolRepositoryBase<Repository, boost::mp11::mp_list<Ts...>, ThreadSafe>
+class SymbolRepositoryBase<Repository, boost::mp11::mp_list<Ts...>, ThreadSafe> : public KeyedRepository<Repository>
 {
     template<typename T>
     using Store = SymbolStore<T, ThreadSafe>;
@@ -87,6 +90,12 @@ public:
     static constexpr bool thread_safe = ThreadSafe;
 
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
+    /// The keys it resolves (operator[], at()): its symbols' indices.
+    using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
+    /// Its one part that resolves keys: its family of stores, held in place; and the same, written into (its records
+    /// stored and found by KeyedRepository's one insert and find).
+    using OwnParts = std::tuple<HeldPart<const Repository, const Family<Store, Ts...>, KeyTypes>>;
+    using OwnWritableParts = std::tuple<HeldPart<Repository, Family<Store, Ts...>, KeyTypes>>;
 
     /// An index as its view here (urd's resolves contract): what compositions of indices are read through (urd::resolve).
     template<typename T>
@@ -94,33 +103,6 @@ public:
     [[nodiscard]] urd::index_view<T, Repository> view(urd::index<T> index) const noexcept
     { return { index, &repository() }; }
 
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] std::optional<urd::index_view<T, Repository>> find(const urd::data<T>& record) const
-    {
-        if (const auto index = get<T>().find(record); !index.is_none())
-            return repository().view(index);
-        return std::nullopt;
-    }
-
-    /// Interns the record; record.index is set to its index.
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    std::pair<urd::index_view<T, Repository>, bool> insert(urd::data<T>& record)
-    {
-        const auto [index, created] = intern(get<T>(), record);
-        return { repository().view(index), created };
-    }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] const urd::data<T>& operator[](urd::index<T> index) const
-    { return m_symbols[index]; }
-
-    template<typename T>
-        requires SupportsSymbol<SymbolRepositoryBase, T>
-    [[nodiscard]] bool contains(urd::index<T> index) const
-    { return m_symbols.contains(index); }
 
     template<typename T>
         requires SupportsSymbol<SymbolRepositoryBase, T>
@@ -149,6 +131,15 @@ public:
     [[nodiscard]] const Store<T>& get() const
     { return m_symbols.template get<T>(); }
 
+private:
+    friend class KeyedRepository<Repository>;
+
+    [[nodiscard]] OwnParts own_parts() const { return OwnParts(std::tuple_element_t<0, OwnParts>(repository(), m_symbols)); }
+
+    [[nodiscard]] OwnWritableParts own_writable_parts()
+    { return OwnWritableParts(std::tuple_element_t<0, OwnWritableParts>(static_cast<Repository&>(*this), m_symbols)); }
+
+public:
     SymbolRepositoryBase() : SymbolRepositoryBase(nullptr) {}
 
     /// Parent layers must remain frozen and outlive this repository.

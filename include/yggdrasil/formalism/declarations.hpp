@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <urd/elements/builder.hpp>
 #include <urd/elements/concepts.hpp>
+#include <urd/elements/data.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/index.hpp>
 #include <urd/tags.hpp>
@@ -56,39 +57,40 @@ struct Relation
     static constexpr std::string_view name = urd::joined_name<"Relation", F::name>;
 };
 
-/// A row of family F (predicates, actions, ..., Schema): its pool's key (relation) and its values (row_data.hpp). Stored
-/// once per pool, its id there is an index<Row<F>>.
+/// A row of family F (predicates, actions, ..., Schema): its values, stored once per pool, its relation's (its key's
+/// first part), its id there an index<Row<F>>. Held three ways (row_data.hpp): packed in its pool's slot (PackedRow<F>,
+/// what a lookup hands out), owned outside it (data<Row<F>>: its values), and built (builder<Row<F>, C>: its relation
+/// and its values).
 template<typename F>
 struct Row
 {
     static constexpr std::string_view name = urd::joined_name<"Row", F::name>;
 };
 
-/// The index of a stored row: its pool's key and its id there. A key, as urd::index is: it reads as the row it names
-/// (its view, RowView, through its context: context.values(key); urd::resolution<RowIndex<F>>), it is no record.
+/// A row as its pool's slot holds it, read on demand (row_data.hpp).
 template<typename F>
-struct RowIndex
+class PackedRow;
+}  // namespace ygg
+
+/// What a lookup of a row hands out (urd::record_at, a repository's operator[] and at()): a reader of the row packed in
+/// its slot, by value.
+template<typename F>
+struct urd::stored_ref_of<ygg::Row<F>>
 {
-    static constexpr std::string_view name = urd::joined_name<"RowIndex", F::name>;
-
-    urd::index<F> relation;
-    urd::index<Row<F>> row;
-
-    friend constexpr auto operator<=>(const RowIndex&, const RowIndex&) = default;
-
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &RowIndex::relation>, urd::field<"row", &RowIndex::row>> {}; }
-
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+    using type = ygg::PackedRow<F>;
 };
 
-/// The view of a stored row through its context C (a layer, or a relation builder): an indexed record under its
-/// composite index.
+namespace ygg
+{
+
+/// The view of a stored row through its context C (a layer, or a relation builder): an indexed record under its key,
+/// urd::key<F, Row<F>> (its relation's index, then its row's there).
 template<typename F, typename C>
-using RowView = urd::index_view<Row<F>, C, RowIndex<F>>;
+using RowView = urd::index_view<Row<F>, C, urd::key<F, Row<F>>>;
 
 namespace formalism
 {
-/// The key a repository interns a record of T under: its index, urd::index<T>; a row's, its RowIndex.
+/// The key a repository interns a record of T under: its index, urd::index<T>; a row's, urd::key<F, Row<F>>.
 template<typename T>
 struct key_of
 {
@@ -98,7 +100,7 @@ struct key_of
 template<typename F>
 struct key_of<Row<F>>
 {
-    using type = RowIndex<F>;
+    using type = urd::key<F, Row<F>>;
 };
 
 template<typename T>
@@ -120,7 +122,7 @@ struct RowOfId
     urd::index<F> relation;
     const C* context;
 
-    auto operator()(urd::index<Row<F>> row) const { return context->view(RowIndex<F> { relation, row }); }
+    auto operator()(urd::index<Row<F>> row) const { return context->view(urd::key<F, Row<F>> { relation, row }); }
 };
 
 /// The rows of one pool, given by their ids, read through their context C: each id transformed into its row's view
@@ -197,6 +199,8 @@ template<typename... Ts>
 struct symbol_repository_traits<Symbols<Ts...>>
 {
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
+    /// The keys it resolves (repository[key]): each symbol's index.
+    using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
     static constexpr bool thread_safe = false;
     using Store = SymbolRepository<Ts...>;
 };
@@ -205,6 +209,7 @@ template<typename... Ts>
 struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
 {
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
+    using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
     static constexpr bool thread_safe = true;
     using Store = ConcurrentSymbolRepository<Ts...>;
 };
@@ -225,6 +230,8 @@ template<typename Width, typename... Ts>
 struct relation_repository_traits<Relations<Width, Ts...>>
 {
     using RelationTypes = boost::mp11::mp_list<Ts...>;
+    /// The keys it resolves (repository[key]): a Schema's index, and each family's rows' keys.
+    using KeyTypes = boost::mp11::mp_list<urd::index<Schema>, urd::key<Ts, Row<Ts>>...>;
     static constexpr bool thread_safe = false;
     using Store = RelationRepository<Width, Ts...>;
 };
@@ -233,6 +240,7 @@ template<typename Width, typename... Ts>
 struct relation_repository_traits<ConcurrentRelations<Width, Ts...>>
 {
     using RelationTypes = boost::mp11::mp_list<Ts...>;
+    using KeyTypes = boost::mp11::mp_list<urd::index<Schema>, urd::key<Ts, Row<Ts>>...>;
     static constexpr bool thread_safe = true;
     using Store = ConcurrentRelationRepository<Width, Ts...>;
 };
@@ -264,6 +272,26 @@ inline constexpr bool holds_records<Repository, Row<F>> = HasRows<Repository, F>
 
 template<typename Repository, typename T>
 concept HoldsRecords = holds_records<Repository, T>;
+
+/// Whether a repository names the keys it resolves (KeyTypes: repository[key] is the record of the key's last tag).
+template<typename R>
+concept DeclaresKeys = requires { typename std::remove_cvref_t<R>::KeyTypes; };
+
+/// Whether a repository resolves keys of type K itself (repository[key]: one of its KeyTypes).
+template<typename R, typename K>
+concept HoldsKey = DeclaresKeys<R> && boost::mp11::mp_contains<typename std::remove_cvref_t<R>::KeyTypes, K>::value;
+
+/// The kind a key names: its last tag (urd::key<..., T>::element_type).
+template<typename K>
+using kind_of_key = typename K::element_type;
+
+/// What a repository's one insert runs on a record first (prepare_for_insert, found by ADL): its domain makes it
+/// canonical and checks it. Nothing, unless a domain says more by an overload of its own for its kind (more specialized,
+/// so it takes precedence).
+template<typename Repository, typename T>
+void prepare_for_insert(Repository& /*repository*/, urd::data<T>& /*record*/) noexcept
+{
+}
 
 /// Whether a repository nests others (Nests, nested.hpp): it names its NestedRepositories.
 template<typename R>
