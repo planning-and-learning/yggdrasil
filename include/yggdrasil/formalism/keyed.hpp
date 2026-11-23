@@ -435,7 +435,8 @@ public:
 
     /// Finds the record a view reads, inserting nothing, likewise.
     template<ViewThrough<Derived> V, IsBuilderStorage Storage>
-    std::optional<urd::index_view<typename urd::view_kind<V>::type, Owner<typename urd::view_kind<V>::type>, key_t<typename urd::view_kind<V>::type>>> find(const V& view, Storage& storage)
+    std::optional<urd::index_view<typename urd::view_kind<V>::type, Owner<typename urd::view_kind<V>::type>, key_t<typename urd::view_kind<V>::type>>>
+    find(const V& view, Storage& storage)
     { return detail::find_view(static_cast<Derived&>(*this), storage, view); }
 
     /// Stores a record where no layer holds it, through the one part that holds its kind and is written into (chosen at
@@ -463,10 +464,7 @@ private:
     /// the repositories it nests, in key_parts' order.
     template<typename K, bool Writable, typename R>
     [[nodiscard]] static typename detail::key_part<Derived, K, Writable>::type part_of(R& repository)
-    {
-        return std::get<part_holding<key_parts<Derived, Writable>, K, Writable>()>(
-            std::tuple_cat(repository.own_parts(), nested_parts<Writable>(repository)));
-    }
+    { return std::get<part_holding<key_parts<Derived, Writable>, K, Writable>()>(std::tuple_cat(repository.own_parts(), nested_parts<Writable>(repository))); }
 };
 
 }  // namespace ygg::formalism

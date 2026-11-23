@@ -280,17 +280,13 @@ void canonicalize(urd::data<T>& /*record*/) noexcept
 /// Whether a record is in its canonical form: always, unless its domain says more (as canonicalize).
 template<typename T>
 bool is_canonical(const urd::data<T>& /*record*/) noexcept
-{
-    return true;
-}
+{ return true; }
 
 /// What a repository's one insert and find run on a record first (prepare_for_insert, found by ADL): its canonical form.
 /// A domain whose preparation does more says so by an overload of its own (more specialized, so it takes precedence).
 template<typename Repository, typename T>
 void prepare_for_insert(const Repository& /*repository*/, urd::data<T>& record)
-{
-    canonicalize(record);
-}
+{ canonicalize(record); }
 
 /// Whether a repository nests others (Nests, nested.hpp): it names its NestedRepositories.
 template<typename R>

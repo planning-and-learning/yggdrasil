@@ -8,7 +8,6 @@
 // records interned through a mutable nesting only, and a kind reached along two paths resolved through neither.
 
 #include "yggdrasil/formalism/nested.hpp"
-#include "yggdrasil/formalism/symbol_context_instantiations.hpp"
 
 #include <boost/mp11.hpp>
 #include <concepts>
@@ -207,11 +206,6 @@ public:
     using Base::view;
 };
 }  // namespace
-
-YGG_FORMALISM_SYMBOL_CONTEXT(, Names, 1)
-YGG_FORMALISM_SYMBOL_CONTEXT(, Tags, 1)
-YGG_FORMALISM_SYMBOL_CONTEXT(, Items, 1)
-YGG_FORMALISM_SYMBOL_CONTEXT(, Twice, 1)
 
 namespace
 {

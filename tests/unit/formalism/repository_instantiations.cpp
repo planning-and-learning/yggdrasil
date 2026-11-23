@@ -21,9 +21,9 @@
 #include "yggdrasil/formalism/relation_repository.hpp"
 #include "yggdrasil/formalism/repository_impl.hpp"
 
-#include <ranges>
 #include <array>
 #include <gtest/gtest.h>
+#include <ranges>
 
 // The declarations of a repository's explicit instantiations, as the header that names it writes them, and their
 // definitions, as the one source of the library that holds it writes them.
@@ -40,7 +40,6 @@ urd::index<ygg::Schema> insert_schema(ygg::FreeRelationRepository& repository, c
     schema.column_types.set(std::ranges::begin(types), std::ranges::end(types));
     return repository.insert(schema).first.index();
 }
-
 
 TEST(RepositoryInstantiations, InstantiateEveryMemberThatTouchesTheStores)
 {

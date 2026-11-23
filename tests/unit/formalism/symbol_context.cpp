@@ -28,12 +28,17 @@
 #include <urd/elements/view.hpp>
 #include <yggdrasil/formalism/symbol_context_impl.hpp>
 
-namespace
+// The test's types have external linkage (a named namespace): YGG_FORMALISM_SYMBOL_CONTEXT instantiates every member
+// of their context explicitly, which a source does for others to link to, and an unused member of a type of internal
+// linkage is a function defined but not used.
+namespace ygg::tests::symbol_context
 {
 struct Name
 {
 };
-}  // namespace
+}  // namespace ygg::tests::symbol_context
+
+using ygg::tests::symbol_context::Name;
 
 template<>
 struct urd::data<Name>
@@ -70,7 +75,7 @@ public:
     [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
-namespace
+namespace ygg::tests::symbol_context
 {
 class Names : public ygg::formalism::SymbolContext<Names, boost::mp11::mp_list<Name>>
 {
@@ -83,7 +88,9 @@ public:
 
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }
 };
-}  // namespace
+}  // namespace ygg::tests::symbol_context
+
+using ygg::tests::symbol_context::Names;
 
 YGG_FORMALISM_SYMBOL_CONTEXT(, Names, 1)
 

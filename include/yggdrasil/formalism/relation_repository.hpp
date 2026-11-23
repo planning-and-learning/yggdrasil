@@ -252,7 +252,8 @@ template<typename... Ts>
 class RelationRepository : public detail::RelationRepositoryBase<false, Ts...>
 {
 public:
-    explicit RelationRepository(const RelationRepository* parent = nullptr, typename detail::RelationRepositoryBase<false, Ts...>::ColumnWidths column_widths = {}) :
+    explicit RelationRepository(const RelationRepository* parent = nullptr,
+                                typename detail::RelationRepositoryBase<false, Ts...>::ColumnWidths column_widths = {}) :
         detail::RelationRepositoryBase<false, Ts...>(parent, column_widths)
     {
     }

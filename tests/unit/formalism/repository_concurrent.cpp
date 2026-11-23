@@ -12,7 +12,6 @@
 #include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
 #include "yggdrasil/formalism/row_view.hpp"
-#include "yggdrasil/formalism/symbol_context_instantiations.hpp"
 
 #include "gtest/gtest.h"
 #include <algorithm>
@@ -277,8 +276,6 @@ public:
 
 }  // namespace
 }  // namespace ygg::tests
-
-YGG_FORMALISM_SYMBOL_CONTEXT(, ygg::tests::PublishedRepository, 2)
 
 namespace ygg::tests
 {

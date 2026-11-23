@@ -15,7 +15,9 @@ def test_a_relation_builder_inserts_in_tuple_order_and_reads_through_its_view() 
         f.ColumnLayoutData(f.ColumnIndex(1), f.ColumnType.UINT32),
     ]
     relation = f.RelationSchemaBuilder()
-    relation.initialize(repository, repository.insert(f.SchemaData([column.type for column in columns]))[0].index(), columns)
+    relation.initialize(
+        repository, repository.insert(f.SchemaData([column.type for column in columns]))[0].index(), columns
+    )
     assert relation.insert(repository, records, [2, 1]) == (0, True)
     assert relation.insert(repository, records, [1, 5]) == (0, True)
     assert relation.insert(repository, records, [1, 5]) == (0, False)
@@ -33,7 +35,9 @@ def test_a_free_relations_row_resolves_no_objects() -> None:
     records = f.RowSchemaRecords()
     columns = [f.ColumnLayoutData(f.ColumnIndex(0), f.ColumnType.UINT32)]
     relation = f.RelationSchemaBuilder()
-    relation.initialize(repository, repository.insert(f.SchemaData([column.type for column in columns]))[0].index(), columns)
+    relation.initialize(
+        repository, repository.insert(f.SchemaData([column.type for column in columns]))[0].index(), columns
+    )
     relation.insert(repository, records, [3])
     row = relation.view(repository).row(0)
     assert not hasattr(row, "get_objects")

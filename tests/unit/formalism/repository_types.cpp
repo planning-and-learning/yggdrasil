@@ -1239,7 +1239,6 @@ TEST(YggdrasilTests, CommonCompositeRepositorySynchronizesLocalAndInheritedScrat
 TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 {
     using Object = ygg::formalism::Object;
-    using Binding = Row<RepositoryTypesRelation>;
 
     auto repository = ContractRepository();
     const auto relation = declared<RepositoryTypesRelation>(repository, 2);
@@ -1262,7 +1261,6 @@ TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
 {
     using Object = ygg::formalism::Object;
-    using Binding = Row<RepositoryTypesRelation>;
     using Symbols = ygg::formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>;
     using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesRelation>;
     using Repository = ygg::formalism::Repository<Symbols, RelationRepository>;
@@ -1320,7 +1318,6 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
 
 TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
 {
-    using Binding = Row<RepositoryTypesRelation>;
     using Object = ygg::formalism::Object;
     using SymbolRepo = ygg::formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>;
     using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesRelation>;

@@ -56,8 +56,7 @@ public:
     using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
     /// Its own part, as read (Writable false) or written into (key_parts): its symbols, behind its Impl.
     template<bool Writable>
-    using OwnParts = std::tuple<
-        HeldPart<detail::access_t<Writable, Derived>, detail::access_t<Writable, SymbolStores<ThreadSafe, Ts...>>, KeyTypes>>;
+    using OwnParts = std::tuple<HeldPart<detail::access_t<Writable, Derived>, detail::access_t<Writable, SymbolStores<ThreadSafe, Ts...>>, KeyTypes>>;
 
     /// The stores: defined in symbol_context_impl.hpp.
     struct Impl;
