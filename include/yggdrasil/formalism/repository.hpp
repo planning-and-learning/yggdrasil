@@ -85,8 +85,6 @@ public:
     /// The stores: defined in repository_impl.hpp.
     struct Impl;
 
-    friend const Repository& get_repository(const Repository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
-
     /// A layer over `parent` (none: a root). Parent layers must remain frozen and outlive this one.
     explicit Repository(const Repository* parent = nullptr);
     Repository(const Repository& other) = delete;

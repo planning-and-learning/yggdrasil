@@ -15,7 +15,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/builder_impl.hpp"
 #include "yggdrasil/formalism/canonicalization.hpp"
@@ -810,9 +809,6 @@ static_assert(formalism::HasRows<ContractRelations, RepositoryTypesRelation>);
 static_assert(formalism::HasRows<ContractRepository, RepositoryTypesRelation>);
 static_assert(!formalism::HasRows<ContractRelations, RepositoryTypesElement>);
 static_assert(!formalism::HasRows<int, RepositoryTypesRelation>);
-static_assert(SymbolContextFor<ContractRepository, RepositoryTypesElement>);
-static_assert(!SymbolContextFor<ContractRepository, RepositoryTypesSerializedElement>);
-static_assert(!SymbolRepositoryFor<ContractRepository, ContractBinding>);
 static_assert(std::same_as<formalism::BuilderStorage<BuilderContext, RepositoryTypesCheckout>::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
 
 template<typename Repository, typename T>

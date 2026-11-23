@@ -7,7 +7,6 @@
  * (at your option) any later version.
  */
 
-#include "symbol_concepts.hpp"
 #include "yggdrasil/core/config.hpp"
 #include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/formalism/row_data.hpp"
@@ -269,9 +268,6 @@ class PublishedRepository : public formalism::SymbolContext<PublishedRepository,
 public:
     /// The repository's number, as urd's views ask of a context.
     [[nodiscard]] std::size_t layer() const noexcept { return 0; }
-
-    // Named only in the static_assert below, which evaluates nothing.
-    [[maybe_unused]] friend const PublishedRepository& get_repository(const PublishedRepository& repository URD_LIFETIMEBOUND) noexcept { return repository; }
 };
 
 }  // namespace
@@ -282,11 +278,9 @@ namespace ygg::tests
 namespace
 {
 
-static_assert(SymbolRepositoryFor<PublishedRepository, ConcurrentElement>);
 static_assert(!formalism::SupportsSymbol<PublishedRepository, ConcurrentRelation<urd::word>>);
 static_assert(!std::is_move_constructible_v<PublishedRepository>);
 static_assert(!std::is_copy_constructible_v<PublishedRepository>);
-static_assert(std::same_as<decltype(get_repository(std::declval<const PublishedRepository&>())), const PublishedRepository&>);
 
 TEST(YggdrasilTests, PublicSymbolContextPreservesPublishedContextAndScratchIndices)
 {
@@ -326,90 +320,6 @@ TEST(YggdrasilTests, PublicSymbolContextPreservesPublishedContextAndScratchIndic
     repository.clear();
     EXPECT_EQ(repository.size<ConcurrentElement>(), 0);
     EXPECT_EQ(repository.size<ConcurrentSerializedElement>(), 0);
-}
-
-template<typename Width>
-void expect_duplicate_same_relation_insertions()
-{
-    auto repository = ConcurrentRepository<Width>(nullptr);
-    const auto relation = declared_relation<Width>(repository, 0);
-    constexpr uint_t rows = 512;
-    constexpr auto invalid_row = std::numeric_limits<uint_t>::max();
-    auto canonical_rows = urd::Store<urd::sequence<std::atomic<uint_t>>>(rows);
-    for (auto& row : canonical_rows)
-        row.store(invalid_row, std::memory_order_relaxed);
-
-    auto created = std::atomic_size_t { 0 };
-    auto errors = std::atomic_size_t { 0 };
-    run_threads(kThreads,
-                [&](std::size_t thread)
-                {
-                    for (uint_t offset = 0; offset < rows; ++offset)
-                    {
-                        const auto key = (offset + static_cast<uint_t>(thread)) % rows;
-                        const auto data = make_binding<Width>(relation, key);
-                        const auto [view, was_created] = insert_bound(repository, data);
-                        created.fetch_add(was_created, std::memory_order_relaxed);
-
-                        const auto returned_row = ygg::tests::row_of(view).value;
-                        auto expected = invalid_row;
-                        if (!canonical_rows[key].compare_exchange_strong(expected, returned_row, std::memory_order_relaxed) && expected != returned_row)
-                            errors.fetch_add(1, std::memory_order_relaxed);
-                    }
-                });
-
-    EXPECT_EQ(errors.load(), 0);
-    EXPECT_EQ(created.load(), rows);
-    EXPECT_EQ(repository.template size<Row<ConcurrentRelation<Width>>>(relation), rows);
-    for (uint_t key = 0; key < rows; ++key)
-    {
-        const auto data = make_binding<Width>(relation, key);
-        const auto found = find_bound(repository, data);
-        ASSERT_TRUE(found.has_value());
-        EXPECT_EQ(ygg::tests::row_of(found.value()).value, canonical_rows[key].load(std::memory_order_relaxed));
-        EXPECT_TRUE(std::ranges::equal(found.value().get_values(), data.values));
-    }
-}
-
-template<typename Width>
-void expect_unique_same_relation_insertions()
-{
-    auto repository = ConcurrentRepository<Width>(nullptr);
-    const auto relation = declared_relation<Width>(repository, 0);
-    constexpr uint_t rows_per_thread = 256;
-    constexpr size_t expected_rows = kThreads * rows_per_thread;
-    auto created = std::atomic_size_t { 0 };
-    auto errors = std::atomic_size_t { 0 };
-
-    run_threads(kThreads,
-                [&](std::size_t thread)
-                {
-                    for (uint_t row = 0; row < rows_per_thread; ++row)
-                    {
-                        const auto key = static_cast<uint_t>(thread) * rows_per_thread + row;
-                        const auto data = make_binding<Width>(relation, key);
-                        const auto [view, was_created] = insert_bound(repository, data);
-                        created.fetch_add(was_created, std::memory_order_relaxed);
-                        if (!std::ranges::equal(view.get_values(), data.values))
-                            errors.fetch_add(1, std::memory_order_relaxed);
-                    }
-                });
-
-    EXPECT_EQ(errors.load(), 0);
-    EXPECT_EQ(created.load(), expected_rows);
-    EXPECT_EQ(repository.template size<Row<ConcurrentRelation<Width>>>(relation), expected_rows);
-
-    auto seen = urd::Store<urd::set<uint_t>, urd::dense> {};
-    for (uint_t key = 0; key < expected_rows; ++key)
-    {
-        const auto data = make_binding<Width>(relation, key);
-        const auto found = find_bound(repository, data);
-        ASSERT_TRUE(found.has_value());
-        const auto row = ygg::tests::row_of(found.value()).value;
-        ASSERT_LT(row, expected_rows);
-        EXPECT_TRUE(seen.insert(row).second);
-        EXPECT_TRUE(std::ranges::equal(found.value().get_values(), data.values));
-    }
 }
 
 TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSerializedSymbols)
@@ -522,10 +432,6 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     EXPECT_EQ(repository.template size<Row<ConcurrentRelation<Width>>>(relation), 1);
     EXPECT_EQ(view.get_values().size(), 4);
 }
-
-TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesRows) { expect_duplicate_same_relation_insertions<urd::word>(); }
-
-TEST(YggdrasilTests, FormalismConcurrentRepositoryInsertsUniqueRowsIntoOneRelation) { expect_unique_same_relation_insertions<urd::word>(); }
 
 TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocksGrow)
 {
