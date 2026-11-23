@@ -1,6 +1,7 @@
 #ifndef YGG_SERIALIZATION_FIELDS_HPP_
 #define YGG_SERIALIZATION_FIELDS_HPP_
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -17,8 +18,16 @@ namespace ygg::serialization
 
 namespace detail
 {
-inline constexpr std::string_view variant_field = "variant";
+
+/// The fields of a record of T (urd::Fields), in order, each under its name, read through the view of any form.
+template<typename T, typename Archive>
+void describe_record(Archive& ar)
+{
+    urd::for_each_field<urd::data<T>>([&]<typename F>()
+                                      { ar.field(F::name, [](const auto& value) -> decltype(auto) { return value.template member<F::member>(); }); });
 }
+
+}  // namespace detail
 
 // Keep the visitors in this namespace: ADL must find describe_fields overloads
 // declared by downstream libraries, without requiring a native object.
@@ -29,10 +38,6 @@ struct FieldNames
     template<typename Accessor>
     void field(std::string_view name, Accessor)
     { names.emplace_back(name); }
-
-    template<typename Accessor>
-    void variant(Accessor)
-    { names.emplace_back(detail::variant_field); }
 };
 
 template<typename Archive, typename T>
@@ -47,24 +52,40 @@ struct FieldWriter
         if (archive->accepts(name))
             archive->field(name, std::invoke(accessor, *value));
     }
-
-    template<typename Accessor>
-    void variant(Accessor accessor)
-    {
-        if (archive->accepts(detail::variant_field))
-            archive->variant(std::invoke(accessor, *value));
-    }
 };
 
 /// A record by its fields (urd::Fields), in order: each under its name, read through the view (resolved through its
-/// context). A record whose serialization differs (a variant record) has an overload of its own, which is more
-/// specialized.
-template<typename Archive, typename T, typename C>
+/// context), whatever its key (a row's of several parts too). A type serialized otherwise declares describe_fields
+/// beside it.
+template<typename Archive, typename T, typename C, typename K>
     requires urd::HasFields<urd::data<T>>
-void describe_fields(Archive& ar, std::type_identity<urd::index_view<T, C>> /*type*/)
+void describe_fields(Archive& ar, std::type_identity<urd::index_view<T, C, K>> /*type*/)
+{ detail::describe_record<T>(ar); }
+
+/// A record held outside its context (a borrowed, owning or shared view of its data<T> or its builder) by its fields,
+/// as its index_view is.
+template<typename Archive, typename T, typename C, typename R>
+    requires urd::HasFields<urd::data<T>>
+void describe_fields(Archive& ar, std::type_identity<urd::borrowed_view<T, C, R>> /*type*/)
+{ detail::describe_record<T>(ar); }
+
+template<typename Archive, typename T, typename C, typename R>
+    requires urd::HasFields<urd::data<T>>
+void describe_fields(Archive& ar, std::type_identity<urd::owning_view<T, C, R>> /*type*/)
+{ detail::describe_record<T>(ar); }
+
+template<typename Archive, typename T, typename C, typename R>
+    requires urd::HasFields<urd::data<T>>
+void describe_fields(Archive& ar, std::type_identity<urd::shared_view<T, C, R>> /*type*/)
+{ detail::describe_record<T>(ar); }
+
+/// A record read without a context (a data<T> held as it is: a graph's label, a column's layout) by its fields, each as
+/// it holds it.
+template<typename Archive, typename T>
+    requires urd::HasFields<urd::data<T>>
+void describe_fields(Archive& ar, std::type_identity<urd::data<T>> /*type*/)
 {
-    urd::for_each_field<urd::data<T>>([&]<typename F>()
-                                      { ar.field(F::name, [](const auto& value) -> decltype(auto) { return value.template member<F::member>(); }); });
+    urd::for_each_field<urd::data<T>>([&]<typename F>() { ar.field(F::name, [](const auto& value) -> decltype(auto) { return (value.*F::member); }); });
 }
 
 /// Default serialized field names, in declaration order. Accessors are never evaluated.

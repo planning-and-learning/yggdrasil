@@ -44,6 +44,13 @@ template<typename Derived>
 using SymbolContextOf = decltype(symbol_context_of(static_cast<const Derived*>(nullptr)));
 }  // namespace ygg::formalism::detail
 
+namespace ygg::formalism
+{
+/// The kinds of a repository's symbol context, in its order: what its conversions and its instantiations cover.
+template<typename Repository>
+using symbol_types_t = typename detail::SymbolContextOf<Repository>::SymbolTypes;
+}  // namespace ygg::formalism
+
 // NOLINTBEGIN(cppcoreguidelines-macro-usage,bugprone-macro-parentheses): the macro expands to explicit instantiations,
 // declarations, which no function gives; its arguments are types and a prefix, which no parentheses may enclose
 /// Explicit instantiations (PREFIX extern: declarations) of the members of repository Repository's SymbolContext base

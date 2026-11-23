@@ -1,6 +1,7 @@
 #ifndef YGG_PYTHON_SERIALIZATION_HPP_
 #define YGG_PYTHON_SERIALIZATION_HPP_
 
+#include "yggdrasil/formalism/declarations.hpp"
 #include "yggdrasil/serialization/dictionaries.hpp"
 
 #include <boost/json.hpp>
@@ -216,85 +217,46 @@ void register_table(serialization::Dictionaries& dictionaries,
         throw nanobind::type_error("this native type cannot be registered as a table");
 }
 
-template<typename... Ts>
-nanobind::object serialize(serialization::Dictionaries& dictionaries, nanobind::handle value, boost::mp11::mp_list<Ts...>)
+/// What a type that can be a table (urd::Hashable) offers the generic table() and register_table() of
+/// pyyggdrasil.serialization: its table, and its registration. Held by its Python class (bind_native_table).
+struct NativeTable
 {
-    nanobind::object result;
-    const auto serialize_as = [&]<typename T>()
-    {
-        if (!nanobind::isinstance<T>(value))
-            return false;
-        result = to_python(dictionaries.serialize(nanobind::cast<const T&>(value)));
-        return true;
-    };
-    if (!(serialize_as.template operator()<Ts>() || ...))
-        throw nanobind::type_error("this native type does not support serialization");
-    return result;
-}
+    boost::json::array (*table)(const serialization::Dictionaries& dictionaries);
+    void (*register_table)(serialization::Dictionaries& dictionaries,
+                           const nanobind::type_object& native_type,
+                           const std::string& name,
+                           const std::string& prefix,
+                           nanobind::object fields,
+                           nanobind::object project);
+};
 
-template<typename... Ts>
-nanobind::object table(serialization::Dictionaries& dictionaries, const nanobind::type_object& native_type, boost::mp11::mp_list<Ts...>)
-{
-    nanobind::object result;
-    const auto table_of = [&]<typename T>()
-    {
-        if (!native_type.is(nanobind::type<T>()))
-            return false;
-        result = to_python(dictionaries.table<T>());
-        return true;
-    };
-    if (!(table_of.template operator()<Ts>() || ...))
-        throw nanobind::type_error("this native type cannot be registered as a table");
-    return result;
-}
-
-inline std::string registration_signature(nanobind::handle native_type)
-{
-    const auto type_name =
-        fmt::format("{0}.{1}", nanobind::cast<std::string>(native_type.attr("__module__")), nanobind::cast<std::string>(native_type.attr("__qualname__")));
-    return fmt::format("def register_table(dictionaries: pyyggdrasil.serialization.Dictionaries, native_type: type[{0}], "
-                       "name: str, prefix: str, fields: collections.abc.Sequence[{0}.Fields | str] | None = None, "
-                       "project: collections.abc.Callable[[{0}], dict[str, object]] | None = None) -> None",
-                       type_name);
-}
-
-template<typename Function>
-void bind_registration_overload(nanobind::module_& module, const Function& function, const std::string& signature)
-{
-    namespace nb = nanobind;
-    using namespace nb::literals;
-
-    module.def("register_table",
-               function,
-               "dictionaries"_a,
-               "native_type"_a,
-               "name"_a,
-               "prefix"_a,
-               "fields"_a = nb::none(),
-               "project"_a = nb::none(),
-               nb::sig(signature.c_str()));
-}
+inline constexpr const char* native_table_capsule_name = "ygg.native_table.v1";
 
 template<typename T>
-void bind_registration(nanobind::module_& module)
+void bind_native_table()
 {
-    namespace nb = nanobind;
-    using serialization::Dictionaries;
-
-    bind_registration_overload(
-        module,
-        [](Dictionaries& dictionaries,
-           nb::type_object_t<T> native_type,
-           const std::string& name,
-           const std::string& prefix,
-           nb::object fields,
-           nb::object project) { register_table(dictionaries, native_type, name, prefix, boost::mp11::mp_list<T> {}, fields, project); },
-        registration_signature(nb::type<T>()));
+    const auto native_type = nanobind::type<T>();
+    if (nanobind::cast<bool>(native_type.attr("__dict__").attr("__contains__")("_ygg_table")))
+        return;
+    static const NativeTable hooks { [](const serialization::Dictionaries& dictionaries) { return dictionaries.table<T>(); },
+                                     [](serialization::Dictionaries& dictionaries,
+                                        const nanobind::type_object& type,
+                                        const std::string& name,
+                                        const std::string& prefix,
+                                        nanobind::object fields,
+                                        nanobind::object project)
+                                     { register_table(dictionaries, type, name, prefix, boost::mp11::mp_list<T> {}, std::move(fields), std::move(project)); } };
+    native_type.attr("_ygg_table") = nanobind::capsule(static_cast<const void*>(&hooks), native_table_capsule_name);
 }
 
-template<typename... Registered>
-void bind_registration_overloads(nanobind::module_& module, boost::mp11::mp_list<Registered...>)
-{ (bind_registration<Registered>(module), ...); }
+/// The table hooks of a native type (bind_native_table); a type error where it can be no table.
+inline const NativeTable& native_table(const nanobind::type_object& native_type)
+{
+    const auto hook = nanobind::getattr(native_type, "_ygg_table", nanobind::none());
+    if (hook.is_none() || !PyCapsule_IsValid(hook.ptr(), native_table_capsule_name))
+        throw nanobind::type_error("this native type cannot be registered as a table");
+    return *static_cast<const NativeTable*>(PyCapsule_GetPointer(hook.ptr(), native_table_capsule_name));
+}
 
 /// Keeps a serialized value alive as long as the dictionaries: their tables hold copies of its views, which
 /// point into the repository the value keeps alive. Appending to a list is O(1); nb::keep_alive scans all
@@ -311,68 +273,87 @@ inline void retain(nanobind::handle dictionaries, nanobind::handle value)
     nb::borrow<nb::list>(retained).append(value);
 }
 
-template<typename T>
-void bind_serialize(nanobind::module_& module)
+/// serialize, table and register_table as methods of the shared Dictionaries, once for every native type: each reads
+/// the hooks its type's class holds (bind_native_serializer, bind_native_table), so a library binds no function of its
+/// own, only its types' hooks.
+inline void bind_serialization_methods(nanobind::class_<serialization::Dictionaries>& dictionaries)
 {
     namespace nb = nanobind;
     using namespace nb::literals;
     using serialization::Dictionaries;
 
-    module.def(
+    dictionaries.def(
         "serialize",
-        [](nb::handle_t<Dictionaries> self, nb::handle_t<T> value)
+        [](nb::handle_t<Dictionaries> self, nb::handle value)
         {
-            auto result = to_python(nb::cast<Dictionaries&>(self).serialize(nb::cast<const T&>(value)));
+            auto owners = urd::Store<urd::sequence<nb::object>> {};
+            auto result = to_python(from_python(nb::cast<Dictionaries&>(self), value, owners));
             retain(self, value);
             return result;
         },
-        "dictionaries"_a,
-        "value"_a.noconvert());
-}
-
-template<typename... Serialized>
-void bind_serialize(nanobind::module_& module, boost::mp11::mp_list<Serialized...>)
-{ (bind_serialize<Serialized>(module), ...); }
-
-template<typename T>
-void bind_table(nanobind::module_& module)
-{
-    namespace nb = nanobind;
-    using namespace nb::literals;
-    using serialization::Dictionaries;
-
-    module.def(
+        "value"_a,
+        nb::sig("def serialize(self, value: object) -> object"));
+    dictionaries.def(
         "table",
-        [](Dictionaries& dictionaries, nb::type_object_t<T> native_type) { return table(dictionaries, native_type, boost::mp11::mp_list<T> {}); },
-        "dictionaries"_a,
-        "native_type"_a);
+        [](const Dictionaries& self, const nb::type_object& native_type) { return to_python(native_table(native_type).table(self)); },
+        "native_type"_a,
+        nb::sig("def table(self, native_type: type) -> list[dict[str, object]]"));
+    dictionaries.def(
+        "register_table",
+        [](Dictionaries& self, const nb::type_object& native_type, const std::string& name, const std::string& prefix, nb::object fields, nb::object project)
+        { native_table(native_type).register_table(self, native_type, name, prefix, std::move(fields), std::move(project)); },
+        "native_type"_a,
+        "name"_a,
+        "prefix"_a,
+        "fields"_a = nb::none(),
+        "project"_a = nb::none(),
+        nb::sig("def register_table(self, native_type: type, name: str, prefix: str, fields: collections.abc.Sequence[enum.Enum | str] | None = None, "
+                "project: collections.abc.Callable[[typing.Any], dict[str, object]] | None = None) -> None"));
 }
 
-template<typename... Registered>
-void bind_table(nanobind::module_& module, boost::mp11::mp_list<Registered...>)
-{ (bind_table<Registered>(module), ...); }
-
-template<typename... Registered, typename... Serialized, typename... Projected>
-void bind_serialization(nanobind::module_& module, boost::mp11::mp_list<Registered...>, boost::mp11::mp_list<Serialized...>, boost::mp11::mp_list<Projected...>)
+namespace detail
 {
-    (bind_fields<Serialized>(), ...);
-    (bind_native_serializer<Projected>(), ...);
-    bind_registration_overloads(module, boost::mp11::mp_list<Registered...> {});
-    bind_serialize(module, boost::mp11::mp_list<Serialized...> {});
-    bind_table(module, boost::mp11::mp_list<Registered...> {});
+template<typename Context>
+struct index_view_of
+{
+    template<typename T>
+    using fn = urd::index_view<T, Context>;
+};
+
+template<typename Context>
+struct row_view_of
+{
+    template<typename F>
+    using fn = ygg::RowView<F, Context>;
+};
+}  // namespace detail
+
+/// The views through Context of the records of each kind in Types (a repository's kind list): what a library binds the
+/// serialization hooks of.
+template<typename Context, typename Types>
+using index_views = boost::mp11::mp_transform_q<detail::index_view_of<Context>, Types>;
+
+/// The views through Context of the rows of each relation in Types.
+template<typename Context, typename Types>
+using row_views = boost::mp11::mp_transform_q<detail::row_view_of<Context>, Types>;
+
+/// The serialization hooks of each of a library's types: its field enum where it is described (bind_fields), its
+/// serializer (bind_native_serializer), and its table where it is described and hashable (bind_native_table); a type
+/// serialized as a value (an enum by name) has its serializer only. It binds no function: those are Dictionaries'
+/// methods (bind_serialization_methods). A library calls it once per module directory, with the types bound there.
+template<typename T>
+void bind_type_serialization()
+{
+    if constexpr (serialization::Described<T>)
+        bind_fields<T>();
+    bind_native_serializer<T>();
+    if constexpr (serialization::Described<T> && urd::Hashable<T>)
+        bind_native_table<T>();
 }
 
-/// The Part-th of Parts consecutive slices of a type list L (the last one takes the remainder).
-template<typename L, std::size_t Part, std::size_t Parts>
-using list_part = boost::mp11::mp_take_c<boost::mp11::mp_drop_c<L, Part * boost::mp11::mp_size<L>::value / Parts>,
-                                         (Part + 1) * boost::mp11::mp_size<L>::value / Parts - Part * boost::mp11::mp_size<L>::value / Parts>;
-
-/// bind_serialization for the Part-th of Parts slices of each list: a library binds its types in Parts sources, one
-/// slice each, so that no one source compiles the bindings of them all (brokkr's template rule T5). Every binding is
-/// of one type (an overload of serialize, table or a registration), so the slices bind the same as one call.
-template<std::size_t Part, std::size_t Parts, typename R, typename S, typename P>
-void bind_serialization_part(nanobind::module_& module, R, S, P)
-{ bind_serialization(module, list_part<R, Part, Parts> {}, list_part<S, Part, Parts> {}, list_part<P, Part, Parts> {}); }
+template<typename... Ts>
+void bind_serialization(boost::mp11::mp_list<Ts...> /*types*/)
+{ (bind_type_serialization<Ts>(), ...); }
 }  // namespace ygg::python
 
 #endif

@@ -39,6 +39,8 @@ testpaths = ["python/tests"]
 Homepage = "https://github.com/planning-and-learning/yggdrasil"
 
 [tool.scikit-build]
+# A persistent build directory per wheel tag: a reinstall rebuilds only what changed.
+build-dir = "build/wheel/{wheel_tag}"
 build.targets = ["pyyggdrasil_wheel"]
 cmake.build-type = "Release"
 install.components = ["pyyggdrasil"]

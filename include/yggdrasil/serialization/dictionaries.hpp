@@ -1,10 +1,12 @@
 #ifndef YGG_SERIALIZATION_DICTIONARIES_HPP_
 #define YGG_SERIALIZATION_DICTIONARIES_HPP_
 
+#include "yggdrasil/core/unsigned_integer.hpp"
 #include "yggdrasil/serialization/conversion.hpp"
 #include "yggdrasil/serialization/fields.hpp"
 
 #include <algorithm>
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -12,7 +14,9 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <typeinfo>
+#include <urd/elements/concepts.hpp>
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
 #include <urd/format.hpp>
@@ -37,8 +41,11 @@ using Index = urd::Store<urd::pool<T>>;
 template<typename T>
 concept Described = requires(FieldNames& archive) { describe_fields(archive, std::type_identity<T> {}); };
 
+/// Ranges of described types or of variants (urd::variant_value), serialized element by element.
 template<typename T>
-concept DescribedRange = std::ranges::input_range<const T> && Described<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>;
+concept DescribedRange = std::ranges::input_range<const T>
+                         && (Described<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
+                             || urd::variant_value<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>);
 
 template<typename T>
 struct IsDescribedOptional : std::false_type
@@ -111,13 +118,6 @@ public:
             if (accepts(name))
                 m_fields[name] = m_dictionaries->convert(value);
         }
-
-        /// A variant read through its context (a std::variant of views): the alternative it holds.
-        template<typename Variant>
-        void variant(const Variant& value)
-        {
-            std::visit([&](const auto& alternative) { field(detail::variant_field, alternative); }, value);
-        }
     };
 
 private:
@@ -165,6 +165,8 @@ public:
                 array.push_back(convert(item));
             return result;
         }
+        else if constexpr (urd::variant_value<T>)
+            return visit([&](const auto& alternative) { return convert(alternative); }, value);  // a variant: the alternative it holds
         else if constexpr (Described<T>)
         {
             auto result = boost::json::value {};
@@ -275,6 +277,29 @@ public:
 template<Described T>
 void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const T& value, Dictionaries* dictionaries)
 { result = dictionaries->convert(value); }
+
+/// A nonnegative integer of its own type (ygg::UnsignedInteger: a parameter's position, an FDR value): its value.
+template<typename T>
+    requires std::derived_from<T, ygg::UnsignedInteger<T>>
+void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const T& value, Dictionaries* /*dictionaries*/)
+{ result = value.value; }
+
+/// An enum that names its values (to_string, found by its namespace): its name.
+template<typename E>
+    requires std::is_enum_v<E> && requires(E value) { std::string(to_string(value)); }
+void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const E& value, Dictionaries* /*dictionaries*/)
+{ result = std::string(to_string(value)); }
+
+/// A key not read through its context (an index held as a value, a column's object index): its value, or the values of
+/// its parts in order where it has several.
+template<typename... Ts>
+void tag_invoke(boost::json::value_from_tag, boost::json::value& result, const urd::key<Ts...>& value, Dictionaries* /*dictionaries*/)
+{
+    if constexpr (sizeof...(Ts) == 1)
+        result = value.template get<Ts...>().value;
+    else
+        result = boost::json::array { value.template get<Ts>().value... };
+}
 
 }
 
