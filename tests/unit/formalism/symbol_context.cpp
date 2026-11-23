@@ -18,6 +18,7 @@
 // A repository on SymbolContext: its records interned, found and read through its interface, over a parent layer,
 // its members instantiated by the library macro as a library instantiates its repositories.
 
+#include "symbol_context_names.hpp"
 #include "yggdrasil/formalism/symbol_context_instantiations.hpp"
 
 #include <boost/mp11.hpp>
@@ -28,68 +29,7 @@
 #include <urd/elements/view.hpp>
 #include <yggdrasil/formalism/symbol_context_impl.hpp>
 
-// The test's types have external linkage (a named namespace): YGG_FORMALISM_SYMBOL_CONTEXT instantiates every member
-// of their context explicitly, which a source does for others to link to, and an unused member of a type of internal
-// linkage is a function defined but not used.
-namespace ygg::tests::symbol_context
-{
-struct Name
-{
-};
-}  // namespace ygg::tests::symbol_context
-
 using ygg::tests::symbol_context::Name;
-
-template<>
-struct urd::data<Name>
-{
-    urd::key<Name> index;
-    int value = 0;
-
-    data() = default;
-
-    explicit data(int value_) : index(), value(value_) {}
-
-    static constexpr bool copyable() noexcept
-    {
-        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
-        return true;
-    }
-
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
-
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
-
-    [[nodiscard]] urd::key<Name> key() const noexcept { return urd::key<Name>(index); }
-};
-
-template<typename V>
-struct urd::view_mixin<Name, V>
-{
-private:
-    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
-
-public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
-};
-
-namespace ygg::tests::symbol_context
-{
-class Names : public ygg::formalism::SymbolContext<Names, boost::mp11::mp_list<Name>>
-{
-    using Base = ygg::formalism::SymbolContext<Names, boost::mp11::mp_list<Name>>;
-
-public:
-    Names() = default;
-
-    explicit Names(const Names* parent) : Base(parent) {}
-
-    [[nodiscard]] std::size_t layer() const noexcept { return 0; }
-};
-}  // namespace ygg::tests::symbol_context
-
 using ygg::tests::symbol_context::Names;
 
 YGG_FORMALISM_SYMBOL_CONTEXT(, Names, 1)

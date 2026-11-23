@@ -167,11 +167,9 @@ auto insert_child(C& repository, Storage& storage, Form& form)
     }
     else if constexpr (NestedBuilderInserted<F, C, Storage>)
         return repository.insert(form, storage);
-    else if constexpr (ChildBuilder<F>)
-        return detail::other_repositorys_child();
     else if constexpr (RecordInserted<F, C>)
         return repository.insert(form);
-    else if constexpr (ChildRecord<F>)
+    else if constexpr (ChildBuilder<F> || ChildRecord<F>)
         return detail::other_repositorys_child();
     else
         return F(form);
