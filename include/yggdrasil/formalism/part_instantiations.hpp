@@ -28,6 +28,7 @@
 
 #include <boost/mp11.hpp>
 #include <boost/preprocessor/repetition/repeat.hpp>
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
 #include <boost/preprocessor/tuple/elem.hpp>
 #include <cstddef>
 #include <optional>
@@ -59,33 +60,36 @@ using PartKnown = boost::mp11::mp_rename<boost::mp11::mp_pop_back<boost::mp11::m
 #define YGG_FORMALISM_PART_KNOWN_T(I, ARGS) ::ygg::formalism::detail::PartKnown<YGG_FORMALISM_PART_OWNER(ARGS), BOOST_PP_TUPLE_ELEM(3, 2, ARGS), I>
 
 /// The members of the part for its I-th key (ARGS: (PREFIX, Owner, P)).
-#define YGG_FORMALISM_PART_KEY(z, I, ARGS)                                                                                                                  \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template urd::stored_ref<YGG_FORMALISM_PART_KIND_T(I, ARGS)> YGG_FORMALISM_PART_READ(ARGS)::operator[](YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;          \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template urd::stored_ref<YGG_FORMALISM_PART_KIND_T(I, ARGS)> YGG_FORMALISM_PART_READ(ARGS)::at(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                  \
-    YGG_FORMALISM_PART_PREFIX(ARGS) template bool YGG_FORMALISM_PART_READ(ARGS)::contains(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                          \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template const YGG_FORMALISM_PART_OWNER(ARGS) * YGG_FORMALISM_PART_READ(ARGS)::owner(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                          \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template std::optional<urd::index_view<YGG_FORMALISM_PART_KIND_T(I, ARGS), YGG_FORMALISM_PART_OWNER(ARGS), YGG_FORMALISM_PART_KEY_T(I, ARGS)>>          \
-    YGG_FORMALISM_PART_READ(ARGS)::find(urd::data<YGG_FORMALISM_PART_KIND_T(I, ARGS)>&) const;                                                              \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template std::pair<urd::index_view<YGG_FORMALISM_PART_KIND_T(I, ARGS), YGG_FORMALISM_PART_OWNER(ARGS), YGG_FORMALISM_PART_KEY_T(I, ARGS)>, bool>        \
-    YGG_FORMALISM_PART_WRITE(ARGS)::insert(urd::data<YGG_FORMALISM_PART_KIND_T(I, ARGS)>&) const;                                                           \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template std::size_t YGG_FORMALISM_PART_READ(ARGS)::size<YGG_FORMALISM_PART_KIND_T(I, ARGS)>(YGG_FORMALISM_PART_KNOWN_T(I, ARGS)) const;                \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
-    template std::size_t YGG_FORMALISM_PART_READ(ARGS)::own_size<YGG_FORMALISM_PART_KIND_T(I, ARGS)>(::urd::key<>) const;                                   \
-    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                         \
+#define YGG_FORMALISM_PART_KEY(z, I, ARGS)                                                                                                           \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template urd::stored_ref<YGG_FORMALISM_PART_KIND_T(I, ARGS)> YGG_FORMALISM_PART_READ(ARGS)::operator[](YGG_FORMALISM_PART_KEY_T(I, ARGS)) const; \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template urd::stored_ref<YGG_FORMALISM_PART_KIND_T(I, ARGS)> YGG_FORMALISM_PART_READ(ARGS)::at(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;         \
+    YGG_FORMALISM_PART_PREFIX(ARGS) template bool YGG_FORMALISM_PART_READ(ARGS)::contains(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                  \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template const YGG_FORMALISM_PART_OWNER(ARGS) * YGG_FORMALISM_PART_READ(ARGS)::owner(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                   \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template std::optional<urd::index_view<YGG_FORMALISM_PART_KIND_T(I, ARGS), YGG_FORMALISM_PART_OWNER(ARGS), YGG_FORMALISM_PART_KEY_T(I, ARGS)>>   \
+        YGG_FORMALISM_PART_READ(ARGS)::find(urd::data<YGG_FORMALISM_PART_KIND_T(I, ARGS)>&) const;                                                   \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template std::pair<urd::index_view<YGG_FORMALISM_PART_KIND_T(I, ARGS), YGG_FORMALISM_PART_OWNER(ARGS), YGG_FORMALISM_PART_KEY_T(I, ARGS)>, bool> \
+        YGG_FORMALISM_PART_WRITE(ARGS)::insert(urd::data<YGG_FORMALISM_PART_KIND_T(I, ARGS)>&) const;                                                \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template std::size_t YGG_FORMALISM_PART_READ(ARGS)::size<YGG_FORMALISM_PART_KIND_T(I, ARGS)>(YGG_FORMALISM_PART_KNOWN_T(I, ARGS)) const;         \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template std::size_t YGG_FORMALISM_PART_READ(ARGS)::own_size<YGG_FORMALISM_PART_KIND_T(I, ARGS)>(::urd::key<>) const;                            \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
     template std::size_t YGG_FORMALISM_PART_READ(ARGS)::memory_usage<YGG_FORMALISM_PART_KIND_T(I, ARGS)>(::urd::key<>) const;
 
 /// Explicit instantiations (PREFIX extern: declarations) of the members of the P-th own part of Owner (a name without
 /// commas: an alias) for each of its Count keys. The count is checked against its KeyTypes.
-#define YGG_FORMALISM_PART(PREFIX, Owner, P, Count)                                                                                                         \
-    static_assert(boost::mp11::mp_size<::ygg::formalism::detail::InstantiatedPart<Owner, P, false>::KeyTypes>::value == (Count),                   \
-                  "YGG_FORMALISM_PART: Count");                                                                                                             \
+#define YGG_FORMALISM_PART(PREFIX, Owner, P, Count)                                                                                                            \
+    static_assert(boost::mp11::mp_size<::ygg::formalism::detail::InstantiatedPart<Owner, P, false>::KeyTypes>::value == (Count), "YGG_FORMALISM_PART: Count"); \
     BOOST_PP_REPEAT(Count, YGG_FORMALISM_PART_KEY, (PREFIX, Owner, P))
+
+/// The same for its keys First..Last-1 only: a part of many keys split over several sources, each of which
+/// instantiates a range (brokkr's template rule T5), so that no one source holds them all.
+#define YGG_FORMALISM_PART_KEYS(PREFIX, Owner, P, First, Last) BOOST_PP_REPEAT_FROM_TO(First, Last, YGG_FORMALISM_PART_KEY, (PREFIX, Owner, P))
 
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 

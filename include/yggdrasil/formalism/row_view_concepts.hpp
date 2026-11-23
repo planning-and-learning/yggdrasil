@@ -17,13 +17,13 @@
 namespace ygg
 {
 /// Whether V is the view of a row of family F (a stored row, one held outside the repository, a builder's: its tag is
-/// Row<F>): its relation and its values, read untyped, through its context. Read through const, however V is spelled
-/// (a reference to a mutable view too).
+/// Row<F>): its values, read untyped, through its context. Read through const, however V is spelled (a reference to a
+/// mutable view too). It asks only for members whose types are written out: get_relation() and get_values() deduce
+/// theirs, and asking for them would compile their reads through the repository wherever the concept is checked; the
+/// tag gives a view both.
 template<typename V, typename F>
 concept RowViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_type, Row<F>> && requires(const std::remove_reference_t<V>& view, std::size_t i) {
     view.context();
-    view.get_relation();
-    { view.get_values() } -> RowValues;
     { view.value(i) } -> std::same_as<Value>;
 };
 

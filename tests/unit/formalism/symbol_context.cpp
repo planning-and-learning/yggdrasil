@@ -26,6 +26,7 @@
 #include <urd/elements/copy.hpp>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
+#include <yggdrasil/formalism/symbol_context_impl.hpp>
 
 namespace
 {
@@ -37,7 +38,7 @@ struct Name
 template<>
 struct urd::data<Name>
 {
-    urd::index<Name> index;
+    urd::key<Name> index;
     int value = 0;
 
     data() = default;
@@ -55,6 +56,8 @@ struct urd::data<Name>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<Name> key() const noexcept { return urd::key<Name>(index); }
 };
 
 template<typename V>

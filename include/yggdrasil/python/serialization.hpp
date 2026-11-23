@@ -362,6 +362,17 @@ void bind_serialization(nanobind::module_& module, boost::mp11::mp_list<Register
     bind_table(module, boost::mp11::mp_list<Registered...> {});
 }
 
+/// The Part-th of Parts consecutive slices of a type list L (the last one takes the remainder).
+template<typename L, std::size_t Part, std::size_t Parts>
+using list_part = boost::mp11::mp_take_c<boost::mp11::mp_drop_c<L, Part * boost::mp11::mp_size<L>::value / Parts>,
+                                         (Part + 1) * boost::mp11::mp_size<L>::value / Parts - Part * boost::mp11::mp_size<L>::value / Parts>;
+
+/// bind_serialization for the Part-th of Parts slices of each list: a library binds its types in Parts sources, one
+/// slice each, so that no one source compiles the bindings of them all (brokkr's template rule T5). Every binding is
+/// of one type (an overload of serialize, table or a registration), so the slices bind the same as one call.
+template<std::size_t Part, std::size_t Parts, typename R, typename S, typename P>
+void bind_serialization_part(nanobind::module_& module, R, S, P)
+{ bind_serialization(module, list_part<R, Part, Parts> {}, list_part<S, Part, Parts> {}, list_part<P, Part, Parts> {}); }
 }  // namespace ygg::python
 
 #endif

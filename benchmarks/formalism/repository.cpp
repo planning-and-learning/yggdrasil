@@ -49,7 +49,7 @@ namespace urd
 template<>
 struct data<ygg::benchmarks::TrivialSymbol>
 {
-    urd::index<ygg::benchmarks::TrivialSymbol> index;
+    urd::key<ygg::benchmarks::TrivialSymbol> index;
     std::uint64_t value = 0;
 
     data() = default;
@@ -67,6 +67,8 @@ struct data<ygg::benchmarks::TrivialSymbol>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<ygg::benchmarks::TrivialSymbol> key() const noexcept { return urd::key<ygg::benchmarks::TrivialSymbol>(index); }
 };
 
 template<typename V>
@@ -83,18 +85,26 @@ public:
 template<>
 struct data<ygg::benchmarks::Relation>
 {
-    urd::index<ygg::benchmarks::Relation> index;
+    urd::key<ygg::benchmarks::Relation> index;
     ygg::uint_t lane = 0;
 
     data() = default;
 
     explicit data(ygg::uint_t lane_) : index(), lane(lane_) {}
 
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane>{}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane> {}; }
+
+    [[nodiscard]] urd::key<ygg::benchmarks::Relation> key() const noexcept { return urd::key<ygg::benchmarks::Relation>(index); }
 };
 
 template<typename V>
@@ -107,7 +117,8 @@ public:
     [[nodiscard]] decltype(auto) get_lane() const { return self().template member<&urd::record_of<V>::lane>(); }
 
     /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(ygg::benchmarks::kObjectColumns.size()); }
+    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const
+    { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(ygg::benchmarks::kObjectColumns.size()); }
 
     static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
 };
@@ -115,7 +126,7 @@ public:
 template<>
 struct data<ygg::benchmarks::SerializedSymbol>
 {
-    urd::index<ygg::benchmarks::SerializedSymbol> index;
+    urd::key<ygg::benchmarks::SerializedSymbol> index;
     urd::flat_vector<urd::index<ygg::benchmarks::TrivialSymbol>> values;
 
     data() = default;
@@ -133,6 +144,8 @@ struct data<ygg::benchmarks::SerializedSymbol>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
+
+    [[nodiscard]] urd::key<ygg::benchmarks::SerializedSymbol> key() const noexcept { return urd::key<ygg::benchmarks::SerializedSymbol>(index); }
 };
 
 template<typename V>

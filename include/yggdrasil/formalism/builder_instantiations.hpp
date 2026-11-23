@@ -21,6 +21,7 @@
 
 #include <boost/mp11.hpp>
 #include <boost/preprocessor/repetition/repeat.hpp>
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
 #include <boost/preprocessor/tuple/elem.hpp>
 #include <cstddef>
 
@@ -49,9 +50,15 @@ using BuilderType = boost::mp11::mp_at_c<typename Builder::Types, I>;
 /// construction, destruction, and its members for each of its Count types. The count is checked against its list.
 #define YGG_FORMALISM_BUILDER(PREFIX, Builder, Count)                                                      \
     static_assert(boost::mp11::mp_size<Builder::Types>::value == (Count), "YGG_FORMALISM_BUILDER: Count"); \
-    PREFIX template Builder::BasicBuilderStorage();                                                        \
-    PREFIX template Builder::~BasicBuilderStorage();                                                       \
+    YGG_FORMALISM_BUILDER_MEMBERS(PREFIX, Builder)                                                         \
     BOOST_PP_REPEAT(Count, YGG_FORMALISM_BUILDER_AT, (PREFIX, Builder))
+
+/// The same in parts, for a storage of many types split over several sources (brokkr's template rule T5): its
+/// construction and destruction, and its members for its types First..Last-1.
+#define YGG_FORMALISM_BUILDER_MEMBERS(PREFIX, Builder) \
+    PREFIX template Builder::BasicBuilderStorage();    \
+    PREFIX template Builder::~BasicBuilderStorage();
+#define YGG_FORMALISM_BUILDER_TYPES(PREFIX, Builder, First, Last) BOOST_PP_REPEAT_FROM_TO(First, Last, YGG_FORMALISM_BUILDER_AT, (PREFIX, Builder))
 
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 

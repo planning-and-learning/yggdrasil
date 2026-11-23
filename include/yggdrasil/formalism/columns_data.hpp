@@ -18,7 +18,7 @@ namespace urd
 template<>
 struct data<ygg::Columns>
 {
-    urd::index<ygg::Columns> index;
+    urd::key<ygg::Columns> index;
     urd::flat_vector<urd::data<ygg::ColumnLayout>> values;
 
     data() = default;
@@ -36,6 +36,8 @@ struct data<ygg::Columns>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
+
+    [[nodiscard]] urd::key<ygg::Columns> key() const noexcept { return urd::key<ygg::Columns>(index); }
 };
 
 }  // namespace urd

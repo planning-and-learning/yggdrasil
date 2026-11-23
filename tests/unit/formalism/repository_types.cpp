@@ -64,13 +64,12 @@ namespace ygg::tests
 {
 /// The Schema of these column types, inserted into `repository` as any record.
 template<std::ranges::input_range Types>
-urd::index<ygg::Schema> insert_schema(ygg::FreeRelationRepository& repository, const Types& types)
+static urd::index<ygg::Schema> insert_schema(ygg::FreeRelationRepository& repository, const Types& types)
 {
     auto schema = urd::data<ygg::Schema>();
     schema.column_types.set(std::ranges::begin(types), std::ranges::end(types));
     return repository.insert(schema).first.index();
 }
-
 
 /// Whether the context makes views of the handle.
 template<typename H, typename C>
@@ -106,18 +105,26 @@ namespace urd
 template<>
 struct data<ygg::tests::RepositoryTypesElement>
 {
-    urd::index<ygg::tests::RepositoryTypesElement> index;
+    urd::key<ygg::tests::RepositoryTypesElement> index;
     int value = 0;
 
     data() = default;
 
     explicit data(int value_) : index(), value(value_) {}
 
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
 
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value>{}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<ygg::tests::RepositoryTypesElement> key() const noexcept { return urd::key<ygg::tests::RepositoryTypesElement>(index); }
 };
 
 template<typename V>
@@ -130,7 +137,8 @@ public:
     [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
 
     /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(static_cast<std::size_t>(get_value())); }
+    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const
+    { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(static_cast<std::size_t>(get_value())); }
 
     static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
 };
@@ -138,7 +146,7 @@ public:
 template<>
 struct data<ygg::tests::RepositoryTypesSerializedElement>
 {
-    urd::index<ygg::tests::RepositoryTypesSerializedElement> index;
+    urd::key<ygg::tests::RepositoryTypesSerializedElement> index;
     urd::flat_vector<urd::index<ygg::tests::RepositoryTypesElement>> values;
 
     data() = default;
@@ -156,6 +164,9 @@ struct data<ygg::tests::RepositoryTypesSerializedElement>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
+
+    [[nodiscard]] urd::key<ygg::tests::RepositoryTypesSerializedElement> key() const noexcept
+    { return urd::key<ygg::tests::RepositoryTypesSerializedElement>(index); }
 };
 
 template<typename V>
@@ -171,71 +182,7 @@ public:
 template<>
 struct data<ygg::tests::RepositoryTypesRelation>
 {
-    urd::index<ygg::tests::RepositoryTypesRelation> index;
-    ygg::uint_t value = 0;
-
-    data() = default;
-
-    explicit data(ygg::uint_t value_) : index(), value(value_) {}
-
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
-
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value>{}; }
-};
-
-template<typename V>
-struct view_mixin<ygg::tests::RepositoryTypesRelation, V>
-{
-private:
-    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
-
-public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
-
-    /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(static_cast<std::size_t>(get_value())); }
-
-    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
-};
-
-template<>
-struct data<ygg::tests::RepositoryTypesPackedRelation>
-{
-    urd::index<ygg::tests::RepositoryTypesPackedRelation> index;
-    ygg::uint_t value = 0;
-
-    data() = default;
-
-    explicit data(ygg::uint_t value_) : index(), value(value_) {}
-
-    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
-
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value>{}; }
-};
-
-template<typename V>
-struct view_mixin<ygg::tests::RepositoryTypesPackedRelation, V>
-{
-private:
-    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
-
-public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
-
-    /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(static_cast<std::size_t>(get_value())); }
-
-    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
-};
-
-template<>
-struct data<ygg::formalism::Object>
-{
-    urd::index<ygg::formalism::Object> index;
+    urd::key<ygg::tests::RepositoryTypesRelation> index;
     ygg::uint_t value = 0;
 
     data() = default;
@@ -253,6 +200,91 @@ struct data<ygg::formalism::Object>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<ygg::tests::RepositoryTypesRelation> key() const noexcept { return urd::key<ygg::tests::RepositoryTypesRelation>(index); }
+};
+
+template<typename V>
+struct view_mixin<ygg::tests::RepositoryTypesRelation, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+
+    /// As a key of row pools, its rows' column types: those its record stores.
+    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const
+    { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(static_cast<std::size_t>(get_value())); }
+
+    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
+};
+
+template<>
+struct data<ygg::tests::RepositoryTypesPackedRelation>
+{
+    urd::key<ygg::tests::RepositoryTypesPackedRelation> index;
+    ygg::uint_t value = 0;
+
+    data() = default;
+
+    explicit data(ygg::uint_t value_) : index(), value(value_) {}
+
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<ygg::tests::RepositoryTypesPackedRelation> key() const noexcept
+    { return urd::key<ygg::tests::RepositoryTypesPackedRelation>(index); }
+};
+
+template<typename V>
+struct view_mixin<ygg::tests::RepositoryTypesPackedRelation, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+
+    /// As a key of row pools, its rows' column types: those its record stores.
+    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const
+    { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(static_cast<std::size_t>(get_value())); }
+
+    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
+};
+
+template<>
+struct data<ygg::formalism::Object>
+{
+    urd::key<ygg::formalism::Object> index;
+    ygg::uint_t value = 0;
+
+    data() = default;
+
+    explicit data(ygg::uint_t value_) : index(), value(value_) {}
+
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<ygg::formalism::Object> key() const noexcept { return urd::key<ygg::formalism::Object>(index); }
 };
 
 template<typename V>
@@ -269,7 +301,7 @@ public:
 template<typename C>
 struct builder<ygg::tests::RepositoryTypesElement, C>
 {
-    urd::index<ygg::tests::RepositoryTypesElement> index;
+    urd::key<ygg::tests::RepositoryTypesElement> index;
     urd::built_t<int, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
@@ -281,7 +313,7 @@ struct builder<ygg::tests::RepositoryTypesElement, C>
 template<typename C>
 struct builder<ygg::formalism::Object, C>
 {
-    urd::index<ygg::formalism::Object> index;
+    urd::key<ygg::formalism::Object> index;
     urd::built_t<ygg::uint_t, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
@@ -292,7 +324,7 @@ struct builder<ygg::formalism::Object, C>
 template<typename C>
 struct builder<ygg::tests::RepositoryTypesRelation, C>
 {
-    urd::index<ygg::tests::RepositoryTypesRelation> index;
+    urd::key<ygg::tests::RepositoryTypesRelation> index;
     urd::built_t<ygg::uint_t, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
@@ -669,10 +701,14 @@ TEST(YggdrasilTests, RowBuilderReadsItsTypesFromItsRelationInEachForm)
     EXPECT_THROW(static_cast<void>(held.get<bool>(1)), std::invalid_argument);
 
     const auto stored = repository.insert(owned).first;
+    // Its whole key: its relation, then the number its relation's slot gave it.
+    EXPECT_EQ(owned.key(), stored.index());
+    // Owned or packed in its slot, a row hashes as its values (urd's range hash): the slot finds it by its owned form.
+    EXPECT_EQ(urd::Hash<urd::data<ygg::Row<ygg::Schema>>> {}(owned), urd::Hash<ygg::PackedRow<ygg::Schema>> {}(repository[stored.index()]));
+    EXPECT_EQ(urd::get<ygg::Schema>(owned.key()), relation);
     EXPECT_EQ(stored.type(0), ygg::type_id<bool>);
     EXPECT_EQ(stored.get<std::uint32_t>(1), 7U);
-    EXPECT_EQ(std::ranges::distance(stored.get<std::uint32_t>(1, 2)), 1);
-    EXPECT_THROW(static_cast<void>(stored.get<bool>(0, 2)), std::invalid_argument);
+    EXPECT_THROW(static_cast<void>(stored.get<bool>()), std::invalid_argument);  // its second column is no bool
 }
 
 using CommonBuilderStorage = ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesElement, RepositoryTypesBuilderOther>;
@@ -840,18 +876,14 @@ TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
 template<typename V, typename T>
 concept ResolvesColumn = requires(const V& view) { view.template resolve<T>(std::size_t { 0 }); };
 template<typename V, typename T>
-concept ResolvesColumnRange = requires(const V& view) { view.template resolve<T>(std::size_t { 0 }, std::size_t { 1 }); };
-template<typename V, typename T>
 concept ResolvesEveryColumn = requires(const V& view) { view.template resolve<T>(); };
 
-using ObjectRowRepository = formalism::Repository<formalism::Symbols<formalism::Object, RepositoryTypesRelation>,
-                                                  formalism::RelationRepository<RepositoryTypesRelation>>;
+using ObjectRowRepository =
+    formalism::Repository<formalism::Symbols<formalism::Object, RepositoryTypesRelation>, formalism::RelationRepository<RepositoryTypesRelation>>;
 using ObjectRow = RowView<RepositoryTypesRelation, ObjectRowRepository>;
-static_assert(ResolvesColumn<ObjectRow, formalism::Object> && ResolvesColumnRange<ObjectRow, formalism::Object>
-              && ResolvesEveryColumn<ObjectRow, formalism::Object>);
+static_assert(ResolvesColumn<ObjectRow, formalism::Object> && ResolvesEveryColumn<ObjectRow, formalism::Object>);
 using FreeRow = RowView<Schema, ygg::FreeRelationRepository>;
-static_assert(!ResolvesColumn<FreeRow, formalism::Object> && !ResolvesColumnRange<FreeRow, formalism::Object>
-              && !ResolvesEveryColumn<FreeRow, formalism::Object>);
+static_assert(!ResolvesColumn<FreeRow, formalism::Object> && !ResolvesEveryColumn<FreeRow, formalism::Object>);
 static_assert(!ResolvesColumn<RowBuilderView<Schema, ygg::FreeRelationRepository>, formalism::Object>);
 
 using ObjectRowStorage = formalism::BuilderStorage<ObjectRowRepository, formalism::Object, RepositoryTypesRelation, Row<RepositoryTypesRelation>>;
@@ -945,8 +977,7 @@ TEST(YggdrasilTests, SeesAllObjectsOfASiblingWithoutItsOwn)
 TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelation)
 {
     using Object = formalism::Object;
-    using Repository =
-        formalism::Repository<formalism::Symbols<Object, RepositoryTypesRelation>, formalism::RelationRepository<RepositoryTypesRelation>>;
+    using Repository = formalism::Repository<formalism::Symbols<Object, RepositoryTypesRelation>, formalism::RelationRepository<RepositoryTypesRelation>>;
     Repository repository;
     auto first = urd::data<Object>(5);
     auto second = urd::data<Object>(8);
@@ -956,15 +987,14 @@ TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelat
     const auto stored = insert_values(repository, relation, { ygg::encode_value(b.index()), ygg::encode_value(a.index()) }).first;
     EXPECT_EQ(ygg::values_text<RepositoryTypesRelation>(stored), fmt::format("{} {}", b, a));
     EXPECT_EQ(stored.resolve<Object>(1), a);
-    EXPECT_EQ(std::ranges::distance(stored.resolve<Object>(0, 1)), 1);
     EXPECT_EQ(*stored.resolve<Object>().begin(), b);
 }
 
 namespace
 {
 /// A repository whose domain prepares its elements (a hook of its own, counting its calls).
-using PreparingRepository = formalism::Repository<formalism::Symbols<RepositoryTypesElement, formalism::Object>,
-                                                  formalism::RelationRepository<RepositoryTypesRelation>>;
+using PreparingRepository =
+    formalism::Repository<formalism::Symbols<RepositoryTypesElement, formalism::Object>, formalism::RelationRepository<RepositoryTypesRelation>>;
 
 /// The number of times the hook ran.
 std::size_t& preparations()
@@ -1105,7 +1135,7 @@ namespace
 {
 struct MutableRowView : PublishedContractRowView
 {
-    urd::index<RepositoryTypesRelation> get_relation();  // not const: no row view
+    Value value(std::size_t column);  // not const: no row view
 };
 }  // namespace
 
@@ -1325,9 +1355,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
 /// Whether the repository holds an index or binding key (some layer owns it), or the record a view denotes.
 template<typename Repository, typename X>
 static bool has(const Repository& repository, const X& x)
-{
-    return repository.contains(x);
-}
+{ return repository.contains(x); }
 
 template<typename Repository>
 static void check_symbol_membership()

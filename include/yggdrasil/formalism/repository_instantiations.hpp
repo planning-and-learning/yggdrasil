@@ -41,17 +41,23 @@
 /// families'). The counts are checked against its lists.
 // NOLINTBEGIN(cppcoreguidelines-macro-usage,bugprone-macro-parentheses): the macro expands to explicit instantiations,
 // declarations, which no function gives; its arguments are types and a prefix, which no parentheses may enclose
-#define YGG_FORMALISM_REPOSITORY(PREFIX, Repo, SymbolCount, RowCount)                                                    \
+#define YGG_FORMALISM_REPOSITORY(PREFIX, Repo, SymbolCount, RowCount)                                                        \
     static_assert(boost::mp11::mp_size<Repo::SymbolTypes>::value == (SymbolCount), "YGG_FORMALISM_REPOSITORY: SymbolCount"); \
     static_assert(boost::mp11::mp_size<Repo::RelationTypes>::value == (RowCount), "YGG_FORMALISM_REPOSITORY: RowCount");     \
-    PREFIX template Repo::Repository(const Repo*);                                                                       \
-    PREFIX template Repo::~Repository();                                                                                 \
-    PREFIX template void Repo::clear();                                                                                  \
-    PREFIX template void Repo::clear_all();                                                                              \
-    PREFIX template Repo::OwnParts<false> Repo::own_parts() const;                                                       \
-    PREFIX template Repo::OwnParts<true> Repo::own_parts();                                                              \
-    YGG_FORMALISM_PART(PREFIX, Repo, 0, SymbolCount)                                                                     \
+    YGG_FORMALISM_REPOSITORY_MEMBERS(PREFIX, Repo)                                                                           \
+    YGG_FORMALISM_PART(PREFIX, Repo, 0, SymbolCount)                                                                         \
     YGG_FORMALISM_PART(PREFIX, Repo, 1, BOOST_PP_INC(RowCount))
+
+/// The same in parts, for a repository split over several sources (brokkr's template rule T5): its own members here,
+/// its symbols' keys and its relations' (the Schema's and RowCount row families') with YGG_FORMALISM_PART_KEYS for
+/// parts 0 and 1.
+#define YGG_FORMALISM_REPOSITORY_MEMBERS(PREFIX, Repo)             \
+    PREFIX template Repo::Repository(const Repo*);                 \
+    PREFIX template Repo::~Repository();                           \
+    PREFIX template void Repo::clear();                            \
+    PREFIX template void Repo::clear_all();                        \
+    PREFIX template Repo::OwnParts<false> Repo::own_parts() const; \
+    PREFIX template Repo::OwnParts<true> Repo::own_parts();
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 
 #endif

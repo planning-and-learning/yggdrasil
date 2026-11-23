@@ -18,7 +18,7 @@ namespace urd
 template<>
 struct data<ygg::Schema>
 {
-    urd::index<ygg::Schema> index;
+    urd::key<ygg::Schema> index;
     urd::flat_vector<ygg::TypeId> column_types;
 
     data() = default;
@@ -36,6 +36,8 @@ struct data<ygg::Schema>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::column_types> {}; }
+
+    [[nodiscard]] urd::key<ygg::Schema> key() const noexcept { return urd::key<ygg::Schema>(index); }
 };
 
 }  // namespace urd

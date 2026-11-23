@@ -21,7 +21,7 @@ namespace urd
 template<typename F>
 struct data<ygg::Relation<F>>
 {
-    urd::index<ygg::Relation<F>> index;
+    urd::key<ygg::Relation<F>> index;
     urd::index<F> pool;
     urd::index<ygg::Columns> columns;
     urd::flat_vector<urd::key<F, ygg::Row<F>>> rows;
@@ -48,6 +48,8 @@ struct data<ygg::Relation<F>>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::pool, &data::columns, &data::rows> {}; }
+
+    [[nodiscard]] urd::key<ygg::Relation<F>> key() const noexcept { return urd::key<ygg::Relation<F>>(index); }
 };
 }  // namespace urd
 

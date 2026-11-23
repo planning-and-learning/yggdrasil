@@ -48,20 +48,23 @@ using SymbolStore = urd::Store<urd::pool<urd::data<T>, urd::index<T>>,
                                urd::layered,
                                std::conditional_t<ThreadSafe, urd::concurrent, urd::single_threaded>>;
 
-/// The store of T's records in a sequential and in a concurrent repository.
-template<typename T>
-using SequentialSymbolStore = SymbolStore<T, false>;
-template<typename T>
-using ConcurrentSymbolStore = SymbolStore<T, true>;
+/// The store of a kind's records in a sequential or a concurrent repository, as a template of the kind alone (a
+/// Family's member template takes one parameter).
+template<bool ThreadSafe>
+struct SymbolStoreOf
+{
+    template<typename T>
+    using fn = SymbolStore<T, ThreadSafe>;
+};
 
 /// The symbols of a repository layer, a plain store: one SymbolStore per kind (a urd family: get<T>() selects the kind's
 /// store, the first step of urd's key fold), each layered over the parent layer's, so that lookups and reads find the
 /// parent's records too. A repository holds it as its symbol part (HeldPart): keys are resolved, counted, viewed,
 /// stored and found by the repository's one keyed dispatch.
 template<bool ThreadSafe, typename... Ts>
-class SymbolStores : public Family<std::conditional_t<ThreadSafe, boost::mp11::mp_quote<ConcurrentSymbolStore>, boost::mp11::mp_quote<SequentialSymbolStore>>::template fn, Ts...>
+class SymbolStores : public Family<SymbolStoreOf<ThreadSafe>::template fn, Ts...>
 {
-    using Base = Family<std::conditional_t<ThreadSafe, boost::mp11::mp_quote<ConcurrentSymbolStore>, boost::mp11::mp_quote<SequentialSymbolStore>>::template fn, Ts...>;
+    using Base = Family<SymbolStoreOf<ThreadSafe>::template fn, Ts...>;
 
 public:
     static constexpr bool thread_safe = ThreadSafe;

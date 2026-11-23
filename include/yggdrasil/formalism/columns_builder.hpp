@@ -18,7 +18,7 @@ namespace urd
 template<typename C>
 struct builder<ygg::Columns, C>
 {
-    urd::index<ygg::Columns> index;
+    urd::key<ygg::Columns> index;
     urd::built_t<urd::flat_vector<urd::data<ygg::ColumnLayout>>, C> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &builder::values>> {}; }

@@ -22,6 +22,7 @@
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
 #include <utility>
+#include <yggdrasil/formalism/symbol_context_impl.hpp>
 
 namespace
 {
@@ -41,7 +42,7 @@ struct Item
 template<>
 struct urd::data<Name>
 {
-    urd::index<Name> index;
+    urd::key<Name> index;
     int value = 0;
 
     data() = default;
@@ -59,12 +60,14 @@ struct urd::data<Name>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+
+    [[nodiscard]] urd::key<Name> key() const noexcept { return urd::key<Name>(index); }
 };
 
 template<>
 struct urd::data<Tag>
 {
-    urd::index<Tag> index;
+    urd::key<Tag> index;
     urd::index<Name> name;
 
     data() = default;
@@ -82,12 +85,14 @@ struct urd::data<Tag>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::name> {}; }
+
+    [[nodiscard]] urd::key<Tag> key() const noexcept { return urd::key<Tag>(index); }
 };
 
 template<>
 struct urd::data<Item>
 {
-    urd::index<Item> index;
+    urd::key<Item> index;
     urd::index<Tag> tag;
 
     data() = default;
@@ -105,6 +110,8 @@ struct urd::data<Item>
     static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 
     static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::tag> {}; }
+
+    [[nodiscard]] urd::key<Item> key() const noexcept { return urd::key<Item>(index); }
 };
 
 template<typename V>

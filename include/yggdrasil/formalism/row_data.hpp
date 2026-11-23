@@ -34,53 +34,26 @@
 namespace ygg
 {
 
-/// A row of family F as its pool's slot holds it: its values packed at the slot's column widths, each column read on
-/// demand, atomically (so that one reader serves concurrent and sequential slots alike), and the relation of its slot,
-/// which the slot keeps once and hands to each row it hands out. What a lookup of a row hands out, by value
-/// (urd::stored_ref<Row<F>>); its slot must outlive it. A random-access view of Values: it owns none (what reads a view,
-/// as Python's list conversion does, reads it).
+/// A row of family F as its pool's slot holds it: urd's packed reader of its values (thread-safe: reading atomically,
+/// it serves concurrent and sequential slots alike), and the relation of its slot, which the slot keeps once and hands
+/// to each row it hands out. What a lookup of a row hands out, by value (urd::stored_ref<Row<F>>); its slot must outlive
+/// it. A random-access view of Values: it owns none.
 template<typename F>
-class PackedRow : public std::ranges::view_base
+class PackedRow : public urd::packed_row<true>, public std::ranges::view_base
 {
-    urd::packed_row<true> m_row;
     urd::index<F> m_relation;
 
 public:
-    using value_type = Value;
-    using const_iterator = typename urd::packed_row<true>::const_iterator;
-    using iterator = const_iterator;
-    using size_type = std::size_t;
-
     /// The row a slot of `relation` hands out (urd::packed_row of either thread safety), read from where it lies.
     template<bool ThreadSafe>
     PackedRow(const urd::packed_row<ThreadSafe>& row, urd::index<F> relation) noexcept :
-        m_row(row.data(), row.first_bit(), row.column_widths()),
+        urd::packed_row<true>(row.data(), row.first_bit(), row.column_widths()),
         m_relation(relation)
     {
     }
 
     /// The relation of its slot.
     [[nodiscard]] urd::index<F> relation() const noexcept { return m_relation; }
-
-    [[nodiscard]] size_type size() const noexcept { return m_row.size(); }
-
-    [[nodiscard]] bool empty() const noexcept { return m_row.empty(); }
-
-    /// The value of a column.
-    [[nodiscard]] Value operator[](size_type column) const noexcept { return m_row.get(column); }
-
-    [[nodiscard]] const_iterator begin() const noexcept { return m_row.begin(); }
-
-    [[nodiscard]] const_iterator end() const noexcept { return m_row.end(); }
-
-    /// The widths its slot packs its columns at.
-    [[nodiscard]] const urd::column_widths& column_widths() const noexcept { return m_row.column_widths(); }
-
-    /// Where it lies in its slot: its first word and its first bit there (two rows read the same storage where both
-    /// are equal).
-    [[nodiscard]] const urd::word_t* data() const noexcept { return m_row.data(); }
-
-    [[nodiscard]] std::size_t first_bit() const noexcept { return m_row.first_bit(); }
 };
 
 }  // namespace ygg
@@ -99,15 +72,15 @@ namespace urd
 template<typename F>
 struct data<ygg::Row<F>>
 {
+    /// Its number in its relation's slot: the local part of its key, written by the slot at insertion (key(): its whole
+    /// key, its relation then this).
+    urd::key<ygg::Row<F>> index;
     urd::index<F> relation;
     urd::flat_vector<ygg::Value> values;
-    /// Its id in its relation's slot: its key's last part, written by the slot at insertion (a record holds its whole
-    /// key; the slot keeps neither: its relation is the slot's, its id its place).
-    urd::index<ygg::Row<F>> index;
 
     data() = default;
 
-    data(urd::index<F> relation_, urd::flat_vector<ygg::Value> values_) : relation(relation_), values(std::move(values_)) {}
+    data(urd::index<F> relation_, urd::flat_vector<ygg::Value> values_) : index(), relation(relation_), values(std::move(values_)) {}
 
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
@@ -120,17 +93,15 @@ struct data<ygg::Row<F>>
     /// Its content alone: the relation selects the slot, the values are what the slot deduplicates.
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::values> {}; }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::relation, &data::values, &data::index> {}; }
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::relation, &data::values> {}; }
+
+    /// Its whole key (urd::key_t<Row<F>>): the relation it lies in, then its number there.
+    [[nodiscard]] urd::key<F, ygg::Row<F>> key() const noexcept { return urd::key<F, ygg::Row<F>>(relation, index); }
 };
 
-/// A row's content hashes as the range of its values, owned (data<Row<F>>) or packed in its slot (PackedRow<F>) alike,
-/// as its slot hashes it (urd::hash_range): equal content, equal hash, in either form.
-template<typename F>
-struct Hash<data<ygg::Row<F>>>
-{
-    [[nodiscard]] hash_t operator()(const data<ygg::Row<F>>& row) const { return urd::hash_range(row.values); }
-};
-
+/// A packed row hashes as the range of its values, as an owned row does (urd hashes data<Row<F>> by its one identifying
+/// member, its values, as that range): the slot finds a row by its owned form. urd's range hash is opt-in for the
+/// ranges it knows, and the packed row is a reader urd does not know.
 template<typename F>
 struct Hash<ygg::PackedRow<F>>
 {

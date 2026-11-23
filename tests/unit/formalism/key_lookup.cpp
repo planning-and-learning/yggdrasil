@@ -50,15 +50,51 @@ struct Member
 };
 }  // namespace
 
-/// A member of a group: numbered in its group's own container, under the key urd::key<Group, Member>.
+/// A member is numbered in its group's own container: its key is its group, then its number there.
+template<>
+struct urd::key_of<Member>
+{
+    using type = urd::key<Group, Member>;
+};
+
+/// A member of a group: its number in its group's container (the local part of its key), its group and its weight.
 template<>
 struct urd::data<Member>
 {
+    urd::key<Member> index;
+    urd::index<Group> group;
     int weight = 0;
 
-    static constexpr auto identifying_members() noexcept { return urd::Members<&data::weight> {}; }
+    data() = default;
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::weight> {}; }
+    data(urd::index<Group> group_, int weight_) : index(), group(group_), weight(weight_) {}
+
+    static constexpr bool copyable() noexcept
+    {
+        static_assert(std::is_trivially_copyable_v<data>, "a copyable record is trivially copyable");
+        return true;
+    }
+
+    static constexpr auto fields() noexcept { return urd::Fields<urd::field<"group", &data::group>, urd::field<"weight", &data::weight>> {}; }
+
+    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+
+    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::group, &data::weight> {}; }
+
+    /// Its whole key: its group, then its number there.
+    [[nodiscard]] urd::key<Group, Member> key() const noexcept { return urd::key<Group, Member>(group, index); }
+};
+
+template<typename V>
+struct urd::view_mixin<Member, V>
+{
+private:
+    [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
+
+public:
+    [[nodiscard]] decltype(auto) get_group() const { return self().template member<&urd::record_of<V>::group>(); }
+
+    [[nodiscard]] decltype(auto) get_weight() const { return self().template member<&urd::record_of<V>::weight>(); }
 };
 
 namespace
@@ -127,9 +163,8 @@ public:
     /// Its one part: the members by group, held in place (an ordinary part, as a repository's stores are), as read and
     /// as written into.
     template<bool Writable>
-    using OwnParts = std::tuple<ygg::formalism::HeldPart<ygg::formalism::detail::access_t<Writable, Groups>,
-                                                         ygg::formalism::detail::access_t<Writable, ByGroup>,
-                                                         KeyTypes>>;
+    using OwnParts =
+        std::tuple<ygg::formalism::HeldPart<ygg::formalism::detail::access_t<Writable, Groups>, ygg::formalism::detail::access_t<Writable, ByGroup>, KeyTypes>>;
 
     explicit Groups(const Groups* parent = nullptr)
     {
@@ -141,7 +176,9 @@ public:
     urd::key<Group, Member> insert(urd::index<Group> group, int weight)
     {
         m_groups.try_emplace(group);
-        return urd::key<Group, Member>(group, m_groups.own_value(group)->insert(urd::data<Member> { weight }).first);
+        auto member = urd::data<Member>(group, weight);
+        urd::insert_at(*m_groups.own_value(group), urd::key<>(), member);  // writes its number into it
+        return member.key();
     }
 
 private:

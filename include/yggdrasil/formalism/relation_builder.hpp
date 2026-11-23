@@ -89,12 +89,12 @@ struct built_form<urd::flat_vector<urd::key<F, ygg::Row<F>>>, C>
 /// Its rows are row children (an interned row's key, a row builder, or a row record not interned yet), in tuple order
 /// and unique, as its record's, ordered through the repository it is initialized into: its members below keep them so,
 /// interning rows and columns into the repository they are given. It is read as any builder, through a view (urd::resolve(builder, repository),
-/// repository.view(builder): the relation mixin of relation_view.hpp), and interned by the repository's insert. A zero-column relation is true exactly when it contains
-/// the empty row.
+/// repository.view(builder): the relation mixin of relation_view.hpp), and interned by the repository's insert. A zero-column relation is true exactly when it
+/// contains the empty row.
 template<typename F, typename C>
 struct builder<ygg::Relation<F>, C>
 {
-    urd::index<ygg::Relation<F>> index;
+    urd::key<ygg::Relation<F>> index;
     urd::built_t<urd::index<F>, C> pool;
     urd::built_t<urd::index<ygg::Columns>, C> columns;
     urd::built_t<urd::flat_vector<urd::key<F, ygg::Row<F>>>, C> rows;
@@ -144,8 +144,7 @@ struct builder<ygg::Relation<F>, C>
         for (const ygg::Value value : values)
         {
             // A column's values are of its type's width: a record is no packed row, so it is checked here.
-            if (const auto bits = ygg::column_bits((column++)->type);
-                bits < std::numeric_limits<ygg::Value>::digits && (value >> bits) != 0)
+            if (const auto bits = ygg::column_bits((column++)->type); bits < std::numeric_limits<ygg::Value>::digits && (value >> bits) != 0)
                 throw std::out_of_range("Relation: a value does not fit its column.");
         }
         const auto [at, held] = view.locate(values);

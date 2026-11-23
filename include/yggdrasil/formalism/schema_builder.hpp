@@ -18,7 +18,7 @@ namespace urd
 template<typename C>
 struct builder<ygg::Schema, C>
 {
-    urd::index<ygg::Schema> index;
+    urd::key<ygg::Schema> index;
     urd::built_t<urd::flat_vector<ygg::TypeId>, C> column_types;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"column_types", &builder::column_types>> {}; }
