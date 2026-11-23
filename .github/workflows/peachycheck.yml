@@ -22,7 +22,7 @@ jobs:
           # .venv (its stubs are generated at install), and both pyurd's
           # native dependencies (from the index).
           prepare: |
-            "$PYTHON" -m pip install "nanobind-backend>=1.0" "pybrokkr>=0.2.1,<0.3" "pyurd>=0.3.0,<0.4"
+            "$PYTHON" -m pip install "nanobind-backend>=1.0" "pybrokkr>=0.3.0,<0.4" "pyurd>=0.4.0,<0.5"
             cmake -S . -B build/peachycheck -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                   -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_BENCHMARKS=ON \
                   -DCMAKE_INSTALL_LIBDIR=lib \
@@ -34,5 +34,5 @@ jobs:
       - name: Schema rules
         run: |
           python3 -m venv "$RUNNER_TEMP/rules"
-          "$RUNNER_TEMP/rules/bin/python" -m pip install --quiet "pybrokkr[fallbacks]>=0.2.1,<0.3"
+          "$RUNNER_TEMP/rules/bin/python" -m pip install --quiet "pybrokkr[fallbacks]>=0.3.0,<0.4"
           "$RUNNER_TEMP/rules/bin/python" -m pybrokkr.rules S --compile-commands build/peachycheck/compile_commands.json -j 4
