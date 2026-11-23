@@ -226,14 +226,14 @@ void describe_fields(Archive& ar, std::type_identity<ygg::RowView<F, C>> /*type*
              {
                  if constexpr (ygg::ResolvesObjects<C>)
                  {
-                     using Column = std::variant<ygg::ColumnValue, urd::index_view<ygg::formalism::Object, C>>;
-                     auto columns = urd::Store<urd::sequence<Column>> {};
+                     using ColumnReadout = std::variant<ygg::ColumnValue, urd::index_view<ygg::formalism::Object, C>>;
+                     auto columns = urd::Store<urd::sequence<ColumnReadout>> {};
                      for (std::size_t column = 0; column < std::ranges::size(value.get_values()); ++column)
                      {
                          if (value.type(column) == ygg::type_id<urd::index<ygg::formalism::Object>>)
-                             columns.push_back(Column(std::in_place_index<1>, value.template resolve<ygg::formalism::Object>(column)));
+                             columns.push_back(ColumnReadout(std::in_place_index<1>, value.template resolve<ygg::formalism::Object>(column)));
                          else
-                             columns.push_back(Column(std::in_place_index<0>, value.get(column)));
+                             columns.push_back(ColumnReadout(std::in_place_index<0>, value.get(column)));
                      }
                      return columns;
                  }
