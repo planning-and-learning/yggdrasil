@@ -45,7 +45,7 @@ jobs:
 
       # pyurd (urd, and with it pyurd-native, the native dependencies) comes from the index, as a build requirement.
       - name: Install build requirements
-        run: python -m pip install --no-cache-dir "nanobind-backend>=1.0" "pybrokkr>=0.3.0,<0.4" "pyurd>=0.4.0,<0.5"
+        run: python -m pip install --no-cache-dir "nanobind-backend>=1.0" "pybrokkr>=0.3.0,<0.4" "pyurd>=0.5.0,<0.6"
 
       - name: Build and install
         run: python -m pip install --no-cache-dir --verbose .[test]
