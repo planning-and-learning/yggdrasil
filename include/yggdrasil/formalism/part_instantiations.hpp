@@ -66,6 +66,7 @@ using PartKnown = boost::mp11::mp_rename<boost::mp11::mp_pop_back<boost::mp11::m
     YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
     template urd::stored_ref<YGG_FORMALISM_PART_KIND_T(I, ARGS)> YGG_FORMALISM_PART_READ(ARGS)::at(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;         \
     YGG_FORMALISM_PART_PREFIX(ARGS) template bool YGG_FORMALISM_PART_READ(ARGS)::contains(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                  \
+    YGG_FORMALISM_PART_PREFIX(ARGS) template bool YGG_FORMALISM_PART_READ(ARGS)::owns(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                      \
     YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
     template const YGG_FORMALISM_PART_OWNER(ARGS) * YGG_FORMALISM_PART_READ(ARGS)::owner(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                   \
     YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \

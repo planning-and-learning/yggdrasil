@@ -539,5 +539,50 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
     EXPECT_TRUE(std::ranges::equal(parent_binding_view.get_values(), make_binding<Width>(relation, 7).values));
 }
 
+TEST(YggdrasilTests, FormalismConcurrentRepositoryWithOneWriterInsertsRowsAsAShared)
+{
+    using Width = urd::word;
+    auto parent = ConcurrentRepository<Width>(nullptr);
+    const auto relation = declared_relation<Width>(parent, 0);
+    const auto [parent_binding_view, parent_binding_created] = insert_bound(parent, make_binding<Width>(relation, 7));
+    ASSERT_TRUE(parent_binding_created);
+
+    auto shared = ConcurrentRepository<Width>(&parent);
+    auto exclusive = ConcurrentRepository<Width>(&parent);
+    exclusive.set_one_writer(true);
+
+    // A row of the parent is the parent's in both layers.
+    const auto [inherited_view, inherited_created] = insert_bound(exclusive, make_binding<Width>(relation, 7));
+    EXPECT_FALSE(inherited_created);
+    EXPECT_EQ(&inherited_view.context(), &parent);
+    EXPECT_EQ(inherited_view.index(), parent_binding_view.index());
+
+    // New rows are numbered alike, stored once, and found again.
+    constexpr uint_t rows = 512;
+    for (uint_t key = 0; key < rows; ++key)
+    {
+        const auto [shared_view, shared_created] = insert_bound(shared, make_binding<Width>(relation, 100 + key));
+        const auto [exclusive_view, exclusive_created] = insert_bound(exclusive, make_binding<Width>(relation, 100 + key));
+        EXPECT_TRUE(shared_created);
+        EXPECT_TRUE(exclusive_created);
+        EXPECT_EQ(&exclusive_view.context(), &exclusive);
+        EXPECT_EQ(exclusive_view.index(), shared_view.index());
+        EXPECT_TRUE(std::ranges::equal(exclusive_view.get_values(), shared_view.get_values()));
+    }
+    for (uint_t key = 0; key < rows; ++key)
+    {
+        const auto [again_view, again_created] = insert_bound(exclusive, make_binding<Width>(relation, 100 + key));
+        EXPECT_FALSE(again_created);
+        EXPECT_EQ(&again_view.context(), &exclusive);
+    }
+    EXPECT_EQ(exclusive.template size<Row<ConcurrentRelation<Width>>>(relation), shared.template size<Row<ConcurrentRelation<Width>>>(relation));
+
+    // Back to shared use, the layer finds what it stored alone.
+    exclusive.set_one_writer(false);
+    const auto [shared_again_view, shared_again_created] = insert_bound(exclusive, make_binding<Width>(relation, 100));
+    EXPECT_FALSE(shared_again_created);
+    EXPECT_EQ(&shared_again_view.context(), &exclusive);
+}
+
 }
 }  // namespace ygg::tests

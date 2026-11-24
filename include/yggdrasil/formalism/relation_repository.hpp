@@ -30,11 +30,15 @@
 #include <concepts>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <type_traits>
+#include <urd/access.hpp>
 #include <urd/elements/flat.hpp>
+#include <urd/elements/hash.hpp>
+#include <urd/elements/prehashed.hpp>
 #include <urd/memory.hpp>
 #include <urd/repr/maps/index_map.hpp>
 #include <urd/repr/pools/pools.hpp>
@@ -63,9 +67,11 @@ class RowSlot
 {
     Rows* m_rows;
     urd::index<F> m_relation;
+    bool m_one_writer;
 
 public:
-    RowSlot(Rows& rows, urd::index<F> relation) noexcept : m_rows(&rows), m_relation(relation) {}
+    /// `one_writer`: only this thread uses the pool while the slot inserts (its rows inserted without locks).
+    RowSlot(Rows& rows, urd::index<F> relation, bool one_writer = false) noexcept : m_rows(&rows), m_relation(relation), m_one_writer(one_writer) {}
 
     /// The row at `at`, packed, with its slot's relation.
     [[nodiscard]] PackedRow<F> operator[](urd::index<Row<F>> at) const { return PackedRow<F>((*m_rows)[at], m_relation); }
@@ -80,14 +86,24 @@ public:
     [[nodiscard]] const Rows& rows() const noexcept { return *m_rows; }
 
     /// The id of the row of this content (its values), in whichever layer holds it, or none.
-    [[nodiscard]] urd::index<Row<F>> find(const urd::data<Row<F>>& content) const { return m_rows->find(content.values); }
+    /// The row is hashed once for every layer of the chain (urd::prehashed), not again in each.
+    [[nodiscard]] urd::index<Row<F>> find(const urd::data<Row<F>>& content) const { return m_rows->find(prehashed_values(content)); }
 
     /// The id of the row of this content (its values) stored where no layer holds it, and whether it was stored now.
     /// The slot keeps its values alone (its relation the slot's, its id its place): `make` is not called.
     template<typename Make>
     [[nodiscard]] std::pair<urd::index<Row<F>>, bool> insert(const urd::data<Row<F>>& content, Make /*make*/) const
         requires(!std::is_const_v<Rows>)
-    { return m_rows->insert(content.values); }
+    {
+        if (m_one_writer)
+            return m_rows->insert(prehashed_values(content), urd::exclusive_write);
+        return m_rows->insert(prehashed_values(content));
+    }
+
+private:
+    /// A row's values with their hash (urd::hash_range, the hash its pool's layers take).
+    [[nodiscard]] static urd::prehashed<urd::flat_vector<Value>> prehashed_values(const urd::data<Row<F>>& content)
+    { return urd::prehashed<urd::flat_vector<Value>> { content.values, urd::hash_range(content.values) }; }
 };
 
 /// What a relation repository reads the column widths of a relation of family F from, when it makes the relation's
@@ -155,6 +171,7 @@ private:
     Family<Pools, Ts...> m_relations;
     Schemas m_schemas;
     ColumnWidths m_column_widths;
+    bool m_one_writer = false;
 
 public:
     /// The pools of family F, as this layer reads them.
@@ -178,6 +195,18 @@ public:
         return pools<F>().visit(relation, [relation, &f](const Rows<F>& rows) { return f(RowSlot<F, const Rows<F>>(rows, relation)); }, missing);
     }
 
+    /// The slot of this layer's own pool `relation`, none where it has none: the pools of the layers below are not looked
+    /// at (the step urd::owns_key and a count of one layer take to a row's slot, urd::SelectsOwnBy).
+    template<typename F>
+        requires HasRows<RelationRepositoryBase, F>
+    [[nodiscard]] std::optional<RowSlot<F, const Rows<F>>> own_value(urd::index<F> relation) const
+    {
+        const auto* rows = pools<F>().own_value(relation);
+        if (rows == nullptr)
+            return std::nullopt;
+        return RowSlot<F, const Rows<F>>(*rows, relation);
+    }
+
     /// This layer's own pool `relation`, made where it has none, with the widths of its column types (its relation
     /// relation's, read through ColumnWidths from the repository it belongs to), over the pool of the nearest
     /// layer below that has one (its row ids continuing after that one's): the step an insertion takes to the slot
@@ -188,9 +217,9 @@ public:
     {
         auto& relations = m_relations.template get<F>();
         if (auto* rows = relations.own_value(relation))
-            return { *rows, relation };
+            return { *rows, relation, m_one_writer };
         relations.try_emplace(relation, std::get<ColumnWidthsReader<F>>(m_column_widths)(relation));
-        return { *relations.own_value(relation), relation };
+        return { *relations.own_value(relation), relation, m_one_writer };
     }
 
     /// f of the slot of each pool of family F this layer made itself (its parents' not visited): what a count of one
@@ -245,6 +274,9 @@ public:
     /// Forgets this layer's own rows; the parent's stay, and so do the Schemas and the pools' declarations (as the
     /// Repository keeps the pool keys).
     void clear() { m_relations.clear(); }
+
+    /// Whether only one thread uses this layer while it inserts (set_one_writer): its rows are inserted without locks.
+    void set_one_writer(bool one_writer) noexcept { m_one_writer = one_writer; }
 };
 }  // namespace detail
 

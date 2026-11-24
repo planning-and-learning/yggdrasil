@@ -81,6 +81,10 @@ public:
     template<typename... Ks>
     [[nodiscard]] bool contains(urd::key<Ks...> key) const;
 
+    /// Whether this layer holds the key itself, not through a layer below it (urd::owns_key: index comparisons).
+    template<typename... Ks>
+    [[nodiscard]] bool owns(urd::key<Ks...> key) const;
+
     /// The number of records of T under the parts `prefix` of their key, along the layers (urd::count_at).
     template<typename T, typename... Ps>
     [[nodiscard]] std::size_t size(urd::key<Ps...> prefix) const;
@@ -93,8 +97,8 @@ public:
     template<typename T, typename... Ps>
     [[nodiscard]] std::size_t memory_usage(urd::key<Ps...> prefix) const;
 
-    /// The layer that owns the record of a key: of its owner and the layers below it (parent()), the last that holds the
-    /// key (a layer holds what the layers below it hold, never what the layers above it hold); nullptr where none does.
+    /// The layer that owns the record of a key: of its owner and the layers below it (parent()), the one that holds the
+    /// key itself (owns); nullptr where no layer holds it.
     template<typename... Ks>
     [[nodiscard]] const std::remove_const_t<O>* owner(urd::key<Ks...> key) const;
 
@@ -122,6 +126,12 @@ public:
     /// it: its view, and whether it was stored now. Of a part that writes (S not const).
     template<typename T>
     std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> insert(urd::data<T>& record) const;
+
+private:
+    /// The layer that owns the record of a key some layer holds (found or inserted just now): of its owner and the layers
+    /// below it, the first that holds it itself.
+    template<typename... Ks>
+    [[nodiscard]] const std::remove_const_t<O>* held_owner(urd::key<Ks...> key) const;
 };
 
 namespace detail
@@ -290,6 +300,12 @@ public:
         requires OnePartHolds<key_parts<Derived, false>, urd::key<Ks...>, false>
     [[nodiscard]] bool contains(urd::key<Ks...> key) const
     { return part_of<urd::key<Ks...>, false>(self()).contains(key); }
+
+    /// Whether this layer holds the key itself, not through a layer below it, through the one part that resolves it.
+    template<typename... Ks>
+        requires OnePartHolds<key_parts<Derived, false>, urd::key<Ks...>, false>
+    [[nodiscard]] bool owns(urd::key<Ks...> key) const
+    { return part_of<urd::key<Ks...>, false>(self()).owns(key); }
 
     /// The layer that owns the record of a key (its canonical context), through the one part that resolves it; nullptr
     /// where no layer holds it.

@@ -56,6 +56,7 @@
     PREFIX template Repo::~Repository();                           \
     PREFIX template void Repo::clear();                            \
     PREFIX template void Repo::clear_all();                        \
+    PREFIX template void Repo::set_one_writer(bool) noexcept;      \
     PREFIX template Repo::OwnParts<false> Repo::own_parts() const; \
     PREFIX template Repo::OwnParts<true> Repo::own_parts();
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)

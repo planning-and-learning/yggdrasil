@@ -13,6 +13,7 @@
 
 #include "yggdrasil/formalism/keyed_read_impl.hpp"
 
+#include <cassert>
 #include <cstddef>
 #include <type_traits>
 #include <urd/elements/keyed.hpp>
@@ -29,7 +30,7 @@ std::optional<urd::index_view<T, std::remove_const_t<O>, key_t<T>>> HeldPart<O, 
     const auto key = urd::find_at(*m_store, detail::known(record), record);
     if (key.is_none())
         return std::nullopt;
-    return m_owner->view(key);
+    return urd::index_view<T, std::remove_const_t<O>, key_t<T>>(key, held_owner(key));
 }
 
 template<typename O, typename S, typename Keys>
@@ -38,7 +39,9 @@ std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> HeldPart<O
 {
     prepare_for_insert(*m_owner, record);
     const auto [key, inserted] = urd::insert_at(*m_store, detail::known(record), record);
-    return { m_owner->view(key), inserted };
+    // A record stored now is this layer's own.
+    const auto* owner = inserted ? static_cast<const std::remove_const_t<O>*>(m_owner) : held_owner(key);
+    return { urd::index_view<T, std::remove_const_t<O>, key_t<T>>(key, owner), inserted };
 }
 
 namespace detail
@@ -97,10 +100,27 @@ template<typename O, typename S, typename Keys>
 template<typename... Ks>
 const std::remove_const_t<O>* HeldPart<O, S, Keys>::owner(urd::key<Ks...> key) const
 {
-    const std::remove_const_t<O>* found = nullptr;
-    for (const std::remove_const_t<O>* layer = m_owner; layer != nullptr && layer->contains(key); layer = layer->parent())
-        found = layer;
-    return found;
+    if (!contains(key))
+        return nullptr;
+    return held_owner(key);
+}
+
+template<typename O, typename S, typename Keys>
+template<typename... Ks>
+bool HeldPart<O, S, Keys>::owns(urd::key<Ks...> key) const
+{ return urd::owns_key(*m_store, key); }
+
+template<typename O, typename S, typename Keys>
+template<typename... Ks>
+const std::remove_const_t<O>* HeldPart<O, S, Keys>::held_owner(urd::key<Ks...> key) const
+{
+    const std::remove_const_t<O>* layer = m_owner;
+    while (!layer->owns(key))
+    {
+        layer = layer->parent();
+        assert(layer != nullptr && "ygg::formalism::HeldPart: no layer holds the key");
+    }
+    return layer;
 }
 
 }  // namespace ygg::formalism

@@ -105,6 +105,12 @@ public:
     /// Forgets every record and row of this layer, its pool keys and their pools too; the parent's stay.
     void clear_all();
 
+    /// Whether only one thread uses this layer while it inserts rows (a layer a solver evaluating with one thread writes
+    /// into): its rows are then inserted without the locks its concurrent stores take; false (the default) where threads
+    /// may share it. Its symbols' records are inserted as before, under their stores' locks. The repository's type keeps
+    /// its stores thread-safe; this says how one use of the layer accesses them.
+    void set_one_writer(bool one_writer) noexcept;
+
 private:
     friend class KeyedRepository<Repository>;
 

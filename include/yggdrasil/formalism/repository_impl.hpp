@@ -124,6 +124,10 @@ void Repository<SymbolRepo, RelationRepo>::clear_all()
 }
 
 template<typename SymbolRepo, typename RelationRepo>
+void Repository<SymbolRepo, RelationRepo>::set_one_writer(bool one_writer) noexcept
+{ m_impl->relations.set_one_writer(one_writer); }
+
+template<typename SymbolRepo, typename RelationRepo>
 typename Repository<SymbolRepo, RelationRepo>::template OwnParts<false> Repository<SymbolRepo, RelationRepo>::own_parts() const
 {
     using Parts = OwnParts<false>;
