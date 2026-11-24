@@ -22,7 +22,7 @@ jobs:
           # .venv (its stubs are generated at install), and both pyurd's
           # native dependencies (from the index).
           prepare: |
-            "$PYTHON" -m pip install "nanobind-backend>=1.0" "pybrokkr>=0.3.0,<0.4" "pyurd>=0.5.0,<0.6"
+            "$PYTHON" -m pip install "nanobind-backend>=1.0" "pybrokkr>=0.3.0,<0.4" "pyurd>=0.6.0,<0.7"
             cmake -S . -B build/peachycheck -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                   -DYGGDRASIL_BUILD_TESTS=ON -DYGGDRASIL_BUILD_BENCHMARKS=ON \
                   -DCMAKE_INSTALL_LIBDIR=lib \
