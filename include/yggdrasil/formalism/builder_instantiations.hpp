@@ -39,12 +39,12 @@ using BuilderType = boost::mp11::mp_at_c<typename Builder::Types, I>;
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                 \
     template urd::handle<                                                                                                                           \
         urd::builder<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>, typename BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::Context>> \
-        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::do_checkout<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();                  \
+        BOOST_PP_TUPLE_ELEM(2, 1, ARGS)::Base::do_checkout<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();            \
     BOOST_PP_TUPLE_ELEM(2, 0, ARGS)                                                                                                                 \
     template urd::handle<urd::data<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>> BOOST_PP_TUPLE_ELEM(                 \
         2,                                                                                                                                          \
         1,                                                                                                                                          \
-        ARGS)::do_scratch<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();
+        ARGS)::Base::do_scratch<::ygg::formalism::detail::BuilderType<BOOST_PP_TUPLE_ELEM(2, 1, ARGS), I>>();
 
 /// Explicit instantiations (PREFIX extern: declarations) of builder storage Builder (a name without commas: an alias):
 /// construction, destruction, and its members for each of its Count types. The count is checked against its list.
@@ -55,9 +55,9 @@ using BuilderType = boost::mp11::mp_at_c<typename Builder::Types, I>;
 
 /// The same in parts, for a storage of many types split over several sources (brokkr's template rule T5): its
 /// construction and destruction, and its members for its types First..Last-1.
-#define YGG_FORMALISM_BUILDER_MEMBERS(PREFIX, Builder) \
-    PREFIX template Builder::BasicBuilderStorage();    \
-    PREFIX template Builder::~BasicBuilderStorage();
+#define YGG_FORMALISM_BUILDER_MEMBERS(PREFIX, Builder)    \
+    PREFIX template Builder::Base::BasicBuilderStorage(); \
+    PREFIX template Builder::Base::~Base();
 #define YGG_FORMALISM_BUILDER_TYPES(PREFIX, Builder, First, Last) BOOST_PP_REPEAT_FROM_TO(First, Last, YGG_FORMALISM_BUILDER_AT, (PREFIX, Builder))
 
 // NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)

@@ -17,14 +17,14 @@
 namespace ygg::formalism
 {
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename... Ks>
-urd::stored_ref<kind_of_key<urd::key<Ks...>>> HeldPart<O, S, Keys>::operator[](urd::key<Ks...> key) const
+urd::stored_ref<kind_of_key<urd::key<Ks...>>> HeldPart<O, P>::operator[](urd::key<Ks...> key) const
 { return urd::record_at(*m_store, key); }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename... Ks>
-urd::stored_ref<kind_of_key<urd::key<Ks...>>> HeldPart<O, S, Keys>::at(urd::key<Ks...> key) const
+urd::stored_ref<kind_of_key<urd::key<Ks...>>> HeldPart<O, P>::at(urd::key<Ks...> key) const
 {
     if (!urd::contains_key(*m_store, key))
         throw std::out_of_range("ygg::formalism: no layer holds the key.");

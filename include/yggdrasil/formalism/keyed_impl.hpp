@@ -22,9 +22,9 @@
 namespace ygg::formalism
 {
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename T>
-std::optional<urd::index_view<T, std::remove_const_t<O>, key_t<T>>> HeldPart<O, S, Keys>::find(urd::data<T>& record) const
+std::optional<urd::index_view<T, std::remove_const_t<O>, key_t<T>>> HeldPart<O, P>::find(urd::data<T>& record) const
 {
     prepare_for_insert(*m_owner, record);
     const auto key = urd::find_at(*m_store, detail::known(record), record);
@@ -33,9 +33,9 @@ std::optional<urd::index_view<T, std::remove_const_t<O>, key_t<T>>> HeldPart<O, 
     return urd::index_view<T, std::remove_const_t<O>, key_t<T>>(key, held_owner(key));
 }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename T>
-std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> HeldPart<O, S, Keys>::insert(urd::data<T>& record) const
+std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> HeldPart<O, P>::insert(urd::data<T>& record) const
 {
     prepare_for_insert(*m_owner, record);
     const auto [key, inserted] = urd::insert_at(*m_store, detail::known(record), record);
@@ -76,43 +76,43 @@ struct CountMemory
 };
 }  // namespace detail
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename T, typename... Ps>
-std::size_t HeldPart<O, S, Keys>::size(urd::key<Ps...> prefix) const
+std::size_t HeldPart<O, P>::size(urd::key<Ps...> prefix) const
 { return urd::count_at<key_t<T>>(*m_store, prefix, detail::CountRecords {}); }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename T, typename... Ps>
-std::size_t HeldPart<O, S, Keys>::own_size(urd::key<Ps...> prefix) const
+std::size_t HeldPart<O, P>::own_size(urd::key<Ps...> prefix) const
 { return urd::count_at<key_t<T>>(*m_store, prefix, detail::CountOwnRecords {}); }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename T, typename... Ps>
-std::size_t HeldPart<O, S, Keys>::memory_usage(urd::key<Ps...> prefix) const
+std::size_t HeldPart<O, P>::memory_usage(urd::key<Ps...> prefix) const
 { return urd::count_at<key_t<T>>(*m_store, prefix, detail::CountMemory {}); }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename... Ks>
-bool HeldPart<O, S, Keys>::contains(urd::key<Ks...> key) const
+bool HeldPart<O, P>::contains(urd::key<Ks...> key) const
 { return urd::contains_key(*m_store, key); }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename... Ks>
-const std::remove_const_t<O>* HeldPart<O, S, Keys>::owner(urd::key<Ks...> key) const
+const std::remove_const_t<O>* HeldPart<O, P>::owner(urd::key<Ks...> key) const
 {
     if (!contains(key))
         return nullptr;
     return held_owner(key);
 }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename... Ks>
-bool HeldPart<O, S, Keys>::owns(urd::key<Ks...> key) const
+bool HeldPart<O, P>::owns(urd::key<Ks...> key) const
 { return urd::owns_key(*m_store, key); }
 
-template<typename O, typename S, typename Keys>
+template<typename O, std::size_t P>
 template<typename... Ks>
-const std::remove_const_t<O>* HeldPart<O, S, Keys>::held_owner(urd::key<Ks...> key) const
+const std::remove_const_t<O>* HeldPart<O, P>::held_owner(urd::key<Ks...> key) const
 {
     const std::remove_const_t<O>* layer = m_owner;
     while (!layer->owns(key))

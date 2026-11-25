@@ -49,7 +49,7 @@
 namespace ygg::formalism
 {
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 struct Repository<SymbolRepo, RelationRepo>::Impl
 {
     /// A pool key's records stay across clear(), and so do their pools.
@@ -95,7 +95,7 @@ struct Repository<SymbolRepo, RelationRepo>::Impl
     }
 };
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 Repository<SymbolRepo, RelationRepo>::Repository(const Repository* parent) :
     m_parent(parent),
     m_layer(next_layer()),
@@ -103,12 +103,12 @@ Repository<SymbolRepo, RelationRepo>::Repository(const Repository* parent) :
 {
 }
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 Repository<SymbolRepo, RelationRepo>::~Repository()  // NOLINT(modernize-use-equals-default): GCC rejects an explicit instantiation of an out-of-line = default
 {
 }
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 void Repository<SymbolRepo, RelationRepo>::clear()
 {
     boost::mp11::mp_for_each<boost::mp11::mp_transform<std::type_identity, boost::mp11::mp_remove_if<SymbolTypes, Impl::template KeysPools>>>(
@@ -116,25 +116,25 @@ void Repository<SymbolRepo, RelationRepo>::clear()
     m_impl->relations.clear();
 }
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 void Repository<SymbolRepo, RelationRepo>::clear_all()
 {
     m_impl->symbols.clear();
     m_impl->relations.clear();
 }
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 void Repository<SymbolRepo, RelationRepo>::set_one_writer(bool one_writer) noexcept
 { m_impl->relations.set_one_writer(one_writer); }
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 typename Repository<SymbolRepo, RelationRepo>::template OwnParts<false> Repository<SymbolRepo, RelationRepo>::own_parts() const
 {
     using Parts = OwnParts<false>;
     return Parts(std::tuple_element_t<0, Parts>(*this, m_impl->symbols), std::tuple_element_t<1, Parts>(*this, m_impl->relations));
 }
 
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 typename Repository<SymbolRepo, RelationRepo>::template OwnParts<true> Repository<SymbolRepo, RelationRepo>::own_parts()
 {
     using Parts = OwnParts<true>;

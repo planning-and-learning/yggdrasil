@@ -162,9 +162,10 @@ public:
     using KeyTypes = boost::mp11::mp_list<urd::key<Group, Member>>;
     /// Its one part: the members by group, held in place (an ordinary part, as a repository's stores are), as read and
     /// as written into.
+    using PartStores = boost::mp11::mp_list<ByGroup>;
+    using PartKeys = boost::mp11::mp_list<KeyTypes>;
     template<bool Writable>
-    using OwnParts =
-        std::tuple<ygg::formalism::HeldPart<ygg::formalism::detail::access_t<Writable, Groups>, ygg::formalism::detail::access_t<Writable, ByGroup>, KeyTypes>>;
+    using OwnParts = std::tuple<ygg::formalism::HeldPart<ygg::formalism::detail::access_t<Writable, Groups>, 0>>;
 
     explicit Groups(const Groups* parent = nullptr)
     {

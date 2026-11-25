@@ -54,9 +54,12 @@ public:
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
     /// The keys it resolves itself (operator[]): its symbols' indices.
     using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
-    /// Its own part, as read (Writable false) or written into (key_parts): its symbols, behind its Impl.
+    /// Its own part's store and the keys it resolves (HeldPart<Derived, 0>): its symbols, behind its Impl.
+    using PartStores = boost::mp11::mp_list<SymbolStores<ThreadSafe, Ts...>>;
+    using PartKeys = boost::mp11::mp_list<KeyTypes>;
+    /// Its own part, as read (Writable false) or written into (key_parts).
     template<bool Writable>
-    using OwnParts = std::tuple<HeldPart<detail::access_t<Writable, Derived>, detail::access_t<Writable, SymbolStores<ThreadSafe, Ts...>>, KeyTypes>>;
+    using OwnParts = std::tuple<HeldPart<detail::access_t<Writable, Derived>, 0>>;
 
     /// The stores: defined in symbol_context_impl.hpp.
     struct Impl;

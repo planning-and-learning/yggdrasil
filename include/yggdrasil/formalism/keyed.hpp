@@ -42,31 +42,40 @@ template<typename T>
 }
 }  // namespace detail
 
-/// A store a repository O holds (behind its pointer, its Impl, or in place) as a part that resolves the keys Keys (one
-/// type per repository, so that each repository's library instantiates its own): read where S is const, read and
-/// written where it is not. Every key, an index or one of several parts, is read by urd's one fold (urd::record_at,
-/// urd::contains_key: a family of stores first selects the store of the key's kind; keyed_read_impl.hpp, included where
-/// the store is complete, rule 25: naming a part completes no store), and every record stored and found by it
-/// (urd::insert_at, urd::find_at, under the parts of its key it holds), which keyed_impl.hpp applies: only the sources
-/// that instantiate a library's repositories include it, so that every insert runs the prepare_for_insert those sources
-/// see. It names its owner, the repository a record's view is through.
-template<typename O, typename S, typename Keys>
+/// Part P of repository O (read where O is const, read and written where it is not): the store O lists P-th among its
+/// PartStores, which resolves the keys it lists P-th among its PartKeys (one type per repository, so that each
+/// repository's library instantiates its own). Named by its owner and its position only, as the library instantiates
+/// it (part_instantiations.hpp): never by the store's types or its keys, which would spell every kind of record in each
+/// of its members' names (brokkr's template rule T20). Every key, an index or one of several parts, is read by urd's one
+/// fold (urd::record_at, urd::contains_key: a family of stores first selects the store of the key's kind;
+/// keyed_read_impl.hpp, included where the store is complete, rule 25: naming a part completes no store), and every
+/// record stored and found by it (urd::insert_at, urd::find_at, under the parts of its key it holds), which
+/// keyed_impl.hpp applies: only the sources that instantiate a library's repositories include it, so that every insert
+/// runs the prepare_for_insert those sources see. It names its owner, the repository a record's view is through.
+template<typename O, std::size_t P>
 class HeldPart
 {
+public:
+    /// The store it holds, as its owner holds it: read where O is const.
+    using Store = std::conditional_t<std::is_const_v<O>,
+                                     const boost::mp11::mp_at_c<typename std::remove_const_t<O>::PartStores, P>,
+                                     boost::mp11::mp_at_c<typename std::remove_const_t<O>::PartStores, P>>;
+
+private:
     O* m_owner;
-    S* m_store;
+    Store* m_store;
 
 public:
     /// The keys it resolves.
-    using KeyTypes = Keys;
+    using KeyTypes = boost::mp11::mp_at_c<typename std::remove_const_t<O>::PartKeys, P>;
     /// The repository a record of T it holds is viewed through: its owner.
     template<typename T>
     using Owner = std::remove_const_t<O>;
-    /// Whether it writes records under keys K: one of its keys, of a part that writes (S not const).
+    /// Whether it writes records under keys K: one of its keys, of a part that writes (O not const).
     template<typename K>
-    static constexpr bool writes = !std::is_const_v<S> && HoldsKey<HeldPart, K>;
+    static constexpr bool writes = !std::is_const_v<O> && HoldsKey<HeldPart, K>;
 
-    HeldPart(O& owner, S& store) noexcept : m_owner(&owner), m_store(&store) {}
+    HeldPart(O& owner, Store& store) noexcept : m_owner(&owner), m_store(&store) {}
 
     /// The record of a key, through the layers; some layer must hold it (unchecked, as std::vector's). Unconstrained, as
     /// a library instantiates it (Clang names a requires-clause in its symbol, g++ does not).
@@ -123,7 +132,7 @@ public:
 
     /// Stores a record where no layer holds it, prepared first by its owner's domain (prepare_for_insert: canonical,
     /// checked; a no-op where it has nothing to do), under the parts of its key it holds, its key's last part written into
-    /// it: its view, and whether it was stored now. Of a part that writes (S not const).
+    /// it: its view, and whether it was stored now. Of a part that writes (O not const).
     template<typename T>
     std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> insert(urd::data<T>& record) const;
 

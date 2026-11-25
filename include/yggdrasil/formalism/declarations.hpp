@@ -144,8 +144,6 @@ RowsView<F, Ids, C> rows_view(urd::index<F> relation, const Ids& ids, const C& c
 namespace ygg::formalism
 {
 
-template<typename SymbolRepo, typename RelationRepo>
-class Repository;
 template<bool ThreadSafe, typename... Ts>
 class SymbolStores;
 template<typename... Ts>
@@ -162,22 +160,39 @@ class ConcurrentRelationRepository;
 template<typename... Ts>
 struct Symbols
 {
+    using List = Symbols;
 };
 
 template<typename... Ts>
 struct ConcurrentSymbols
 {
+    using List = ConcurrentSymbols;
 };
 
 template<typename... Ts>
 struct Relations
 {
+    using List = Relations;
 };
 
 template<typename... Ts>
 struct ConcurrentRelations
 {
+    using List = ConcurrentRelations;
 };
+
+/// Whether Held names a list it is not: a library's class deriving from Symbols<...>, ConcurrentSymbols<...>,
+/// Relations<...> or ConcurrentRelations<...>, so that a Repository named by it, and everything that names that Repository,
+/// spells its short name instead of every type of the list (the list's types, spelled out, are most of the names of its
+/// symbols and of their debug info). Its traits are its list's.
+template<typename Held>
+concept NamesList = requires { typename Held::List; } && !std::same_as<Held, typename Held::List>;
+
+/// A repository of the symbols SymbolRepo and the relations RelationRepo: each a class of its own deriving from
+/// Symbols<...> or ConcurrentSymbols<...>, Relations<...> or ConcurrentRelations<...> (NamesList), so that the names of
+/// everything over it spell their names, not every one of its types (brokkr's template rule T20).
+template<NamesList SymbolRepo, NamesList RelationRepo>
+class Repository;
 
 namespace detail
 {
@@ -212,8 +227,18 @@ struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
     using Store = SymbolStores<true, Ts...>;
 };
 
+template<NamesList Held>
+struct symbol_repository_traits<Held> : symbol_repository_traits<typename Held::List>
+{
+};
+
 template<typename Held>
 struct relation_repository_traits;
+
+template<NamesList Held>
+struct relation_repository_traits<Held> : relation_repository_traits<typename Held::List>
+{
+};
 
 template<typename... Ts>
 struct relation_repository_traits<Relations<Ts...>>
@@ -234,15 +259,6 @@ struct relation_repository_traits<ConcurrentRelations<Ts...>>
     using Store = ConcurrentRelationRepository<Ts...>;
 };
 
-template<typename... Ts>
-struct relation_repository_traits<RelationRepository<Ts...>> : relation_repository_traits<Relations<Ts...>>
-{
-};
-
-template<typename... Ts>
-struct relation_repository_traits<ConcurrentRelationRepository<Ts...>> : relation_repository_traits<ConcurrentRelations<Ts...>>
-{
-};
 }  // namespace detail
 
 /// Whether a repository's symbol inventory contains T.

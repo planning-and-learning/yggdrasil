@@ -710,7 +710,67 @@ TEST(YggdrasilTests, RowBuilderReadsItsTypesFromItsRelationInEachForm)
     EXPECT_THROW(static_cast<void>(stored.get<bool>()), std::invalid_argument);  // its second column is no bool
 }
 
-using CommonBuilderStorage = ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesElement, RepositoryTypesBuilderOther>;
+// The tests' repositories and builder storages, named by classes of their own (brokkr's template rule T20).
+namespace
+{
+struct ContractSymbols : ygg::formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>
+{
+};
+
+struct ContractConcurrentSymbols : ygg::formalism::ConcurrentSymbols<RepositoryTypesElement, RepositoryTypesRelation>
+{
+};
+
+struct ElementSymbols : ygg::formalism::Symbols<RepositoryTypesElement>
+{
+};
+
+struct ObjectRelationSymbols : ygg::formalism::Symbols<ygg::formalism::Object, RepositoryTypesRelation>
+{
+};
+
+struct ElementObjectSymbols : ygg::formalism::Symbols<RepositoryTypesElement, ygg::formalism::Object>
+{
+};
+
+struct RelationObjectSymbols : ygg::formalism::Symbols<RepositoryTypesRelation, ygg::formalism::Object>
+{
+};
+
+struct ContractRelations : ygg::formalism::Relations<RepositoryTypesRelation>
+{
+};
+
+struct ContractConcurrentRelations : ygg::formalism::ConcurrentRelations<RepositoryTypesRelation>
+{
+};
+
+struct RowRelations : ygg::formalism::Relations<RepositoryTypesRelation, RepositoryTypesElement>
+{
+};
+
+struct ConcurrentRowRelations : ygg::formalism::ConcurrentRelations<RepositoryTypesRelation, RepositoryTypesElement>
+{
+};
+
+struct CommonBuilders : ygg::formalism::Builders<RepositoryTypesElement, RepositoryTypesBuilderOther>
+{
+};
+
+struct ContractBuilders : ygg::formalism::Builders<RepositoryTypesCheckout>
+{
+};
+
+struct ElementBuilders : ygg::formalism::Builders<RepositoryTypesElement>
+{
+};
+
+struct ObjectRowBuilders : ygg::formalism::Builders<ygg::formalism::Object, RepositoryTypesRelation, ygg::Row<RepositoryTypesRelation>>
+{
+};
+}  // namespace
+
+using CommonBuilderStorage = ygg::formalism::BasicBuilderStorage<BuilderContext, CommonBuilders>;
 
 TEST(YggdrasilTests, CommonBuilderStorageReusesReleasedBuildersByType)
 {
@@ -739,7 +799,7 @@ concept CanCheckout = requires(Storage& storage) {
     ygg::formalism::checkout<T>(storage);
 };
 
-using ContractBuilderStorage = ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesCheckout>;
+using ContractBuilderStorage = ygg::formalism::BasicBuilderStorage<BuilderContext, ContractBuilders>;
 static_assert(std::is_default_constructible_v<ContractBuilderStorage>);
 static_assert(!std::is_copy_constructible_v<ContractBuilderStorage>);
 static_assert(!std::is_copy_assignable_v<ContractBuilderStorage>);
@@ -747,7 +807,7 @@ static_assert(!std::is_move_constructible_v<ContractBuilderStorage>);
 static_assert(!std::is_move_assignable_v<ContractBuilderStorage>);
 
 static_assert(CanCheckout<RepositoryTypesCheckout, ContractBuilderStorage>);
-static_assert(!CanCheckout<RepositoryTypesCheckout, ygg::formalism::BuilderStorage<BuilderContext, RepositoryTypesElement>>);
+static_assert(!CanCheckout<RepositoryTypesCheckout, ygg::formalism::BasicBuilderStorage<BuilderContext, ElementBuilders>>);
 
 TEST(YggdrasilTests, CommonBuilderCheckoutClearsAndRetainsCapacity)
 {
@@ -781,10 +841,8 @@ template<typename Repository, typename T>
 concept CanUseAnyLocalSymbolOperation =
     requires(Repository& repository) { repository.template get<T>(); } || requires(const Repository& repository) { repository.template get<T>(); };
 
-using ContractSymbols = formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>;
-using ContractConcurrentSymbols = formalism::ConcurrentSymbols<RepositoryTypesElement, RepositoryTypesRelation>;
-using ContractRepository = formalism::Repository<ContractSymbols, formalism::RelationRepository<RepositoryTypesRelation>>;
-using ContractConcurrentRepository = formalism::Repository<ContractConcurrentSymbols, formalism::ConcurrentRelationRepository<RepositoryTypesRelation>>;
+using ContractRepository = formalism::Repository<ContractSymbols, ContractRelations>;
+using ContractConcurrentRepository = formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>;
 using ContractBinding = Row<RepositoryTypesRelation>;
 static_assert(std::same_as<ContractRepository::SymbolTypes, boost::mp11::mp_list<RepositoryTypesElement, RepositoryTypesRelation>>);
 static_assert(std::same_as<ContractConcurrentRepository::SymbolTypes, ContractRepository::SymbolTypes>);
@@ -800,16 +858,17 @@ static_assert(!CanUseAnyLocalSymbolOperation<ContractConcurrentRepository, Repos
 static_assert(Viewable<urd::index<RepositoryTypesElement>, ContractRepository>);
 static_assert(!Viewable<urd::index<RepositoryTypesSerializedElement>, ContractRepository>);
 
-using ContractRelations = formalism::RelationRepository<RepositoryTypesRelation>;
-using ContractConcurrentRelations = formalism::ConcurrentRelationRepository<RepositoryTypesRelation>;
-static_assert(std::same_as<ContractRelations::RelationTypes, boost::mp11::mp_list<RepositoryTypesRelation>>);
-static_assert(std::same_as<ContractConcurrentRelations::RelationTypes, ContractRelations::RelationTypes>);
-static_assert(std::same_as<ContractRepository::RelationTypes, ContractRelations::RelationTypes>);
-static_assert(formalism::HasRows<ContractRelations, RepositoryTypesRelation>);
+// The stores of the relations (what a Repository holds behind its Impl) list them as the repository does.
+using ContractRelationStore = formalism::RelationRepository<RepositoryTypesRelation>;
+using ContractConcurrentRelationStore = formalism::ConcurrentRelationRepository<RepositoryTypesRelation>;
+static_assert(std::same_as<ContractRelationStore::RelationTypes, boost::mp11::mp_list<RepositoryTypesRelation>>);
+static_assert(std::same_as<ContractConcurrentRelationStore::RelationTypes, ContractRelationStore::RelationTypes>);
+static_assert(std::same_as<ContractRepository::RelationTypes, ContractRelationStore::RelationTypes>);
+static_assert(formalism::HasRows<ContractRelationStore, RepositoryTypesRelation>);
 static_assert(formalism::HasRows<ContractRepository, RepositoryTypesRelation>);
-static_assert(!formalism::HasRows<ContractRelations, RepositoryTypesElement>);
+static_assert(!formalism::HasRows<ContractRelationStore, RepositoryTypesElement>);
 static_assert(!formalism::HasRows<int, RepositoryTypesRelation>);
-static_assert(std::same_as<formalism::BuilderStorage<BuilderContext, RepositoryTypesCheckout>::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
+static_assert(std::same_as<ContractBuilderStorage::Types, boost::mp11::mp_list<RepositoryTypesCheckout>>);
 
 template<typename Repository, typename T>
 concept CanUseUnsupportedRelation = requires(Repository& repository, urd::data<Row<T>>& data) { repository.insert(data); }
@@ -864,8 +923,8 @@ static void expect_row_access_for_each_relation_type()
 
 TEST(YggdrasilTests, CommonRelationAccessUsesDecodedObjectTypeForEveryRelation)
 {
-    expect_row_access_for_each_relation_type<formalism::RelationRepository<RepositoryTypesRelation, RepositoryTypesElement>>();
-    expect_row_access_for_each_relation_type<formalism::ConcurrentRelationRepository<RepositoryTypesRelation, RepositoryTypesElement>>();
+    expect_row_access_for_each_relation_type<RowRelations>();
+    expect_row_access_for_each_relation_type<ConcurrentRowRelations>();
 }
 
 /// Whether a row view resolves its columns of T, in each form: one column, a range of columns, every column.
@@ -874,15 +933,14 @@ concept ResolvesColumn = requires(const V& view) { view.template resolve<T>(std:
 template<typename V, typename T>
 concept ResolvesEveryColumn = requires(const V& view) { view.template resolve<T>(); };
 
-using ObjectRowRepository =
-    formalism::Repository<formalism::Symbols<formalism::Object, RepositoryTypesRelation>, formalism::RelationRepository<RepositoryTypesRelation>>;
+using ObjectRowRepository = formalism::Repository<ObjectRelationSymbols, ContractRelations>;
 using ObjectRow = RowView<RepositoryTypesRelation, ObjectRowRepository>;
 static_assert(ResolvesColumn<ObjectRow, formalism::Object> && ResolvesEveryColumn<ObjectRow, formalism::Object>);
 using FreeRow = RowView<Schema, ygg::FreeRelationRepository>;
 static_assert(!ResolvesColumn<FreeRow, formalism::Object> && !ResolvesEveryColumn<FreeRow, formalism::Object>);
 static_assert(!ResolvesColumn<RowBuilderView<Schema, ygg::FreeRelationRepository>, formalism::Object>);
 
-using ObjectRowStorage = formalism::BuilderStorage<ObjectRowRepository, formalism::Object, RepositoryTypesRelation, Row<RepositoryTypesRelation>>;
+using ObjectRowStorage = formalism::BasicBuilderStorage<ObjectRowRepository, ObjectRowBuilders>;
 
 /// A row copied between sibling layers whose own objects differ names the same objects: each object column's object is
 /// copied as a child (a parent's kept, the source layer's interned in the target by its fields), however the layers
@@ -973,7 +1031,7 @@ TEST(YggdrasilTests, SeesAllObjectsOfASiblingWithoutItsOwn)
 TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelation)
 {
     using Object = formalism::Object;
-    using Repository = formalism::Repository<formalism::Symbols<Object, RepositoryTypesRelation>, formalism::RelationRepository<RepositoryTypesRelation>>;
+    using Repository = formalism::Repository<ObjectRelationSymbols, ContractRelations>;
     Repository repository;
     auto first = urd::data<Object>(5);
     auto second = urd::data<Object>(8);
@@ -989,8 +1047,7 @@ TEST(YggdrasilTests, CommonRowValuesTextWritesEachColumnAsItsTypeWithoutTheRelat
 namespace
 {
 /// A repository whose domain prepares its elements (a hook of its own, counting its calls).
-using PreparingRepository =
-    formalism::Repository<formalism::Symbols<RepositoryTypesElement, formalism::Object>, formalism::RelationRepository<RepositoryTypesRelation>>;
+using PreparingRepository = formalism::Repository<ElementObjectSymbols, ContractRelations>;
 
 /// The number of times the hook ran.
 std::size_t& preparations()
@@ -1050,9 +1107,7 @@ TEST(YggdrasilTests, CommonInterningAcceptsRowsWithoutSymbolIdentity)
 
 TEST(YggdrasilTests, CommonRepositoryLayersHaveDistinctNumbersAndParents)
 {
-    using SymbolRepo = ygg::formalism::Symbols<RepositoryTypesElement>;
-    using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesRelation>;
-    using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
+    using Repository = ygg::formalism::Repository<ElementSymbols, ContractRelations>;
 
     auto root = Repository();
     auto child = Repository(&root);
@@ -1068,9 +1123,7 @@ TEST(YggdrasilTests, CommonRepositoryLayersHaveDistinctNumbersAndParents)
 TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
 {
     using Object = ygg::formalism::Object;
-    using SymbolRepo = ygg::formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>;
-    using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesRelation>;
-    using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
+    using Repository = ygg::formalism::Repository<ContractSymbols, ContractRelations>;
     using LayerRowView = RowView<RepositoryTypesRelation, Repository>;
 
     auto first_repository = Repository();
@@ -1117,7 +1170,7 @@ TEST(YggdrasilTests, CommonRowViewIdentityUsesTheOwningLayer)
 template<typename V>
 concept HasPublishedRowKey = requires(const V& view) { view.index(); };
 
-using RowViewRepository = formalism::Repository<formalism::Symbols<RepositoryTypesRelation, formalism::Object>, ContractRelations>;
+using RowViewRepository = formalism::Repository<RelationObjectSymbols, ContractRelations>;
 using BorrowedContractRowView = RowBuilderView<RepositoryTypesRelation, RowViewRepository>;
 using OwnedContractRowView = urd::borrowed_view<ContractBinding, RowViewRepository>;
 static_assert(RowViewConcept<OwnedContractRowView, RepositoryTypesRelation>);
@@ -1257,9 +1310,7 @@ TEST(YggdrasilTests, CommonRepositoryRejectsWrongArityWithoutMutation)
 TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
 {
     using Object = ygg::formalism::Object;
-    using Symbols = ygg::formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>;
-    using RelationRepository = ygg::formalism::RelationRepository<RepositoryTypesRelation>;
-    using Repository = ygg::formalism::Repository<Symbols, RelationRepository>;
+    using Repository = ygg::formalism::Repository<ContractSymbols, ContractRelations>;
 
     auto repository = Repository();
     EXPECT_EQ(repository.memory_usage<RepositoryTypesElement>(), 0);
@@ -1291,9 +1342,7 @@ TEST(YggdrasilTests, CommonRepositoryReportsOwnedMemory)
 
 TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
 {
-    using SymbolRepo = ygg::formalism::Symbols<RepositoryTypesElement>;
-    using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesRelation>;
-    using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
+    using Repository = ygg::formalism::Repository<ElementSymbols, ContractRelations>;
 
     auto repository = Repository();
 
@@ -1315,9 +1364,7 @@ TEST(YggdrasilTests, CommonRepositoryThrowsForMissingSymbolIndices)
 TEST(YggdrasilTests, CommonRepositoryThrowsForMissingRowIndices)
 {
     using Object = ygg::formalism::Object;
-    using SymbolRepo = ygg::formalism::Symbols<RepositoryTypesElement, RepositoryTypesRelation>;
-    using RelationRepo = ygg::formalism::RelationRepository<RepositoryTypesRelation>;
-    using Repository = ygg::formalism::Repository<SymbolRepo, RelationRepo>;
+    using Repository = ygg::formalism::Repository<ContractSymbols, ContractRelations>;
 
     auto repository = Repository();
     const auto relation = declared<RepositoryTypesRelation>(repository, 2);
@@ -1399,7 +1446,7 @@ static void check_symbol_membership()
 TEST(YggdrasilTests, CommonSymbolMembershipChecksCanonicalOwnersAcrossLayers)
 {
     check_symbol_membership<ContractRepository>();
-    check_symbol_membership<formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>>();
+    check_symbol_membership<ContractConcurrentRepository>();
 }
 
 template<typename Repository>
@@ -1458,7 +1505,7 @@ static void check_relation_membership()
 TEST(YggdrasilTests, CommonRelationMembershipChecksCanonicalOwnersAcrossLayers)
 {
     check_relation_membership<ContractRepository>();
-    check_relation_membership<formalism::Repository<ContractConcurrentSymbols, ContractConcurrentRelations>>();
+    check_relation_membership<ContractConcurrentRepository>();
 }
 
 }  // namespace ygg::tests

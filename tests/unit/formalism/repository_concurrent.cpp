@@ -244,14 +244,30 @@ urd::index<ConcurrentRelation<Width>> declared_relation(Repository& repository, 
     return repository.insert(key).first.index();
 }
 
+// The repositories' symbols and relations, named by classes of their own (brokkr's template rule T20).
 template<typename Width>
-using ConcurrentRepository = formalism::Repository<formalism::ConcurrentSymbols<ConcurrentElement, ConcurrentSerializedElement, ConcurrentRelation<Width>>,
-                                                   formalism::ConcurrentRelationRepository<ConcurrentRelation<Width>>>;
+struct ConcurrentTestSymbols : formalism::ConcurrentSymbols<ConcurrentElement, ConcurrentSerializedElement, ConcurrentRelation<Width>>
+{
+};
 
-using SequentialRepository = formalism::Repository<formalism::Symbols<ConcurrentElement, ConcurrentSerializedElement, ConcurrentRelation<urd::word>>,
-                                                   formalism::RelationRepository<ConcurrentRelation<urd::word>>>;
-using MixedRepository = formalism::Repository<formalism::ConcurrentSymbols<ConcurrentElement, ConcurrentSerializedElement, ConcurrentRelation<urd::word>>,
-                                              formalism::RelationRepository<ConcurrentRelation<urd::word>>>;
+template<typename Width>
+struct ConcurrentTestRelations : formalism::ConcurrentRelations<ConcurrentRelation<Width>>
+{
+};
+
+struct SequentialTestSymbols : formalism::Symbols<ConcurrentElement, ConcurrentSerializedElement, ConcurrentRelation<urd::word>>
+{
+};
+
+struct SequentialTestRelations : formalism::Relations<ConcurrentRelation<urd::word>>
+{
+};
+
+template<typename Width>
+using ConcurrentRepository = formalism::Repository<ConcurrentTestSymbols<Width>, ConcurrentTestRelations<Width>>;
+
+using SequentialRepository = formalism::Repository<SequentialTestSymbols, SequentialTestRelations>;
+using MixedRepository = formalism::Repository<ConcurrentTestSymbols<urd::word>, SequentialTestRelations>;
 
 /// Whether both halves of a repository layer are thread-safe.
 template<typename Repository>

@@ -10,6 +10,8 @@
 #ifndef YGG_FORMALISM_BUILDER_HPP_
 #define YGG_FORMALISM_BUILDER_HPP_
 
+#include "yggdrasil/formalism/declarations.hpp"
+
 #include <boost/mp11.hpp>
 #include <memory>
 #include <urd/elements/builder.hpp>
@@ -33,6 +35,8 @@ public:
     /// The context the builders' children are read through: the repository they are interned into.
     using Context = C;
     using Types = boost::mp11::mp_list<Ts...>;
+    /// The storage whose members a library instantiates (builder_instantiations.hpp): this one.
+    using Base = BasicBuilderStorage;
 
     /// The pools: defined in builder_impl.hpp.
     struct Impl;
@@ -70,9 +74,35 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-/// The builder storage of the types Ts, interned into context C.
-template<typename C, typename... Ts>
-using BuilderStorage = BasicBuilderStorage<C, boost::mp11::mp_list<Ts...>>;
+/// The builder types of a storage, as a list: a library derives a class of its own from one (NamesList), so that the
+/// names of everything that takes its storage spell that class's name instead of every one of its types.
+template<typename... Ts>
+struct Builders
+{
+    using List = Builders;
+};
+
+namespace detail
+{
+template<typename List>
+struct builder_types;
+
+template<typename... Ts>
+struct builder_types<Builders<Ts...>>
+{
+    using type = boost::mp11::mp_list<Ts...>;
+};
+}  // namespace detail
+
+/// The builder storage of a named list of builder types (a class deriving from Builders<Ts...>): the storage of its
+/// types, under the list's name.
+template<typename C, NamesList Named>
+class BasicBuilderStorage<C, Named> : public BasicBuilderStorage<C, typename detail::builder_types<typename Named::List>::type>
+{
+public:
+    /// The storage whose members a library instantiates (builder_instantiations.hpp): the one of its types.
+    using Base = BasicBuilderStorage<C, typename detail::builder_types<typename Named::List>::type>;
+};
 
 /// Whether S is a builder storage (a BasicBuilderStorage, of any repository): what interning takes its scratch
 /// records from (scratch<T>()), for its own records and for those of the repositories nested in it alike.

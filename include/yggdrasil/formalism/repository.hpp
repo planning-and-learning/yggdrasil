@@ -60,7 +60,7 @@ namespace ygg::formalism
 /// pointer to its Impl, which repository_impl.hpp defines with every member. A library includes repository_impl.hpp in
 /// one source and instantiates its repositories' members there (repository_instantiations.hpp); its other sources
 /// include this header only, and instantiate none of the stores.
-template<typename SymbolRepo, typename RelationRepo>
+template<NamesList SymbolRepo, NamesList RelationRepo>
 class Repository : public KeyedRepository<Repository<SymbolRepo, RelationRepo>>
 {
 public:
@@ -69,15 +69,15 @@ public:
     /// The keys it resolves (operator[]): its symbols' and its relation repository's.
     using KeyTypes = boost::mp11::mp_append<typename detail::symbol_repository_traits<SymbolRepo>::KeyTypes,
                                             typename detail::relation_repository_traits<RelationRepo>::KeyTypes>;
-    /// Its own parts, behind its Impl, as read (Writable false) or written into (key_parts): its symbol repository, then
-    /// its relation repository (own_parts()). It nests no repository.
+    /// Its own parts' stores and the keys each resolves (HeldPart<Repository, P>), behind its Impl: its symbol
+    /// repository, then its relation repository (own_parts()). It nests no repository.
+    using PartStores =
+        boost::mp11::mp_list<typename detail::symbol_repository_traits<SymbolRepo>::Store, typename detail::relation_repository_traits<RelationRepo>::Store>;
+    using PartKeys = boost::mp11::mp_list<typename detail::symbol_repository_traits<SymbolRepo>::KeyTypes,
+                                          typename detail::relation_repository_traits<RelationRepo>::KeyTypes>;
+    /// Its own parts, as read (Writable false) or written into (key_parts).
     template<bool Writable>
-    using OwnParts = std::tuple<HeldPart<detail::access_t<Writable, Repository>,
-                                         detail::access_t<Writable, typename detail::symbol_repository_traits<SymbolRepo>::Store>,
-                                         typename detail::symbol_repository_traits<SymbolRepo>::KeyTypes>,
-                                HeldPart<detail::access_t<Writable, Repository>,
-                                         detail::access_t<Writable, typename detail::relation_repository_traits<RelationRepo>::Store>,
-                                         typename detail::relation_repository_traits<RelationRepo>::KeyTypes>>;
+    using OwnParts = std::tuple<HeldPart<detail::access_t<Writable, Repository>, 0>, HeldPart<detail::access_t<Writable, Repository>, 1>>;
     /// Whether finds, inserts and lookups may overlap (its symbols and its relations concurrent).
     static constexpr bool thread_safe =
         detail::symbol_repository_traits<SymbolRepo>::thread_safe && detail::relation_repository_traits<RelationRepo>::thread_safe;

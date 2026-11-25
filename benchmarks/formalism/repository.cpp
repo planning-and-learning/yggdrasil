@@ -172,10 +172,21 @@ constexpr std::uint64_t kPrefill = 1U << 16;
 constexpr benchmark::IterationCount kLookupIterations = 1U << 20;
 constexpr benchmark::IterationCount kInsertIterations = 1U << 18;
 
-using SequentialSymbols = formalism::Symbols<TrivialSymbol, SerializedSymbol, Relation>;
-using ConcurrentSymbols = formalism::ConcurrentSymbols<TrivialSymbol, SerializedSymbol, Relation>;
-using SequentialBlockRelations = formalism::RelationRepository<Relation>;
-using ConcurrentBlockRelations = formalism::ConcurrentRelationRepository<Relation>;
+struct SequentialSymbols : formalism::Symbols<TrivialSymbol, SerializedSymbol, Relation>
+{
+};
+
+struct ConcurrentSymbols : formalism::ConcurrentSymbols<TrivialSymbol, SerializedSymbol, Relation>
+{
+};
+
+struct SequentialBlockRelations : formalism::Relations<Relation>
+{
+};
+
+struct ConcurrentBlockRelations : formalism::ConcurrentRelations<Relation>
+{
+};
 
 using SequentialBlockRepository = formalism::Repository<SequentialSymbols, SequentialBlockRelations>;
 using ConcurrentBlockRepository = formalism::Repository<ConcurrentSymbols, ConcurrentBlockRelations>;
