@@ -19,11 +19,12 @@ namespace ygg::serialization
 namespace detail
 {
 
-/// The fields of a record of T (urd::Fields), in order, each under its name, read through the view of any form.
-template<typename T, typename Archive>
+/// The fields of a record R (urd::Fields: a data<T>, or a builder<T, C>, whose fields are its record's), in order, each
+/// under its name, read through a view of R.
+template<typename R, typename Archive>
 void describe_record(Archive& ar)
 {
-    urd::for_each_field<urd::data<T>>([&]<typename F>()
+    urd::for_each_field<R>([&]<typename F>()
                                       { ar.field(F::name, [](const auto& value) -> decltype(auto) { return value.template member<F::member>(); }); });
 }
 
@@ -60,24 +61,24 @@ struct FieldWriter
 template<typename Archive, typename T, typename C, typename K>
     requires urd::HasFields<urd::data<T>>
 void describe_fields(Archive& ar, std::type_identity<urd::index_view<T, C, K>> /*type*/)
-{ detail::describe_record<T>(ar); }
+{ detail::describe_record<urd::data<T>>(ar); }
 
 /// A record held outside its context (a borrowed, owning or shared view of its data<T> or its builder) by its fields,
-/// as its index_view is.
+/// as its index_view is: read through the view's own record (a builder's fields under its record's names).
 template<typename Archive, typename T, typename C, typename R>
     requires urd::HasFields<urd::data<T>>
 void describe_fields(Archive& ar, std::type_identity<urd::borrowed_view<T, C, R>> /*type*/)
-{ detail::describe_record<T>(ar); }
+{ detail::describe_record<R>(ar); }
 
 template<typename Archive, typename T, typename C, typename R>
     requires urd::HasFields<urd::data<T>>
 void describe_fields(Archive& ar, std::type_identity<urd::owning_view<T, C, R>> /*type*/)
-{ detail::describe_record<T>(ar); }
+{ detail::describe_record<R>(ar); }
 
 template<typename Archive, typename T, typename C, typename R>
     requires urd::HasFields<urd::data<T>>
 void describe_fields(Archive& ar, std::type_identity<urd::shared_view<T, C, R>> /*type*/)
-{ detail::describe_record<T>(ar); }
+{ detail::describe_record<R>(ar); }
 
 /// A record read without a context (a data<T> held as it is: a graph's label, a column's layout) by its fields, each as
 /// it holds it.
