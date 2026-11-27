@@ -22,24 +22,7 @@
 #include <urd/format.hpp>
 #include <variant>
 
-// What urd/format.hpp does not write of the free relations: a column and a row's key. Their records and views are
-// written as urd writes a record.
-
-namespace fmt
-{
-
-/// A column: label:type.
-template<>
-struct formatter<urd::data<ygg::ColumnLayout>, char>
-{
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const urd::data<ygg::ColumnLayout>& value, FormatContext& ctx) const
-    { return fmt::format_to(ctx.out(), "{}:{}", value.label, value.type); }
-};
-
-}  // namespace fmt
+// A row's values as text; its records and views, the columns among them, are written as urd writes a record.
 
 namespace ygg
 {

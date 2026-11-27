@@ -19,12 +19,16 @@
 #define YGG_FORMATTING_FORMATTER_HPP_
 
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/core/unsigned_integer.hpp"
 
+#include <concepts>
 #include <fmt/format.h>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <urd/repr/sequences/sequence.hpp>
 #include <urd/store.hpp>
 #include <variant>
@@ -85,6 +89,26 @@ struct formatter<std::unique_ptr<T, Deleter>, char>
             return fmt::format_to(ctx.out(), "{}", *value);
         return fmt::format_to(ctx.out(), "<nullptr>");
     }
+};
+
+/// An enum that names its values (to_string, found by its namespace): its name.
+template<typename E>
+    requires std::is_enum_v<E> && requires(E value) { std::string_view(to_string(value)); }
+struct formatter<E, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    auto format(E value, format_context& ctx) const { return fmt::format_to(ctx.out(), "{}", std::string_view(to_string(value))); }
+};
+
+/// An unsigned integer of its own type (ygg::UnsignedInteger): its value.
+template<typename T>
+    requires std::derived_from<T, ygg::UnsignedInteger<T>>
+struct formatter<T, char>
+{
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    auto format(const T& value, format_context& ctx) const { return fmt::format_to(ctx.out(), "{}", value.value); }
 };
 
 template<>
