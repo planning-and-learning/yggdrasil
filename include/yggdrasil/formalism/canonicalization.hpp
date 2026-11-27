@@ -45,6 +45,12 @@ decltype(auto) with_values(const std::variant<Vs...>& row, F&& f)
     return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); });
 }
 
+template<urd::ChildView R, typename F>
+decltype(auto) with_values(const R& row, F&& f)
+{
+    return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); });
+}
+
 /// The value of a column of a row in any of those forms (with_values).
 template<typename R>
 Value value_of(const R& row, std::size_t column)

@@ -136,6 +136,35 @@ public:
     template<typename T>
     std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> insert(urd::data<T>& record) const;
 
+    /// Interns a builder of T where its store interns builders itself (store.insert_built(builder, hints...): the key of
+    /// the record, and whether it was stored now), with the hints the store takes: its view, and whether it was stored
+    /// now. Of a part that writes (O not const).
+    template<typename T, typename C, typename... Hints>
+        requires(!std::is_const_v<O>) && requires(Store& store, const urd::builder<T, C>& built, const Hints&... hints) { store.insert_built(built, hints...); }
+    std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> insert_built(const urd::builder<T, C>& built, const Hints&... hints) const
+    {
+        const auto [key, inserted] = m_store->insert_built(built, hints...);
+        return { view(key), inserted };
+    }
+
+    /// The view of the record a builder of T writes, where its store finds builders itself (store.find_built(builder,
+    /// hints...): the optional key of its record), with the hints the store takes.
+    template<typename T, typename C, typename... Hints>
+        requires requires(const Store& store, const urd::builder<T, C>& built, const Hints&... hints) { store.find_built(built, hints...); }
+    [[nodiscard]] std::optional<urd::index_view<T, std::remove_const_t<O>, key_t<T>>> find_built(const urd::builder<T, C>& built, const Hints&... hints) const
+    {
+        if (const auto key = m_store->find_built(built, hints...))
+            return view(*key);
+        return std::nullopt;
+    }
+
+    /// Reads the stored record of a key into a builder, where its store unpacks records itself (store.unpack_built(key,
+    /// builder): the builder's fields as the record's, its buffers reused).
+    template<typename T, typename C, typename... Ks>
+        requires requires(const Store& store, urd::key<Ks...> key, urd::builder<T, C>& built) { store.unpack_built(key, built); }
+    void unpack_built(urd::key<Ks...> key, urd::builder<T, C>& built) const
+    { m_store->unpack_built(key, built); }
+
 private:
     /// The layer that owns the record of a key some layer holds (found or inserted just now): of its owner and the layers
     /// below it, the first that holds it itself.
@@ -438,6 +467,48 @@ public:
         else
             return part_of<key_t<T>, true>(self()).insert(built, storage);
     }
+
+    /// Interns a builder through the part that holds its kind, where that part's store interns builders itself
+    /// (HeldPart::insert_built), with the hints it takes: what insert(builder, storage) gives.
+    template<typename T, typename C, typename... Hints>
+        requires requires(typename detail::key_part<Derived, key_t<T>, true>::type part, const urd::builder<T, C>& built, const Hints&... hints) {
+            part.insert_built(built, hints...);
+        }
+    std::pair<urd::index_view<T, Owner<T>, key_t<T>>, bool> insert_built(const urd::builder<T, C>& built, const Hints&... hints)
+    { return part_of<key_t<T>, true>(self()).insert_built(built, hints...); }
+
+    /// Finds the record a builder writes through the part that holds its kind, where that part's store finds builders
+    /// itself (HeldPart::find_built), with the hints it takes.
+    template<typename T, typename C, typename... Hints>
+        requires requires(typename detail::key_part<Derived, key_t<T>, false>::type part, const urd::builder<T, C>& built, const Hints&... hints) {
+            part.find_built(built, hints...);
+        }
+    [[nodiscard]] std::optional<urd::index_view<T, Owner<T>, key_t<T>>> find_built(const urd::builder<T, C>& built, const Hints&... hints) const
+    { return part_of<key_t<T>, false>(self()).find_built(built, hints...); }
+
+    /// Finds the record a builder writes as find(builder, storage) does, with hints: each child whose part finds builders
+    /// itself (find_built) gets the hints that part takes.
+    template<typename T, typename C, IsBuilderStorage Storage, typename Hint, typename... Hints>
+        requires std::same_as<C, Derived>
+    std::optional<urd::index_view<T, Owner<T>, key_t<T>>> find(const urd::builder<T, C>& built, Storage& storage, const Hint& hint, const Hints&... hints)
+    { return detail::find_child(static_cast<Derived&>(*this), storage, built, hint, hints...); }
+
+    /// Reads the stored record of a key into a builder through the part that holds it, where that part's store unpacks
+    /// records itself (HeldPart::unpack_built).
+    template<typename T, typename C, typename... Ks>
+        requires requires(typename detail::key_part<Derived, urd::key<Ks...>, false>::type part, urd::key<Ks...> key, urd::builder<T, C>& built) {
+            part.unpack_built(key, built);
+        }
+    void unpack_built(urd::key<Ks...> key, urd::builder<T, C>& built) const
+    { part_of<urd::key<Ks...>, false>(self()).unpack_built(key, built); }
+
+    /// Interns a builder as insert(builder, storage) does, with hints: each child whose part interns builders itself
+    /// (insert_built) gets the hints that part takes (a state's storages, its parent and its changes, say); the others
+    /// are interned as they are.
+    template<typename T, typename C, IsBuilderStorage Storage, typename Hint, typename... Hints>
+        requires std::same_as<C, Derived>
+    std::pair<urd::index_view<T, Owner<T>, key_t<T>>, bool> insert(const urd::builder<T, C>& built, Storage& storage, const Hint& hint, const Hints&... hints)
+    { return detail::insert_child(static_cast<Derived&>(*this), storage, built, hint, hints...); }
 
     /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
     /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record.

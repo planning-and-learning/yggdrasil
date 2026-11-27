@@ -16,6 +16,7 @@
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
+#include <urd/elements/child_view.hpp>
 #include <urd/elements/concepts.hpp>
 #include <urd/elements/equal_to.hpp>
 #include <urd/elements/hash.hpp>
@@ -41,18 +42,21 @@ using Index = urd::Store<urd::pool<T>>;
 template<typename T>
 concept Described = requires(FieldNames& archive) { describe_fields(archive, std::type_identity<T> {}); };
 
-/// Ranges of described types or of variants (urd::variant_value), serialized element by element.
+/// Ranges of described types, of variants (urd::variant_value) or of child views (urd::ChildView), serialized element by
+/// element.
 template<typename T>
 concept DescribedRange = std::ranges::input_range<const T>
                          && (Described<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
-                             || urd::variant_value<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>);
+                             || urd::variant_value<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
+                             || urd::ChildView<std::ranges::range_reference_t<const T>>);
 
 template<typename T>
 struct IsDescribedOptional : std::false_type
 {
 };
 
-template<Described T>
+template<typename T>
+    requires Described<T> || urd::variant_value<T> || urd::ChildView<T>
 struct IsDescribedOptional<std::optional<T>> : std::true_type
 {
 };
@@ -167,6 +171,8 @@ public:
         }
         else if constexpr (urd::variant_value<T>)
             return visit([&](const auto& alternative) { return convert(alternative); }, value);  // a variant: the alternative it holds
+        else if constexpr (urd::ChildView<T>)
+            return urd::visit_view(value, [&](const auto& form) { return convert(form); });  // a child: the view of the form it holds
         else if constexpr (Described<T>)
         {
             auto result = boost::json::value {};

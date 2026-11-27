@@ -156,14 +156,23 @@ bool is_missing(const R& result) noexcept
 /// scratch record of `storage`, prepared and inserted (under the parts of its key it holds); a builder of a kind a
 /// repository nested in this one holds, there, through this one. A record or builder no repository reached through
 /// this one holds throws std::invalid_argument.
-template<typename C, IsBuilderStorage Storage, typename Form>
-auto insert_child(C& repository, Storage& storage, Form& form)
+template<typename C, IsBuilderStorage Storage, typename Form, typename... Hints>
+auto insert_child(C& repository, Storage& storage, Form& form, const Hints&... hints)
 {
     using F = std::remove_const_t<Form>;
     if constexpr (OwnBuilder<F, C>)
     {
-        auto scratch = storage.template scratch<typename child_form<F>::tag>();
-        return urd::intern(form, *scratch, [&repository, &storage](auto& child) { return detail::insert_child(repository, storage, child); });
+        // A builder its part interns itself (with the hints it takes, else without); any other through a scratch record,
+        // its children first, each with the hints.
+        if constexpr (requires { repository.insert_built(form, hints...); })
+            return repository.insert_built(form, hints...);
+        else if constexpr (requires { repository.insert_built(form); })
+            return repository.insert_built(form);
+        else
+        {
+            auto scratch = storage.template scratch<typename child_form<F>::tag>();
+            return urd::intern(form, *scratch, [&repository, &storage, &hints...](auto& child) { return detail::insert_child(repository, storage, child, hints...); });
+        }
     }
     else if constexpr (NestedBuilderInserted<F, C, Storage>)
         return repository.insert(form, storage);
@@ -176,23 +185,28 @@ auto insert_child(C& repository, Storage& storage, Form& form)
 }
 
 /// A child looked up in `repository`, nothing inserted, as finding a builder meets it: what the lookup gives (a key, the
-/// optional of a view, or missing_key for a child no record here can name). A builder of this repository: its children
-/// looked up first (a child not found: its record is not found either), then its record, written into a scratch record
+/// optional of a view, or missing_key for a child no record here can name). A builder its part finds itself
+/// (find_built), with the hints the part takes; any other builder of this repository: its children looked up first (a
+/// child not found: its record is not found either), each with the hints, then its record, written into a scratch record
 /// of `storage`, prepared and looked up.
-template<typename C, IsBuilderStorage Storage, typename Form>
-auto find_child(C& repository, Storage& storage, Form& form)
+template<typename C, IsBuilderStorage Storage, typename Form, typename... Hints>
+auto find_child(C& repository, Storage& storage, Form& form, const Hints&... hints)
 {
     using F = std::remove_const_t<Form>;
-    if constexpr (OwnBuilder<F, C>)
+    if constexpr (OwnBuilder<F, C> && requires { repository.find_built(form, hints...); })
+        return repository.find_built(form, hints...);
+    else if constexpr (OwnBuilder<F, C> && requires { repository.find_built(form); })
+        return repository.find_built(form);
+    else if constexpr (OwnBuilder<F, C>)
     {
         using T = typename child_form<F>::tag;
         auto scratch = storage.template scratch<T>();
         auto found = true;
         urd::map_children(form,
                           *scratch,
-                          [&repository, &storage, &found](auto& child)
+                          [&repository, &storage, &found, &hints...](auto& child)
                           {
-                              auto key = detail::find_child(repository, storage, child);
+                              auto key = detail::find_child(repository, storage, child, hints...);
                               if (detail::is_missing(key))
                                   found = false;
                               return key;
