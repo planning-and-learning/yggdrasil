@@ -126,12 +126,12 @@ template<typename T, typename Storage>
 { return storage.template checkout<T>(); }
 
 /// The builder a child holds, to fill: one checked out of `storage` (emptied, its buffers kept) where it holds none (it
-/// is interned, a record, or its builder was moved out), as urd::builder_of(child, pool) does with a pool of slots.
+/// is interned or a record), as urd::builder_of(child, pool) does with a pool of slots.
 template<typename T, typename C, typename K, typename Storage>
     requires Pools<Storage, T> && std::same_as<typename Storage::Context, C>
 urd::builder<T, C>& builder_of(urd::child<T, C, K>& held, Storage& storage)
 {
-    if (const auto* built = std::get_if<urd::built_child<T, C>>(&held); built == nullptr || *built == nullptr)
+    if (!std::holds_alternative<urd::built_child<T, C>>(held))
         held.template emplace<urd::built_child<T, C>>(storage.template checkout<T>());
     return *std::get<urd::built_child<T, C>>(held);
 }

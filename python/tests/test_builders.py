@@ -23,7 +23,7 @@ def test_a_relation_builder_inserts_in_tuple_order_and_reads_through_its_view() 
     assert relation.insert(repository, records, [1, 5]) == (0, False)
     assert relation.erase(repository, [2, 1])
     view = relation.view(repository)
-    assert isinstance(view, f.RelationSchemaBuilderBorrowed)
+    assert isinstance(view, f.RelationSchemaBuilderView)
     assert view.arity() == 2
     assert len(view.get_rows()) == 1
     assert view.contains([1, 5])
@@ -50,7 +50,7 @@ def test_a_schema_builder_is_set_from_its_records_form_without_a_repository() ->
     schema = f.SchemaBuilder()
     schema.set_column_types([f.ColumnType.UINT32, f.ColumnType.BOOL])
     view = schema.view(repository)
-    assert isinstance(view, f.SchemaBuilderBorrowed)
+    assert isinstance(view, f.SchemaBuilderView)
     assert list(view.get_column_types()) == [f.ColumnType.UINT32, f.ColumnType.BOOL]
 
 

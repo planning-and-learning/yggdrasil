@@ -84,15 +84,15 @@ void bind_formalism_module_definitions(nb::module_& m)
     urd::python::bind_builder<RelationTag, RelationRepository>(m);
     urd::python::bind_view<RelationView>(m);
 
-    // The views of a builder's children in each form: built (<Name>BuilderBorrowed), a record not interned yet
-    // (<Name>Borrowed).
+    // The views of a builder's children in each form: built (<Name>BuilderView), a record not interned yet
+    // (<Name>RecordView).
     urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository, urd::builder<ygg::Schema, RelationRepository>>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository, urd::builder<ygg::Columns, RelationRepository>>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository>>(m);
     urd::python::bind_view<ygg::RowBuilderView<ygg::Schema, RelationRepository>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Row<ygg::Schema>, RelationRepository>>(m);
-    // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilderBorrowed.
+    // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilderView.
     urd::python::bind_view<RelationBuilderView>(m);
 
     nb::class_<ygg::FreeRelationStorage>(m, "FreeRelationStorage", "The builders and scratch records free relations are interned through; create once, reuse.")
