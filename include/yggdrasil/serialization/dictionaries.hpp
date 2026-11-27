@@ -42,13 +42,18 @@ using Index = urd::Store<urd::pool<T>>;
 template<typename T>
 concept Described = requires(FieldNames& archive) { describe_fields(archive, std::type_identity<T> {}); };
 
-/// Ranges of described types, of variants (urd::variant_value) or of child views (urd::ChildView), serialized element by
-/// element.
+/// A plain value that declares its fields (urd::Fields) and is no view: serialized inline, as an object of its fields.
+template<typename T>
+concept PlainFields = urd::HasFields<T> && !urd::View<T> && !urd::ChildView<T>;
+
+/// Ranges of described types, of variants (urd::variant_value), of child views (urd::ChildView) or of plain values with
+/// fields (PlainFields), serialized element by element.
 template<typename T>
 concept DescribedRange = std::ranges::input_range<const T>
                          && (Described<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
                              || urd::variant_value<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
-                             || urd::ChildView<std::ranges::range_reference_t<const T>>);
+                             || urd::ChildView<std::ranges::range_reference_t<const T>>
+                             || PlainFields<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>);
 
 template<typename T>
 struct IsDescribedOptional : std::false_type
@@ -56,7 +61,7 @@ struct IsDescribedOptional : std::false_type
 };
 
 template<typename T>
-    requires Described<T> || urd::variant_value<T> || urd::ChildView<T>
+    requires Described<T> || urd::variant_value<T> || urd::ChildView<T> || PlainFields<T>
 struct IsDescribedOptional<std::optional<T>> : std::true_type
 {
 };
@@ -183,6 +188,14 @@ public:
                        auto writer = FieldWriter { &archive, &value };
                        describe_fields(writer, std::type_identity<T> {});
                    });
+            return result;
+        }
+        else if constexpr (PlainFields<T>)
+        {
+            // Inline: an object of its fields, each converted.
+            auto result = boost::json::value {};
+            auto& object = result.emplace_object();
+            urd::for_each_field<T>([&]<typename F>() { object[F::name] = convert(value.*F::member); });
             return result;
         }
         else if constexpr (IsDescribedOptional<T>::value)
