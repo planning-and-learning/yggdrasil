@@ -22,7 +22,8 @@
 // rules, https://planning-and-learning.github.io/brokkr/template_rules.html), shared by the repositories
 // (repository_instantiations.hpp) and the symbol contexts (symbol_context_instantiations.hpp): for the P-th of Owner's
 // own parts (Owner::OwnParts<Writable>), each of its Count keys (its KeyTypes) read, looked for, owned, viewed, counted,
-// found and stored.
+// found and stored. The part that is written into has its owner too: interning a builder views the key it stored
+// (HeldPart::insert of a builder, defined in keyed.hpp), from any source that interns one.
 
 #include "yggdrasil/formalism/keyed.hpp"
 
@@ -69,6 +70,8 @@ using PartKnown = boost::mp11::mp_rename<boost::mp11::mp_pop_back<boost::mp11::m
     YGG_FORMALISM_PART_PREFIX(ARGS) template bool YGG_FORMALISM_PART_READ(ARGS)::owns(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                      \
     YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
     template const YGG_FORMALISM_PART_OWNER(ARGS) * YGG_FORMALISM_PART_READ(ARGS)::owner(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                   \
+    YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
+    template const YGG_FORMALISM_PART_OWNER(ARGS) * YGG_FORMALISM_PART_WRITE(ARGS)::owner(YGG_FORMALISM_PART_KEY_T(I, ARGS)) const;                  \
     YGG_FORMALISM_PART_PREFIX(ARGS)                                                                                                                  \
     template std::optional<urd::index_view<YGG_FORMALISM_PART_KIND_T(I, ARGS), YGG_FORMALISM_PART_OWNER(ARGS), YGG_FORMALISM_PART_KEY_T(I, ARGS)>>   \
         YGG_FORMALISM_PART_READ(ARGS)::find(urd::data<YGG_FORMALISM_PART_KIND_T(I, ARGS)>&) const;                                                   \

@@ -68,12 +68,14 @@ struct urd::data<ygg::tests::CanonicalizationSetsTag>
     urd::flat_vector<ygg::uint_t> order;
 
     data() = default;
+
     data(urd::flat_vector<ygg::uint_t> set_, urd::flat_vector<ygg::uint_t> bag_, urd::flat_vector<ygg::uint_t> order_) :
         set(std::move(set_)),
         bag(std::move(bag_)),
         order(std::move(order_))
     {
     }
+
     data(const data& other) = delete;
     data& operator=(const data& other) = delete;
     data(data&& other) = default;
@@ -82,9 +84,8 @@ struct urd::data<ygg::tests::CanonicalizationSetsTag>
 
     static constexpr auto fields() noexcept
     {
-        return urd::Fields<urd::field<"set", &data::set, urd::sorted, urd::unique>,
-                           urd::field<"bag", &data::bag, urd::sorted>,
-                           urd::field<"order", &data::order>> {};
+        return urd::
+            Fields<urd::field<"set", &data::set, urd::sorted, urd::unique>, urd::field<"bag", &data::bag, urd::sorted>, urd::field<"order", &data::order>> {};
     }
 
     static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
@@ -188,8 +189,8 @@ TEST(YggdrasilTests, ARecordIsCanonicalizedAsItsFieldsPromise)
     ygg::formalism::canonicalize(record);
 
     EXPECT_TRUE(ygg::formalism::is_canonical(record));
-    EXPECT_EQ(std::vector<ygg::uint_t>(record.set.begin(), record.set.end()), (std::vector<ygg::uint_t> { 1, 2, 3 }));     // sorted, unique
-    EXPECT_EQ(std::vector<ygg::uint_t>(record.bag.begin(), record.bag.end()), (std::vector<ygg::uint_t> { 1, 2, 3, 3 }));  // sorted
+    EXPECT_EQ(std::vector<ygg::uint_t>(record.set.begin(), record.set.end()), (std::vector<ygg::uint_t> { 1, 2, 3 }));         // sorted, unique
+    EXPECT_EQ(std::vector<ygg::uint_t>(record.bag.begin(), record.bag.end()), (std::vector<ygg::uint_t> { 1, 2, 3, 3 }));      // sorted
     EXPECT_EQ(std::vector<ygg::uint_t>(record.order.begin(), record.order.end()), (std::vector<ygg::uint_t> { 3, 1, 3, 2 }));  // as given
 }
 

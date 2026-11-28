@@ -152,7 +152,9 @@ auto insert_child(C& repository, Storage& storage, Form& form, const Hints&... h
         else
         {
             auto scratch = storage.template scratch<urd::kind_of_t<F>>();
-            return urd::intern(form, *scratch, [&repository, &storage, &hints...](auto& child) { return detail::insert_child(repository, storage, child, hints...); });
+            return urd::intern(form,
+                               *scratch,
+                               [&repository, &storage, &hints...](auto& child) { return detail::insert_child(repository, storage, child, hints...); });
         }
     }
     else if constexpr (NestedBuilder<F, C> && InsertsBuilder<C, F, Storage>)

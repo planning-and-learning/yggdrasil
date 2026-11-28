@@ -222,7 +222,7 @@ namespace ygg
 /// f of each column of a row, as it reads: an object column's object view (resolve<Object>(column), where the row's
 /// context resolves objects), any other column decoded (get(column): a ColumnValue).
 template<typename V, typename F>
-void for_each_column(const V& row, F&& f)
+void for_each_column(const V& row, F f)
 {
     for (std::size_t column = 0; column < std::ranges::size(row.values()); ++column)
     {

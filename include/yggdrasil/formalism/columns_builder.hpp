@@ -22,7 +22,6 @@ struct builder<ygg::Columns, C>
     urd::built_t<urd::flat_vector<urd::data<ygg::ColumnLayout>>, C> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &builder::values>> {}; }
-
 };
 
 }  // namespace urd

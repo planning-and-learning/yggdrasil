@@ -294,7 +294,6 @@ struct builder<ygg::tests::RepositoryTypesElement, C>
     urd::built_t<int, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
-
 };
 
 /// The builders of an object and of a pool key (what urd::copy draws where the target does not see them).
@@ -305,7 +304,6 @@ struct builder<ygg::formalism::Object, C>
     urd::built_t<ygg::uint_t, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
-
 };
 
 template<typename C>
@@ -315,7 +313,6 @@ struct builder<ygg::tests::RepositoryTypesRelation, C>
     urd::built_t<ygg::uint_t, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
-
 };
 
 template<typename C>
@@ -324,7 +321,6 @@ struct builder<ygg::tests::RepositoryTypesBuilderOther, C>
     urd::built_t<int, C> value = 0;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &builder::value>> {}; }
-
 };
 
 template<typename C>
@@ -334,7 +330,6 @@ struct builder<ygg::tests::RepositoryTypesCheckout, C>
     urd::built_t<urd::Store<urd::sequence<int>, urd::contiguous>, C> values;
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"id", &builder::id>, urd::field<"values", &builder::values>> {}; }
-
 };
 
 template<>

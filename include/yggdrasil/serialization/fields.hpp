@@ -24,8 +24,7 @@ namespace detail
 template<typename R, typename Archive>
 void describe_record(Archive& ar)
 {
-    urd::for_each_field<R>([&]<typename F>()
-                                      { ar.field(F::name, [](const auto& value) -> decltype(auto) { return value.template member<F::member>(); }); });
+    urd::for_each_field<R>([&]<typename F>() { ar.field(F::name, [](const auto& value) -> decltype(auto) { return value.template member<F::member>(); }); });
 }
 
 }  // namespace detail

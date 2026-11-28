@@ -16,8 +16,8 @@
 
 namespace urd
 {
-/// A relation of family F: its pool (the key of the layer's pool of its rows), its layout (its Columns: its labeled, typed columns) and the keys of its rows, each
-/// in that pool, sorted and unique. Renaming keeps the pool and the rows.
+/// A relation of family F: its pool (the key of the layer's pool of its rows), its layout (its Columns: its labeled, typed columns) and the keys of its rows,
+/// each in that pool, sorted and unique. Renaming keeps the pool and the rows.
 template<typename F>
 struct data<ygg::Relation<F>>
 {

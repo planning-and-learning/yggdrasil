@@ -305,15 +305,15 @@ using key_part_t = std::remove_reference_t<typename detail::key_part<R, K, Writa
 /// holds scratch records of T; or one of another repository, interned through the part of R that writes T's key (a
 /// repository it nests, or a part of its own that packs its records: a state's storages).
 template<typename R, typename T, typename C, typename Storage>
-concept InternsBuilder = (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
-                         || (!std::same_as<C, R> && OnePartHolds<key_parts<R, true>, key_t<T>, true>
-                             && InsertsBuilder<key_part_t<R, key_t<T>, true>, urd::builder<T, C>, Storage>);
+concept InternsBuilder =
+    (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
+    || (!std::same_as<C, R> && OnePartHolds<key_parts<R, true>, key_t<T>, true> && InsertsBuilder<key_part_t<R, key_t<T>, true>, urd::builder<T, C>, Storage>);
 
 /// Likewise for finding the record a builder writes.
 template<typename R, typename T, typename C, typename Storage>
-concept LooksUpBuilder = (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
-                         || (!std::same_as<C, R> && OnePartHolds<key_parts<R, true>, key_t<T>, true>
-                             && FindsBuilder<key_part_t<R, key_t<T>, true>, urd::builder<T, C>, Storage>);
+concept LooksUpBuilder =
+    (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
+    || (!std::same_as<C, R> && OnePartHolds<key_parts<R, true>, key_t<T>, true> && FindsBuilder<key_part_t<R, key_t<T>, true>, urd::builder<T, C>, Storage>);
 
 /// The base of a repository Derived (CRTP) that resolves keys: its one operator[] and at(), and its one insert and find
 /// of a record. Derived names its own parts and hands them out (OwnParts<Writable>: own_parts() const as read,

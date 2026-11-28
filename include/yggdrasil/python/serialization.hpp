@@ -192,8 +192,9 @@ void register_table(serialization::Dictionaries& dictionaries,
     std::function<void(serialization::Dictionaries::Archive&, const T&)> projection;
     if (!project.is_none())
     {
-        projection = [project, &dictionaries, owners = urd::Store<urd::sequence<nanobind::object>> {}](serialization::Dictionaries::Archive& archive,
-                                                                                                       const T& value) mutable
+        projection = [project = std::move(project),
+                      &dictionaries,
+                      owners = urd::Store<urd::sequence<nanobind::object>> {}](serialization::Dictionaries::Archive& archive, const T& value) mutable
         {
             nanobind::gil_scoped_acquire guard;
             const auto row = project(nanobind::cast(value, nanobind::rv_policy::copy));
