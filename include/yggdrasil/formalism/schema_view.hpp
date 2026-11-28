@@ -20,7 +20,7 @@ private:
 
 public:
     /// Its rows' column types, as every key of row pools gives them (a free relation's pool is its Schema).
-    [[nodiscard]] decltype(auto) get_column_types() const noexcept { return self().template member<&urd::record_of<V>::column_types>(); }
+    [[nodiscard]] decltype(auto) column_types() const noexcept { return self().template member<&urd::record_of<V>::column_types>(); }
 };
 
 #endif

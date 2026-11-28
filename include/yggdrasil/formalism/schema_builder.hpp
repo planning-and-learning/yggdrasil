@@ -23,7 +23,6 @@ struct builder<ygg::Schema, C>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"column_types", &builder::column_types>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
 }  // namespace urd

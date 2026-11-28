@@ -29,8 +29,8 @@ concept RelationViewConcept = std::same_as<typename std::remove_cvref_t<V>::valu
                                      view.context();
                                      { view.columns() } -> std::same_as<std::span<const urd::data<ColumnLayout>>>;
                                      { view.arity() } -> std::same_as<std::size_t>;
-                                     { view.get_rows() } -> std::ranges::sized_range;
-                                     { view.get_rows() } -> std::ranges::random_access_range;
+                                     { view.rows() } -> std::ranges::sized_range;
+                                     { view.rows() } -> std::ranges::random_access_range;
                                      view.row(i);
                                      { view.locate(values) } -> std::same_as<std::pair<std::size_t, bool>>;
                                      { view.find(values) } -> std::same_as<std::optional<std::size_t>>;

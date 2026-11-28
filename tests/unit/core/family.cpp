@@ -40,9 +40,7 @@ struct urd::data<Object>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"id", &data::id>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::id> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 };
 
 template<typename V>
@@ -52,7 +50,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] auto get_id() const noexcept { return self().template member<&urd::record_of<V>::id>(); }
+    [[nodiscard]] auto id() const noexcept { return self().template member<&urd::record_of<V>::id>(); }
 };
 
 template<>
@@ -72,9 +70,7 @@ struct urd::data<Predicate>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"arity", &data::arity>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::arity> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 };
 
 template<typename V>
@@ -84,7 +80,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] auto get_arity() const noexcept { return self().template member<&urd::record_of<V>::arity>(); }
+    [[nodiscard]] auto arity() const noexcept { return self().template member<&urd::record_of<V>::arity>(); }
 };
 
 namespace

@@ -27,18 +27,8 @@ struct builder<ygg::Row<F>, C>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"relation", &builder::relation>, urd::field<"values", &builder::values>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
 };
 
-/// A row's key held by a builder is built as a child of the row (urd::child): its key (interned), a row builder (built:
-/// a row not interned yet, a binding copied), or a row record of its own; as a relation's rows are (relation_builder.hpp).
-template<typename F, typename C>
-struct built_form<urd::key<F, ygg::Row<F>>, C>
-{
-    using type = urd::child<ygg::Row<F>, C, urd::key<F, ygg::Row<F>>>;
-
-    static void assign(urd::key<F, ygg::Row<F>> value, type& into) { into.template emplace<0>(value); }
-};
 }  // namespace urd
 
 #endif

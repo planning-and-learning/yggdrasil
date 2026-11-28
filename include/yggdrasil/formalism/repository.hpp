@@ -66,15 +66,14 @@ class Repository : public KeyedRepository<Repository<SymbolRepo, RelationRepo>>
 public:
     using SymbolTypes = typename detail::symbol_repository_traits<SymbolRepo>::SymbolTypes;
     using RelationTypes = typename detail::relation_repository_traits<RelationRepo>::RelationTypes;
-    /// The keys it resolves (operator[]): its symbols' and its relation repository's.
-    using KeyTypes = boost::mp11::mp_append<typename detail::symbol_repository_traits<SymbolRepo>::KeyTypes,
-                                            typename detail::relation_repository_traits<RelationRepo>::KeyTypes>;
     /// Its own parts' stores and the keys each resolves (HeldPart<Repository, P>), behind its Impl: its symbol
     /// repository, then its relation repository (own_parts()). It nests no repository.
     using PartStores =
         boost::mp11::mp_list<typename detail::symbol_repository_traits<SymbolRepo>::Store, typename detail::relation_repository_traits<RelationRepo>::Store>;
     using PartKeys = boost::mp11::mp_list<typename detail::symbol_repository_traits<SymbolRepo>::KeyTypes,
                                           typename detail::relation_repository_traits<RelationRepo>::KeyTypes>;
+    /// The keys it resolves (operator[]): its parts'.
+    using KeyTypes = boost::mp11::mp_apply<boost::mp11::mp_append, PartKeys>;
     /// Its own parts, as read (Writable false) or written into (key_parts).
     template<bool Writable>
     using OwnParts = std::tuple<HeldPart<detail::access_t<Writable, Repository>, 0>, HeldPart<detail::access_t<Writable, Repository>, 1>>;
@@ -119,10 +118,6 @@ private:
 
     /// Its own parts as written into: what KeyedRepository stores a record through.
     [[nodiscard]] OwnParts<true> own_parts();
-
-    // What a library instantiates: the constrained members above, unconstrained, which they forward to. Clang names an
-    // instantiation's requires-clause in its symbol and g++ does not, so only unconstrained symbols link between code
-    // built by either.
 
     const Repository* m_parent;
     std::size_t m_layer;

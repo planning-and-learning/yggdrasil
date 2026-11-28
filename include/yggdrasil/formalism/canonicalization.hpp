@@ -25,30 +25,20 @@ namespace ygg
 {
 
 /**
- * Canonicalization of ygg's records (found by ADL). Every record has a canonicalize overload, a no-op where it is
- * canonical as built, so a record without one is a compile error, and is_canonical, whether it is. A row is its family's (its tag's library's).
+ * Canonicalization of ygg's records (found by ADL): canonicalize, and is_canonical, whether a record is. A record
+ * that is canonical as built has none of its own: the default is a no-op (declarations.hpp). A row is its family's
+ * (its tag's library's).
  */
 
-/// f of a row's values: a row read as the view it is (a row child resolved, an interned row, a row builder's or record's
-/// view), or bare values.
-template<RowValues R, typename F>
-decltype(auto) with_values(const R& values, F&& f)
-{ return std::forward<F>(f)(values); }
-
-template<urd::View V, typename F>
-decltype(auto) with_values(const V& row, F&& f)
-{ return std::forward<F>(f)(row.get_values()); }
-
-template<urd::View... Vs, typename F>
-decltype(auto) with_values(const std::variant<Vs...>& row, F&& f)
-{
-    return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); });
-}
-
-template<urd::ChildView R, typename F>
+/// f of a row's values: bare values as they are; a row read as the view it is (an interned row, a row builder's or
+/// record's view), a row child resolved or a child view: of the view it holds (urd::visit_view).
+template<typename R, typename F>
 decltype(auto) with_values(const R& row, F&& f)
 {
-    return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.get_values()); });
+    if constexpr (RowValues<R>)
+        return std::forward<F>(f)(row);
+    else
+        return urd::visit_view(row, [&f](const auto& view) -> decltype(auto) { return std::forward<F>(f)(view.values()); });
 }
 
 /// The value of a column of a row in any of those forms (with_values).

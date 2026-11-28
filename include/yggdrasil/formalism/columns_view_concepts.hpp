@@ -20,8 +20,8 @@ namespace ygg
 template<typename V>
 concept ColumnsViewConcept = std::same_as<typename std::remove_cvref_t<V>::value_type, Columns> && requires(const std::remove_reference_t<V>& view) {
     view.context();
-    { view.get_values() } -> std::ranges::random_access_range;
-    requires std::same_as<std::ranges::range_value_t<decltype(view.get_values())>, urd::data<ColumnLayout>>;
+    { view.values() } -> std::ranges::random_access_range;
+    requires std::same_as<std::ranges::range_value_t<decltype(view.values())>, urd::data<ColumnLayout>>;
 };
 }  // namespace ygg
 

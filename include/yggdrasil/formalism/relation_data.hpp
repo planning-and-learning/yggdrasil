@@ -16,22 +16,22 @@
 
 namespace urd
 {
-/// A relation of family F: its pool (the key of the layer's pool of its rows), its columns and the keys of its rows, each
+/// A relation of family F: its pool (the key of the layer's pool of its rows), its layout (its Columns: its labeled, typed columns) and the keys of its rows, each
 /// in that pool, sorted and unique. Renaming keeps the pool and the rows.
 template<typename F>
 struct data<ygg::Relation<F>>
 {
     urd::key<ygg::Relation<F>> index;
     urd::index<F> pool;
-    urd::index<ygg::Columns> columns;
+    urd::index<ygg::Columns> layout;
     urd::flat_vector<urd::key<F, ygg::Row<F>>> rows;
 
     data() = default;
 
-    data(urd::index<F> pool_, urd::index<ygg::Columns> columns_, urd::flat_vector<urd::key<F, ygg::Row<F>>> rows_) :
+    data(urd::index<F> pool_, urd::index<ygg::Columns> layout_, urd::flat_vector<urd::key<F, ygg::Row<F>>> rows_) :
         index(),
         pool(pool_),
-        columns(columns_),
+        layout(layout_),
         rows(std::move(rows_))
     {
     }
@@ -43,11 +43,9 @@ struct data<ygg::Relation<F>>
     ~data() = default;
 
     static constexpr auto fields() noexcept
-    { return urd::Fields<urd::field<"pool", &data::pool>, urd::field<"columns", &data::columns>, urd::field<"rows", &data::rows>> {}; }
+    { return urd::Fields<urd::field<"pool", &data::pool>, urd::field<"layout", &data::layout>, urd::field<"rows", &data::rows>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::pool, &data::columns, &data::rows> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::Relation<F>> key() const noexcept { return urd::key<ygg::Relation<F>>(index); }
 };

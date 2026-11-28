@@ -18,7 +18,7 @@
 #ifndef YGG_FORMALISM_PART_INSTANTIATIONS_HPP_
 #define YGG_FORMALISM_PART_INSTANTIATIONS_HPP_
 
-// Explicit instantiations of the members of a repository's own part for each key it resolves (rule 7 of the template
+// Explicit instantiations of the members of a repository's own part for each key it resolves (rule T1 of the template
 // rules, https://planning-and-learning.github.io/brokkr/template_rules.html), shared by the repositories
 // (repository_instantiations.hpp) and the symbol contexts (symbol_context_instantiations.hpp): for the P-th of Owner's
 // own parts (Owner::OwnParts<Writable>), each of its Count keys (its KeyTypes) read, looked for, owned, viewed, counted,

@@ -48,7 +48,7 @@ template<typename T>
 /// it (part_instantiations.hpp): never by the store's types or its keys, which would spell every kind of record in each
 /// of its members' names (brokkr's template rule T20). Every key, an index or one of several parts, is read by urd's one
 /// fold (urd::record_at, urd::contains_key: a family of stores first selects the store of the key's kind;
-/// keyed_read_impl.hpp, included where the store is complete, rule 25: naming a part completes no store), and every
+/// keyed_read_impl.hpp, included where the store is complete, rule T17: naming a part completes no store), and every
 /// record stored and found by it (urd::insert_at, urd::find_at, under the parts of its key it holds), which
 /// keyed_impl.hpp applies: only the sources that instantiate a library's repositories include it, so that every insert
 /// runs the prepare_for_insert those sources see. It names its owner, the repository a record's view is through.
@@ -137,31 +137,49 @@ public:
     std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> insert(urd::data<T>& record) const;
 
     /// Interns a builder of T where its store interns builders itself (store.insert_built(builder, hints...): the key of
-    /// the record, and whether it was stored now), with the hints the store takes: its view, and whether it was stored
-    /// now. Of a part that writes (O not const).
+    /// the record, and whether it was stored now): its view, and whether it was stored now. The store gets the hints
+    /// where it takes them (a caller passes the hints it has to every part: a state's storages take its parent and its
+    /// changes, another part none). Of a part that writes (O not const).
     template<typename T, typename C, typename... Hints>
-        requires(!std::is_const_v<O>) && requires(Store& store, const urd::builder<T, C>& built, const Hints&... hints) { store.insert_built(built, hints...); }
+        requires(!std::is_const_v<O>) && (InsertsBuilt<Store, urd::builder<T, C>, Hints...> || InsertsBuilt<Store, urd::builder<T, C>>)
     std::pair<urd::index_view<T, std::remove_const_t<O>, key_t<T>>, bool> insert_built(const urd::builder<T, C>& built, const Hints&... hints) const
     {
-        const auto [key, inserted] = m_store->insert_built(built, hints...);
-        return { view(key), inserted };
+        if constexpr (InsertsBuilt<Store, urd::builder<T, C>, Hints...>)
+        {
+            const auto [key, inserted] = m_store->insert_built(built, hints...);
+            return { view(key), inserted };
+        }
+        else
+        {
+            const auto [key, inserted] = m_store->insert_built(built);
+            return { view(key), inserted };
+        }
     }
 
     /// The view of the record a builder of T writes, where its store finds builders itself (store.find_built(builder,
-    /// hints...): the optional key of its record), with the hints the store takes.
+    /// hints...): the optional key of its record), with the hints where the store takes them.
     template<typename T, typename C, typename... Hints>
-        requires requires(const Store& store, const urd::builder<T, C>& built, const Hints&... hints) { store.find_built(built, hints...); }
+        requires FindsBuilt<Store, urd::builder<T, C>, Hints...> || FindsBuilt<Store, urd::builder<T, C>>
     [[nodiscard]] std::optional<urd::index_view<T, std::remove_const_t<O>, key_t<T>>> find_built(const urd::builder<T, C>& built, const Hints&... hints) const
     {
-        if (const auto key = m_store->find_built(built, hints...))
-            return view(*key);
-        return std::nullopt;
+        if constexpr (FindsBuilt<Store, urd::builder<T, C>, Hints...>)
+        {
+            if (const auto key = m_store->find_built(built, hints...))
+                return view(*key);
+            return std::nullopt;
+        }
+        else
+        {
+            if (const auto key = m_store->find_built(built))
+                return view(*key);
+            return std::nullopt;
+        }
     }
 
     /// Reads the stored record of a key into a builder, where its store unpacks records itself (store.unpack_built(key,
     /// builder): the builder's fields as the record's, its buffers reused).
     template<typename T, typename C, typename... Ks>
-        requires requires(const Store& store, urd::key<Ks...> key, urd::builder<T, C>& built) { store.unpack_built(key, built); }
+        requires UnpacksBuilt<Store, urd::key<Ks...>, urd::builder<T, C>>
     void unpack_built(urd::key<Ks...> key, urd::builder<T, C>& built) const
     { m_store->unpack_built(key, built); }
 
@@ -279,13 +297,9 @@ concept OwnsKey = OnePartHolds<typename R::template OwnParts<false>, K, false>;
 template<typename Storage, typename T>
 concept ScratchesRecordsOf = requires(Storage& storage) { storage.template scratch<T>(); };
 
-/// Whether part P interns a builder of T of context C through a builder storage (part.insert(built, storage)).
-template<typename P, typename T, typename C, typename Storage>
-concept InsertsBuilder = requires(P& part, const urd::builder<T, C>& built, Storage& storage) { part.insert(built, storage); };
-
-/// Whether part P finds the record a builder of T of context C writes (part.find(built, storage)).
-template<typename P, typename T, typename C, typename Storage>
-concept FindsBuilder = requires(P& part, const urd::builder<T, C>& built, Storage& storage) { part.find(built, storage); };
+/// The part of repository R that holds keys K (written into where Writable).
+template<typename R, typename K, bool Writable>
+using key_part_t = std::remove_reference_t<typename detail::key_part<R, K, Writable>::type>;
 
 /// Whether repository R interns a builder of T of context C through `Storage`: one of its own (C is R), whose storage
 /// holds scratch records of T; or one of another repository, interned through the part of R that writes T's key (a
@@ -293,13 +307,13 @@ concept FindsBuilder = requires(P& part, const urd::builder<T, C>& built, Storag
 template<typename R, typename T, typename C, typename Storage>
 concept InternsBuilder = (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
                          || (!std::same_as<C, R> && OnePartHolds<key_parts<R, true>, key_t<T>, true>
-                             && InsertsBuilder<std::remove_reference_t<typename detail::key_part<R, key_t<T>, true>::type>, T, C, Storage>);
+                             && InsertsBuilder<key_part_t<R, key_t<T>, true>, urd::builder<T, C>, Storage>);
 
-/// Likewise for finding.
+/// Likewise for finding the record a builder writes.
 template<typename R, typename T, typename C, typename Storage>
-concept FindsBuilderOf = (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
+concept LooksUpBuilder = (std::same_as<C, R> && ScratchesRecordsOf<Storage, T>)
                          || (!std::same_as<C, R> && OnePartHolds<key_parts<R, true>, key_t<T>, true>
-                             && FindsBuilder<std::remove_reference_t<typename detail::key_part<R, key_t<T>, true>::type>, T, C, Storage>);
+                             && FindsBuilder<key_part_t<R, key_t<T>, true>, urd::builder<T, C>, Storage>);
 
 /// The base of a repository Derived (CRTP) that resolves keys: its one operator[] and at(), and its one insert and find
 /// of a record. Derived names its own parts and hands them out (OwnParts<Writable>: own_parts() const as read,
@@ -458,69 +472,51 @@ public:
     /// written into a scratch record, prepared and inserted; one of a part's kinds, there. The view of its record through
     /// its owner, and whether it was new. A child interned in another repository of this kind, or a child of another
     /// repository not interned there, throws std::invalid_argument.
-    template<typename T, typename C, IsBuilderStorage Storage>
+    /// `hints` go to each child whose part interns builders itself (insert_built), where that part's store takes them (a
+    /// state's storages take its parent and its changes, say); the others are interned as they are.
+    template<typename T, typename C, IsBuilderStorage Storage, typename... Hints>
         requires InternsBuilder<Derived, T, C, Storage>
-    std::pair<urd::index_view<T, Owner<T>, key_t<T>>, bool> insert(const urd::builder<T, C>& built, Storage& storage)
+    std::pair<urd::index_view<T, Owner<T>, key_t<T>>, bool> insert(const urd::builder<T, C>& built, Storage& storage, const Hints&... hints)
     {
         if constexpr (std::same_as<C, Derived>)
-            return detail::insert_child(static_cast<Derived&>(*this), storage, built);
+            return detail::insert_child(static_cast<Derived&>(*this), storage, built, hints...);
         else
-            return part_of<key_t<T>, true>(self()).insert(built, storage);
+            return part_of<key_t<T>, true>(self()).insert(built, storage, hints...);
+    }
+
+    /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
+    /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record;
+    /// `hints` as insert gives them (find_built).
+    template<typename T, typename C, IsBuilderStorage Storage, typename... Hints>
+        requires LooksUpBuilder<Derived, T, C, Storage>
+    std::optional<urd::index_view<T, Owner<T>, key_t<T>>> find(const urd::builder<T, C>& built, Storage& storage, const Hints&... hints)
+    {
+        if constexpr (std::same_as<C, Derived>)
+            return detail::find_child(static_cast<Derived&>(*this), storage, built, hints...);
+        else
+            return part_of<key_t<T>, true>(self()).find(built, storage, hints...);
     }
 
     /// Interns a builder through the part that holds its kind, where that part's store interns builders itself
     /// (HeldPart::insert_built), with the hints it takes: what insert(builder, storage) gives.
     template<typename T, typename C, typename... Hints>
-        requires requires(typename detail::key_part<Derived, key_t<T>, true>::type part, const urd::builder<T, C>& built, const Hints&... hints) {
-            part.insert_built(built, hints...);
-        }
+        requires InsertsBuilt<key_part_t<Derived, key_t<T>, true>, urd::builder<T, C>, Hints...>
     std::pair<urd::index_view<T, Owner<T>, key_t<T>>, bool> insert_built(const urd::builder<T, C>& built, const Hints&... hints)
     { return part_of<key_t<T>, true>(self()).insert_built(built, hints...); }
 
     /// Finds the record a builder writes through the part that holds its kind, where that part's store finds builders
     /// itself (HeldPart::find_built), with the hints it takes.
     template<typename T, typename C, typename... Hints>
-        requires requires(typename detail::key_part<Derived, key_t<T>, false>::type part, const urd::builder<T, C>& built, const Hints&... hints) {
-            part.find_built(built, hints...);
-        }
+        requires FindsBuilt<key_part_t<Derived, key_t<T>, false>, urd::builder<T, C>, Hints...>
     [[nodiscard]] std::optional<urd::index_view<T, Owner<T>, key_t<T>>> find_built(const urd::builder<T, C>& built, const Hints&... hints) const
     { return part_of<key_t<T>, false>(self()).find_built(built, hints...); }
-
-    /// Finds the record a builder writes as find(builder, storage) does, with hints: each child whose part finds builders
-    /// itself (find_built) gets the hints that part takes.
-    template<typename T, typename C, IsBuilderStorage Storage, typename Hint, typename... Hints>
-        requires std::same_as<C, Derived>
-    std::optional<urd::index_view<T, Owner<T>, key_t<T>>> find(const urd::builder<T, C>& built, Storage& storage, const Hint& hint, const Hints&... hints)
-    { return detail::find_child(static_cast<Derived&>(*this), storage, built, hint, hints...); }
 
     /// Reads the stored record of a key into a builder through the part that holds it, where that part's store unpacks
     /// records itself (HeldPart::unpack_built).
     template<typename T, typename C, typename... Ks>
-        requires requires(typename detail::key_part<Derived, urd::key<Ks...>, false>::type part, urd::key<Ks...> key, urd::builder<T, C>& built) {
-            part.unpack_built(key, built);
-        }
+        requires UnpacksBuilt<key_part_t<Derived, urd::key<Ks...>, false>, urd::key<Ks...>, urd::builder<T, C>>
     void unpack_built(urd::key<Ks...> key, urd::builder<T, C>& built) const
     { part_of<urd::key<Ks...>, false>(self()).unpack_built(key, built); }
-
-    /// Interns a builder as insert(builder, storage) does, with hints: each child whose part interns builders itself
-    /// (insert_built) gets the hints that part takes (a state's storages, its parent and its changes, say); the others
-    /// are interned as they are.
-    template<typename T, typename C, IsBuilderStorage Storage, typename Hint, typename... Hints>
-        requires std::same_as<C, Derived>
-    std::pair<urd::index_view<T, Owner<T>, key_t<T>>, bool> insert(const urd::builder<T, C>& built, Storage& storage, const Hint& hint, const Hints&... hints)
-    { return detail::insert_child(static_cast<Derived&>(*this), storage, built, hint, hints...); }
-
-    /// Finds the record a builder writes, inserting nothing: its children looked up the same way (a child not found
-    /// names no record here, so then nothing is found; a record of its own is prepared in place), then its record.
-    template<typename T, typename C, IsBuilderStorage Storage>
-        requires FindsBuilderOf<Derived, T, C, Storage>
-    std::optional<urd::index_view<T, Owner<T>, key_t<T>>> find(const urd::builder<T, C>& built, Storage& storage)
-    {
-        if constexpr (std::same_as<C, Derived>)
-            return detail::find_child(static_cast<Derived&>(*this), storage, built);
-        else
-            return part_of<key_t<T>, true>(self()).find(built, storage);
-    }
 
     /// Interns a view of a record of its kinds as it reads it (what a child resolves to): an interned one is checked
     /// to be its own, a builder's is interned as that builder.

@@ -52,13 +52,13 @@ inline void check_column(std::size_t i, std::size_t size)
 
 namespace ygg
 {
-/// The columns of a row view V read as T (get<T>()): a range of the values it reads (get_values(): a stored row's from
+/// The columns of a row view V read as T (get<T>()): a range of the values it reads (values(): a stored row's from
 /// its slot, a held row's or a builder's own), each decoded. A class, so that it is formed only where a member that
 /// returns it is used (V is incomplete where its mixin is).
 template<typename V, typename T>
 struct decoded_columns
 {
-    using values_type = std::remove_cvref_t<decltype(std::declval<const V&>().get_values())>;
+    using values_type = std::remove_cvref_t<decltype(std::declval<const V&>().values())>;
     using type = urd::transformed_range<std::ranges::subrange<std::ranges::iterator_t<const values_type>>, T (*)(Value) noexcept>;
 };
 
@@ -73,26 +73,30 @@ using resolved_columns_t = urd::resolved_range<decoded_columns_t<V, urd::index<T
 namespace ygg::detail
 {
 /// The type of a column of a row view's relation (unchecked) and the number of its columns, as its relation gives them
-/// (its view's get_column_types(), stored or computed), whichever form its relation is in (urd::visit_view).
+/// (its view's column_types(), stored or computed), whichever form its relation is in (urd::visit_view).
+template<typename Relation>
+[[nodiscard]] ygg::TypeId relation_column_type(const Relation& relation, std::size_t column)
+{
+    return urd::visit_view(relation,
+                           [column](const auto& view) -> ygg::TypeId
+                           { return *std::ranges::next(std::ranges::begin(view.column_types()), static_cast<std::ptrdiff_t>(column)); });
+}
+
 template<typename V>
 [[nodiscard]] ygg::TypeId column_type(const V& row, std::size_t column)
-{
-    return urd::visit_view(row.get_relation(),
-                           [column](const auto& relation) -> ygg::TypeId
-                           { return *std::ranges::next(std::ranges::begin(relation.get_column_types()), static_cast<std::ptrdiff_t>(column)); });
-}
+{ return detail::relation_column_type(row.relation(), column); }
 
 template<typename V>
 [[nodiscard]] std::size_t column_count(const V& row)
 {
-    return urd::visit_view(row.get_relation(), [](const auto& relation) -> std::size_t { return std::ranges::size(relation.get_column_types()); });
+    return urd::visit_view(row.relation(), [](const auto& relation) -> std::size_t { return std::ranges::size(relation.column_types()); });
 }
 }  // namespace ygg::detail
 
 /// A row's views, in every form: a stored row (urd::index_view<Row<F>, C, urd::key<F, Row<F>>>, read through the packed
 /// row its context hands out, PackedRow<F>), an owned row (urd::data<Row<F>>) and a builder (its relation a child, of
 /// any form). Its relation (the view of its pool key, or of the form a builder's child holds) and its values, and the
-/// typed reads over them: the types of its columns are those its relation's record stores (get_column_types(), read
+/// typed reads over them: the types of its columns are those its relation's record stores (column_types(), read
 /// through whichever form the relation is in). The context and the record, where borrowed, must outlive the view and
 /// all ranges it gives.
 template<typename F, typename V>
@@ -103,15 +107,15 @@ private:
 
 public:
     /// The view of its relation (its pool's key) through the context.
-    [[nodiscard]] decltype(auto) get_relation() const { return self().template member<&urd::record_of<V>::relation>(); }
+    [[nodiscard]] decltype(auto) relation() const { return self().template member<&urd::record_of<V>::relation>(); }
 
     /// Its canonical Values: a stored row's read from its slot as they are needed (PackedRow<F>).
-    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
+    [[nodiscard]] decltype(auto) values() const { return self().template member<&urd::record_of<V>::values>(); }
 
     /// The canonical Value of a column; std::out_of_range past the last.
     [[nodiscard]] ygg::Value value(std::size_t column) const
     {
-        decltype(auto) values = get_values();
+        decltype(auto) values = self().values();
         ygg::detail::check_column(column, std::ranges::size(values));
         return values[column];
     }
@@ -140,7 +144,7 @@ public:
     template<typename T>
     [[nodiscard]] ygg::decoded_columns_t<V, T> get() const
     {
-        const auto& values = get_values();
+        const auto& values = self().values();
         const auto count = std::ranges::size(values);
         if (count > 0)
             ygg::detail::check_column(count - 1, ygg::detail::column_count(self()));  // std::out_of_range past the last
@@ -151,7 +155,7 @@ public:
     }
 
     /// The record of type T a column names, resolved through its context (a ground record's objects are its row's,
-    /// `atom.get_row().resolve<Object>()`): where its context resolves indices of T (ResolvesColumns). Throws
+    /// `atom.row().resolve<Object>()`): where its context resolves indices of T (ResolvesColumns). Throws
     /// std::invalid_argument where the column's type is not urd::index<T> (get<T>).
     template<typename T>
         requires ygg::ResolvesColumns<V, T>
@@ -198,12 +202,12 @@ struct urd::element_children<Member>
     template<typename R, typename C>
     [[nodiscard]] static bool is_child(const R& stored, const C& context, std::size_t position)
     {
-        const auto object_column = [position](const auto& relation)
-        { return *std::ranges::next(std::ranges::begin(relation.get_column_types()), static_cast<std::ptrdiff_t>(position)) == ygg::type_id<child_type>; };
-        if constexpr (ygg::ResolvesObjects<C> && urd::is_builder<R>)
-            return urd::visit_view(urd::resolve(stored.relation, context), object_column);  // its relation a child, in any form
+        // Its relation as its form reads it: a builder's child, in any form; a record's key, as its view.
+        if constexpr (ygg::ResolvesObjects<C> && urd::Builder<R>)
+            return ygg::detail::relation_column_type(urd::resolve(stored.relation, context), position) == ygg::type_id<child_type>;
         else if constexpr (ygg::ResolvesObjects<C>)
-            return object_column(context.view(urd::stored_field<&urd::data<ygg::Row<F>>::relation, R>::read(stored)));
+            return ygg::detail::relation_column_type(context.view(urd::stored_field<&urd::data<ygg::Row<F>>::relation, R>::read(stored)), position)
+                   == ygg::type_id<child_type>;
         else
             return false;  // a context that resolves no objects (a free relation's) has no object children: every value is plain
     }
@@ -215,12 +219,31 @@ struct urd::element_children<Member>
 
 namespace ygg
 {
-/// A row is serialized as its relation and its columns: each object column as its object (resolve<Object>(column), where
-/// its context resolves objects), every other column as get(column) reads it (pyyggdrasil.serialization).
+/// f of each column of a row, as it reads: an object column's object view (resolve<Object>(column), where the row's
+/// context resolves objects), any other column decoded (get(column): a ColumnValue).
+template<typename V, typename F>
+void for_each_column(const V& row, F&& f)
+{
+    for (std::size_t column = 0; column < std::ranges::size(row.values()); ++column)
+    {
+        if constexpr (ResolvesObjects<urd::view_context_t<V>>)
+        {
+            if (row.type(column) == type_id<urd::index<formalism::Object>>)
+                f(row.template resolve<formalism::Object>(column));
+            else
+                f(row.get(column));
+        }
+        else
+            f(row.get(column));
+    }
+}
+
+/// A row is serialized as its relation and its columns (for_each_column): each object column as its object, every other
+/// column as get(column) reads it (pyyggdrasil.serialization).
 template<class Archive, typename F, typename C>
 void describe_fields(Archive& ar, std::type_identity<ygg::RowView<F, C>> /*type*/)
 {
-    ar.field("relation", [](const auto& value) -> decltype(auto) { return value.get_relation(); });
+    ar.field("relation", [](const auto& value) -> decltype(auto) { return value.relation(); });
     ar.field("values",
              [](const auto& value)
              {
@@ -228,20 +251,20 @@ void describe_fields(Archive& ar, std::type_identity<ygg::RowView<F, C>> /*type*
                  {
                      using ColumnReadout = std::variant<ygg::ColumnValue, urd::index_view<ygg::formalism::Object, C>>;
                      auto columns = urd::Store<urd::sequence<ColumnReadout>> {};
-                     for (std::size_t column = 0; column < std::ranges::size(value.get_values()); ++column)
-                     {
-                         if (value.type(column) == ygg::type_id<urd::index<ygg::formalism::Object>>)
-                             columns.push_back(ColumnReadout(std::in_place_index<1>, value.template resolve<ygg::formalism::Object>(column)));
-                         else
-                             columns.push_back(ColumnReadout(std::in_place_index<0>, value.get(column)));
-                     }
+                     ygg::for_each_column(value,
+                                          [&columns]<typename Reading>(const Reading& reading)
+                                          {
+                                              if constexpr (std::same_as<Reading, ygg::ColumnValue>)
+                                                  columns.push_back(ColumnReadout(std::in_place_index<0>, reading));
+                                              else
+                                                  columns.push_back(ColumnReadout(std::in_place_index<1>, reading));
+                                          });
                      return columns;
                  }
                  else
                  {
                      auto columns = urd::Store<urd::sequence<ygg::ColumnValue>> {};
-                     for (std::size_t column = 0; column < std::ranges::size(value.get_values()); ++column)
-                         columns.push_back(value.get(column));
+                     ygg::for_each_column(value, [&columns](const ygg::ColumnValue& reading) { columns.push_back(reading); });
                      return columns;
                  }
              });

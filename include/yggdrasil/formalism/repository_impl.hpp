@@ -74,7 +74,7 @@ struct Repository<SymbolRepo, RelationRepo>::Impl
     /// stored or computed); std::out_of_range where no layer holds it.
     template<typename F>
     static urd::column_widths read_column_widths(const void* repository, urd::index<F> relation)
-    { return RelationStore::widths(static_cast<const Repository*>(repository)->view(relation).get_column_types()); }
+    { return RelationStore::widths(static_cast<const Repository*>(repository)->view(relation).column_types()); }
 
     /// The reader of family F's column widths from `owner`, the repository these stores belong to: where it holds F's
     /// relation records; else none, so that a pool of F is never made (std::logic_error).

@@ -18,11 +18,14 @@
 #include "yggdrasil/semantics/canonicalization.hpp"
 
 #include "yggdrasil/core/config.hpp"
+#include "yggdrasil/formalism/declarations.hpp"
 
 #include <gtest/gtest.h>
 #include <type_traits>
 #include <urd/elements/flat.hpp>
 #include <urd/elements/view.hpp>
+#include <urd/tags.hpp>
+#include <utility>
 #include <vector>
 
 namespace ygg::tests
@@ -48,9 +51,43 @@ struct urd::data<ygg::tests::CanonicalizationTestTag>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
+};
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::value> {}; }
+namespace ygg::tests
+{
+struct CanonicalizationSetsTag;
+}  // namespace ygg::tests
+
+/// A record that holds one list as a set, one as a bag, and one in the order it was given.
+template<>
+struct urd::data<ygg::tests::CanonicalizationSetsTag>
+{
+    urd::flat_vector<ygg::uint_t> set;
+    urd::flat_vector<ygg::uint_t> bag;
+    urd::flat_vector<ygg::uint_t> order;
+
+    data() = default;
+    data(urd::flat_vector<ygg::uint_t> set_, urd::flat_vector<ygg::uint_t> bag_, urd::flat_vector<ygg::uint_t> order_) :
+        set(std::move(set_)),
+        bag(std::move(bag_)),
+        order(std::move(order_))
+    {
+    }
+    data(const data& other) = delete;
+    data& operator=(const data& other) = delete;
+    data(data&& other) = default;
+    data& operator=(data&& other) = default;
+    ~data() = default;
+
+    static constexpr auto fields() noexcept
+    {
+        return urd::Fields<urd::field<"set", &data::set, urd::sorted, urd::unique>,
+                           urd::field<"bag", &data::bag, urd::sorted>,
+                           urd::field<"order", &data::order>> {};
+    }
+
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 };
 
 template<typename V>
@@ -60,7 +97,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+    [[nodiscard]] decltype(auto) value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
 namespace ygg::tests
@@ -135,6 +172,25 @@ TEST(YggdrasilTests, CommonCanonicalizeOptionalIsNoOp)
 
     ASSERT_TRUE(value.has_value());
     EXPECT_EQ(*value, 4);
+}
+
+TEST(YggdrasilTests, ARecordIsCanonicalizedAsItsFieldsPromise)
+{
+    auto record = urd::data<CanonicalizationSetsTag> {};
+    for (const auto value : { 3U, 1U, 3U, 2U })
+    {
+        record.set.push_back(value);
+        record.bag.push_back(value);
+        record.order.push_back(value);
+    }
+    EXPECT_FALSE(ygg::formalism::is_canonical(record));
+
+    ygg::formalism::canonicalize(record);
+
+    EXPECT_TRUE(ygg::formalism::is_canonical(record));
+    EXPECT_EQ(std::vector<ygg::uint_t>(record.set.begin(), record.set.end()), (std::vector<ygg::uint_t> { 1, 2, 3 }));     // sorted, unique
+    EXPECT_EQ(std::vector<ygg::uint_t>(record.bag.begin(), record.bag.end()), (std::vector<ygg::uint_t> { 1, 2, 3, 3 }));  // sorted
+    EXPECT_EQ(std::vector<ygg::uint_t>(record.order.begin(), record.order.end()), (std::vector<ygg::uint_t> { 3, 1, 3, 2 }));  // as given
 }
 
 }  // namespace ygg::tests

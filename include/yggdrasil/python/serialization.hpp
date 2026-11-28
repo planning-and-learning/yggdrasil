@@ -176,45 +176,40 @@ inline boost::json::value from_python(serialization::Dictionaries& dictionaries,
     return result;
 }
 
-template<typename... Registered>
+/// Registers the table of the native type T (bound as `native_type`) under `name` and `prefix`: its fields `fields`
+/// (all where none), or the row `project` gives for each value (a dict of its fields).
+template<typename T>
 void register_table(serialization::Dictionaries& dictionaries,
                     const nanobind::type_object& native_type,
                     const std::string& name,
                     const std::string& prefix,
-                    boost::mp11::mp_list<Registered...>,
                     nanobind::object fields = nanobind::none(),
                     nanobind::object project = nanobind::none())
 {
     if (!project.is_none() && !PyCallable_Check(project.ptr()))
         throw nanobind::type_error("project must be callable");
-    auto register_type = [&]<typename T>()
+    const auto selected = selected_fields(native_type, std::move(fields));
+    std::function<void(serialization::Dictionaries::Archive&, const T&)> projection;
+    if (!project.is_none())
     {
-        const auto selected = selected_fields(native_type, std::move(fields));
-        std::function<void(serialization::Dictionaries::Archive&, const T&)> projection;
-        if (!project.is_none())
+        projection = [project, &dictionaries, owners = urd::Store<urd::sequence<nanobind::object>> {}](serialization::Dictionaries::Archive& archive,
+                                                                                                       const T& value) mutable
         {
-            projection = [project, &dictionaries, owners = urd::Store<urd::sequence<nanobind::object>> {}](serialization::Dictionaries::Archive& archive,
-                                                                                                           const T& value) mutable
+            nanobind::gil_scoped_acquire guard;
+            const auto row = project(nanobind::cast(value, nanobind::rv_policy::copy));
+            if (!nanobind::isinstance<nanobind::dict>(row))
+                throw nanobind::type_error("project must return a dict");
+            for (const auto& [key, item] : nanobind::borrow<nanobind::dict>(row))
             {
-                nanobind::gil_scoped_acquire guard;
-                const auto row = project(nanobind::cast(value, nanobind::rv_policy::copy));
-                if (!nanobind::isinstance<nanobind::dict>(row))
-                    throw nanobind::type_error("project must return a dict");
-                for (const auto& [key, item] : nanobind::borrow<nanobind::dict>(row))
-                {
-                    if (!nanobind::isinstance<nanobind::str>(key))
-                        throw nanobind::type_error("serialization mapping keys must be strings");
-                    const auto field = nanobind::cast<std::string>(key);
-                    if (archive.accepts(field))
-                        archive.put(field, from_python(dictionaries, item, owners));
-                }
-            };
-        }
-        dictionaries.register_table<T>(name, prefix, selected, std::move(projection));
-        return true;
-    };
-    if (!((native_type.is(nanobind::type<Registered>()) && register_type.template operator()<Registered>()) || ...))
-        throw nanobind::type_error("this native type cannot be registered as a table");
+                if (!nanobind::isinstance<nanobind::str>(key))
+                    throw nanobind::type_error("serialization mapping keys must be strings");
+                const auto field = nanobind::cast<std::string>(key);
+                if (archive.accepts(field))
+                    archive.put(field, from_python(dictionaries, item, owners));
+            }
+        };
+    }
+    dictionaries.register_table<T>(name, prefix, selected, std::move(projection));
 }
 
 /// What a type that can be a table (urd::Hashable) offers the generic table() and register_table() of
@@ -245,7 +240,7 @@ void bind_native_table()
                                         const std::string& prefix,
                                         nanobind::object fields,
                                         nanobind::object project)
-                                     { register_table(dictionaries, type, name, prefix, boost::mp11::mp_list<T> {}, std::move(fields), std::move(project)); } };
+                                     { register_table<T>(dictionaries, type, name, prefix, std::move(fields), std::move(project)); } };
     native_type.attr("_ygg_table") = nanobind::capsule(static_cast<const void*>(&hooks), native_table_capsule_name);
 }
 
@@ -320,12 +315,6 @@ struct index_view_of
     using fn = urd::index_view<T, Context>;
 };
 
-template<typename Context>
-struct row_view_of
-{
-    template<typename F>
-    using fn = ygg::RowView<F, Context>;
-};
 }  // namespace detail
 
 /// The views through Context of the records of each kind in Types (a repository's kind list): what a library binds the
@@ -335,7 +324,7 @@ using index_views = boost::mp11::mp_transform_q<detail::index_view_of<Context>, 
 
 /// The views through Context of the rows of each relation in Types.
 template<typename Context, typename Types>
-using row_views = boost::mp11::mp_transform_q<detail::row_view_of<Context>, Types>;
+using row_views = index_views<Context, boost::mp11::mp_transform<ygg::Row, Types>>;
 
 /// The serialization hooks of each of a library's types: its field enum where it is described (bind_fields), its
 /// serializer (bind_native_serializer), and its table where it is described and hashable (bind_native_table); a type

@@ -64,9 +64,7 @@ struct data<ygg::benchmarks::TrivialSymbol>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::benchmarks::TrivialSymbol> key() const noexcept { return urd::key<ygg::benchmarks::TrivialSymbol>(index); }
 };
@@ -78,7 +76,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+    [[nodiscard]] decltype(auto) value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
 /// A key of row pools: a lane's relation, told apart by its lane; its pool has the object columns kObjectColumns.
@@ -100,9 +98,7 @@ struct data<ygg::benchmarks::Relation>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::benchmarks::Relation> key() const noexcept { return urd::key<ygg::benchmarks::Relation>(index); }
 };
@@ -114,13 +110,13 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_lane() const { return self().template member<&urd::record_of<V>::lane>(); }
+    [[nodiscard]] decltype(auto) lane() const { return self().template member<&urd::record_of<V>::lane>(); }
 
     /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const
+    [[nodiscard]] ygg::UniformColumnTypes column_types() const
     { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(ygg::benchmarks::kObjectColumns.size()); }
 
-    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
+    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"column_types", &view_mixin::column_types>> {}; }
 };
 
 template<>
@@ -141,9 +137,7 @@ struct data<ygg::benchmarks::SerializedSymbol>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &data::values>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::benchmarks::SerializedSymbol> key() const noexcept { return urd::key<ygg::benchmarks::SerializedSymbol>(index); }
 };
@@ -155,7 +149,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
+    [[nodiscard]] decltype(auto) values() const { return self().template member<&urd::record_of<V>::values>(); }
 };
 
 }

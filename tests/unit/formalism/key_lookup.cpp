@@ -77,9 +77,7 @@ struct urd::data<Member>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"group", &data::group>, urd::field<"weight", &data::weight>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::group, &data::weight> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     /// Its whole key: its group, then its number there.
     [[nodiscard]] urd::key<Group, Member> key() const noexcept { return urd::key<Group, Member>(group, index); }
@@ -92,9 +90,9 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_group() const { return self().template member<&urd::record_of<V>::group>(); }
+    [[nodiscard]] decltype(auto) group() const { return self().template member<&urd::record_of<V>::group>(); }
 
-    [[nodiscard]] decltype(auto) get_weight() const { return self().template member<&urd::record_of<V>::weight>(); }
+    [[nodiscard]] decltype(auto) weight() const { return self().template member<&urd::record_of<V>::weight>(); }
 };
 
 namespace
@@ -264,7 +262,7 @@ TEST(KeyLookup, ARowIsInternedFromItsBuilderAndReadByItsKey)
     // A view of each form: stored and owned read typed (their interned relation's column types), built untyped only.
     EXPECT_EQ(stored.get<std::uint32_t>(0), 7U);
     EXPECT_TRUE(stored.get<bool>(1));
-    EXPECT_EQ(stored.get_relation().index(), pool);
+    EXPECT_EQ(stored.relation().index(), pool);
     EXPECT_EQ(repository.view(built).value(0), row[0]);
     auto content = urd::data<ygg::Row<ygg::Schema>>(pool, urd::flat_vector<ygg::Value>(row.begin(), row.end()));
     EXPECT_EQ(urd::resolve(content, repository).value(0), row[0]);
@@ -328,7 +326,7 @@ TEST(KeyLookup, ALayersOwnPoolFindsTheRowsOfThePoolBelow)
     EXPECT_EQ(reinserted.index(), below_view.index());
     EXPECT_NE(own_view.index(), below_view.index());
 
-    // A field of a stored row read through its packed form, by value (what Python's get_values reads).
+    // A field of a stored row read through its packed form, by value (what Python's values reads).
     static_assert(std::same_as<decltype(below_view.template member<&urd::data<ygg::Row<ygg::Schema>>::values>()), ygg::PackedRow<ygg::Schema>>);
     EXPECT_EQ(below_view.template member<&urd::data<ygg::Row<ygg::Schema>>::values>()[0], 1U);
 }

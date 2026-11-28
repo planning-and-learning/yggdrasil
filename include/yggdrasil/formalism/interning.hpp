@@ -27,29 +27,32 @@
 
 namespace ygg
 {
+/// A Columns record checked before it is inserted (by the repository's one insert): its columns' types valid, their
+/// labels distinct (validate_columns: std::invalid_argument otherwise).
+template<typename Repository>
+void prepare_for_insert(const Repository& /*repository*/, urd::data<Columns>& columns)
+{ ygg::validate_columns(std::span<const urd::data<ColumnLayout>>(columns.values.data(), columns.values.size())); }
+
 /// A relation record made canonical and checked before it is inserted (by the repository's one insert): its rows in tuple order,
-/// unique; its columns' types its pool's (its relation symbol's: std::out_of_range where no layer holds it), their
-/// labels distinct (std::invalid_argument otherwise).
+/// unique; its columns' types its pool's (its relation symbol's: std::out_of_range where no layer holds it; its
+/// columns were checked as they were inserted).
 template<typename Repository, typename F>
     requires formalism::SupportsSymbol<Repository, Relation<F>>
 void prepare_for_insert(const Repository& repository, urd::data<Relation<F>>& relation)
 {
     ygg::canonicalize(relation, repository);
-    const auto& values = repository[relation.columns]->values;
+    const auto& values = repository[relation.layout]->values;
     const auto columns = std::span<const urd::data<ColumnLayout>>(values.data(), values.size());
-    if (!std::ranges::equal(repository.view(relation.pool).get_column_types(), columns, {}, {}, &urd::data<ColumnLayout>::type))
+    if (!std::ranges::equal(repository.view(relation.pool).column_types(), columns, {}, {}, &urd::data<ColumnLayout>::type))
         throw std::invalid_argument("Repository: the columns' types are not the pool's.");
-    for (auto it = columns.begin(); it != columns.end(); ++it)
-        if (repeats_label(columns, it))
-            throw std::invalid_argument("Repository: a relation's column labels are distinct.");
     // ponytail: an assert, not a throw: O(rows) per insert (user). Catches ids beyond the pool (e.g. of another
     // repository), not an id that happens to exist in both.
     assert(std::ranges::all_of(relation.rows, [&](urd::key<F, Row<F>> key) { return urd::get<F>(key) == relation.pool && repository.owner(key) != nullptr; })
            && "Repository: a relation's rows must be rows of its pool here.");
 }
 
-// Columns, a Schema and a row are canonical as they are written (their order is their meaning): inserted as they are,
-// by the no-op default (declarations.hpp).
+// A Schema and a row are canonical as they are written (their order is their meaning): inserted as they are, by the
+// default (declarations.hpp).
 }  // namespace ygg
 
 namespace ygg::formalism
@@ -64,6 +67,26 @@ concept InsertsRecord = requires(Repository& repository, urd::data<T>& data) { r
 template<typename Repository, typename T>
 concept FindsRecord = requires(const Repository& repository, urd::data<T>& data) { repository.find(data); };
 
+/// Whether P (a repository, or a part of one) interns a builder B through a builder storage (insert(built, storage));
+/// whether it finds the record B writes (find(built, storage)).
+template<typename P, typename B, typename Storage>
+concept InsertsBuilder = requires(P& held, const B& built, Storage& storage) { held.insert(built, storage); };
+
+template<typename P, typename B, typename Storage>
+concept FindsBuilder = requires(P& held, const B& built, Storage& storage) { held.find(built, storage); };
+
+/// Whether P (a store, a part, a repository) interns a builder B itself, with the hints `Hints`
+/// (insert_built(built, hints...)); finds the record it writes (find_built(built, hints...)); reads the record of a key
+/// K into it (unpack_built(key, built)).
+template<typename P, typename B, typename... Hints>
+concept InsertsBuilt = requires(P& held, const B& built, const Hints&... hints) { held.insert_built(built, hints...); };
+
+template<typename P, typename B, typename... Hints>
+concept FindsBuilt = requires(const P& held, const B& built, const Hints&... hints) { held.find_built(built, hints...); };
+
+template<typename P, typename K, typename B>
+concept UnpacksBuilt = requires(const P& held, K key, B& built) { held.unpack_built(key, built); };
+
 }  // namespace ygg::formalism
 
 namespace ygg::formalism
@@ -73,63 +96,23 @@ namespace ygg::formalism
 template<typename Repository, typename T>
 using found_t = std::optional<urd::index_view<T, typename Repository::template Owner<T>, key_t<T>>>;
 
-/// Whether a repository interns a builder of another repository's kind, which it holds nested (its insert(builder,
-/// storage) passing it on: an execution repository's planning state, say).
-template<typename C, typename Storage, typename T, typename Context>
-concept InsertsNestedBuilder =
-    !std::same_as<Context, C> && requires(C& repository, Storage& storage, const urd::builder<T, Context>& built) { repository.insert(built, storage); };
-
-/// Likewise for finding (find(builder, storage)).
-template<typename C, typename Storage, typename T, typename Context>
-concept FindsNestedBuilder =
-    !std::same_as<Context, C> && requires(C& repository, Storage& storage, const urd::builder<T, Context>& built) { repository.find(built, storage); };
-
 namespace detail
 {
 /// The forms of a child interning or finding a builder meets: its key (an interned child: an index, or a key of its own
-/// such as a row's, a value); a record not interned yet (data<T>, writable); a builder (builder<T, Context>).
-template<typename Form>
-struct child_form
-{
-};
-
-template<typename T>
-struct child_form<urd::data<T>>
-{
-    using tag = T;
-};
-
-template<typename T, typename Context>
-struct child_form<urd::builder<T, Context>>
-{
-    using tag = T;
-    using context = Context;
-};
-
-/// Whether a child's form is a record not interned yet, or a builder.
-template<typename Form>
-concept ChildRecord = !urd::is_builder<Form> && requires { typename child_form<Form>::tag; };
-
-template<typename Form>
-concept ChildBuilder = urd::is_builder<Form>;
-
-/// Whether a child's form is a builder of repository C itself.
+/// such as a row's, a value); a record not interned yet (urd::Record, writable); a builder (urd::Builder): one of
+/// repository C itself, or one of a repository nested in C.
 template<typename Form, typename C>
-concept OwnBuilder = ChildBuilder<Form> && std::same_as<typename child_form<Form>::context, C>;
+concept OwnBuilder = urd::Builder<Form> && std::same_as<urd::builder_context_t<Form>, C>;
 
-/// Whether a child's form is a builder repository C interns (finds) in a repository nested in it, through Storage.
-template<typename Form, typename C, typename Storage>
-concept NestedBuilderInserted = ChildBuilder<Form> && InsertsNestedBuilder<C, Storage, typename child_form<Form>::tag, typename child_form<Form>::context>;
-
-template<typename Form, typename C, typename Storage>
-concept NestedBuilderFound = ChildBuilder<Form> && FindsNestedBuilder<C, Storage, typename child_form<Form>::tag, typename child_form<Form>::context>;
+template<typename Form, typename C>
+concept NestedBuilder = urd::Builder<Form> && !std::same_as<urd::builder_context_t<Form>, C>;
 
 /// Whether a child's form is a record repository C inserts (finds): of a kind it holds, or one nested in it holds.
 template<typename Form, typename C>
-concept RecordInserted = ChildRecord<Form> && InsertsRecord<C, typename child_form<Form>::tag>;
+concept InsertedRecord = urd::Record<Form> && InsertsRecord<C, urd::kind_of_t<Form>>;
 
 template<typename Form, typename C>
-concept RecordFound = ChildRecord<Form> && FindsRecord<C, typename child_form<Form>::tag>;
+concept FoundRecord = urd::Record<Form> && FindsRecord<C, urd::kind_of_t<Form>>;
 
 /// Whether a child's lookup found nothing: missing_key, or an empty lookup result; a key is found.
 template<typename R>
@@ -162,23 +145,21 @@ auto insert_child(C& repository, Storage& storage, Form& form, const Hints&... h
     using F = std::remove_const_t<Form>;
     if constexpr (OwnBuilder<F, C>)
     {
-        // A builder its part interns itself (with the hints it takes, else without); any other through a scratch record,
-        // its children first, each with the hints.
-        if constexpr (requires { repository.insert_built(form, hints...); })
+        // A builder its part interns itself (the part gives its store the hints the store takes); any other through a
+        // scratch record, its children first, each with the hints.
+        if constexpr (InsertsBuilt<C, F, Hints...>)
             return repository.insert_built(form, hints...);
-        else if constexpr (requires { repository.insert_built(form); })
-            return repository.insert_built(form);
         else
         {
-            auto scratch = storage.template scratch<typename child_form<F>::tag>();
+            auto scratch = storage.template scratch<urd::kind_of_t<F>>();
             return urd::intern(form, *scratch, [&repository, &storage, &hints...](auto& child) { return detail::insert_child(repository, storage, child, hints...); });
         }
     }
-    else if constexpr (NestedBuilderInserted<F, C, Storage>)
+    else if constexpr (NestedBuilder<F, C> && InsertsBuilder<C, F, Storage>)
         return repository.insert(form, storage);
-    else if constexpr (RecordInserted<F, C>)
+    else if constexpr (InsertedRecord<F, C>)
         return repository.insert(form);
-    else if constexpr (ChildBuilder<F> || ChildRecord<F>)
+    else if constexpr (urd::Builder<F> || urd::Record<F>)
         return detail::other_repositorys_child();
     else
         return F(form);
@@ -193,13 +174,11 @@ template<typename C, IsBuilderStorage Storage, typename Form, typename... Hints>
 auto find_child(C& repository, Storage& storage, Form& form, const Hints&... hints)
 {
     using F = std::remove_const_t<Form>;
-    if constexpr (OwnBuilder<F, C> && requires { repository.find_built(form, hints...); })
+    if constexpr (OwnBuilder<F, C> && FindsBuilt<C, F, Hints...>)
         return repository.find_built(form, hints...);
-    else if constexpr (OwnBuilder<F, C> && requires { repository.find_built(form); })
-        return repository.find_built(form);
     else if constexpr (OwnBuilder<F, C>)
     {
-        using T = typename child_form<F>::tag;
+        using T = urd::kind_of_t<F>;
         auto scratch = storage.template scratch<T>();
         auto found = true;
         urd::map_children(form,
@@ -215,11 +194,11 @@ auto find_child(C& repository, Storage& storage, Form& form, const Hints&... hin
             return found_t<C, T> {};
         return found_t<C, T>(repository.find(*scratch));
     }
-    else if constexpr (NestedBuilderFound<F, C, Storage>)
+    else if constexpr (NestedBuilder<F, C> && FindsBuilder<C, F, Storage>)
         return repository.find(form, storage);
-    else if constexpr (RecordFound<F, C>)
+    else if constexpr (FoundRecord<F, C>)
         return repository.find(form);
-    else if constexpr (ChildBuilder<F> || ChildRecord<F>)
+    else if constexpr (urd::Builder<F> || urd::Record<F>)
         return urd::missing_key {};
     else
         return F(form);
@@ -244,8 +223,8 @@ std::pair<urd::index_view<T, C, K>, bool> insert_view(C& repository, Storage& /*
 
 /// The builder a view holds, interned as a built child (insert_child); find_view likewise finds it.
 template<typename C, IsBuilderStorage Storage, urd::View V>
-decltype(auto) insert_view(C& repository, Storage& storage, const V& view)
-{ return detail::insert_child(repository, storage, urd::detail::view_access::record(view)); }
+auto insert_view(C& repository, Storage& storage, const V& view)
+{ return detail::insert_child(repository, storage, urd::record(view)); }
 
 template<typename C, IsBuilderStorage Storage, typename T, typename K>
 std::optional<urd::index_view<T, C, K>> find_view(C& repository, Storage& /*storage*/, const urd::index_view<T, C, K>& interned)
@@ -256,13 +235,13 @@ std::optional<urd::index_view<T, C, K>> find_view(C& repository, Storage& /*stor
 
 template<typename C, IsBuilderStorage Storage, urd::View V>
 auto find_view(C& repository, Storage& storage, const V& view)
-{ return detail::find_child(repository, storage, urd::detail::view_access::record(view)); }
+{ return detail::find_child(repository, storage, urd::record(view)); }
 }  // namespace detail
 
 /// Whether V is a view read through C (in any form: interned, or holding a builder or a record): what a child of C's
 /// kinds resolves to, and what a repository interns as it interns that child.
 template<typename V, typename C>
-concept ViewThrough = urd::View<V> && std::same_as<std::remove_cvref_t<decltype(std::declval<const V&>().context())>, C>;
+concept ViewThrough = urd::View<V> && std::same_as<urd::view_context_t<V>, C>;
 
 }  // namespace ygg::formalism
 

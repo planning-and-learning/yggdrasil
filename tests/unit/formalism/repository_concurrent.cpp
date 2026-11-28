@@ -76,9 +76,7 @@ struct data<ygg::tests::ConcurrentElement>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::tests::ConcurrentElement> key() const noexcept { return urd::key<ygg::tests::ConcurrentElement>(index); }
 };
@@ -90,7 +88,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+    [[nodiscard]] decltype(auto) value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
 /// A key of row pools: a relation, told apart by its lane; its pool has four object columns.
@@ -112,9 +110,7 @@ struct data<ygg::tests::ConcurrentRelation<Width>>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"lane", &data::lane>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::lane> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::tests::ConcurrentRelation<Width>> key() const noexcept { return urd::key<ygg::tests::ConcurrentRelation<Width>>(index); }
 };
@@ -126,13 +122,13 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_lane() const { return self().template member<&urd::record_of<V>::lane>(); }
+    [[nodiscard]] decltype(auto) lane() const { return self().template member<&urd::record_of<V>::lane>(); }
 
     /// As a key of row pools, its rows' column types: those its record stores.
-    [[nodiscard]] ygg::UniformColumnTypes get_column_types() const
+    [[nodiscard]] ygg::UniformColumnTypes column_types() const
     { return ygg::uniform_column_types<urd::index<ygg::formalism::Object>>(ygg::tests::object_columns.size()); }
 
-    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"get_column_types", &view_mixin::get_column_types>> {}; }
+    static constexpr auto functions() noexcept { return urd::Functions<urd::function<"column_types", &view_mixin::column_types>> {}; }
 };
 
 template<>
@@ -153,9 +149,7 @@ struct data<ygg::tests::ConcurrentSerializedElement>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"values", &data::values>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::values> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::tests::ConcurrentSerializedElement> key() const noexcept { return urd::key<ygg::tests::ConcurrentSerializedElement>(index); }
 };
@@ -167,7 +161,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_values() const { return self().template member<&urd::record_of<V>::values>(); }
+    [[nodiscard]] decltype(auto) values() const { return self().template member<&urd::record_of<V>::values>(); }
 };
 
 }
@@ -306,8 +300,8 @@ TEST(YggdrasilTests, PublicSymbolContextPreservesPublishedContextAndScratchIndic
     const auto [view, inserted] = repository.insert(data);
     EXPECT_TRUE(inserted);
     EXPECT_EQ(&view.context(), &repository);
-    EXPECT_EQ(&view.get_value(), &repository[view.index()]->value);
-    EXPECT_EQ(view.get_value(), 7);
+    EXPECT_EQ(&view.value(), &repository[view.index()]->value);
+    EXPECT_EQ(view.value(), 7);
     EXPECT_EQ(data.index, view.index());
 
     data.index = urd::index<ConcurrentElement>(84);
@@ -355,7 +349,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryCanonicalizesTrivialAndSeriali
                         data.value = key;
                         const auto [view, created] = repository.insert(data);
                         trivial_created.fetch_add(created, std::memory_order_relaxed);
-                        if (view.get_value() != key || view.context()[view.index()]->index != view.index() || data.index != view.index())
+                        if (view.value() != key || view.context()[view.index()]->index != view.index() || data.index != view.index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -446,7 +440,7 @@ TEST(YggdrasilTests, FormalismConcurrentPackedRepositoryRejectsWrongArityWithout
     EXPECT_FALSE(find_bound(repository, wrong).has_value());
     EXPECT_THROW(insert_bound(repository, wrong), std::invalid_argument);
     EXPECT_EQ(repository.template size<Row<ConcurrentRelation<Width>>>(relation), 1);
-    EXPECT_EQ(view.get_values().size(), 4);
+    EXPECT_EQ(view.values().size(), 4);
 }
 
 TEST(YggdrasilTests, FormalismConcurrentPackedViewsRemainStableWhileSharedBlocksGrow)
@@ -526,7 +520,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
 
                     const auto [inherited_binding_view, inherited_binding_created] = insert_bound(child, make_binding<Width>(relation, 7));
                     if (inherited_binding_created || &inherited_binding_view.context() != &parent
-                        || !std::ranges::equal(inherited_binding_view.get_values(), parent_binding_view.get_values()))
+                        || !std::ranges::equal(inherited_binding_view.values(), parent_binding_view.values()))
                         errors.fetch_add(1, std::memory_order_relaxed);
 
                     auto missing = urd::data<ConcurrentElement> {};
@@ -539,7 +533,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
                         auto local = urd::data<ConcurrentElement> {};
                         local.value = 1000 + static_cast<uint_t>(thread) * rows_per_thread + row;
                         const auto [local_view, created] = child.insert(local);
-                        if (!created || &local_view.context() != &child || local_view.get_value() != local.value
+                        if (!created || &local_view.context() != &child || local_view.value() != local.value
                             || local_view.context()[local_view.index()]->index != local_view.index() || local.index != local_view.index())
                             errors.fetch_add(1, std::memory_order_relaxed);
                     }
@@ -550,9 +544,9 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryReadsFrozenParentWhileGrowingC
     EXPECT_EQ(parent.size<ConcurrentSerializedElement>(), 1);
     EXPECT_EQ(parent.template size<Row<ConcurrentRelation<Width>>>(relation), 1);
     EXPECT_EQ(child.size<ConcurrentElement>(), 1 + kThreads * rows_per_thread);
-    EXPECT_EQ(parent_view.get_value(), 7);
+    EXPECT_EQ(parent_view.value(), 7);
     EXPECT_EQ(parent_serialized_view.context()[parent_serialized_view.index()]->values.front(), parent_view.index());
-    EXPECT_TRUE(std::ranges::equal(parent_binding_view.get_values(), make_binding<Width>(relation, 7).values));
+    EXPECT_TRUE(std::ranges::equal(parent_binding_view.values(), make_binding<Width>(relation, 7).values));
 }
 
 TEST(YggdrasilTests, FormalismConcurrentRepositoryWithOneWriterInsertsRowsAsAShared)
@@ -583,7 +577,7 @@ TEST(YggdrasilTests, FormalismConcurrentRepositoryWithOneWriterInsertsRowsAsASha
         EXPECT_TRUE(exclusive_created);
         EXPECT_EQ(&exclusive_view.context(), &exclusive);
         EXPECT_EQ(exclusive_view.index(), shared_view.index());
-        EXPECT_TRUE(std::ranges::equal(exclusive_view.get_values(), shared_view.get_values()));
+        EXPECT_TRUE(std::ranges::equal(exclusive_view.values(), shared_view.values()));
     }
     for (uint_t key = 0; key < rows; ++key)
     {

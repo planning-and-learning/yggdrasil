@@ -40,7 +40,7 @@ namespace ygg::formalism
 /// declares the members that touch the symbols; symbol_context_impl.hpp defines them and the stores (a plain symbol
 /// repository), and a library instantiates them for each of its repositories in one source
 /// (symbol_context_instantiations.hpp), so that its other sources complete no store.
-/// Named by its record types and Derived, never by a store, so that no lookup completes one (rule 25).
+/// Named by its record types and Derived, never by a store, so that no lookup completes one (rule T17).
 ///
 /// Over a parent (its stores layered over the parent's), lookups and reads find the parent's records too.
 template<typename Derived, typename Types, bool ThreadSafe = false>

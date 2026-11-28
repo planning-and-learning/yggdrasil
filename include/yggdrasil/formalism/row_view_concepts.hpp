@@ -18,7 +18,7 @@ namespace ygg
 {
 /// Whether V is the view of a row of family F (a stored row, one held outside the repository, a builder's: its tag is
 /// Row<F>): its values, read untyped, through its context. Read through const, however V is spelled (a reference to a
-/// mutable view too). It asks only for members whose types are written out: get_relation() and get_values() deduce
+/// mutable view too). It asks only for members whose types are written out: relation() and values() deduce
 /// theirs, and asking for them would compile their reads through the repository wherever the concept is checked; the
 /// tag gives a view both.
 template<typename V, typename F>

@@ -56,9 +56,7 @@ struct urd::data<Name>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"value", &data::value>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::value> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<Name> key() const noexcept { return urd::key<Name>(index); }
 };
@@ -81,9 +79,7 @@ struct urd::data<Tag>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"name", &data::name>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::name> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<Tag> key() const noexcept { return urd::key<Tag>(index); }
 };
@@ -106,9 +102,7 @@ struct urd::data<Item>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"tag", &data::tag>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::tag> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<Item> key() const noexcept { return urd::key<Item>(index); }
 };
@@ -120,7 +114,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_value() const { return self().template member<&urd::record_of<V>::value>(); }
+    [[nodiscard]] decltype(auto) value() const { return self().template member<&urd::record_of<V>::value>(); }
 };
 
 template<typename V>
@@ -130,7 +124,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_name() const { return self().template member<&urd::record_of<V>::name>(); }
+    [[nodiscard]] decltype(auto) name() const { return self().template member<&urd::record_of<V>::name>(); }
 };
 
 template<typename V>
@@ -140,7 +134,7 @@ private:
     [[nodiscard]] const V& self() const noexcept { return static_cast<const V&>(*this); }
 
 public:
-    [[nodiscard]] decltype(auto) get_tag() const { return self().template member<&urd::record_of<V>::tag>(); }
+    [[nodiscard]] decltype(auto) tag() const { return self().template member<&urd::record_of<V>::tag>(); }
 };
 
 namespace
@@ -272,13 +266,13 @@ TEST(Nests, ResolvesEachKindThroughTheRepositoryOwningIt)
     auto item = urd::data<Item>(tag_index);
     const auto item_view = fixture.items.insert(item).first;
 
-    const auto tag_view = item_view.get_tag();
+    const auto tag_view = item_view.tag();
     static_assert(std::same_as<std::remove_cvref_t<decltype(tag_view.context())>, Tags>);
     EXPECT_EQ(&tag_view.context(), fixture.tags.get());
-    const auto name_view = tag_view.get_name();
+    const auto name_view = tag_view.name();
     static_assert(std::same_as<std::remove_cvref_t<decltype(name_view.context())>, Names>);
     EXPECT_EQ(&name_view.context(), fixture.names.get());
-    EXPECT_EQ(name_view.get_value(), 7);
+    EXPECT_EQ(name_view.value(), 7);
 
     // A record of a kind two levels down found through Items (read only there), as its view in the repository owning it.
     auto name_again = urd::data<Name>(7);
@@ -293,13 +287,13 @@ TEST(Nests, ResolvesEachKindThroughTheRepositoryOwningIt)
     EXPECT_EQ(fixture.items[item_view.index()]->tag, tag_index);
 
     // An index of a kind two levels down, through Items.
-    EXPECT_EQ(fixture.items.view(name_index).get_value(), 7);
+    EXPECT_EQ(fixture.items.view(name_index).value(), 7);
     EXPECT_EQ(&fixture.items.view(name_index).context(), fixture.names.get());
 
     // A record held in place, of a kind held below: its view through its owner.
     const auto held = fixture.items.view(tag);
     static_assert(std::same_as<std::remove_cvref_t<decltype(held.context())>, Tags>);
-    EXPECT_EQ(held.get_name().get_value(), 7);
+    EXPECT_EQ(held.name().value(), 7);
 
     EXPECT_TRUE(fixture.items.find(tag).has_value());
 }
@@ -309,7 +303,7 @@ TEST(Nests, FindPreparesARecordInTheRepositoryOwningIt)
     auto fixture = Fixture {};
     auto name = urd::data<Name>(-7);
     const auto inserted = fixture.names->insert(name).first;
-    EXPECT_EQ(inserted.get_value(), 7);
+    EXPECT_EQ(inserted.value(), 7);
 
     // Found through Items, two levels down and nested read only: prepared by the names' domain as its insert is.
     auto unprepared = urd::data<Name>(-7);

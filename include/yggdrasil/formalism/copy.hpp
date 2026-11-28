@@ -51,12 +51,12 @@ struct urd::copying<ygg::Relation<F>>
     {
         const auto copied = [&to, &storage](const auto& view) { return urd::copy(view, to, storage); };
         auto record = storage.template scratch<ygg::Relation<F>>();
-        record->pool = urd::visit_view(relation.get_pool(), copied);
+        record->pool = urd::visit_view(relation.pool(), copied);
         auto columns = storage.template scratch<ygg::Columns>();  // its labels and types, in whatever form it holds them
         const auto layouts = relation.columns();
         columns->values.set(layouts.begin(), layouts.end());
-        record->columns = to.insert(*columns).first.index();
-        for (const auto row : relation.get_rows())
+        record->layout = to.insert(*columns).first.index();
+        for (const auto row : relation.rows())
             record->rows.push_back(urd::visit_view(row, copied));
         return to.insert(*record).first.index();
     }

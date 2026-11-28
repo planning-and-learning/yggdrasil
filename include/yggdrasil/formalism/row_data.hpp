@@ -93,7 +93,7 @@ struct data<ygg::Row<F>>
     /// Its content alone: the relation selects the slot, the values are what the slot deduplicates.
     static constexpr auto identifying_members() noexcept { return urd::Members<&data::values> {}; }
 
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::relation, &data::values> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     /// Its whole key (urd::key_t<Row<F>>): the relation it lies in, then its number there.
     [[nodiscard]] urd::key<F, ygg::Row<F>> key() const noexcept { return urd::key<F, ygg::Row<F>>(relation, index); }

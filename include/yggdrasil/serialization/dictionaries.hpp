@@ -46,25 +46,32 @@ concept Described = requires(FieldNames& archive) { describe_fields(archive, std
 template<typename T>
 concept PlainFields = urd::HasFields<T> && !urd::View<T> && !urd::ChildView<T>;
 
-/// Ranges of described types, of variants (urd::variant_value), of child views (urd::ChildView) or of plain values with
-/// fields (PlainFields), serialized element by element.
-template<typename T>
-concept DescribedRange = std::ranges::input_range<const T>
-                         && (Described<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
-                             || urd::variant_value<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>
-                             || urd::ChildView<std::ranges::range_reference_t<const T>>
-                             || PlainFields<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>);
+class Dictionaries;
 
+/// What a range's element or an optional's value is serialized as, one by one: a described type, a variant
+/// (urd::variant_value), a child view (urd::ChildView), or a plain value with fields (PlainFields).
 template<typename T>
-struct IsDescribedOptional : std::false_type
-{
-};
+concept DescribedElement = Described<T> || urd::variant_value<T> || urd::ChildView<T> || PlainFields<T>;
 
+/// Ranges of such elements, serialized element by element.
 template<typename T>
-    requires Described<T> || urd::variant_value<T> || urd::ChildView<T> || PlainFields<T>
-struct IsDescribedOptional<std::optional<T>> : std::true_type
+concept DescribedRange = std::ranges::input_range<const T> && DescribedElement<std::remove_cvref_t<std::ranges::range_reference_t<const T>>>;
+
+namespace detail
 {
-};
+template<typename T>
+inline constexpr bool described_optional = false;
+template<typename T>
+inline constexpr bool described_optional<std::optional<T>> = DescribedElement<T>;
+}  // namespace detail
+
+/// A std::optional of such an element.
+template<typename T>
+concept DescribedOptional = detail::described_optional<T>;
+
+/// A type serialized as another object: it declares serialize_as(Dictionaries&, const T&) returning it.
+template<typename T>
+concept SerializedAs = requires(Dictionaries& dictionaries, const T& value) { serialize_as(dictionaries, value); };
 
 /// Objects referenced by stored keys must remain valid while the dictionaries are used.
 class Dictionaries
@@ -162,7 +169,7 @@ public:
     template<typename T>
     boost::json::value convert(const T& value)
     {
-        if constexpr (requires { serialize_as(*this, value); })
+        if constexpr (SerializedAs<T>)
             return convert(serialize_as(*this, value));
         else if constexpr (std::ranges::view<T> && std::ranges::input_range<T> && !std::ranges::input_range<const T>)
         {
@@ -198,7 +205,7 @@ public:
             urd::for_each_field<T>([&]<typename F>() { object[F::name] = convert(value.*F::member); });
             return result;
         }
-        else if constexpr (IsDescribedOptional<T>::value)
+        else if constexpr (DescribedOptional<T>)
             return value ? convert(*value) : boost::json::value(nullptr);
         else if constexpr (DescribedRange<T>)
         {

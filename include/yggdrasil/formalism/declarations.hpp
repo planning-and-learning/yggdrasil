@@ -10,6 +10,8 @@
 #ifndef YGG_FORMALISM_DECLARATIONS_HPP_
 #define YGG_FORMALISM_DECLARATIONS_HPP_
 
+#include "yggdrasil/semantics/canonicalization.hpp"
+
 #include <atomic>
 #include <boost/mp11.hpp>
 #include <concepts>
@@ -90,10 +92,10 @@ struct urd::key_of<ygg::Row<F>>
 namespace ygg
 {
 
-/// The view of a stored row through its context C (a layer, or a relation builder): an indexed record under its key,
-/// urd::key<F, Row<F>> (its relation's index, then its row's there).
+/// The view of a stored row through its context C (a layer, or a relation builder): an indexed record under its key
+/// (urd::key_of: urd::key<F, Row<F>>, its relation's index, then its row's there).
 template<typename F, typename C>
-using RowView = urd::index_view<Row<F>, C, urd::key<F, Row<F>>>;
+using RowView = urd::index_view<Row<F>, C>;
 
 namespace formalism
 {
@@ -207,24 +209,26 @@ class RowSlot;
 template<typename Held>
 struct symbol_repository_traits;
 
-template<typename... Ts>
-struct symbol_repository_traits<Symbols<Ts...>>
+/// Of the symbols Ts, held thread safe or not.
+template<bool ThreadSafe, typename... Ts>
+struct symbol_traits
 {
     using SymbolTypes = boost::mp11::mp_list<Ts...>;
     /// The keys it resolves (repository[key]): each symbol's index.
     using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
-    static constexpr bool thread_safe = false;
+    static constexpr bool thread_safe = ThreadSafe;
     /// The store that holds them (symbol_repository.hpp): one layered pool per kind.
-    using Store = SymbolStores<false, Ts...>;
+    using Store = SymbolStores<ThreadSafe, Ts...>;
 };
 
 template<typename... Ts>
-struct symbol_repository_traits<ConcurrentSymbols<Ts...>>
+struct symbol_repository_traits<Symbols<Ts...>> : symbol_traits<false, Ts...>
 {
-    using SymbolTypes = boost::mp11::mp_list<Ts...>;
-    using KeyTypes = boost::mp11::mp_list<urd::index<Ts>...>;
-    static constexpr bool thread_safe = true;
-    using Store = SymbolStores<true, Ts...>;
+};
+
+template<typename... Ts>
+struct symbol_repository_traits<ConcurrentSymbols<Ts...>> : symbol_traits<true, Ts...>
+{
 };
 
 template<NamesList Held>
@@ -240,23 +244,25 @@ struct relation_repository_traits<Held> : relation_repository_traits<typename He
 {
 };
 
-template<typename... Ts>
-struct relation_repository_traits<Relations<Ts...>>
+/// Of the row families Ts, held by Store, thread safe or not.
+template<bool ThreadSafe, template<typename...> typename Held, typename... Ts>
+struct relation_traits
 {
     using RelationTypes = boost::mp11::mp_list<Ts...>;
     /// The keys it resolves (repository[key]): a Schema's index, and each family's rows' keys.
     using KeyTypes = boost::mp11::mp_list<urd::index<Schema>, urd::key<Ts, Row<Ts>>...>;
-    static constexpr bool thread_safe = false;
-    using Store = RelationRepository<Ts...>;
+    static constexpr bool thread_safe = ThreadSafe;
+    using Store = Held<Ts...>;
 };
 
 template<typename... Ts>
-struct relation_repository_traits<ConcurrentRelations<Ts...>>
+struct relation_repository_traits<Relations<Ts...>> : relation_traits<false, RelationRepository, Ts...>
 {
-    using RelationTypes = boost::mp11::mp_list<Ts...>;
-    using KeyTypes = boost::mp11::mp_list<urd::index<Schema>, urd::key<Ts, Row<Ts>>...>;
-    static constexpr bool thread_safe = true;
-    using Store = ConcurrentRelationRepository<Ts...>;
+};
+
+template<typename... Ts>
+struct relation_repository_traits<ConcurrentRelations<Ts...>> : relation_traits<true, ConcurrentRelationRepository, Ts...>
+{
 };
 
 }  // namespace detail
@@ -286,17 +292,46 @@ concept HoldsRecords = HoldsKey<Repository, key_t<T>>;
 template<typename K>
 using kind_of_key = typename K::element_type;
 
-/// A record's canonical form: as built, unless its domain says more by an overload of its own for its kind (found by ADL
-/// through T's namespace; more specialized, so it takes precedence).
-template<typename T>
-void canonicalize(urd::data<T>& /*record*/) noexcept
+namespace detail
 {
+/// A field of a record made canonical as the record promises it (urd::field<..., urd::sorted>, and urd::unique where it
+/// holds no element twice): sorted, and deduplicated; a field the record promises nothing of as it is.
+template<typename Field, typename T>
+void canonicalize_field(urd::data<T>& record)
+{
+    if constexpr (Field::template promises<urd::sorted>)
+        ygg::canonicalize<Field::template promises<urd::unique>>(record.*Field::member);
 }
 
-/// Whether a record is in its canonical form: always, unless its domain says more (as canonicalize).
+template<typename Field, typename T>
+bool is_canonical_field(const urd::data<T>& record)
+{
+    if constexpr (Field::template promises<urd::sorted>)
+        return ygg::is_canonical<Field::template promises<urd::unique>>(record.*Field::member);
+    else
+        return true;
+}
+}  // namespace detail
+
+/// A record's canonical form: each field as the record promises it (detail::canonicalize_field: a list it holds as a set
+/// sorted and deduplicated), the others as built; a domain whose canonical form is more says so by an overload of its
+/// own for its kind (found by ADL through T's namespace; more specialized, so it takes precedence).
 template<typename T>
-bool is_canonical(const urd::data<T>& /*record*/) noexcept
-{ return true; }
+void canonicalize(urd::data<T>& record)
+{
+    if constexpr (urd::HasFields<urd::data<T>>)
+        [&]<typename... Fs>(urd::Fields<Fs...> /*fields*/) { (detail::canonicalize_field<Fs>(record), ...); }(urd::data<T>::fields());
+}
+
+/// Whether a record is in its canonical form (as canonicalize makes it).
+template<typename T>
+bool is_canonical(const urd::data<T>& record)
+{
+    if constexpr (urd::HasFields<urd::data<T>>)
+        return [&]<typename... Fs>(urd::Fields<Fs...> /*fields*/) { return (detail::is_canonical_field<Fs>(record) && ...); }(urd::data<T>::fields());
+    else
+        return true;
+}
 
 /// What a repository's one insert and find run on a record first (prepare_for_insert, found by ADL): its canonical form.
 /// A domain whose preparation does more says so by an overload of its own (more specialized, so it takes precedence).

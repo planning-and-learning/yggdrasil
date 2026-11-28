@@ -96,13 +96,11 @@ struct builder<ygg::Relation<F>, C>
 {
     urd::key<ygg::Relation<F>> index;
     urd::built_t<urd::index<F>, C> pool;
-    urd::built_t<urd::index<ygg::Columns>, C> columns;
+    urd::built_t<urd::index<ygg::Columns>, C> layout;
     urd::built_t<urd::flat_vector<urd::key<F, ygg::Row<F>>>, C> rows;
 
     static constexpr auto fields() noexcept
-    { return urd::Fields<urd::field<"pool", &builder::pool>, urd::field<"columns", &builder::columns>, urd::field<"rows", &builder::rows>> {}; }
-
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
+    { return urd::Fields<urd::field<"pool", &builder::pool>, urd::field<"layout", &builder::layout>, urd::field<"rows", &builder::rows>> {}; }
 
     /// Empties it and gives it the pool `pool` and these columns (validated), interned into `repository`, through which
     /// its rows are then ordered.
@@ -187,12 +185,11 @@ struct builder<ygg::Relation<F>, C>
     }
 
 private:
-    /// Gives it these columns (validated), interned into `repository`.
+    /// Gives it these columns, interned into `repository` (which checks them: prepare_for_insert).
     void assign_columns(C& repository, std::span<const urd::data<ygg::ColumnLayout>> layouts)
     {
-        ygg::validate_columns(layouts);
         auto record = urd::data<ygg::Columns>(urd::flat_vector<urd::data<ygg::ColumnLayout>>(layouts.begin(), layouts.end()));
-        columns = repository.insert(record).first.index();
+        layout = repository.insert(record).first.index();
     }
 };
 

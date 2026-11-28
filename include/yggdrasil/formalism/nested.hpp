@@ -98,27 +98,21 @@ public:
     explicit Nests(std::shared_ptr<Rs>... repositories) : detail::NestedMember<Rs> { std::move(repositories) }...
     { assert(((static_cast<const detail::NestedMember<Rs>&>(*this).repository != nullptr) && ...)); }
 
+    /// R as it is nested: R, or `const R` where it is nested read only.
+    template<typename R>
+    using held_t = std::conditional_t<boost::mp11::mp_contains<List, R>::value, R, const R>;
+
     /// The directly nested repository of type R (read only where nested as `const R`).
     template<typename R>
         requires boost::mp11::mp_contains<List, R>::value || boost::mp11::mp_contains<List, const R>::value
-    [[nodiscard]] auto& get() const noexcept
-    {
-        if constexpr (boost::mp11::mp_contains<List, R>::value)
-            return member<R>();
-        else
-            return member<const R>();
-    }
+    [[nodiscard]] held_t<R>& get() const noexcept
+    { return member<held_t<R>>(); }
 
     /// The shared pointer to the directly nested repository of type R.
     template<typename R>
         requires boost::mp11::mp_contains<List, R>::value || boost::mp11::mp_contains<List, const R>::value
-    [[nodiscard]] auto get_ptr() const noexcept
-    {
-        if constexpr (boost::mp11::mp_contains<List, R>::value)
-            return static_cast<const detail::NestedMember<R>&>(*this).repository;
-        else
-            return static_cast<const detail::NestedMember<const R>&>(*this).repository;
-    }
+    [[nodiscard]] const std::shared_ptr<held_t<R>>& get_ptr() const noexcept
+    { return static_cast<const detail::NestedMember<held_t<R>>&>(*this).repository; }
 
     /// Checks that Derived may hold copies of `source`'s records (urd::ChecksCompatibility): each nested repository sees
     /// the one `source` nests in its place (the same one, or a layer it lies over), else std::invalid_argument. A record

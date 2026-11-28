@@ -126,7 +126,7 @@ struct ColumnWidthsReader
 /// The rows of a repository layer, for each family F (predicates, actions, ..., Schema).
 ///
 /// Rows live in pools. A pool holds each row once and numbers it (its id, an index<Row<F>>), and has a key (an
-/// index<F>, its relation symbol) whose view gives its column types (get_column_types()). For example:
+/// index<F>, its relation symbol) whose view gives its column types (column_types()). For example:
 ///
 ///   - predicate `at` (key: index<Predicate> 3, column types (object, object)): pool of rows (truck1, loc2), ...;
 ///   - free relations of two uint columns (key: their Schema S, index<Schema> 1, column types (uint, uint)): pool of
@@ -255,7 +255,6 @@ public:
         return result;
     }
 
-    /// Parent layers must remain frozen and outlive this repository.
     /// Parent layers must remain frozen and outlive this repository. `column_widths` reads the column widths of a
     /// relation from the repository the relations belong to (none: no pool can be made).
     explicit RelationRepositoryBase(const RelationRepositoryBase* parent = nullptr, ColumnWidths column_widths = {}) :

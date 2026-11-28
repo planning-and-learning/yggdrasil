@@ -9,7 +9,6 @@
 #include "yggdrasil/formalism/relation_view.hpp"
 #include "yggdrasil/formalism/repository_impl.hpp"
 #include "yggdrasil/python/bindings.hpp"
-#include "yggdrasil/python/relations.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,14 +23,9 @@
 namespace yggdrasil
 {
 
-namespace
-{
-
-}  // namespace
-
 void bind_formalism_module_definitions(nb::module_& m)
 {
-    // A row's values as its columns store them, and back: Python composes them with RowData and Row.get_values().
+    // A row's values as its columns store them, and back: Python composes them with RowData and Row.values().
     // bool before the integers: a Python bool is an int too.
     m.def("encode", nb::overload_cast<bool, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"))
         .def("encode", nb::overload_cast<std::int64_t, ygg::TypeId>(&ygg::encode), nb::arg("value"), nb::arg("type"))
@@ -65,14 +59,8 @@ void bind_formalism_module_definitions(nb::module_& m)
     urd::python::bind_index<urd::key<ygg::Schema, ygg::Row<ygg::Schema>>>(m);
 
     // The records: <Name>Index, <Name>Data, <Name>Builder and <Name>, the view.
-    urd::python::bind_index<ygg::Schema>(m);
-    urd::python::bind_data<ygg::Schema>(m);
-    urd::python::bind_builder<ygg::Schema, RelationRepository>(m);
-    urd::python::bind_view<SchemaView>(m);
-    urd::python::bind_index<ygg::Columns>(m);
-    urd::python::bind_data<ygg::Columns>(m);
-    urd::python::bind_builder<ygg::Columns, RelationRepository>(m);
-    urd::python::bind_view<ColumnsView>(m);
+    urd::python::bind_record<ygg::Schema, RelationRepository>(m);
+    urd::python::bind_record<ygg::Columns, RelationRepository>(m);
     urd::python::bind_data<ygg::Row<ygg::Schema>>(m);
     urd::python::bind_builder<ygg::Row<ygg::Schema>, RelationRepository>(m);
     urd::python::bind_view<RowView>(m);
@@ -86,10 +74,8 @@ void bind_formalism_module_definitions(nb::module_& m)
 
     // The views of a builder's children in each form: built (<Name>BuilderView), a record not interned yet
     // (<Name>RecordView).
-    urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository, urd::builder<ygg::Schema, RelationRepository>>>(m);
-    urd::python::bind_view<urd::borrowed_view<ygg::Schema, RelationRepository>>(m);
-    urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository, urd::builder<ygg::Columns, RelationRepository>>>(m);
-    urd::python::bind_view<urd::borrowed_view<ygg::Columns, RelationRepository>>(m);
+    urd::python::bind_record_views<ygg::Schema, RelationRepository>(m);
+    urd::python::bind_record_views<ygg::Columns, RelationRepository>(m);
     urd::python::bind_view<ygg::RowBuilderView<ygg::Schema, RelationRepository>>(m);
     urd::python::bind_view<urd::borrowed_view<ygg::Row<ygg::Schema>, RelationRepository>>(m);
     // A relation builder read through its repository (RelationRepository.view(builder)): RelationSchemaBuilderView.

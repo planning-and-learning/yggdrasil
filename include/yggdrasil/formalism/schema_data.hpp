@@ -33,9 +33,7 @@ struct data<ygg::Schema>
 
     static constexpr auto fields() noexcept { return urd::Fields<urd::field<"column_types", &data::column_types>> {}; }
 
-    static constexpr auto identifying_members() noexcept { return urd::members_of(fields()); }
-
-    static constexpr auto cista_members() noexcept { return urd::Members<&data::index, &data::column_types> {}; }
+    static constexpr auto cista_members() noexcept { return urd::cista_members_of<data>(); }
 
     [[nodiscard]] urd::key<ygg::Schema> key() const noexcept { return urd::key<ygg::Schema>(index); }
 };

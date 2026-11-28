@@ -19,7 +19,7 @@
 #define YGG_FORMALISM_SYMBOL_CONTEXT_INSTANTIATIONS_HPP_
 
 // Explicit instantiations of the members of a repository's SymbolContext base (symbol_context.hpp) for each of its
-// symbol types (rule 7 of the template rules, https://planning-and-learning.github.io/brokkr/template_rules.html): the
+// symbol types (rule T1 of the template rules, https://planning-and-learning.github.io/brokkr/template_rules.html): the
 // one source of a library that includes symbol_context_impl.hpp (this header does not: a header may declare the
 // instantiations, PREFIX extern, without seeing the definitions) instantiates each of its repositories,
 //

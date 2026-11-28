@@ -10,7 +10,7 @@
 #ifndef YGG_FORMALISM_BUILDER_INSTANTIATIONS_HPP_
 #define YGG_FORMALISM_BUILDER_INSTANTIATIONS_HPP_
 
-// Explicit instantiations of a BuilderStorage (builder.hpp) for each of its types (rule 7 of the template rules): the one
+// Explicit instantiations of a BuilderStorage (builder.hpp) for each of its types (rule T1 of the template rules): the one
 // source of a library that includes builder_impl.hpp instantiates each of its storages,
 //
 //     YGG_FORMALISM_BUILDER(, Builder, Count)

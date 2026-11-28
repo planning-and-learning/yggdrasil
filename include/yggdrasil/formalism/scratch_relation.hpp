@@ -78,7 +78,7 @@ struct ScratchRelation
         columns_kept.values.set(columns.begin(), columns.end());               // its buffer kept: no allocation once warm
         const auto pool = std::get<urd::interned_child<F, C>>(relation.pool);  // interned by its initialization
         rows.clear();
-        relation.columns = rows.insert(columns_kept).first.index();  // validated when it was initialized
+        relation.layout = rows.insert(columns_kept).first.index();  // validated when it was initialized
         relation.pool = pool;
         relation.clear();
     }

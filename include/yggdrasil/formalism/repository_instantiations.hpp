@@ -18,7 +18,7 @@
 #ifndef YGG_FORMALISM_REPOSITORY_INSTANTIATIONS_HPP_
 #define YGG_FORMALISM_REPOSITORY_INSTANTIATIONS_HPP_
 
-// Explicit instantiations of a Repository and of its members for each of its symbol types and row families (rule 7 of
+// Explicit instantiations of a Repository and of its members for each of its symbol types and row families (rule T1 of
 // the template rules, https://planning-and-learning.github.io/brokkr/template_rules.html): the one source of a library
 // that includes repository_impl.hpp (and its domain's prepare_for_insert, which every insert runs) instantiates each of
 // its repositories,

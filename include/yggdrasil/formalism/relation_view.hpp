@@ -42,21 +42,21 @@ private:
 
 public:
     /// The view of its pool's key.
-    [[nodiscard]] auto get_pool() const { return self().template member<&urd::record_of<V>::pool>(); }
+    [[nodiscard]] auto pool() const { return self().template member<&urd::record_of<V>::pool>(); }
 
-    /// The view of its Columns.
-    [[nodiscard]] auto get_columns() const { return self().template member<&urd::record_of<V>::columns>(); }
+    /// The view of its layout: its Columns.
+    [[nodiscard]] auto layout() const { return self().template member<&urd::record_of<V>::layout>(); }
 
     /// Its rows in tuple order: a borrowed range of their views.
-    [[nodiscard]] auto get_rows() const { return self().template member<&urd::record_of<V>::rows>(); }
+    [[nodiscard]] auto rows() const { return self().template member<&urd::record_of<V>::rows>(); }
 
     /// Its columns, labeled and typed.
     [[nodiscard]] std::span<const urd::data<ygg::ColumnLayout>> columns() const
     {
-        return urd::visit_view(get_columns(),
+        return urd::visit_view(layout(),
                                [](const auto& columns)
                                {
-                                   const auto& values = columns.get_values();
+                                   const auto& values = columns.values();
                                    return std::span<const urd::data<ygg::ColumnLayout>>(values.data(), values.size());
                                });
     }
@@ -67,9 +67,9 @@ public:
     /// The row at a position; std::out_of_range past the last.
     [[nodiscard]] auto row(std::size_t index) const
     {
-        if (index >= std::ranges::size(self().get_rows()))
+        if (index >= std::ranges::size(self().rows()))
             throw std::out_of_range("Relation: row index out of range.");
-        return self().get_rows()[index];
+        return self().rows()[index];
     }
 
     /// Where these values are, or would go, in tuple order (the first row not before them), and whether it holds them
@@ -79,7 +79,7 @@ public:
         requires std::same_as<std::ranges::range_value_t<Values>, ygg::Value>
     [[nodiscard]] std::pair<std::size_t, bool> locate(const Values& values) const
     {
-        const auto rows = self().get_rows();
+        const auto rows = self().rows();
         const auto order = ygg::TupleOrder {};
         const auto found = [&]
         {
@@ -97,7 +97,7 @@ public:
     /// searches itself; a record's sorted keys are searched from outside, comparing each row read with the prefix.
     [[nodiscard]] auto with_prefix(std::span<const ygg::Value> values) const
     {
-        const auto rows = self().get_rows();
+        const auto rows = self().rows();
         const auto prefix = ygg::RowPrefix { values };
         if constexpr (urd::OrderedLookup<decltype(rows), ygg::RowPrefix>)
             return std::ranges::subrange(rows.lower_bound(prefix), rows.upper_bound(prefix));
@@ -128,13 +128,13 @@ public:
     /// Whether it holds a row with the values of `row`, of any relation of F.
     template<ygg::RowViewConcept<F> R>
     [[nodiscard]] bool contains(const R& row) const
-    { return self().contains(row.get_values()); }
+    { return self().contains(row.values()); }
 
     /// Its reads; find and contains by their instantiations Python reaches: a sequence of Values, and a stored row of its
     /// context's.
     static constexpr auto functions() noexcept
     {
-        using Context = std::remove_cvref_t<decltype(std::declval<const V&>().context())>;
+        using Context = urd::view_context_t<V>;
         return urd::Functions<urd::function<"columns", &view_mixin::columns>,
                               urd::function<"arity", &view_mixin::arity>,
                               urd::function<"row", &view_mixin::row, urd::arg<"index">>,
